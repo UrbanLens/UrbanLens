@@ -13,7 +13,6 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from drf_spectacular.utils import extend_schema
-from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer, ProfileDetailSerializer
@@ -33,6 +32,7 @@ from urbanlens.dashboard.external_api.serializers_social import (
 from urbanlens.dashboard.external_api.views import ExternalApiView, FriendActionView, ProfileDetailView, _resolve_profile
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.social_link.model import SocialLink
+from urbanlens.dashboard.services.core.request_body import FormParser, MultiPartParser
 from urbanlens.dashboard.services.profile.avatar import (
     AvatarMalwareDetectedError,
     AvatarScanUnavailableError,

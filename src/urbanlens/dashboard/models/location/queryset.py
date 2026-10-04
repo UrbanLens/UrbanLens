@@ -17,11 +17,29 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.queryset import slug_or_uuid_q
 from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.place.queryset import point_for_coordinates
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
+
+
+class CoordinateOffTheGlobeError(ValueError):
+    """A Location was asked for at a coordinate that is not a finite number within -90..90 / -180..180."""
+
+
+def _on_the_globe(latitude: object, longitude: object) -> tuple[float, float]:
+    """*latitude* and *longitude* as floats, refused unless they are a place on the globe.
+
+    Raises:
+        CoordinateOffTheGlobeError: Either is not a finite number in range.
+    """
+    lat = coordinate_or_none(latitude, bound=LATITUDE_BOUND)
+    lng = coordinate_or_none(longitude, bound=LONGITUDE_BOUND)
+    if lat is None or lng is None:
+        raise CoordinateOffTheGlobeError(f"({latitude!r}, {longitude!r}) is not a place on the globe.")
+    return lat, lng
 
 
 def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decimal:
@@ -126,7 +144,11 @@ class LocationManager(_LocationManagerBase["Location"]):
 
         Returns:
             Tuple of (Location, whether it was created).
+
+        Raises:
+            CoordinateOffTheGlobeError: The coordinates are not a place on the globe.
         """
+        latitude, longitude = _on_the_globe(latitude, longitude)
         latitude_value = quantize_coordinate(latitude, "latitude")
         longitude_value = quantize_coordinate(longitude, "longitude")
 
@@ -161,9 +183,13 @@ class LocationManager(_LocationManagerBase["Location"]):
 
         Returns:
             (Location, bool): Tuple of (Location instance, created boolean)
+
+        Raises:
+            CoordinateOffTheGlobeError: The coordinates are not a place on the globe.
         """
         if not threshold_meters:
             return self.get_exact_or_create(latitude, longitude, defaults=defaults)
+        latitude, longitude = _on_the_globe(latitude, longitude)
 
         point = Point(longitude, latitude, srid=4326)
 

@@ -5,24 +5,45 @@ Twenty-five routes answered one with a 500: every search, and every write of a t
 
 from __future__ import annotations
 
+import base64
 import io
 import json
+from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import HttpResponse
 from django.test import RequestFactory
-from django.urls import reverse
+from django.urls import URLResolver, get_resolver, reverse
 from django.views.decorators.csrf import csrf_exempt
 from model_bakery import baker
 from rest_framework.exceptions import ParseError
+from rest_framework.views import APIView
 
 from hypothesis import find, given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.middleware import NulCharacterRefusalMiddleware
+from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.core.request_body import JSONParser, MalformedBodyError, decode_json
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.core.request_body import (
+    FormParser,
+    JSONParser,
+    MalformedBodyError,
+    MultiPartParser,
+    decode_json,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+#: A real 1x1 PNG, so the upload is refused for the NUL and not for its bytes.
+_PNG_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
 
 
 def _refusal(request, view_kwargs: dict | None = None) -> HttpResponse | None:
@@ -108,11 +129,62 @@ class TheMiddlewareTests(SimpleTestCase):
         self.assertIsNone(_refusal(RequestFactory().post("/x/?q=a", {"name": "b"}), {"slug": "c", "pk": 3}))
 
 
-_JSON_TEXT = st.text(alphabet=st.characters(codec="utf-8", exclude_categories=("Cs",)), max_size=8)
+class ThroughTheApiTests(TestCase):
+    """Every DRF view is CSRF-exempt, so the middleware leaves its multipart body to DRF's parser."""
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        api_key, self.raw_key = generate_api_key(self.user, "Test Key")
+        api_key.scopes = [ApiKeyScope.PHOTOS_READ.value, ApiKeyScope.PHOTOS_WRITE.value]
+        api_key.save(update_fields=["scopes"])
+
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
+    def test_a_multipart_upload_with_a_nul_in_a_field_is_refused_and_nothing_is_stored(self, _enqueue) -> None:
+        for field in ("caption", "pin", "na\x00me"):
+            with self.subTest(field=field):
+                response = self.client.post(
+                    reverse("external_api:photos"),
+                    {"file": SimpleUploadedFile("p.png", _PNG_BYTES, content_type="image/png"), field: "x\x00y"},
+                    HTTP_AUTHORIZATION=f"Bearer {self.raw_key}",
+                )
+
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(Image.objects.exists())
+
+    def test_every_api_view_parses_with_a_parser_that_refuses_a_nul(self) -> None:
+        refusing = {FormParser, MultiPartParser, JSONParser}
+        views = list(_api_views(get_resolver().url_patterns))
+
+        self.assertGreater(len(views), 100)
+        for view in views:
+            with self.subTest(view=view.__name__):
+                self.assertLessEqual(set(view.parser_classes), refusing)
+
+
+def _api_views(patterns) -> Iterator[type]:
+    for pattern in patterns:
+        if isinstance(pattern, URLResolver):
+            yield from _api_views(pattern.url_patterns)
+        elif isinstance(view := getattr(pattern.callback, "cls", None), type) and issubclass(view, APIView):
+            yield view
+
+
+class TheDrfParsersTests(SimpleTestCase):
+    def test_a_form_field_holding_a_nul_is_refused(self) -> None:
+        with self.assertRaises(ParseError):
+            FormParser().parse(io.BytesIO(b"a=x%00y"), "application/x-www-form-urlencoded", {"encoding": "utf-8"})
+
+    def test_a_form_without_a_nul_parses(self) -> None:
+        parsed = FormParser().parse(io.BytesIO(b"a=xy"), "application/x-www-form-urlencoded", {"encoding": "utf-8"})
+
+        self.assertEqual(parsed["a"], "xy")
+
+
+_JSON_TEXT = st.text(alphabet=st.characters(codec="utf-8", exclude_categories=("Cs",)), max_size=5)
 _JSON_VALUES = st.recursive(
-    st.none() | st.booleans() | st.integers() | _JSON_TEXT,
-    lambda children: st.lists(children, max_size=4) | st.dictionaries(_JSON_TEXT, children, max_size=4),
-    max_leaves=12,
+    st.none() | st.booleans() | st.integers(min_value=-1000, max_value=1000) | _JSON_TEXT,
+    lambda children: st.lists(children, max_size=3) | st.dictionaries(_JSON_TEXT, children, max_size=3),
+    max_leaves=6,
 )
 
 

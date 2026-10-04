@@ -1218,8 +1218,8 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PARSER_CLASSES": [
         "urbanlens.dashboard.services.core.request_body.JSONParser",
-        "rest_framework.parsers.FormParser",
-        "rest_framework.parsers.MultiPartParser",
+        "urbanlens.dashboard.services.core.request_body.FormParser",
+        "urbanlens.dashboard.services.core.request_body.MultiPartParser",
     ],
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.AnonRateThrottle",

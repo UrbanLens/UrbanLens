@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import datetime
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
+
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.floorplans.model import Floorplan, FloorplanFloor, FloorplanItem, FloorplanMarker
@@ -212,9 +215,24 @@ def _float_in(raw, field: str) -> float | None:
     if raw is None or raw == "":
         return None
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError) as exc:
         raise FloorplanValidationError(f"{field} must be a number") from exc
+    if not math.isfinite(value):
+        raise FloorplanValidationError(f"{field} must be a number")
+    return value
+
+
+def _coordinate_in(raw, field: str, *, bound: float) -> float | None:
+    """An optional latitude or longitude from a document payload.
+
+    Raises:
+        ValueError: Present but not a number within ``±bound``.
+    """
+    value = _float_in(raw, field)
+    if value is not None and coordinate_or_none(value, bound=bound) is None:
+        raise FloorplanValidationError(f"{field} must be within ±{bound:g}")
+    return value
 
 
 def _required_float_in(raw, field: str) -> float:
@@ -463,8 +481,8 @@ def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-    lat = _float_in(payload.get("lat"), "marker.lat")
-    lng = _float_in(payload.get("lng"), "marker.lng")
+    lat = _coordinate_in(payload.get("lat"), "marker.lat", bound=LATITUDE_BOUND)
+    lng = _coordinate_in(payload.get("lng"), "marker.lng", bound=LONGITUDE_BOUND)
     if lat is None or lng is None:
         return
 
@@ -615,8 +633,8 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     floorplan.floor_count = _int_in(document.get("floor_count"), "floor_count")
     plan_origin = document.get("plan_origin") or {}
     if plan_origin:
-        floorplan.origin_lat = _float_in(plan_origin.get("lat"), "plan_origin.lat")
-        floorplan.origin_lng = _float_in(plan_origin.get("lng"), "plan_origin.lng")
+        floorplan.origin_lat = _coordinate_in(plan_origin.get("lat"), "plan_origin.lat", bound=LATITUDE_BOUND)
+        floorplan.origin_lng = _coordinate_in(plan_origin.get("lng"), "plan_origin.lng", bound=LONGITUDE_BOUND)
     floorplan.rotation_degrees = _float_in(document.get("rotation_degrees"), "rotation_degrees") or 0.0
     _apply_item(floorplan, document, pools, profile)
 

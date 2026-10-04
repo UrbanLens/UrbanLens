@@ -202,6 +202,55 @@ def drf_data_object(request: Request) -> Mapping[str, Any]:
     return data
 
 
+class FormParser(parsers.FormParser):
+    """DRF's form parser, refusing a NUL in any field, as ``NulCharacterRefusalMiddleware`` does for a Django view."""
+
+    def parse(self, stream: IO[bytes], media_type: str | None = None, parser_context: Mapping[str, Any] | None = None) -> Any:
+        """Parse *stream* as a urlencoded form.
+
+        Args:
+            stream: The request body.
+            media_type: The request's media type.
+            parser_context: DRF's parser context.
+
+        Returns:
+            The fields.
+
+        Raises:
+            ParseError: A field name or value holds a NUL.
+        """
+        data = super().parse(stream, media_type, parser_context)
+        if holds_nul(list(data.lists())):
+            raise ParseError(NUL_REFUSAL)
+        return data
+
+
+class MultiPartParser(parsers.MultiPartParser):
+    """DRF's multipart parser, refusing a NUL in any field. An uploaded file's bytes are not read.
+
+    The middleware leaves a CSRF-exempt view's multipart body unread, and every DRF view is CSRF-exempt.
+    """
+
+    def parse(self, stream: IO[bytes], media_type: str | None = None, parser_context: Mapping[str, Any] | None = None) -> Any:
+        """Parse *stream* as a multipart form.
+
+        Args:
+            stream: The request body.
+            media_type: The request's media type.
+            parser_context: DRF's parser context.
+
+        Returns:
+            The fields and files.
+
+        Raises:
+            ParseError: A field name or value holds a NUL.
+        """
+        parsed = super().parse(stream, media_type, parser_context)
+        if holds_nul(list(parsed.data.lists())):
+            raise ParseError(NUL_REFUSAL)
+        return parsed
+
+
 class JSONParser(parsers.JSONParser):
     """DRF's JSON parser, answering a body nested past the recursion limit with a 400 rather than a 500."""
 

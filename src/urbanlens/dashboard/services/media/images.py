@@ -22,6 +22,7 @@ from django.utils import timezone
 from PIL import Image as PILImage, ImageOps
 from PIL.ExifTags import GPSTAGS, TAGS
 
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
@@ -210,11 +211,13 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
         return None
     lat = _dms_to_decimal(gps_data["GPSLatitude"], gps_data.get("GPSLatitudeRef", "N"))
     lng = _dms_to_decimal(gps_data["GPSLongitude"], gps_data.get("GPSLongitudeRef", "E"))
-    if not (math.isfinite(lat) and math.isfinite(lng)):
-        # Some cameras/phones write GPS IFDs with zero-denominator rationals
-        # (e.g. "GPS on, no fix yet"), which decode to NaN/Inf - not usable.
+    # Some cameras/phones write GPS IFDs with zero-denominator rationals ("GPS on, no fix yet"), which decode to
+    # NaN/Inf; a malformed tag can decode past 90 or 180.
+    latitude = coordinate_or_none(lat, bound=LATITUDE_BOUND)
+    longitude = coordinate_or_none(lng, bound=LONGITUDE_BOUND)
+    if latitude is None or longitude is None:
         return None
-    return lat, lng
+    return latitude, longitude
 
 
 @untrusted_parse("image.exif")

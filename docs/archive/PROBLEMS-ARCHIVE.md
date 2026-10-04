@@ -22824,8 +22824,13 @@ The crashes fell into these classes:
 
 - `middleware.NulCharacterRefusalMiddleware` sits after CSRF. It answers a NUL in the query, the form or a URL argument
   with a plain-text 400. It reads a multipart form only for a view the CSRF check has already read it for, so a
-  CSRF-exempt view keeps its body. `request_body.decode_json` and the DRF `JSONParser` refuse a NUL in any decoded
-  string.
+  CSRF-exempt view keeps its body.
+- Every DRF view is CSRF-exempt, so the middleware never reads a DRF view's multipart body. DRF's own parsers refuse
+  a NUL instead. `request_body.JSONParser`, `FormParser` and `MultiPartParser` are the defaults, and the two views
+  that name their own parsers use them. A test checks every API view's parsers. The batch's review found this gap. A
+  serializer's `CharField` already refuses a NUL, but a DRF view reading a multipart `request.data` field directly
+  would have passed one to Postgres.
+- `request_body.decode_json` refuses a NUL in any decoded string.
 - `services/core/uuids.py` adds `uuid_or_none` and `valid_uuids`. Every UUID lookup the sweep reached goes through
   them.
 - `safe_int_or_none` returns None past a 64-bit integer. `clamp_int` still clamps an over-long number.
@@ -22848,3 +22853,41 @@ The crashes fell into these classes:
 
 A sweep over 304 test files that import a changed module or hit a changed route passed. The only failures were 8
 seed-row pollution failures in `test_site_admin_subscription_roles.py`, which passes alone.
+
+## RESOLVED 2026-10-04: Any caller that forgot to check could create a Location off the globe
+
+`id: P285` · `status: fixed` · `resolved: 2026-10-04` · `found by: the probe behind the P282 correction`
+
+**What was wrong.** `Location.latitude` and `longitude` are `numeric(9, 6)`, which hold up to ±999.999999. Nothing
+below the routes checked a coordinate, and a probe stored latitudes of 95 and 500. P282 to P284 fixed each route that
+posts or imports one. Every Location, though, is created through `LocationManager.get_exact_or_create` or
+`get_nearby_or_create` (`test_canonical_creates_check.py` enforces this), so one check there covers any caller that
+forgets. Two callers still passed unchecked values:
+
+- **EXIF GPS** was checked for being finite, but not for range. A malformed tag decodes past 90.
+- **Floorplan documents** read marker and origin coordinates with a bare `float()`. They also stored NaN and infinity
+  in the plan-local `x`, `y` and facing.
+
+**Fix.**
+
+- Both manager methods raise `CoordinateOffTheGlobeError`, a `ValueError`, for a coordinate that is not a finite
+  number in range. The bounds are inclusive.
+- `extract_gps_coords` returns None for an off-globe fix, and photo provider metadata is checked the same way. The
+  photo task treats a position stored before this check as unplaced, rather than failing.
+- A floorplan document refuses a non-finite number wherever `_float_in` reads one, and refuses a coordinate off the
+  globe, with its existing 400.
+
+**Not done: a database constraint.** A `CHECK` on `dashboard_location` would also stop a raw `create()`. It is not
+added because model_bakery fills a `DecimalField(9, 6)` with values up to 999.999999, and 593 test files bake a Pin or
+Location, so the constraint would fail them at random. It would first need a coordinate generator registered with
+model_bakery, or a `LatitudeField`/`LongitudeField` pair. It would also need `NOT VALID`, so that rows already stored
+off the globe do not block the migration.
+
+**Tests.**
+
+- `test_location_on_the_globe.py`: nine off-globe pairs through each method, plus the inclusive edges.
+- `test_image_gallery_helpers.py`: EXIF of 200°, 181° and 90°0'1" is refused; ±90 and ±180 are kept.
+- `test_floorplans.py`: an off-globe origin, an off-globe marker, and a NaN `x`.
+
+117 affected test files pass.
+

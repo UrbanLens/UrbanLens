@@ -201,6 +201,22 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
             result = extract_gps_coords(mock_file)
         self.assertIsNone(result)
 
+    def test_returns_none_for_gps_off_the_globe(self):
+        """A malformed tag decodes to 200 degrees; storing it placed the photo nowhere on Earth (P285)."""
+        for lat_dms, lng_dms in (((200, 0, 0), (74, 0, 21)), ((40, 26, 46), (181, 0, 0)), ((90, 0, 1), (74, 0, 21))):
+            with self.subTest(lat=lat_dms, lng=lng_dms):
+                mock_file, mock_img, _ = self._make_file_with_gps(lat_dms, "N", lng_dms, "W")
+                with patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=mock_img):
+                    result = extract_gps_coords(mock_file)
+                self.assertIsNone(result)
+
+    def test_returns_coords_at_the_edge_of_the_globe(self):
+        """Anti-vacuity for the test above: the bounds are inclusive."""
+        mock_file, mock_img, _ = self._make_file_with_gps((90, 0, 0), "S", (180, 0, 0), "E")
+        with patch("urbanlens.dashboard.services.media.images.PILImage.open", return_value=mock_img):
+            result = extract_gps_coords(mock_file)
+        self.assertEqual(result, (-90.0, 180.0))
+
     def test_returns_none_for_infinite_gps(self):
         mock_file, mock_img, _ = self._make_file_with_gps(
             (40, 26, 46),

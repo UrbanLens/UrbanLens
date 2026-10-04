@@ -840,6 +840,18 @@ class FloorplanEndpointTests(TestCase):
         self.assertIn("That floorplan has an invalid value", response.json()["error"])
         self.assertTrue(any("floor_count" in message for message in logs.output))
 
+    def test_a_place_off_the_globe_or_a_number_that_is_not_finite_is_a_400(self) -> None:
+        """Every one was stored, or became a Location off the globe (P285)."""
+        hazard = {"kind": "hazard", "x": 1.0, "y": 1.0}
+        for document in (
+            {"plan_origin": {"lat": 95, "lng": -73.9}},
+            {"plan_origin": {"lat": 41.7, "lng": "inf"}},
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{**hazard, "lat": 95, "lng": -73.9}]}]},
+            {"plan_origin": _ORIGIN, "floors": [{"level": 0, "markers": [{**hazard, "x": "nan"}]}]},
+        ):
+            with self.subTest(document=document):
+                self.assertEqual(self._save(document).status_code, 400)
+
     def test_a_bad_date_is_a_400(self) -> None:
         response = self._save({"floors": [{"level": 0, "built_date": "sometime in 1890"}]})
 

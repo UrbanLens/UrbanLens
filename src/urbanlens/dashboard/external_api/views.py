@@ -22,7 +22,6 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
 from rest_framework.exceptions import ValidationError
-from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -184,6 +183,7 @@ from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, 
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.core.capacity import PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
+from urbanlens.dashboard.services.core.request_body import MultiPartParser
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import (

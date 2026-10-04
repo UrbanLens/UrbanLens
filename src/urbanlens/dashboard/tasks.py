@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import RetryNoticeError, update_task_progress
 from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.media.storage_errors import OBJECT_STORE_ERRORS, STORAGE_ERRORS, is_transient
 from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 from urbanlens.dashboard.services.sandbox import sandbox_queue
@@ -1182,8 +1183,10 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
         if "taken_at" in metadata:
             image.taken_at = metadata["taken_at"]
             update_fields["taken_at"] = image.taken_at
-        if "latitude" in metadata and "longitude" in metadata:
-            coords = (metadata["latitude"], metadata["longitude"])
+        latitude = coordinate_or_none(metadata.get("latitude"), bound=LATITUDE_BOUND)
+        longitude = coordinate_or_none(metadata.get("longitude"), bound=LONGITUDE_BOUND)
+        if latitude is not None and longitude is not None:
+            coords = (latitude, longitude)
     if replacement is not None:
         update_fields["image"] = image.image.name
     return _UploadProcessResult(
@@ -2573,6 +2576,7 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
         The resolved Location, or None when nothing places the photo.
     """
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.location.queryset import CoordinateOffTheGlobeError
 
     if image.pin is not None and image.pin.location_id is not None:
         return image.pin.location
@@ -2580,7 +2584,12 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
         return image.wiki.location
     if coords:
         lat, lng = coords
-        location, _created = Location.objects.get_nearby_or_create(lat, lng)
+        try:
+            location, _created = Location.objects.get_nearby_or_create(lat, lng)
+        except CoordinateOffTheGlobeError:
+            # A position stored before positions were checked.
+            logger.warning("Image %s has a position off the globe; it is not placed", image.pk)
+            return None
         return location
     return None
 
