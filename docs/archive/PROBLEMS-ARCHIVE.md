@@ -22478,3 +22478,34 @@ figure taken on dev until that worker is synced and restarted.
 
 Tests: `tests/hypothesis/test_pin_panel_probe.py`. `test_pin_detail_fanout_budget.py` is now measured on a pin where
 no panel is known empty (every gate passes, nothing cached), and is still 42 there.
+
+## RESOLVED 2026-10-04: A campus's pinned buildings get their wikis once its building list is cached
+
+`id: P265` · `status: fixed` · `resolved: 2026-10-04`
+
+Since P261, `Wiki.objects.existing_for_location` returns None for a location standing on a campus building that has
+no wiki yet. Only `get_or_create_for_location` creates the building's wiki. A location pinned before the campus's
+building list was cached had already had that call, and the answer was the campus's wiki, so it linked no wiki.
+
+**Fix.** `parcel_buildings.building_list_cached(location)` runs on each path that caches a building list: the panel
+fetch and background enrichment. It builds the default pin structure as before (`auto_nest_location`). When the
+location holds a campus's wiki, it also queues `tasks.ensure_building_wikis` (BULK) on commit. That task asks
+`building_wikis.locations_awaiting_building_wikis(campus_wiki)` for the pinned locations on the place that have no
+wiki of their own and stand on a building that has no wiki, and passes them to `ensure_wikis_for_locations`.
+
+- **Which locations count:** only those a community member pinned, the same rule a pin save follows.
+- **Cost:** one candidate query. The building clustering runs only when a candidate exists.
+- **Backlog:** it clears as caches refresh, so no deploy-time command is needed.
+- **View time:** nothing is created when a page is viewed.
+
+Tests (`tests/hypothesis/test_building_wiki_backfill.py`) reuse P261's campus fixture. Against HEAD with a no-op task,
+4 failed: a building gets its wiki, a wing nests under its envelope, and both cache paths queue the task. A fifth test
+(two locations on one building share one new wiki) passed vacuously and was tightened. These hold now, along with
+the cases that must create nothing:
+- the grounds;
+- a building that already has a wiki;
+- an unpinned location;
+- a location pinned only with community features off;
+- a location holding no campus wiki.
+
+The sweep of every test file touching parcel buildings, auto-nesting or wiki creation passed: 700 passed, 1 xfailed.

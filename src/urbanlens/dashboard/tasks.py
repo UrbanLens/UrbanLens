@@ -132,6 +132,28 @@ def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
     return wiki_pks
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
+def ensure_building_wikis(location_id: int) -> list[int]:
+    """Give each pinned location on a campus's buildings its building's wiki, once the campus's building list is cached.
+
+    A location pinned before the list landed was answered with the campus's wiki, which is not its own (P265).
+
+    Args:
+        location_id: PK of the Location whose building list was just cached.
+
+    Returns:
+        PKs of the wikis ensured; empty unless the Location holds a campus's wiki.
+    """
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.building_wikis import locations_awaiting_building_wikis
+
+    campus_wiki = Wiki.objects.filter(location_id=location_id, place__isnull=False).select_related("place", "location").first()
+    if campus_wiki is None:
+        return []
+    awaiting = locations_awaiting_building_wikis(campus_wiki)
+    return ensure_wikis_for_locations(awaiting) if awaiting else []
+
+
 @shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def enrich_wiki_location(self, wiki_id: int) -> bool:
     """Enrich a Wiki's Location with place link, name, and boundaries.

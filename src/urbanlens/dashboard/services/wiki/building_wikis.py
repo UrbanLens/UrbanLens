@@ -169,3 +169,31 @@ def standing_building(location: Location, campus_wiki: Wiki) -> StandingBuilding
         return None
     buildings = CampusBuildings.of(campus_wiki)
     return buildings.standing(float(location.latitude), float(location.longitude)) if buildings is not None else None
+
+
+def locations_awaiting_building_wikis(campus_wiki: Wiki) -> list[int]:
+    """The pinned locations on ``campus_wiki``'s place standing on one of its buildings that has no wiki yet.
+
+    A location counts only once a community member has pinned it, as on a pin save
+    (``pin.signals.ensure_wiki_for_pin_location``).
+
+    Args:
+        campus_wiki: A wiki holding a place, with ``place`` and ``location`` loaded.
+
+    Returns:
+        Their PKs.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+
+    candidates = list(
+        Location.objects.filter(place_id=campus_wiki.place_id, wiki__isnull=True, latitude__isnull=False, longitude__isnull=False, pins__profile__community_enabled=True)
+        .exclude(pk=campus_wiki.location_id)
+        .distinct()
+        .only("pk", "latitude", "longitude"),
+    )
+    if not candidates:
+        return []
+    buildings = CampusBuildings.of(campus_wiki)
+    if buildings is None:
+        return []
+    return [location.pk for location in candidates if (building := buildings.standing(float(location.latitude), float(location.longitude))) is not None and building.wiki is None]

@@ -2802,26 +2802,6 @@ Options, for the release's migration squash (see the release migration notes): r
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
 
-## P265 — A pinned location on a campus building with no wiki shows no wiki until something creates the building's
-
-`id: P265` · `status: open` · `updated: 2026-10-04` · `found by: Claude, reviewing the P261 fix`
-
-Since P261, `Wiki.objects.existing_for_location` returns None for a location standing on a campus building that has
-no wiki yet, where it used to return the campus's wiki. The building's wiki is created only when something calls
-`get_or_create_for_location` for that location: a pin saved there (`tasks.ensure_wiki_for_location`), a share
-(`WikiShareService`), an enrichment photo. A location pinned before the campus's building list was cached, or before
-the fix was deployed, has had its call already and was answered with the campus's wiki: it now links none.
-
-On dev, 3 pinned locations sit on a campus place with no wiki of their own, and none stands on or within 15 m of a
-building record or a building wiki (read 2026-10-04), so none is affected. Production was not read.
-
-Options: a `parcel_buildings` cache write for a location holding a campus's wiki enqueues
-`ensure_wikis_for_locations` for the pinned locations on that place with no wiki of their own, which also covers the
-backlog as caches refresh; a one-off command run at deploy; or accepting it, since a campus pin's automatic sweep
-(`auto_nest.auto_nest_pin`) mirrors every building of the campus into a wiki when its owner has community features on.
-Creating at view time is ruled out: `get_or_create_for_location` says a wiki appearing as a side effect of viewing is a
-bug.
-
 ## P277 — A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged
 
 `id: P277` · `status: open` · `updated: 2026-10-04` · `found by: Claude, implementing P53`

@@ -577,6 +577,34 @@ def _row_sort_key(row: dict[str, Any]) -> tuple:
     return (2, 0, str(row.get("name") or "").casefold())
 
 
+def building_list_cached(location: Location) -> None:
+    """Act on a building list just cached for ``location``.
+
+    The moment the list lands is the moment the default structure can be built - every building becomes a child pin
+    with no dialog. On a campus it also says which building each pinned location stands on, so those given no wiki of
+    their own while the campus's stood in for it get their building's (P265).
+
+    Args:
+        location: The Location the list was cached for.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location
+
+    auto_nest_location(location)
+    if not Wiki.objects.filter(location_id=location.pk, place__isnull=False).exists():
+        return
+
+    def _enqueue() -> None:
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import ensure_building_wikis
+
+        safely_enqueue_task(ensure_building_wikis, location.pk)
+
+    transaction.on_commit(_enqueue)
+
+
 class ParcelBuildingsPanelSource(LocationCachePanelSource):
     """Every building on the pin's parcel, for the "Buildings on this Property" panel."""
 
@@ -607,14 +635,11 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
     def fetch(self, pin: Pin) -> None:
         """Enumerate the parcel's buildings and cache them against the pin's location."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location
 
         location = pin.location
         payload = fetch_parcel_buildings(location)
         LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}")
-        # The moment the list lands is the moment the default structure can be
-        # built - every building becomes a child pin with no dialog.
-        auto_nest_location(location)
+        building_list_cached(location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """Every building on the pin's parcel, each paired with its child pin.
@@ -698,11 +723,9 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
         return payload, f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}"
 
     def enrich(self, location: Location) -> bool:
-        """Cache the building list, then build the default pin structure from it."""
-        from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location
-
+        """Cache the building list, then act on it."""
         result = super().enrich(location)
-        auto_nest_location(location)
+        building_list_cached(location)
         return result
 
 
