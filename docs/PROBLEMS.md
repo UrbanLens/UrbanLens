@@ -2863,24 +2863,6 @@ which reads as a conflict for any place elsewhere ("Pierce County" against Dutch
 alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
 Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03.
 
-## P236 — A wiki URL's response time tells whether a Location exists under that slug
-
-`id: P236` · `status: open` · `updated: 2026-10-03` · `found by: adversarial review of P186`
-
-A wiki URL for a slug no Location has ever used 404s after one query (`get_location_or_404`). A current slug of
-a Location the requester can't see also 404s, but only after the wiki lookup, a profile `get_or_create`, and the
-`location_visible_to` queries. Since P186, a former slug (`LocationSlugHistory`) of an invisible Location costs
-more again: `canonical_location_slug` runs the history query, the `exists()` check and a full
-`locate_visible_wiki` before the view runs its own (`services/wiki/wiki_access.py`, `canonical_location_slug`).
-
-Wiki slugs come only from official names, so a slug is guessable. Enough timed requests against a guessed slug
-tell an authenticated user whether anyone has pinned that place.
-
-Fix: make an invisible Location's 404 cost the same as a missing one's. Resolve visibility in one query whose
-plan doesn't depend on whether the row exists, or check visibility before any other per-Location work. Test it
-first: assert equal query counts for a never-used slug, an invisible current slug and an invisible former slug.
-Other slug-addressed routes (pins, trips, albums) likely share the pattern, so audit them in the same pass.
-
 ## P240 — Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out
 
 `id: P240` · `status: open` · `updated: 2026-10-03` · `follows: P110`
@@ -2931,17 +2913,6 @@ Options, for the release's migration squash (see the release migration notes): r
 0.8.0 and drop the command and its test; or make the download part of an ordinary data migration's follow-up (a task
 queued by 0033 itself) so no current code ever runs on the old schema. Not Jess's call unless the first option
 changes the supported upgrade path.
-
-## P256 — NPS's record link opens an empty page for listings NPGallery does not carry
-
-`id: P256` · `status: open` · `updated: 2026-10-03` · `found by: Claude, fixing P228`
-
-P228 links a National Register reference number to `https://npgallery.nps.gov/AssetDetail/NRIS/<number>`. Checked
-live on 2026-10-03: 89001166 (HRSH Main Building), 98001317 and 100001066 render their listing, but 100007768 (listed
-2022) and 11000781 render the same empty page a made-up number does, as a 200. NPS's research page sends records
-through 2012 to the National Archives catalogue and later ones to NPGallery. REData's `nps_nrhp` rows carry
-`attributes.NARA_URL`, the archives' record for the listing, which UrbanLens does not cache. Decide whether to link it
-where NPGallery has nothing; whether NPGallery has a listing cannot be told from the status code.
 
 ## P261 — A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid
 
@@ -3007,3 +2978,19 @@ the same guard after the pin's own row, so a pin there skips its wiki's drawn ou
 `test_detail_building_outlines.py`'s fixtures, not yet reproduced as a failing test. Fix: let the guard return
 early only when the place says the type does not apply, and keep the drawn row for a building place without
 geometry.
+## P269 — A profile URL's response time tells whether an account has that username
+
+`id: P269` · `status: open` · `updated: 2026-10-04` · `found by: the P236 route audit`
+
+`/profile/<slug>/` (`controllers/userprofile.py`, `ViewProfileView.get`), the external API's profile detail
+(`external_api/views.py`, the `profile_slug` handlers) and the direct-message partner routes
+(`controllers/direct_messages.py`, `_get_partner`) look the profile up by slug across every account, then decide
+whether the requester may see it (`Profile.can_view_profile`: blocks, the visibility setting, friendship,
+temporary access; `conversation_reachable` for messages). A slug nobody has 404s after one query; a hidden account
+404s after the permission queries too, so timed requests tell whether a username is registered. Slugs come from
+usernames, which are guessable.
+
+Same shape as P236, not fixed with it: P236's fix puts the rule in the query that finds the row, and
+`can_view_profile` is several Python-level checks that would have to become one queryset filter first. Not
+measured: how many queries the hidden path adds. Whether this matters depends on how public a username is meant
+to be; the email-enumeration policy says no surface should reveal a registered username where avoidable.

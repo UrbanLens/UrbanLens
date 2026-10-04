@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.location.slug_history import LocationSlugHistory
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.slugs import parent_slug_prefix
 
-migration = importlib.import_module("urbanlens.dashboard.migrations.0052_location_slug_follows_name")
+migration = importlib.import_module("urbanlens.dashboard.migrations.0054_location_slug_follows_name")
 
 _HISTORICAL_APPS = None
 

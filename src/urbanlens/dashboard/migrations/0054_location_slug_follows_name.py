@@ -111,7 +111,7 @@ def remint_mismatched_slugs(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("dashboard", "0051_media_relevance_is_vote"),
+        ("dashboard", "0053_notification_fold"),
     ]
 
     operations = [
