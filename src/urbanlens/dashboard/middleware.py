@@ -407,6 +407,43 @@ class WriteSourceMiddleware:
             return self.get_response(request)
 
 
+class NulCharacterRefusalMiddleware:
+    """Answer a request whose query, form or URL arguments hold a NUL character with a 400, before the view runs.
+
+    Postgres refuses a NUL in text, so a view passing one to a query or a write fails with a 500. An uploaded file's
+    bytes are not read. A JSON body is refused where it is decoded, by ``request_body.decode_json``.
+
+    Reading a multipart form consumes the body, so it is read only where the CSRF check has already read it: a view
+    exempt from that check may read ``request.body`` itself.
+    """
+
+    def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
+        self.get_response = get_response
+
+    def __call__(self, request: HttpRequest) -> HttpResponse:
+        return self.get_response(request)
+
+    def process_view(self, request: HttpRequest, view_func: Callable[..., HttpResponse], view_args: tuple[object, ...], view_kwargs: dict[str, object]) -> HttpResponse | None:
+        """Refuse the request when a NUL is in what the view would read.
+
+        Args:
+            request: The current request.
+            view_func: The view about to run.
+            view_args: Its positional URL arguments.
+            view_kwargs: Its keyword URL arguments.
+
+        Returns:
+            The 400, or None to run the view.
+        """
+        from urbanlens.dashboard.services.core.request_body import NUL_REFUSAL, holds_nul
+
+        form_is_read = request.content_type == "application/x-www-form-urlencoded" or (request.content_type == "multipart/form-data" and not getattr(view_func, "csrf_exempt", False))
+        fields = [*request.GET.lists(), *(request.POST.lists() if request.method == "POST" and form_is_read else ())]
+        if holds_nul(fields) or holds_nul(view_args) or holds_nul(view_kwargs):
+            return HttpResponse(NUL_REFUSAL, status=400, content_type="text/plain; charset=utf-8")
+        return None
+
+
 class StorageUnavailableMiddleware:
     """Answer a request that media storage failed under with a 503 and ``Retry-After``, not a 500.
 

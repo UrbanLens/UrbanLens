@@ -26,7 +26,8 @@ from urbanlens.dashboard.models.trips.model import (
 )
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-from urbanlens.dashboard.services.core.request_body import FORM_CONTENT_TYPES, posted_fields
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.request_body import FORM_CONTENT_TYPES, list_field, posted_fields, text_field
 from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate
 from urbanlens.dashboard.services.trips.trip_access import (
@@ -482,7 +483,7 @@ class TripCreateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         body = posted_fields(request)
-        invite_ids = request.POST.getlist("invite_profile_ids") if request.content_type in FORM_CONTENT_TYPES else body.get("invite_profile_ids") or []
+        invite_ids = request.POST.getlist("invite_profile_ids") if request.content_type in FORM_CONTENT_TYPES else list_field(body, "invite_profile_ids")
 
         source = body.get("source") or "list"
         invite_emails = parse_address_list(body.get("invite_emails"))
@@ -713,16 +714,15 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.services.core.reorder_limits import UNLIMITED_TRIP_FALLBACK, reorder_id_ceiling
 
-        submitted = body.get("order") or []
+        submitted = request.POST.getlist("order") if request.content_type in FORM_CONTENT_TYPES else list_field(body, "order")
         # The trip's own activity limit, for the same reason the list reorder
         # uses its pin limit - and counted before the values are converted.
         ceiling = reorder_id_ceiling(SiteSettings.get_current().max_trip_activities, UNLIMITED_TRIP_FALLBACK)
         if len(submitted) > ceiling:
             return HttpResponse(f"Reorder at most {ceiling} activities at a time.", status=400)
 
-        try:
-            order = [int(value) for value in submitted]
-        except (TypeError, ValueError):
+        order = [parsed for parsed in map(safe_int_or_none, submitted) if parsed is not None]
+        if len(order) != len(submitted):
             return HttpResponse("Invalid order.", status=400)
 
         try:
@@ -978,8 +978,8 @@ class TripMembersView(LoginRequiredMixin, View):
 
         body = posted_fields(request)
 
-        username = (body.get("username") or "").strip()
-        email = (body.get("email") or "").strip() or (username if "@" in username else "")
+        username = text_field(body, "username")
+        email = text_field(body, "email") or (username if "@" in username else "")
         try:
             if email:
                 invite_to_trip_by_email(trip, profile, email, invitation_url_builder=request.build_absolute_uri)
@@ -1117,7 +1117,7 @@ class TripActivityMoveView(LoginRequiredMixin, View):
 
         body = posted_fields(request)
 
-        date_str = (body.get("date") or "").strip()
+        date_str = text_field(body, "date")
         if not date_str:
             return HttpResponse("date is required.", status=400)
 

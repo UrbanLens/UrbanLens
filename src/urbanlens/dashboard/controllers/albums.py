@@ -20,7 +20,8 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
-from urbanlens.dashboard.services.core.request_body import posted_json_object
+from urbanlens.dashboard.services.core.pagination import offset_window
+from urbanlens.dashboard.services.core.request_body import posted_json_object, text_field
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
@@ -503,20 +504,12 @@ def _int_ids(raw) -> list[int]:
     """Coerce a JSON list of ids into ints, dropping anything non-numeric."""
     if not isinstance(raw, list):
         return []
-    return [int(value) for value in raw if str(value).lstrip("-").isdigit()]
+    return [parsed for parsed in map(safe_int_or_none, raw) if parsed is not None]
 
 
 def _page_args(request: HttpRequest) -> tuple[int, int]:
     """Read ``offset``/``limit`` query params for a photo-grid page."""
-    try:
-        offset = max(0, int(request.GET.get("offset") or 0))
-    except (TypeError, ValueError):
-        offset = 0
-    try:
-        limit = int(request.GET.get("limit") or ALBUM_GRID_PAGE_SIZE)
-    except (TypeError, ValueError):
-        limit = ALBUM_GRID_PAGE_SIZE
-    return offset, min(max(1, limit), MAX_PAGE_SIZE)
+    return offset_window(request.GET, default_limit=ALBUM_GRID_PAGE_SIZE, max_limit=MAX_PAGE_SIZE)
 
 
 def _photo_tile(image, request: HttpRequest, viewer: Profile) -> dict:
@@ -988,7 +981,7 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
             except CapacityExceededError as exc:
                 return JsonResponse({"error": exc.user_message}, status=409)
             response["added"] += added
-            move_from = (body.get("move_from") or "").strip()
+            move_from = text_field(body, "move_from")
             source_album_id = None
             if images and move_from and move_from != album.slug:
                 source = _qs.filter(slug=move_from).first()

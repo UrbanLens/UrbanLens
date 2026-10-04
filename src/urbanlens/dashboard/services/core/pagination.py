@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING, Any
 
 from django.core.paginator import Page, Paginator
 
+from urbanlens.dashboard.services.core.numbers import DB_BIGINT_MAX, clamp_int
+
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from django.http import HttpRequest
 
 
@@ -35,3 +39,20 @@ def get_page(
     if page_param:
         return paginator.get_page(page_param)
     return paginator.get_page(paginator.num_pages if default_last else 1)
+
+
+def offset_window(query: Mapping[str, Any], *, default_limit: int, max_limit: int) -> tuple[int, int]:
+    """The ``offset`` and ``limit`` a grid's next-page request asks for, each one a query can be given.
+
+    Args:
+        query: The request's query parameters.
+        default_limit: The page size when none, or no number, is asked for.
+        max_limit: The largest page served.
+
+    Returns:
+        ``(offset, limit)``, the offset within ``[0, DB_BIGINT_MAX]`` (Postgres refuses a larger ``OFFSET``) and the
+        limit within ``[1, max_limit]``.
+    """
+    offset = clamp_int(query.get("offset"), low=0, high=DB_BIGINT_MAX, default=0)
+    limit = clamp_int(query.get("limit") or default_limit, low=1, high=max_limit, default=default_limit)
+    return offset, limit

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
@@ -20,12 +20,16 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
-from urbanlens.dashboard.services.core.request_body import posted_json_object
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.request_body import list_field, posted_json_object
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.uuids import uuid_or_none, valid_uuids
 from urbanlens.dashboard.services.pins.pin_bulk import MAX_BULK_PINS, UNSET, BulkPinEdit, BulkPinError, Unset, bulk_delete_pins, bulk_edit_pins, bulk_merge_under
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -54,7 +58,7 @@ def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[st
     """Parse a JSON body containing a list of pin uuid strings under ``key``."""
     try:
         data = posted_json_object(request)
-        uuids = [str(x) for x in data.get(key, [])]
+        uuids = [str(x) for x in list_field(data, key)]
     except (json.JSONDecodeError, ValueError, TypeError):
         return None, JsonResponse({"error": "Invalid data"}, status=400)
     if not uuids:
@@ -64,13 +68,18 @@ def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[st
     return uuids, None
 
 
+def _posted_ids(data: Mapping[str, Any], key: str) -> list[int]:
+    """The integer ids a JSON body lists under *key*, dropping any that are not one."""
+    return [parsed for parsed in map(safe_int_or_none, list_field(data, key)) if parsed is not None]
+
+
 def _owned_pins(profile: Profile, uuids: list[str]) -> QuerySet[Pin]:
     """Pins (root or child) owned by ``profile`` among the given uuids.
 
     The main map's select tool can select both root and child (sub) pin
     markers, so bulk actions must be able to resolve either kind.
     """
-    return Pin.objects.filter(profile=profile, uuid__in=uuids)
+    return Pin.objects.filter(profile=profile, uuid__in=valid_uuids(uuids))
 
 
 class PinBulkDeleteView(LoginRequiredMixin, View):
@@ -139,7 +148,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
         try:
             data = posted_json_object(request)
             target_uuid = str(data.get("target_uuid") or "")
-            source_uuids = [str(x) for x in data.get("source_uuids", [])]
+            source_uuids = [str(x) for x in list_field(data, "source_uuids")]
         except (json.JSONDecodeError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
@@ -152,7 +161,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             return HttpResponse(_TOO_MANY_PINS, status=400)
 
         profile = _request_profile(request)
-        target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
+        target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=uuid_or_none(target_uuid))
         try:
             result = bulk_merge_under(target, list(_owned_pins(profile, source_uuids)))
         except BulkPinError as exc:
@@ -169,7 +178,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid data"}, status=400)
 
-        uuids = [str(x) for x in data.get("uuids", [])]
+        uuids = [str(x) for x in list_field(data, "uuids")]
         if not uuids:
             return HttpResponse("No pins specified.", status=400)
         if _too_many(uuids):
@@ -209,49 +218,44 @@ class PinBulkEditView(LoginRequiredMixin, View):
         ):
             if request_field not in data:
                 continue
-            raw_value = data[request_field]
-            try:
-                int_value = int(raw_value)
-            except (TypeError, ValueError):
+            int_value = safe_int_or_none(data[request_field])
+            if int_value is None:
                 return HttpResponse(f"{request_field} must be a percentage.", status=400)
-            if isinstance(raw_value, bool) or not 0 <= int_value <= 100:
+            if not 0 <= int_value <= 100:
                 return HttpResponse(f"{request_field} must be between 0 and 100.", status=400)
             style_updates[model_field] = int_value
 
         description = data.get("description")
         new_description: str | Literal[Unset.UNSET] = UNSET
-        if description is not None and str(description).strip():
+        if isinstance(description, str) and description.strip():
             length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
             if length_error:
                 return HttpResponse(length_error, status=400)
-            new_description = str(description)
+            new_description = description
 
         # 0 clears every selected pin's review; absent or out of range leaves ratings alone.
         rating_raw = data.get("rating")
         rating: int | None | Literal[Unset.UNSET] = UNSET
         if rating_raw is not None and str(rating_raw).strip():
-            try:
-                parsed_rating = int(rating_raw)
-            except (TypeError, ValueError):
-                parsed_rating = -1
-            if 1 <= parsed_rating <= 5:
+            parsed_rating = safe_int_or_none(rating_raw)
+            if parsed_rating is not None and 1 <= parsed_rating <= 5:
                 rating = parsed_rating
             elif parsed_rating == 0:
                 rating = None
 
         add_labels: list[Label] = []
-        if add_ids := [int(x) for x in data.get("add_label_ids", [])]:
+        if add_ids := _posted_ids(data, "add_label_ids"):
             add_labels = list(Label.objects.visible_to(profile).filter(id__in=add_ids, kind__in=_ORGANIZE_KINDS))
 
         remove_labels: list[Label] = []
-        if remove_ids := [int(x) for x in data.get("remove_label_ids", [])]:
+        if remove_ids := _posted_ids(data, "remove_label_ids"):
             # Never trust the client's option list - only labels present on at least one selected pin.
             remove_labels = list(Label.objects.filter(id__in=remove_ids, kind__in=_ORGANIZE_KINDS, pins__in=pins).distinct())
 
         parent: Pin | Literal[Unset.UNSET] = UNSET
         parent_uuid = str(data.get("parent_uuid") or "").strip()
         if parent_uuid:
-            parent = get_object_or_404(Pin.objects.filter(profile=profile), uuid=parent_uuid)
+            parent = get_object_or_404(Pin.objects.filter(profile=profile), uuid=uuid_or_none(parent_uuid))
 
         result = bulk_edit_pins(
             profile,
@@ -298,7 +302,7 @@ class PinParentSearchView(LoginRequiredMixin, View):
             return JsonResponse({"results": []})
 
         profile = _request_profile(request)
-        exclude_uuids = set(request.GET.getlist("exclude"))
+        exclude_uuids = set(valid_uuids(request.GET.getlist("exclude")))
         pins = Pin.objects.filter(profile=profile).select_related("location").filter(Q(name__icontains=query) | Q(aliases__name__icontains=query)).exclude(uuid__in=exclude_uuids).distinct().order_by("name")[:10]
         return JsonResponse(
             {

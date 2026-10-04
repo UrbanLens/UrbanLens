@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -37,13 +36,8 @@ def _parse_amount_cents(raw: str | None) -> int | None:
     """Parse a user-entered dollar amount into cents, or None if unparseable/non-positive."""
     if not raw:
         return None
-    try:
-        dollars = Decimal(raw)
-    except InvalidOperation:
-        return None
-    if dollars <= 0:
-        return None
-    return pricing.dollars_to_cents(dollars)
+    cents = pricing.typed_dollars_to_cents(raw)
+    return cents or None
 
 
 class BillingSettingsSectionView(LoginRequiredMixin, View):

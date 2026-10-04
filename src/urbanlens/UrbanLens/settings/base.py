@@ -130,6 +130,8 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
+    # After CSRF, which has already parsed the form.
+    "urbanlens.dashboard.middleware.NulCharacterRefusalMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     # A fetch or htmx request follows a login redirect to a 200; it gets a 401 instead.
     "urbanlens.dashboard.middleware.ScriptLoginRefusalMiddleware",

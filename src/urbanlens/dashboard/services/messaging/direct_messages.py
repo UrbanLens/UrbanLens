@@ -18,6 +18,7 @@ from urbanlens.dashboard.services.core.message_limits import charge_message, ref
 from urbanlens.dashboard.services.core.numbers import DB_INTEGER_MAX
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.uuids import uuid_or_none
 from urbanlens.dashboard.services.security import socket_budget
 
 if TYPE_CHECKING:
@@ -724,7 +725,7 @@ def create_direct_message(
 
     markup_map = None
     if markup_map_uuid:
-        markup_map = MarkupMap.objects.filter(uuid=markup_map_uuid, profile=sender).first()
+        markup_map = MarkupMap.objects.filter(uuid=uuid_or_none(markup_map_uuid), profile=sender).first()
 
     reply_to = None
     if reply_to_id:

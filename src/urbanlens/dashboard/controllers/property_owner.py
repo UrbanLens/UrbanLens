@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from decimal import Decimal, InvalidOperation
 import json
 import logging
 from typing import TYPE_CHECKING
@@ -17,10 +16,15 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
+from urbanlens.dashboard.services.core.numbers import typed_decimal_for_column
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.notifications.change_notifications import announce_wiki_change
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from decimal import Decimal
+
     from django.http import HttpRequest, HttpResponse
 
     from urbanlens.dashboard.models.location.model import Location
@@ -80,6 +84,18 @@ def _owner_fields_from_post(request: HttpRequest) -> dict[str, str]:
     }
 
 
+#: The owner fields stored in a column of fixed width, and what to call each in a refusal.
+_OWNER_FIELD_LABELS = {"name": "Owner name", "company_name": "Company name", "care_of": "Care of", "phone": "Phone", "email": "Email"}
+
+
+def _owner_fields_error(fields: Mapping[str, str]) -> str | None:
+    """The refusal for the first owner field longer than its column, or None."""
+    for field, label in _OWNER_FIELD_LABELS.items():
+        if length_error := column_length_error(PinOwner, field, fields[field], label):
+            return length_error
+    return None
+
+
 def _parse_owner_names(raw: str) -> list[str]:
     """Split a comma-separated owner-name field into a deduped, ordered list.
 
@@ -107,6 +123,9 @@ def _parse_sale_owner_names(request: HttpRequest) -> tuple[list[str], list[str],
     new_names = _parse_owner_names(request.POST.get("new_owners") or "")
     if {name.lower() for name in previous_names} & {name.lower() for name in new_names}:
         return [], [], "Previous and new owner can't be the same."
+    for name in (*previous_names, *new_names):
+        if length_error := column_length_error(PinOwner, "name", name, "Owner name"):
+            return [], [], length_error
     return previous_names, new_names, None
 
 
@@ -122,9 +141,8 @@ def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, da
     raw_price = (request.POST.get("sale_price") or "").strip()
     sale_price: Decimal | None = None
     if raw_price:
-        try:
-            sale_price = Decimal(raw_price)
-        except InvalidOperation:
+        sale_price = typed_decimal_for_column(raw_price, PinPropertySale, "sale_price")
+        if sale_price is None:
             return None, None, "Invalid sale price."
         if sale_price < 0:
             return None, None, "Sale price can't be negative."
@@ -195,6 +213,8 @@ class PinOwnershipPanelView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_pin_ownership_panel(request, pin, error="Owner name is required.")
+        if length_error := _owner_fields_error(fields):
+            return _render_pin_ownership_panel(request, pin, error=length_error)
         # Same case-insensitive dedup the Sale History tab's get_or_create already applies (see
         # PinPropertySaleTabView.post) - without it this panel and that tab disagree on whether "Alice" and
         # "alice" are the same owner, producing duplicate PinOwner rows for one real owner.
@@ -213,6 +233,8 @@ class PinOwnerUpdateView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_pin_ownership_panel(request, pin, error="Owner name is required.")
+        if length_error := _owner_fields_error(fields):
+            return _render_pin_ownership_panel(request, pin, error=length_error)
         for attr, value in fields.items():
             setattr(owner, attr, value)
         owner.save(update_fields=[*fields.keys(), "updated"])
@@ -357,6 +379,8 @@ class WikiOwnershipPanelView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_wiki_ownership_panel(request, location, wiki, profile, error="Owner name is required.")
+        if length_error := _owner_fields_error(fields):
+            return _render_wiki_ownership_panel(request, location, wiki, profile, error=length_error)
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
         # Same case-insensitive dedup the Sale History tab's get_or_create already applies (see
@@ -383,6 +407,8 @@ class WikiOwnerUpdateView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_wiki_ownership_panel(request, location, wiki, profile, error="Owner name is required.")
+        if length_error := _owner_fields_error(fields):
+            return _render_wiki_ownership_panel(request, location, wiki, profile, error=length_error)
         changed = [attr for attr, value in fields.items() if getattr(owner, attr) != value]
         for attr in changed:
             setattr(owner, attr, fields[attr])

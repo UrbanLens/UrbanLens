@@ -6,7 +6,7 @@ import urllib.parse
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
-from django.db import DatabaseError
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Count, Prefetch
 from django.db.models.functions import Coalesce, Lower
 from django.http import HttpResponse, HttpResponseNotModified, JsonResponse, StreamingHttpResponse
@@ -30,7 +30,7 @@ from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
-from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.core.request_body import drf_data_object
@@ -41,6 +41,7 @@ from urbanlens.dashboard.services.pins.pin_creation import (
     AddressResolutionError,
     DuplicateCoordinatesError,
     DuplicatePropertyError,
+    InvalidCoordinatesError,
     NoLocationProvidedError,
     PinCreationError,
     PinCreationForbiddenError,
@@ -51,6 +52,9 @@ from urbanlens.dashboard.services.security.throttle import Rate, account_or_addr
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+#: A profile has one root pin per place (``db_pin_unique_location_per_profile``).
+_ALREADY_PINNED_THERE = "You already have a pin there."
 
 #: Placeholder slug for building per-pin URLs.
 #: Default page size for the pin-list sidebar.
@@ -272,6 +276,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             except AddressResolutionError as e:
                 logger.info("pin creation rejected: %s", e)
                 return HttpResponse("Error: that address couldn't be converted to coordinates.", status=400)
+            except InvalidCoordinatesError as e:
+                logger.info("pin creation rejected: %s", e)
+                return HttpResponse("Error: that isn't a place on the map.", status=400)
             except PinCreationError as e:
                 logger.info("pin creation rejected: %s", e)
                 return HttpResponse("Error: that pin couldn't be created.", status=400)
@@ -773,8 +780,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                 message, status = upload_error
                 return JsonResponse({"error": message}, status=status)
         label_ids = [bid for bid in request.POST.getlist("label_ids") if bid]
-
-        import contextlib
+        wanted_label_ids = [parsed for parsed in map(safe_int_or_none, label_ids) if parsed is not None]
 
         # Only the posted fields are written.
         touched: list[str] = []
@@ -785,9 +791,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # Coordinates live on the Location; a move repoints the pin to a
         # find-or-created Location at the new point rather than mutating a shared row.
         if latitude is not None and longitude is not None:
-            with contextlib.suppress(ValueError, TypeError):
-                pin.location, _ = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
-                touched.append("location")
+            lat = coordinate_or_none(latitude, bound=LATITUDE_BOUND)
+            lng = coordinate_or_none(longitude, bound=LONGITUDE_BOUND)
+            if lat is None or lng is None:
+                return JsonResponse({"error": "That isn't a place on the map."}, status=400)
+            pin.location, _ = Location.objects.get_nearby_or_create(lat, lng)
+            if pin.parent_pin_id is None and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists():
+                return JsonResponse({"error": _ALREADY_PINNED_THERE}, status=400)
+            touched.append("location")
         if icon is not None:
             pin.icon = clean_icon(icon)
             touched.append("icon")
@@ -806,7 +817,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         elif request.POST.get("clear_custom_icon"):
             pin.custom_icon = None
             touched += ["custom_icon", discard_held_upload(pin, "custom_icon")]
-        pin.save(update_fields=[*touched, "updated"])
+        try:
+            with transaction.atomic():
+                pin.save(update_fields=[*touched, "updated"])
+        except IntegrityError:
+            # Another request placed a pin there since the check above.
+            if "location" in touched and Pin.objects.root_pins().filter(profile=pin.profile, location=pin.location).exclude(pk=pin.pk).exists():
+                return JsonResponse({"error": _ALREADY_PINNED_THERE}, status=400)
+            raise
         if custom_icon:
             queue_held_upload(pin, "custom_icon")
 
@@ -815,7 +833,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 
             # visible_to: same foreign-label-id guard as post_add_pin.
-            new_labels = Label.objects.exclude(kind=KIND_USER).visible_to(request.user.profile).filter(id__in=label_ids)
+            new_labels = Label.objects.exclude(kind=KIND_USER).visible_to(request.user.profile).filter(id__in=wanted_label_ids)
             new_ids = set(new_labels.values_list("pk", flat=True))
             removed = pin.labels.filter(kind__in={KIND_TAG, KIND_CATEGORY, KIND_STATUS}).exclude(pk__in=new_ids)
             for label in removed:

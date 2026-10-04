@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.safety.model import MAX_AUTO_DELETE_AFTER_DAYS, 
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, bounded_float_or_none, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.request_body import json_body
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
@@ -1522,7 +1523,7 @@ class SafetyImageView(LoginRequiredMixin, View):
         """
         img = self._get_image(request, checkin_slug, image_id)
         try:
-            img.latitude, img.longitude = parse_reposition_payload(request.body)
+            img.latitude, img.longitude = parse_reposition_payload(json_body(request))
         except ValueError as exc:
             logger.warning("Failed to update image %s on checkin %s: %s", image_id, checkin_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)

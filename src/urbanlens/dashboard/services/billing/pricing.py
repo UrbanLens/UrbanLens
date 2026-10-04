@@ -3,7 +3,7 @@ Kept separate from ``models.subscriptions.model.SubscriptionRole`` so the model 
 
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -13,6 +13,28 @@ if TYPE_CHECKING:
 
 #: Stripe's own minimum charge amount for USD, in cents.
 STRIPE_MINIMUM_CHARGE_CENTS = 50
+#: Stripe's largest charge for USD, in cents.
+STRIPE_MAXIMUM_CHARGE_CENTS = 99_999_999
+
+
+def typed_dollars_to_cents(raw: str) -> int | None:
+    """A dollar amount someone typed, as cents, or None when it is not one Stripe could charge.
+
+    Args:
+        raw: The typed amount.
+
+    Returns:
+        The cents, within ``[0, STRIPE_MAXIMUM_CHARGE_CENTS]``; None for anything that is not a number, not finite,
+        negative, or larger.
+    """
+    try:
+        dollars = Decimal(raw.strip())
+    except InvalidOperation:
+        return None
+    # Compared before converting: an exponent like 1e999999999 is finite, and int() of it would never finish.
+    if not dollars.is_finite() or not 0 <= dollars <= cents_to_dollars(STRIPE_MAXIMUM_CHARGE_CENTS):
+        return None
+    return dollars_to_cents(dollars)
 
 
 def dollars_to_cents(dollars: Decimal | str) -> int:

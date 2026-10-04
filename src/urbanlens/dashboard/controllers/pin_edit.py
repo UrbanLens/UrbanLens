@@ -22,8 +22,9 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
-from urbanlens.dashboard.services.core.request_body import posted_fields
-from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
 from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
 
@@ -231,9 +232,12 @@ class PinEditView(LoginRequiredMixin, View):
         edits: dict[str, object] = {}
 
         if "name" in body:
-            edits["name"] = body.get("name")
+            name = body.get("name")
+            if isinstance(name, str) and (length_error := column_length_error(Pin, "name", name, "Name")):
+                return HttpResponse(length_error, status=400)
+            edits["name"] = name if isinstance(name, str) else None
         if "description" in body:
-            description = (body.get("description") or "").strip() or None
+            description = text_field(body, "description") or None
             length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
             if length_error:
                 return HttpResponse(length_error, status=400)
@@ -242,35 +246,19 @@ class PinEditView(LoginRequiredMixin, View):
         # A browser form is a lenient caller: an out-of-range or unparseable value means a stale/hand-edited
         # control, and dropping that one field is friendlier than failing the whole dialog.
         for stat_field in ("priority", "vulnerability", "danger"):
-            raw = body.get(stat_field)
-            if raw is None or not str(raw).strip():
-                continue
-            try:
-                parsed = int(raw)
-            except (TypeError, ValueError):
-                continue
-            if 0 <= parsed <= 5:
+            parsed = safe_int_or_none(body.get(stat_field))
+            if parsed is not None and 0 <= parsed <= 5:
                 edits[stat_field] = parsed
 
         # clear_rating distinguishes "explicitly submitted 0" (delete the Review row) from "field untouched,
         # pin.rating just defaults to 0 because no Review exists yet" (nothing to do) - collapsing both into
         # rating=0 would either silently no-op a real clear request, or issue a pointless delete query on every
         # unrelated quick-edit.
-        rating_raw = body.get("rating")
-        clear_rating = False
-        try:
-            if rating_raw is not None and str(rating_raw).strip():
-                rating = int(rating_raw)
-                if not (0 <= rating <= 5):
-                    rating = pin.rating
-                elif rating == 0:
-                    clear_rating = True
-            else:
-                rating = pin.rating
-        except (TypeError, ValueError):
-            rating = pin.rating
+        parsed_rating = safe_int_or_none(body.get("rating"))
+        rating = parsed_rating if parsed_rating is not None and 0 <= parsed_rating <= 5 else pin.rating
+        clear_rating = parsed_rating == 0
 
-        last_visited_raw = (body.get("last_visited") or "").strip() or None
+        last_visited_raw = text_field(body, "last_visited") or None
         if last_visited_raw:
             last_visited = None
             for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
@@ -296,13 +284,12 @@ class PinEditView(LoginRequiredMixin, View):
         valid_security = {value for value, _label in SecurityLevel.choices}
         for security_field in SECURITY_EDIT_FIELDS:
             raw = body.get(security_field, "")
-            if raw in valid_security:
+            if isinstance(raw, str) and raw in valid_security:
                 edits[security_field] = raw
 
         # Abandonment dates. Present-but-unparseable clears the field, matching
         # the date input's own "clear" behavior (it posts an empty string).
         def _parse_date(raw: str) -> date | None:
-            raw = (raw or "").strip()
             if not raw:
                 return None
             try:
@@ -312,10 +299,10 @@ class PinEditView(LoginRequiredMixin, View):
 
         for date_field in ("date_built", "date_abandoned", "date_last_active"):
             if date_field in body:
-                edits[date_field] = _parse_date(body.get(date_field, ""))
+                edits[date_field] = _parse_date(text_field(body, date_field))
 
         valid_types = {value for value, _label in PinType.choices}
-        if body.get("pin_type") in valid_types:
+        if isinstance(body.get("pin_type"), str) and body["pin_type"] in valid_types:
             edits["pin_type"] = body["pin_type"]
 
         apply_pin_edits(pin, edits)
@@ -332,7 +319,7 @@ class PinEditView(LoginRequiredMixin, View):
 
         # Category update: only runs when the field was explicitly submitted (partial requests preserve existing)
         if "categories" in body:
-            category_raw = (body.get("categories") or "").strip()
+            category_raw = text_field(body, "categories")
             names: dict[str, str] = {}
             for raw_name in category_raw.split(","):
                 if (name := raw_name.strip()) and name.casefold() not in names:

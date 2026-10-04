@@ -23,8 +23,9 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.numbers import clamp_int
-from urbanlens.dashboard.services.core.request_body import posted_fields
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.uuids import uuid_or_none
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
 from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
@@ -283,9 +284,10 @@ def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap
     Returns:
         The resolved CustomLayer, or None.
     """
-    if not layer_uuid:
+    parsed_uuid = uuid_or_none(layer_uuid)
+    if parsed_uuid is None:
         return None
-    qs = CustomLayer.objects.filter(uuid=layer_uuid, **owner_kwargs)
+    qs = CustomLayer.objects.filter(uuid=parsed_uuid, **owner_kwargs)
     if isinstance(owner, Wiki):
         from urbanlens.dashboard.services.wiki.concealment import visible_rows
 
@@ -722,7 +724,7 @@ class MarkupView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = posted_fields(request)
 
-        markup_type = body.get("markup_type", "")
+        markup_type = text_field(body, "markup_type")
         if markup_type not in _ALLOWED_TYPES:
             return JsonResponse({"ok": False, "error": f"Invalid markup_type: {markup_type}"}, status=400)
 
@@ -741,11 +743,11 @@ class MarkupView(LoginRequiredMixin, View):
         if markup_type == "text":
             _sanitize_text_box_corner(geometry)
 
-        label = (body.get("label") or "").strip()
+        label = text_field(body, "label")
         length_error = text_length_error(label, MAX_MARKUP_LABEL_LENGTH, "Label")
         if length_error:
             return JsonResponse({"ok": False, "error": length_error}, status=400)
-        security_indicator = body.get("security_indicator") or ""
+        security_indicator = text_field(body, "security_indicator")
         if security_indicator not in _ALLOWED_SECURITY_INDICATORS:
             security_indicator = ""
 
@@ -837,7 +839,7 @@ class MarkupEditView(LoginRequiredMixin, View):
                 _sanitize_text_box_corner(geometry)
             item.geometry = geometry
         if "label" in body:
-            label = (body["label"] or "").strip()
+            label = text_field(body, "label")
             length_error = text_length_error(label, MAX_MARKUP_LABEL_LENGTH, "Label")
             if length_error:
                 return JsonResponse({"ok": False, "error": length_error}, status=400)
@@ -865,7 +867,7 @@ class MarkupEditView(LoginRequiredMixin, View):
             # indistinguishable from that display value being echoed straight back by an edit to some other
             # field.
         if "security_indicator" in body:
-            indicator = body.get("security_indicator") or ""
+            indicator = text_field(body, "security_indicator")
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""
         item.coerce_colors()
         snapshot.save_changes()

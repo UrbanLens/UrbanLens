@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import DatabaseError
 
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
+
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
@@ -19,6 +21,25 @@ logger = logging.getLogger(__name__)
 
 VISIT_MATCH_RADIUS_M = 100
 MIN_CONFIDENCE = 50
+
+
+def _e7_degrees(value: object, *, bound: float) -> float | None:
+    """A Takeout ``latitudeE7``-style coordinate in degrees, or None when it is not a place on the globe.
+
+    Args:
+        value: The integer the file holds: degrees times ten million.
+        bound: :data:`LATITUDE_BOUND` or :data:`LONGITUDE_BOUND`.
+
+    Returns:
+        The degrees, or None for anything but a number within *bound* once scaled.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        return coordinate_or_none(value / 1e7, bound=bound)
+    except OverflowError:
+        # An integer past a float's range.
+        return None
 
 
 def detect_location_history_format(data: dict) -> str | None:
@@ -69,9 +90,9 @@ def semantic_visit(obj: dict) -> dict[str, Any] | None:
     if confidence < MIN_CONFIDENCE:
         return None
     loc = pv.get("location", {})
-    lat_e7 = loc.get("latitudeE7")
-    lon_e7 = loc.get("longitudeE7")
-    if lat_e7 is None or lon_e7 is None:
+    latitude = _e7_degrees(loc.get("latitudeE7"), bound=LATITUDE_BOUND)
+    longitude = _e7_degrees(loc.get("longitudeE7"), bound=LONGITUDE_BOUND)
+    if latitude is None or longitude is None:
         return None
     start_ts = (pv.get("duration") or {}).get("startTimestamp")
     if not start_ts:
@@ -82,8 +103,8 @@ def semantic_visit(obj: dict) -> dict[str, Any] | None:
         logger.debug("Unparseable placeVisit timestamp: %s", start_ts)
         return None
     return {
-        "latitude": lat_e7 / 1e7,
-        "longitude": lon_e7 / 1e7,
+        "latitude": latitude,
+        "longitude": longitude,
         "visited_at": visited_at,
         "place_name": loc.get("name", ""),
         "place_id": loc.get("placeId"),
@@ -171,7 +192,7 @@ def _parse_iso_timestamp(value: str | None) -> datetime | None:
         return None
     try:
         return datetime.fromisoformat(value)
-    except ValueError:
+    except (TypeError, ValueError):
         logger.debug("Unparseable activitySegment timestamp: %s", value)
         return None
 
@@ -179,24 +200,20 @@ def _parse_iso_timestamp(value: str | None) -> datetime | None:
 def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
     """Yield RawTrackPoint entries for an activitySegment, preferring the timestamped path.
     ``simplifiedRawPath.points`` carries a per-point timestamp when Google recorded one; ``waypointPath.waypoints`` is a coarser fallback with only coordinates, so points from it carry no timestamp."""
-    from urbanlens.dashboard.services.import_formats.gpx_tracks import RawTrackPoint
+    from urbanlens.dashboard.services.import_formats.gpx_tracks import track_point
 
     simplified_points = (segment.get("simplifiedRawPath") or {}).get("points") or []
     if simplified_points:
         for point in simplified_points:
-            lat_e7 = point.get("latE7")
-            lng_e7 = point.get("lngE7")
-            if lat_e7 is None or lng_e7 is None:
-                continue
-            yield RawTrackPoint(lat_e7 / 1e7, lng_e7 / 1e7, _parse_iso_timestamp(point.get("timestamp")))
+            track = track_point(_e7_degrees(point.get("latE7"), bound=LATITUDE_BOUND), _e7_degrees(point.get("lngE7"), bound=LONGITUDE_BOUND), _parse_iso_timestamp(point.get("timestamp")))
+            if track is not None:
+                yield track
         return
 
     for waypoint in (segment.get("waypointPath") or {}).get("waypoints") or []:
-        lat_e7 = waypoint.get("latE7")
-        lng_e7 = waypoint.get("lngE7")
-        if lat_e7 is None or lng_e7 is None:
-            continue
-        yield RawTrackPoint(lat_e7 / 1e7, lng_e7 / 1e7, None)
+        track = track_point(_e7_degrees(waypoint.get("latE7"), bound=LATITUDE_BOUND), _e7_degrees(waypoint.get("lngE7"), bound=LONGITUDE_BOUND), None)
+        if track is not None:
+            yield track
 
 
 def _activity_segment(obj: dict) -> dict[str, Any] | None:

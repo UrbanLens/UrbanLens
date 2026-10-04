@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.images.kinds import MediaKindSpec, media_kind_sp
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.sort import GALLERY_SORT_SPECS, GallerySort, gallery_sort_spec
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.pagination import offset_window
 from urbanlens.dashboard.services.media.images import image_to_gallery_json
 
 if TYPE_CHECKING:
@@ -114,15 +115,7 @@ class VaultMediaItemsView(LoginRequiredMixin, View):
         """
         spec = media_kind_spec(kind)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        try:
-            offset = max(0, int(request.GET.get("offset") or 0))
-        except (TypeError, ValueError):
-            offset = 0
-        try:
-            limit = int(request.GET.get("limit") or _GALLERY_PAGE_SIZE)
-        except (TypeError, ValueError):
-            limit = _GALLERY_PAGE_SIZE
-        limit = min(max(1, limit), _MAX_ITEMS_PER_FETCH)
+        offset, limit = offset_window(request.GET, default_limit=_GALLERY_PAGE_SIZE, max_limit=_MAX_ITEMS_PER_FETCH)
 
         gallery = _sorted_gallery(spec, profile, request)
         return JsonResponse(

@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, clamp_int, coordinate_or_none
-from urbanlens.dashboard.services.core.request_body import posted_fields
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
 from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.media.quota_rewards import revoke_community_bonuses_on_wiki_delete
@@ -51,7 +51,7 @@ def _requested_pin_type(body) -> tuple[str, bool]:
     Returns:
         Tuple of (pin type to store now, whether the user picked it).
     """
-    chosen = (body.get("pin_type") or "").strip()
+    chosen = text_field(body, "pin_type")
     if chosen and PinType.valid(chosen):
         return chosen, True
     return _PROVISIONAL_PIN_TYPE, False
@@ -142,7 +142,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             logger.info("detail pin location rejected: %s", exc)
             return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
-        detail_name = body.get("name") or None
+        detail_name = text_field(body, "name") or None
         name_error = column_length_error(Pin, "name", detail_name, "Name")
         if name_error:
             return JsonResponse({"ok": False, "error": name_error}, status=400)
@@ -152,7 +152,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             # Creation is not an explicit rename; imported/generated detail
             # names must remain eligible for later canonical-name cleanup.
             name_is_user_provided=False,
-            description=body.get("description") or None,
+            description=text_field(body, "description") or None,
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
             icon=clean_icon(body.get("icon")),
@@ -196,9 +196,12 @@ class DetailPinEditView(LoginRequiredMixin, View):
                 logger.info("detail pin move rejected: %s", exc)
                 return JsonResponse({"ok": False, "error": "You already have a pin at these exact coordinates."}, status=400)
 
+        name = text_field(body, "name") or None
+        if name_error := column_length_error(Pin, "name", name, "Name"):
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         for field, value in {
-            "name": body.get("name") or None,
-            "description": body.get("description") or None,
+            "name": name,
+            "description": text_field(body, "description") or None,
             "icon": clean_icon(body.get("icon")),
             "color": clean_color(body.get("color")),
             "detail_bg_color": clean_color(body.get("bg_color"), allow_none_keyword=True),
@@ -379,7 +382,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         # write concealment into shared content.
         from urbanlens.dashboard.services.wiki.concealment import writable_wiki
 
-        child_name = body.get("name") or writable_wiki(wiki).name
+        child_name = text_field(body, "name") or writable_wiki(wiki).name
         name_error = column_length_error(Wiki, "name", child_name, "Name")
         if name_error:
             return JsonResponse({"ok": False, "error": name_error}, status=400)
@@ -388,7 +391,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             # Who placed it.
             created_by=profile,
             name=child_name,
-            description=body.get("description") or None,
+            description=text_field(body, "description") or None,
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
             icon=clean_icon(body.get("icon")),
@@ -450,9 +453,12 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         # Style/content fields update silently (no WikiEdit) - same reasoning as personal detail pins: these
         # autosave on every panel change, and a granular audit entry per keystroke would flood the wiki's edit
         # history.
+        child_name = text_field(body, "name") or child_wiki.name
+        if name_error := column_length_error(Wiki, "name", child_name, "Name"):
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         for field, value in {
-            "name": body.get("name") or child_wiki.name,
-            "description": body.get("description") or None,
+            "name": child_name,
+            "description": text_field(body, "description") or None,
             "icon": clean_icon(body.get("icon")),
             "color": clean_color(body.get("color")),
             "detail_bg_color": clean_color(body.get("bg_color"), allow_none_keyword=True),

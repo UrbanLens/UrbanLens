@@ -7,15 +7,20 @@ from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 import json
 import logging
+import math
 import os
 import shutil
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 import zipfile
 
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
+
+if TYPE_CHECKING:
+    from django.contrib.gis.geos import LineString
 
 logger = logging.getLogger(__name__)
 
@@ -2655,9 +2660,10 @@ def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
         return None
+    return number if math.isfinite(number) else None
 
 
 def _bounded_int(value: Any, *, default: int, low: int = 0, high: int = 100) -> int:
@@ -2849,16 +2855,16 @@ class RoutesImport(RowImportType):
         return True
 
 
-def _linestring_from_geojson(value: Any) -> Any:
+def _linestring_from_geojson(value: Any) -> LineString | None:
     """Parse an exported GeoJSON path into a WGS-84 LineString.
 
     Args:
         value: The exported ``path`` object.
 
     Returns:
-        A ``LineString`` in SRID 4326, or None when the payload isn't one.
+        A ``LineString`` in SRID 4326, or None when the payload isn't one, or any point is not on the globe.
     """
-    from django.contrib.gis.geos import GEOSGeometry
+    from django.contrib.gis.geos import GEOSGeometry, LineString
     from django.contrib.gis.geos.error import GEOSException
 
     if not isinstance(value, dict):
@@ -2867,7 +2873,9 @@ def _linestring_from_geojson(value: Any) -> Any:
         geometry = GEOSGeometry(json.dumps(value), srid=4326)
     except (GEOSException, ValueError, TypeError):
         return None
-    if geometry.geom_type != "LineString" or geometry.num_coords < 2:
+    if not isinstance(geometry, LineString) or geometry.num_coords < 2:
+        return None
+    if any(coordinate_or_none(lng, bound=LONGITUDE_BOUND) is None or coordinate_or_none(lat, bound=LATITUDE_BOUND) is None for lng, lat, *_ in geometry.coords):
         return None
     return geometry
 

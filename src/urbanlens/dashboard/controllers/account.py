@@ -33,7 +33,7 @@ from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDIN
 from urbanlens.dashboard.services.auth.username import USERNAME_RULES, USERNAME_UNAVAILABLE, username_is_available
 from urbanlens.dashboard.services.core import counters
 from urbanlens.dashboard.services.core.counters import Outage
-from urbanlens.dashboard.services.core.request_body import MalformedBodyError, posted_json_object
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, json_body, posted_json_object
 from urbanlens.dashboard.services.security.client_ip import client_ip
 from urbanlens.dashboard.services.security.throttle import Rate
 
@@ -873,7 +873,7 @@ class LoginTwoFactorVerifyView(View):
         )
 
         try:
-            verify_authentication(request, user, request.body.decode("utf-8"))
+            verify_authentication(request, user, json_body(request).decode("utf-8"))
         except UnicodeDecodeError as exc:
             logger.warning("Passkey verification body was not valid UTF-8: %s", exc, exc_info=True)
             return JsonResponse({"error": "Invalid passkey response."}, status=400)

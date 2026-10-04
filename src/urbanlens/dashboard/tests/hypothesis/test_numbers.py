@@ -10,6 +10,8 @@ import pytest
 
 from hypothesis import given, strategies as st
 from urbanlens.dashboard.services.core.numbers import (
+    DB_BIGINT_MAX,
+    DB_BIGINT_MIN,
     LATITUDE_BOUND,
     LONGITUDE_BOUND,
     clamp_int,
@@ -45,9 +47,16 @@ class TestSafeInt:
         body = json.loads(f'{{"opacity": {literal}}}')
         assert safe_int(body["opacity"], 80) == 80
 
-    @given(st.integers())
+    @given(st.integers(min_value=DB_BIGINT_MIN, max_value=DB_BIGINT_MAX))
     def test_an_int_round_trips_through_its_own_string(self, value: int) -> None:
         assert safe_int(str(value), -1) == value
+
+    @given(st.integers(min_value=DB_BIGINT_MAX + 1) | st.integers(max_value=DB_BIGINT_MIN - 1))
+    def test_an_int_no_64_bit_column_holds_is_not_one(self, value: int) -> None:
+        """An ``__in`` lookup sends it to Postgres, which refuses it (P283)."""
+        assert safe_int_or_none(str(value)) is None
+        assert safe_int_or_none(value) is None
+        assert clamp_int(value, low=0, high=100, default=50) == (100 if value > 0 else 0)
 
 
 class TestSafeIntOrNone:

@@ -22743,3 +22743,108 @@ found three with no range or finiteness check. The others use DRF `FloatField` b
 Tests: `test_import_confirm_coordinates.py` (9 refused, 4 accepted, ±90/±180 included) and
 `test_coordinate_inputs_on_the_globe.py`, which posts 6 bad pairs to each form route. Before the fix, a latitude of 95
 created a pin through each of the three routes.
+
+**Correction (P283).** That audit missed two routes. Adding a pin from the map (`pin.add`, through
+`create_pin_for_profile`) and the map's quick edit (`pin.quick_edit`) both stored a posted coordinate after a bare
+`float()`. `Location`'s columns hold up to ±999.999999, and a probe stored latitudes of 95 and 500. Both now go
+through `coordinate_or_none`; see P283.
+
+## RESOLVED 2026-10-04: An import's routes and visits kept coordinates off the globe
+
+`id: P284` · `status: fixed` · `resolved: 2026-10-04` · `found by: the adversarial review of P282`
+
+**What was wrong.** P282 kept every previewed pin on the globe. The same uploads also build routes, whose path is
+stored as `Route.path`, and visits, which are matched to the nearest pin. Neither checked its coordinates:
+
+- **GPX tracks and routes.** gpxpy reads a `lat` of `9999`, `inf` or `nan`. An infinite or NaN point made GEOS refuse
+  the line, which failed the whole file. An out-of-range point was stored in the path.
+- **Takeout Semantic Location History**, for both activity-segment routes and place visits:
+  - an E7 value past the range was kept;
+  - `Infinity` or `NaN` was kept as a non-finite coordinate;
+  - an integer past a float's range raised `OverflowError`;
+  - a string raised `TypeError`;
+  - `true` was read as 1e-7 degrees.
+- **The export re-import** (`RoutesImport`) restored any LineString GEOS accepted, including out-of-range vertices. It
+  also stored infinite or NaN distances and elevations.
+
+**Fix.**
+
+- `gpx_tracks.track_point()` builds a `RawTrackPoint` only for a coordinate on the globe, through
+  `coordinate_or_none`. Both GPX readers and both Semantic Location History point readers use it. An off-globe point
+  is left out and the rest of the track is kept. A track left with fewer than two points makes no route, as before. A
+  non-finite GPX elevation is read as none.
+- `location_history._e7_degrees()` scales an E7 value only when it is a number, not a bool or a string. It refuses one
+  past a float's range or off the globe. `semantic_visit` uses it, so an off-globe place visit is no visit.
+- `import_data._linestring_from_geojson` refuses a path with any vertex off the globe. `_float_or_none` refuses
+  infinity and NaN, so a restored distance falls back to 0 and an elevation to none.
+- `_parse_iso_timestamp` reads a timestamp that is not a string as absent, rather than failing the file.
+
+**Tests.** `test_route_and_history_coordinates.py` covers:
+
+- GPX tracks, with five bad latitudes;
+- Semantic Location History routes and visits, with six bad E7 values each;
+- the export re-import, with four bad vertices and non-finite measures;
+- anti-vacuity cases for each.
+
+Before the fix, 23 subtests failed.
+
+## RESOLVED 2026-10-04: A parameter value no view expected was a 500 on about sixty routes
+
+`id: P283` · `status: fixed` · `resolved: 2026-10-04` · `found by: a hostile-value sweep added to test_write_route_smoke.py`
+
+**What was found.** `test_write_route_smoke.py` already sent an empty form and malformed JSON to every owner-scoped
+route. Two new sweeps set every parameter name a view reads to one hostile value at a time. The names are scanned from
+the source, 282 of them.
+
+- **As a form or a query:** `inf`, `-1e999`, `nan`, `abc`, `-1`, a 23-digit number, `x\x00y`, and 400 nines. The first
+  run had 41 routes answer a 500.
+- **As a JSON object body:** the same strings, then the bare values `Infinity`, `NaN`, `-1e999`, a 23-digit number,
+  `1.5`, `true`, `null`, `[]`, `{}`, `["x"]` and `{"a": 1}`. A further 24 crash sites answered a 500.
+
+The crashes fell into these classes:
+
+- **A NUL character**, on about 25 routes: every search, and every text write outside a Django form. Postgres refuses
+  NUL in text.
+- **An id or UUID used as written:** `filter(id="inf")` raises `ValueError`, a malformed UUID raises
+  `ValidationError`, and a number past a bigint in an `__in` lookup raises `DataError`. Django guards exact lookups
+  past the column's range, but not `__in`.
+- **`Decimal` or `float` reading `nan` and `inf`:** a sale price, a pledge amount, an admin price, and the coordinates
+  posted to add-pin and quick-edit. Before, `Location` stored a latitude of 95 or 500 (see the P282 correction).
+- **An `offset` past a bigint**, on the album and vault grids. Postgres refuses it as `OFFSET`.
+- **A JSON value of the wrong type.** A view called `.strip()` or `len()` on a number, or iterated one, or hashed a
+  list. This hit list, trip, pin-edit, bulk-edit, detail-pin, markup and album routes.
+- **Text past its column:** a pin rename, a detail pin or child wiki rename, a list rename, a trip name, and owner
+  fields. Each create form checked the length; these writes did not.
+- **A form posted where a view reads `request.body` as JSON** (the photo reposition routes, a passkey check and the
+  CSP report). Once the form is read, reading `request.body` raises `RawPostDataException`. In production the CSRF
+  check reads the form of every POST it guards.
+- **A quick-edit move onto a place the user already pinned** violated `db_pin_unique_location_per_profile`.
+
+**Fix.** Each fix is shared where the class is shared.
+
+- `middleware.NulCharacterRefusalMiddleware` sits after CSRF. It answers a NUL in the query, the form or a URL argument
+  with a plain-text 400. It reads a multipart form only for a view the CSRF check has already read it for, so a
+  CSRF-exempt view keeps its body. `request_body.decode_json` and the DRF `JSONParser` refuse a NUL in any decoded
+  string.
+- `services/core/uuids.py` adds `uuid_or_none` and `valid_uuids`. Every UUID lookup the sweep reached goes through
+  them.
+- `safe_int_or_none` returns None past a 64-bit integer. `clamp_int` still clamps an over-long number.
+- `request_body.text_field`, `list_field` and `json_body` read a JSON field by type, or refuse a form where JSON is
+  read.
+- `pagination.offset_window` holds the grids' offset and limit within what Postgres takes.
+- `numbers.typed_decimal_for_column` and `pricing.typed_dollars_to_cents` replace bare `Decimal()` parses. The second
+  bounds an amount to Stripe's maximum, $999,999.99.
+- `create_pin_for_profile` raises `InvalidCoordinatesError`, and quick-edit refuses an off-globe move.
+- The trip service parses the name, description and dates itself, so the web form and the API refuse alike.
+- Length checks were added where a write lacked one.
+
+**Tests.**
+
+- `test_write_route_smoke.py`: the two sweeps. A crash report now names the line it came from.
+- `test_hostile_parameter_values.py`: each refusal, with nothing written.
+- `test_nul_character_refusal.py`: the middleware, including both CSRF-exempt cases, and a hypothesis property that
+  JSON is refused exactly when a string in it holds a NUL.
+- `test_numbers.py`: the bigint bound.
+
+A sweep over 304 test files that import a changed module or hit a changed route passed. The only failures were 8
+seed-row pollution failures in `test_site_admin_subscription_roles.py`, which passes alone.

@@ -17,7 +17,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
+from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json, json_body
 from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
@@ -109,7 +109,7 @@ class CspReportView(View):
         if not length.isdigit() or int(length) > MAX_REPORT_BYTES:
             return HttpResponse(status=413)
         try:
-            payload = decode_json(request.body)
+            payload = decode_json(json_body(request))
         except MalformedBodyError:
             return HttpResponse(status=400)
         for report in iter_reports(payload):

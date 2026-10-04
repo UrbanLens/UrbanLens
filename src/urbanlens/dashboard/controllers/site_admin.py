@@ -715,11 +715,9 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
 
         if action == "role_pricing":
-            from decimal import Decimal, InvalidOperation
-
             from django.core.exceptions import ValidationError
 
-            from urbanlens.dashboard.services.billing.pricing import dollars_to_cents
+            from urbanlens.dashboard.services.billing.pricing import typed_dollars_to_cents
 
             role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
             if role is None:
@@ -733,14 +731,17 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 raw = (request.POST.get(field) or "").strip()
                 if raw == "":
                     return None
-                return dollars_to_cents(Decimal(raw))
+                cents = typed_dollars_to_cents(raw)
+                if cents is None:
+                    raise ValueError(raw)
+                return cents
 
             error_message: str | None = None
             try:
                 role.monthly_price_cents = _parse_dollars("monthly_price_dollars")
                 role.pwyw_minimum_cents = _parse_dollars("pwyw_minimum_dollars")
-            except InvalidOperation:
-                error_message = "Prices must be numbers."
+            except ValueError:
+                error_message = "Prices must be amounts from $0 to $999,999.99."
             else:
                 role.pay_what_you_want = request.POST.get("pay_what_you_want") == "on"
                 role.pwyw_dynamic_threshold = request.POST.get("pwyw_dynamic_threshold") == "on"

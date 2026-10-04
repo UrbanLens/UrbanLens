@@ -685,7 +685,7 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
             label.parents.set(safe_parent_ids)
 
-        child_ids = request.POST.getlist("child_ids")
+        child_ids = _posted_label_ids(request, "child_ids")
         if child_ids:
             valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=label.id)
             for child in valid_children:
@@ -833,7 +833,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
             label.parents.set(safe_parent_ids)
 
-            child_ids = request.POST.getlist("child_ids")
+            child_ids = _posted_label_ids(request, "child_ids")
             valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=label_id)
             safe_child_ids = [c.id for c in valid_children if not _would_create_cycle(c, label_id)]
             label.children.set(safe_child_ids)
@@ -1337,9 +1337,9 @@ def _membership_panel_ctx(
     return ctx
 
 
-def _membership_label_id(request: HttpRequest) -> str | None:
+def _membership_label_id(request: HttpRequest) -> int | None:
     """Read a label PK from membership add/remove POST data."""
-    return request.POST.get("label_id") or request.POST.get("category_id")
+    return safe_int_or_none(request.POST.get("label_id") or request.POST.get("category_id"))
 
 
 def _organize_label_from_create(request: HttpRequest, profile: Profile) -> Label | HttpResponse:

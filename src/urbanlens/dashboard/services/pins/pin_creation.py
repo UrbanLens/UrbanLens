@@ -13,6 +13,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, safe_int_or_none
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 
 if TYPE_CHECKING:
@@ -25,6 +26,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+
+def _ids(values: Sequence[object]) -> list[int]:
+    return [parsed for parsed in map(safe_int_or_none, values) if parsed is not None]
 
 
 class PinCreationError(ValueError):
@@ -49,6 +54,10 @@ class NoLocationProvidedError(PinCreationError):
 
 class AddressResolutionError(PinCreationError):
     """The given address couldn't be geocoded to coordinates."""
+
+
+class InvalidCoordinatesError(PinCreationError):
+    """The given coordinates are not a place on the globe: not numbers, not finite, or out of range."""
 
 
 class DuplicateUuidError(PinCreationError):
@@ -119,9 +128,9 @@ def create_pin_for_profile(
     description: str | None = None,
     pin_type: str | None = None,
     custom_icon: UploadedFile | None = None,
-    label_ids: Sequence[str] = (),
-    tag_ids: Sequence[str] = (),
-    category_ids: Sequence[str] = (),
+    label_ids: Sequence[object] = (),
+    tag_ids: Sequence[object] = (),
+    category_ids: Sequence[object] = (),
     google_place_id: str | None = None,
     place_canonical_name: str | None = None,
     client_uuid: UUID | None = None,
@@ -141,7 +150,7 @@ def create_pin_for_profile(
         description: Personal notes to store on the pin, if any.
         pin_type: A ``PinType`` value; when given, the pin is marked user-classified (``pin_type_is_user_provided``) so automatic classification won't overwrite it - mirroring ``name``'s handling.
         custom_icon: An uploaded custom icon image.
-        label_ids: Label ids to attach directly (takes precedence over tag_ids/category_ids).
+        label_ids: Label ids to attach directly (takes precedence over tag_ids/category_ids). Anything not an id is dropped.
         tag_ids: Tag-kind label ids to attach when ``label_ids`` wasn't given.
         category_ids: Category-kind label ids to attach when ``label_ids`` wasn't given.
         google_place_id: A Google Place id to link on both the pin and location.
@@ -154,7 +163,7 @@ def create_pin_for_profile(
         The created (or, for an idempotent replay, existing) pin plus every Location match at this point.
 
     Raises:
-        PinCreationError: Neither coordinates nor a usable address were given, the address couldn't be geocoded, ``client_uuid`` is already used by a pin that isn't this profile's, ``parent_id`` doesn't match one of this profile's own pins, the profile already has a...
+        PinCreationError: Neither coordinates nor a usable address were given, the coordinates are not on the globe, the address couldn't be geocoded, ``client_uuid`` is already used by a pin that isn't this profile's, ``parent_id`` doesn't match one of this profile's own pins, the profile already has a...
         PinCreationForbiddenError: An address needed geocoding but external lookups are turned off for this profile."""
     if client_uuid is not None:
         existing = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first()
@@ -183,8 +192,10 @@ def create_pin_for_profile(
         if latitude is None or longitude is None:
             raise AddressResolutionError("Geocoding the given address returned no coordinates.")
 
-    lat_f = float(latitude)
-    lon_f = float(longitude)
+    lat_f = coordinate_or_none(latitude, bound=LATITUDE_BOUND)
+    lon_f = coordinate_or_none(longitude, bound=LONGITUDE_BOUND)
+    if lat_f is None or lon_f is None:
+        raise InvalidCoordinatesError("The coordinates are not a place on the globe.")
 
     if new_parent is not None:
         # A child pin keeps its own exact point (and may not stack on another of
@@ -285,14 +296,14 @@ def create_pin_for_profile(
     # private labels - a guessed foreign label id would otherwise attach (and
     # render the name of) someone else's label.
     if label_ids:
-        pin.labels.set(Label.objects.location_labels().visible_to(profile).filter(id__in=label_ids))
+        pin.labels.set(Label.objects.location_labels().visible_to(profile).filter(id__in=_ids(label_ids)))
     else:
         if tag_ids:
             pin.labels.remove(*pin.labels.filter(kind=KIND_TAG))
-            pin.labels.add(*Label.objects.tags().visible_to(profile).filter(id__in=tag_ids))
+            pin.labels.add(*Label.objects.tags().visible_to(profile).filter(id__in=_ids(tag_ids)))
         if category_ids:
             pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
-            pin.labels.add(*Label.objects.categories().visible_to(profile).filter(id__in=category_ids))
+            pin.labels.add(*Label.objects.categories().visible_to(profile).filter(id__in=_ids(category_ids)))
 
     # Generate slug immediately so the "View Details" URL resolves without a
     # separate lookup - Pin.slug is nullable and is not auto-populated by create().

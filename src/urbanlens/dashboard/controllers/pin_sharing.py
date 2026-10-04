@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.uuids import uuid_or_none, valid_uuids
 from urbanlens.dashboard.services.sharing.pin_sharing import PinSharePermissionError, apply_pin_share_response, create_pin_share
 from urbanlens.dashboard.services.social.connections import get_connections
 
@@ -27,8 +28,7 @@ class PinShareDialogView(LoginRequiredMixin, View):
         # ?children=<uuid>,<uuid>,...
         selected_child_pins: list[Pin] = []
         if raw_uuids := request.GET.get("children"):
-            uuids = [u for u in raw_uuids.split(",") if u]
-            selected_child_pins = list(pin.descendants().filter(uuid__in=uuids).select_related("location"))
+            selected_child_pins = list(pin.descendants().filter(uuid__in=valid_uuids(raw_uuids.split(","))).select_related("location"))
 
         return render(
             request,
@@ -85,9 +85,9 @@ class PinShareCreateView(LoginRequiredMixin, View):
 
         attached_map = None
         if map_uuid := request.POST.get("markup_map_uuid"):
-            attached_map = MarkupMap.objects.filter(uuid=map_uuid, profile=sender).first()
+            attached_map = MarkupMap.objects.filter(uuid=uuid_or_none(map_uuid), profile=sender).first()
 
-        selected_uuids = [u for u in request.POST.getlist("child_pin_uuids") if u]
+        selected_uuids = valid_uuids(request.POST.getlist("child_pin_uuids"))
         if selected_uuids:
             children = pin.descendants().filter(uuid__in=selected_uuids)
         elif request.POST.get("include_children"):

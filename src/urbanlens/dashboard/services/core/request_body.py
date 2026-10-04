@@ -20,6 +20,33 @@ if TYPE_CHECKING:
 FORM_CONTENT_TYPES = frozenset({"multipart/form-data", "application/x-www-form-urlencoded"})
 
 
+#: Postgres refuses a NUL in text, so a request holding one is refused before a view can pass it to a query.
+NUL_REFUSAL = "Text can't contain a NUL character."
+
+
+def holds_nul(value: object) -> bool:
+    """Whether any string in *value*, a decoded JSON value or a form's fields, holds a NUL character.
+
+    Args:
+        value: A string, or lists, tuples and dicts of them, keys included.
+
+    Returns:
+        True when one does.
+    """
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if "\x00" in item:
+                return True
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+        elif isinstance(item, list | tuple):
+            pending.extend(item)
+    return False
+
+
 class MalformedBodyError(BadRequest, ValueError):
     """Posted JSON that does not decode, or is not the shape asked for. Django answers it with a 400.
 
@@ -39,12 +66,17 @@ def decode_json(raw: str | bytes) -> Any:
         The decoded value.
 
     Raises:
-        MalformedBodyError: *raw* is not JSON, or nests too deeply to decode.
+        MalformedBodyError: *raw* is not JSON, nests too deeply to decode, or holds a NUL in a string.
     """
     try:
-        return json.loads(raw)
+        text = raw.decode(json.detect_encoding(raw), "surrogatepass") if isinstance(raw, bytes) else raw
+        value = json.loads(text)
     except (ValueError, RecursionError) as exc:
         raise MalformedBodyError("The request body is not valid JSON.") from exc
+    # A NUL can only be in a JSON string escaped.
+    if "u0000" in text and holds_nul(value):
+        raise MalformedBodyError(NUL_REFUSAL)
+    return value
 
 
 def posted_json_object(request: HttpRequest) -> dict[str, Any]:
@@ -67,6 +99,26 @@ def posted_json_object(request: HttpRequest) -> dict[str, Any]:
     return data
 
 
+def json_body(request: HttpRequest) -> bytes:
+    """The raw body of a request a view decodes as JSON itself.
+
+    A form's body may already have been read into ``request.POST``, by the CSRF check or the NUL refusal; reading
+    ``request.body`` after that raises ``RawPostDataException``, a 500.
+
+    Args:
+        request: The incoming request.
+
+    Returns:
+        The body.
+
+    Raises:
+        MalformedBodyError: The request was posted as a form, not JSON.
+    """
+    if request.content_type in FORM_CONTENT_TYPES:
+        raise MalformedBodyError("The request body must be JSON.")
+    return request.body
+
+
 def posted_fields(request: HttpRequest) -> dict[str, Any]:
     """A form post's fields, one value each, or the JSON object body.
 
@@ -82,6 +134,36 @@ def posted_fields(request: HttpRequest) -> dict[str, Any]:
     if request.content_type in FORM_CONTENT_TYPES:
         return request.POST.dict()
     return posted_json_object(request)
+
+
+def text_field(fields: Mapping[str, Any], name: str) -> str:
+    """A posted field's text, stripped: ``""`` when it is absent, or a JSON body posted anything but a string.
+
+    A form posts only strings; a JSON body may post any JSON value under a name a view reads as text.
+
+    Args:
+        fields: What :func:`posted_fields` or :func:`posted_json_object` returned.
+        name: The field.
+
+    Returns:
+        The stripped text.
+    """
+    value = fields.get(name)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def list_field(fields: Mapping[str, Any], name: str) -> list[Any]:
+    """A JSON body's list field: ``[]`` when it is absent or posted as anything but a list.
+
+    Args:
+        fields: What :func:`posted_json_object` returned.
+        name: The field.
+
+    Returns:
+        The list, its items unchecked.
+    """
+    value = fields.get(name)
+    return value if isinstance(value, list) else []
 
 
 def drf_data_object(request: Request) -> Mapping[str, Any]:
@@ -117,9 +199,12 @@ class JSONParser(parsers.JSONParser):
             The decoded JSON value.
 
         Raises:
-            ParseError: The body is not JSON, or nests too deeply to decode.
+            ParseError: The body is not JSON, nests too deeply to decode, or holds a NUL in a string.
         """
         try:
-            return super().parse(stream, media_type, parser_context)
+            value = super().parse(stream, media_type, parser_context)
         except RecursionError as exc:
             raise ParseError("JSON parse error - the body is nested too deeply.") from exc
+        if holds_nul(value):
+            raise ParseError(NUL_REFUSAL)
+        return value

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 from typing import TYPE_CHECKING, Any
 
 from django.db import IntegrityError, transaction
@@ -9,14 +10,13 @@ from django.db import IntegrityError, transaction
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.notifications.change_notifications import announce_trip_change
 from urbanlens.dashboard.services.trips.trip_access import require_joined
 from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError, TripQuotaError, TripValidationError
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    import datetime
     from uuid import UUID
 
 EDIT_TRIP_DENIED = "Join this trip to edit its details."
@@ -36,6 +36,48 @@ TRIP_PERMISSION_FIELDS: tuple[str, ...] = (
     "allow_edit_activities",
     "allow_comments",
 )
+
+
+def _trip_name(value: object) -> str:
+    """A submitted trip name, stripped: ``""`` for anything but text.
+
+    Raises:
+        TripValidationError: The name is longer than its column.
+    """
+    name = value.strip() if isinstance(value, str) else ""
+    if length_error := column_length_error(Trip, "name", name, "Trip name"):
+        raise TripValidationError(length_error)
+    return name
+
+
+def _trip_description(value: object) -> str | None:
+    """A submitted description: None for a blank one, or anything but text.
+
+    Raises:
+        TripValidationError: The description exceeds the shared text limit.
+    """
+    description = (value if isinstance(value, str) else "") or None
+    if length_error := text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description"):
+        raise TripValidationError(length_error)
+    return description
+
+
+def _trip_date(value: object, label: str) -> datetime.date | None:
+    """A submitted date: a ``date``, a ``YYYY-MM-DD`` string, or blank for none.
+
+    Raises:
+        TripValidationError: Anything else.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, datetime.date) and not isinstance(value, datetime.datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.date.fromisoformat(value.strip())
+        except ValueError:
+            pass
+    raise TripValidationError(f"{label} must be a date, written YYYY-MM-DD.")
 
 
 def create_trip(
@@ -63,7 +105,7 @@ def create_trip(
         The ``(trip, created)`` pair; ``created`` is False for an idempotent replay.
 
     Raises:
-        TripValidationError: The description exceeds the shared text limit, or ``client_uuid`` already belongs to somebody else's trip.
+        TripValidationError: The name or description is too long, a date is not one, or ``client_uuid`` already belongs to somebody else's trip.
         TripQuotaError: The creator is already at ``max_upcoming_trips_per_user``."""
     if client_uuid is not None:
         existing = Trip.objects.filter(uuid=client_uuid).first()
@@ -76,18 +118,11 @@ def create_trip(
 
     from urbanlens.dashboard.services.trips.trip_names import random_trip_name
 
-    clean_name = (name or "").strip() or random_trip_name()
-
-    clean_description = description or None
-    length_error = text_length_error(clean_description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
-    if length_error:
-        raise TripValidationError(length_error)
-
     create_kwargs: dict[str, Any] = {
-        "name": clean_name,
-        "description": clean_description,
-        "start_date": start_date or None,
-        "end_date": end_date or None,
+        "name": _trip_name(name) or random_trip_name(),
+        "description": _trip_description(description),
+        "start_date": _trip_date(start_date, "The start date"),
+        "end_date": _trip_date(end_date, "The end date"),
         "creator": creator,
     }
     if client_uuid is not None:
@@ -175,24 +210,18 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
 
     Raises:
         TripPermissionError: The actor has not joined the trip.
-        TripValidationError: The description exceeds the shared text limit."""
+        TripValidationError: The name or description is too long, or a date is not one."""
     require_joined(actor, trip, EDIT_TRIP_DENIED)
 
     before = (trip.name, trip.description, trip.start_date, trip.end_date)
-    if "name" in changes:
-        new_name = (changes["name"] or "").strip()
-        if new_name:
-            trip.name = new_name
+    if "name" in changes and (new_name := _trip_name(changes["name"])):
+        trip.name = new_name
     if "description" in changes:
-        description = changes["description"] or None
-        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
-        if length_error:
-            raise TripValidationError(length_error)
-        trip.description = description
+        trip.description = _trip_description(changes["description"])
     if "start_date" in changes:
-        trip.start_date = changes["start_date"] or None
+        trip.start_date = _trip_date(changes["start_date"], "The start date")
     if "end_date" in changes:
-        trip.end_date = changes["end_date"] or None
+        trip.end_date = _trip_date(changes["end_date"], "The end date")
     trip.save()
     if (trip.name, trip.description, trip.start_date, trip.end_date) != before:
         announce_trip_change(trip, actor, "changed the trip's details")

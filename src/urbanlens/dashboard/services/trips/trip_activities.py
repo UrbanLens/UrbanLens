@@ -19,7 +19,10 @@ from urbanlens.dashboard.models.trips.model import (
 )
 from urbanlens.dashboard.models.trips.signals import queue_calendar_push
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
+from urbanlens.dashboard.services.core.request_body import text_field
 from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_ACTIVITY_NOTES_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.uuids import uuid_or_none
 from urbanlens.dashboard.services.notifications.change_notifications import announce_trip_change
 from urbanlens.dashboard.services.trips.trip_access import has_joined, is_organizer, require_joined, require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError, TripQuotaError, TripValidationError
@@ -221,22 +224,17 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
 
     Raises:
         TripValidationError: A ``pin_uuid``/``pin_slug`` was submitted but does not resolve to one of *profile*'s own pins - either it does not exist, or it belongs to someone else."""
-    import uuid as uuid_module
-
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pin_ref = (body.get("pin_uuid") or body.get("pin_slug") or "").strip()
+    pin_ref = text_field(body, "pin_uuid") or text_field(body, "pin_slug")
     if pin_ref:
         # The shared location-search engine identifies pins by slug (falling
         # back to the uuid when a pin has no slug), so accept either form.
         pin_qs = Pin.objects.filter(profile=profile).select_related("location")
         pin = pin_qs.filter(slug=pin_ref).first()
-        if pin is None:
-            try:
-                pin = pin_qs.filter(uuid=uuid_module.UUID(pin_ref)).first()
-            except ValueError:
-                pin = None
+        if pin is None and (pin_uuid := uuid_or_none(pin_ref)) is not None:
+            pin = pin_qs.filter(uuid=pin_uuid).first()
         if pin is not None:
             return pin.location, pin
         # Unlike location_uuid below, this must not silently fall through to "no place given": a pin
@@ -245,7 +243,7 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
         # and staying quiet about it would attach nothing while telling the caller their pin was
         raise TripValidationError("That pin does not exist, or does not belong to you.")
 
-    location_ref = (body.get("location_uuid") or body.get("location_slug") or "").strip()
+    location_ref = text_field(body, "location_uuid") or text_field(body, "location_slug")
     if location_ref:
         reachable = visible_locations_filter(profile)
         if trip is not None:
@@ -254,21 +252,14 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
         if location is not None:
             return location, None
 
-    geocoded_lat = (body.get("geocoded_lat") or "").strip()
-    geocoded_lng = (body.get("geocoded_lng") or "").strip()
-    if geocoded_lat and geocoded_lng:
-        try:
-            lat = float(geocoded_lat)
-            lng = float(geocoded_lng)
-            if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-                return None, None
-            # No name from the request: it is client text, and a Location's name reaches its shared wiki.
-            location, _ = Location.objects.get_exact_or_create(lat, lng)
-            # Wikis are user-created only; a trip activity location gets one
-            # when someone explicitly creates it from a Private Pin page.
-            return location, None
-        except (ValueError, TypeError):
-            pass
+    lat = coordinate_or_none(body.get("geocoded_lat"), bound=LATITUDE_BOUND)
+    lng = coordinate_or_none(body.get("geocoded_lng"), bound=LONGITUDE_BOUND)
+    if lat is not None and lng is not None:
+        # No name from the request: it is client text, and a Location's name reaches its shared wiki.
+        location, _ = Location.objects.get_exact_or_create(lat, lng)
+        # Wikis are user-created only; a trip activity location gets one
+        # when someone explicitly creates it from a Private Pin page.
+        return location, None
 
     return None, None
 
@@ -594,8 +585,8 @@ def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
 
     Returns:
         The matching trip the actor belongs to, or None."""
-    ref = str(child_trip_uuid or "").strip()
-    if not ref:
+    ref = uuid_or_none(str(child_trip_uuid or "").strip())
+    if ref is None:
         return None
     return Trip.objects.filter(uuid=ref, profiles=actor).first()
 

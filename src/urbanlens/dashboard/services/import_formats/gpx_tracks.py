@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
+import math
 from typing import IO, TYPE_CHECKING, Any, NamedTuple
 from xml.etree.ElementTree import Element  # nosec B405 - builds a holder, parses nothing
 
@@ -15,6 +16,7 @@ import gpxpy.gpx
 from gpxpy.gpxfield import GPXComplexField
 
 from urbanlens.dashboard.models.routes.model import Route, RouteSource
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
 from urbanlens.dashboard.services.import_formats.streams import as_stream, iter_decoded
 from urbanlens.dashboard.services.sandbox import untrusted_parse
@@ -36,6 +38,22 @@ class RawTrackPoint(NamedTuple):
     latitude: float
     longitude: float
     time: datetime | None
+
+
+def track_point(latitude: object, longitude: object, time: datetime | None) -> RawTrackPoint | None:
+    """A track point, or None when its coordinates are not a place on the globe.
+
+    Args:
+        latitude: The point's latitude in degrees, as parsed.
+        longitude: Its longitude.
+        time: When it was recorded, if known.
+
+    Returns:
+        The point, or None for a coordinate that is not a finite number in range.
+    """
+    lat = coordinate_or_none(latitude, bound=LATITUDE_BOUND)
+    lng = coordinate_or_none(longitude, bound=LONGITUDE_BOUND)
+    return RawTrackPoint(lat, lng, time) if lat is not None and lng is not None else None
 
 
 class ParsedRoute(NamedTuple):
@@ -304,9 +322,9 @@ class _GpxReader:
             self._waypoint(_read_fields(gpxpy.gpx.GPXWaypoint, element, self._version))
         elif ancestors == ["trk", "trkseg"] and element.tag == "trkpt":
             point = _read_fields(gpxpy.gpx.GPXTrackPoint, element, self._version)
-            if self.build_routes:
-                self._points.append(RawTrackPoint(point.latitude, point.longitude, point.time))
-                self._elevations.append(point.elevation)
+            if self.build_routes and (kept := track_point(point.latitude, point.longitude, point.time)):
+                self._points.append(kept)
+                self._elevations.append(point.elevation if point.elevation is None or math.isfinite(point.elevation) else None)
         elif ancestors == ["trk"] and element.tag == "trkseg":
             _read_fields(gpxpy.gpx.GPXTrackSegment, element, self._version)
             self._segment_ended()
@@ -315,8 +333,8 @@ class _GpxReader:
             self._route_ended(self.tracks, RouteSource.GPX_TRACK, track.name, climb=True)
         elif ancestors == ["rte"] and element.tag == "rtept":
             route_point = _read_fields(gpxpy.gpx.GPXRoutePoint, element, self._version)
-            if self.build_routes:
-                self._points.append(RawTrackPoint(route_point.latitude, route_point.longitude, route_point.time))
+            if self.build_routes and (kept := track_point(route_point.latitude, route_point.longitude, route_point.time)):
+                self._points.append(kept)
         elif not ancestors and element.tag == "rte":
             route = _read_fields(gpxpy.gpx.GPXRoute, element, self._version)
             self._route_ended(self.routes, RouteSource.GPX_ROUTE, route.name, climb=False)

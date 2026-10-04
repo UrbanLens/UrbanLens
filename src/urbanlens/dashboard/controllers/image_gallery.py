@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import Http404, HttpResponse, JsonResponse
@@ -16,8 +16,9 @@ from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.core.request_body import posted_json_object
+from urbanlens.dashboard.services.core.request_body import json_body, list_field, posted_json_object
 from urbanlens.dashboard.services.geo.sampling import bound_map_layer
 from urbanlens.dashboard.services.media.images import apply_image_map_update, delete_stored_file, detach_image_from_wiki, image_to_gallery_json, prime_uploader_memo
 from urbanlens.dashboard.services.photos.uploads import UploadRejection, record_photo_upload_failure, upload_photo_for_owner
@@ -25,12 +26,28 @@ from urbanlens.dashboard.services.wiki.concealment import visible_rows
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
+
+
+def _posted_ids(data: Mapping[str, Any], name: str) -> list[int]:
+    """The ids a JSON body lists under *name*.
+
+    Raises:
+        ValueError: One of them is not an id.
+    """
+    raw = list_field(data, name)
+    ids = [parsed for parsed in map(safe_int_or_none, raw) if parsed is not None]
+    if len(ids) != len(raw):
+        raise ValueError(f"{name} holds something that is not an id.")
+    return ids
+
 
 _GALLERY_PAGE_SIZE = 12
 
@@ -238,7 +255,7 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
         try:
             data = posted_json_object(request)
             action = data["action"]
-            image_ids = [int(i) for i in data.get("image_ids", [])]
+            image_ids = _posted_ids(data, "image_ids")
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
@@ -327,7 +344,7 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
         try:
             data = posted_json_object(request)
             action = data["action"]
-            image_ids = [int(i) for i in data.get("image_ids", [])]
+            image_ids = _posted_ids(data, "image_ids")
         except (KeyError, ValueError, TypeError, json.JSONDecodeError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
@@ -379,7 +396,7 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
         # Media-gallery item materialized via "send to wiki" or a prior cover-photo pick), is eligible - but
         # only among photos this viewer may see, since every pin upload stamps Image.location and two users
         # pinning the same place therefore share a location id.
-        image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
+        image = get_object_or_404(Image.objects.filter(pk=safe_int_or_none(image_id)).visible_to(profile))
         if image.pin_id != pin.pk and image.location_id != pin.location_id:
             raise Http404
         pin.cover_photo = image
@@ -408,7 +425,7 @@ class PinImageView(LoginRequiredMixin, View):
         if img.profile != profile:
             raise Http404
         try:
-            payload = apply_image_map_update(img, request.body)
+            payload = apply_image_map_update(img, json_body(request))
         except ValueError as exc:
             logger.warning("Failed to update image %s on pin %s: %s", image_id, pin_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)
@@ -546,7 +563,7 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
 
         # Scoped to the one row before `visible_to`, whose per-uploader pass
         # would otherwise walk every uploader on the site to answer about one image.
-        image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
+        image = get_object_or_404(Image.objects.filter(pk=safe_int_or_none(image_id)).visible_to(profile))
         # On the wiki, not merely at the place.
         on_this_wiki = image.wiki_id == wiki.pk or ImageAttachment.objects.filter(image=image, wiki=wiki).exists()
         if not on_this_wiki:
@@ -568,7 +585,7 @@ class WikiImageView(LoginRequiredMixin, View):
         if img.profile != profile:
             raise Http404
         try:
-            payload = apply_image_map_update(img, request.body)
+            payload = apply_image_map_update(img, json_body(request))
         except ValueError as exc:
             logger.warning("Failed to update image %s on location %s: %s", image_id, location_slug, exc)
             return JsonResponse({"error": "Invalid request data."}, status=400)

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+import re
+import traceback
+
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.urls import NoReverseMatch, get_resolver, reverse
@@ -55,6 +60,57 @@ _SKIP_ROUTES = {
 
 #: Well-formed JSON that is not an object, bodies that are not JSON at all, and JSON nested past the recursion limit.
 _MALFORMED_JSON_BODIES = ("[]", "null", '"text"', "{", "[" * 5000, DEEPLY_NESTED_JSON)
+
+#: Values a form field or query parameter may hold that no parser should turn into a 500: numbers past a float's range
+#: or not finite (``float()`` reads all three), not numbers, negative, past a 64-bit integer, a NUL (which Postgres
+#: refuses in text), and very long.
+_HOSTILE_VALUES = ("inf", "-1e999", "nan", "abc", "-1", "99999999999999999999999", "x\x00y", "9" * 400)
+
+#: JSON values a view expecting a string or a number is handed: bare literals ``json.loads`` reads as an infinite,
+#: a NaN or a wide number, and each other type.
+_HOSTILE_JSON_LITERALS = (
+    "Infinity",
+    "NaN",
+    "-1e999",
+    "99999999999999999999999",
+    "1.5",
+    "true",
+    "null",
+    "[]",
+    "{}",
+    '["x"]',
+    '{"a": 1}',
+)
+
+#: A parameter a view reads by name: ``request.POST.get("x")``, ``request.GET["x"]``, ``request.data.getlist("x")``.
+_PARAMETER_READ = re.compile(
+    r"request\.(?:POST|GET|data|query_params)(?:\.(?:get|getlist)\(\s*|\[\s*)['\"]([A-Za-z0-9_\[\]-]+)['\"]"
+)
+
+
+def _parameter_names() -> list[str]:
+    """Every parameter name a view or API endpoint reads, read from the source so a new one is swept too."""
+    package = Path(__file__).resolve().parents[2]
+    names: set[str] = set()
+    for folder in ("controllers", "external_api", "models", "services"):
+        for path in (package / folder).rglob("*.py"):
+            names.update(_PARAMETER_READ.findall(path.read_text(encoding="utf-8")))
+    return sorted(names)
+
+
+def _origin(exc: BaseException) -> str:
+    """The innermost frame of this app's own code that *exc* passed through, so a report names the line to fix."""
+    package = Path(__file__).resolve().parents[2]
+    frames = [
+        frame
+        for frame in traceback.extract_tb(exc.__traceback__)
+        if frame.filename.startswith(str(package)) and "/tests/" not in frame.filename
+    ]
+    # The middleware wraps every query and every view; the frame below it is the one that issued the call.
+    frames = [frame for frame in frames if not frame.filename.endswith("/middleware.py")] or frames
+    if not frames:
+        return "?"
+    return f"{Path(frames[-1].filename).relative_to(package)}:{frames[-1].lineno}"
 
 
 class WriteRouteSmokeTests(TestCase):
@@ -164,11 +220,12 @@ class WriteRouteSmokeTests(TestCase):
         value = self.identifiers[param]
         return value if isinstance(value, list) else [value]
 
-    def _crashing_routes(self, *, json_body: str | None = None) -> dict[str, str]:
+    def _crashing_routes(self, *, json_body: str | None = None, form: dict[str, str] | None = None) -> dict[str, str]:
         """Route name → how it crashed, for every swept write route that did.
 
         Args:
             json_body: Sent raw as ``application/json`` to every POST, in place of the empty form.
+            form: Sent as the form (POST, DELETE) or the query (GET), in place of the empty one.
         """
         crashes: dict[str, str] = {}
         methods = ("post",) if json_body is not None else _WRITE_METHODS
@@ -181,11 +238,13 @@ class WriteRouteSmokeTests(TestCase):
                         if json_body is not None:
                             response = self.client.post(url, data=json_body, content_type="application/json")
                         else:
-                            response = getattr(self.client, method)(url, data={})
+                            response = getattr(self.client, method)(url, data=form or {})
                 except Exception as exc:
                     if _NETWORK_GUARD_MARKER in str(exc):
                         continue
-                    crashes[name] = f"[{method.upper()}] raised {type(exc).__name__}: {str(exc)[:160]}"
+                    crashes[name] = (
+                        f"[{method.upper()}] raised {type(exc).__name__}: {str(exc)[:160]} at {_origin(exc)}"
+                    )
                     continue
                 if response.status_code >= 500:
                     crashes[name] = f"[{method.upper()}] returned {response.status_code}"
@@ -212,6 +271,47 @@ class WriteRouteSmokeTests(TestCase):
             {},
             "write routes crashed on a malformed JSON body:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
         )
+
+    def test_no_route_answers_a_hostile_parameter_value_with_a_server_error(self) -> None:
+        """Every parameter any view reads, all set to one hostile value at a time: a bare ``float()``, ``int()`` or a
+        NUL written to Postgres is a 500."""
+        names = _parameter_names()
+        unexpected: dict[str, str] = {}
+        for value in _HOSTILE_VALUES:
+            for name, how in self._crashing_routes(form=dict.fromkeys(names, value)).items():
+                unexpected.setdefault(f"{name} {how.rpartition(' at ')[2]}", f"{value[:12]!r} {how}")
+
+        self.assertEqual(
+            unexpected,
+            {},
+            "routes crashed on a hostile parameter value:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
+        )
+
+    def test_no_route_answers_a_hostile_json_value_with_a_server_error(self) -> None:
+        """Every parameter any view reads, in a JSON object body: each hostile string, then each value ``json.loads``
+        hands a view that expected a string or a number."""
+        names = _parameter_names()
+        bodies = [json.dumps(dict.fromkeys(names, value)) for value in _HOSTILE_VALUES]
+        bodies += [
+            "{" + ", ".join(f'"{name}": {literal}' for name in names) + "}" for literal in _HOSTILE_JSON_LITERALS
+        ]
+        unexpected: dict[str, str] = {}
+        for body in bodies:
+            for name, how in self._crashing_routes(json_body=body).items():
+                unexpected.setdefault(f"{name} {how.rpartition(' at ')[2]}", f"{body[:40]!r} {how}")
+
+        self.assertEqual(
+            unexpected,
+            {},
+            "routes crashed on a hostile JSON value:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
+        )
+
+    def test_the_parameter_names_are_found(self) -> None:
+        """Anti-vacuity: the source scan finds the parameters this sweep relies on."""
+        names = _parameter_names()
+
+        self.assertGreater(len(names), 150)
+        self.assertTrue({"latitude", "longitude", "profile_id", "member_slugs"} <= set(names))
 
     def test_the_known_crash_is_still_crashing(self) -> None:
         """Stops an exemption outliving the bug it describes.

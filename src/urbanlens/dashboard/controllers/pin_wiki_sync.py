@@ -12,6 +12,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.uuids import valid_uuids
 from urbanlens.dashboard.services.pins import pin_wiki_sync
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class PinSendToWikiView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
 
-        uuids = [u for u in request.POST.getlist("child_pin_uuids") if u]
+        uuids = valid_uuids(request.POST.getlist("child_pin_uuids"))
         if not uuids:
             return HttpResponse("No child pins selected.", status=400)
         children = list(pin.detail_pins.filter(uuid__in=uuids).select_related("location"))

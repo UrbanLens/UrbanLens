@@ -25,8 +25,9 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.capacity import PIN_LISTS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.core.request_body import posted_fields
+from urbanlens.dashboard.services.core.request_body import posted_fields, text_field
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
+from urbanlens.dashboard.services.core.uuids import uuid_or_none
 from urbanlens.dashboard.services.geo.sampling import select_spread
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
@@ -244,7 +245,7 @@ class PinListCreateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         body = posted_fields(request)
 
-        name = (body.get("name") or "").strip()
+        name = text_field(body, "name")
         if not name:
             return HttpResponse("List name is required.", status=400)
         name_error = column_length_error(PinList, "name", name, "List name")
@@ -253,7 +254,7 @@ class PinListCreateView(LoginRequiredMixin, View):
         if PinList.objects.filter(profile=profile, name=name).exists():
             return HttpResponse("You already have a list with that name.", status=409)
 
-        description = body.get("description") or ""
+        description = text_field(body, "description")
         length_error = text_length_error(description, MAX_PIN_LIST_DESCRIPTION_LENGTH, "Description")
         if length_error:
             return HttpResponse(length_error, status=400)
@@ -318,15 +319,18 @@ class PinListEditView(LoginRequiredMixin, View):
         # separate implementations editing the same row) changed in between.
         changed_fields: set[str] = set()
 
-        name = (body.get("name") or "").strip()
+        name = text_field(body, "name")
         if name and name != pin_list.name:
+            name_error = column_length_error(PinList, "name", name, "List name")
+            if name_error:
+                return HttpResponse(name_error, status=400)
             if PinList.objects.filter(profile=profile, name=name).exclude(pk=pin_list.pk).exists():
                 return HttpResponse("You already have a list with that name.", status=409)
             pin_list.name = name
             changed_fields.add("name")
 
         if "description" in body:
-            description = body.get("description") or ""
+            description = text_field(body, "description")
             length_error = text_length_error(description, MAX_PIN_LIST_DESCRIPTION_LENGTH, "Description")
             if length_error:
                 return HttpResponse(length_error, status=400)
@@ -345,9 +349,9 @@ class PinListEditView(LoginRequiredMixin, View):
             changed_fields.add("is_smart")
 
         if "saved_filter_uuid" in body:
-            saved_filter_uuid = (body.get("saved_filter_uuid") or "").strip()
+            saved_filter_uuid = text_field(body, "saved_filter_uuid")
             if saved_filter_uuid:
-                saved_filter = get_object_or_404(SavedFilter, uuid=saved_filter_uuid, profile=profile)
+                saved_filter = get_object_or_404(SavedFilter, uuid=uuid_or_none(saved_filter_uuid), profile=profile)
                 pin_list.smart_filter = saved_filter.criteria
                 pin_list.source_saved_filter = saved_filter
             else:
@@ -539,7 +543,7 @@ class PinListCreateTripView(LoginRequiredMixin, View):
         pin_list = _get_pin_list_or_404(list_slug, profile)
         body = posted_fields(request)
 
-        trip_name = (body.get("name") or "").strip() or _default_trip_name_for_list(pin_list)
+        trip_name = text_field(body, "name") or _default_trip_name_for_list(pin_list)
         name_error = column_length_error(Trip, "name", trip_name, "Trip name")
         if name_error:
             return HttpResponse(name_error, status=400)
