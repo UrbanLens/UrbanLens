@@ -58,11 +58,14 @@ class IsCapabilityUrlTests(SimpleTestCase):
         for url in (
             "https://cloud.example.com/index.php/s/AbCdEfGhIjKl",
             "https://photos.example.com/share/AbCdEfGhIjKlMnOp",
-            "https://www.reddit.com/r/urbanexploration/s/AbCdEfGh",
             "https://www.flickr.com/gp/12345678@N00/AbC123",
         ):
             with self.subTest(url=url):
                 self.assertTrue(is_capability_url(url))
+
+    def test_a_reddit_share_link_is_not_one(self) -> None:
+        """It redirects to a public post; opening it grants nothing browsing the subreddit does not."""
+        self.assertFalse(is_capability_url("https://www.reddit.com/r/urbanexploration/s/AbCdEfGh"))
 
     def test_a_short_word_after_a_share_segment_is_not_a_key(self) -> None:
         self.assertFalse(is_capability_url("https://example.com/share/news"))

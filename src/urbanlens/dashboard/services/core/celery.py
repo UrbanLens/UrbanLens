@@ -26,6 +26,10 @@ PROGRESS_STATE = "PROGRESS"
 #: What ``apply_async`` raises when the broker cannot take a message.
 BROKER_ERRORS: tuple[type[Exception], ...] = (KombuError, ConnectionError, OSError, RuntimeError)
 
+#: The longest a task may wait to run. The broker holds its delivery unacknowledged for the wait and then the run, so
+#: RabbitMQ's ``consumer_timeout`` and Redis's ``visibility_timeout`` must exceed this plus the longest time limit.
+LONGEST_COUNTDOWN_SECONDS = 6 * 60 * 60
+
 #: Queues whose jobs are sized by what one account owns.
 _BATCH_QUEUES = frozenset({Queue.BULK, Queue.MAINTENANCE, Queue.SANDBOX_BATCH, Queue.DEFAULT})
 
@@ -207,7 +211,7 @@ def safely_enqueue_task(
     Args:
         task: The Celery task to enqueue.
         *args: Positional arguments passed to the task.
-        countdown: Seconds to delay execution, if any.
+        countdown: Seconds to delay execution, if any; at most :data:`LONGEST_COUNTDOWN_SECONDS`, to which a longer one is shortened.
         queue: Celery queue to dispatch to; None uses the task's default route.
         expires: Seconds from now after which the broker should drop this task unexecuted, rather than run it late.
         durable: Whether a refused enqueue is kept in the outbox and retried.
@@ -219,6 +223,9 @@ def safely_enqueue_task(
     if _enqueues_suppressed.get():
         logger.debug("Dropped enqueue of %s: enqueues are suppressed", getattr(task, "name", task))
         return None
+    if countdown is not None and countdown > LONGEST_COUNTDOWN_SECONDS:
+        logger.warning("Shortened %s's countdown from %ss to %ss", getattr(task, "name", task), countdown, LONGEST_COUNTDOWN_SECONDS)
+        countdown = LONGEST_COUNTDOWN_SECONDS
     try:
         apply_kwargs: dict[str, Any] = {}
         if countdown is not None:

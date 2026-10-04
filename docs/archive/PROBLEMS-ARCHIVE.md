@@ -22991,6 +22991,11 @@ the availability lookup handed the secret to a third party.
 The archive task refuses such a URL before either request, beside the own-site check. The rules lean wide: a false
 positive loses only an archive copy of a public page.
 
+The adversarial review found that Reddit's share links (`/r/<sub>/s/<id>`) matched the share-path rule. They only
+redirect to a public post, so Reddit is exempt from that rule. It also named Facebook's `/share/p/<id>/`; that was
+left archivable. Facebook still enforces the post's audience behind the link, so a capture gets the public post or a
+login page, never restricted content.
+
 Snapshots taken before the fix are already public. `manage.py list_shared_link_snapshots` lists them read-only. A
 removal is requested from the Internet Archive, by snapshot URL. Whether a link on a private pin should be submitted at
 all is a question for Jess: a page only its author knows of, such as an unlisted video, is still captured.
@@ -23002,3 +23007,41 @@ all is a question for Jess: a page only its author knows of, such as an unlisted
 - `test_capability_urls.py`: property tests over credential names, in a query and in a fragment, and over share hosts
   and their subdomains; look-alike hosts are not matched.
 - `ListSharedLinkSnapshotsTests`: the command lists share-link snapshots, and nothing else.
+
+## RESOLVED 2026-10-04: A countdown past 30 minutes made the Celery worker holding it exit, every 31 minutes
+
+`id: P290` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, reading dev's RabbitMQ log while sizing a follow-up task for P24`
+
+**What was wrong.** A Celery task with a countdown is delivered at once and held unacknowledged until it has run
+(`CELERY_TASK_ACKS_LATE`). RabbitMQ closes a channel whose delivery stays unacknowledged past `consumer_timeout`,
+30 minutes by default, and the worker then exits with `Unrecoverable error: PreconditionFailed`. The redelivered task
+is held again, so the worker exits again 31 minutes later. Every task it was running is lost and redelivered.
+
+Several countdowns run longer than that. A boundary provider's deferral is retried after up to two hours on the
+interactive queue (`boundaries._schedule_deferred_retry`), and the provider's own `Retry-After` could make it any
+length. Deferred pin resolution waits up to six hours on the bulk queue, and import and export cleanup wait one. Dev's
+log showed the consequence. On 2026-09-30 the interactive worker, which also sends signup mail and safety alerts,
+exited every 31 minutes for 11 hours, while P240's Overture deferrals were scheduling boundary retries. It exited
+twice more on 2026-10-04. Production's compose RabbitMQ has the same default.
+
+**Fix.**
+- `services/core/celery.py::LONGEST_COUNTDOWN_SECONDS` (six hours) bounds a countdown. `safely_enqueue_task` shortens a
+  longer one and logs it, including in the outbox it falls back to.
+- `docker-compose.yml` sets RabbitMQ's `consumer_timeout` to eight hours, through
+  `RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS`: the longest countdown plus the one-hour task time limit, with room.
+- The Redis fallback's `visibility_timeout` went from two hours to eight. It was already shorter than its own
+  comment's rule.
+
+On dev, the recreated broker answers `{ok,28800000}`, and every worker reconnected without a restart. The Kubernetes
+RabbitMQ is the infrastructure repo's, and it is asked for the same line in
+[`handoffs/infrastructure-rabbitmq-consumer-timeout.md`](../handoffs/infrastructure-rabbitmq-consumer-timeout.md).
+
+**Tests.** `test_broker_consumer_timeout.py`:
+- compose's consumer timeout and the Redis visibility timeout each exceed the longest countdown plus the task time
+  limit;
+- every scheduled countdown (deferred resolution, boundary retries, cleanup, check-in archive, storage waits) is
+  within the bound;
+- an over-long countdown is shortened, including on the outbox path, and a provider asking for a day is asked again
+  within the bound.
+
+All but the bound and the within-bound case failed before the fix.

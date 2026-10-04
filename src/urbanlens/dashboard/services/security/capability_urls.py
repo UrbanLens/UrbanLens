@@ -9,9 +9,13 @@ something its owner shared privately, so the rules lean wide.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlsplit
 
 from urbanlens.dashboard.services.security.redact import is_sensitive_param_name
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 #: Hosts that serve little but private or link-shared files, maps and albums; a subdomain counts.
 SHARE_DOMAINS = frozenset(
@@ -45,8 +49,10 @@ SHARE_DOMAINS = frozenset(
 _GOOGLE_HOST = re.compile(r"^(?:www\.)?google\.[a-z]{2,3}(?:\.[a-z]{2})?$")
 _GOOGLE_SHARED_MAP = re.compile(r"^/maps/(?:d|placelists)/", re.IGNORECASE)
 
-#: A share-link path on any host: Nextcloud and Reddit ``/s/<id>``, Immich ``/share/<key>``, Flickr ``/gp/<code>``.
+#: A share-link path on any host: Nextcloud ``/s/<token>``, Immich ``/share/<key>``, Flickr ``/gp/<code>``.
 _SHARE_PATH = re.compile(r"/(?:s|share|shared|sharedalbum|sharing|invite|gp)/[^/]{6,}", re.IGNORECASE)
+#: Hosts whose share paths only redirect to a public page, so opening one grants nothing: Reddit's ``/r/<sub>/s/<id>``.
+_PUBLIC_SHARE_PATH_DOMAINS = ("reddit.com", "redd.it")
 
 #: Parameter names that carry access rather than content, beyond the credential words logging redacts.
 _ACCESS_PARAM_NAMES = frozenset({"pass", "passcode", "invite", "jwt", "otp"})
@@ -66,13 +72,17 @@ def is_capability_url(url: str) -> bool:
     host = (parts.hostname or "").lower().rstrip(".")
     if parts.username is not None or parts.password is not None:
         return True
-    if any(host == domain or host.endswith(f".{domain}") for domain in SHARE_DOMAINS):
+    if _on(host, SHARE_DOMAINS):
         return True
     if _GOOGLE_HOST.match(host) and _GOOGLE_SHARED_MAP.match(parts.path):
         return True
-    if _SHARE_PATH.search(parts.path):
+    if _SHARE_PATH.search(parts.path) and not _on(host, _PUBLIC_SHARE_PATH_DOMAINS):
         return True
     return any(_grants_access(name) for text in (parts.query, parts.fragment) for name, _value in parse_qsl(text, keep_blank_values=True))
+
+
+def _on(host: str, domains: Iterable[str]) -> bool:
+    return any(host == domain or host.endswith(f".{domain}") for domain in domains)
 
 
 def _grants_access(name: str) -> bool:

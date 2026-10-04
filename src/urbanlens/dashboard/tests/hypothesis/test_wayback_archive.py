@@ -298,6 +298,7 @@ class ShareLinksAreNotSentToTheArchiveTests(TestCase):
             "https://example.com/article?id=3&page=2",
             "https://www.google.com/maps/place/Hudson+River+State+Hospital/@41.73,-73.92,17z",
             "https://notdropbox.com/plans.pdf?dl=0",
+            "https://www.reddit.com/r/urbanexploration/s/AbCdEfGh",
         ):
             link = baker.make(PinLink, pin=self.pin, url=url, wayback_url="")
             with (

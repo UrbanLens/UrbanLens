@@ -2627,7 +2627,7 @@ moved them all by containment. To close: after REData deploys, refresh HRSH's bu
 
 ## P206 — `dashboard_location_cache` is 81% of production's database
 
-`id: P206` · `status: open` · `updated: 2026-10-02` · `found by: infrastructure's 0.8.0 deploy findings, item 9`
+`id: P206` · `status: open` · `updated: 2026-10-04` · `found by: infrastructure's 0.8.0 deploy findings, item 9`
 
 1,915 MB of 2,361 MB: 135k rows, about 1.85 GB of it TOAST, with a 69% TOAST hit ratio against 99.9% for heap. Index
 scans fetched 972k tuples from it in a day, and one pooler pod sent 11.35 GB to clients in five hours, most likely from
@@ -2643,6 +2643,12 @@ Measured on `development_main`, 2026-10-03:
   46 kB) and `parcel_buildings` (max row 57 kB).
 - **Next:** production's per-source row count and `sum(pg_column_size(data))` (the query this used is in this entry's
   history), and the infrastructure side's `pg_stat_statements` output, which names the queries that read it.
+
+**A prune is not free (2026-10-04).** A row past its age is also a record that a fetch was tried. The backfill
+enrichment sources (`services/locations/enrichment.py`) pick locations by `~Exists(LocationCache …)` of any age, and
+`wikipedia._backfill_street_address` skips when its marker row exists. Deleting expired rows would queue every pruned
+location for those upstream calls again. `wiki_seed`, `nps` and `epa_echo` also read rows regardless of age. A prune
+has to keep marker rows, or strip `data` while keeping the row, or those gates have to learn an age.
 
 ## P210 — Pin-share notifications stored before 2026-10-02 still name the sender's own pin
 

@@ -861,6 +861,9 @@ services:
     image: rabbitmq:3.13-management-alpine
     restart: unless-stopped
     environment:
+      # A task's delivery is unacknowledged through its countdown and its run; past the default 30 minutes the
+      # broker closes the channel and the worker exits. Above LONGEST_COUNTDOWN_SECONDS plus the longest time limit.
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-rabbit consumer_timeout 28800000"
       RABBITMQ_DEFAULT_USER: ${UL_RABBITMQ_USER:-urbanlens}
       RABBITMQ_DEFAULT_PASS: ${UL_RABBITMQ_PASS:-guest}
       RABBITMQ_DEFAULT_VHOST: ${UL_RABBITMQ_VHOST:-urbanlens}
