@@ -627,7 +627,7 @@ class BoundaryControllerTests(TestCase):
             profile=self.user.profile,
             location=child_location,
             boundary_type=BoundaryType.BUILDING,
-            polygon=_SMALL,
+            polygon=_square(-74.0004, 40.0004, 0.0001),
         )
 
         response = BoundaryController().get_boundaries(self._request(), self.pin.slug)

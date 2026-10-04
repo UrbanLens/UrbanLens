@@ -268,7 +268,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         wiki_row = self.row_for_wiki(wiki, boundary_type) if wiki is not None else None
         return self._resolve_pin_tail(boundary_type, location=location, scoped=scoped, wiki_row=wiki_row)
 
-    def _resolve_pin_head(self, pin: Pin, boundary_type: str, *, row: Boundary | None, place: Place | None, scoped: GEOSGeometry | None) -> tuple[GEOSGeometry | None, str | None] | None:
+    def _resolve_pin_head(self, pin: Pin, boundary_type: str, *, row: Boundary | None, place: Place | None, scoped: GEOSGeometry | None, inherit: bool = True) -> tuple[GEOSGeometry | None, str | None] | None:
         """The steps of :meth:`resolve_for_pin` that come before the wiki.
 
         Args:
@@ -277,6 +277,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             row: The pin's own boundary row of this type, or None.
             place: The place the pin's location resolved onto, or None.
             scoped: ``place_polygon(place, boundary_type)``.
+            inherit: Whether a detail pin may take its parent's polygon.
 
         Returns:
             The answer, or None when it depends on the wiki.
@@ -296,7 +297,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         if place is not None and scoped is None:
             return None, None
 
-        if scoped is None and pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
+        if inherit and scoped is None and pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
             parent_polygon, _parent_source = self.resolve_for_pin(parent_pin, boundary_type)
             if parent_polygon is not None:
                 point = self._pin_point(pin)
@@ -350,23 +351,42 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         Returns:
             Pin id to polygon, or None where nothing applies.
         """
+        pins = list(pins)
+        answers: dict[int, GEOSGeometry | None] = {pin.pk: self.effective_polygon_for_pin(pin, boundary_type) for pin in pins if pin.parent_pin_id}
+        answers.update(self._batch_resolve([pin for pin in pins if not pin.parent_pin_id], boundary_type, inherit=True))
+        return answers
+
+    def own_polygons_for_pins(self, pins: Iterable[Pin], boundary_type: str) -> dict[int, GEOSGeometry | None]:
+        """Each pin's own polygon - drawn, generated, its wiki's or its place's - in a fixed number of queries.
+
+        Unlike :meth:`effective_polygons_for_pins`, a detail pin never takes its parent's polygon, and so the batch
+        never walks up a hierarchy.
+
+        Args:
+            pins: The pins.
+            boundary_type: A :class:`BoundaryType` value.
+
+        Returns:
+            Pin id to polygon, or None where the pin has none of its own.
+        """
+        return self._batch_resolve(list(pins), boundary_type, inherit=False)
+
+    def _batch_resolve(self, pins: list[Pin], boundary_type: str, *, inherit: bool) -> dict[int, GEOSGeometry | None]:
+        """The :meth:`resolve_for_pin` chain for pins whose answer needs no parent, each step's rows fetched once."""
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.services.places.scope import place_polygon
 
-        pins = list(pins)
-        answers: dict[int, GEOSGeometry | None] = {pin.pk: self.effective_polygon_for_pin(pin, boundary_type) for pin in pins if pin.parent_pin_id}
-        roots = [pin for pin in pins if not pin.parent_pin_id]
-        if not roots:
+        answers: dict[int, GEOSGeometry | None] = {}
+        if not pins:
             return answers
-
-        rows = self.rows_by_pin_id([pin.pk for pin in roots], boundary_type)
-        locations = {location.pk: location for location in Location.objects.filter(pk__in={pin.location_id for pin in roots if pin.location_id}).select_related("place", "place__parent")}
+        rows = self.rows_by_pin_id([pin.pk for pin in pins], boundary_type)
+        locations = {location.pk: location for location in Location.objects.filter(pk__in={pin.location_id for pin in pins if pin.location_id}).select_related("place", "place__parent")}
         needs_wiki: list[tuple[Pin, Location | None, GEOSGeometry | None]] = []
-        for pin in roots:
+        for pin in pins:
             location = locations.get(pin.location_id) if pin.location_id else None
             place = location.place if (location is not None and location.place_id) else None
             scoped = place_polygon(place, boundary_type) if place is not None else None
-            head = self._resolve_pin_head(pin, boundary_type, row=rows.get(pin.pk), place=place, scoped=scoped)
+            head = self._resolve_pin_head(pin, boundary_type, row=rows.get(pin.pk), place=place, scoped=scoped, inherit=inherit)
             if head is not None:
                 answers[pin.pk] = head[0]
             else:

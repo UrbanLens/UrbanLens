@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
+    from django.contrib.gis.geos import GEOSGeometry
     from rest_framework.request import Request
 
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -47,32 +48,58 @@ def _parse_boundary_type(value) -> str | None:
     return value if value in BoundaryType.values else None
 
 
-def _detail_building_entries(pin: Pin) -> list[dict]:
-    """Building boundaries drawn on this pin's detail pins (display-only).
+def _detail_building_entries(pin: Pin, drawn: GEOSGeometry | None) -> list[dict]:
+    """The building outline of each of this pin's descendants that has one of its own (display-only).
 
-    The map hides the building layer only when neither the pin itself nor any of its detail pins has a
-    building boundary.
+    A pin standing inside a building resolves onto that building, so an outline is drawn once, for the pin nearest
+    the top of the tree.
 
     Args:
-        pin: The parent pin whose detail pins are inspected.
+        pin: The parent pin.
+        drawn: The parent's own building outline, already on the map.
 
     Returns:
         List of ``{"pin_id", "polygon"}`` dicts.
     """
-    rows = Boundary.objects.filter(pin__parent_pin=pin, boundary_type=BoundaryType.BUILDING).select_related("pin")
+    descendants = list(pin.descendants())
+    polygons = Boundary.objects.own_polygons_for_pins(descendants, BoundaryType.BUILDING)
+    parents: dict[int, int | None] = {descendant.pk: descendant.parent_pin_id for descendant in descendants}
+
+    def depth(pin_id: int) -> int:
+        steps, parent = 0, parents.get(pin_id)
+        while parent is not None and steps <= len(parents):
+            steps += 1
+            parent = parents.get(parent)
+        return steps
+
+    seen = {bytes(drawn.wkb)} if drawn is not None else set()
     entries = []
-    for row in rows:
-        polygon = row.drawn_or_generated_polygon
-        if polygon is not None:
-            entries.append({"pin_id": row.pin_id, "polygon": _geojson(polygon)})
+    for descendant in sorted(descendants, key=lambda candidate: (depth(candidate.pk), candidate.pk)):
+        polygon = polygons.get(descendant.pk)
+        if polygon is None or (key := bytes(polygon.wkb)) in seen:
+            continue
+        seen.add(key)
+        entries.append({"pin_id": descendant.pk, "polygon": _geojson(polygon)})
     return entries
 
 
-def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False) -> dict:
-    """Full boundary payload for a Private Pin page map."""
+def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False, include_children: bool = True) -> dict:
+    """Full boundary payload for a Private Pin page map.
+
+    Args:
+        pin: The pin.
+        pending: Whether provider generation is still running.
+        refreshing: Whether a stale generated boundary is being refreshed.
+        include_children: Whether its descendants' building outlines are drawn ("child pin details").
+
+    Returns:
+        The payload dict.
+    """
     boundaries = {}
+    polygons = {}
     for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
         polygon, source = Boundary.objects.resolve_for_pin(pin, boundary_type)
+        polygons[boundary_type] = polygon
         boundaries[str(boundary_type.value)] = {"polygon": _geojson(polygon), "source": source}
     return {
         "latitude": pin.effective_latitude,
@@ -81,7 +108,7 @@ def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False) 
         "pending": pending,
         "refreshing": refreshing,
         "boundaries": boundaries,
-        "detail_buildings": _detail_building_entries(pin),
+        "detail_buildings": _detail_building_entries(pin, polygons[BoundaryType.BUILDING]) if include_children else [],
     }
 
 
@@ -144,7 +171,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
             else:
                 refreshing = schedule_location_boundary_generation(pin.location, pin.profile)
 
-        return JsonResponse(_pin_boundary_payload(pin, pending=pending, refreshing=refreshing))
+        include_children = request.GET.get("children", "1") != "0"
+        return JsonResponse(_pin_boundary_payload(pin, pending=pending, refreshing=refreshing, include_children=include_children))
 
     def save_boundary(self, request: Request, pin_slug):
         """Create, update, or clear the user's custom boundary of one type.
@@ -206,7 +234,7 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
             else:
                 refreshing = schedule_location_boundary_generation(pin.location, pin.profile)
 
-        payload = _pin_boundary_payload(pin, pending=pending, refreshing=refreshing)
+        payload = _pin_boundary_payload(pin, pending=pending, refreshing=refreshing, include_children=request.GET.get("children", "1") != "0")
         payload["status"] = "ok"
         return JsonResponse(payload)
 
