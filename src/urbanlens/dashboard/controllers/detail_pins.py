@@ -110,7 +110,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
 
     def get(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        detail_pins = pin.detail_pins.select_related("location").order_by("pin_type", "name")
+        detail_pins = pin.detail_pins.select_related("location__wiki").order_by("pin_type", "name")
         return render(
             request,
             "dashboard/partials/pins/detail_pins_panel.html",

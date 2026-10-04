@@ -23187,13 +23187,14 @@ dev's campus pin with 517 detail pins, and a pin with 42 children:
 | `pin.custom_fields` (a card with a pin reference field) | 318 | 8 |
 | `location.wiki.detail_pins.panel` (a wiki's child-wiki panel; 11 vs 20 queries in the test) | 67 | - |
 | `map.pins.children` (the main map's Child pins layer, `e2e-primary`'s 196 child pins) | 201 | 5 |
+| `pin.detail_pins` (the pin page's detail-pin list, a 359-child pin; 9 vs 18 queries in the test) | 120 | - |
 
 The overlay and the main map's Child pins layer also read the labels without the viewer's label customizations, so
 a label recoloured or re-iconed kept its original colour and icon on both, while the main map's own pins showed it.
 
 **Fix.** The overlay and the Child pins layer select each pin's location wiki and prefetches its labels with
-`Label.objects.with_customizations_for`, as the main map's payload does. The Buildings card and a pin reference
-field's choices select `location__wiki`; the wiki panel selects each child wiki's location.
+`Label.objects.with_customizations_for`, as the main map's payload does. The Buildings card, the detail-pin list and a pin
+reference field's choices select `location__wiki`; the wiki panel selects each child wiki's location.
 
 **Tests.** `test_detail_pins_json_queries.py`, `test_parcel_buildings_queries.py` and
 `test_custom_field_reference_choice_queries.py`, and `test_location_detail_pins_json.py::LocationDetailPinPanelQueryTests`,

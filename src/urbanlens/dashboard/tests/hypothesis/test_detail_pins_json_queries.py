@@ -1,8 +1,9 @@
-"""The pin page's detail-pin map overlay costs the same queries for 3 detail pins as for 12.
+"""Lists of a pin's child pins cost the same queries for a few children as for many (P296).
 
-Dev's campus pin with ~300 detail pins answered in 596 queries: each pin read its labels for its icon, and an unnamed
-pin read its location's wiki for its name. The labels were also read without the viewer's customizations, so a
-label recoloured on the map kept its original colour here.
+Each child read its labels for its icon, and an unnamed one its location's wiki for its name: on dev, the pin page's
+detail-pin overlay ran 596 queries for a 517-child campus, its detail-pin list 120 for a 359-child one, and the main
+map's Child pins layer 201 for 196 children. The overlay and the layer also read the labels without the viewer's
+customizations, so a label recoloured for the map kept its original colour on both.
 """
 
 from __future__ import annotations
@@ -22,7 +23,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 
 
-class DetailPinsJsonQueryTests(TestCase):
+class _ChildPinListCase(TestCase):
+    """A campus pin with a child pin, both of which gain unnamed, labelled detail pins with wikis."""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
@@ -45,69 +48,43 @@ class DetailPinsJsonQueryTests(TestCase):
             baker.make(Wiki, location=pin.location, name=f"zz-detail-wiki-{pin.pk}")
             pin.labels.add(self.label)
 
-    def _queries(self, *, children: bool) -> int:
-        url = reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug})
+    def _unnamed_detail_pin(self) -> Pin:
+        self._add_detail_pins(1, self.root)
+        return Pin.objects.get(parent_pin=self.root, name="")
+
+    def _count(self, url: str, params: dict[str, str] | None = None) -> int:
         with CaptureQueriesContext(connection) as captured:
-            response = self.client.get(url, {"children": "1"} if children else {})
+            response = self.client.get(url, params or {})
         self.assertEqual(response.status_code, 200)
         return len(captured)
 
-    def test_the_query_count_does_not_grow_with_the_detail_pins(self) -> None:
-        for children in (False, True):
-            with self.subTest(children=children):
-                self._add_detail_pins(3, self.root)
-                self._add_detail_pins(3, self.child)
-                few = self._queries(children=children)
-                self._add_detail_pins(9, self.root)
-                self._add_detail_pins(9, self.child)
-                many = self._queries(children=children)
+    def _assert_flat(self, url: str, params: dict[str, str] | None = None) -> None:
+        self._add_detail_pins(3, self.root)
+        self._add_detail_pins(3, self.child)
+        few = self._count(url, params)
+        self._add_detail_pins(9, self.root)
+        self._add_detail_pins(9, self.child)
 
-                self.assertEqual(many, few)
-
-    def test_an_unnamed_detail_pin_is_named_by_its_wiki_and_drawn_with_its_label(self) -> None:
-        self._add_detail_pins(1, self.root)
-        detail = Pin.objects.get(parent_pin=self.root, name="")
-
-        payload = {
-            row["id"]: row
-            for row in self.client.get(reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug})).json()[
-                "detail_pins"
-            ]
-        }
-
-        self.assertEqual(payload[detail.pk]["name"], f"zz-detail-wiki-{detail.pk}")
-        self.assertEqual((payload[detail.pk]["icon"], payload[detail.pk]["color"]), ("tower", "#111111"))
-
-    def test_the_viewers_own_label_colour_and_icon_are_used(self) -> None:
-        self._add_detail_pins(1, self.root)
-        detail = Pin.objects.get(parent_pin=self.root, name="")
-        LabelCustomization.objects.create(profile=self.profile, label=self.label, icon="castle", color="#abcdef")
-
-        payload = {
-            row["id"]: row
-            for row in self.client.get(reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug})).json()[
-                "detail_pins"
-            ]
-        }
-
-        self.assertEqual((payload[detail.pk]["icon"], payload[detail.pk]["color"]), ("castle", "#abcdef"))
+        self.assertEqual(self._count(url, params), few)
 
 
-class MapChildPinsQueryTests(DetailPinsJsonQueryTests):
-    """The main map's Child pins layer: 201 queries for e2e-primary's 196 child pins on dev, and the same label colours."""
+class DetailPinsJsonQueryTests(_ChildPinListCase):
+    """The pin page's detail-pin map overlay."""
 
-    def _queries(self, *, children: bool = True) -> int:
-        with CaptureQueriesContext(connection) as captured:
-            response = self.client.get(reverse("map.pins.children"))
-        self.assertEqual(response.status_code, 200)
-        return len(captured)
+    def _url(self) -> str:
+        return reverse("pin.detail_pins.json", kwargs={"pin_slug": self.root.slug})
 
     def _payload(self) -> dict[int, dict]:
-        return {row["id"]: row for row in self.client.get(reverse("map.pins.children")).json()["pins"]}
+        return {row["id"]: row for row in self.client.get(self._url()).json()["detail_pins"]}
+
+    def test_the_query_count_does_not_grow_with_the_detail_pins(self) -> None:
+        self._assert_flat(self._url())
+
+    def test_nor_with_every_descendant_shown(self) -> None:
+        self._assert_flat(self._url(), {"children": "1"})
 
     def test_an_unnamed_detail_pin_is_named_by_its_wiki_and_drawn_with_its_label(self) -> None:
-        self._add_detail_pins(1, self.root)
-        detail = Pin.objects.get(parent_pin=self.root, name="")
+        detail = self._unnamed_detail_pin()
 
         row = self._payload()[detail.pk]
 
@@ -115,13 +92,22 @@ class MapChildPinsQueryTests(DetailPinsJsonQueryTests):
         self.assertEqual((row["icon"], row["color"]), ("tower", "#111111"))
 
     def test_the_viewers_own_label_colour_and_icon_are_used(self) -> None:
-        self._add_detail_pins(1, self.root)
-        detail = Pin.objects.get(parent_pin=self.root, name="")
+        detail = self._unnamed_detail_pin()
         LabelCustomization.objects.create(profile=self.profile, label=self.label, icon="castle", color="#abcdef")
 
         row = self._payload()[detail.pk]
 
         self.assertEqual((row["icon"], row["color"]), ("castle", "#abcdef"))
+
+
+class MapChildPinsQueryTests(DetailPinsJsonQueryTests):
+    """The main map's Child pins layer, which lists every child pin the viewer owns."""
+
+    def _url(self) -> str:
+        return reverse("map.pins.children")
+
+    def _payload(self) -> dict[int, dict]:
+        return {row["id"]: row for row in self.client.get(self._url()).json()["pins"]}
 
     def test_an_unnamed_parent_is_named_by_its_wiki(self) -> None:
         parent = self._pin("", parent_pin=self.root)
@@ -129,3 +115,18 @@ class MapChildPinsQueryTests(DetailPinsJsonQueryTests):
         child = self._pin("Door", parent_pin=parent)
 
         self.assertEqual(self._payload()[child.pk]["parent_name"], "zz-parent-wiki")
+
+
+class DetailPinPanelQueryTests(_ChildPinListCase):
+    """The pin page's detail-pin list, which shows each child's name and coordinates."""
+
+    def _url(self) -> str:
+        return reverse("pin.detail_pins", kwargs={"pin_slug": self.root.slug})
+
+    def test_the_query_count_does_not_grow_with_the_detail_pins(self) -> None:
+        self._assert_flat(self._url())
+
+    def test_an_unnamed_detail_pin_is_named_by_its_wiki(self) -> None:
+        detail = self._unnamed_detail_pin()
+
+        self.assertContains(self.client.get(self._url()), f"zz-detail-wiki-{detail.pk}")
