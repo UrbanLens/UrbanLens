@@ -22065,7 +22065,9 @@ carries no article that describes its campus.
   the first revision is the seed, every later one is `localize_article_images` (`EDIT_SUMMARY_IMAGES_LOCALIZED`,
   now a constant) changing nothing but image addresses, no revision has an editor, `last_edited_by` is empty and
   the article holds the last revision's text. A revision with no editor and any other summary is a person whose
-  account was deleted, and keeps the article. Dev's 11 each hold the seed plus the localising command's revision; a
+  account was deleted, and keeps the article. Each chunk of candidates is locked before its revisions are read, as the
+  article editor locks it, so an edit saved while the migration runs is read or waits rather than failing the
+  migration on a dangling revision. Dev's 11 each hold the seed plus the localising command's revision; a
   read-only SQL transcription of the rule, run against dev's data (2026-10-04), selects exactly those 11 and nothing
   else. The migration itself was not run there. The localising summary stays out of `SYSTEM_EDIT_SUMMARIES`:
   it can rewrite a person's text, which concealment must not show as system content.
@@ -22080,3 +22082,5 @@ linked, the campus's and a parcel under its site still are, nesting drops an unt
 the migration removes untouched seeds (dev's shape included) and keeps every human-touched or possibly-own article,
 and the runtime and migration judges agree case by case. An ordinary property's one building is still seeded. With
 the three call sites put back as they were, 4 of the 9 seeding and nesting tests failed; all 15 in the file pass with the fix.
+Self-review added an edit saved while the migration runs (`TransactionTestCase`): without the lock the migration
+failed on the edit's revision; with it the edit is kept. All 16 pass.

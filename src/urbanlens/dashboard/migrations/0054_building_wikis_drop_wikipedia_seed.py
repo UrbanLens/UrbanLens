@@ -26,6 +26,8 @@ def _without_image_addresses(content):
 def _untouched(content, revisions):
     if not revisions or revisions[0]["edit_summary"] != _SEEDED or revisions[-1]["content"] != content:
         return False
+    if any(revision["editor_id"] is not None for revision in revisions):
+        return False
     previous = revisions[0]["content"]
     for revision in revisions[1:]:
         if revision["edit_summary"] != _IMAGES_LOCALIZED or _without_image_addresses(revision["content"]) != _without_image_addresses(previous):
@@ -49,12 +51,12 @@ def drop_building_wikipedia_seeds(apps, schema_editor):
     doomed = []
     for start in range(0, len(candidates), _CHUNK_SIZE):
         chunk = candidates[start : start + _CHUNK_SIZE]
+        # Locked before the revisions are read, as the article editor locks it: an edit is either read here or waits.
+        articles = list(Article.objects.select_for_update().filter(pk__in=chunk, last_edited_by__isnull=True).values_list("pk", "content"))
         revisions = {}
-        for revision in ArticleRevision.objects.filter(article_id__in=chunk).order_by("created", "pk").values("article_id", "edit_summary", "content"):
+        for revision in ArticleRevision.objects.filter(article_id__in=chunk).order_by("created", "pk").values("article_id", "editor_id", "edit_summary", "content"):
             revisions.setdefault(revision["article_id"], []).append(revision)
-        for pk, content in Article.objects.filter(pk__in=chunk).values_list("pk", "content"):
-            if _untouched(content, revisions.get(pk, [])):
-                doomed.append(pk)
+        doomed.extend(pk for pk, content in articles if _untouched(content, revisions.get(pk, [])))
     ArticleRevision.objects.filter(article_id__in=doomed).delete()
     Article.objects.filter(pk__in=doomed).delete()
 
