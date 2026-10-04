@@ -53,7 +53,7 @@ class WikiPageHeroTests(TestCase):
         """The suggest-edits/delete/back-to-pin actions and the community-wiki notice used to render as their own row directly below the hero, spending extra page height on them - both now render inside the hero itself (see _wiki_detail_hero_body.html) instead."""
         content = self._get().content.decode()
         hero_start = content.index('id="wiki-hero"')
-        content_block_start = content.index('id="wiki-onboarding"')
+        content_block_start = content.index('class="wiki-page page-content"')
         actions_idx = content.index("Suggest edits")
         notice_idx = content.index("wiki-notice")
         self.assertGreater(actions_idx, hero_start)

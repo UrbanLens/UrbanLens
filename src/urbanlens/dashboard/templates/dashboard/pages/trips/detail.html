@@ -44,7 +44,6 @@
      data-gps-lat="{{ gps_fallback_lat|default:'' }}"
      data-gps-lng="{{ gps_fallback_lng|default:'' }}"
      data-show-onboarding="{% if request.user.profile.show_onboarding_tips %}1{% endif %}">
-    <div id="trip-onboarding" class="page-onboarding" aria-live="polite"></div>
 
     {# -- Trip header ----------------------------------------------------- #}
     <div id="trip-header">
@@ -480,6 +479,10 @@
 </dialog>
 {% endif %}
 
+{% endblock %}
+
+{% block overlays %}
+<div id="trip-onboarding" class="page-onboarding" aria-live="polite"></div>
 {% endblock %}
 
 {% block scripts %}

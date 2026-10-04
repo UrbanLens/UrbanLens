@@ -21790,3 +21790,19 @@ changed. A direct message's URL was checked and never had the fault.
 Verified in Chromium on `development_main`: `/dashboard/messages/g/<uuid>/` loaded cold shows the group's thread
 with its message and the row highlighted, no placeholder, no script errors.
 Test: `test_group_chats.py::GroupEndpointTests::test_the_groups_own_url_opens_its_thread`, red before.
+
+## RESOLVED 2026-10-04: On a wiki page, the purple Community wiki notice overlapped the onboarding card
+
+`id: P211` · `status: fixed` · `resolved: 2026-10-04`
+
+The onboarding card is `position: fixed; z-index: 1200`, but its mount sat in `{% block content %}`, inside
+`.container`, which is a stacking context (`position: relative; z-index: 1`). The card's 1200 counted only within that
+context, so the hero's absolutely positioned "Community wiki" notice (z-index 5, in the body's context) drew over the
+whole container, card included.
+
+`themes/base.html` has a new `{% block overlays %}` after `.container`, and the four floating onboarding mounts (wiki,
+pin, trip and organize pages) render there; their scripts find them by id. The pin grid's two selectors for the old
+mount, dead once it left the grid, are gone.
+
+Verified in Chromium on `development_main` at 1280 and 900 px: the elements at the card's eyebrow and title corners
+are the card's own. Test: `test_floating_onboarding_mounts.py` (no mount has a `.container` ancestor; 4 red before).

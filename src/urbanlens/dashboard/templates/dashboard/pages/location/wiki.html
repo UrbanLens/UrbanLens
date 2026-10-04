@@ -50,7 +50,6 @@
 
 {% block content %}
 <div class="wiki-page page-content">
-    <div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
 
     {# Notice + suggest-edits/delete/back-to-pin actions now render inside the hero itself to save vertical space #}
 
@@ -459,6 +458,10 @@
 
 </div>
 
+{% endblock %}
+
+{% block overlays %}
+<div id="wiki-onboarding" class="page-onboarding page-onboarding--wiki" aria-live="polite"></div>
 {% endblock %}
 
 {% block scripts %}

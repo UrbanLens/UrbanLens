@@ -41,8 +41,6 @@
      data-rows-url-tag="{% url 'label.rows' label_kind='tag' %}"
      data-rows-url-category="{% url 'label.rows' label_kind='category' %}"
      data-rows-url-status="{% url 'label.rows' label_kind='status' %}">
-    <div id="organize-onboarding" class="page-onboarding" aria-live="polite"
-         data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 
     {# LABELS SECTION: Tags/Categories/Statuses/People/Display Order, all inside one visually distinct container so it doesn't read. #}
     <div class="organize-section-panel" id="panel-labels" role="tabpanel"
@@ -209,6 +207,11 @@
 {% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='people' title='Edit Labels' picker_id='people-bulk-edit' candidates_from='people' %}
 
 {% include 'dashboard/partials/labels/organize_label_bulk_edit_dialog.html' with ns='media' title='Edit Media Labels' picker_id='media-bulk-edit' candidates_from='media' %}
+{% endblock %}
+
+{% block overlays %}
+<div id="organize-onboarding" class="page-onboarding" aria-live="polite"
+     data-show-onboarding-tips="{{ request.user.profile.show_onboarding_tips|yesno:'1,' }}"></div>
 {% endblock %}
 
 {% block scripts %}

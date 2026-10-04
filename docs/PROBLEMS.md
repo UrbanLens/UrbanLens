@@ -2898,14 +2898,6 @@ The fix is a data migration rewriting `message` on `notification_type=PIN_SHARED
 built the way `create_pin_share` builds it now (sender name through `resolve_visible_identity`, then the child-pin and
 already-pinned suffixes). Not done: it rewrites stored rows users see, which wants Jess's say-so.
 
-## P211 — On a wiki page, the purple "Community wiki" pill overlaps the onboarding card
-
-`id: P211` · `status: open` · `updated: 2026-10-03` · `found by: the P36 screenshot pass`
-
-On the wiki page, the "Community wiki" badge draws over the `page-onboarding--wiki` card. The P36 pass's screenshots
-`page-onboarding--wiki.png` and `page-onboarding--unmodified-sibling-on-pin-page.png` show it. Fix it in a browser, and
-assert with `elementFromPoint` that the card's top-left text is the topmost element.
-
 ## P216 — Historic Newspapers shows nothing, because no page reaches UrbanLens with its text
 
 `id: P216` · `status: open` · `updated: 2026-10-03` · `found by: P196, checking each provider's fields, 2026-10-03`

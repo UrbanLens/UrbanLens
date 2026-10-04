@@ -210,7 +210,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
 | P207 | open | 2026-10-02 | A worker's gen-2 collection still walks the startup heap, and that pause has never been timed on a real worker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P211 | open | 2026-10-03 | On a wiki page, the purple "Community wiki" pill overlaps the onboarding card | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P220 | open | 2026-10-03 | A background photo import stops at the first object store refusal, and the rest of the selection is never imported | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P229 | open | 2026-10-03 | The Ownership panel shows a subscriber only the owner's name | [`docs/PROBLEMS.md`](PROBLEMS.md) |

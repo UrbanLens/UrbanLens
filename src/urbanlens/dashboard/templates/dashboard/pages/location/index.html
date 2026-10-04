@@ -86,7 +86,6 @@
 {% endif %}
 <section class="page-tab-panel" data-tab-panel="overview">
 <div class="pin-detail-grid">
-    <div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 
     {% comment %}Request lanes for this page's enrichment panels.{% endcomment %}
     <span id="pin-panel-lane-0" hidden></span>
@@ -842,6 +841,10 @@
 </dialog>
 </div>
 
+{% endblock %}
+
+{% block overlays %}
+<div id="pin-detail-onboarding" class="page-onboarding" aria-live="polite"></div>
 {% endblock %}
 
 {% block scripts %}
