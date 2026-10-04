@@ -39,6 +39,27 @@ def pin_type_for_place(place: Place | None) -> str | None:
     return PinType.BUILDING if place.kind == PlaceKind.BUILDING else PinType.PARCEL
 
 
+def outline_applies(place: Place, boundary_type: str) -> bool:
+    """Whether a marker on this place has an outline of this type at all, known or not.
+
+    Args:
+        place: The resolved place.
+        boundary_type: A :class:`~urbanlens.dashboard.models.boundary.model.BoundaryType` value.
+
+    Returns:
+        False for a place that is not a building asked for a building outline, and for a building on a
+        multi-building parcel asked for the property; True otherwise, including where no geometry is known.
+    """
+    from urbanlens.dashboard.models.boundary.model import BoundaryType
+
+    if boundary_type == BoundaryType.BUILDING:
+        # A marker on the grounds of a multi-building site has no building: picking one of its structures would
+        # be inventing an answer.
+        return place.kind == PlaceKind.BUILDING
+    # A building on a property with others shows the building, not the grounds it shares with them.
+    return place.kind != PlaceKind.BUILDING or not place.is_multi_building
+
+
 def place_polygon(place: Place | None, boundary_type: str) -> MultiPolygon | None:
     """The outline a place contributes for one boundary type.
 
@@ -47,24 +68,14 @@ def place_polygon(place: Place | None, boundary_type: str) -> MultiPolygon | Non
         boundary_type: A :class:`~urbanlens.dashboard.models.boundary.model.BoundaryType` value.
 
     Returns:
-        The polygon to draw, or None when this place has nothing to say about that boundary type."""
+        The polygon to draw, or None when the type does not apply (:func:`outline_applies`) or its geometry is
+        unknown."""
     from urbanlens.dashboard.models.boundary.model import BoundaryType
 
-    if place is None:
+    if place is None or not outline_applies(place, boundary_type):
         return None
-
-    if boundary_type == BoundaryType.BUILDING:
-        # Only a marker standing on a footprint has a building. A marker on
-        # the grounds of a multi-building site deliberately has none: picking
-        # one of its structures would be inventing an answer.
-        return place.geometry if place.kind == PlaceKind.BUILDING else None
-
-    if place.kind != PlaceKind.BUILDING:
+    if boundary_type == BoundaryType.BUILDING or place.kind != PlaceKind.BUILDING:
         return place.geometry
-    if place.is_multi_building:
-        # A building on a property with others: its page shows the building,
-        # not the grounds it shares with 123 more of them.
-        return None
     parcel = place.parcel
     return parcel.geometry if parcel is not None else None
 

@@ -98,6 +98,22 @@ class BuildingChildOutlineTests(_Campus):
 
         self.assertEqual(self.outlines("1"), [drawn.pk])
 
+    def test_an_outline_drawn_on_the_childs_wiki_counts_where_its_building_has_no_footprint(self) -> None:
+        """P264."""
+        child = self.building_child(0, outline=False)
+        wiki = baker.make(Wiki, location=child.location, name="Building 0")
+        baker.make(
+            Boundary,
+            wiki=wiki,
+            pin=None,
+            profile=None,
+            location=child.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_square(-73.930, 41.7325, 0.0001),
+        )
+
+        self.assertEqual(self.outlines("1"), [child.pk])
+
     def test_a_building_with_no_outline_draws_nothing(self) -> None:
         self.building_child(0, outline=False)
 
@@ -232,6 +248,21 @@ class WikiChildOutlineTests(_Campus):
             location=drawn.location,
             boundary_type=BoundaryType.BUILDING,
             polygon=_square(-73.930, 41.745, 0.0001),
+        )
+
+        self.assertEqual(self.wiki_outlines("1"), [drawn.pk])
+
+    def test_an_outline_drawn_on_a_building_with_no_footprint_counts(self) -> None:
+        """P264: the building place says a building outline applies; it only lacks one."""
+        drawn = self.child_wiki(0, outline=False)
+        baker.make(
+            Boundary,
+            wiki=drawn,
+            pin=None,
+            profile=None,
+            location=drawn.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_square(-73.930, 41.7325, 0.0001),
         )
 
         self.assertEqual(self.wiki_outlines("1"), [drawn.pk])

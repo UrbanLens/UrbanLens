@@ -432,6 +432,124 @@ class ScopeGateResolutionTests(TestCase):
         self.assertIsNone(source)
 
 
+class FootprintlessBuildingTests(TestCase):
+    """P264: a building place with no footprint still takes an outline drawn on its wiki.
+
+    ``place_polygon`` is None both for a place the type does not apply to and for a building whose footprint is
+    unknown; only the first rules a drawn outline out.
+    """
+
+    def setUp(self):
+        self.parcel = make_place(PlaceKind.PARCEL, _square(-74.0, 40.0, 0.01))
+        self.building = make_place(PlaceKind.BUILDING, None, parent=self.parcel)
+        make_place(PlaceKind.BUILDING, _square(-73.997, 40.0, 0.001), parent=self.parcel)
+        self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-73.999000")
+        resolution.attach_location(self.location, self.building)
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, place=self.building)
+
+    def _draw(self, boundary_type: str = BoundaryType.BUILDING) -> None:
+        baker.make(
+            "dashboard.Boundary",
+            wiki=self.wiki,
+            pin=None,
+            location=self.location,
+            boundary_type=boundary_type,
+            polygon=_square(-73.999, 40.0, 0.0002),
+        )
+
+    def test_the_fixture_has_no_footprint(self) -> None:
+        self.assertEqual(self.location.place_id, self.building.pk)
+        self.assertIsNone(self.building.geometry)
+
+    def test_the_wikis_drawn_building_outline_is_shown(self) -> None:
+        self._draw()
+
+        polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.BUILDING)
+
+        self.assertEqual(source, "wiki")
+        self.assertIsNotNone(polygon)
+
+    def test_the_batched_wiki_outline_agrees(self) -> None:
+        self._draw()
+
+        polygons = Boundary.objects.own_polygons_for_wikis([self.wiki], BoundaryType.BUILDING, None)
+
+        self.assertIsNotNone(polygons[self.wiki.pk])
+
+    def test_a_pin_there_takes_its_wikis_drawn_outline(self) -> None:
+        self._draw()
+        pin = baker.make("dashboard.Pin", location=self.location, wiki=self.wiki)
+
+        polygon, source = Boundary.objects.resolve_for_pin(pin, BoundaryType.BUILDING)
+
+        self.assertEqual(source, "wiki")
+        self.assertEqual(Boundary.objects.own_polygons_for_pins([pin], BoundaryType.BUILDING)[pin.pk].wkt, polygon.wkt)
+
+    def test_a_child_pin_there_takes_its_wikis_drawn_outline_not_its_parents(self) -> None:
+        self._draw()
+        parent = baker.make(
+            "dashboard.Pin", location=baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
+        )
+        baker.make(
+            "dashboard.Boundary",
+            pin=parent,
+            profile=parent.profile,
+            location=parent.location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_square(-74.0, 40.0, 0.005),
+        )
+        child = baker.make(
+            "dashboard.Pin", profile=parent.profile, location=self.location, parent_pin=parent, wiki=self.wiki
+        )
+
+        _polygon, source = Boundary.objects.resolve_for_pin(child, BoundaryType.BUILDING)
+
+        self.assertEqual(source, "wiki")
+
+    def test_share_detection_agrees_where_a_property_outline_applies_but_is_unknown(self) -> None:
+        """A lone building with no parcel: the property applies, and only the wiki knows it."""
+        from urbanlens.dashboard.services.sharing.map_pin_share_detection import _boundaries_for_pins
+
+        lone = make_place(PlaceKind.BUILDING, _square(-74.02, 40.02, 0.0002))
+        location = baker.make("dashboard.Location", latitude="40.020000", longitude="-74.020000")
+        resolution.attach_location(location, lone)
+        wiki = baker.make("dashboard.Wiki", location=location, place=lone)
+        drawn = _square(-74.02, 40.02, 0.002)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=wiki,
+            pin=None,
+            location=location,
+            boundary_type=BoundaryType.PROPERTY,
+            polygon=drawn,
+        )
+        pin = baker.make("dashboard.Pin", location=location)
+
+        polygon, source = Boundary.objects.resolve_for_pin(pin, BoundaryType.PROPERTY)
+
+        self.assertEqual((polygon.wkt, source), (drawn.wkt, "wiki"))
+        self.assertEqual(_boundaries_for_pins([pin], BoundaryType.PROPERTY)[pin.pk].wkt, drawn.wkt)
+
+    def test_with_nothing_drawn_there_is_still_no_building_outline(self) -> None:
+        self.assertEqual(Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.BUILDING), (None, None))
+
+    def test_a_parcel_asked_for_a_building_outline_ignores_one_drawn_on_its_wiki(self) -> None:
+        location = baker.make("dashboard.Location", latitude="40.004000", longitude="-74.004000")
+        resolution.attach_location(location, self.parcel)
+        wiki = baker.make("dashboard.Wiki", location=location, place=self.parcel)
+        baker.make(
+            "dashboard.Boundary",
+            wiki=wiki,
+            pin=None,
+            location=location,
+            boundary_type=BoundaryType.BUILDING,
+            polygon=_square(-74.004, 40.004, 0.0002),
+        )
+
+        self.assertEqual(Boundary.objects.resolve_for_wiki(wiki, BoundaryType.BUILDING), (None, None))
+        self.assertEqual(Boundary.objects.own_polygons_for_wikis([wiki], BoundaryType.BUILDING, None), {wiki.pk: None})
+
+
 class WikiResolutionTests(TestCase):
     """resolve_for_wiki: wiki row → location generated → circle (property only)."""
 

@@ -180,17 +180,26 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             boundary_type: A :class:`BoundaryType` value.
 
         Returns:
-            Dict mapping location id to a polygon or None, for placed
-            locations only.
+            Dict mapping location id to its place's polygon, or to None where the place says the type does not
+            apply (``scope.outline_applies``). A location whose place has no geometry for a type that applies is
+            left out, as an unplaced one is: both fall back to the wiki and the circle.
         """
         from urbanlens.dashboard.models.location.model import Location
-        from urbanlens.dashboard.services.places.scope import place_polygon
+        from urbanlens.dashboard.services.places.scope import outline_applies, place_polygon
 
         location_ids = list(location_ids)
         if not location_ids:
             return {}
         rows = Location.objects.filter(pk__in=location_ids, place__isnull=False).select_related("place", "place__parent")
-        return {location.pk: place_polygon(location.place, boundary_type) for location in rows}
+        polygons: dict[int, GEOSGeometry | None] = {}
+        for location in rows:
+            place = location.place
+            if place is None:
+                continue
+            polygon = place_polygon(place, boundary_type)
+            if polygon is not None or not outline_applies(place, boundary_type):
+                polygons[location.pk] = polygon
+        return polygons
 
     # ------------------------------------------------------------------
     # Effective-polygon resolution
@@ -252,14 +261,14 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             The polygon and its source.
         """
         from urbanlens.dashboard.models.boundary.model import BoundaryType
-        from urbanlens.dashboard.services.places.scope import place_polygon
+        from urbanlens.dashboard.services.places.scope import outline_applies, place_polygon
 
         # A wiki with no place anchor of its own still displays at a location,
         # and that location knows what it stands on - so fall back to it rather
         # than dropping to a circle.
         place = wiki.place if wiki.place_id else (wiki.location.place if (wiki.location_id and wiki.location is not None and wiki.location.place_id) else None)
         scoped = place_polygon(place, boundary_type) if place is not None else None
-        if place is not None and scoped is None:
+        if place is not None and not outline_applies(place, boundary_type):
             return None, None
 
         if not concealed and (own := row()) and own.drawn_or_generated_polygon:
@@ -318,6 +327,7 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
             The answer, or None when it depends on the wiki.
         """
         from urbanlens.dashboard.models.boundary.model import BoundaryType
+        from urbanlens.dashboard.services.places.scope import outline_applies
 
         if row is not None and row.polygon:
             return row.polygon, "pin"
@@ -329,10 +339,11 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         if row is not None and row.generated_polygon and not (row.generated_from_children and scoped is not None):
             return row.generated_polygon, "generated"
 
-        if place is not None and scoped is None:
+        if place is not None and not outline_applies(place, boundary_type):
             return None, None
 
-        if inherit and scoped is None and pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
+        # A placed pin is its place's, never its parent's, even where the place's outline is unknown.
+        if inherit and place is None and pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
             parent_polygon, _parent_source = self.resolve_for_pin(parent_pin, boundary_type)
             if parent_polygon is not None:
                 point = self._pin_point(pin)
