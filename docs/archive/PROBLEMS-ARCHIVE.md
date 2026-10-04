@@ -21516,8 +21516,8 @@ did not reproduce there. Production was not read.
 **Not fixed: P261.** A building child pin whose location has no wiki of its own, on a parcel place whose wiki another
 location holds, still resolves the parcel's wiki by place: a uuid URL rendering the campus's root wiki, which is the
 exact shape of the report. No HRSH pin on dev is in that state. Fixing it is a choice, set out in P261. The campus's
-article still seeds a building wiki's article (P262). P250 (whether a provider rename re-mints a slug) was not decided:
-a slug minted from the right name is kept.
+article still seeds a building wiki's article (P262), and a wiki a share creates ahead of the task nests later
+(P263). P250 (whether a provider rename re-mints a slug) was not decided: a slug minted from the right name is kept.
 
 **Tests.** `test_building_location_names.py`: the campus's article and a listing merely holding the building name
 nothing, CRIS's record must stand on the building, a listed building keeps its listing, a property keeps its article

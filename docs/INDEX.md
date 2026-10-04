@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P263` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P264` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -229,3 +229,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P260 | open | 2026-10-03 | A PDF or DjVu result from REData's archives reaches neither the Media gallery nor Article > Sources | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P261 | open | 2026-10-04 | A building child pin on a location with no wiki of its own opens its campus's wiki under the building's uuid | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P262 | open | 2026-10-04 | A building's wiki is seeded with its campus's Wikipedia article | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P263 | open | 2026-10-04 | A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated | [`docs/PROBLEMS.md`](PROBLEMS.md) |

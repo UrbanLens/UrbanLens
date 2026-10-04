@@ -3187,3 +3187,14 @@ starts the location's wiki article from whatever is cached there (`wiki_seed.see
 P231 stopped that article naming a building's location (`name_tiers.describes_scope`); the article seeding was not
 changed. Open: whether a building's wiki carries no article from it, or the campus's with a note that the building is
 part of it.
+
+## P263 — A wiki created outside `ensure_wiki_for_location` nests only when its boundary is generated
+
+`id: P263` · `status: open` · `updated: 2026-10-04` · `found by: Claude, fixing P231`
+
+P231 made `tasks.ensure_wiki_for_location` reconcile nesting as soon as it creates a wiki. `WikiShareService`
+(`services/wiki/wiki_share.py`) also creates one when a share races ahead of that task. A wiki it creates stays a root
+until boundary generation, which runs only for an owner who allows enrichment, and the task that follows finds the
+wiki and does not reconcile. `photo_enrichment._save_enriched_image` creates one too, but only during enrichment.
+Found by reading, not seen on dev. Either reconcile on those paths as well, or have `ensure_wiki_for_location`
+reconcile any root wiki it returns, at a few queries per pin.
