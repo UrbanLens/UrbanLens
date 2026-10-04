@@ -96,6 +96,11 @@ REVIEWED: dict[str, str] = {
         "misplaced CRIS cards and nests root wikis under their parcel's. A reverse keeps every value, each one the old "
         "code reads; the dropped rows are a cache it refetches, and old links resolve through the history."
     ),
+    "0054_pin_share_notification_labels.py": (
+        "Rewrites stored pin-share notification messages to name the place as the share consented to. The old text "
+        "named the sender's own pin, which the share never consented to pass on, so a reverse must not restore it; "
+        "the rewritten messages are ordinary strings to the old code."
+    ),
 }
 
 
