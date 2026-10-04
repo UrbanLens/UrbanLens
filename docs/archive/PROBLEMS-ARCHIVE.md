@@ -22002,11 +22002,17 @@ one wiki. It reads places, wikis and location caches only, never a pin (a test a
   wiki holds it), typed a building (not user-chosen), and nested by P263's reconcile under the wiki of the building
   enclosing it, if any, else the campus's (`wiki_merge._containing_root_wiki_by_geometry`). A race in which the
   place's wiki appears meanwhile retries without the place rather than raising.
+- A placeless wiki has no unique column to collide on, so two locations on one building whose wikis were created at
+  once each got one. The building path re-resolves and creates under a transaction-scoped advisory lock keyed on the
+  campus wiki, and nests before releasing it, so the second caller finds the first's wiki.
 - A placeless wiki standing on a place another wiki holds no longer nests other root wikis inside that place's
   outline (`wiki_merge._nestable_child_wikis`): the parcel's outline is the campus wiki's, and a building's new wiki
   would otherwise have taken in every root wiki on the campus.
-- `wiki_naming.wiki_named_by_location` reads the place's wiki directly (`Wiki.objects.holding_place_of`), so a root
-  pin's names on a campus building still feed the campus's wiki, never the building's.
+- `wiki_naming.wiki_named_by_location` reads the place's wiki directly (`Wiki.objects.holding_place_of`), so the
+  names of a root pin's location with no wiki of its own still feed the campus's wiki, never a building's.
+- `name_tiers.naming_scope` reads the location's own wiki first: one whose wiki describes a building (`wiki_scope`)
+  is named as a building's whatever pins it holds. A root pin on a building with no wiki otherwise got a building
+  wiki named, in a property's scope, after the campus's Wikipedia article.
 
 A second account's root pin dropped on a campus building now opens that building's wiki, as it already did where the
 building has a place of its own. `BuildingCluster` gained `holding_footprint` and `nearest_meters`; `covers` is built
@@ -22017,6 +22023,9 @@ grounds, the reported child-pin shape, no pin read, the batched lookup, an ordin
 place/type/parent (campus, and an envelope's for a wing), no root wiki taken in, an existing building wiki reused,
 naming, and a building with a place of its own unchanged. 8 of the 16 written first failed before the fix; all
 17 pass after, with a race in which the campus's wiki appears between the lookup and the insert added alongside.
+Self-review then added three, all failing first: a building's wiki appearing between the lookup and the insert is
+reused, two threads creating wikis for one building at once get one (`TransactionTestCase`, the first insert held
+until the other returns), and a root pin's own building wiki is not renamed by a Wikipedia candidate. All 20 pass.
 `test_canonical_create_helpers.py`'s wiki race tests now make the manager's `_resolve` miss once, since
 `get_or_create_for_location` no longer goes through `existing_for_location`.
 
