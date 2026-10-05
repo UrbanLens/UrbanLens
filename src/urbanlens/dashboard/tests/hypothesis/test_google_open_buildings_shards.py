@@ -21,6 +21,7 @@ from urllib3 import HTTPResponse
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.boundaries import google_open_buildings
 from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
 
 #: The Royal Palace in Luang Prabang, Laos, at its Wikipedia coordinate; inside level-6 cell 312f.
 _PALACE = (19.8921, 102.1356)
@@ -115,13 +116,6 @@ class ShardTests(_GatewayTestCase):
 class CoverageTests(_GatewayTestCase):
     """Only cells the dataset covers are asked for, at the level whose shards a lookup can read."""
 
-    def test_a_place_outside_the_dataset_asks_for_nothing(self) -> None:
-        self.assertEqual(self.gateway.get_buildings(_US_BBOX), [])
-        self.assertEqual(self.gateway.get_building_points(_US_BBOX), [])
-        self.assertIsNone(self.gateway.get_boundary(41.73, -73.93))
-
-        self.session.get.assert_not_called()
-
     def test_a_covered_place_asks_for_its_level_6_shard(self) -> None:
         self.session.get.return_value = _response(404)
 
@@ -207,11 +201,46 @@ class RateLimitedSessionTests(TestCase):
         self.assertTrue(request.call_args.kwargs["stream"])
         huge.raw.read.assert_not_called()
 
-    def test_a_place_outside_the_dataset_logs_no_call(self) -> None:
+
+class OutsideCoverageTests(TestCase):
+    """A place the dataset does not cover is refused before any request, as an input no source could answer."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_each_lookup_is_refused_without_a_request(self) -> None:
+        session = MagicMock()
+        gateway = GoogleOpenBuildingsGateway(session=session)
+
+        for lookup in (
+            lambda: gateway.get_buildings(_US_BBOX),
+            lambda: gateway.get_building_points(_US_BBOX),
+            lambda: gateway.get_boundary(41.73, -73.93),
+        ):
+            with self.subTest(lookup=lookup), self.assertRaises(ImpossibleInputError) as refused:
+                lookup()
+            self.assertEqual(refused.exception.reason, InputRejection.OUTSIDE_COVERAGE)
+
+        session.get.assert_not_called()
+
+    def test_the_refusal_is_logged_as_a_rejected_input(self) -> None:
         from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 
-        with mock.patch.object(requests.Session, "request") as request:
-            self.assertIsNone(GoogleOpenBuildingsGateway().get_boundary(41.73, -73.93))
+        with mock.patch.object(requests.Session, "request") as request, self.assertRaises(ImpossibleInputError):
+            GoogleOpenBuildingsGateway().get_boundary(41.73, -73.93)
 
         request.assert_not_called()
-        self.assertFalse(ApiCallLog.objects.filter(service="google_open_buildings").exists())
+        rows = ApiCallLog.objects.filter(service="google_open_buildings")
+        self.assertEqual([row.was_rejected_input for row in rows], [True])
+
+    def test_the_boundary_chain_moves_on_without_deferring(self) -> None:
+        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+        with mock.patch.object(requests.Session, "request") as request:
+            resolved = BoundaryProviderChain(providers=(GoogleOpenBuildingsGateway(),)).get_boundaries(41.73, -73.93)
+
+        request.assert_not_called()
+        self.assertIsNone(resolved.building_polygon)
+        self.assertEqual(resolved.deferred, [])

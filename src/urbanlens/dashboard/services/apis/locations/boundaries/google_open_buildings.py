@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, validate_bbox
 from urbanlens.dashboard.services.apis.locations.boundaries.shards import read_shard
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.input_validation import InputRejection, reject
 
 try:
     import s2sphere
@@ -35,6 +36,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from django.contrib.gis.geos import Polygon
+
+SERVICE_KEY = "google_open_buildings"
 
 #: v3 is also published as level-4 shards, but 200 of those 333 are past :data:`MAX_SHARD_BYTES` (median 138 MiB),
 #: against 626 of these 3,330 (median 8.8 MiB). A level-6 shard has no header row.
@@ -95,7 +98,7 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
     Attributes:
         min_confidence: Drop rows below this model confidence score (dataset range is roughly 0.65-1.0)."""
 
-    service_key: ClassVar[str | None] = "google_open_buildings"
+    service_key: ClassVar[str | None] = SERVICE_KEY
     paid_service: ClassVar[bool] = False
     boundary_kind: ClassVar[str] = "building"
 
@@ -104,18 +107,27 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
 
     def get_buildings(self, bbox: BBox, *, as_geojson: bool = True) -> list[dict]:
         """Building footprint polygons overlapping ``bbox``.
-        Pass ``as_geojson=False`` to get raw dicts with a ``geometry_wkt`` string instead, if you'd rather avoid the shapely dependency."""
+        Pass ``as_geojson=False`` to get raw dicts with a ``geometry_wkt`` string instead, if you'd rather avoid the shapely dependency.
+
+        Raises:
+            ImpossibleInputError: ``bbox`` is outside the dataset's coverage."""
         return self._download_shards(bbox, POLYGONS_BASE_URL, POLYGON_COLUMNS, as_geojson=as_geojson)
 
     def get_building_points(self, bbox: BBox) -> list[dict]:
-        """Building centroid points overlapping ``bbox`` (smaller/faster than polygons)."""
+        """Building centroid points overlapping ``bbox`` (smaller/faster than polygons).
+
+        Raises:
+            ImpossibleInputError: ``bbox`` is outside the dataset's coverage."""
         return self._download_shards(bbox, POINTS_BASE_URL, POINT_COLUMNS, as_geojson=False)
 
     def _download_shards(self, bbox: BBox, base_url: str, columns: tuple[str, ...], *, as_geojson: bool) -> list[dict]:
         validate_bbox(bbox)
+        tokens = _shard_tokens_for_bbox(bbox)
+        if not tokens:
+            reject(SERVICE_KEY, InputRejection.OUTSIDE_COVERAGE, "Open Buildings v3 has no shards in this area")
         has_geometry = "geometry" in columns
         results: list[dict] = []
-        for token in _shard_tokens_for_bbox(bbox):
+        for token in tokens:
             shard = read_shard(self.session, f"{base_url}/{token}_buildings.csv.gz", max_bytes=MAX_SHARD_BYTES, what="An Open Buildings shard")
             if shard is None:
                 continue
@@ -162,6 +174,18 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
         }
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
+        """The smallest footprint holding the point.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            name: Unused; footprints carry no name.
+
+        Returns:
+            The footprint, or None when none holds the point or its shard is missing or past the cap.
+
+        Raises:
+            ImpossibleInputError: The point is outside the dataset's coverage."""
         return best_containing_polygon(
             self.get_buildings(create_bbox(latitude, longitude, self.bbox_delta)),
             latitude,

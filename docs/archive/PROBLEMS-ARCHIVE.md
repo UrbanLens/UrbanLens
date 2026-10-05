@@ -24167,7 +24167,9 @@ bytes. The 2.5D Temporal dataset is published only as Earth Engine rasters, so i
 
 **Fix.** `GoogleOpenBuildingsGateway` reads the level-6 shards, naming their columns from the level-4 header, and
 skips a row whose column count is wrong. It asks only for level-6 cells under one of the 333 covered level-4 cells,
-listed in `boundaries/data/open_buildings_v3_level_4_cells.txt`, so a US lookup makes no request and logs no call.
+listed in `boundaries/data/open_buildings_v3_level_4_cells.txt`. A lookup with none of them is refused before any
+request as `InputRejection.OUTSIDE_COVERAGE` (#209's impossible-input refusal): one `was_rejected_input` row, which
+neither budgets nor provider health count, and the boundary chain moves on without deferring.
 Live, the Royal Palace in Luang Prabang (Wikipedia's 19.8921, 102.1356) resolves to its 2,382 m² footprint, about 65
 by 69 m, from a 37 MiB shard in about 6 s. Before, its 3.7 GB shard was skipped and it answered nothing.
 
@@ -24182,10 +24184,10 @@ between lookups, as for Microsoft's footprints (P309). The 626 level-6 shards pa
 those still answer nothing here. REData's own `GoogleOpenBuildingsGateway` reads the level-4 shards whole, with no
 cap: [`handoffs/redata-open-buildings-shards-read-whole.md`](../handoffs/redata-open-buildings-shards-read-whole.md).
 
-**Tests.** `test_google_open_buildings_shards.py`: a place outside the dataset asks for nothing and logs no call
-through the real session; a covered place asks for its level-6 shard; the covered cells are the 333 level-4 cells; a
+**Tests.** `test_google_open_buildings_shards.py`: a place outside the dataset is refused without a request, logged as
+a rejected input, and the chain does not defer on it; a covered place asks for its level-6 shard; the covered cells are the 333 level-4 cells; a
 headerless shard's polygons, raw WKT and points are read, from the palace's own row; the boundary is the footprint
-holding the point; a short row is skipped. Ten failed before the fix. `tests/live_locations/test_open_buildings.py`
+holding the point; a short row is skipped. Eleven failed before the fix. `tests/live_locations/test_open_buildings.py`
 (`live_source`, run only with `UL_LIVE_LOCATIONS=1`) asks Google for the palace.
 
 ## RESOLVED 2026-10-05: Cloudflare's classifier refused 1-pixel test uploads, which UrbanLens logged as the classifier failing, and an outage could clear a photo's keywords
