@@ -20,7 +20,7 @@ const FORMER_CARD_IDS = [
 ];
 
 function exactly(label: string): RegExp {
-    return new RegExp(`^\\s*${label.replace(/[()]/g, "\\$&")}\\s*$`);
+    return new RegExp(`^\\s*${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`);
 }
 
 test.describe("pin detail - panel layout", () => {

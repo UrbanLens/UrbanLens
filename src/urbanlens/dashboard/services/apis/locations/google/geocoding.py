@@ -95,7 +95,7 @@ def _cached_answer(key: str) -> dict | None:
     try:
         answer = json.loads(row.json_response or "null")
     except json.JSONDecodeError:
-        logger.exception("Dropping an unreadable cached geocode for %s", key)
+        logger.exception("Dropping unreadable cached geocode %s", row.pk)
         row.delete()
         return None
     return answer if isinstance(answer, dict) else None

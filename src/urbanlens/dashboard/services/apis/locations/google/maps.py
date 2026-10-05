@@ -901,7 +901,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 continue
             coordinates = _on_the_globe(p["latitude"], p["longitude"])
             if coordinates is None:
-                logger.debug("Leaving out a place off the globe: (%s, %s)", p["latitude"], p["longitude"])
+                logger.debug("Leaving out a place off the globe")
                 continue
             lat, lng = coordinates
             name = (p.get("name") or "")[:255]
