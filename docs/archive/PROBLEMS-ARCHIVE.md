@@ -23273,3 +23273,25 @@ remembered. On dev, the same refused form asked twice made one REData call (33 s
 
 **Tests.** `test_redata_gateway.py::ExtractCulturalResourceAttachmentTests`: each settled refusal is not asked again
 within the backoff, and is asked again after it (failed before the fix); a timeout is asked again.
+
+## RESOLVED 2026-10-05: A boundary lookup downloaded a whole Google Open Buildings shard, up to gigabytes, into memory
+
+`id: P301` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading dev's ApiCallLog for a service with no successful call`
+
+**What was wrong.** `GoogleOpenBuildingsGateway`, last in the boundary chain, reads the dataset one level-4 S2 cell's
+shard at a time. It read the response whole and `gzip.decompress`ed it in memory. A real shard is large: Lagos's
+polygons are 1.9 GB compressed, Sao Paulo's 2.4 GB and Dhaka's 3.4 GB; the median of the 333 polygon shards is
+138 MiB. A lookup anywhere the dataset covers would have exhausted a worker. In the US, where there are no shards, every
+lookup asked again for a missing one: dev's `ApiCallLog` held 5,357 calls and no 200s (1,554 404s, 2,679 refused by our
+own rate limiter, 750 failures).
+
+**Fix.** The gateway streams each shard and skips one larger than `MAX_SHARD_BYTES` (64 MiB) from its Content-Length,
+or by reading one byte past the cap when there is none. It decompresses and parses the shards it keeps as a stream, and
+remembers a missing or skipped shard for 30 days in the default cache. On dev, a Poughkeepsie lookup asked once and
+then not again, and a Lagos lookup skipped its shard in 0.4 s. 133 of the 333 polygon shards fit the cap. REData
+already serves the dataset per query extent (parcel buildings, `?source=google_open_buildings`); a boundary provider on
+that route would cover the rest without downloading a shard.
+
+**Tests.** `test_google_open_buildings_shards.py`: a missing shard is asked for once, a shard past the cap is not
+read and not asked for again, nor is one that gives no size and runs past it, and a small shard is parsed (the first
+two failed before the fix).

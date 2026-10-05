@@ -6,12 +6,14 @@ import csv
 from dataclasses import dataclass
 import gzip
 import io
+import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, validate_bbox
+from django.core.cache import DEFAULT_CACHE_ALIAS
 
-# Adjust this import to wherever Gateway/Gateway actually live.
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, validate_bbox
+from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_or_skip
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, read_capped
 
 try:
     import s2sphere
@@ -26,11 +28,19 @@ except ImportError:  # pragma: no cover
     shapely_mapping = None
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from django.contrib.gis.geos import Polygon
 
 POLYGONS_BASE_URL = "https://storage.googleapis.com/open-buildings-data/v3/polygons_s2_level_4_gzip"
 POINTS_BASE_URL = "https://storage.googleapis.com/open-buildings-data/v3/points_s2_level_4_gzip"
 S2_COVERING_LEVEL = 4
+#: Shards run to gigabytes where the dataset is dense (Lagos's polygons are 1.9 GB compressed); one past this is skipped.
+MAX_SHARD_BYTES = 64 * 1024 * 1024
+#: A shard that is missing or too large stays so for as long as the dataset's release does.
+_UNUSABLE_SHARD_SECONDS = 30 * 24 * 60 * 60
+
+logger = logging.getLogger(__name__)
 
 
 def _s2_tokens_for_bbox(bbox: BBox) -> list[str]:
@@ -74,27 +84,53 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
 
     def _download_shards(self, bbox: BBox, base_url: str, *, has_geometry: bool, as_geojson: bool) -> list[dict]:
         validate_bbox(bbox)
-        min_lon, min_lat, max_lon, max_lat = bbox
         results: list[dict] = []
         for token in _s2_tokens_for_bbox(bbox):
-            # Runs inside the boundary panel-fetch Celery task (via BoundaryProviderChain, see
-            # services/external_data.py), whose soft time limit is the real budget - the (connect,
-            # read) tuple just keeps a dead connection from eating that budget while a genuinely
-            # slow shard download may keep trickling within it.
-            response = self.session.get(f"{base_url}/{token}_buildings.csv.gz", timeout=(5, 60))
-            if response.status_code == 404:
-                continue  # cell has no shard published (no buildings there)
-            response.raise_for_status()
-            text = gzip.decompress(response.content).decode("utf-8")
-            for row in csv.DictReader(io.StringIO(text)):
-                lat, lon = float(row["latitude"]), float(row["longitude"])
-                if not (min_lon <= lon <= max_lon and min_lat <= lat <= max_lat):
-                    continue
-                confidence = float(row.get("confidence") or 0.0)
-                if confidence < self.min_confidence:
-                    continue
-                results.append(self._row_to_output(row, has_geometry=has_geometry, as_geojson=as_geojson))
+            shard = self._read_shard(f"{base_url}/{token}_buildings.csv.gz")
+            if shard is None:
+                continue
+            with gzip.GzipFile(fileobj=io.BytesIO(shard)) as unzipped, io.TextIOWrapper(unzipped, encoding="utf-8", newline="") as text:
+                results.extend(self._rows_within(csv.DictReader(text), bbox, has_geometry=has_geometry, as_geojson=as_geojson))
         return results
+
+    def _read_shard(self, url: str) -> bytes | None:
+        """A shard's compressed body, or None when it is missing or past ``MAX_SHARD_BYTES``; either is remembered.
+
+        Runs inside the boundary panel-fetch Celery task, whose soft time limit is the real budget; the (connect, read)
+        timeout keeps a dead connection from spending it.
+        """
+        unusable_key = f"google-open-buildings:unusable:{url}"
+        if get_or_none(unusable_key, label="google open buildings shard", alias=DEFAULT_CACHE_ALIAS):
+            return None
+        response = self.session.get(url, timeout=(5, 60), stream=True)
+        try:
+            if response.status_code == 404:
+                reason = "missing"
+            else:
+                response.raise_for_status()
+                length = response.headers.get("Content-Length", "")
+                reason = "too large" if length.isdigit() and int(length) > MAX_SHARD_BYTES else ""
+            if not reason:
+                try:
+                    return read_capped(response, max_bytes=MAX_SHARD_BYTES, what="An Open Buildings shard")
+                except GatewayRequestError:
+                    reason = "too large"
+        finally:
+            response.close()
+        if reason == "too large":
+            logger.info("Skipping the Open Buildings shard %s: it is larger than %s bytes", url, MAX_SHARD_BYTES)
+        set_or_skip(unusable_key, reason, _UNUSABLE_SHARD_SECONDS, label="google open buildings shard", alias=DEFAULT_CACHE_ALIAS)
+        return None
+
+    def _rows_within(self, rows: csv.DictReader[str], bbox: BBox, *, has_geometry: bool, as_geojson: bool) -> Iterator[dict[str, Any]]:
+        min_lon, min_lat, max_lon, max_lat = bbox
+        for row in rows:
+            lat, lon = float(row["latitude"]), float(row["longitude"])
+            if not (min_lon <= lon <= max_lon and min_lat <= lat <= max_lat):
+                continue
+            if float(row.get("confidence") or 0.0) < self.min_confidence:
+                continue
+            yield self._row_to_output(row, has_geometry=has_geometry, as_geojson=as_geojson)
 
     @staticmethod
     def _row_to_output(row: dict[str, str], *, has_geometry: bool, as_geojson: bool) -> dict[str, Any]:
