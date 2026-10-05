@@ -6,7 +6,7 @@
 
 import { expect, test } from "@playwright/test";
 
-import { isProductionHost } from "../../lib/production-guard.js";
+import { DEFAULT_PRODUCTION_HOSTS, isProductionHost } from "../../lib/production-guard.js";
 
 test.describe("production-write guard", () => {
     test("an exact production hostname is caught", () => {
@@ -30,9 +30,15 @@ test.describe("production-write guard", () => {
     });
 
     test("every default production host is genuinely caught by its own list", () => {
-        const defaults = ["urbanlens.org", "www.urbanlens.org", "app.urbanlens.org"];
-        for (const host of defaults) {
-            expect(isProductionHost(host, defaults)).toBe(true);
+        for (const host of DEFAULT_PRODUCTION_HOSTS) {
+            expect(isProductionHost(host, [...DEFAULT_PRODUCTION_HOSTS])).toBe(true);
+        }
+    });
+
+    test("every hostname the production tunnel serves the web app on is refused by default", () => {
+        // infrastructure platform/cloudflare-tunnel/base/config.yml routes these to production web.
+        for (const host of ["urbanlens.org", "www.urbanlens.org", "beta.urbanlens.org"]) {
+            expect(isProductionHost(host, [...DEFAULT_PRODUCTION_HOSTS])).toBe(true);
         }
     });
 });

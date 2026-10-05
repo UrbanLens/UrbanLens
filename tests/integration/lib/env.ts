@@ -8,12 +8,10 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { isProductionHost } from "./production-guard.js";
+import { DEFAULT_PRODUCTION_HOSTS, isProductionHost } from "./production-guard.js";
 
 export const INTEGRATION_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Hosts that are refused by default. These tests create, edit and delete real rows as a real account. */
-const DEFAULT_PRODUCTION_HOSTS = ["urbanlens.org", "www.urbanlens.org", "app.urbanlens.org"];
 
 /** Loads `KEY=value` pairs from a dotenv file without taking a dependency. */
 function loadDotEnv(path: string): void {
@@ -89,10 +87,10 @@ function readInteger(name: string, fallback: number): number {
     return value;
 }
 
-function readList(name: string, fallback: string[]): string[] {
+function readList(name: string, fallback: readonly string[]): string[] {
     const raw = process.env[name]?.trim();
     if (!raw) {
-        return fallback;
+        return [...fallback];
     }
     return raw
         .split(",")
