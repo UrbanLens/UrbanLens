@@ -110,7 +110,13 @@ def test_the_campus_has_its_buildings(redata: LiveRedata, site: Site) -> None:
     assert len(buildings) >= site.required_buildings, (
         f"{site.name}: {len(buildings)} buildings on the property, want at least {site.required_buildings}"
     )
-    far = [row.get("name") for row in buildings if (row.get("distance_meters") or 0) > _ON_PROPERTY_REACH_METERS]
+    # Inside the parcel's own boundary is on the property however far from the point: Harlem Valley's 503-acre
+    # parcel holds the hospital cemetery 1.5 km out. Every other reason for "on the property" is bounded.
+    far = [
+        row.get("name")
+        for row in buildings
+        if row.get("match_scope") != "parcel" and (row.get("distance_meters") or 0) > _ON_PROPERTY_REACH_METERS
+    ]
     assert not far, f"{site.name}: on-property buildings more than {_ON_PROPERTY_REACH_METERS} m away: {far[:5]}"
 
 

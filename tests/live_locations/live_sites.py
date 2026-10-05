@@ -94,7 +94,8 @@ class Site:
 
         One of its names must appear as a whole phrase. A name that does not say it is an institution
         ("The Ridges"), or that other campuses share (a wikipedia title disambiguated in parentheses),
-        also needs the town or the disambiguator nearby.
+        also needs the town or the disambiguator somewhere in the same texts - not necessarily next to it,
+        so "Athens, Georgia ... the ridges" still counts for Athens, Ohio.
         """
         haystack = f" {_normalized(' '.join(str(text) for text in texts if text))} "
         qualified = any(f" {phrase} " in haystack for phrase in self.qualifiers)
