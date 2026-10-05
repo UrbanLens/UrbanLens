@@ -151,6 +151,8 @@ _LOCAL_ONLY_MEDIA_SUBTREES = (
     ("exports/", "services.import_export.export.export_dir"),
     ("imports/", "services.import_export.import_data"),
     ("preview_sources/", "services.media.previews"),
+    ("import_previews/", "services.pins.import_preview"),
+    ("confirmed_imports/", "services.pins.confirmed_import"),
 )
 
 
