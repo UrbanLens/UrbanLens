@@ -254,6 +254,8 @@ class RedataBreaker(UpstreamBreaker):
     REFUSAL_MEMORY_SECONDS: ClassVar[int] = 24 * 3600
     #: Scope prefix of a refused endpoint.
     REFUSED_SCOPE: ClassVar[str] = "refused:"
+    #: Endpoints UrbanLens does without when refused, so a key narrowed to leave them out is a warning, not an error.
+    OPTIONAL_ENDPOINTS: ClassVar[frozenset[str]] = frozenset({"locations/prewarm"})
 
     def covers(self, service: str) -> bool:
         """REData's services are the ones named for it.
@@ -426,7 +428,8 @@ class RedataBreaker(UpstreamBreaker):
         if known:
             logger.info("REData still refuses this key at %s; asking again in %ss", endpoint, seconds)
         else:
-            logger.error("REData refused this key at %s - it may lack the endpoint's scope. Not asking again for %ss.", endpoint, seconds)
+            level = logging.WARNING if endpoint in self.OPTIONAL_ENDPOINTS else logging.ERROR
+            logger.log(level, "REData refused this key at %s - it may lack the endpoint's scope. Not asking again for %ss.", endpoint, seconds)
 
     def refused_endpoints(self) -> list[RefusedEndpoint]:
         """The endpoints REData has refused this key in the last :attr:`REFUSAL_MEMORY_SECONDS`, most recent first.
