@@ -256,6 +256,7 @@ def find_nearby_places(latitude: float, longitude: float, *, radius: int, source
             answer.cached = False
         if result.ok:
             answer.places.extend(result.value_or([]))
-        else:
+        elif result.outcome is not Outcome.REFUSED:
+            # A refused point was never asked and cannot be answered later either, so the source is not missing.
             answer.incomplete.append(source)
     return answer

@@ -16,6 +16,7 @@ import requests
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, is_source_outage
+from urbanlens.dashboard.services.core.input_validation import require_coordinates, require_in_range
 from urbanlens.dashboard.services.core.user_agent import USER_AGENT
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
@@ -131,8 +132,13 @@ class WikipediaGateway(Gateway):
             List of place dicts compatible with the Places layer marker format.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe, or the radius or limit can hold nothing.
             GatewayRequestError: Wikipedia could not be reached or answered with something unreadable.
         """
+        # (0, 0) is allowed: Wikipedia has an article about Null Island, geotagged there.
+        require_coordinates(self.service_key, latitude, longitude, allow_null_island=True)
+        require_in_range(self.service_key, "radius_m", radius_m, minimum=0, exclusive_minimum=True)
+        require_in_range(self.service_key, "limit", limit, minimum=1)
         params: dict[str, str | int] = {
             "action": "query",
             "list": "geosearch",

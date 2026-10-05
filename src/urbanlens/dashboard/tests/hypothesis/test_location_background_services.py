@@ -746,7 +746,8 @@ class NominatimGatewayTests(SimpleTestCase):
         session.get.return_value = response
         gateway = NominatimGateway(session=session)
 
-        result = gateway.reverse_geocode(0, 0)
+        # Any real point: (0, 0) is refused before it is asked (services.core.input_validation).
+        result = gateway.reverse_geocode(41.7, -73.9)
 
         assert result is not None
         self.assertEqual(result["extra_details"], [])

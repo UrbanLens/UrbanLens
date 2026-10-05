@@ -9,6 +9,7 @@ from typing import Any, ClassVar, Literal
 import requests
 
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_coordinates
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -39,10 +40,16 @@ class OSRMGateway(Gateway):
             profile: Routing profile - ``"driving"``, ``"walking"``, or ``"cycling"``.
 
         Returns:
-            Dict with ``distance_meters``, ``duration_seconds``, and ``geometry`` (``None`` here since overview geometry isn't requested), or None when routing failed (e.g. no road network connects the points, or the request failed).
+            Dict with ``distance_meters``, ``duration_seconds``, and ``geometry`` (``None`` here since overview geometry isn't requested), or None when routing failed (e.g. no road network connects the points, or the request failed), or a waypoint is not on the globe or is ``(0, 0)`` (counted, never sent).
         """
         if len(waypoints) < 2:
             raise ValueError("get_route requires at least two waypoints")
+        try:
+            for latitude, longitude in waypoints:
+                # OSRM snaps (0, 0) to whatever road is nearest, which is a route, not the one asked for.
+                require_coordinates(self.service_key, latitude, longitude)
+        except ImpossibleInputError:
+            return None
 
         coordinates = ";".join(f"{longitude},{latitude}" for latitude, longitude in waypoints)
         url = f"{self.base_url.rstrip('/')}/route/v1/{profile}/{coordinates}"

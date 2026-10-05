@@ -6,7 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway, refused_as_rejection
+from urbanlens.dashboard.services.core.input_validation import require_coordinates, require_in_range
 
 #: Matches REData's own ``profile`` values.
 RoutingProfile = Literal["driving", "walking", "cycling"]
@@ -15,6 +16,9 @@ RoutingProfile = Literal["driving", "walking", "cycling"]
 #: ``RD_ROUTEXL_USERNAME``/``RD_ROUTEXL_PASSWORD``) - REData returns ``503`` rather than silently
 #: downgrading when the requested capability isn't configured on its end.
 RoutingCapability = Literal["as_given", "optimized"]
+
+#: REData's own per-route waypoint ceiling.
+MAX_WAYPOINTS = 20
 
 
 @dataclass(slots=True, kw_only=True)
@@ -37,11 +41,16 @@ class RedataRoutingGateway(RedataLocationContextGateway):
             ``{"distance_meters", "duration_seconds"}`` for the whole route (matching ``OSRMGateway.get_route``'s shape, its direct-fallback counterpart), or None when REData confirmed no route connects these points (``route: null``), or found nothing to report.
 
         Raises:
+            LocationContextRefusedError: A waypoint is not on the globe or is ``(0, 0)``, or there are not 2-20 of them; nothing was sent.
             LocationContextUnavailableError: The requested ``capability`` isn't configured on REData's end, or the request itself failed outright.
 
         Note:
             REData's own ``../REData/docs/api-reference.md`` documents the request body for this endpoint and the ``route: null``/``waypoint_order``/ ``available_capabilities`` fields, but doesn't show a full worked example of a non-null ``route`` object's own fields.
         """
+        with refused_as_rejection():
+            require_in_range(self.service_key, "waypoints", len(waypoints), minimum=2, maximum=MAX_WAYPOINTS)
+            for latitude, longitude in waypoints:
+                require_coordinates(self.service_key, latitude, longitude)
         body = self.post_json(
             "/api/v1/routes/",
             {

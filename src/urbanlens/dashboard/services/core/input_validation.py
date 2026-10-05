@@ -207,6 +207,25 @@ def require_query(service: str, query: object, *, name: str = "query", max_lengt
     return query
 
 
+def require_content(service: str, name: str, content: bytes) -> bytes:
+    """Bytes with something in them, such as an image to describe, returned unchanged.
+
+    Args:
+        service: The service key the call is for.
+        name: What the content is, for the message.
+        content: The bytes as given.
+
+    Returns:
+        ``content``.
+
+    Raises:
+        ImpossibleInputError: ``content`` is empty.
+    """
+    if not content:
+        reject(service, InputRejection.EMPTY_QUERY, f"{name} is empty")
+    return content
+
+
 def require_in_range[N: (int, float)](service: str, name: str, value: N, *, minimum: float | None = None, maximum: float | None = None, exclusive_minimum: bool = False) -> N:
     """A number the provider accepts, returned unchanged.
 

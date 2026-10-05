@@ -493,8 +493,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             Raw JPEG bytes, or None when no API key is configured.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe.
             requests.exceptions.RequestException: The request failed.
         """
+        from urbanlens.dashboard.services.core.input_validation import require_coordinates
+
+        # (0, 0) is open ocean, which Google still photographs.
+        require_coordinates(self.service_key, latitude, longitude, allow_null_island=True)
         if not self.api_key:
             return None
         resp = self.session.get(
@@ -529,9 +534,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             Tuple of ``(image_bytes, capture_date, pano_latitude, pano_longitude)`` - the pano's own coordinates are returned alongside the image (rather than just echoing back the input) since a widened search radius can resolve to a pano some distance from the requested point.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``, where no road runs.
             StreetViewNotFoundError: No Street View imagery was found within ``max_radius``, or only a placeholder.
             StreetViewStatusError: The API answered with an account or request-level status.
             requests.RequestException: The request failed."""
+        from urbanlens.dashboard.services.core.input_validation import require_coordinates
+
+        require_coordinates(self.service_key, latitude, longitude)
         logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
         view = {"fov": fov, "pitch": pitch, "size": size}
         radii = list(range(radius, max_radius + 1, radius_increment))

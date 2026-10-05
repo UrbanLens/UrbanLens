@@ -102,6 +102,7 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, SlideState]
     Returns:
         ``(slides, state)``; only a :attr:`SlideState.COMPLETE` result may be cached."""
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
     from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
     slides: list = []
@@ -116,6 +117,9 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, SlideState]
             return slides, SlideState.UNAVAILABLE
         logger.warning("%s provider degraded after %d slide(s): %s", what, len(slides), exc)
         return slides, SlideState.DEGRADED
+    except ImpossibleInputError:
+        # Counted where it was refused; the same point can only be refused again, so the answer is kept.
+        return slides, SlideState.COMPLETE
     except (GatewayRequestError, OSError) as exc:
         logger.warning("%s provider degraded after %d slide(s): %s", what, len(slides), exc)
         return slides, SlideState.DEGRADED

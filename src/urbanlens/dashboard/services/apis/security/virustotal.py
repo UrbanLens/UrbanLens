@@ -4,15 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.input_validation import require_format
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://www.virustotal.com/api/v3"
 _REQUEST_TIMEOUT = 15
+
+#: A SHA-256 hex digest; anything else in the path is a lookup VirusTotal can only answer 400 or 404.
+_SHA256 = re.compile(r"[0-9a-fA-F]{64}")
 
 
 @dataclass(slots=True, kw_only=True)
@@ -40,8 +45,10 @@ class VirusTotalGateway(Gateway):
             The report's ``data.attributes`` dict (includes ``last_analysis_stats``) when VirusTotal has already analyzed a file with this hash, or ``None`` on HTTP 404 - not an error, just "VirusTotal has never seen this exact file".
 
         Raises:
+            ImpossibleInputError: ``sha256`` is not a SHA-256 hex digest.
             GatewayRequestError: The request could not be made, VirusTotal returned a non-2xx status other than 404 (401 bad key, 429 rate limited, 5xx, ...), or the response body was not the expected JSON shape.
         """
+        require_format(self.service_key, "sha256", sha256, _SHA256)
         try:
             response = self.session.get(f"{_BASE_URL}/files/{sha256}", timeout=_REQUEST_TIMEOUT)
         except OSError as exc:

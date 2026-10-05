@@ -38,6 +38,7 @@ from django.views import View
 from urbanlens.dashboard.middleware import mark_shared_cacheable
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.upstream_slots import UpstreamSlots as BaseUpstreamSlots
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -360,8 +361,8 @@ class VectorBasemapTileView(AccessMixin, View):
             y: Tile row.
 
         Returns:
-            The tile bytes, a 404 when this deployment buys no hosted basemap, or an uncached 503
-            when the upstream could not be reached.
+            The tile bytes, a 404 when this deployment buys no hosted basemap or the tile is outside
+            the pyramid, or an uncached 503 when the upstream could not be reached.
         """
         from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import ProtomapsBasemapGateway
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
@@ -394,6 +395,8 @@ class VectorBasemapTileView(AccessMixin, View):
                 return HttpResponse(status=503, headers={"Retry-After": "1"})
             try:
                 status, body, content_type = ProtomapsBasemapGateway().download_tile(z, x, y, key=key, origin=_origin_of(request))
+            except ImpossibleInputError:
+                return _keep_for(HttpResponse(status=404))
             except (RequestCancelledError, GatewayRequestError, OSError) as exc:
                 logger.warning("Vector basemap tile fetch failed for %s/%s/%s: %s", z, x, y, exc)
                 return HttpResponse(status=503)

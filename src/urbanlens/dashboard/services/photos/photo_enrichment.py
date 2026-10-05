@@ -10,6 +10,7 @@ import requests
 
 from urbanlens.dashboard.models.images.model import ImageSource
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
 
 if TYPE_CHECKING:
@@ -222,7 +223,7 @@ class StreetViewEnrichmentSource(_BackfillMarkerSource):
         found = False
         try:
             content, _capture_date, _pano_lat, _pano_lng = gateway.get_street_view_single(float(location.latitude), float(location.longitude))
-        except (ValueError, requests.exceptions.RequestException) as exc:
+        except (ValueError, requests.exceptions.RequestException, ImpossibleInputError) as exc:
             if is_source_outage(exc):
                 raise
             logger.info("Street View unavailable for location=%s: %s", location.pk, exc)
@@ -257,7 +258,7 @@ class SatelliteEnrichmentSource(_BackfillMarkerSource):
         gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
         try:
             content = gateway.get_satellite_image_bytes(float(location.latitude), float(location.longitude))
-        except requests.exceptions.RequestException as exc:
+        except (requests.exceptions.RequestException, ImpossibleInputError) as exc:
             if is_source_outage(exc):
                 raise
             logger.info("Satellite image unavailable for location=%s: %s", location.pk, exc)

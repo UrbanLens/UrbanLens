@@ -13,6 +13,7 @@ from django.utils import timezone
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.inference_client import ToolSpec as InferenceToolSpec, ToolUseBlock
 from urbanlens.dashboard.services.ai.tools import MAX_TOOL_CALLS, REGISTRY, ToolContext, available_tools, execute
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
@@ -52,6 +53,7 @@ _INSTRUCTIONS = (
 )
 
 _TIMEOUT_REPLY = "Sorry - that took too long. Try a narrower question."
+_EMPTY_MESSAGE_REPLY = "Type a question and I'll take a look."
 _NO_RESPONSE_REPLY = "Sorry - I couldn't get a response from the assistant just now. Try again in a moment."
 _ACTION_LIMIT_REPLY = "I hit my per-message action limit before finishing - the steps so far are listed below. Ask me to continue if you'd like."
 _ROUND_LIMIT_REPLY = "I hit my per-message step limit before finishing - the steps so far are listed below. Ask me to continue if you'd like."
@@ -116,6 +118,10 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
         raise AssistantUnavailableError("AI features are turned off.")
 
     user_message = user_message.strip()[:MAX_MESSAGE_CHARS]
+    try:
+        require_query("assistant", user_message, name="message")
+    except ImpossibleInputError:
+        return AssistantTurn(reply=_EMPTY_MESSAGE_REPLY)
     transcript = _history_block(history)
     prompt = (f"{transcript}\n" if transcript else "") + f"USER: {user_message}"
     started = time.monotonic()

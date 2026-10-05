@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 import math
 from typing import Any
 from unittest import mock
 
+from django.contrib.auth.models import User
+from django.core.cache import cache
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
@@ -154,3 +159,335 @@ class NominatimTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.core.rate_limiter._RateLimitedSession._do_request") as request:
             self.assertEqual(nominatim_geocode("  "), (None, None))
         request.assert_not_called()
+
+
+class StreetViewTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+
+    def test_a_coverage_probe_of_null_island_never_reaches_google(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.street_view_metadata import (
+            GoogleStreetViewMetadataGateway,
+        )
+
+        session = mock.Mock()
+        with self.assertRaises(ImpossibleInputError):
+            GoogleStreetViewMetadataGateway(api_key="test-key", session=session).has_imagery(0.0, 0.0)
+        session.get.assert_not_called()
+
+    def test_the_right_click_probe_answers_no_imagery_for_a_refused_point(self) -> None:
+        baker.make(User)  # the first user is auto-promoted to site admin
+        self.client.force_login(baker.make(User))
+        with (
+            mock.patch("urbanlens.UrbanLens.settings.app.settings.google_unrestricted_api_key", "test-key"),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            response = self.client.get(reverse("map.streetview_check"), {"lat": "0", "lng": "0"})
+        self.assertEqual(response.json(), {"available": False})
+        wire.assert_not_called()
+
+    def test_static_street_view_of_null_island_never_reaches_google(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+
+        session = mock.Mock()
+        with self.assertRaises(ImpossibleInputError):
+            GoogleMapsGateway(api_key="test-key", session=session).get_street_view_single(0.0, 0.0)
+        session.get.assert_not_called()
+
+    def test_a_refused_point_is_a_settled_empty_carousel_not_a_degraded_one(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+
+        session = mock.Mock()
+        fetched = GoogleMapsGateway(api_key="test-key", session=session).get_street_view_slides(0.0, 0.0)
+        self.assertEqual(fetched.slides, [])
+        self.assertFalse(fetched.degraded)
+        session.get.assert_not_called()
+
+
+class GoogleStaticSatelliteTests(TestCase):
+    def test_an_impossible_centre_never_reaches_google(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+
+        for latitude, longitude in ((math.nan, 1.0), (91.0, 1.0)):
+            session = mock.Mock()
+            with self.subTest(latitude=latitude), self.assertRaises(ImpossibleInputError):
+                GoogleMapsGateway(api_key="test-key", session=session).get_satellite_image_bytes(latitude, longitude)
+            session.get.assert_not_called()
+
+    def test_null_island_has_imagery_so_it_is_still_asked(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+
+        session = mock.Mock()
+        session.get.return_value = mock.Mock(content=b"jpeg")
+        self.assertEqual(
+            GoogleMapsGateway(api_key="test-key", session=session).get_satellite_image_bytes(0.0, 0.0), b"jpeg"
+        )
+
+
+class ProtomapsTests(TestCase):
+    def test_a_tile_outside_the_pyramid_never_reaches_protomaps(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import ProtomapsBasemapGateway
+
+        session = mock.Mock()
+        gateway = ProtomapsBasemapGateway(session=session)
+        for z, x, y in ((3, 8, 0), (3, 0, 8), (20, 0, 0)):
+            with self.subTest(z=z, x=x, y=y), self.assertRaises(ImpossibleInputError):
+                gateway.download_tile(z, x, y, key="k", origin="https://urbanlens.test")
+        session.get.assert_not_called()
+
+    def test_the_proxy_answers_a_tile_outside_the_pyramid_with_404(self) -> None:
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        cache.clear()
+        baker.make(User)
+        self.client.force_login(baker.make(User))
+        with (
+            mock.patch.object(app_settings, "protomaps_api_key", "SECRET"),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            response = self.client.get(reverse("map.basemap_vector_tiles", kwargs={"z": 3, "x": 8, "y": 0}))
+        self.assertEqual(response.status_code, 404)
+        wire.assert_not_called()
+
+
+class VirusTotalTests(TestCase):
+    def test_a_value_that_is_not_a_sha256_never_reaches_virustotal(self) -> None:
+        from urbanlens.dashboard.services.apis.security.virustotal import VirusTotalGateway
+
+        session = mock.Mock()
+        gateway = VirusTotalGateway(api_key="k", session=session)
+        for value in ("", "a" * 63, "g" * 64, "../" + "a" * 61):
+            with self.subTest(value=value), self.assertRaises(ImpossibleInputError):
+                gateway.get_file_report(value)
+        session.get.assert_not_called()
+
+    def test_a_refused_hash_is_no_verdict_so_clamav_decides(self) -> None:
+        from urbanlens.dashboard.services.security.virustotal_scan import VirusTotalNoVerdictError, verdict_for_checksum
+
+        with (
+            mock.patch("urbanlens.UrbanLens.settings.app.settings.virustotal_api_key", "k"),
+            mock.patch("requests.Session.request") as wire,
+            self.assertRaises(VirusTotalNoVerdictError),
+        ):
+            verdict_for_checksum("not-a-hash")
+        wire.assert_not_called()
+
+
+class TwilioTests(TestCase):
+    def _sms(self) -> tuple[Any, mock.Mock]:
+        from urbanlens.dashboard.services.apis.messaging.sms import SmsGateway
+
+        session = mock.Mock()
+        return SmsGateway(account_sid="AC1", auth_token="t", from_number="+15550000000", session=session), session
+
+    def test_a_number_that_cannot_be_dialled_is_not_sent(self) -> None:
+        gateway, session = self._sms()
+        for number in ("", "call me", "+1", "12-ab"):
+            with self.subTest(number=number):
+                self.assertFalse(gateway.send(number, "hello"))
+        session.post.assert_not_called()
+        self.assertEqual(ApiCallLog.objects.filter(service="sms", was_rejected_input=True).count(), 4)
+
+    def test_an_empty_message_is_not_sent(self) -> None:
+        gateway, session = self._sms()
+        self.assertFalse(gateway.send("+15551234567", ""))
+        session.post.assert_not_called()
+
+    def test_a_formatted_or_whatsapp_number_is_still_sent(self) -> None:
+        from urbanlens.dashboard.services.apis.messaging.whatsapp import WhatsAppGateway
+
+        gateway, session = self._sms()
+        self.assertTrue(gateway.send("+1 (555) 123-4567", "hello"))
+        session.post.assert_called_once()
+
+        session = mock.Mock()
+        whatsapp = WhatsAppGateway(account_sid="AC1", auth_token="t", from_number="+15550000000", session=session)
+        self.assertTrue(whatsapp.send("whatsapp:+15551234567", "hello"))
+        session.post.assert_called_once()
+
+
+class AzureMapsTests(TestCase):
+    def _search(self) -> tuple[Any, mock.Mock]:
+        from urbanlens.dashboard.services.apis.locations.azure.search import AzureMapsSearchGateway
+
+        session = mock.Mock()
+        return AzureMapsSearchGateway(subscription_key="k", session=session), session
+
+    def _geocoding(self) -> tuple[Any, mock.Mock]:
+        from urbanlens.dashboard.services.apis.locations.azure.geocoding import AzureMapsGeocodingGateway
+
+        session = mock.Mock()
+        return AzureMapsGeocodingGateway(subscription_key="k", session=session), session
+
+    def test_search_refuses_a_blank_query_or_an_impossible_bias_point(self) -> None:
+        gateway, session = self._search()
+        self.assertEqual(gateway.search(""), [])
+        with self.assertRaises(ImpossibleInputError):
+            gateway.search("   ")
+        with self.assertRaises(ImpossibleInputError):
+            gateway.search("asylum", latitude=math.nan, longitude=1.0)
+        session.get.assert_not_called()
+
+    def test_poi_search_refuses_null_island_and_an_empty_circle(self) -> None:
+        cases: tuple[dict[str, Any], ...] = (
+            {"latitude": 0.0, "longitude": 0.0},
+            {"latitude": 41.7, "longitude": -73.9, "radius": 0},
+            {"latitude": 41.7, "longitude": -73.9, "radius": 50_001},
+        )
+        for kwargs in cases:
+            gateway, session = self._search()
+            with self.subTest(kwargs=kwargs), self.assertRaises(ImpossibleInputError):
+                gateway.search_poi(**kwargs)
+            session.get.assert_not_called()
+
+    def test_geocoding_refuses_a_blank_address_and_an_impossible_point(self) -> None:
+        gateway, session = self._geocoding()
+        self.assertIsNone(gateway.geocode_address(""))
+        with self.assertRaises(ImpossibleInputError):
+            gateway.geocode_address("  ")
+        for latitude, longitude in ((0.0, 0.0), (math.inf, 1.0)):
+            with self.subTest(latitude=latitude), self.assertRaises(ImpossibleInputError):
+                gateway.reverse_geocode(latitude, longitude)
+        session.get.assert_not_called()
+
+
+class WikipediaTests(TestCase):
+    def _gateway(self) -> tuple[Any, mock.Mock]:
+        from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway
+
+        session = mock.Mock()
+        return WikipediaGateway(session=session), session
+
+    def test_an_impossible_point_or_an_empty_circle_never_reaches_wikipedia(self) -> None:
+        cases: tuple[dict[str, Any], ...] = (
+            {"latitude": math.nan, "longitude": 1.0},
+            {"latitude": 41.7, "longitude": -73.9, "radius_m": 0},
+            {"latitude": 41.7, "longitude": -73.9, "limit": 0},
+        )
+        for kwargs in cases:
+            gateway, session = self._gateway()
+            with self.subTest(kwargs=kwargs), self.assertRaises(ImpossibleInputError):
+                gateway.get_nearby_articles(**kwargs)
+            session.get.assert_not_called()
+
+    def test_null_island_has_an_article_so_it_is_still_asked(self) -> None:
+        gateway, session = self._gateway()
+        session.get.return_value = mock.Mock(**{"json.return_value": {"query": {"geosearch": []}}})
+        gateway.get_nearby_articles(0.0, 0.0)
+        session.get.assert_called_once()
+
+
+class OverpassTests(TestCase):
+    def _gateway(self) -> tuple[Any, mock.Mock]:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+
+        session = mock.Mock()
+        return OverpassGateway(session=session), session
+
+    def test_null_island_or_a_non_finite_point_never_reaches_overpass(self) -> None:
+        gateway, session = self._gateway()
+        with self.assertRaises(ImpossibleInputError):
+            gateway.nearby_features(0.0, 0.0)
+        with self.assertRaises(ImpossibleInputError):
+            gateway.nearby_boundary_candidates(math.nan, 1.0)
+        session.post.assert_not_called()
+        session.get.assert_not_called()
+
+    def test_an_id_osm_never_issues_never_reaches_overpass(self) -> None:
+        gateway, session = self._gateway()
+        with self.assertRaises(ImpossibleInputError):
+            gateway.element("node", 0)
+        session.post.assert_not_called()
+        session.get.assert_not_called()
+
+    def test_the_boundary_chain_moves_past_a_refusal_without_deferring_or_a_traceback(self) -> None:
+        from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
+
+        gateway, _session = self._gateway()
+        with self.assertNoLogs("urbanlens.dashboard.services.locations.boundaries", level="WARNING"):
+            resolved = BoundaryProviderChain(providers=(gateway,)).get_boundaries(0.0, 0.0)
+        self.assertEqual(resolved.deferred, [])
+        self.assertIsNone(resolved.property_polygon)
+
+
+class OpenHistoricalMapTests(TestCase):
+    def test_null_island_never_reaches_ohm(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.open_historical_map import OpenHistoricalMapGateway
+
+        session = mock.Mock()
+        gateway = OpenHistoricalMapGateway(session=session)
+        with self.assertRaises(ImpossibleInputError):
+            gateway.get_coverage(0.0, 0.0)
+        with self.assertRaises(ImpossibleInputError):
+            gateway.get_features_at(math.nan, 1.0, 1900)
+        with self.assertRaises(ValueError):
+            gateway.get_features_at(41.7, -73.9, 1)
+        session.post.assert_not_called()
+        session.get.assert_not_called()
+
+    def test_features_for_a_refused_location_are_an_empty_collection(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.locations import temporal_imagery
+
+        location = baker.make(Location, latitude=0, longitude=0)
+        with (
+            mock.patch.object(temporal_imagery, "redata_configured", return_value=False),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            self.assertEqual(
+                temporal_imagery.get_temporal_features(location, 1900), {"type": "FeatureCollection", "features": []}
+            )
+        wire.assert_not_called()
+
+
+class WeatherTests(TestCase):
+    def test_open_meteo_answers_none_for_an_impossible_point_without_asking(self) -> None:
+        from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
+
+        session = mock.Mock()
+        gateway = OpenMeteoGateway(session=session)
+        self.assertIsNone(gateway.get_weather_forecast(math.nan, 1.0))
+        self.assertIsNone(gateway.get_sun_times(91.0, 0.0))
+        session.get.assert_not_called()
+        self.assertEqual(ApiCallLog.objects.filter(service="open_meteo", was_rejected_input=True).count(), 2)
+
+    def test_open_meteo_still_forecasts_null_island(self) -> None:
+        from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
+
+        session = mock.Mock()
+        session.get.return_value = mock.Mock(**{"json.return_value": {}})
+        OpenMeteoGateway(session=session).get_weather_forecast(0.0, 0.0)
+        session.get.assert_called_once()
+
+    def test_openweathermap_answers_none_for_an_impossible_point_without_asking(self) -> None:
+        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+
+        session = mock.Mock()
+        gateway = OpenWeatherMapGateway(api_key="k", session=session)
+        self.assertIsNone(gateway.get_weather_forecast(math.nan, 1.0))
+        self.assertIsNone(gateway.get_raw_forecast(Decimal("NaN"), Decimal(1)))
+        session.get.assert_not_called()
+
+
+class RoutingTests(TestCase):
+    def test_osrm_answers_no_route_for_null_island_without_asking(self) -> None:
+        from urbanlens.dashboard.services.apis.routing.osrm import OSRMGateway
+
+        session = mock.Mock()
+        gateway = OSRMGateway(session=session)
+        self.assertIsNone(gateway.get_route([(0.0, 0.0), (41.7, -73.9)]))
+        self.assertIsNone(gateway.get_route([(41.7, -73.9), (math.nan, 1.0)]))
+        session.get.assert_not_called()
+
+    def test_a_refused_waypoint_asks_neither_redata_nor_osrm(self) -> None:
+        from urbanlens.dashboard.services.apis.locations import routing_resolution
+
+        with (
+            mock.patch.object(routing_resolution, "redata_configured", return_value=True),
+            mock.patch("urbanlens.UrbanLens.settings.app.settings.redata_api_url", "https://redata.example.test"),
+            mock.patch("urbanlens.UrbanLens.settings.app.settings.redata_api_key", "test-key"),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            self.assertIsNone(routing_resolution.get_route_between((0.0, 0.0), (41.7, -73.9)))
+        wire.assert_not_called()
