@@ -23595,19 +23595,24 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
 `id: P305` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, fetching every panel of one pin and listing those that landed nothing`
 
 **What was wrong.** REData has not reached the Library of Congress or Chronicling America since about 2026-10-03
-(P216): a search for either waits about 20 s and answers 503, with the provider's outcome `unavailable` and
+(noted at the end of P216): a search for either waits about 20 s and answers 503, with the provider's outcome `unavailable` and
 "could not be reached: ReadTimeout" in its `providers` envelope. The envelope has no top-level `error`, so
 `RedataBreaker` let every later search go out. On dev, one pin's panels spent 41 s on the two archives; each other pin
 page, and each child of a campus, would spend the same, and so would REData's workers.
 
-**Fix.** When a request names one provider (`provider=`) and REData's envelope reports that provider `unavailable` or
-`rate_limited`, the breaker opens that provider's scope for 60 s. REData documents both as "no answer, the source
+**Fix.** When REData's envelope reports every provider a request named (`provider=`, one or a list) `unavailable` or
+`rate_limited`, the breaker opens that request's provider scope for 60 s. The first version read only a single name; a
+list, which Hazard History, Historic Registers and satellite imagery send, reached the check as its repr and never
+matched (found in review). REData documents both as "no answer, the source
 cannot be asked now". A provider the request did not name trips nothing: REData picks a county's provider by the
 point, so one it chose may not be the one the next point needs. On dev, a second Chronicling America search was
-refused in 0.1 s and a Smithsonian search still went out.
+refused in 0.1 s and a Smithsonian search still went out. The envelope does not say whether a timeout was the
+provider's or the query's, so a query slow for its own reasons also closes that archive for a minute; the outage it
+guards against cost every requester 20 s alone.
 
 **Tests.** `test_redata_breaker.py::BusySourceTests::test_a_named_provider_redata_could_not_reach_stops_calls_to_it`
-(both statuses failed before the fix) and `test_a_provider_the_request_did_not_name_trips_nothing`.
+(both statuses failed before the fix), `test_named_providers_given_as_a_list_trip_only_when_none_answered` (failed
+against the first version) and `test_a_provider_the_request_did_not_name_trips_nothing`.
 
 ## RESOLVED 2026-10-05: The external API kept a panel that had answered "nothing here" pending forever, and fetched it again
 

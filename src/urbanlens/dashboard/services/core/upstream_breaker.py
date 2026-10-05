@@ -151,6 +151,17 @@ def _query(url: str, params: object) -> dict[str, str]:
     return query
 
 
+def _named_providers(url: str, params: object) -> set[str]:
+    """The provider tags a request named, from its URL and from what was passed to ``requests``, one or a list."""
+    named = {value for key, value in parse_qsl(urlsplit(url).query) if key == "provider"}
+    value = params.get("provider") if isinstance(params, Mapping) else None
+    if isinstance(value, str):
+        named.add(value)
+    elif isinstance(value, list | tuple):
+        named.update(str(tag) for tag in value)
+    return {tag for tag in named if tag}
+
+
 def _api_path(url: str) -> str:
     """The path after ``/api/v1/``, without a leading slash."""
     path = urlsplit(url).path
@@ -298,11 +309,13 @@ class RedataBreaker(UpstreamBreaker):
         return f"source:{self.source(url, params)}" if busy else None
 
     def _named_provider_unanswered(self, url: str, params: object, body: dict) -> bool:
-        named = _query(url, params).get("provider")
+        """Whether none of the providers the request named answered."""
+        named = _named_providers(url, params)
         outcomes = body.get("providers")
         if not named or not isinstance(outcomes, list):
             return False
-        return any(isinstance(outcome, dict) and outcome.get("provider") == named and outcome.get("status") in self.PROVIDER_UNANSWERED for outcome in outcomes)
+        unanswered = {outcome.get("provider") for outcome in outcomes if isinstance(outcome, dict) and outcome.get("status") in self.PROVIDER_UNANSWERED}
+        return named <= unanswered
 
     def default_seconds(self, scope: str) -> int:
         """A minute for a busy source, which never names its wait.

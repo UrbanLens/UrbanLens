@@ -238,6 +238,32 @@ class BusySourceTests(TestCase):
                         search, params={"q": "mill", "provider": "chronicling_america"}
                     )
 
+    def test_named_providers_given_as_a_list_trip_only_when_none_answered(self) -> None:
+        """Hazard history names two providers on every call; a list reached the check as its repr and never matched."""
+        hazards = f"{_BASE}hazards/"
+        params = {"lat": 42.1, "lng": -73.9, "provider": ["nifc_wildfires", "fema_disasters"]}
+        partly = {
+            "providers": [
+                {"provider": "nifc_wildfires", "status": "unavailable"},
+                {"provider": "fema_disasters", "status": "ok"},
+            ]
+        }
+        _session("redata_hazards", _response(503, partly)).get(hazards, params=params)
+        again = _session("redata_hazards", _response(200, {}))
+
+        again.get(hazards, params=params)
+
+        again._session.request.assert_called_once()
+        neither = {
+            "providers": [
+                {"provider": "nifc_wildfires", "status": "unavailable"},
+                {"provider": "fema_disasters", "status": "rate_limited"},
+            ]
+        }
+        _session("redata_hazards", _response(503, neither)).get(hazards, params=params)
+        with pytest.raises(UpstreamThrottledError):
+            _session("redata_hazards").get(hazards, params=params)
+
     def test_a_provider_the_request_did_not_name_trips_nothing(self) -> None:
         """REData picks a county's provider by the point, so the next point may be another county's."""
         unanswered = {
