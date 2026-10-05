@@ -13,6 +13,7 @@ from django.core.cache import DEFAULT_CACHE_ALIAS
 from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_or_skip
 from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
+from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -30,6 +31,14 @@ _CULTURAL_RESOURCE_SHARE_SECONDS = 3600
 #: How long a refusal to extract a document is believed. REData's "found nothing" also covers an unreachable AI
 #: provider, so this is a backoff, not a verdict.
 _EXTRACTION_REFUSAL_SECONDS = 7 * 24 * 60 * 60
+#: How long a parcel lookup REData answered "retry later" for, without being down, is left before it is asked again.
+#: Every ask re-runs REData's whole tier pipeline, and REData stores none of these answers.
+_UNSETTLED_PARCEL_RETRY_SECONDS = 12 * 60 * 60
+#: Rows per page of a paginated parcel list: REData's ``max_page_size``, so most parcels take one request.
+_PARCEL_ROW_PAGE_SIZE = 500
+#: Pages of one paginated parcel list read before stopping. A card summarises these rows, so a parcel with more is
+#: shown from its first ``MAX_PARCEL_ROW_PAGES * _PARCEL_ROW_PAGE_SIZE`` rather than costing a request per hundred.
+MAX_PARCEL_ROW_PAGES = 4
 
 #: Mirrors REData's own ``REASON_*`` string constants - a stable contract across the API boundary
 #: (REData's values, returned verbatim in its error responses' ``"error"`` field), not Python
@@ -49,8 +58,10 @@ REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
 #: single-source endpoints (demographics, the places family, cultural-resource
 #: detail) rather than the tiered parcel pipeline.
 REASON_RATE_LIMITED = "rate_limited"
-#: The key lacks the scope an endpoint needs - settled until the key changes, so not transient.
+#: REData refused the key for the endpoint (a scope it lacks). Says nothing about the place asked about.
 REASON_FORBIDDEN = "forbidden"
+#: No source behind a near-point endpoint answered (cultural resources' 503).
+REASON_ALL_PROVIDERS_UNAVAILABLE = "all_providers_unavailable"
 #: An attachment REData cannot extract: not a document, a provider with no extraction, or a file it does not hold yet.
 REASON_NOT_EXTRACTABLE = "not_extractable"
 #: REData read a document and found neither fields nor photos, or could not reach its OCR or AI provider to look.
@@ -62,7 +73,7 @@ REASON_ATTACHMENT_UNAVAILABLE = "attachment_unavailable"
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
 #: stores a payload for one of these turns a passing outage into a blank card for the whole
 #: ``external_data_cache_days`` window.
-TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED})
+TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED, REASON_ALL_PROVIDERS_UNAVAILABLE})
 _SETTLED_EXTRACTION_REFUSALS: frozenset[str] = frozenset({REASON_NOT_EXTRACTABLE, REASON_EXTRACTION_UNAVAILABLE, REASON_ATTACHMENT_UNAVAILABLE})
 
 
@@ -71,41 +82,69 @@ class PropertyRecordsUnavailableError(GatewayRequestError):
 
     Attributes:
         reason: REData's ``REASON_*`` string when it responded with a structured error (e.g. ``"manual_only"``, ``"no_data_found"``); ``REASON_SOURCE_ERROR`` for anything REData didn't cleanly report itself (a network failure, a malformed response, or a...
-        links: Manual-lookup reference URLs (assessor/treasurer/recorder), when REData supplied them (only for the manual-lookup reasons)."""
+        links: Manual-lookup reference URLs (assessor/treasurer/recorder), when REData supplied them (only for the manual-lookup reasons).
+        retry_later: REData said to ask again later (a 503), whatever its reason."""
 
-    def __init__(self, reason: str, message: str, *, links: dict[str, str] | None = None) -> None:
+    def __init__(self, reason: str, message: str, *, links: dict[str, str] | None = None, retry_later: bool = False) -> None:
         self.reason = reason
         self.links = links or {}
+        self.retry_later = retry_later
         super().__init__(message)
 
     @property
     def is_outage(self) -> bool:
-        """Every reason outside :data:`TRANSIENT_REASONS` is REData's settled answer about what was asked."""
-        return self.reason in TRANSIENT_REASONS
+        """A retry-later answer or a reason in :data:`TRANSIENT_REASONS` learned nothing; anything else is REData's settled answer."""
+        return self.retry_later or self.reason in TRANSIENT_REASONS
 
 
 class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyError):
     """REData throttled this key, or its source is down for now; a caller may retry after ``retry_after`` seconds."""
 
-    def __init__(self, reason: str, message: str, *, retry_after: int) -> None:
-        super().__init__(reason, message)
+    def __init__(self, reason: str, message: str, *, retry_after: int, links: dict[str, str] | None = None) -> None:
+        super().__init__(reason, message, links=links, retry_later=True)
         self.retry_after = retry_after
 
 
+def _refused(response: requests.Response) -> PropertyRecordsBusyError:
+    """The error for an endpoint REData refused this key, held off for as long as the breaker holds the endpoint.
+
+    Args:
+        response: REData's 401 or 403.
+
+    Returns:
+        A busy error, so a caller neither caches it as an answer nor asks again soon.
+    """
+    return PropertyRecordsBusyError(REASON_FORBIDDEN, f"REData refused this key ({response.status_code}); it may lack the endpoint's scope.", retry_after=RedataBreaker.REFUSED_SECONDS)
+
+
 def _download_failure(response: requests.Response) -> PropertyRecordsUnavailableError:
-    """The error for a file download REData answered with neither 200 nor 404.
+    """The error for a request REData answered with a status its caller does not handle itself.
 
     Args:
         response: REData's response.
 
     Returns:
-        A :class:`PropertyRecordsBusyError` for a throttle or a source outage, which a caller can retry, else the plain error.
+        A :class:`PropertyRecordsBusyError` for a refusal, a throttle or a source outage, which a caller can retry, else the plain error.
     """
+    if response.status_code in RedataBreaker.REFUSED_STATUSES:
+        return _refused(response)
     message = f"REData request failed with status {response.status_code}."
     wait = upstream_retry_after(response)
     if wait is None:
         return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, message)
     return PropertyRecordsBusyError(REASON_RATE_LIMITED if response.status_code == 429 else REASON_SOURCE_ERROR, message, retry_after=wait)
+
+
+def _named_wait(response: requests.Response) -> int | None:
+    """The wait a 503 named in its ``Retry-After`` header, or None.
+
+    Args:
+        response: REData's 503.
+
+    Returns:
+        Seconds, bounded as every upstream wait is.
+    """
+    return upstream_retry_after(response) if str(response.headers.get("Retry-After", "")).strip() else None
 
 
 @dataclass(slots=True, kw_only=True)
@@ -187,11 +226,48 @@ class RedataGateway(Gateway):
                 body = response.json()
             except ValueError:
                 body = {}
+            if not isinstance(body, dict):
+                body = {}
             reason = body.get("error") or REASON_SOURCE_ERROR
-            raise PropertyRecordsUnavailableError(reason, body.get("message", ""), links=body.get("links"))
+            message = body.get("message", "")
+            links = body.get("links") if isinstance(body.get("links"), dict) else None
+            # REData answers 404 for a permanent reason and 503 for one worth asking about again.
+            if response.status_code == 404:
+                raise PropertyRecordsUnavailableError(reason, message, links=links)
+            if (wait := _named_wait(response)) is not None:
+                raise PropertyRecordsBusyError(reason, message, retry_after=wait, links=links)
+            raise PropertyRecordsUnavailableError(reason, message, links=links, retry_later=True)
 
+        if response.status_code in RedataBreaker.REFUSED_STATUSES:
+            logger.info("REData refused %s (%s)", path, response.status_code)
+            raise _refused(response)
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
         raise _download_failure(response)
+
+    def _get_pages(self, path: str) -> list[dict[str, Any]]:
+        """Every row of a page-number-paginated REData list, up to :data:`MAX_PARCEL_ROW_PAGES` pages.
+
+        Pages are asked for by number on this gateway's own host: ``next`` names whatever host REData saw the request
+        on, and following it would hand the API key to that host.
+
+        Args:
+            path: Path relative to ``base_url``.
+
+        Returns:
+            The rows, in REData's order.
+
+        Raises:
+            PropertyRecordsUnavailableError: Any page could not be read; part of a list is not offered as all of it.
+        """
+        rows: list[dict[str, Any]] = []
+        for page in range(1, MAX_PARCEL_ROW_PAGES + 1):
+            body = self._get_json(path, params={"page": page, "page_size": _PARCEL_ROW_PAGE_SIZE})
+            if not isinstance(body, dict):
+                break
+            rows.extend(row for row in body.get("results") or [] if isinstance(row, dict))
+            if not body.get("next"):
+                break
+        return rows
 
     def _lookup_parcel_body(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
         """Shared implementation for :meth:`lookup_parcel` and :meth:`lookup_parcel_uuid`."""
@@ -201,7 +277,18 @@ class RedataGateway(Gateway):
         if apn:
             params["apn"] = apn
         question = hashlib.sha256(json.dumps({**params, "lat": round(latitude, 6), "lng": round(longitude, 6)}, sort_keys=True).encode()).hexdigest()
-        return coalesced(f"redata:parcels-lookup:{question}", lambda: dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {}), ttl=_PARCEL_LOOKUP_SHARE_SECONDS)
+        deferred_key = f"redata:parcels-lookup-deferred:{question}"
+        deferred = get_or_none(deferred_key, label="parcel lookup deferral", alias=DEFAULT_CACHE_ALIAS)
+        if isinstance(deferred, dict):
+            raise PropertyRecordsBusyError(str(deferred.get("reason") or REASON_SOURCE_ERROR), str(deferred.get("message") or ""), retry_after=_UNSETTLED_PARCEL_RETRY_SECONDS)
+        try:
+            return coalesced(f"redata:parcels-lookup:{question}", lambda: dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {}), ttl=_PARCEL_LOOKUP_SHARE_SECONDS)
+        except PropertyRecordsUnavailableError as exc:
+            if not exc.retry_later or exc.reason in TRANSIENT_REASONS:
+                raise
+            # Nothing was learned and nothing is down: no county source found the parcel, or none could be searched.
+            set_or_skip(deferred_key, {"reason": exc.reason, "message": str(exc)}, _UNSETTLED_PARCEL_RETRY_SECONDS, label="parcel lookup deferral", alias=DEFAULT_CACHE_ALIAS)
+            raise PropertyRecordsBusyError(exc.reason, str(exc), retry_after=_UNSETTLED_PARCEL_RETRY_SECONDS, links=exc.links) from exc
 
     def lookup_parcel(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
         """Look up (retrieving/refreshing as needed) the parcel record at a coordinate.
@@ -221,13 +308,11 @@ class RedataGateway(Gateway):
         """
         body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
         payload = dict(body.get("record_payload") or {})
-        # parcel_geometry/building_geometry are also top-level fields on the Parcel response
-        # (alongside record_payload), already converted to standard GeoJSON server-side (REData's
-        # own core.services.geojson.esri_rings_to_geojson) - prefer these over record_payload's own
-        # copies, which are just whichever tier's raw, still-Esri-ring-shaped PropertyRecord
-        for key in ("parcel_geometry", "building_geometry"):
-            if key in body:
-                payload[key] = body[key]
+        # The Parcel publishes parcel_geometry as GeoJSON beside record_payload, whose own copy is the tier's
+        # Esri-ring snapshot. A county building footprint reaches here only inside record_payload, still in Esri
+        # rings - read it with services.apis.locations.base.polygon_from_wire, which takes either shape.
+        if "parcel_geometry" in body:
+            payload["parcel_geometry"] = body["parcel_geometry"]
         # Also a top-level field (see lookup_parcel_uuid) - surfaced here too so
         # callers who already called lookup_parcel don't need a second,
         # identically-parametered request just to get the uuid.
@@ -328,8 +413,7 @@ class RedataGateway(Gateway):
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/liens/") or {}
-        return list(body.get("results") or [])
+        return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/liens/")
 
     def lookup_owners(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return every owner REData has linked to a parcel, former ones included.
@@ -338,14 +422,13 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
 
         Returns:
-            The raw owner rows, first page only. ``current`` says whether the parcel's latest record still names
+            The raw owner rows. ``current`` says whether the parcel's latest record still names
             the owner, and ``parcels`` lists every parcel the owner is linked to, this one included.
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/owners/") or {}
-        return list(body.get("results") or [])
+        return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/owners/")
 
     def lookup_sales(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return the sales REData has recorded against a parcel across every retrieval, newest first.
@@ -354,13 +437,12 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
 
         Returns:
-            The raw sale rows, first page only.
+            The raw sale rows.
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/sales/") or {}
-        return list(body.get("results") or [])
+        return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/sales/")
 
     def lookup_tax_payments(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """``delinquent`` is the publisher's own determination rather than something derived from ``paid`` - a row can be unpaid but not yet delinquent, since bills are unpaid before their due date.
@@ -374,8 +456,7 @@ class RedataGateway(Gateway):
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/tax-payments/") or {}
-        return list(body.get("results") or [])
+        return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/tax-payments/")
 
     def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return supplementary recorded sales near a parcel.
@@ -527,7 +608,7 @@ class RedataGateway(Gateway):
             A list of resource dicts, each tagged with the ``provider`` that answered - see the module docs for each resource's fields.
 
         Raises:
-            PropertyRecordsUnavailableError: The request to REData failed.
+            PropertyRecordsUnavailableError: The request to REData failed, or no register covering the point answered.
         """
         params: dict[str, Any] = {"lat": latitude, "lng": longitude, "radius_meters": radius_meters}
         if provider:
@@ -535,11 +616,13 @@ class RedataGateway(Gateway):
         body = self._get_json("/api/v1/cultural-resources/lookup/", params=params)
         if isinstance(body, list):
             return list(body)
-        if isinstance(body, dict):
-            results = body.get("results")
-            if isinstance(results, list):
-                return list(results)
-        return []
+        if not isinstance(body, dict):
+            return []
+        results = body.get("results")
+        rows = list(results) if isinstance(results, list) else []
+        if not rows and body.get("complete") is False:
+            raise PropertyRecordsUnavailableError(REASON_ALL_PROVIDERS_UNAVAILABLE, "A register covering the point did not answer, and none of the rest found anything.", retry_later=True)
+        return rows
 
     def fetch_cultural_resource_detail(self, resource_uuid: str) -> dict[str, Any]:
         """Fetch a CRIS resource's full detail record and attachments, shared by every panel asking about it.
@@ -588,7 +671,7 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData cultural-resource detail fetch failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def queue_cultural_resource_details(self, latitude: float, longitude: float, *, radius_meters: float) -> dict[str, Any]:
         """Ask REData to fetch the detail record of every resource near a coordinate, in the background.
@@ -616,10 +699,10 @@ class RedataGateway(Gateway):
             except ValueError:
                 body = {}
             return dict(body) if isinstance(body, dict) else {}
-        if response.status_code == 403:
-            raise PropertyRecordsUnavailableError(REASON_FORBIDDEN, "The REData key lacks cultural_resources:write.")
+        if response.status_code in RedataBreaker.REFUSED_STATUSES:
+            raise _refused(response)
         logger.warning("REData bulk cultural-resource detail queue failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def download_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> tuple[bytes, str]:
         """Download one CRIS attachment/photo's actual file bytes.
@@ -730,7 +813,7 @@ class RedataGateway(Gateway):
                 body = {}
             raise PropertyRecordsUnavailableError(body.get("error") or REASON_SOURCE_ERROR, body.get("message", ""))
         logger.warning("REData cultural-resource attachment extraction failed (%s): %s", response.status_code, response.text[:500])
-        raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise _download_failure(response)
 
     def download_extracted_image(self, resource_uuid: str, attachment_id: int, image_id: int) -> tuple[bytes, str]:
         """Download one image extracted from a document attachment's actual file bytes.

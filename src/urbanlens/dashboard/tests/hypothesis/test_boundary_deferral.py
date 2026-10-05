@@ -52,10 +52,11 @@ class RedataRefusalIsADeferralTests(SimpleTestCase):
 
     def test_a_transient_refusal_defers_rather_than_answering_none(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.redata.settings") as cfg,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.boundaries.redata.redata_configured", return_value=True
+            ),
             mock.patch(self._GATEWAY) as gateway,
         ):
-            cfg.redata_api_url, cfg.redata_api_key = "https://redata.example", "key"
             gateway.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError(
                 REASON_SOURCE_RATE_LIMITED, "Dutchess budget exhausted"
             )
@@ -64,10 +65,11 @@ class RedataRefusalIsADeferralTests(SimpleTestCase):
 
     def test_a_settled_answer_is_still_none(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.apis.locations.boundaries.redata.settings") as cfg,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.boundaries.redata.redata_configured", return_value=True
+            ),
             mock.patch(self._GATEWAY) as gateway,
         ):
-            cfg.redata_api_url, cfg.redata_api_key = "https://redata.example", "key"
             gateway.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
             result = RedataBoundaryProvider().get_typed_boundaries(_LAT, _LON)
         self.assertEqual(result, {"property": None, "building": None})

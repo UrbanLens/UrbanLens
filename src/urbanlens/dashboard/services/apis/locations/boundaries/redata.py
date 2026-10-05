@@ -8,10 +8,10 @@ from typing import ClassVar
 
 from django.contrib.gis.geos import MultiPoint, MultiPolygon, Point, Polygon
 
-from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, geojson_polygon_to_geos
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, geojson_polygon_to_geos, polygon_from_wire
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.dashboard.services.geo.distance import haversine_meters
-from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +101,7 @@ class RedataBoundaryProvider(BoundaryProvider):
         Returns:
             ``{"property": ..., "building": ...}``, both possibly None.
         """
-        if not settings.redata_api_url or not settings.redata_api_key:
+        if not redata_configured():
             return {}
 
         gateway = RedataGateway()
@@ -112,7 +112,7 @@ class RedataBoundaryProvider(BoundaryProvider):
             logger.debug("REData boundary lookup unavailable for %s: %s", self.service_key, exc)
             return {"property": None, "building": None}
 
-        property_polygon = geojson_polygon_to_geos(payload.get("parcel_geometry"))
+        property_polygon = polygon_from_wire(payload.get("parcel_geometry"))
         if property_polygon is None:
             property_polygon = self._scored_boundary(gateway, payload.get("uuid"))
         if property_polygon is None:
@@ -120,7 +120,7 @@ class RedataBoundaryProvider(BoundaryProvider):
 
         return {
             "property": property_polygon,
-            "building": geojson_polygon_to_geos(payload.get("building_geometry")),
+            "building": polygon_from_wire(payload.get("building_geometry")),
         }
 
     def _scored_boundary(self, gateway: RedataGateway, parcel_uuid: str | None) -> Polygon | MultiPolygon | None:
@@ -151,7 +151,7 @@ class RedataBoundaryProvider(BoundaryProvider):
 
     def _defer_if_transient(self, exc: PropertyRecordsUnavailableError) -> None:
         """Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback."""
-        if exc.reason in TRANSIENT_REASONS:
+        if exc.is_outage:
             raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None)) from exc
 
     def _buildings_convex_hull(self, gateway: RedataGateway, parcel_uuid: str | None, latitude: float, longitude: float) -> Polygon | None:

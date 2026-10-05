@@ -225,6 +225,10 @@ class RedataSatelliteProvider(SatelliteViewProvider):
     service_key: ClassVar[str] = "redata_imagery"
     paid_service: ClassVar[bool] = False
 
+    def available(self) -> bool:
+        """Only through REData."""
+        return redata_configured()
+
     def _generate_satellite_slides(
         self,
         latitude: float,
@@ -235,9 +239,6 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         height: int = 400,
         limit: int = -1,
     ) -> Generator[SatelliteSlide]:
-        if not redata_configured():
-            return
-
         wanted = _wanted_providers(latitude, longitude)
         if not wanted:
             return

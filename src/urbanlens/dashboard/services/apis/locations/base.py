@@ -148,10 +148,20 @@ class SatelliteViewProvider(Gateway, ABC):
     #: keep being served for the cache's whole lifetime.
     slide_cache_version: ClassVar[str] = ""
 
+    def available(self) -> bool:
+        """Whether this install can ask this provider at all; an unavailable one is skipped and nothing is cached.
+
+        Returns:
+            True unless the provider needs configuration this install lacks.
+        """
+        return True
+
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
 
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
+        if not self.available():
+            return SlideFetch([], from_cache=False, unavailable=True)
         cache_key = make_cache_key(f"satellite_view_{self.service_key}{self.slide_cache_version}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
@@ -168,10 +178,20 @@ class SatelliteViewProvider(Gateway, ABC):
 
 
 class StreetViewProvider(Gateway, ABC):
+    def available(self) -> bool:
+        """Whether this install can ask this provider at all; an unavailable one is skipped and nothing is cached.
+
+        Returns:
+            True unless the provider needs configuration this install lacks.
+        """
+        return True
+
     @abstractmethod
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]: ...
 
     def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> SlideFetch:
+        if not self.available():
+            return SlideFetch([], from_cache=False, unavailable=True)
         cache_key = make_cache_key(f"street_view_{self.service_key}", f"{latitude:.5f}", f"{longitude:.5f}")
         cached = cache.get(cache_key, _CACHE_MISS)
         if cached is not _CACHE_MISS:
@@ -384,7 +404,7 @@ def _close_ring(points: list) -> list[tuple[float, float]] | None:
 
 def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | None:
     """Convert an Esri ring-list polygon geometry into a GEOS polygon.
-    Only still needed for sources that hand back Esri's native ring-list shape directly - Census TIGERweb (``geo_boundary.py``) being the one remaining caller.
+    For sources that hand back Esri's native ring-list shape: Census TIGERweb (``geo_boundary.py``), and the county geometries inside a REData parcel's ``record_payload`` (see :func:`polygon_from_wire`).
 
     Args:
         geometry: A dict of the shape ``{"format": "esri_rings", "rings": [...]}``, or None.
@@ -449,6 +469,25 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
     if len(final_polygons) == 1:
         return final_polygons[0]
     return MultiPolygon(final_polygons, srid=4326)
+
+
+def polygon_from_wire(geometry: object) -> Polygon | MultiPolygon | None:
+    """Read a polygon in whichever of the two shapes REData publishes geometry in.
+
+    REData converts a parcel's own boundary to GeoJSON, but a county record's other geometries (a building footprint)
+    arrive inside ``record_payload`` as Esri rings.
+
+    Args:
+        geometry: A GeoJSON ``Polygon``/``MultiPolygon``, or ``{"format": "esri_rings", "rings": [...]}``.
+
+    Returns:
+        The polygon, or None when ``geometry`` is neither shape or holds nothing valid.
+    """
+    if not isinstance(geometry, dict):
+        return None
+    if geometry.get("format") == "esri_rings":
+        return esri_rings_to_polygon(geometry)
+    return geojson_polygon_to_geos(geometry)
 
 
 def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | None:

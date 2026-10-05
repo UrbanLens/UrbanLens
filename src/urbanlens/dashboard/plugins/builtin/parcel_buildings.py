@@ -179,23 +179,25 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
             ``is_source_outage``).
     """
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
     latitude = float(location.latitude or 0)
     longitude = float(location.longitude or 0)
     outages: list[Exception] = []
 
-    try:
-        gateway = RedataGateway()
-        parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
-        buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
-    except (PropertyRecordsUnavailableError, ValueError) as exc:
-        # handful of candidates, and exc_info would re-leak the exact coordinate
-        # from the failed request's own URL. See services/security/redact.py.
-        logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
-        buildings = []
-        if is_source_outage(exc):
-            outages.append(exc)
+    buildings: list[dict[str, Any]] = []
+    if redata_configured():
+        try:
+            gateway = RedataGateway()
+            parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
+            buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
+        except PropertyRecordsUnavailableError as exc:
+            # handful of candidates, and exc_info would re-leak the exact coordinate
+            # from the failed request's own URL. See services/security/redact.py.
+            logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+            if is_source_outage(exc):
+                outages.append(exc)
 
     if buildings:
         return {"buildings": list(buildings), "provider": "redata"}
@@ -253,20 +255,23 @@ def _cris_buildings(location: Location) -> list[dict[str, Any]]:
         PropertyRecordsUnavailableError: CRIS could not be asked.
     """
     from urbanlens.dashboard.plugins.builtin.cris_buildings import radius_covering
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
     from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
     from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
     latitude, longitude = float(location.latitude or 0), float(location.longitude or 0)
+    if not redata_configured() or not state_boundary("NY").contains(latitude, longitude):
+        return []
     polygon = parcel_polygon_for_location(location)
-    if polygon is None or not state_boundary("NY").contains(latitude, longitude):
+    if polygon is None:
         return []
     from shapely import wkt as shapely_wkt
 
     radius = min(radius_covering(shapely_wkt.loads(polygon.wkt), latitude, longitude), _MAX_CRIS_RADIUS_METERS)
     try:
         resources = RedataGateway().lookup_cultural_resources(latitude, longitude, radius_meters=radius, provider="ny_cris")
-    except (PropertyRecordsUnavailableError, ValueError) as exc:
+    except PropertyRecordsUnavailableError as exc:
         logger.debug("parcel_buildings: CRIS unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
         if is_source_outage(exc):
             raise

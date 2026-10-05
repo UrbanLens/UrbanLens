@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway, redata_configured
 from urbanlens.dashboard.services.geo.geo_boundary import USA, state_boundary
 
 if TYPE_CHECKING:
@@ -69,6 +69,10 @@ class _RedataReferenceDocumentProvider(MediaProvider):
     """Base for one REData ``reference-documents/search`` archive in the Media gallery."""
 
     _redata_provider: ClassVar[str] = ""
+
+    def available(self) -> bool:
+        """Only through REData."""
+        return redata_configured()
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         """Yield this archive's matches for ``search_term``, via REData.

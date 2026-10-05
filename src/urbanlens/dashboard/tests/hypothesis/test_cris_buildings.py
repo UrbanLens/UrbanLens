@@ -26,6 +26,8 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     RedataGateway,
 )
 from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 # A stand-in boundary covering roughly upstate NY, so tests don't hit TIGERweb.
 _NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])
@@ -38,7 +40,7 @@ def _make_profile():
     return Profile.objects.get(user=user)
 
 
-class PanelGateTests(TestCase):
+class PanelGateTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.source = CrisBuildingPanelSource()
@@ -53,6 +55,16 @@ class PanelGateTests(TestCase):
         location = baker.make(Location, latitude="48.850000", longitude="2.350000", google_place=None)
         pin = baker.make(Pin, profile=_make_profile(), location=location)
         with patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH):
+            self.assertFalse(self.source.gate(pin))
+
+    def test_gate_false_without_redata(self) -> None:
+        """CRIS reaches UrbanLens only through REData; an empty row cached without it would outlive REData's arrival."""
+        location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
+        pin = baker.make(Pin, profile=_make_profile(), location=location)
+        with (
+            patch.object(CrisBuildingPanelSource, "geo_boundary", _NY_ISH),
+            patch.object(app_settings, "redata_api_url", None),
+        ):
             self.assertFalse(self.source.gate(pin))
 
     def test_gate_false_without_coordinates(self) -> None:
@@ -187,20 +199,6 @@ class PanelFetchTests(TestCase):
                 RedataGateway,
                 "lookup_cultural_resources",
                 side_effect=PropertyRecordsUnavailableError("no_data_found", "nothing here"),
-            ),
-            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
-        ):
-            CrisBuildingPanelSource().fetch(self.pin)
-        mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="42.65,-73.75")
-
-    def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
-
-        The unconfigured state is simulated rather than left to the ambient environment: an install that *does*
-        configure REData would otherwise reach the real API here instead of exercising this branch."""
-        with (
-            patch.object(
-                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
             ),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):

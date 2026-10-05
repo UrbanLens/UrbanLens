@@ -77,7 +77,7 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
     Raises:
         PropertyRecordsUnavailableError: REData could not answer for a transient reason.
         ValueError: REData is not configured."""
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
     from urbanlens.dashboard.services.locations.site_scope import parcel_buildings
 
     cached_buildings = parcel_buildings(location)
@@ -91,7 +91,7 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
             return {}
         buildings = gateway.lookup_buildings(parcel_uuid)
     except PropertyRecordsUnavailableError as exc:
-        if exc.reason in TRANSIENT_REASONS:
+        if exc.is_outage:
             raise
         # Every other reason is REData's settled answer about this coordinate
         # (no coverage, manual lookup only, nothing found) and is worth caching.

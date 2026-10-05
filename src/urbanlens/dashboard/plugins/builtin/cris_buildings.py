@@ -13,6 +13,7 @@ from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnric
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.media.previews import tile_preview_url
 from urbanlens.dashboard.services.pins.external_data import FAILURE_SKIP_TTL_SECONDS, CoordinateGatedInfoPanelSource, DocumentPanelSource, DocumentUnavailableError, GalleryMediaSource, OverviewSummary, PanelApiKind, PanelPlacement, SourceDocument
+from urbanlens.dashboard.services.pins.redata_panel import RedataBackedSource
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -445,7 +446,7 @@ CAMPUS_FILL_DELAYS_SECONDS = (10 * 60, 20 * 60, 25 * 60)
 _SITE_FETCH_WAIT_SECONDS = 110.0
 
 
-class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource, DocumentPanelSource):
+class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource, GalleryMediaSource, DocumentPanelSource):
     """NY SHPO CRIS "Building USN Point" info for the pin's location. New York only.
 
     A site-scope pin (a campus) also gathers the inventory forms of every CRIS building on the site, for Article > Sources."""
@@ -482,7 +483,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
         A site-scope fetch runs once however many callers ask at the same moment, and answers the site's building children as it lands.
 
         Raises:
-            PropertyRecordsUnavailableError: Only for a reason in ``TRANSIENT_REASONS``, so an outage is retried rather than cached as "CRIS has nothing here".
+            PropertyRecordsUnavailableError: Only for an outage (``is_outage``), so it is retried rather than cached as "CRIS has nothing here".
         """
         from urbanlens.dashboard.services.core.coalesce import coalesced
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
@@ -502,7 +503,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     def _fetch_now(self, pin: Pin) -> None:
         """:meth:`fetch`, unshared."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
         started = time.monotonic()
@@ -530,13 +531,9 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                     resources = gateway.lookup_cultural_resources(lat, lng, radius_meters=radius, provider=_PROVIDER)
                     polygon = site_boundary(resources, lat, lng)
         except PropertyRecordsUnavailableError as exc:
-            if exc.reason in TRANSIENT_REASONS:
+            if exc.is_outage:
                 raise
             logger.debug("CrisBuildingPanelSource.fetch: CRIS lookup unavailable for pin %s", pin.pk, exc_info=True)
-            LocationCache.set(pin.location, self.cache_source, {}, query_key=query_key)
-            return
-        except ValueError:
-            logger.debug("CrisBuildingPanelSource.fetch: REData is not configured (pin %s)", pin.pk, exc_info=True)
             LocationCache.set(pin.location, self.cache_source, {}, query_key=query_key)
             return
 
@@ -901,7 +898,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             The payload, or None when no building on the roster is the one at ``location``.
 
         Raises:
-            PropertyRecordsUnavailableError: A full answer's detail fetch failed for a reason in ``TRANSIENT_REASONS``.
+            PropertyRecordsUnavailableError: A full answer's detail fetch could not be asked (``is_outage``).
         """
         latitude, longitude = float(location.latitude), float(location.longitude)
         roster = [entry for entry in site_data.get(_CAMPUS_BUILDINGS_KEY) or [] if isinstance(entry, dict)]
@@ -938,12 +935,12 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     @staticmethod
     def _building_detail(resource_uuid: str) -> dict:
         """One building's detail record for a full answer: a lasting refusal degrades to none, an outage raises so it is retried."""
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import TRANSIENT_REASONS, PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
         try:
             return RedataGateway().fetch_cultural_resource_detail(resource_uuid)
         except PropertyRecordsUnavailableError as exc:
-            if exc.reason in TRANSIENT_REASONS:
+            if exc.is_outage:
                 raise
             logger.debug("CrisBuildingPanelSource: no detail for campus building %s", resource_uuid, exc_info=True)
         except ValueError:

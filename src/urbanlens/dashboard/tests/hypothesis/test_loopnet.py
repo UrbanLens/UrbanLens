@@ -15,6 +15,8 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsUnavailableError,
     RedataGateway,
 )
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 
 def _make_profile():
@@ -54,7 +56,7 @@ class AddressTests(SimpleTestCase):
         self.assertEqual(LoopnetPanelSource.address(stub_pin), "")
 
 
-class GateTests(TestCase):
+class GateTests(RedataConfiguredMixin, TestCase):
     def test_gate_true_with_an_address(self) -> None:
         location = baker.make(Location, street_number="123", route="Main St", google_place=None)
         pin = baker.make(Pin, profile=_make_profile(), location=location)
@@ -110,7 +112,7 @@ class FetchTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_listings", return_value={"results": [], "refresh_queued": True}),
+            patch.object(RedataGateway, "lookup_listings", return_value={"results": [], "refresh_queued": False}),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             LoopnetPanelSource().fetch(self.pin)
@@ -142,19 +144,10 @@ class FetchTests(TestCase):
             LoopnetPanelSource().fetch(self.pin)
         mock_set.assert_not_called()
 
-    def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
-
-        The unconfigured state is forced rather than assumed."""
-        with (
-            patch.object(
-                RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")
-            ),
-            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
-        ):
-            LoopnetPanelSource().fetch(self.pin)
-        data = mock_set.call_args[0][2]
-        self.assertEqual(data, {})
+    def test_without_redata_the_panel_is_not_scheduled(self) -> None:
+        """An empty row cached without REData would still read "no listings" after REData is configured."""
+        with patch.object(app_settings, "redata_api_url", None):
+            self.assertFalse(LoopnetPanelSource().gate(self.pin))
 
     def test_no_coordinates_persists_empty_without_calling_redata(self) -> None:
         # Location.latitude/longitude are non-nullable at the DB level, so this
