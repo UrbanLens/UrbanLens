@@ -28,6 +28,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
     RedataLocationContextGateway,
 )
 from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
+from urbanlens.dashboard.services.pins.redata_panel import at_limit
 
 
 def _response(body: dict) -> mock.Mock:
@@ -71,6 +72,18 @@ class NearPointLimitTests(SimpleTestCase):
 
         self.assertEqual(session.get.call_args.kwargs["params"]["limit"], MAX_NEAR_POINT_LIMIT)
 
+    def test_the_limit_is_per_provider_as_redata_applies_it(self) -> None:
+        """A provider listed after one that filled its limit still reaches the panel."""
+        rows = [{"id": index, "provider": "nrhp"} for index in range(30)] + [{"id": 100, "provider": "cris"}]
+        session = mock.Mock()
+        session.get.return_value = _response(_envelope(rows))
+        gateway = RedataLocationContextGateway(base_url="https://redata.example.test", api_key="k", session=session)
+
+        envelope = gateway.near_point("/api/v1/historic-resources/", 40.0, -74.0, limit=25)
+
+        self.assertEqual([row["id"] for row in envelope.results], [*range(25), 100])
+        self.assertEqual(envelope.count, 26)
+
     def test_no_limit_keeps_every_row(self) -> None:
         session = mock.Mock()
         session.get.return_value = _response(_envelope([{"id": index} for index in range(40)]))
@@ -92,6 +105,22 @@ class AerialMediaLimitTests(SimpleTestCase):
 
         self.assertEqual([item["id"] for item in items], [0, 10, 20, 30, 40])
         self.assertGreater(session.get.call_args.kwargs["params"]["limit"], 5)
+
+
+class AtLimitTests(SimpleTestCase):
+    def test_providers_that_each_fell_short_make_a_total(self) -> None:
+        rows = [{"provider": "a"}] * 13 + [{"provider": "b"}] * 13
+
+        self.assertFalse(at_limit(rows, 25))
+
+    def test_one_provider_at_the_limit_makes_a_floor(self) -> None:
+        rows = [{"provider": "a"}] * 25 + [{"provider": "b"}] * 2
+
+        self.assertTrue(at_limit(rows, 25))
+
+    def test_rows_without_a_provider_count_together(self) -> None:
+        self.assertTrue(at_limit([{}] * 25, 25))
+        self.assertFalse(at_limit([{}] * 24, 25))
 
 
 #: One minimal row per panel that its render_context counts, and the panel's own limit.

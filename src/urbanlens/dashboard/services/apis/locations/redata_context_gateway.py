@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, NoReturn
@@ -57,6 +58,26 @@ class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyErro
     def __init__(self, message: str, *, retry_after: int, reason: str = REASON_RATE_LIMITED) -> None:
         super().__init__(reason, message)
         self.retry_after = retry_after
+
+
+def cap_per_provider(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """The first ``limit`` rows of each provider, in their original order, as REData applies ``limit``.
+
+    Args:
+        rows: Near-point results, each tagged with its ``provider`` (rows without one share a group).
+        limit: Most rows to keep per provider.
+
+    Returns:
+        The kept rows.
+    """
+    seen: Counter[Any] = Counter()
+    kept = []
+    for row in rows:
+        provider = row.get("provider")
+        if seen[provider] < limit:
+            seen[provider] += 1
+            kept.append(row)
+    return kept
 
 
 def redata_configured() -> bool:
@@ -157,7 +178,8 @@ class RedataLocationContextGateway(Gateway):
         envelope = self._get_envelope(path, params)
         if limit is None or len(envelope.results) <= limit:
             return envelope
-        return LocationContextEnvelope(count=limit, complete=envelope.complete, results=envelope.results[:limit], providers=envelope.providers)
+        kept = cap_per_provider(envelope.results, limit)
+        return LocationContextEnvelope(count=len(kept), complete=envelope.complete, results=kept, providers=envelope.providers)
 
     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET any REData endpoint outside the near-a-coordinate envelope and return its raw JSON body.

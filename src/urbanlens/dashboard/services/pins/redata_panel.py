@@ -4,6 +4,7 @@ Eight plugins under ``plugins/builtin/redata_*.py`` had the same ``gate`` / ``fe
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections import Counter
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelSource
@@ -16,16 +17,20 @@ if TYPE_CHECKING:
 
 
 def at_limit(rows: Sized, limit: int | None) -> bool:
-    """Whether an answer filled the ``limit`` it was asked under, which makes any count drawn from it a floor.
+    """Whether any provider filled the ``limit`` it was asked under, which makes any count drawn from the answer a floor.
 
     Args:
-        rows: The rows the answer held.
+        rows: The rows the answer held; REData applies ``limit`` to each ``provider`` among them.
         limit: The most rows asked for, or None for no limit.
 
     Returns:
         True when there may be more than ``rows``.
     """
-    return limit is not None and len(rows) >= limit
+    if limit is None or len(rows) < limit:
+        return False
+    if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+        return True
+    return max(Counter(row.get("provider") for row in rows).values()) >= limit
 
 
 def count_label(rows: Sized, limit: int | None) -> str:
