@@ -29,13 +29,14 @@ fails or is undecided:
 | Check | Sites | Why | Tracked |
 |---|---|---|---|
 | footprints | HRSH 37%, St. Lawrence 66%, Harlem Valley 76% of buildings outlined | REData staging has no Overture credentials, so Microsoft's footprints stand in; HRSH's CRIS roster also lists demolished buildings | REData P106 |
-| historic_maps | all four | no Sanborn volume harvested for these towns yet; loc.gov allows about a call a minute | REData P112, P79, P95 |
+| historic_maps | Harlem Valley | loc.gov holds no Sanborn atlas of Wingdale, and REData offers Poughkeepsie's, 26 km off, as same-county. HRSH, St. Lawrence and Athens pass since a paced harvest on 2026-10-05, once REData `052692a6` stopped the walk failing after its first page | REData P112 |
 | incidents | all four | no incident source covers New York or Ohio | REData P110 |
 | build_dates | Athens | Ohio buildings come from OSM and Microsoft, which carry no year | REData P111 |
-| web_search | three of four, inconclusive | REData read an empty answer from a live index as a block and backed all web search off; fixed in `4c883a78` after the run, and St. Lawrence and Harlem Valley answer since. Athens still finds nothing, because only yep and mwmbl answer staging | REData P113 |
+| web_search | Athens | Only mwmbl answers staging now that yep refuses it too, and it has nothing for Athens. HRSH, St. Lawrence and Harlem Valley pass since REData stopped reading an empty answer, or one index timing out, as a block that backs all web search off (`4c883a78`, `10425d61`) | REData P113 |
 | photos | three of four, inconclusive | background sweeps spend the Commons and SearXNG-media budgets by about 03:30 UTC | REData P108 |
 
-These are `known_issues` in `kirkbrides.toml`, so each turns red when fixed.
+These are `known_issues` in `kirkbrides.toml`, so each turns red when fixed. The historic_maps and web_search rows
+were re-run against REData `10425d61` the same morning.
 
 The pipeline layer (`test_pipeline.py`: one pin dropped on the campus, UrbanLens's own bootstrap run against the
 same REData) passes for all four primary campuses: the parcel under the top pin and its wiki, a child pin per
@@ -79,3 +80,5 @@ records, register listings and image search cached. The one gap is Athens's buil
   lengthens it too (`LocationCache.set`).
 - Background enrichment fills only locations with no cache row, so a lapsed partial row is refreshed by the next
   page view, not by the sweep.
+- A bootstrap whose pin is deleted before its first stage leaves the location's in-flight marker for its hour, so
+  enrichment skips that location until then. The task knows only the pin's id.

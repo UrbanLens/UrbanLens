@@ -21,6 +21,10 @@ if TYPE_CHECKING:
 #: across town is the over-inclusion UrbanLens P148 describes.
 _ON_PROPERTY_REACH_METERS = 1500
 
+#: How far outside a catalogued town a campus may sit and still count as in its atlas. HRSH is 1.7 km outside the
+#: City of Poughkeepsie.
+_TOWN_ATLAS_REACH_METERS = 5000
+
 #: REData clamps every confidence into this range (docs/api-reference.md, boundaries).
 _CONFIDENCE_RANGE = (0.01, 0.95)
 
@@ -245,7 +249,15 @@ def test_dated_aerial_imagery_of_the_campus_exists(redata: LiveRedata, site: Sit
 def test_historic_maps_cover_the_campus(redata: LiveRedata, site: Site) -> None:
     sheets = _near(redata, site, "maps/").rows
     volumes = _near(redata, site, "maps/volumes/").rows
-    assert sheets or volumes, f"{site.name}: no historical map sheet or volume covers the campus"
+    # REData returns every volume catalogued to the campus's county; Poughkeepsie's atlas is not a map of Wingdale.
+    local = [
+        row
+        for row in volumes
+        if row.get("match") != "same_county" or (row.get("distance_meters") or 0) <= _TOWN_ATLAS_REACH_METERS
+    ]
+    assert sheets or local, (
+        f"{site.name}: no historical map sheet covers the campus, and none of {len(volumes)} volumes is of its town"
+    )
 
 
 @pytest.mark.live_check("incidents")

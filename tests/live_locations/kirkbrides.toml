@@ -247,7 +247,7 @@ status = "standing"
 nrhp = "89001166"
 aliases = ["Hudson River Psychiatric Center"]
 tier = "primary"
-known_issues = { footprints = "REData P106: no Overture on its staging; CRIS also lists demolished buildings no footprint source has", historic_maps = "REData P112", incidents = "REData P110" }
+known_issues = { footprints = "REData P106: no Overture on its staging; CRIS also lists demolished buildings no footprint source has", incidents = "REData P110" }
 # HRSH campus, west range of the Kirkbride (tests/integration/lib/hrsh.ts).
 
 [[site]]
@@ -386,7 +386,7 @@ status = "standing"
 nrhp = "80002936"
 aliases = ["The Ridges", "Athens State Hospital", "Athens Mental Health Center"]
 tier = "primary"
-known_issues = { build_dates = "REData P111", historic_maps = "REData P112", incidents = "REData P110", web_search = "REData P113", "pipeline.build_date" = "REData P111" }
+known_issues = { build_dates = "REData P111", incidents = "REData P110", web_search = "REData P113", "pipeline.build_date" = "REData P111" }
 # The Ridges, Athens OH (Wikipedia coordinate, on the NRHP district parcel).
 
 [[site]]
@@ -665,7 +665,7 @@ built = 1890
 status = "standing"
 aliases = ["St. Lawrence Psychiatric Center"]
 tier = "primary"
-known_issues = { footprints = "REData P106: no Overture on its staging", historic_maps = "REData P112", incidents = "REData P110" }
+known_issues = { footprints = "REData P106: no Overture on its staging", incidents = "REData P110" }
 # St. Lawrence Psychiatric Center, 1 Chimney Point Dr (OSM way centroid).
 
 [[site]]
@@ -680,5 +680,5 @@ built = 1924
 status = "standing"
 aliases = ["Harlem Valley Psychiatric Center"]
 tier = "primary"
-known_issues = { footprints = "REData P106: no Overture on its staging", historic_maps = "REData P112", incidents = "REData P110" }
+known_issues = { footprints = "REData P106: no Overture on its staging", historic_maps = "loc.gov holds no Sanborn atlas of Wingdale; Poughkeepsie's is 26 km off (REData P112)", incidents = "REData P110" }
 # Campus point of CRIS project 'Olivet Center Full Build [Harlem Valley Psych Center]'.
