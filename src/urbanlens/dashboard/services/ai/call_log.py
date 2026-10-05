@@ -12,15 +12,15 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
+from decimal import Decimal
 import logging
 import time
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.core.rate_limiter import current_call_slot, log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import current_call_slot, log_api_call, valid_token_count
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from decimal import Decimal
 
     from urbanlens.dashboard.services.ai.inference_client import InferenceError
 
@@ -44,6 +44,10 @@ class AiCall:
     input_tokens: int | None = None
     output_tokens: int | None = None
     cost_estimate: Decimal | None = None
+
+
+#: The largest cost ``ApiCallLog.cost_estimate`` holds (``max_digits=10``, six places).
+_MAX_COST = Decimal("9999.999999")
 
 
 def failure_status(exc: InferenceError) -> int | None:
@@ -101,11 +105,14 @@ def recorded_ai_call(*, service: str, provider: str, model: str) -> Iterator[AiC
 def _record(service: str, provider: str, model: str, call: AiCall, response_ms: int) -> None:
     try:
         endpoint = ai_endpoint(provider, model)
+        input_tokens, output_tokens = valid_token_count(call.input_tokens), valid_token_count(call.output_tokens)
+        # A value the column rejects would lose the whole row, so one it cannot hold is left out instead.
+        cost = call.cost_estimate if call.cost_estimate is not None and 0 <= call.cost_estimate <= _MAX_COST else None
         slot = current_call_slot()
         # Only the slot reserved for this service: a call under another feature's slot is its own call.
         if slot is not None and slot.service == service:
             slot.endpoint, slot.model = endpoint, model
-            slot.input_tokens, slot.output_tokens = call.input_tokens, call.output_tokens
+            slot.input_tokens, slot.output_tokens = input_tokens, output_tokens
             if call.status_code is not None:
                 slot.status_code = call.status_code
             return
@@ -114,11 +121,11 @@ def _record(service: str, provider: str, model: str, call: AiCall, response_ms: 
             success=call.success,
             response_ms=response_ms,
             endpoint=endpoint,
-            cost_estimate=call.cost_estimate,
+            cost_estimate=cost,
             status_code=call.status_code,
             model=model,
-            input_tokens=call.input_tokens,
-            output_tokens=call.output_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
     except Exception:
         logger.exception("Failed to record an AI call to %s", service)

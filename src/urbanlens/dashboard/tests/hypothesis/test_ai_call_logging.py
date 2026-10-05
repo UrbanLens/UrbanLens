@@ -211,6 +211,37 @@ class GatewayCallTests(_LoggingCase):
         self.assertIsNone(row.input_tokens)
         self.assertIsNone(row.output_tokens)
 
+    def test_a_count_the_ledger_cannot_hold_is_left_out_not_the_row(self) -> None:
+        garbled = _answer("<ANSWER>x</ANSWER>", Usage(input_tokens=-5, output_tokens=2**40))
+        with mock.patch(CLIENT_PATH, return_value=_client(garbled)):
+            gateway = get_gateway("garbled_feature")
+            assert gateway is not None
+            self.assertEqual(gateway.send_prompt("hello"), "x")
+
+        row = self.one_row("garbled_feature")
+        self.assertTrue(row.success)
+        self.assertEqual((row.input_tokens, row.output_tokens), (None, None))
+
+    def test_a_cost_the_ledger_cannot_hold_is_left_out_not_the_row(self) -> None:
+        from urbanlens.dashboard.services.ai.call_log import recorded_ai_call
+
+        with recorded_ai_call(service="priceless_feature", provider="openai", model="gpt-5-nano") as call:
+            call.success, call.cost_estimate = True, Decimal(99999)
+
+        row = self.one_row("priceless_feature")
+        self.assertTrue(row.success)
+        self.assertIsNone(row.cost_estimate)
+
+    def test_the_longest_model_the_site_settings_allow_still_logs(self) -> None:
+        longest = "@cf/" + "x" * 196
+        SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(cloudflare_model=longest)
+        with mock.patch(CLIENT_PATH, return_value=_client(_answer("<ANSWER>x</ANSWER>"))):
+            gateway = get_gateway("long_model_feature", provider="cloudflare")
+            assert gateway is not None
+            gateway.send_prompt("hello")
+
+        self.assert_ledgered("long_model_feature", model=longest)
+
     def test_a_logging_failure_never_fails_the_call(self) -> None:
         with (
             mock.patch(CLIENT_PATH, return_value=_client(_answer("<ANSWER>x</ANSWER>"))),
@@ -452,6 +483,22 @@ class OllamaTests(_LoggingCase):
         row = self.assert_ledgered("ollama", model="llava")
         self.assertEqual(row.status_code, 200)
 
+    def test_a_usage_reader_answering_in_the_wrong_shape_does_not_fail_the_call(self) -> None:
+        from urbanlens.dashboard.services.apis.ai.ollama import OllamaGateway
+
+        with (
+            mock.patch("requests.Session.request", return_value=self._wire({"response": "brick"})),
+            mock.patch("urbanlens.dashboard.services.apis.ai.ollama._reported_tokens", return_value=None),
+        ):
+            keywords = OllamaGateway(base_url="http://ollama.test:11434", model="llava").describe_photo_keywords(
+                SECRET.encode()
+            )
+
+        self.assertEqual(keywords, ["brick"])
+        row = self.one_row("ollama")
+        self.assertTrue(row.success)
+        self.assertIsNone(row.input_tokens)
+
     def test_a_response_without_counts_still_names_the_model(self) -> None:
         from urbanlens.dashboard.services.apis.ai.ollama import OllamaGateway
 
@@ -466,22 +513,22 @@ class OllamaTests(_LoggingCase):
 class EveryInferenceCallerLogsTests(SimpleTestCase):
     """The inference client is reached from the two modules that record what they send, and no other."""
 
-    def test_nothing_else_calls_the_inference_client(self) -> None:
+    def test_nothing_else_reaches_the_inference_client(self) -> None:
         import pathlib
-        import re
 
         root = pathlib.Path(__file__).resolve().parents[3]
-        callers = {
+        users = {
             path.relative_to(root).as_posix()
             for path in root.rglob("*.py")
-            if "/tests/" not in path.as_posix()
-            and re.search(
-                r"get_inference_client\(\)\.(send|classify)\(|_inference_client\.(send|classify)\(", path.read_text()
-            )
+            if "/tests/" not in path.as_posix() and "get_inference_client" in path.read_text()
         }
 
         self.assertEqual(
-            callers,
-            {"dashboard/services/ai/gateway.py", "dashboard/services/ai/vision.py"},
+            users,
+            {
+                "dashboard/services/ai/gateway.py",
+                "dashboard/services/ai/inference_client.py",
+                "dashboard/services/ai/vision.py",
+            },
             "a new inference caller must record its call: see services/ai/call_log.py",
         )

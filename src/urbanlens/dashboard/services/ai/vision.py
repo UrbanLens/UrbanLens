@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.call_log import failure_status
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_content
-from urbanlens.dashboard.services.core.rate_limiter import ApiCallSlot, RequestCancelledError, api_call_slot
+from urbanlens.dashboard.services.core.rate_limiter import ApiCallSlot, RequestCancelledError, api_call_slot, valid_token_count
 
 if TYPE_CHECKING:
     from urbanlens_ai.schema import Provider
@@ -120,7 +120,7 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
         logger.exception("AI vision call failed (provider=%s, model=%s)", provider, model)
         return None
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    slot.input_tokens, slot.output_tokens = response.usage.input_tokens, response.usage.output_tokens
+    slot.input_tokens, slot.output_tokens = valid_token_count(response.usage.input_tokens), valid_token_count(response.usage.output_tokens)
 
     # Priced from the provider's own token counts where it reports them - more accurate than the
     # flat ServiceDefaults.cost_per_call the HTTP gateway wrapper applies elsewhere, so it is worth

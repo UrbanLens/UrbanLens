@@ -957,6 +957,26 @@ def annotate_calls(*, model: str | None = None, usage: Callable[[Any], tuple[int
         _CALL_NOTES.reset(token)
 
 
+#: The largest value ``ApiCallLog.input_tokens`` and ``output_tokens`` hold.
+_MAX_TOKEN_COUNT = 2**31 - 1
+
+
+def valid_token_count(value: object) -> int | None:
+    """A token count a provider reported, or None when it is not one the ledger can hold.
+
+    A value the column rejects would lose the whole row, so a garbled count is left out instead.
+
+    Args:
+        value: What the provider sent.
+
+    Returns:
+        The count, or None for anything but an integer from 0 to 2**31 - 1.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _MAX_TOKEN_COUNT:
+        return None
+    return value
+
+
 def _reported_usage(reader: Callable[[Any], tuple[int | None, int | None]] | None, response: Any) -> tuple[int | None, int | None]:
     """The ``(input, output)`` token counts a gateway reads from a response, or ``(None, None)``.
 
@@ -965,15 +985,16 @@ def _reported_usage(reader: Callable[[Any], tuple[int | None, int | None]] | Non
         response: The upstream's response.
 
     Returns:
-        Whatever the reader found; a reader that fails leaves the counts unrecorded, never the call failed.
+        Whatever the reader found; a reader that fails or answers in the wrong shape leaves the counts unrecorded, never the call failed.
     """
     if reader is None:
         return None, None
     try:
-        return reader(response)
+        input_tokens, output_tokens = reader(response)
     except Exception:
         logger.debug("Could not read token usage from a response", exc_info=True)
         return None, None
+    return valid_token_count(input_tokens), valid_token_count(output_tokens)
 
 
 class _RateLimitedSession:

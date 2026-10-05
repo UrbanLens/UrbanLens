@@ -19,6 +19,7 @@ from urbanlens.dashboard.services.ai.meta import (
     PROJECT_DESCRIPTION,
     SHORTEST_MESSAGE,
 )
+from urbanlens.dashboard.services.core.rate_limiter import valid_token_count
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.ai.inference_client import InferenceClient, InferenceResponse, Provider
@@ -170,9 +171,9 @@ class LLMGateway(ABC):
         costs = self.MODEL_COSTS.get(self.model)
         if costs is None:
             return None
-        sent = response.usage.input_tokens if response.usage.input_tokens is not None else self.calculate_combined_tokens(message_queue)
-        received = response.usage.output_tokens if response.usage.output_tokens is not None else self.calculate_tokens(response.text)
-        return self._price(costs, sent, received)
+        sent = valid_token_count(response.usage.input_tokens)
+        received = valid_token_count(response.usage.output_tokens)
+        return self._price(costs, self.calculate_combined_tokens(message_queue) if sent is None else sent, self.calculate_tokens(response.text) if received is None else received)
 
     @singledispatchmethod
     def send_tokens(self, count: Any):
