@@ -23346,3 +23346,243 @@ can be deleted at will. On dev, a second reverse geocode of a point and a second
 **Tests.** `test_google_geocoding_cache.py`: a point and an address are each asked once, a nearby point is not
 answered from another's row, a refusal is asked again, and a failed name lookup asks Google once (the first, third
 and fifth failed before the fix). `test_google_place.py`'s rate-limit test now goes through the real chain.
+
+## RESOLVED 2026-10-05: An import preview read files, archive entries and single elements whole; every format now reads in pieces and every element is bounded
+
+`id: P95` · `status: fixed` · `resolved: 2026-10-05`
+
+Previously titled "An import preview reads each file a chunk at a time, but one huge WKT line still costs GEOS's
+reader about 9x its size", before that "One import preview entry is still read whole at up to 1 GB, and what parsing it
+costs is unmeasured", before that "An import preview can hold 2 GB of extracted bytes in a sandbox
+worker that has 3 GB for two jobs", and before that "`ExtractionBudget` cannot bound a single file's
+decompression, and nothing prices what parsing one costs". The 2026-09-18 measurement of the
+fastkml parse (15.4x RSS on 10 MB; a 100 MB run killed at 1.78 GiB) is replaced below: it described a
+parser the 2026-09-29 rewrite had already removed.
+
+Related to P2 (sandboxing the preview parse) - cross-referenced rather than duplicated: this is about
+the resource cost of the parse, wherever it runs.
+
+**Where it stands, 2026-10-02.** Every preview format reads a file a chunk at a time, an archive entry
+is spooled to disk rather than read into memory, and the pin formats stop reading once the preview
+holds `MAX_PREVIEW_PINS` (20,000). On a 16 MiB file, RSS growth fell from 2.7x-18.2x the file to
+0.7x-0.9x for every pin format but OSM, the kept pins included; OSM now holds one batch of ways' nodes
+rather than every node, so it stops growing at about 135 MiB where it used to grow at 15-16x. The
+history formats hold what the confirmed import will save rather than the file (Location History
+1.26x, GPX 5.9x). What still grows with its input is a single element: one KML placemark, GeoJSON
+feature or OSM way is built whole, at 10-13x its size (RSS) - as, unmeasured, is one CSV row or text
+line - so an entry that is one 300 MB element would still exhaust `media-worker`. Capping an element is what is left, and where to
+cap it is a product call (below).
+
+**Where the parse runs, re-checked 2026-09-14.** Not in a gunicorn worker any more.
+`services/pins/import_preview.py::start_import_preview` stores the upload and enqueues
+`tasks.py::parse_import_preview_task` on the sandbox queue, which `media-worker` consumes with
+`--concurrency=2` under a 3 GB `mem_limit` by default (`docker-compose.yml`). `guard_key`'s
+single-flight claim allows one preview per account and answers a second with 409, so the old concern
+that one account could start 600 near-2 GB extractions a minute under the DRF `user` throttle no
+longer holds.
+
+**The limits, as they stand.** nginx's `client_max_body_size 200m` (`config/nginx/django.conf.template`) bounds
+the compressed upload. `_read_uploads` builds one `ExtractionBudget` for the whole upload, nested
+archives included: 2 GB uncompressed and 1000 files. `_MAX_SINGLE_FILE_BYTES` caps one entry at 1 GB.
+`PARSE_SOFT_TIME_LIMIT_SECONDS` (110) ends a parse that runs longer.
+
+**Fixed 2026-09-14, three ways a preview outgrew the worker.**
+
+- **The budget was charged after the read.** `_extract_zip` and `_extract_tgz` read every entry up to
+  the 1 GB cap and only then deducted it, so an upload with 1,000 bytes of allowance left still asked
+  for 1,073,741,825 bytes. `ExtractionBudget.read_limit` bounds the read to what remains
+  (`test_extraction_budget_before_read.py`).
+- **Every entry was held until the parser returned**, up to the whole 2 GB. `_read_uploads` hands
+  `GoogleMapsGateway.parse_for_preview` a generator (`import_preview.py::_uploaded_files`), so each
+  entry is parsed and let go before the next is extracted. Shapefile sidecar parts are the exception -
+  a bundle is parsed once all its parts are in - so they are kept, on disk since 2026-10-02
+  (`shapefile.py::ShapefileSpool`), and parsed after every other file: their lists come last, and they
+  are what is dropped when a preview reaches `MAX_PREVIEW_PINS`. Ten 8 MiB entries peaked at 100.8 MB
+  under `tracemalloc` before; `test_import_preview_memory.py` holds the peak under half of what was
+  extracted.
+- **Two previews could run side by side** in `media-worker`'s two slots. `parse_import_preview` now
+  claims one of `IMPORT_PREVIEW_MAX_CONCURRENT_PARSES` site-wide slots first
+  (`import_preview.py::_claim_parse_slot`, default 1). A preview that finds none stays "pending" and
+  `parse_import_preview_task` retries it every `PARSE_SLOT_RETRY_SECONDS`, until `STALL_AFTER`, when
+  it ends itself and frees the account. A slot outlives the parse's hard limit by a minute, so a
+  killed worker's slot frees itself.
+
+**The KML parse streams, 2026-09-29.** `takeout_kml_to_dict` reads placemarks one at a time through
+defusedxml's `iterparse`, instead of a regex copy, a defused pre-parse and a full fastkml tree
+(`test_kml_streaming_parse.py` checks it against the old fastkml walk). A Polygon or MultiGeometry
+placemark used to raise past `IMPORT_PARSE_ERRORS` and fail the whole file; it is now a pin at its
+centroid. Placemarks come in document order, where fastkml returned a Document's Folders first. It
+freed only placemarks, so a file's styles stayed in the tree until 2026-10-02.
+
+**Fixed 2026-10-02: every format reads in pieces.**
+
+- **An archive entry is spooled to disk.** `archive_extractor.py::spool_archive` copies each entry a
+  256 KiB chunk at a time into the preview's job directory - not `/tmp`, which in `media-worker` is a
+  tmpfs counted against its memory - and `import_preview.py::_opened` removes it once the parser asks
+  for the next file. Parsers take a seekable file instead of bytes (`streams.py::as_stream`).
+- **The format sniff reads in chunks.** `validate_content_type` checks the whole file is UTF-8 a chunk
+  at a time and keeps 64 KiB past leading whitespace; a JSON file is checked well-formed with ijson
+  (`json_stream.py::top_level_keys`) rather than `json.loads`.
+- **GeoJSON and Location History stream through ijson** (`json_stream.py::iter_array_items`): yajl's
+  C parser, falling back to ijson's pure-Python one for an integer outside the signed 64-bit range,
+  which yajl refuses. A file's visits and routes join the preview only once the whole file has read
+  cleanly (`maps.py::_PreviewFile`); they used to be kept up to the entry that failed, while the file
+  was reported as failed.
+- **CSV, WKT, WKB and My Activity read line by line or entry by entry** (`streams.py::iter_lines`,
+  split exactly where `str.splitlines` splits; `my_activity.py::_split_entries`).
+- **OSM keeps no index of every node.** `osm_xml.py::iter_osm_xml_pins` yields tagged nodes in a pass
+  that keeps nothing, then reads ways in batches of `_WAY_REFS_PER_PASS` (250,000) node references,
+  each batch one pass collecting the ways and one finding only their nodes.
+- **GPX is read with `iterparse` into gpxpy's own field readers** (`gpx_tracks.py::_GpxReader`), so a
+  value gpxpy refused still fails the file, and it stops taking waypoints once the preview is full.
+- **Shapefiles are read through GDAL's Arrow stream**, 1,000 features a batch
+  (`shapefile.py::iter_shapefile_pins`), rather than as one GeoDataFrame. Batching by offset
+  (`skip_features`), tried first, reads some records twice wherever a `.dbf` marks others deleted.
+- **KML frees every element outside a placemark**, so a file whose placemarks follow 12 MiB of styles
+  no longer holds the styles (93.8 MB tracemalloc peak before).
+- **Pin formats stop once the preview is full**, instead of parsing the rest of the file and
+  discarding it.
+
+Departures, each deliberate and each checked by a test in `test_import_streaming_parsers.py`, which
+otherwise holds every streaming parser to its whole-file predecessor over generated documents: JSON's
+non-standard `NaN`/`Infinity` and numbers past a double's range are refused where `json.loads` read
+them; a duplicated JSON key no longer keeps only its last value; a GeoJSON file with a byte-order mark
+now parses; a first line longer than 64 KiB is sniffed on its start; a file holding an integer outside the
+signed 64-bit range is re-read by ijson's pure-Python parser, which takes any Unicode whitespace between
+tokens; a tagged OSM node whose id repeats keeps its own coordinates rather than the last same-id node's; a null Shapefile attribute is left out
+rather than read as `nan`, and an integer column holding one no longer reads as floats; and a fault
+past the point where the preview filled is never reached, so that file now previews where it failed.
+
+`test_import_parse_memory.py` holds each format's tracemalloc peak under an eighth of a 12 MiB file
+(16 MiB for the Shapefile); all 17 of its tracemalloc cases failed on the code before this change. ijson is
+a new dependency: nothing installed streamed JSON (orjson and simplejson do not). pyarrow, already
+installed through overturemaps, is now declared, since pyogrio's Arrow stream needs it.
+
+**Measured 2026-10-02, before and after.** A scratchpad harness (not committed), run in
+`test_runner_a` (5 GB cgroup) rather than `media-worker`, on generated Takeout-shaped files. Each run is
+a fresh process calling `import_preview._read_uploads` end to end - extract, sniff, parse - on the file
+staged as an upload, after a warm-up on a tiny file of the same format. "RSS" is `VmHWM` growth after
+resetting it through `/proc/self/clear_refs`, which sees what expat, yajl, GDAL and Arrow allocate
+outside Python; "trace" is the tracemalloc peak. "Before" is 24cc42528. Ratios are to the file
+unzipped. Pin formats reach the 20,000-pin cap between 4 and 16 MiB, after which their "after" numbers
+are mostly the kept pins (10-11 MiB) and stop growing; before the cap the same pins make the ratio
+look larger.
+
+| Format | RSS before, 4 / 8 / 16 MiB | RSS after, 4 / 8 / 16 MiB | Trace at 16 MiB, before → after |
+|---|---|---|---|
+| KML | 11.1 / 22.1 / 43.2 MiB (2.70x) | 6.1 / 11.2 / 12.0 (0.75x) | 42.4 → 10.7 |
+| KMZ (that KML zipped) | 15.2 / 30.4 / 59.8 (3.74x) | 6.8 / 11.9 / 12.8 (0.80x) | 48.6 → 10.7 |
+| GeoJSON (Saved Places) | 25.0 / 49.7 / 99.3 (6.21x) | 7.2 / 12.1 / 12.1 (0.76x) | 95.4 → 10.8 |
+| CSV, Takeout | 30.4 / 61.2 / 122.3 (7.64x) | 14.0 / 14.0 / 14.0 (0.87x) | 112.0 → 12.6 |
+| CSV, lat/lng | 27.1 / 54.4 / 109.5 (6.84x) | 12.1 / 12.1 / 12.1 (0.75x) | 100.6 → 10.5 |
+| WKT | 53.6 / 107.2 / 213.8 (13.36x) | 10.9 / 10.9 / 10.9 (0.68x) | 189.6 → 9.8 |
+| WKB (hex) | 71.5 / 143.9 / 291.1 (18.19x) | 11.1 / 10.8 / 10.8 (0.68x) | 261.6 → 10.0 |
+| Shapefile (4.6 / 9.2 / 18.4 MiB) | 23.4 / 47.0 / 90.7 (4.92x) | 11.3 / 13.1 / 13.1 (0.71x) | 65.0 → 10.6 |
+| OSM, tagged nodes and ways | 61.4 / 123.2 / 242.8 (15.18x) | 18.8 / 37.9 / 75.7 (4.73x); 101.6 at 48 MiB (2.12x) | 217.5 → 66.3 |
+| OSM, vertices and tagged ways | 259.9 at 16 MiB (16.24x); 762.6 at 48 (15.89x) | 15.7 / 31.1 / 60.6 (3.79x); 125.2 at 48, 133.6 at 96 (1.39x) | not run → 50.9 |
+| Location History | 26.8 / 53.6 / 107.3 (6.71x) | 6.2 / 11.0 / 20.1 (1.26x) | 84.9 → 16.7 |
+| My Activity | 12.3 / 26.3 / 52.0 (3.25x) | 3.0 / 3.9 / 5.8 (0.36x) | 52.3 → 4.7 |
+| GPX, tracks | 90.8 / 181.6 / 363.0 (22.56x) | 23.9 / 47.6 / 94.7 (5.88x) | 143.9 → 78.4 |
+| Records.json (refused) | 19.6 / 40.0 / 80.6 (5.07x) | 1.6 / 1.6 / 1.6 (0.10x) | 78.5 → 0.9 |
+
+Every "before" ratio was within 11% of its 16 MiB value at 4 and 8 MiB, so each grew with the file.
+OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 s before, and the
+96 MiB file 60.6 s, under a soft limit of 110 s. Not run: the 1 GB cap itself, any of it inside
+`media-worker`, and a real Takeout export rather than a generated one.
+
+**Fixed 2026-10-04 and 2026-10-05.**
+
+- **One huge element: fixed for KML, GeoJSON, OSM and WKT (2026-10-04).** A file that is one
+  element - one placemark, feature, way, row or line - used to be read whole into that element and then parsed.
+  The tracemalloc peak for a file that is one element, end to end through `parse_import_preview`
+  (`test_import_parse_memory.py::OneLargeElementTests`, each held under 3x):
+
+  | One element | Before | After |
+  |---|---|---|
+  | KML placemark, 12.6 MB LineString | 125.9 MB | 25.3 MB (2.01x) |
+  | GeoJSON feature, 12.6 MB LineString | 145.3 MB | 10.5 MB (0.84x) |
+  | GeoJSON feature, 12.6 MB Polygon outline | 146.3 MB | 9.4 MB (0.75x) |
+  | OSM way through every node, 11.1 MB | 113.8 MB | 20.9 MB (1.88x) |
+  | hex WKB, one 12.6 MB LineString line | not measured | under 3x |
+  | WKT, one 12.6 MB LineString line | 138.4 MB | under 3x |
+
+  - **KML.** `maps._kml_tuples` joins whitespace-separated tokens that meet at a comma. That replaces a `re.sub` that
+    built about seven times the text. A line keeps its first coordinate and a ring a flat `array('d')`, though every
+    coordinate is still parsed, so a bad one still fails the file.
+  - **GeoJSON.** `json_stream.iter_geojson_features` builds each feature from ijson's events. Under a geometry's
+    `coordinates`, an array of two- or three-number positions is one `float64` array of shape `(n, 2)` or `(n, 3)`.
+    Any other array is built as `json.loads` builds it, and so is a property named `coordinates`. shapely builds the
+    same geometry from the array, so the centroid is unchanged. Three hypothesis properties in
+    `GeoJsonGeometriesReadCompactlyTests` check that:
+    - arbitrary documents build what ijson's C builder builds, once the arrays are read back as lists;
+    - arbitrary geometries do too: every type, collections, wrong nesting, booleans, 60-bit integers, mixed sizes;
+    - arbitrary geometries make the same pins.
+
+    The cost is speed. A 16 MiB Saved Places file of 58,416 Points reads in 0.84 s rather than 0.37 s. The preview
+    stops at 20,000 pins, so it pays about 0.15 s more. A skipped feature's warning now names its geometry type
+    rather than logging the geometry.
+  - **OSM.** `osm_xml._top_level_ways` reads a way's `<nd>` and `<tag>` children as they close, and `_top_level`
+    frees the children of any element it is not looking for. That second change matters because the node passes
+    used to build the way whole only to discard it. `_Coordinates` holds the wanted nodes in one dict filled during
+    the node pass, with coordinates in two `array('d')`. A canonical integer id is keyed as an int and any other
+    spelling as itself, so ids still match exactly when their text does. A test over `07`, `-0`, `+7`, `x` and
+    Arabic-Indic digits checks this. The centroid sums the same floats in the same order, so it is the same number.
+    The parse is 5-10% slower: 16 MiB of vertices and ways read every pin in 6.2 s rather than 5.9 s, and 48 MiB in
+    32.4 s rather than 29.2 s.
+  - **WKT.** A line over 1 MiB is read by `geometry_readers._WktToWkb` into WKB, which GEOS reads at about its own
+    size, rather than by GEOS's WKT reader. RSS growth for a 12 MiB LineString line fell from 107.6 MiB to 27.4 MiB
+    (2.3x), and the read from 0.73 s to 0.60 s. Counting the line itself, a WKT line now fills `media-worker`'s 3 GB
+    at about 900 MB, rather than 330 MB; the 1 GB entry cap is just above that. The reader takes a strict subset of
+    WKT and refuses a long line outside it, where GEOS might have read it: `inf` or `nan`, hexadecimal or digit
+    separators, a tag joined to its type (`POINTZ`), an SRID prefix, a geometry mixing coordinate sizes, and an
+    untagged multipoint of bare four-number points, which GEOS cuts to three. Two hypothesis properties in
+    `test_geometry_readers.py` hold it to GEOS: every geometry the subset can write reads the same through both, and
+    anything it accepts from arbitrary WKT-like text, GEOS accepts as the same geometry. Each passed 5,000 examples
+    twice; they found where GEOS's dimensions and multipoint forms differed from the first draft. Dimensions follow
+    GEOS: each collection member has its own, a tagged collection's must match, and an untagged collection is 2D.
+    Shorter lines still go to GEOS, after P287's nesting check.
+  - **CSV.** A cell past the csv module's 128 KiB field limit raises `csv.Error`. That was not in
+    `IMPORT_PARSE_ERRORS`, so it failed the whole preview as unreadable, every other file in the upload with it. It
+    now fails only its own file (`AnOversizedCsvCellFailsOnlyItsFileTests`). A row of very many small cells is bounded below.
+- **A CSV record is bounded, 2026-10-05.** `csv` builds a whole record before anything sees it, a string per cell:
+  a 12 MB row of two-letter cells peaked at 263 MB (21.9x), and a 12.4 MB header at 526 MB (42.5x), so a zipped CSV
+  under the upload cap could exhaust `media-worker`. `maps.MAX_CSV_RECORD_CHARS` (1 MiB) bounds one record, header
+  included. `streams.iter_lines(max_line=...)` refuses a line once it passes the bound rather than once it ends, and
+  `maps._CsvRecordBudget` refuses a record quoted across many short lines. The file fails alone, as an oversized cell
+  does. A real row is far shorter: `csv`'s own field limit is 128 KiB, so the bound leaves room for eight cells at
+  that limit. `test_import_parse_memory.py::AWideCsvRecordIsRefusedTests` holds each shape under 3x the file (all
+  three failed before), and `test_import_streaming_parsers.py::ACsvRecordPastTheBoundFailsOnlyItsFileTests` checks
+  that only that file fails and that records within the bound still read.
+- **History grows with the file, by design.** Location History's visits and routes and GPX's routes
+  are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
+  16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates
+  (16 MiB of Location History in 9.9 s, 16 MiB of GPX in 28.8 s, on a host running other work),
+  roughly 180 MB of Location History (about 230 MB RSS) or 60 MB of GPX (about 360 MB) is the largest
+  that finishes. A larger history file fails on time, not memory. Whether to allow more is P304.
+- **The confirm request no longer reads the history, 2026-10-04.** It used to `json.load` the preview's
+  `history.json` and dump it again into the import's payload, in the web worker. 16 MiB of Location History
+  makes 11.7 MiB of it, and 16 MiB of GPX 9.0 MiB; reading either back peaked at about 39 MiB, so the largest
+  history the preview can finish would have cost the web worker about 450 MB. `start_confirmed_import` copies the
+  file undecoded (`preview_history_path`), and the import's worker reads it, as it read the payload before
+  (`test_import_wizard_history.py::test_confirming_a_large_history_does_not_read_it_in_the_request`: a 10 MB
+  history peaked at 51 MB in the request before, under 5 MB now). A payload stored before the change, with its
+  history inline, still imports.
+- **`test_import_parse_memory.py` measured first-use imports, 2026-10-04.** The modules a format imports when it
+  is first read cost about 1.1 MB, which counted against whichever test reached that format first. `test_csv`
+  failed alone at 2.18 MB against its 1.57 MB bound, and passed at 1.10 MB once warm. Each case now reads its file
+  once unmeasured first.
+- **Documents were already bounded, and still are.** `.txt` and `.docx` are read up to
+  `MAX_DOCUMENT_BYTES` (2 MB), and a `.docx` declaring more than `MAX_DOCUMENT_UNCOMPRESSED_BYTES`
+  (20 MB) unzipped is refused. A `.docx` costs 5.2x-5.6x RSS of its unzipped size, the same before and
+  after: 27.4 MiB at 5.0 MiB, 55.9 at 10.0, 113.7 at 19.5. A `.txt` costs under 3x: 4.8 MiB at
+  1.9 MiB.
+- **An archive's directory is bounded, 2026-10-04.** `zipfile` reads a ZIP's whole central directory into a `ZipInfo`
+  per entry before anything looks at one, and the extraction budget counted only supported entries after that. A
+  94 MB ZIP of a million empty entries cost 586 MiB and 8 s to open, and the 200 MB upload cap allows two to four
+  million. `archive_extractor.open_zip` opens a ZIP through a reader that refuses any read over
+  `MAX_ZIP_DIRECTORY_BYTES` (8 MiB) while `zipfile` opens it. That bounds the directory by its size, which is how
+  `zipfile` reads it; the entry count in the end record is not trusted. The same ZIP is now refused at once, with no
+  RSS growth. The preview's extraction and a backup restore (`import_data._extract_and_validate`, which counted
+  members only after reading them) both open ZIPs this way. A TGZ is refused past `MAX_TAR_MEMBERS` (50,000) members,
+  supported or not: `tarfile` keeps each `TarInfo`, about 410 MiB a million (measured with `tracemalloc` over 200,000
+  empty members, 82 MiB, in the app image; no test measures it).

@@ -56,28 +56,46 @@ def iter_decoded(stream: IO[bytes], encoding: str) -> Iterator[str]:
         yield tail
 
 
-def iter_lines(pieces: Iterable[str]) -> Iterator[str]:
+class LineTooLongError(ValueError):
+    """A line ran past the length its reader allows."""
+
+
+def iter_lines(pieces: Iterable[str], *, max_line: int | None = None) -> Iterator[str]:
     """The lines of a text that arrives in pieces, split exactly as ``str.splitlines`` splits.
 
     Only a line is held whole, never the text.
 
     Args:
         pieces: Successive pieces of the text.
+        max_line: The longest line to hold, in characters; None for no bound.
 
     Yields:
         Each line, without its line break.
+
+    Raises:
+        LineTooLongError: A line ran past ``max_line``, raised once it does rather than once it ends.
     """
     held: list[str] = []
+    held_length = 0
     for piece in pieces:
         held.append(piece)
+        held_length += len(piece)
         if not _LINE_BREAK_RE.search(piece):
+            if max_line is not None and held_length > max_line:
+                raise LineTooLongError(f"a line is longer than {max_line:,} characters")
             continue
         lines = "".join(held).splitlines(keepends=True)
         # The last line may go on in the next piece, as may a "\r" that the next piece's "\n" completes.
         held = [lines.pop()]
+        held_length = len(held[0])
         for line in lines:
+            if max_line is not None and len(line) > max_line + 2:
+                raise LineTooLongError(f"a line is longer than {max_line:,} characters")
             yield line.splitlines()[0]
-    yield from "".join(held).splitlines()
+    remainder = "".join(held)
+    if max_line is not None and len(remainder) > max_line:
+        raise LineTooLongError(f"a line is longer than {max_line:,} characters")
+    yield from remainder.splitlines()
 
 
 def is_valid_text(stream: IO[bytes], encoding: str) -> bool:

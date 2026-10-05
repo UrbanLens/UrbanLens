@@ -315,6 +315,7 @@ class _MemoryCase(TestCase):
     def _parse(self, name: str, upload: bytes, *, measured: bool) -> tuple[int, dict[str, Any]]:
         with mock.patch(ENQUEUE, return_value=mock.Mock()):
             job_id = import_preview.start_import_preview(self.profile, [SimpleUploadedFile(name, upload)])
+        self.job_id = job_id
         self.addCleanup(import_preview.shutil.rmtree, import_preview.job_dir(job_id), True)
         self.addCleanup(import_preview.single_flight.release, import_preview.guard_key(self.profile.pk))
 
@@ -418,6 +419,44 @@ class OneLargeElementTests(_MemoryCase):
 
     def test_a_hex_wkb_line(self) -> None:
         self.assert_held_near_its_text("track.wkb", _wkb_one_line())
+
+
+def _csv_wide_row() -> bytes:
+    return ("name,latitude,longitude\nMill,42.1,-73.9" + ",ab" * 4_000_000 + "\n").encode()
+
+
+def _csv_wide_header() -> bytes:
+    return (
+        "name,latitude,longitude" + "".join(f",c{index}" for index in range(1_500_000)) + "\nMill,42.1,-73.9\n"
+    ).encode()
+
+
+def _csv_record_over_many_lines() -> bytes:
+    return ("name,latitude,longitude,notes\nMill,42.1,-73.9" + ',"a\n"' * 2_400_000 + "\n").encode()
+
+
+class AWideCsvRecordIsRefusedTests(_MemoryCase):
+    """P95: ``csv`` builds a whole record before anything sees it, a string per cell; one record is a file's element.
+
+    A 12 MB row of two-letter cells peaked at 263 MB, and a 12.4 MB header at 526 MB.
+    """
+
+    def assert_refused_near_its_text(self, upload: bytes) -> None:
+        peak, _state = self._peak("wide.csv", upload)
+        with open(os.path.join(import_preview.job_dir(self.job_id), import_preview._PARSED)) as handle:
+            parsed = json.load(handle)
+
+        self.assertEqual(parsed["failed_formats"], ["csv"])
+        self.assertLess(peak, 3 * len(upload), f"reading a {len(upload):,}-byte record peaked at {peak:,} bytes")
+
+    def test_a_row_of_many_cells(self) -> None:
+        self.assert_refused_near_its_text(_csv_wide_row())
+
+    def test_a_header_of_many_columns(self) -> None:
+        self.assert_refused_near_its_text(_csv_wide_header())
+
+    def test_a_record_quoted_across_many_lines(self) -> None:
+        self.assert_refused_near_its_text(_csv_record_over_many_lines())
 
 
 class HistoryFormatsAreReadInPiecesTests(_MemoryCase):

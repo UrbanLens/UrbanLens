@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P304` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P305` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -58,7 +58,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P85 | open | 2026-09-29 | Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P95 | open | 2026-10-04 | An import preview reads every format a piece at a time; a history file's visits and routes still grow to its end | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P110 | open | 2026-10-03 | The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-17 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-17 | 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -210,3 +209,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P278 | open | 2026-10-04 | MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P279 | open | 2026-10-04 | Legacy `BLOCKED` friendship rows may still record the wrong blocker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P286 | open | 2026-10-04 | A campus pin can lose its own National Register listing, because REData answers a point with the rows last found from it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P304 | open | 2026-10-05 | A Location History file over about 180 MB, or a GPX file over about 60 MB, fails its preview on the time limit | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -38,7 +38,7 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import RouteSource
-from urbanlens.dashboard.services.apis.locations.google import my_activity
+from urbanlens.dashboard.services.apis.locations.google import maps as maps_module, my_activity
 from urbanlens.dashboard.services.apis.locations.google.location_history import (
     parse_semantic_visits,
     semantic_history_to_routes,
@@ -479,6 +479,42 @@ class AnOversizedCsvCellFailsOnlyItsFileTests(SimpleTestCase):
 
         self.assertEqual(parse.failed_formats, ["csv"])
         self.assertEqual([pin["name"] for listed in parse.lists for pin in listed["pins"]], ["Dam"])
+
+
+class ACsvRecordPastTheBoundFailsOnlyItsFileTests(SimpleTestCase):
+    """A record longer than ``MAX_CSV_RECORD_CHARS`` is refused before ``csv`` splits it into cells."""
+
+    _KML = (
+        b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        b"<Placemark><name>Dam</name><Point><coordinates>-74.1,40.1</coordinates></Point></Placemark>"
+        b"</Document></kml>"
+    )
+
+    def _preview(self, csv_text: str) -> Any:
+        upload = [("notes.csv", csv_text.encode()), ("dam.kml", self._KML)]
+        with mock.patch.object(maps_module, "MAX_CSV_RECORD_CHARS", 4096):
+            return GoogleMapsGateway(api_key="").parse_for_preview(upload, Profile())
+
+    def test_a_long_line_a_long_header_and_a_record_over_many_lines_each_fail_only_their_file(self) -> None:
+        records = {
+            "line": "name,latitude,longitude\nMill,40.5,-74.5" + ",ab" * 2_000 + "\n",
+            "header": "name,latitude,longitude" + ",c" * 2_100 + "\nMill,40.5,-74.5\n",
+            "lines": "name,latitude,longitude,notes\nMill,40.5,-74.5" + ',"a\n"' * 2_000 + "\n",
+        }
+        for shape, csv_text in records.items():
+            with self.subTest(shape):
+                parse = self._preview(csv_text)
+
+                self.assertEqual(parse.failed_formats, ["csv"])
+                self.assertEqual([pin["name"] for listed in parse.lists for pin in listed["pins"]], ["Dam"])
+
+    def test_records_within_the_bound_are_read_however_many_there_are(self) -> None:
+        rows = "".join(f"Mill {index},40.5,-74.5,{'x' * 3_000}\n" for index in range(50))
+
+        parse = self._preview("name,latitude,longitude,notes\n" + rows)
+
+        self.assertEqual(parse.failed_formats, [])
+        self.assertEqual(sum(len(listed["pins"]) for listed in parse.lists), 51)
 
 
 _CSV_CELL = st.text(alphabet=st.sampled_from(list('ab1. ,"\n\r\u2028\ufeffé')), max_size=8)
