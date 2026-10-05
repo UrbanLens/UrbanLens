@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { installSharedPinMap, type SharedPinEngine, sharedPinView } from "./shared-pin-map";
+import { installSharedPinMap, maplibreEngine, type SharedPinEngine, sharedPinLabel, sharedPinView } from "./shared-pin-map";
 
 function mapEl(attrs: string): HTMLElement {
     document.body.innerHTML = `<div id="shared-pin-map" ${attrs}></div><div id="shared-pin-map-layers"></div>`;
@@ -38,4 +38,47 @@ test("the map is always built, with a marker only where there is a point", () =>
     calls.length = 0;
     installSharedPinMap(mapEl('data-lat="1.5" data-lng="2.5" data-name="Mill"'), engine);
     expect(calls).toEqual(["map 1.5,2.5 z16", "marker 1.5,2.5 Mill"]);
+});
+
+test("the label is the site's pin popup card, holding the sender's name as text", () => {
+    const label = sharedPinLabel("Old <b>Mill</b>");
+    expect(label.className).toBe("pin-popup");
+    expect(label.textContent).toBe("Old <b>Mill</b>");
+    expect(label.querySelector("b")).toBeNull();
+});
+
+test("on MapLibre the label opens in the site's dark popup, not maplibre-gl.css's white one", () => {
+    const opened: { options?: unknown; content?: Node } = {};
+    class Popup {
+        constructor(options: unknown) {
+            opened.options = options;
+        }
+        setDOMContent(node: Node): this {
+            opened.content = node;
+            return this;
+        }
+    }
+    class Marker {
+        setLngLat(): this {
+            return this;
+        }
+        setPopup(): this {
+            return this;
+        }
+        addTo(): this {
+            return this;
+        }
+        togglePopup(): this {
+            return this;
+        }
+    }
+    class Map {}
+    window.MapLayers = { create: () => ({}) } as unknown as typeof window.MapLayers;
+    const engine = maplibreEngine({ Map, Marker, Popup } as unknown as typeof import("maplibre-gl"));
+    engine.createMap(mapEl(""), sharedPinView({ lat: "1.5", lng: "2.5", name: "Mill" }));
+    engine.addMarker([1.5, 2.5], "Mill");
+    // It opens with the page, so it must not pull focus to its close button.
+    expect(opened.options).toMatchObject({ className: "map-popup", focusAfterOpen: false });
+    expect((opened.content as HTMLElement).className).toBe("pin-popup");
+    expect(opened.content?.textContent).toBe("Mill");
 });

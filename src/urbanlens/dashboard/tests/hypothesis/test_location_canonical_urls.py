@@ -242,6 +242,15 @@ class BareLocationUrlTests(_VisibleWikiFixture):
 
         self.assertEqual(response["Location"], reverse("location.wiki", args=[SLUG]) + "?tab=photos")
 
+    def test_no_query_string_takes_the_redirect_off_this_site(self) -> None:
+        for query in ("?next=//elsewhere.test/", "?a=1&b=https://elsewhere.test", "?%2F%2Felsewhere.test"):
+            with self.subTest(query=query):
+                response = self.client.get(reverse("location.detail", args=[SLUG]) + query)
+
+                self.assertTrue(
+                    response["Location"].startswith(reverse("location.wiki", args=[SLUG])), response["Location"]
+                )
+
     def test_the_location_url_is_reachable_at_its_plain_path(self) -> None:
         self.assertEqual(reverse("location.detail", args=[SLUG]), f"/dashboard/location/{SLUG}/")
 

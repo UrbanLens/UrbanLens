@@ -91,6 +91,8 @@ function conversationKeyKey(selfSlug: string, partnerSlug: string, version: numb
 
 /**
  * Ask the browser to exempt this origin's storage from automatic eviction.
+ *
+ * Not awaited by callers: Firefox answers with a permission prompt and settles only once the visitor responds.
  */
 async function requestPersistentStorage(): Promise<void> {
     try {
@@ -107,7 +109,7 @@ async function requestPersistentStorage(): Promise<void> {
 /** Cache the decrypted identity for a profile. */
 export async function putIdentity(selfSlug: string, identity: CachedIdentity): Promise<void> {
     await put(identityKey(selfSlug), identity);
-    await requestPersistentStorage();
+    void requestPersistentStorage();
 }
 
 /** Load the cached identity for a profile, or null when locked. */

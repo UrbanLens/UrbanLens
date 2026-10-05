@@ -21,10 +21,6 @@
         return !reducedMotionQuery.matches;
     }
 
-    function hasCustomPosition() {
-        try { return !!localStorage.getItem(positionKey); } catch (_) { return false; }
-    }
-
     function getSavedPosition() {
         try {
             var raw = localStorage.getItem(positionKey);
@@ -64,38 +60,6 @@
     function finishPositionAnimation() {
         positionAnimating = false;
         toolbar.classList.remove('dev-toolbar--position-animating');
-    }
-
-    function animateToPosition(left, top, onComplete) {
-        ensurePixelPosition();
-        positionAnimating = true;
-        toolbar.classList.remove('dev-toolbar--no-transition');
-        toolbar.classList.add('dev-toolbar--position-animating');
-
-        var finished = false;
-        function complete() {
-            if (finished) return;
-            finished = true;
-            toolbar.removeEventListener('transitionend', onTransitionEnd);
-            clearTimeout(fallbackTimer);
-            finishPositionAnimation();
-            if (onComplete) onComplete();
-        }
-
-        function onTransitionEnd(e) {
-            if (e.target !== toolbar) return;
-            if (e.propertyName === 'left' || e.propertyName === 'top') complete();
-        }
-
-        toolbar.addEventListener('transitionend', onTransitionEnd);
-        var fallbackTimer = setTimeout(complete, POSITION_TRANSITION_MS + 50);
-
-        requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-                toolbar.style.left = left + 'px';
-                toolbar.style.top = top + 'px';
-            });
-        });
     }
 
     function updateNavButton(collapsed) {

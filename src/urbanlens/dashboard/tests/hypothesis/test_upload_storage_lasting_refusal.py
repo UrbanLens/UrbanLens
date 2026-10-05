@@ -71,8 +71,11 @@ class RefusalWordingTests(_NotifyPatchedCase):
         self.assertIn("briefly", str(refusal))
 
     def test_the_block_helper_words_it_the_same_way(self) -> None:
-        with self.assertRaises(StorageUnavailableError) as raised, storage_failures_refused():
+        def refused() -> None:
             raise _client_error("AccessDenied", 403)
+
+        with self.assertRaises(StorageUnavailableError) as raised, storage_failures_refused():
+            refused()
 
         self.assertIsNone(raised.exception.retry_after)
 

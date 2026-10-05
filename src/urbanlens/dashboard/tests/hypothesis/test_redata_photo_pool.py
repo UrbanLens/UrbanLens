@@ -226,6 +226,23 @@ class NearbyPhotosFetchTests(_PoolCase):
         assert cached is not None
         self.assertEqual([row["photo_id"] for row in cached.data["photos"]], ["near"])
 
+    def test_nearby_photos_kept_while_the_parcels_could_not_be_asked_lapse_within_the_hour(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from urbanlens.dashboard.models.cache.location_cache import PARTIAL_ANSWER_STALE_AFTER, UNANSWERED_SOURCES_KEY
+
+        LocationCache.set(self.here, "property_records", {"available": True, "uuid": _PARCEL})
+        self._fetch([_photo_row("near", 0.5)], GatewayRequestError("connection reset"))
+
+        cached = LocationCache.get_fresh(self.here, "redata_photo_pool")
+        assert cached is not None
+        self.assertEqual(cached.data[UNANSWERED_SOURCES_KEY], ["parcel_photos"])
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNone(LocationCache.get_fresh(self.here, "redata_photo_pool"))
+
     def test_a_failed_lookup_propagates_for_the_fetch_policy(self) -> None:
         with (
             mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
