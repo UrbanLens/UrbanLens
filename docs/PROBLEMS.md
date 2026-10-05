@@ -900,7 +900,7 @@ panel fan-out - reproducing again, not a new problem.)
 
 ## P85 — Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows
 
-`id: P85` · `status: open` · `updated: 2026-09-29` · supersedes "Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it"
+`id: P85` · `status: open` · `updated: 2026-10-05` · supersedes "Every manager is a dynamic base class, so `Model.objects` is `Any` and 146 mypy errors are turned off to hide it"
 
 **Fixed 2026-09-29: `Model.objects` is typed.** Every manager was declared
 `class XManager(Base.from_queryset(XQuerySet))`. mypy cannot follow a call as a base class, so each
@@ -985,7 +985,9 @@ excluded (guarded; the guard cannot fire).
   with annotations of the same name (`trips/queryset.py`); and a single `prefetch_related` mixing
   `Prefetch`es over different querysets, split into one call each (`controllers/memories.py`).
 
-**What is left: `misc` is still disabled.** `--enable-error-code misc` reports 478 (2026-09-29):
+**What is left: `misc` is still disabled.** `--enable-error-code misc` reports 478 (2026-09-29); 494 on 2026-10-05,
+the same kinds plus eight `except (*OBJECT_STORE_ERRORS, ...)` clauses, which mypy cannot read through a starred
+variadic tuple. A 2026-10-05 pass over the 75 outside the two large kinds found no runtime fault:
 
 - 249 `Incompatible type for lookup` - the lookup-value check the plugin could not run while
   `.objects` was `Any`. **Triaged 2026-09-29: no 500 among them.** 202 pass `request.user`
