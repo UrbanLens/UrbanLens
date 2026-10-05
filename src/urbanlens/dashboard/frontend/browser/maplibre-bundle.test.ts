@@ -13,8 +13,9 @@ import { join } from "node:path";
 import { version as packageVersion } from "maplibre-gl/package.json";
 import { type Browser, type Page, chromium } from "playwright";
 
-// Bun.serve does not recognise a happy-dom Response; see floorplan-editor.test.ts.
-GlobalRegistrator.unregister();
+// Bun.serve does not recognise a happy-dom Response; see floorplan-editor.test.ts. `test:browser` runs that file in this
+// same process first, and it has already unregistered; a second unregister rejects and this file never runs.
+if (GlobalRegistrator.isRegistered) await GlobalRegistrator.unregister();
 
 const ROOT = join(import.meta.dir, "../../../../..");
 const STATIC_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static");
