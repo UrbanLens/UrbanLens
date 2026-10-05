@@ -30,14 +30,20 @@ class HistoricalFeaturesPanelSource(RedataInfoPanelSource):
     payload_key: ClassVar[str] = "features"
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
-        """Historical buildings/roads/water/etc. mapped near the pin."""
-        from urbanlens.dashboard.services.apis.locations.redata_historical_features_gateway import RedataHistoricalFeaturesGateway
+        """Historical buildings/roads/water/etc. mapped near the pin, from the point's answer the time slider shares."""
+        from urbanlens.dashboard.services.locations.redata_point_data import historical_features_near
 
-        return RedataHistoricalFeaturesGateway().get_historical_features(latitude, longitude, limit=25)
+        return historical_features_near(latitude, longitude)
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
         """Drop each feature's geometry before caching."""
         return [{key: value for key, value in feature.items() if key != "geometry"} for feature in rows]
+
+    def landed(self, pin: Pin, data: dict) -> None:
+        """Fill the beta time slider from the same answer, which keeps the geometry this card drops."""
+        from urbanlens.dashboard.services.locations.temporal_imagery import fetch_redata_temporal_features
+
+        fetch_redata_temporal_features(pin.location, float(pin.effective_latitude or 0), float(pin.effective_longitude or 0))
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """List the most recently-attested features first, undated ones excluded from the count claim."""
