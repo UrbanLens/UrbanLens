@@ -318,6 +318,7 @@ class PlaceDetailsEnrichmentOutageTests(RedataConfiguredMixin, TestCase):
     """The batch's place-details fetch, which wrote 50 empty rows in the production outage."""
 
     _DETAIL = "urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway.RedataCidGateway.get_place_detail"
+    _RESOLVE = "urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway.RedataCidGateway.resolve_cids"
 
     def setUp(self) -> None:
         super().setUp()
@@ -339,10 +340,24 @@ class PlaceDetailsEnrichmentOutageTests(RedataConfiguredMixin, TestCase):
 
         self.assertEqual(self._rows(), 0)
 
-    def test_a_cid_redata_never_resolved_is_cached_as_empty(self) -> None:
-        self._enrich(return_value=None)
+    def test_a_cid_redata_never_resolved_is_posted_and_kept_briefly(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
 
+        pending = RedataCidBatchResult(pending={123456789012345678})
+        with mock.patch(f"{self._RESOLVE}", return_value=pending) as resolve:
+            self._enrich(return_value=None)
+
+        resolve.assert_called_once()
         self.assertEqual(self._rows(), 1)
+
+    def test_a_cid_that_cannot_be_posted_writes_nothing(self) -> None:
+        with (
+            mock.patch(f"{self._RESOLVE}", side_effect=GatewayRequestError("Could not reach REData")),
+            self.assertRaises(GatewayRequestError),
+        ):
+            self._enrich(return_value=None)
+
+        self.assertEqual(self._rows(), 0)
 
 
 class ParcelBuildingsOutageTests(RedataConfiguredMixin, TestCase):

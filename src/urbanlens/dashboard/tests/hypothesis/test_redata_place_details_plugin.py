@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.plugins.builtin.redata_place_details import (
+    UNKNOWN_CID_STALE_AFTER,
     RedataPlaceDetailsEnrichmentSource,
     RedataPlaceDetailsPanelSource,
 )
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
@@ -33,6 +37,13 @@ def _location_with_cid(cid: int | None, *, latitude: str = "40.7", longitude: st
 
 def _location_without_google_place(*, latitude: str = "40.7", longitude: str = "-74.0") -> Location:
     return baker.make("dashboard.Location", latitude=latitude, longitude=longitude, google_place=None)
+
+
+def _fresh_after(location: Location, elapsed: timedelta) -> bool:
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+    with mock.patch("django.utils.timezone.now", return_value=timezone.now() + elapsed):
+        return LocationCache.get_fresh(location, "redata_place_details") is not None
 
 
 class RedataPlaceDetailsPanelSourceGateTests(TestCase):
@@ -84,15 +95,45 @@ class RedataPlaceDetailsPanelSourceFetchTests(TestCase):
         self.assertEqual(self._cached(location), detail)
         mock_gateway_cls.return_value.get_place_detail.assert_called_once_with(123456789012345678)
 
-    def test_caches_an_empty_dict_when_redata_has_never_resolved_this_cid(self) -> None:
-        """get_place_detail's 404 -> None case."""
+    def test_a_cid_redata_has_never_seen_is_posted_for_resolution_and_asked_again_soon(self) -> None:
+        """REData's 404 means nobody posted the CID, not that the place has no details (its T11, item 7)."""
         location = _location_with_cid(123456789012345678)
         pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=location)
         with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
             mock_gateway_cls.return_value.get_place_detail.return_value = None
+            mock_gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(pending={123456789012345678})
+            self.source.fetch(pin)
+
+        mock_gateway_cls.return_value.resolve_cids.assert_called_once_with([123456789012345678])
+        self.assertIsNone(self.source.render_context(pin, self._cached(location) or {}))
+        self.assertTrue(_fresh_after(location, timedelta(0)))
+        self.assertFalse(_fresh_after(location, UNKNOWN_CID_STALE_AFTER + timedelta(minutes=1)))
+
+    def test_a_cid_resolved_on_posting_is_read_straight_back(self) -> None:
+        location = _location_with_cid(123456789012345678)
+        pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=location)
+        detail = {"cid": 123456789012345678, "name": "Katz's Delicatessen", "scrape_pending": True}
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.get_place_detail.side_effect = [None, detail]
+            mock_gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(
+                resolved={123456789012345678: (40.72, -73.99)}
+            )
+            self.source.fetch(pin)
+
+        self.assertEqual(self._cached(location), detail)
+
+    def test_a_cid_redata_confirms_has_no_place_is_settled(self) -> None:
+        location = _location_with_cid(123456789012345678)
+        pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=location)
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.get_place_detail.return_value = None
+            mock_gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(
+                unresolvable={123456789012345678}
+            )
             self.source.fetch(pin)
 
         self.assertEqual(self._cached(location), {})
+        self.assertTrue(_fresh_after(location, UNKNOWN_CID_STALE_AFTER + timedelta(minutes=1)))
 
     def test_caches_an_empty_dict_and_skips_the_gateway_when_the_location_has_no_cid(self) -> None:
         location = _location_without_google_place()
@@ -230,6 +271,16 @@ class RedataPlaceDetailsEnrichmentSourceTests(TestCase):
         self.assertEqual(data, detail)
         self.assertEqual(query_key, "123456789012345678")
         mock_gateway_cls.return_value.get_place_detail.assert_called_once_with(123456789012345678)
+
+    def test_enrichment_posts_an_unknown_cid_and_keeps_the_row_briefly(self) -> None:
+        location = _location_with_cid(123456789012345678)
+        with mock.patch(_GATEWAY_PATH) as mock_gateway_cls:
+            mock_gateway_cls.return_value.get_place_detail.return_value = None
+            mock_gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(pending={123456789012345678})
+            self.source.enrich(location)
+
+        mock_gateway_cls.return_value.resolve_cids.assert_called_once_with([123456789012345678])
+        self.assertFalse(_fresh_after(location, UNKNOWN_CID_STALE_AFTER + timedelta(minutes=1)))
 
     def test_fetch_raises_a_gateway_failure_rather_than_answering_nothing_found(self) -> None:
         """Returning None here is cached as "no details" for the whole cache term (P187)."""

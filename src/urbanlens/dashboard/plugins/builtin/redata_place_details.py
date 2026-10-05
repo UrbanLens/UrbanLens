@@ -3,6 +3,7 @@ This plugin reads it back via a second, independent REData endpoint - ``RedataCi
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature
@@ -21,6 +22,11 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
+#: How soon a CID REData had never seen is asked about again, once it has been posted for resolution.
+UNKNOWN_CID_STALE_AFTER = timedelta(days=1)
+#: Marks a cached answer as "posted for resolution, not answered yet" rather than "no details".
+_RESOLUTION_PENDING = "resolution_pending"
+
 #: Human-readable provider name for every MediaItem this plugin emits.
 _SOURCE_NAME = "Google Maps (REData)"
 
@@ -28,6 +34,40 @@ _SOURCE_NAME = "Google Maps (REData)"
 #: capped - REData can return dozens per popular place, and this panel's job is a quick glance, not a
 #: Google Maps clone (see the module docstring).
 _MAX_PHOTOS = 3
+
+
+def place_detail(cid: int) -> dict[str, Any]:
+    """REData's place detail for a CID, posting a CID it has never seen for resolution.
+
+    REData answers ``404`` for a CID nobody has posted to ``POST /places/resolve-cids/``; a place with
+    no location is a confirmed answer from that endpoint instead.
+
+    Args:
+        cid: The Google Maps CID.
+
+    Returns:
+        The detail payload; ``{}`` when REData confirmed the CID has no place; or a
+        :data:`_RESOLUTION_PENDING` marker while REData resolves it.
+
+    Raises:
+        GatewayRequestError: REData could not be asked.
+    """
+    from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
+
+    gateway = RedataCidGateway()
+    detail = gateway.get_place_detail(cid)
+    if detail is not None:
+        return detail
+    result = gateway.resolve_cids([cid])
+    if cid in result.unresolvable:
+        return {}
+    if cid in result.resolved:
+        return gateway.get_place_detail(cid) or {_RESOLUTION_PENDING: True}
+    return {_RESOLUTION_PENDING: True}
+
+
+def _stale_after(data: dict | None) -> timedelta | None:
+    return UNKNOWN_CID_STALE_AFTER if data and data.get(_RESOLUTION_PENDING) else None
 
 
 def _coerce_cid(cid_value: Any) -> int | None:
@@ -61,7 +101,6 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
     def fetch(self, pin: Pin) -> None:
         """Read REData's cached deep-scrape record for the pin's CID."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
 
         location = pin.location
         cid = location.cid if location is not None else None
@@ -70,8 +109,8 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
             return
 
         cid_int = int(cid)
-        detail = RedataCidGateway().get_place_detail(cid_int)
-        LocationCache.set(pin.location, self.cache_source, detail or {}, query_key=str(cid_int))
+        detail = place_detail(cid_int)
+        LocationCache.set(pin.location, self.cache_source, detail, query_key=str(cid_int), stale_after=_stale_after(detail))
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the compact card from a cached place-detail payload."""
@@ -162,13 +201,15 @@ class RedataPlaceDetailsEnrichmentSource(LocationCacheEnrichmentSource):
         Raises:
             GatewayRequestError: REData could not be asked, so there is no answer to cache.
         """
-        from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
-
         cid = location.cid
         if cid is None:
             return None, ""
         cid_int = int(cid)
-        return RedataCidGateway().get_place_detail(cid_int), str(cid_int)
+        return place_detail(cid_int), str(cid_int)
+
+    def stale_after(self, data: dict | None) -> timedelta | None:
+        """A CID still being resolved is asked about again soon rather than kept for the whole window."""
+        return _stale_after(data)
 
 
 class RedataPlaceDetailsPlugin(UrbanLensPlugin):

@@ -108,7 +108,9 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # Deliberately conservative since this rate limiter has no cross-service shared-budget
         # concept and redata_api already draws from the same pool.
         calls_per_minute=20,
-        calls_per_day=None,
+        # REData's whole Google Places budget is 160 uncached calls a UTC day, shared by every key and its own CID
+        # resolution; it asks each client for about 40 (REData docs/infrastructure-2026-10-02-replies.md, item 3).
+        calls_per_day=40,
         notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
     ),
     "redata_photos": ServiceDefaults(
