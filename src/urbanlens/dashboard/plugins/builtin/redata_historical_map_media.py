@@ -42,25 +42,55 @@ class HistoricalMapMediaSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, {"maps": maps}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached map matches into gallery tiles. Sheets without a preview image are skipped."""
+        """Turn cached map matches into gallery tiles. Sheets without a preview image are skipped.
+
+        Args:
+            data: This source's cached ``{"maps": [...]}``, each a ``/maps/`` match whose catalogue record is under ``sheet``.
+
+        Returns:
+            One tile per sheet with an image to show.
+        """
         items = []
-        for row in (data or {}).get("maps") or []:
-            image_url = row.get("thumbnail_url") or row.get("image_url") or ""
-            if not image_url:
+        for match in (data or {}).get("maps") or []:
+            sheet = match.get("sheet") if isinstance(match, dict) else None
+            if not isinstance(sheet, dict):
                 continue
-            title = row.get("title") or "Historical map"
-            if row.get("date_text"):
-                title = f"{title} ({row['date_text']})"
+            service = _image_service(sheet)
+            thumb_url = sheet.get("thumbnail_url") or (f"{service}/full/!400,400/0/default.jpg" if service else "")
+            if not thumb_url:
+                continue
+            title = sheet.get("title") or "Historical map"
+            if sheet.get("date_text"):
+                title = f"{title} ({sheet['date_text']})"
             items.append(
                 MediaItem(
-                    url=image_url,
-                    thumb_url=image_url,
+                    url=f"{service}/full/!{_FULL_VIEW_PIXELS},{_FULL_VIEW_PIXELS}/0/default.jpg" if service else thumb_url,
+                    thumb_url=thumb_url,
                     caption=title,
-                    source=row.get("attribution") or "Historical map",
-                    page_url=row.get("landing_page_url") or "",
+                    source=sheet.get("attribution") or "Historical map",
+                    page_url=sheet.get("landing_page_url") or "",
                 ),
             )
         return items
+
+
+#: Longest edge of the scan the gallery's full view asks for. A whole sheet is tens of megapixels.
+_FULL_VIEW_PIXELS = 1600
+
+
+def _image_service(sheet: dict) -> str:
+    """The sheet's IIIF image service base, or ``""`` when it has none.
+
+    ``!w,h`` sizing reads the same in IIIF Image API 2 and 3, so the base serves either version.
+
+    Args:
+        sheet: REData's ``MapSheetSerializer`` row.
+
+    Returns:
+        The service URL without ``/info.json``.
+    """
+    info = str(sheet.get("iiif_info_url") or "")
+    return info.removesuffix("/info.json") if info.endswith("/info.json") else ""
 
 
 class HistoricalMapMediaPlugin(UrbanLensPlugin):
