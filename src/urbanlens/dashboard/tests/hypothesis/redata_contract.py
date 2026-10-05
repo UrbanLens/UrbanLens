@@ -19,6 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 VENDORED_SCHEMA = Path(__file__).parent / "fixtures" / "redata_openapi.json"
+#: REData's Overture shard boxes (``parcels.services.overture.shards.US_STATE_BBOXES``), vendored by
+#: ``bin/vendor_redata_schema.py --shards`` from the same REData as ``VENDORED_SCHEMA``.
+VENDORED_OVERTURE_SHARDS = Path(__file__).parent / "fixtures" / "redata_overture_shards.json"
 
 
 @dataclass(frozen=True, slots=True)

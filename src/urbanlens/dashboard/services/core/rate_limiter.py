@@ -232,7 +232,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="REData Buildings",
         calls_per_minute=20,
         calls_per_day=None,
-        notes="Overture building footprints near a point via GET /buildings/, from REData's own Overture mirror (US only). Read by the boundary chain and the Building Characteristics panel. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.boundaries.overture.",
+        notes="Overture building footprints near a point via GET /buildings/, from REData's own Overture mirror, where its synced US shards cover the point. Read by the boundary chain and the Building Characteristics panel. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.boundaries.overture.",
     ),
     "redata_historical_maps": ServiceDefaults(
         display_name="REData Historical Maps",
@@ -262,7 +262,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # (it does not publish one).
         calls_per_minute=20,
         calls_per_day=500,
-        notes="Overture's public GeoParquet release via services.apis.locations.boundaries.overture_maps, read only outside the US; REData's mirror answers inside it. Free public dataset, but its STAC index rate-limits us under load - see P110.",
+        notes="Overture's public GeoParquet release via services.apis.locations.boundaries.overture_maps, read only where REData's mirror holds nothing (outside its synced US shards); REData answers the rest. Free public dataset, but its STAC index rate-limits us under load - see P110.",
         billable=False,
     ),
     "openweathermap": ServiceDefaults(

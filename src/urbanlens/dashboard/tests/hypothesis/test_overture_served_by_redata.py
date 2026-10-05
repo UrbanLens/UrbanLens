@@ -53,6 +53,14 @@ _SOURCE = "overture_building_attributes"
 _INSIDE = (38.8895, -77.0075)
 #: Paris, outside every US box.
 _ABROAD = (48.8584, 2.2945)
+#: Inside ``is_usa_coordinates``' generous boxes but outside every shard REData syncs, so REData holds nothing there.
+_OUTSIDE_EVERY_SHARD = {
+    "Montreal": (45.5017, -73.567),
+    "Nassau": (25.04, -77.35),
+    "Shemya, Alaska, west of the antimeridian": (52.72, 174.11),
+}
+#: Inside Alaska's padded shard but outside REData's US boxes, where its ``overture`` providers are not applicable.
+_YUKON = (60.0, -129.5)
 
 _CAPITOL_RING = [[-77.01, 38.888], [-77.01, 38.891], [-77.005, 38.891], [-77.005, 38.888], [-77.01, 38.888]]
 #: A larger footprint also containing the point; the smaller one is the building.
@@ -629,6 +637,114 @@ class OutsideTheUsTests(RedataConfiguredMixin, TestCase):
 
         self.assertEqual(asked, [])
         self.assertIsNotNone(typed["building"])
+
+
+def _square_around(latitude: float, longitude: float) -> dict[str, Any]:
+    """A small building footprint containing a coordinate, as the public release's GeoDataFrame yields it."""
+    d = 0.0005
+    ring = [
+        [longitude - d, latitude - d],
+        [longitude - d, latitude + d],
+        [longitude + d, latitude + d],
+        [longitude + d, latitude - d],
+        [longitude - d, latitude - d],
+    ]
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Polygon", "coordinates": [ring]},
+        "properties": {"class": "residential", "subtype": "residential", "names": {"primary": "Here"}},
+    }
+
+
+class OutsideEveryShardTests(RedataConfiguredMixin, TestCase):
+    """Where REData syncs no Overture shard it holds nothing, so the public release answers, as it did before P110."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        _reset_public_reader()
+        self.addCleanup(_reset_public_reader)
+        latest = mock.patch("overturemaps.core.get_latest_release", return_value="2026-09-23.1")
+        latest.start()
+        self.addCleanup(latest.stop)
+
+    def test_the_public_release_answers_outside_every_shard_and_redata_is_not_asked(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overture import OvertureProvider
+
+        for place, (latitude, longitude) in _OUTSIDE_EVERY_SHARD.items():
+            with (
+                self.subTest(place),
+                _redata_answers({}) as asked,
+                mock.patch(f"{_MAPS}._intersecting_files", return_value=["bucket/one.parquet"]),
+                mock.patch(f"{_MAPS}._read_files", return_value=[_square_around(latitude, longitude)]),
+            ):
+                attributes = OvertureProvider().get_building_attributes(latitude, longitude)
+                typed = _overture_step().get_typed_boundaries(latitude, longitude)
+
+                self.assertEqual(asked, [])
+                assert attributes is not None
+                self.assertEqual(attributes["primary_name"], "Here")
+                self.assertIsNotNone(typed["building"])
+
+    def test_the_panel_is_scheduled_outside_every_shard_without_redata(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.overture_building_attributes import (
+            OvertureBuildingAttributesPanelSource,
+        )
+
+        profile = baker.make(User).profile
+        for place, (latitude, longitude) in _OUTSIDE_EVERY_SHARD.items():
+            pin: Pin = baker.make_recipe(
+                "dashboard.pin",
+                profile=profile,
+                location=baker.make("dashboard.Location", latitude=latitude, longitude=longitude),
+            )
+            with self.subTest(place), mock.patch.object(app_settings, "redata_api_url", None):
+                self.assertTrue(OvertureBuildingAttributesPanelSource().gate(pin))
+
+
+class TheGateFollowsRedatasShardsTests(SimpleTestCase):
+    """``served_by_redata`` holds only where REData both applies its ``overture`` providers and syncs a shard."""
+
+    def test_the_capitol_is_redatas_and_paris_is_not(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overture import served_by_redata
+
+        self.assertTrue(served_by_redata(*_INSIDE))
+        self.assertFalse(served_by_redata(*_ABROAD))
+
+    def test_points_outside_every_shard_are_not_redatas(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overture import served_by_redata
+        from urbanlens.dashboard.services.geo.geo_filter import is_usa_coordinates
+
+        for place, (latitude, longitude) in _OUTSIDE_EVERY_SHARD.items():
+            with self.subTest(place):
+                self.assertTrue(is_usa_coordinates(latitude, longitude), "the case must sit inside the old gate")
+                self.assertFalse(served_by_redata(latitude, longitude))
+
+    def test_a_padded_shard_edge_outside_redatas_us_boxes_is_not_redatas(self) -> None:
+        """REData answers ``not_applicable`` there, so it is not asked."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.overture import served_by_redata
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata_overture_shards import (
+            REDATA_OVERTURE_SHARD_BBOXES,
+        )
+
+        min_lon, min_lat, max_lon, max_lat = REDATA_OVERTURE_SHARD_BBOXES["02"]
+        self.assertTrue(min_lat <= _YUKON[0] <= max_lat and min_lon <= _YUKON[1] <= max_lon)
+        self.assertFalse(served_by_redata(*_YUKON))
+
+    def test_the_public_reader_reads_a_bbox_outside_every_shard(self) -> None:
+        _reset_public_reader()
+        self.addCleanup(_reset_public_reader)
+        latitude, longitude = _OUTSIDE_EVERY_SHARD["Montreal"]
+        bbox = (longitude - 0.001, latitude - 0.001, longitude + 0.001, latitude + 0.001)
+        with (
+            mock.patch.object(OvertureMapsGateway, "_reserve_call_budget", return_value=1),
+            mock.patch(f"{_MAPS}._finalize_call"),
+            mock.patch(f"{_MAPS}._intersecting_files", return_value=["bucket/one.parquet"]),
+            mock.patch(f"{_MAPS}._read_files", return_value=[]) as read,
+            mock.patch("overturemaps.core.get_latest_release", return_value="2026-09-23.1"),
+        ):
+            OvertureMapsGateway().get_buildings(bbox)
+
+        read.assert_called_once()
 
 
 class ThePublicReaderRefusesTheUsTests(SimpleTestCase):

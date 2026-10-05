@@ -15,12 +15,16 @@ or from any deployment, which serves it without a key::
 
 Then::
 
-    uv run python bin/vendor_redata_schema.py /tmp/redata.json --revision "release/0.3.0 621e98c8"
+    uv run python bin/vendor_redata_schema.py /tmp/redata.json --revision "release/0.3.1 84b3c436" --shards ../REData
+
+``--shards`` also vendors REData's Overture shard boxes (``parcels.services.overture.shards.US_STATE_BBOXES``) from that
+checkout, which must be at the same revision. ``OvertureShardTableTests`` holds UrbanLens's routing table to them.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import pathlib
 import sys
@@ -29,7 +33,10 @@ from typing import Any
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
-from urbanlens.dashboard.tests.hypothesis.redata_contract import READS, VENDORED_SCHEMA
+from urbanlens.dashboard.tests.hypothesis.redata_contract import READS, VENDORED_OVERTURE_SHARDS, VENDORED_SCHEMA
+
+#: Where REData keeps the boxes its Overture sync is sharded by, relative to a REData checkout.
+_SHARDS_SOURCE = "src/redata/parcels/services/overture/shards.py"
 
 #: Keys that describe rather than constrain; dropping them keeps the vendored file reviewable.
 _PROSE_KEYS = frozenset({"description", "summary", "example", "examples", "x-spec-enum-id"})
@@ -120,6 +127,35 @@ def trimmed(schema: dict[str, Any], revision: str) -> dict[str, Any]:
     )
 
 
+def overture_shards(checkout: pathlib.Path, revision: str) -> dict[str, Any]:
+    """REData's Overture shard boxes, read from its source without importing it.
+
+    Args:
+        checkout: A REData checkout.
+        revision: Which REData the checkout is, recorded in the output.
+
+    Returns:
+        The vendored document: ``US_STATE_BBOXES`` as ``(min_lon, min_lat, max_lon, max_lat)`` per FIPS code.
+
+    Raises:
+        SystemExit: The source no longer assigns ``US_STATE_BBOXES`` a literal.
+    """
+    tree = ast.parse((checkout / _SHARDS_SOURCE).read_text())
+    target: ast.expr
+    value: ast.expr | None
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign):
+            target, value = node.target, node.value
+        elif isinstance(node, ast.Assign):
+            target, value = node.targets[0], node.value
+        else:
+            continue
+        if isinstance(target, ast.Name) and target.id == "US_STATE_BBOXES" and value is not None:
+            boxes = ast.literal_eval(value)
+            return {"x-redata-revision": revision, "source": _SHARDS_SOURCE, "US_STATE_BBOXES": {key: list(boxes[key]) for key in sorted(boxes)}}
+    raise SystemExit(f"{_SHARDS_SOURCE} assigns no literal US_STATE_BBOXES")
+
+
 def main() -> int:
     """Read a full schema, write the vendored one.
 
@@ -129,11 +165,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("schema", type=pathlib.Path, help="REData's full OpenAPI document, as JSON")
     parser.add_argument("--revision", required=True, help="which REData it came from, e.g. 'release/0.3.0 621e98c8'")
+    parser.add_argument("--shards", type=pathlib.Path, metavar="REDATA_CHECKOUT", help="also vendor the Overture shard boxes from this REData checkout")
     args = parser.parse_args()
 
     document = trimmed(json.loads(args.schema.read_text()), args.revision)
     VENDORED_SCHEMA.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n")
     print(f"wrote {VENDORED_SCHEMA.relative_to(REPO_ROOT)}: {len(document['paths'])} paths, {len(document['components']['schemas'])} components")
+    if args.shards is not None:
+        shards = overture_shards(args.shards, args.revision)
+        VENDORED_OVERTURE_SHARDS.write_text(json.dumps(shards, indent=1, sort_keys=True) + "\n")
+        print(f"wrote {VENDORED_OVERTURE_SHARDS.relative_to(REPO_ROOT)}: {len(shards['US_STATE_BBOXES'])} shards")
     return 0
 
 

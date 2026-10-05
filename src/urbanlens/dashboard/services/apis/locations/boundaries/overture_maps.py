@@ -1,6 +1,6 @@
 """Gateway for Overture Maps' public GeoParquet release, for coordinates outside REData's mirror.
 
-Callers go through ``boundaries.overture.OvertureProvider``, which answers US coordinates from REData.
+Callers go through ``boundaries.overture.OvertureProvider``, which answers coordinates REData's mirror covers from REData.
 """
 
 from __future__ import annotations

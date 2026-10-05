@@ -12,7 +12,7 @@ import json
 from typing import Any
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.tests.hypothesis.redata_contract import READS, VENDORED_SCHEMA, Read
+from urbanlens.dashboard.tests.hypothesis.redata_contract import READS, VENDORED_OVERTURE_SHARDS, VENDORED_SCHEMA, Read
 
 _JSON = "application/json"
 
@@ -190,3 +190,24 @@ class IncidentVocabularyTests(SimpleTestCase):
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import CRIME_INCIDENT_CATEGORIES
 
         self.assertEqual(set(CRIME_INCIDENT_CATEGORIES) - self.published, set())
+
+
+class OvertureShardTableTests(SimpleTestCase):
+    """REData syncs Overture only inside its state shard boxes, and UrbanLens decides who answers by the same boxes."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.vendored = json.loads(VENDORED_OVERTURE_SHARDS.read_text())
+
+    def test_the_routing_table_is_redatas(self) -> None:
+        """A box REData widens or adds sends UrbanLens's reads there to REData only once this table says so."""
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata_overture_shards import (
+            REDATA_OVERTURE_SHARD_BBOXES,
+        )
+
+        published = {key: tuple(box) for key, box in self.vendored["US_STATE_BBOXES"].items()}
+        self.assertEqual(REDATA_OVERTURE_SHARD_BBOXES, published)
+
+    def test_the_table_is_vendored_from_the_same_redata_as_the_schema(self) -> None:
+        self.assertEqual(self.vendored["x-redata-revision"], _load()["info"]["x-redata-revision"])

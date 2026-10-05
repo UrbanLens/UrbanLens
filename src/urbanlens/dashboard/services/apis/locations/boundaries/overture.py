@@ -1,7 +1,7 @@
-"""Overture Maps buildings and places for a coordinate, from REData's mirror inside the US and the public release elsewhere.
+"""Overture Maps buildings and places for a coordinate, from REData's mirror where it holds them and the public release elsewhere.
 
-REData syncs Overture's themes for every US state and territory and serves them from ``/buildings/`` and the
-``overture`` points-of-interest provider, so a coordinate there never reaches Overture itself, even when REData
+REData syncs Overture's themes by padded US state and territory boxes and serves them from ``/buildings/`` and the
+``overture`` points-of-interest provider, so a coordinate it covers never reaches Overture itself, even when REData
 has nothing or is not configured.
 
 The public reader (``overture_maps``) is imported only when used: importing it loads pyarrow.
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, best_containing_polygon
+from urbanlens.dashboard.services.apis.locations.boundaries.redata_overture_shards import in_redata_overture_shard
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
 from urbanlens.dashboard.services.geo.geo_filter import is_usa_coordinates
@@ -32,16 +33,18 @@ _BUILDING_SEARCH_RADIUS_METERS = 10.0
 def served_by_redata(latitude: float, longitude: float) -> bool:
     """Whether REData's Overture mirror covers a coordinate, so the public release is not read for it.
 
-    The US-and-territories test REData gates its own Overture providers on, with the same boxes.
+    REData answers its ``overture`` providers only where its ``is_usa_coordinates`` holds (the same boxes as ours),
+    and holds rows only inside the shards it syncs. Those boxes are wider than the US in places (Canada and Mexico
+    near the border, the Bahamas) and miss the western Aleutians, so both must hold.
 
     Args:
         latitude: WGS-84 latitude.
         longitude: WGS-84 longitude.
 
     Returns:
-        True inside the US and its territories.
+        True where REData both applies its Overture providers and syncs a shard.
     """
-    return is_usa_coordinates(latitude, longitude)
+    return is_usa_coordinates(latitude, longitude) and in_redata_overture_shard(latitude, longitude)
 
 
 @dataclass(slots=True)
