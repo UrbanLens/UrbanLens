@@ -51,7 +51,7 @@ class TheCheckIsAReservationTests(TestCase):
 
     def test_a_call_in_flight_holds_its_place(self) -> None:
         upstream_calls: list[str] = []
-        nested: list[list[tuple[str, float]]] = []
+        nested: list[list[tuple[str, float]] | None] = []
 
         def classify(_request):  # noqa: ANN001, ANN202
             upstream_calls.append("call")
@@ -66,7 +66,7 @@ class TheCheckIsAReservationTests(TestCase):
             first = vision.classify_photo(b"first")
 
         self.assertEqual(first, [("mill", 0.9)])
-        self.assertEqual(nested, [[]], "the second caller was let through")
+        self.assertEqual(nested, [None], "the second caller was let through")
         self.assertEqual(len(upstream_calls), 1, f"a limit of 1 per minute made {len(upstream_calls)} provider calls")
 
     def test_the_reserved_row_records_the_outcome(self) -> None:
