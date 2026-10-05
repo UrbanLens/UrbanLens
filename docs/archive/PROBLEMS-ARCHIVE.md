@@ -23707,3 +23707,36 @@ Seventeen of the nineteen failed before the fix; the last two guard against the 
 `test_bulk_followup_chunk_tasks.py` now drives the chunk tasks through the service, and
 `test_wayback_archive.py::test_a_failed_lookup_frees_the_url_for_the_next_task_once_it_is_due` keeps its lock check
 under the shared wait.
+
+## RESOLVED 2026-10-05: A Microsoft building-footprints lookup held a whole part in memory twice and parsed every building in it
+
+`id: P309` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading a week of dev's ApiCallLog`
+
+**What was wrong.** `MicrosoftBuildingFootprintsGateway.get_buildings` downloaded a zoom-9 quadkey's part whole, then
+decompressed it whole and split the text into a list of lines, so the decompressed text was held twice. P301 found the
+same shape in Google's Open Buildings. The links file lists 178 parts over 64 MiB, the largest Tokyo's at 292 MB
+compressed and one in the US at 170 MB. A lookup there would have held gigabytes. On dev, the Hudson Valley's 16.3 MB
+part (170,824 buildings) peaked at 175.8 MiB and took 17.3 s, nearly all of it parsing every building's JSON to keep
+the few near the point. Dev downloaded its neighbour, quadkey 030232311, 208 times in a week.
+
+**Fix.** P301's shard reading moved to `boundaries/shards.py::read_shard`, which both gateways use. It reads a shard
+up to a cap, and remembers one that is missing or past the cap for 30 days. A footprints part listed above 64 MiB is
+skipped without a request, from the links file's `Size`; one that says nothing is read no further than the cap. A part
+is decompressed a line at a time, and a line whose first vertex lies more than 0.05° from the box is skipped unparsed.
+On dev, the same lookup peaked at 51.8 MiB and took 0.91 s. For 20 points taken from the part's own buildings, it
+returned exactly what parsing every line returned.
+
+**Not fixed.** Each lookup still downloads its part: a usable one is not kept between lookups. That now costs about a
+second and 16 MB of bandwidth from Microsoft's public storage per boundary resolution in that area.
+
+**Tests.** `test_microsoft_building_footprints_parts.py`:
+- a small part is read;
+- a part the links file lists past the cap is not asked for;
+- a part past the cap by its headers is not read, and one with no stated size is read no further than the cap;
+- a missing part is asked for once;
+- a part's text is never held whole (failed with a 23 MB peak against a 4 MB bound);
+- a building far from the box is not parsed (failed with 501 parses);
+- a building reaching into the box from outside is kept;
+- the real session passes `stream`.
+
+Six failed before the fix. `test_google_open_buildings_shards.py` passes unchanged through the shared reader.

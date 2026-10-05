@@ -8,15 +8,35 @@ from dataclasses import dataclass, field
 import gzip
 import io
 import json
+import logging
 import math
+import re
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, feature_intersects_bbox, validate_bbox
+from urbanlens.dashboard.services.apis.locations.boundaries.shards import read_shard
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+
     from django.contrib.gis.geos import Polygon
+
+#: Parts run to 292 MB compressed where the dataset is dense (Tokyo's; one in the US is 170 MB); one past this is skipped.
+MAX_PART_BYTES = 64 * 1024 * 1024
+_SIZE_UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
+#: Far wider than any building, so one whose first vertex lies further than this from the box cannot overlap it.
+_NEAR_DEGREES = 0.05
+_FIRST_VERTEX = re.compile(rb"\[\s*(-?[0-9][0-9.eE+-]*)\s*,\s*(-?[0-9][0-9.eE+-]*)")
+
+logger = logging.getLogger(__name__)
+
+
+def _listed_bytes(size: str) -> float | None:
+    """The links file's ``Size`` (``74.7KB``, ``16.0MB``) in bytes, or None when it is not one."""
+    match = re.fullmatch(r"([0-9.]+)\s*(B|KB|MB|GB)", size.strip())
+    return float(match[1]) * _SIZE_UNITS[match[2]] if match else None
 
 
 def _lonlat_to_tile(lon: float, lat: float, zoom: int) -> tuple[int, int]:
@@ -91,21 +111,15 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
 
         features: list[dict] = []
         for row in matches:
-            # Runs inside the boundary panel-fetch Celery task (via BoundaryProviderChain, see
-            # services/external_data.py), whose soft time limit is the real budget - the (connect,
-            # read) tuple just keeps a dead connection from eating that budget while a genuinely
-            # slow shard download may keep trickling within it.
-            response = self.session.get(row["Url"], timeout=(5, 60))
-            response.raise_for_status()
-            raw = gzip.decompress(response.content)
-            for line in raw.splitlines():
-                stripped_line = line.strip()
-                if not stripped_line:
-                    continue
-                parsed = json.loads(stripped_line)
-                feature = parsed if parsed.get("type") == "Feature" else {"type": "Feature", "geometry": parsed, "properties": {}}
-                if feature_intersects_bbox(feature, bbox):
-                    features.append(feature)
+            listed = _listed_bytes(row.get("Size", ""))
+            if listed is not None and listed > MAX_PART_BYTES:
+                logger.info("Skipping the Microsoft footprints part %s: the links file lists it at %s", row["Url"], row["Size"])
+                continue
+            part = read_shard(self.session, row["Url"], max_bytes=MAX_PART_BYTES, what="A Microsoft footprints part")
+            if part is None:
+                continue
+            with gzip.GzipFile(fileobj=io.BytesIO(part)) as lines:
+                features.extend(_features_within(lines, bbox))
         return features
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
@@ -114,3 +128,28 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
             latitude,
             longitude,
         )
+
+
+def _features_within(lines: Iterable[bytes], bbox: BBox) -> Iterator[dict]:
+    """The features among a part's GeoJSON lines that overlap *bbox*, read one line at a time."""
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or _far_from(stripped, bbox):
+            continue
+        parsed = json.loads(stripped)
+        feature = parsed if parsed.get("type") == "Feature" else {"type": "Feature", "geometry": parsed, "properties": {}}
+        if feature_intersects_bbox(feature, bbox):
+            yield feature
+
+
+def _far_from(line: bytes, bbox: BBox) -> bool:
+    """Whether a GeoJSON line's first vertex lies too far from *bbox* for its building to overlap it."""
+    match = _FIRST_VERTEX.search(line)
+    if match is None:
+        return False
+    try:
+        lon, lat = float(match[1]), float(match[2])
+    except ValueError:
+        return False
+    min_lon, min_lat, max_lon, max_lat = bbox
+    return not (min_lon - _NEAR_DEGREES <= lon <= max_lon + _NEAR_DEGREES and min_lat - _NEAR_DEGREES <= lat <= max_lat + _NEAR_DEGREES)
