@@ -426,12 +426,15 @@ class RolledBackCreationTests(_BootstrapCase):
         class _AbortError(Exception):
             pass
 
-        with self.upstreams.serving(), tasks_run_inline(), self.assertRaises(_AbortError), transaction.atomic():
-            pin = create_pin_for_profile(self.profile, name="HRSH", latitude=CAMPUS_LAT, longitude=CAMPUS_LNG).pin
-            location_id = pin.location_id
-            raise _AbortError
+        def create_then_roll_back() -> None:
+            with transaction.atomic():
+                pin = create_pin_for_profile(self.profile, name="HRSH", latitude=CAMPUS_LAT, longitude=CAMPUS_LNG).pin
+                raise _AbortError(pin.location_id)
 
-        self.assertEqual(bootstrap.locations_bootstrapping([location_id]), set())
+        with self.upstreams.serving(), tasks_run_inline(), self.assertRaises(_AbortError) as aborted:
+            create_then_roll_back()
+
+        self.assertEqual(bootstrap.locations_bootstrapping([aborted.exception.args[0]]), set())
 
 
 class InFlightDeduplicationTests(_BootstrapCase):

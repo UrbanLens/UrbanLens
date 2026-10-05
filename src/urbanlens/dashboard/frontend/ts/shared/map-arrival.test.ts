@@ -13,7 +13,10 @@ beforeEach(() => {
     imports = 0;
     assigned = [];
     window.toastr = { ...realToastr, success: (message: string) => void toasts.push(message) } as typeof window.toastr;
-    Object.defineProperty(window, "location", { value: { assign: (url: string) => void assigned.push(url) }, configurable: true });
+    Object.defineProperty(window, "location", {
+        value: { origin: "https://urbanlens.test", assign: (url: string) => void assigned.push(url) },
+        configurable: true,
+    });
     document.body.innerHTML = `
       <button id="import-pins-button" type="button">Import</button>
       <dialog id="pin-suggestions-intro-dialog"><button id="pin-suggestions-intro-accept" type="button">View suggestions</button></dialog>`;
@@ -46,6 +49,12 @@ describe("arriving at the map", () => {
         expect(intro().open).toBe(true);
         document.getElementById("pin-suggestions-intro-accept")!.click();
         expect(assigned).toEqual(["/dashboard/memories/locations/?onboarding=1"]);
+    });
+
+    test("a suggestions URL on another site is not followed", () => {
+        handleMapArrival("", { showPinSuggestionsIntro: true, suggestionsUrl: "https://elsewhere.test/phish/" });
+        document.getElementById("pin-suggestions-intro-accept")!.click();
+        expect(assigned).toEqual([]);
     });
 
     test("returning from accepting every suggestion confirms they are on the map", () => {

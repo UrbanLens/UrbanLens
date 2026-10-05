@@ -299,10 +299,10 @@ class ExternalWikiArticleRevisionDetailRouteTests(_WikiFixture):
     def setUp(self) -> None:
         super().setUp()
         self.other_editor = baker.make("auth.User").profile
-        _article, self.theirs = save_article_checked(
+        _, self.theirs = save_article_checked(
             editor=self.other_editor, content="Built 1890.", base_revision_id=None, wiki=self.wiki
         )
-        _article, self.mine = save_article_checked(
+        _, self.mine = save_article_checked(
             editor=self.owner, content="Built 1891.", base_revision_id=self.theirs.pk, wiki=self.wiki
         )
         self.url = reverse("external_api:wikis.article.revisions.detail", args=[self.slug, self.mine.pk])

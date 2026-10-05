@@ -12,6 +12,7 @@ from django.http import Http404, HttpRequest, HttpResponse, HttpResponseBadReque
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import URLPattern, reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 
 from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
@@ -109,8 +110,10 @@ def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conce
 
 
 def _with_query_string(url: str, request: HttpRequest) -> str:
+    """``url`` with the request's own query string as sent; ``url`` alone should the result point off this site."""
     query = request.META.get("QUERY_STRING", "")
-    return f"{url}?{query}" if query else url
+    target = f"{url}?{query}" if query else url
+    return target if url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}) else url
 
 
 def _unstored[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:

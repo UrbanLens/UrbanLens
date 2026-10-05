@@ -607,13 +607,23 @@ function expandIncludes(html: string, files: Map<string, string>, stack: string[
     });
 }
 
+/** ``html`` with every script block removed, repeated until none is left, closing tags in any spacing included. */
+function withoutScripts(html: string): string {
+    let previous: string;
+    let current = html;
+    do {
+        previous = current;
+        current = current.replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "");
+    } while (current !== previous);
+    return current;
+}
+
 function toFragment(html: string): { className: string; html: string } {
     const className = /<body\b[^>]*\bclass\s*=\s*(['"])([\s\S]*?)\1/i.exec(html)?.[2] ?? "";
-    const fragment = html
+    const fragment = withoutScripts(html)
         .replace(/<!DOCTYPE[^>]*>/gi, "")
         .replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, "")
         .replace(/<\/?(?:html|body)\b[^>]*>/gi, "")
-        .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
         .replace(/<link\b[^>]*>/gi, "")
         .replace(/<meta\b[^>]*>/gi, "");
     return { className: normalizeSpace(className), html: fragment };
@@ -973,7 +983,7 @@ async function withChrome<T>(fn: (send: (method: string, params?: object) => Pro
     try {
         let port = "";
         let socketPath = "";
-        for (let attempt = 0; attempt < 80 && !socketPath; attempt++) {
+        for (let attempt = 0; attempt < 80; attempt++) {
             if (existsSync(portFile)) {
                 const parts = readFileSync(portFile, "utf8").trim().split(/\r?\n/);
                 if (parts[0] && parts[1]?.startsWith("/")) {

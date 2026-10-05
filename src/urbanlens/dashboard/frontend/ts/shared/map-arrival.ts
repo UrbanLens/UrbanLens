@@ -17,7 +17,12 @@ export function handleMapArrival(search: string, options: MapArrivalOptions): vo
 
     const intro = document.getElementById("pin-suggestions-intro-dialog");
     if (options.showPinSuggestionsIntro && intro instanceof HTMLDialogElement) intro.showModal();
-    document.getElementById("pin-suggestions-intro-accept")?.addEventListener("click", () => window.location.assign(`${options.suggestionsUrl}?onboarding=1`));
+    document.getElementById("pin-suggestions-intro-accept")?.addEventListener("click", () => {
+        const target = new URL(options.suggestionsUrl, window.location.origin);
+        if (target.origin !== window.location.origin) return;
+        target.searchParams.set("onboarding", "1");
+        window.location.assign(`${target.pathname}${target.search}`);
+    });
 
     if (params.get("suggestions_imported") === "1") toast.success("Your accepted pin suggestions are now on the map.");
 }
