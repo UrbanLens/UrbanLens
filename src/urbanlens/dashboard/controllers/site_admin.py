@@ -22,7 +22,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.views import redirect_to_login
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.http.response import HttpResponseForbidden
 from django.shortcuts import render
@@ -1008,6 +1008,31 @@ def _redata_refusals() -> list[dict]:
     return [{"endpoint": entry.endpoint, "refused_at": datetime.fromtimestamp(entry.refused_at, tz=UTC), "retry_at": datetime.fromtimestamp(entry.retry_at, tz=UTC)} for entry in RedataBreaker().refused_endpoints()]
 
 
+#: An evaluation older than this means the beat task has stopped, which the page says rather than showing old verdicts.
+_PROVIDER_HEALTH_STALE_AFTER = timedelta(minutes=30)
+
+
+def _provider_health() -> dict[str, object]:
+    """The providers ``services.core.provider_health`` is backing off or watching, for the api-limits page.
+
+    Returns:
+        ``unhealthy``: the rows not healthy, each with the calls the gate refused today; ``healthy``: how many are;
+        ``last_evaluated_at``: the newest evaluation, or None before the first; ``stale``: whether that is too old to
+        trust.
+    """
+    from urbanlens.dashboard.models.provider_health import ProviderHealth, ProviderState
+    from urbanlens.dashboard.services.core.provider_health import suppressed_today
+
+    unhealthy = [{"row": row, "suppressed_today": suppressed_today(row.provider)} for row in ProviderHealth.objects.unhealthy().order_by("state", "provider")]
+    last = ProviderHealth.objects.aggregate(last=Max("last_evaluated_at"))["last"]
+    return {
+        "unhealthy": unhealthy,
+        "healthy": ProviderHealth.objects.filter(state=ProviderState.HEALTHY).count(),
+        "last_evaluated_at": last,
+        "stale": last is None or timezone.now() - last > _PROVIDER_HEALTH_STALE_AFTER,
+    }
+
+
 class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """API rate limit configuration page.
 
@@ -1075,6 +1100,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "tabs": tabs,
                 "redata_capabilities": _redata_capabilities(),
                 "redata_refusals": _redata_refusals(),
+                "provider_health": _provider_health(),
             },
         )
 

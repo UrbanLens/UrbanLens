@@ -604,6 +604,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
         "schedule": crontab(hour=5, minute=40),
     },
+    # Backs off and alerts on a provider that is refusing or failing; see services/core/provider_health.py.
+    "provider-health-evaluation": {
+        "task": "urbanlens.dashboard.tasks.evaluate_provider_health_task",
+        "schedule": 5 * 60,
+    },
     # Daily retention sweeps; periods live in SiteSettings.
     "session-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_expired_sessions",

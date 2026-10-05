@@ -138,6 +138,7 @@ problems on its first run is a check somebody switches off.
 | `cleanup_vestigial_assets_task` | MAINTENANCE | beat-driven and site-wide |
 | `delete_expired_safety_checkins` | MAINTENANCE | beat-driven and site-wide |
 | `discard_unretried_failed_uploads` | MAINTENANCE | beat-driven and site-wide |
+| `evaluate_provider_health_task` | MAINTENANCE | beat-driven and site-wide |
 | `evaluate_public_pin_candidates` | MAINTENANCE | beat-driven and site-wide |
 | `hard_delete_expired_accounts` | MAINTENANCE | beat-driven and site-wide |
 | `hard_delete_expired_direct_messages` | MAINTENANCE | beat-driven and site-wide |

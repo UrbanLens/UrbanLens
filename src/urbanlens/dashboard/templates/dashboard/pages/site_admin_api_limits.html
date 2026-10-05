@@ -40,6 +40,61 @@
     </div>
     {% endif %}
 
+    <section class="api-limits-capabilities card" id="provider-health">
+        <div class="card-header">
+            <i class="material-symbols-outlined">monitor_heart</i>
+            <h3>Provider health</h3>
+        </div>
+        <div class="card__body">
+            {% if provider_health.stale %}
+            <p class="api-limits-capabilities-note">
+                {% if provider_health.last_evaluated_at %}
+                Last evaluated {{ provider_health.last_evaluated_at|date:"Y-m-d H:i e" }}. The
+                <code>provider-health-evaluation</code> beat task has stopped running, so what follows is out of date
+                and nothing is being backed off or alerted on.
+                {% else %}
+                Not evaluated yet: the <code>provider-health-evaluation</code> beat task has not run, so nothing is
+                being backed off or alerted on.
+                {% endif %}
+            </p>
+            {% endif %}
+            {% if provider_health.unhealthy %}
+            <p class="api-limits-capabilities-note">
+                These providers are refusing or failing this site. While one is backed off its background calls are
+                paused and live calls are limited to a few every five minutes; when the backoff ends, a few calls
+                decide whether it recovered or backs off for twice as long.
+            </p>
+            <div class="table-scroll">
+                <table class="api-limits-capabilities-table">
+                    <thead>
+                        <tr><th>Provider</th><th>State</th><th>Since</th><th>Paused until</th><th>Last answer</th><th>Refused today</th><th>Why</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for item in provider_health.unhealthy %}
+                        {% with row=item.row %}
+                        <tr>
+                            <td><code>{{ row.provider }}</code></td>
+                            <td>{{ row.get_state_display }}{% if row.cause %} ({{ row.get_cause_display|lower }}){% endif %}</td>
+                            <td>{{ row.episode_started_at|default:row.state_since|date:"Y-m-d H:i e" }}</td>
+                            <td>{% if row.backed_off_until %}{{ row.backed_off_until|date:"Y-m-d H:i e" }}{% else %}-{% endif %}</td>
+                            <td>{% if row.last_ok_at %}{{ row.last_ok_at|date:"Y-m-d H:i e" }}{% else %}none in the last day{% endif %}</td>
+                            <td>{{ item.suppressed_today }}</td>
+                            <td>{{ row.reason }}</td>
+                        </tr>
+                        {% endwith %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% elif not provider_health.stale %}
+            <p class="api-limits-capabilities-note">
+                All {{ provider_health.healthy }} provider{{ provider_health.healthy|pluralize }} called in the last day
+                {{ provider_health.healthy|pluralize:"is,are" }} answering (checked {{ provider_health.last_evaluated_at|date:"H:i e" }}).
+            </p>
+            {% endif %}
+        </div>
+    </section>
+
     <div class="api-limits-grid">
     {% for svc in services %}
     {% with cfg=svc.config %}
