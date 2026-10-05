@@ -210,4 +210,3 @@ still resolves after it is fixed, and the id is never handed out again.
 | P286 | open | 2026-10-04 | A campus pin can lose its own National Register listing, because REData answers a point with the rows last found from it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P304 | open | 2026-10-05 | A Location History file over about 180 MB, or a GPX file over about 60 MB, fails its preview on the time limit | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P316 | open | 2026-10-05 | Nine tests fail under `bin/host_pytest.sh` on `release/v_0_9_0`, from three causes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P317 | open | 2026-10-05 | A Places photo backfill that met a spent budget marks the location done, so its photos are never fetched | [`docs/PROBLEMS.md`](PROBLEMS.md) |

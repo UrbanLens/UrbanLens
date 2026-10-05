@@ -2602,14 +2602,3 @@ both. Not run in a test-runner container (`bin/run_tests.sh`), so whether each i
 
 `test_write_route_smoke` and `test_websocket_credential_scopes` each failed once in a full run under load
 and pass alone, on both branches.
-
-## P317 — A Places photo backfill that met a spent budget marks the location done, so its photos are never fetched
-
-`id: P317` · `status: open` · `updated: 2026-10-05`
-
-`PlacePhotoEnrichmentSource.enrich` (`services/photos/photo_enrichment.py`) catches every
-`GatewayRequestError` per photo download, a `PlacesRateLimitedError` included, and still writes its
-backfill marker after the loop. When the photo list was already cached and REData's Places budget is
-spent, the location is marked as backfilled with none of its photos, and the batch never comes back
-to it. A source outage should stop the loop without writing the marker, as `EnrichmentSource.enrich`'s
-contract says; whether a re-run then duplicates photos already stored has not been checked.

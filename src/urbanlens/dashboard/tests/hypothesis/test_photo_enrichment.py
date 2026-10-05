@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKin
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import PlacesRateLimitedError
 from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
 from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -200,6 +201,61 @@ class PlacePhotoEnrichmentSourceTests(TestCase):
 
         find_mock.assert_not_called()
         self.assertEqual(Image.objects.filter(location=location).count(), 1)
+
+    def test_a_spent_budget_mid_backfill_writes_no_marker(self) -> None:
+        """The marker takes the location out of the backfill for good, so a refused download must not write it (P317)."""
+        location = _make_location()
+        with (
+            mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos", return_value=("place1", ["a", "b"])),
+            mock.patch(
+                f"{_PLACES_MODULE}.download_photo", side_effect=PlacesRateLimitedError("budget spent", retry_after=600)
+            ),
+            self.assertRaises(PlacesRateLimitedError),
+        ):
+            self.source.enrich(location)
+
+        self.assertFalse(LocationCache.objects.filter(location=location, source=self.source.marker_source).exists())
+        self.assertIn(location, Location.objects.filter(self.source.missing_filter()))
+
+    def test_an_unreachable_photo_host_writes_no_marker(self) -> None:
+        location = _make_location()
+        with (
+            mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos", return_value=("place1", ["a"])),
+            mock.patch(f"{_PLACES_MODULE}.download_photo", side_effect=requests.ConnectionError("refused")),
+            self.assertRaises(requests.ConnectionError),
+        ):
+            self.source.enrich(location)
+
+        self.assertFalse(LocationCache.objects.filter(location=location, source=self.source.marker_source).exists())
+
+    def test_a_rerun_after_an_outage_saves_no_photo_twice(self) -> None:
+        location = _make_location()
+        outage = iter([None, PlacesRateLimitedError("budget spent", retry_after=600)])
+
+        def first_run(photo_name: str, *, api_key: str):
+            if (failure := next(outage)) is not None:
+                raise failure
+            return _jpeg_bytes(), "image/jpeg"
+
+        with (
+            mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos", return_value=("place1", ["a", "b", "c"])),
+            mock.patch(f"{_PLACES_MODULE}.download_photo", side_effect=first_run),
+            self.assertRaises(PlacesRateLimitedError),
+        ):
+            self.source.enrich(location)
+        self.assertEqual(Image.objects.filter(location=location).count(), 1)
+
+        with (
+            mock.patch(f"{_PLACES_MODULE}.find_nearest_place_photos") as find_mock,
+            mock.patch(f"{_PLACES_MODULE}.download_photo", return_value=(_jpeg_bytes(), "image/jpeg")) as download_mock,
+        ):
+            self.assertTrue(self.source.enrich(location))
+
+        find_mock.assert_not_called()
+        self.assertEqual([call.args[0] for call in download_mock.call_args_list], ["b", "c"])
+        self.assertEqual(Image.objects.filter(location=location).count(), 3)
+        marker = LocationCache.objects.get(location=location, source=self.source.marker_source)
+        self.assertEqual(marker.data, {"created": 3, "found": 3})
 
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
