@@ -10,13 +10,9 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 
 from urbanlens.dashboard.models.google_place.model import GooglePlace
-from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.core.outages import outages_observed
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
-from urbanlens.dashboard.services.security.redact import redact_coordinate
-from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -219,11 +215,4 @@ class GooglePlaceService:
         return google_place
 
     def _resolve_name(self, latitude: float, longitude: float) -> str | None:
-        name = self.name_resolver.resolve(latitude, longitude)
-        if is_meaningful_name(name):
-            return name
-        try:
-            return GoogleGeocodingGateway(api_key=settings.google_unrestricted_api_key).get_place_name(latitude, longitude)
-        except (OSError, ValueError, RequestCancelledError) as exc:
-            logger.debug("Google place-name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
-            return None
+        return self.name_resolver.resolve(latitude, longitude)

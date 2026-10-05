@@ -6,7 +6,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 import s2sphere
 
 from urbanlens.dashboard.models.cache import GeocodedLocation
@@ -73,6 +73,34 @@ def parse_address_components(address_components: list[dict[str, Any]]) -> dict[s
     return type_map
 
 
+#: Google's statuses that answer the question asked; any other (``OVER_QUERY_LIMIT``, ``REQUEST_DENIED``) is asked again.
+_KEPT_STATUSES = frozenset({"OK", "ZERO_RESULTS"})
+_KEY_MAX_LENGTH = GeocodedLocation._meta.get_field("place_name").max_length or 0  # noqa: SLF001
+_ANSWER_MAX_LENGTH = GeocodedLocation._meta.get_field("json_response").max_length or 0  # noqa: SLF001
+
+
+def _address_key(place_name: str) -> str:
+    return f"address:{place_name}"
+
+
+def _point_key(latitude: float, longitude: float) -> str:
+    return f"latlng:{latitude:.6f},{longitude:.6f}"
+
+
+def _cached_answer(key: str) -> dict | None:
+    """The stored answer under ``key``, or None; an unreadable one is dropped so the next lookup asks again."""
+    row = GeocodedLocation.objects.filter(place_name=key).first()
+    if row is None:
+        return None
+    try:
+        answer = json.loads(row.json_response or "null")
+    except json.JSONDecodeError:
+        logger.exception("Dropping an unreadable cached geocode for %s", key)
+        row.delete()
+        return None
+    return answer if isinstance(answer, dict) else None
+
+
 class CoordinatesNeedNetworkError(LookupError):
     """Only a network lookup could place this URL, and the caller asked for none."""
 
@@ -107,19 +135,9 @@ class GoogleGeocodingGateway(Gateway):
         if not place_name:
             raise ValueError("Place name must be provided to retrieve_place_name.")
 
-        # Check if the geocoded data for the given place name already exists in the database
-        geocoded_location = GeocodedLocation.objects.all().filter(place_name=place_name).first()
-        if geocoded_location:
-            # parse json_response
-            try:
-                return json.loads(geocoded_location.json_response or "null")
-            except json.JSONDecodeError as e:
-                logger.exception('Error decoding cached json_response for %s -> Message: "%s"', place_name, e)
-                logger.exception("json_response: %s", geocoded_location.json_response)
-
-                # Remove it from the cache
-                geocoded_location.delete()
-                return None
+        key = _address_key(place_name)
+        if (cached := _cached_answer(key)) is not None:
+            return cached
 
         if not self.api_key:
             logger.debug("Skipping Google geocoding for %r - no API key configured.", place_name)
@@ -130,7 +148,7 @@ class GoogleGeocodingGateway(Gateway):
             "key": self.api_key,
         }
 
-        return self.get(params)
+        return self.get(params, cache_key=key)
 
     def geocode_coordinates(self, latitude: float, longitude: float) -> dict | None:
         """
@@ -139,25 +157,9 @@ class GoogleGeocodingGateway(Gateway):
         if latitude is None or longitude is None:
             raise ValueError("Latitude and longitude must be provided to retrieve_place_name.")
 
-        # Check if the geocoded data for the given place name already exists in the database
-        geocoded_location = GeocodedLocation.objects.all().filter(latitude=latitude, longitude=longitude).first()
-        if geocoded_location:
-            # parse json_response
-            try:
-                return json.loads(geocoded_location.json_response or "null")
-            except json.JSONDecodeError as e:
-                logger.exception(
-                    'Error decoding json_response for (type: %s, %s -> %s, %s) -> Message: "%s"',
-                    type(latitude),
-                    type(longitude),
-                    redact_coordinate(latitude),
-                    redact_coordinate(longitude),
-                    e,
-                )
-                logger.exception("json_response: %s", geocoded_location.json_response)
-                # Remove it from the cache
-                geocoded_location.delete()
-                return None
+        key = _point_key(latitude, longitude)
+        if (cached := _cached_answer(key)) is not None:
+            return cached
 
         if not self.api_key:
             logger.debug("Skipping Google geocoding for %s, %s - no API key configured.", redact_coordinate(latitude), redact_coordinate(longitude))
@@ -168,14 +170,14 @@ class GoogleGeocodingGateway(Gateway):
             "key": self.api_key,
         }
 
-        return self.get(params)
+        return self.get(params, cache_key=key)
 
-    def get(self, params: dict[str, Any]) -> dict[str, Any] | None:
+    def get(self, params: dict[str, Any], *, cache_key: str | None = None) -> dict[str, Any] | None:
         response = self.session.get(self.base_url, params=params, timeout=60)
         response.raise_for_status()
-        return self.handle_response(response, params)
+        return self.handle_response(response, params, cache_key=cache_key)
 
-    def handle_response(self, response: requests.Response, request_data: dict | None = None) -> dict | None:
+    def handle_response(self, response: requests.Response, request_data: dict | None = None, *, cache_key: str | None = None) -> dict | None:
         """
         Handle a response from the Google Geocoding API
         """
@@ -205,18 +207,20 @@ class GoogleGeocodingGateway(Gateway):
             logger.info("json response type: %s", type(response))
             return None
 
+        if cache_key and body.get("status") in _KEPT_STATUSES:
+            self._keep(cache_key, body, latitude, longitude, request_data)
+        return body
+
+    @staticmethod
+    def _keep(cache_key: str, body: dict, latitude: float | None, longitude: float | None, request_data: dict) -> None:
+        answer = json.dumps(body)
+        if len(cache_key) > _KEY_MAX_LENGTH or len(answer) > _ANSWER_MAX_LENGTH:
+            return
         try:
-            # Cache it
-            GeocodedLocation.objects.create(
-                latitude=latitude,
-                longitude=longitude,
-                place_name=request_data.get("place_name"),
-                json_response=json.dumps(body),
-            )
+            with transaction.atomic():
+                GeocodedLocation.objects.create(latitude=latitude, longitude=longitude, place_name=cache_key, json_response=answer)
         except DatabaseError:
             logger.exception("Error caching geocoded location for %s", redact_params(request_data))
-
-        return body
 
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
         """Return the formatted address of the most relevant non-administrative geocoding result.

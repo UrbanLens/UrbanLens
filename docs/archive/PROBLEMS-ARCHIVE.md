@@ -23321,3 +23321,28 @@ web search callable (both failed against the first version).
 
 **Not fixed here.** REData's Places nearby search has barely answered on dev for a month, which is REData's quota
 question in `handoffs/redata-cris-attachment-500-and-places-429.md`.
+
+## RESOLVED 2026-10-05: Google geocodes were stored where no lookup could find them, so every lookup asked Google again
+
+`id: P303` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, tracing a burst of 136 Google Geocoding calls in dev's ApiCallLog`
+
+**What was wrong.** `GoogleGeocodingGateway` stores each answer in `GeocodedLocation` and looks there first, but the
+two never met. It stored `place_name=request_data.get("place_name")`, which no request carries, so an address lookup
+(`filter(place_name=address)`) never found its answer. A reverse geocode was stored at the first result's coordinates
+and looked up at the point asked about, so it was found only when a lookup asked exactly where an earlier answer stood.
+Dev held 2,224 rows, none with a key, and 576 answer locations stored more than once. A 200 that refused
+(`OVER_QUERY_LIMIT`, `REQUEST_DENIED`) was stored too, which mattered only because nothing was read back.
+
+Naming a place also asked twice. `GooglePlaceService._resolve_name` ran the resolver chain, whose last step is Google
+Geocoding, and when it found nothing called Google Geocoding again for the same point. At 23:37 UTC on 2026-10-04 the
+panel worker made 136 Google Geocoding calls in two minutes; 116 were refused by our own limit, two for each of 58
+points.
+
+**Fix.** An answer is stored under `address:<text>` or `latlng:<lat>,<lng>` (six decimals) and read back by the same
+key, only for `OK` and `ZERO_RESULTS`, and in its own savepoint so a write that fails cannot abort the caller's
+transaction. `_resolve_name` returns the chain's answer. Rows from before the fix have no key and are never read; they
+can be deleted at will. On dev, a second reverse geocode of a point and a second geocode of an address made no call.
+
+**Tests.** `test_google_geocoding_cache.py`: a point and an address are each asked once, a nearby point is not
+answered from another's row, a refusal is asked again, and a failed name lookup asks Google once (the first, third
+and fifth failed before the fix). `test_google_place.py`'s rate-limit test now goes through the real chain.

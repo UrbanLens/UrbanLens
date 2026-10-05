@@ -66,11 +66,15 @@ class GooglePlaceServiceTests(TestCase):
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
         from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 
-        # Empty chain so `_resolve_name` falls through to its own geocoding fallback below.
-        service = GooglePlaceService(name_resolver=PlaceNameResolverChain(resolvers=()))
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.google.place_info.GoogleGeocodingGateway",
-        ) as gateway:
+        service = GooglePlaceService(name_resolver=PlaceNameResolverChain())
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.places_resolution.resolve_name_from_nearby",
+                return_value=None,
+            ),
+            mock.patch("urbanlens.dashboard.services.locations.google.GoogleGeocodingGateway") as gateway,
+        ):
             gateway.return_value.get_place_name.side_effect = RateLimitExceededError("google_geocoding")
             name = service._resolve_name(40.0, -74.0)
         self.assertIsNone(name)
+        gateway.return_value.get_place_name.assert_called_once()
