@@ -10,7 +10,7 @@
 
 ## R29 — Every tier logs in as its own capped Postgres role, and only db-setup holds the owner
 
-`id: R29` · `status: current` · `updated: 2026-09-15`
+`id: R29` · `status: current` · `updated: 2026-10-05`
 
 This implements decision 3 of D11 (`docs/designs/request-isolation-and-connection-budget.md`) for the compose
 deployment, and closes what remained of P104.
@@ -56,6 +56,16 @@ every tier at its limit. They protected nothing during the outage, because the a
   - a service logs in as another tier;
   - a service holds the owner's password;
   - a service starts before `db-setup`.
+
+**Behind a transaction-mode pooler the limits are dropped.** With `UL_DB_ROLES_POOLED=true` every role is
+created with no `CONNECTION LIMIT` (`-1`), and `apply_database_roles` leaves unlimited roles out of its budget
+check. A role's limit counts the pooler's server connections, not the tier's: each PgBouncer pod keeps its own pool
+per (database, user) and holds idle server connections for `server_idle_timeout`, so two pods could hold a small
+tier's whole limit idle and refuse its next login while the tier is under its real concurrency. There the pooler's
+own pool sizes are the budget. Deadlines, privileges and the password rules are unchanged. This answers the
+infrastructure repo's question in its 0.8.0 deploy findings (item 10, "Your per-tier database roles (N23), answered
+late"); running the command needs a superuser, which on CNPG is that repo's hook to provide. `UL_DB_ROLES_POOLED`
+is off by default, and compose, which has no pooler, keeps the limits below.
 
 **Deadlines.** 120s matches nginx's `proxy_read_timeout` for the app. Celery tiers get `CELERY_TASK_TIME_LIMIT`.
 D11 also named `idle_session_timeout` and `lock_timeout`, which are not set: `CONN_MAX_AGE=0` already closes idle

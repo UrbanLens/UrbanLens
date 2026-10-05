@@ -611,6 +611,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "UL_DB_PASS outside production; in production db-setup refuses to run without it."
         ),
     )
+    db_roles_pooled: bool = Field(
+        default=False,
+        description=(
+            "Set where the tiers reach Postgres through a transaction-mode pooler (PgBouncer, CNPG's Pooler): the "
+            "per-tier login roles then carry no CONNECTION LIMIT, because a role's limit would count the pooler's idle "
+            "server connections rather than the tier's own, and the pooler's pool sizes are the budget instead. Their "
+            "deadlines and privileges are unchanged."
+        ),
+    )
     external_api_write_rate: str = Field(
         default="300/hour",
         description="Per-credential external-API write cap, as DRF's 'N/period'. Raise it only on a deployment the integration suite drives.",

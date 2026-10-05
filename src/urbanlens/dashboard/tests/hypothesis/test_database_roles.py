@@ -188,6 +188,28 @@ class RefusedRolesTests(TestCase):
         self.assertEqual(_rows("SELECT 1 FROM pg_roles WHERE rolname = 'ul_p104_shell'"), [])
 
 
+class PooledRolesTests(TestCase):
+    """Behind a transaction-mode pooler the pooler is the budget, and a per-role limit counts its idle server
+    connections rather than the tier's real concurrency (the infrastructure repo's 0.8.0 deploy findings, item 10)."""
+
+    def test_the_settings_it_reads_exist(self) -> None:
+        self.assertTrue(hasattr(settings, "UL_DB_ROLES_POOLED"))
+
+    def test_pooled_roles_carry_no_connection_limit(self) -> None:
+        with override_settings(UL_DB_ROLES_POOLED=True):
+            roles = declared_roles()
+            apply_database_roles(roles, PASSWORD)
+
+        for role in roles:
+            with self.subTest(role=role.name):
+                self.assertEqual(_rows("SELECT rolconnlimit FROM pg_roles WHERE rolname = %s", [role.name]), [(-1,)])
+
+    def test_pooled_roles_keep_their_deadlines(self) -> None:
+        with override_settings(UL_DB_ROLES_POOLED=True):
+            pooled = {role.process_role: role.deadline_seconds for role in declared_roles()}
+        self.assertEqual(pooled, {role.process_role: role.deadline_seconds for role in declared_roles()})
+
+
 class AppRolePasswordTests(SimpleTestCase):
     def test_the_settings_it_reads_exist(self) -> None:
         """``override_settings`` below would otherwise invent them."""

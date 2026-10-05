@@ -8,7 +8,7 @@ keeps ``superuser_reserved_connections`` for migrations and operators. See R29 (
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -38,6 +38,9 @@ SEPARATE_PASSWORD_ENVIRONMENTS = frozenset({"production", "staging"})
 
 _DEADLINE_SETTINGS = ("statement_timeout", "idle_in_transaction_session_timeout")
 
+#: Postgres's ``CONNECTION LIMIT`` for no limit.
+UNLIMITED_CONNECTIONS = -1
+
 
 class DatabaseRoleError(RuntimeError):
     """The declared roles cannot be applied as they stand."""
@@ -57,7 +60,7 @@ class DatabaseRole:
 
     Attributes:
         process_role: The ``UL_PROCESS_ROLE`` of every container that logs in as this role.
-        connection_limit: Its ``CONNECTION LIMIT``.
+        connection_limit: Its ``CONNECTION LIMIT``, or :data:`UNLIMITED_CONNECTIONS`.
         deadline_seconds: Its ``statement_timeout`` and ``idle_in_transaction_session_timeout``.
         predefined_roles: Postgres predefined roles granted on top of the group's table privileges.
     """
@@ -91,12 +94,14 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
     A Celery tier's limit covers each container's pool plus its parent process. ``test_connection_budget_wiring``
     fails when a tier's configured concurrency outgrows its limit.
 
+    Under ``UL_DB_ROLES_POOLED`` every role is unlimited instead: the pooler in front of the server is the budget.
+
     Returns:
         The roles, in the order the command reports them.
     """
     task_deadline = int(settings.CELERY_TASK_TIME_LIMIT)
     reads_stats = frozenset({"pg_read_all_stats"})
-    return (
+    roles = (
         # 3 gunicorn workers x 4 threads, each keeping its connection; the rest is headroom for timeout_utils' executor and more workers.
         DatabaseRole("web", 54, REQUEST_DEADLINE_SECONDS, reads_stats),
         # Channels runs every consumer's database call on one thread; the health probe is the other.
@@ -110,6 +115,9 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
         DatabaseRole("beat", 1, REQUEST_DEADLINE_SECONDS),
         DatabaseRole("metrics", 1, REQUEST_DEADLINE_SECONDS),
     )
+    if settings.UL_DB_ROLES_POOLED:
+        return tuple(replace(role, connection_limit=UNLIMITED_CONNECTIONS) for role in roles)
+    return roles
 
 
 def app_role_password(owner_password: str) -> str:
@@ -199,7 +207,7 @@ def _check_budget(cursor: CursorWrapper, roles: Sequence[DatabaseRole]) -> None:
             "SELECT current_setting('max_connections')::int - current_setting('superuser_reserved_connections')::int - coalesce(current_setting('reserved_connections', true)::int, 0)",
         ),
     )
-    limits = sum(role.connection_limit for role in roles)
+    limits = sum(role.connection_limit for role in roles if role.connection_limit != UNLIMITED_CONNECTIONS)
     if limits > usable:
         raise ConnectionBudgetExceededError(f"Role connection limits sum to {limits}, over the {usable} connections this server accepts from non-superusers.")
 

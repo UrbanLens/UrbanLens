@@ -7,7 +7,7 @@ from typing import Any
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection
 
-from urbanlens.dashboard.services.core.database_roles import DatabaseRoleError, app_role_password, apply_database_roles, declared_roles
+from urbanlens.dashboard.services.core.database_roles import UNLIMITED_CONNECTIONS, DatabaseRoleError, app_role_password, apply_database_roles, declared_roles
 
 
 class Command(BaseCommand):
@@ -27,6 +27,7 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
         for entry in applied:
             role = entry.role
+            limit = "unlimited" if role.connection_limit == UNLIMITED_CONNECTIONS else f"{role.connection_limit:>3}"
             self.stdout.write(
-                f"{role.name:14} {'created' if entry.created else 'updated':8} connection limit {role.connection_limit:>3}, deadline {role.deadline_seconds}s",
+                f"{role.name:14} {'created' if entry.created else 'updated':8} connection limit {limit}, deadline {role.deadline_seconds}s",
             )

@@ -253,6 +253,7 @@ DATABASES = {
     },
 }
 UL_DB_APP_PASS = _app_settings.db_app_pass
+UL_DB_ROLES_POOLED = _app_settings.db_roles_pooled
 # Dragonfly/Redis for the Django cache, sessions and the Channels layer. UL_VALKEY_URL and UL_REDIS_URL are
 # honored too, for anything still pointed at the store this replaced.
 DRAGONFLY_URL = require_deployment_setting(
