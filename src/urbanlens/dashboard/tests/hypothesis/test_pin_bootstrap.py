@@ -15,6 +15,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import cache
+from django.db import transaction
 from django.template.loader import render_to_string
 from model_bakery import baker
 
@@ -420,6 +421,19 @@ class BulkCreationTrickleTests(_BootstrapCase):
         self.assertFalse([call for call in enqueue.call_args_list if call.args[0] is tasks.bootstrap_location])
 
 
+class RolledBackCreationTests(_BootstrapCase):
+    def test_a_creation_that_rolls_back_holds_no_location(self) -> None:
+        class _AbortError(Exception):
+            pass
+
+        with self.upstreams.serving(), tasks_run_inline(), self.assertRaises(_AbortError), transaction.atomic():
+            pin = create_pin_for_profile(self.profile, name="HRSH", latitude=CAMPUS_LAT, longitude=CAMPUS_LNG).pin
+            location_id = pin.location_id
+            raise _AbortError
+
+        self.assertEqual(bootstrap.locations_bootstrapping([location_id]), set())
+
+
 class InFlightDeduplicationTests(_BootstrapCase):
     """A page opened while the bootstrap runs shares its fetches, and the bootstrap shares the page's."""
 
@@ -430,6 +444,15 @@ class InFlightDeduplicationTests(_BootstrapCase):
     def run_stage(self, stage: str, **kwargs) -> None:
         with self.upstreams.serving(), tasks_run_inline() as self.enqueue:
             tasks.bootstrap_location(self.pin.pk, stage=stage, **kwargs)
+
+    def test_a_pin_no_longer_eligible_releases_its_location(self) -> None:
+        """Otherwise every enrichment source skips the location for the marker's hour."""
+        self.assertEqual(bootstrap.locations_bootstrapping([self.pin.location_id]), {self.pin.location_id})
+        Pin.objects.filter(pk=self.pin.pk).update(parent_pin=baker.make(Pin, profile=self.profile))
+
+        self.run_stage(bootstrap.BootstrapStage.BUILDINGS)
+
+        self.assertEqual(bootstrap.locations_bootstrapping([self.pin.location_id]), set())
 
     def test_a_buildings_fetch_already_in_flight_is_waited_for_not_repeated(self) -> None:
         source = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)

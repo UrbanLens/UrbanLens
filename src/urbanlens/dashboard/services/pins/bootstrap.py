@@ -168,8 +168,13 @@ def request_bootstrap(pin: Pin) -> bool:
     from urbanlens.dashboard.tasks import bootstrap_location
 
     location_id, pin_id = pin.location_id, pin.pk
-    cache.set(_in_flight_key(location_id), pin_id, IN_FLIGHT_SECONDS)
-    transaction.on_commit(lambda: safely_enqueue_task(bootstrap_location, pin_id))
+
+    def start() -> None:
+        # Only once committed: a creation that rolls back must not hold its location for the marker's hour.
+        cache.set(_in_flight_key(location_id), pin_id, IN_FLIGHT_SECONDS)
+        safely_enqueue_task(bootstrap_location, pin_id)
+
+    transaction.on_commit(start)
     return True
 
 
@@ -214,6 +219,7 @@ def run_stage(pin: Pin, stage: BootstrapStage, attempt: int = 0) -> NextStep | N
         The stage to queue next, or None when the chain is done.
     """
     if not bootstrap_eligible(pin):
+        cache.delete(_in_flight_key(pin.location_id))
         return None
     try:
         step = _STAGES[stage](pin, attempt)
