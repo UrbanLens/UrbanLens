@@ -11,6 +11,7 @@ import json
 import time
 from unittest import mock
 
+from django.core.cache import cache
 import pytest
 
 from urbanlens.core.tests.testcase import TestCase
@@ -204,6 +205,52 @@ class BusySourceTests(TestCase):
         text.get(web, params={"q": "mill"})
 
         text._session.request.assert_called_once()
+
+    def test_a_named_provider_redata_could_not_reach_stops_calls_to_it(self) -> None:
+        """REData waited 20 s on Chronicling America for every pin page; the other archives answered."""
+        search = f"{_BASE}reference-documents/search/"
+        for status in ("unavailable", "rate_limited"):
+            with self.subTest(status):
+                cache.clear()
+                unanswered = {
+                    "count": 0,
+                    "complete": False,
+                    "results": [],
+                    "providers": [
+                        {"provider": "internet_archive", "status": "skipped"},
+                        {
+                            "provider": "chronicling_america",
+                            "status": status,
+                            "message": "could not be reached: ReadTimeout",
+                        },
+                    ],
+                }
+                _session("redata_reference_documents", _response(503, unanswered)).get(
+                    search, params={"q": "mill", "provider": "chronicling_america"}
+                )
+                other = _session("redata_reference_documents", _response(200, {}))
+
+                other.get(search, params={"q": "mill", "provider": "smithsonian"})
+
+                other._session.request.assert_called_once()
+                with pytest.raises(UpstreamThrottledError):
+                    _session("redata_reference_documents").get(
+                        search, params={"q": "mill", "provider": "chronicling_america"}
+                    )
+
+    def test_a_provider_the_request_did_not_name_trips_nothing(self) -> None:
+        """REData picks a county's provider by the point, so the next point may be another county's."""
+        unanswered = {
+            "count": 0,
+            "complete": False,
+            "providers": [{"provider": "dutchess_gis", "status": "unavailable"}],
+        }
+        _session("redata_api", _response(503, unanswered)).get(_PARCEL)
+        again = _session("redata_api", _response(200, {}))
+
+        again.get(_PARCEL)
+
+        again._session.request.assert_called_once()
 
     def test_a_503_about_one_place_trips_nothing(self) -> None:
         """``source_rate_limited`` is one county's scraper; the next point may be in another county."""

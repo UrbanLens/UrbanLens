@@ -201,6 +201,10 @@ class RedataBreaker(UpstreamBreaker):
     #: malformed place id), so only a message naming the provider's 429 or 5xx trips the breaker.
     PROVIDER_FAILURE_ERRORS: ClassVar[frozenset[str]] = frozenset({"places_api_unavailable", "search_unavailable"})
     PROVIDER_REFUSED: ClassVar[re.Pattern[str]] = re.compile(r"\b(?:answered|status)\s+(?:429|5\d\d)\b")
+    #: A provider's outcome in REData's envelope when REData could not reach it or had no budget left for it. Read
+    #: only for the provider a request named: REData picks a county's provider by the point, so one it chose may not
+    #: be the one the next point needs.
+    PROVIDER_UNANSWERED: ClassVar[frozenset[str]] = frozenset({"unavailable", "rate_limited"})
     #: None of them names a wait.
     SOURCE_BUSY_SECONDS: ClassVar[int] = 60
 
@@ -290,7 +294,15 @@ class RedataBreaker(UpstreamBreaker):
             return None
         error = body.get("error")
         refused = error in self.PROVIDER_FAILURE_ERRORS and self.PROVIDER_REFUSED.search(str(body.get("message", ""))) is not None
-        return f"source:{self.source(url, params)}" if error == self.SOURCE_BUSY_ERROR or refused else None
+        busy = error == self.SOURCE_BUSY_ERROR or refused or self._named_provider_unanswered(url, params, body)
+        return f"source:{self.source(url, params)}" if busy else None
+
+    def _named_provider_unanswered(self, url: str, params: object, body: dict) -> bool:
+        named = _query(url, params).get("provider")
+        outcomes = body.get("providers")
+        if not named or not isinstance(outcomes, list):
+            return False
+        return any(isinstance(outcome, dict) and outcome.get("provider") == named and outcome.get("status") in self.PROVIDER_UNANSWERED for outcome in outcomes)
 
     def default_seconds(self, scope: str) -> int:
         """A minute for a busy source, which never names its wait.

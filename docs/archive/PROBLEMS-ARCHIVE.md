@@ -23589,3 +23589,22 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   members only after reading them) both open ZIPs this way. A TGZ is refused past `MAX_TAR_MEMBERS` (50,000) members,
   supported or not: `tarfile` keeps each `TarInfo`, about 410 MiB a million (measured with `tracemalloc` over 200,000
   empty members, 82 MiB, in the app image; no test measures it).
+
+## RESOLVED 2026-10-05: An archive REData could not reach cost every pin page 20 seconds a provider
+
+`id: P305` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, fetching every panel of one pin and listing those that landed nothing`
+
+**What was wrong.** REData has not reached the Library of Congress or Chronicling America since about 2026-10-03
+(P216): a search for either waits about 20 s and answers 503, with the provider's outcome `unavailable` and
+"could not be reached: ReadTimeout" in its `providers` envelope. The envelope has no top-level `error`, so
+`RedataBreaker` let every later search go out. On dev, one pin's panels spent 41 s on the two archives; each other pin
+page, and each child of a campus, would spend the same, and so would REData's workers.
+
+**Fix.** When a request names one provider (`provider=`) and REData's envelope reports that provider `unavailable` or
+`rate_limited`, the breaker opens that provider's scope for 60 s. REData documents both as "no answer, the source
+cannot be asked now". A provider the request did not name trips nothing: REData picks a county's provider by the
+point, so one it chose may not be the one the next point needs. On dev, a second Chronicling America search was
+refused in 0.1 s and a Smithsonian search still went out.
+
+**Tests.** `test_redata_breaker.py::BusySourceTests::test_a_named_provider_redata_could_not_reach_stops_calls_to_it`
+(both statuses failed before the fix) and `test_a_provider_the_request_did_not_name_trips_nothing`.
