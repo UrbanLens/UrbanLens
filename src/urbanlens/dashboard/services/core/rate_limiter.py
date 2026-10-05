@@ -448,13 +448,6 @@ def billed_api_share() -> float:
     return BILLED_API_SHARE_BY_ENVIRONMENT.get(environment, UNKNOWN_ENVIRONMENT_BILLED_API_SHARE)
 
 
-def _service_defaults(service: str) -> ServiceDefaults | None:
-    defaults = SERVICE_REGISTRY.get(service)
-    if defaults is None:
-        defaults = all_service_defaults().get(service)
-    return defaults
-
-
 def free_tier_ceiling(service: str) -> int | None:
     """How many calls to *service* this deployment may make this calendar month, or None.
 
@@ -465,7 +458,15 @@ def free_tier_ceiling(service: str) -> int | None:
         The vendor's free allowance, times UrbanLens's allotment, times :func:`billed_api_share`,
         rounded down; None for a service with no declared free tier.
     """
-    defaults = _service_defaults(service)
+    try:
+        # Plugin defaults win, as all_service_defaults documents.
+        defaults = all_service_defaults().get(service)
+    except Exception:
+        logger.exception("Could not read plugin service defaults for %s; the core registry decides its free tier", service)
+        defaults = SERVICE_REGISTRY.get(service)
+        if defaults is None:
+            # A plugin's service whose free tier cannot be read spends none of it.
+            return 0
     if defaults is None or defaults.free_tier_per_calendar_month is None:
         return None
     return math.floor(defaults.free_tier_per_calendar_month * defaults.free_tier_allotment * billed_api_share())

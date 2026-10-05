@@ -96,6 +96,15 @@ class FreeTierCeilingTests(SimpleTestCase):
     def test_a_free_service_has_no_ceiling(self) -> None:
         self.assertIsNone(free_tier_ceiling("overpass"))
 
+    def test_unreadable_plugin_defaults_fall_back_to_the_core_registry_and_hold_a_plugin_service_at_zero(self) -> None:
+        with (
+            _share(0.8),
+            patch.object(rate_limiter, "all_service_defaults", side_effect=RuntimeError("plugin broke")),
+            self.assertLogs(rate_limiter.logger, "ERROR"),
+        ):
+            self.assertEqual(free_tier_ceiling("google_geocoding"), 3_200)
+            self.assertEqual(free_tier_ceiling("some_plugin_only_service"), 0)
+
 
 class CeilingIsEnforcedTests(TestCase):
     def setUp(self) -> None:
