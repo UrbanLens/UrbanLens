@@ -57,7 +57,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | PL6 | live | 2026-08-29 | Every test file is being reviewed for negative coverage; 73 of 832 done, resume at manifest line 94 | [`docs/notes/test-quality-audit.md`](notes/test-quality-audit.md) |
 | PL7 | live | 2026-09-11 | Making "no user can affect another user's availability" a property the tests can prove; phases 0, 1 and 5 done, 2 and 6 partly | [`docs/notes/availability-isolation-programme.md`](notes/availability-isolation-programme.md) |
 | P85 | open | 2026-10-05 | Managers are typed, but `misc` stays off: it reports 478 lookup and plugin findings, and annotations do not survive a model-bound queryset's rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P110 | open | 2026-10-03 | The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-17 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-17 | 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
@@ -202,7 +201,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P240 | open | 2026-10-03 | Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P240 | open | 2026-10-05 | Inside the US, Overture data needs REData 0.3.0's index-backed lookups, which production REData does not run yet | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P277 | open | 2026-10-04 | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P278 | open | 2026-10-04 | MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against | [`docs/PROBLEMS.md`](PROBLEMS.md) |
