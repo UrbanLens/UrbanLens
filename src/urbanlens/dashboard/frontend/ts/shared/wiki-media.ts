@@ -28,6 +28,7 @@ const TAB_LABELS: Record<string, string> = {
     redata_media: "Nearby Media",
     redata_aerial: "Aerial & Drone",
     redata_street_level: "Street-level",
+    redata_photo_pool: "Nearby Photos",
 };
 
 /** How long every provider gets to produce a tile before the section says it found nothing. */

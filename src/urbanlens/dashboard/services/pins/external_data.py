@@ -26,11 +26,14 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser
 
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.subscriptions import SiteFeature
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.media.previews import GalleryUrls
     from urbanlens.dashboard.services.media.subject_relevance import MediaSubject
     from urbanlens.dashboard.services.pins.search_names import SearchNames, SearchScope
 
@@ -633,6 +636,9 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
 
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.MEDIA})
     judges_relevance: ClassVar[bool] = False
+    #: Whether the tiles are members' own uploads rather than a provider's media: they are read where they are, never
+    #: saved to a pin from the gallery (a member's photo is copied through its wiki, with its provenance).
+    members_media: ClassVar[bool] = False
     #: The payload key :meth:`media_items` reads its results from.
     media_results_key: ClassVar[str] = "items"
 
@@ -647,6 +653,39 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         Returns:
             The items to render as ``.media-item`` tiles; may be empty.
         """
+
+    def for_viewer(self, data: dict, viewer: Profile, location: Location) -> dict:
+        """``data`` as ``viewer`` may see it on ``location``'s pages, which every reader applies before reading tiles.
+
+        A provider's cached rows describe public media and are anyone's to see as they are. A source whose rows name
+        members' own uploads overrides this, and stores rows that yield no tile until narrowed here: a reader that
+        forgot to call this then shows nothing, rather than a photo its uploader never shared.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+            viewer: The profile looking.
+            location: The place whose page is being viewed.
+
+        Returns:
+            The payload :meth:`media_items` reads.
+        """
+        return data
+
+    def pictures(self, items: Sequence[MediaItem]) -> list[GalleryUrls]:
+        """Where each tile gets its pictures: this site's copy of a provider's image, or a member's upload where it is.
+
+        Args:
+            items: The tiles, from :meth:`gallery_items`.
+
+        Returns:
+            One :class:`~urbanlens.dashboard.services.media.previews.GalleryUrls` per item.
+        """
+        from urbanlens.dashboard.services.media.previews import GalleryUrls, gallery_urls
+
+        if self.members_media:
+            # This site's own media is served under its own access checks; copying it as a remote image would not be.
+            return [GalleryUrls(thumb=item.thumb_url, view="") for item in items]
+        return gallery_urls(items, provider=self.key)
 
     def media_is_ready(self, data: dict) -> bool:
         """Whether a cached row's *media* half has actually been filled in.
@@ -736,8 +775,9 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """The provider's cached media as ``{"media": [...]}``, or None; only what is about the place, for a source that judges relevance."""
         data = self.cached_data(pin)
-        if data is None:
+        if data is None or pin.location is None:
             return None
+        data = self.for_viewer(data, pin.profile, pin.location)
         if not self.judges_relevance:
             return {PanelApiKind.MEDIA.value: self.api_media(data)}
         from urbanlens.dashboard.models.images.relevance import MediaRelevance

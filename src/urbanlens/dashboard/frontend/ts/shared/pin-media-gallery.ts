@@ -52,6 +52,7 @@ const TAB_LABELS: Record<string, string> = {
     redata_media: "Nearby Media",
     redata_aerial: "Aerial & Drone",
     redata_street_level: "Street-level",
+    redata_photo_pool: "Nearby Photos",
 };
 
 function section(): HTMLElement | null {

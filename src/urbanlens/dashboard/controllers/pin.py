@@ -555,7 +555,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_media(request, pin, source)
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-        from urbanlens.dashboard.services.media.previews import gallery_urls
         from urbanlens.dashboard.services.media.subject_relevance import subject_for_pin
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -563,10 +562,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
         kept = {key for key, is_relevant in relevance.items() if is_relevant}
-        items = panel.gallery_items(cached.data or {}, subject_for_pin(pin), kept=kept)
+        items = panel.gallery_items(panel.for_viewer(cached.data or {}, profile, location), subject_for_pin(pin), kept=kept)
         # The remote page_url stays the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
-        pictures = gallery_urls(items, provider=source)
+        pictures = panel.pictures(items)
         rendered_items = [
             {
                 "item": item,
@@ -587,6 +586,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "rendered_items": rendered_items,
             "source_key": source,
+            "members_media": panel.members_media,
             "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items)),
         }
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)

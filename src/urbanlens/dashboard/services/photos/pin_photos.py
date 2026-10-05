@@ -36,6 +36,7 @@ PIN_MEDIA_GALLERY_SOURCES: tuple[str, ...] = (
     "redata_media",
     "redata_aerial",
     "redata_street_level",
+    "redata_photo_pool",
 )
 
 #: Upper bound on one page of any Photos-tab grid.
@@ -105,7 +106,8 @@ def _visible_sources(pin: Pin, user: AbstractBaseUser | AnonymousUser) -> list[G
     sources = []
     for key in PIN_MEDIA_GALLERY_SOURCES:
         panel = get_panel_source(key)
-        if isinstance(panel, GalleryMediaSource) and panel_visible_to(user, panel):
+        # Other members' photos are not public-source photos, and the tab's own are listed apart.
+        if isinstance(panel, GalleryMediaSource) and not panel.members_media and panel_visible_to(user, panel):
             sources.append(panel)
     return sources
 
@@ -171,7 +173,7 @@ def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser |
             continue
         kept = {key for (source_key, key), is_relevant in relevance.items() if source_key == source.key and is_relevant}
         try:
-            items = source.gallery_items(data, subject, kept=kept)
+            items = source.gallery_items(source.for_viewer(data, profile, location), subject, kept=kept)
         except Exception:
             logger.exception("Media source %s could not read its cached row for location %s", source.key, location.pk)
             continue
