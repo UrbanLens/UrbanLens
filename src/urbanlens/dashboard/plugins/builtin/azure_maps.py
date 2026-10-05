@@ -135,7 +135,9 @@ class AzureMapsPlugin(UrbanLensPlugin):
                 display_name="Azure Maps (Search/Geocoding)",
                 calls_per_minute=50,
                 calls_per_day=2500,
-                notes="Free tier: 5,000 transactions/month (Gen1 S0 / Gen2 pay-as-you-go) shared across Search and Geocoding.",
+                free_tier_per_calendar_month=5_000,
+                free_tier_allotment=0.4,
+                notes="Free tier: 5,000 Search transactions a month (Gen2), per subscription, shared with REData.",
             ),
         }
 

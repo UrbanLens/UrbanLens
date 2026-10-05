@@ -149,7 +149,11 @@ class GooglePlacesPlugin(UrbanLensPlugin):
                 display_name="Google Places API",
                 calls_per_minute=20,
                 calls_per_day=200,
-                notes="Free tier: $200/month credit. Geocoding/details billed per call.",
+                # One budget spans several SKUs; the smallest free one it can hit is 1,000 a month
+                # (Nearby Search Enterprise - the default mask asks for rating - and Place Photos).
+                free_tier_per_calendar_month=1_000,
+                free_tier_allotment=0.4,
+                notes="No credit since 2025-03: each SKU has its own monthly free cap, per billing account, shared with REData. Held to the smallest this budget can spend.",
             ),
         }
 

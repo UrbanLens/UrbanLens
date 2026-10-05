@@ -48,6 +48,14 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         """Filter to calls made in the last 30 days."""
         return self.since(timedelta(days=30))
 
+    def this_calendar_month(self) -> Self:
+        """Filter to calls made since the 1st of this UTC month, the window a vendor's free tier resets on.
+
+        Returns:
+            Calls whose ``created`` falls in the current UTC calendar month.
+        """
+        return self.filter(created__gte=timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+
     def billable(self) -> Self:
         """Filter to calls that actually consumed the service's quota.
         Excludes the entries written for calls that were *skipped* - geo-filtered, rate-limited, service-disabled, and refused for an input that could not return data.

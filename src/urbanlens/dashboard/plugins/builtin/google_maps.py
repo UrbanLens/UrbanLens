@@ -30,7 +30,9 @@ class GoogleMapsPlugin(UrbanLensPlugin):
                 display_name="Google Maps (Static/StreetView)",
                 calls_per_minute=20,
                 calls_per_day=200,
-                notes="Static Maps: 25,000 free/month. Street View: billed per call.",
+                # Static Maps and Street View Static are 10,000 a month free each; REData calls neither.
+                free_tier_per_calendar_month=10_000,
+                notes="Static Maps and Street View Static: 10,000 free a month each, then $2 and $7 per 1,000. The coverage probes before a Street View image are counted here too, though Google does not bill them.",
             ),
             "google_street_view_metadata": ServiceDefaults(
                 display_name="Google Street View Metadata",
