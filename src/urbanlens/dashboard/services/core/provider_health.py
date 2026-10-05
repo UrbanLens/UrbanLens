@@ -362,7 +362,9 @@ def _read_counts(since: datetime, until: datetime | None = None, *, bucketed: bo
     """
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
-    rows = ApiCallLog.objects.filter(service__in=_known_services(), created__gte=since, was_rate_limited=False, was_geo_filtered=False, was_service_disabled=False, was_rejected_input=False).exclude(success=True, response_ms__isnull=True, status_code__isnull=True)
+    rows = ApiCallLog.objects.filter(service__in=_known_services(), created__gte=since, was_rate_limited=False, was_geo_filtered=False, was_service_disabled=False, was_rejected_input=False).exclude(
+        success=True, response_ms__isnull=True, status_code__isnull=True
+    )
     if until is not None:
         rows = rows.filter(created__lt=until)
     annotated = rows.annotate(derived=OUTCOME_EXPRESSION)

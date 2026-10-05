@@ -158,6 +158,8 @@ class OutcomeTests(_GateTestCase):
         _calls(_SERVICE, 3, status=None, success=False, at=at, was_rate_limited=True)
         _calls(_SERVICE, 3, status=None, success=False, at=at, was_service_disabled=True)
         _calls(_SERVICE, 3, status=None, success=False, at=at, was_geo_filtered=True)
+        # Refused for an input no source could answer: it never left, even with a response time.
+        _calls(_SERVICE, 3, status=None, success=True, at=at, was_rejected_input=True)
         rows = ApiCallLog.objects.bulk_create([ApiCallLog(service=_SERVICE, success=True) for _ in range(3)])
         ApiCallLog.objects.filter(pk__in=[row.pk for row in rows]).update(created=at)
 
