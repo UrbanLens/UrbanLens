@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from urbanlens.dashboard.services.apis.locations.azure.gateway import AzureMapsGateway
+from urbanlens.dashboard.services.core.input_validation import require_coordinates, require_query
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +53,13 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
             The best-matching normalized result, or None when nothing matched.
 
         Raises:
+            ImpossibleInputError: The query is only whitespace.
             ValueError: When no subscription key is configured.
             requests.exceptions.RequestException: When the request failed.
         """
         if not query:
             return None
+        require_query(self.service_key, query)
         body = self._get("/geocode", api_version=GEOCODING_API_VERSION, params={"query": query})
         features = body.get("features") or []
         return _normalize_feature(features[0]) if features else None
@@ -72,9 +75,11 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
             The normalized address result, or None when nothing matched.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``, which has no address.
             ValueError: When no subscription key is configured.
             requests.exceptions.RequestException: When the request failed.
         """
+        require_coordinates(self.service_key, latitude, longitude)
         body = self._get(
             "/reverseGeocode",
             api_version=GEOCODING_API_VERSION,

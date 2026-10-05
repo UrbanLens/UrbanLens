@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from collections import Counter
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import logging
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any, ClassVar, NoReturn
 
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_coordinates, require_in_range
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     import requests
 
 logger = logging.getLogger(__name__)
@@ -52,6 +56,33 @@ class LocationContextUnavailableError(GatewayRequestError):
     def is_outage(self) -> bool:
         """Only a rejected request is an answer; every other failure left the question unasked."""
         return not self.rejected
+
+
+class LocationContextRefusedError(ImpossibleInputError, LocationContextUnavailableError):
+    """An input REData could only answer 400 for, refused before asking: the same settled answer as that 400.
+
+    Both an :class:`ImpossibleInputError`, for callers that know refusals, and a rejected
+    :class:`LocationContextUnavailableError`, for the callers that already handle REData's own 400.
+    """
+
+    def __init__(self, refusal: ImpossibleInputError) -> None:
+        ImpossibleInputError.__init__(self, refusal.service, refusal.reason, refusal.detail)
+        self.rejected = True
+
+
+@contextmanager
+def refused_as_rejection() -> Iterator[None]:
+    """Re-raise an :class:`ImpossibleInputError` from the checks inside as a :class:`LocationContextRefusedError`.
+
+    Raises:
+        LocationContextRefusedError: A check inside refused its input.
+    """
+    try:
+        yield
+    except LocationContextRefusedError:
+        raise
+    except ImpossibleInputError as exc:
+        raise LocationContextRefusedError(exc) from None
 
 
 class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyError):
@@ -138,6 +169,10 @@ class LocationContextEnvelope:
 class RedataLocationContextGateway(Gateway):
     """Base REST client for REData's near-a-coordinate location-context endpoints."""
 
+    #: Whether this endpoint's sources hold anything at exactly ``(0, 0)``: a weather or elevation grid does; a
+    #: register of buildings does not, so a missing coordinate that became zeros is refused before asking.
+    answers_at_null_island: ClassVar[bool] = False
+
     # default_factory so settings changes apply per instance; a bare default freezes at import.
     base_url: str | None = field(default_factory=lambda: settings.redata_api_url)
     api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
@@ -190,7 +225,15 @@ class RedataLocationContextGateway(Gateway):
 
         Raises:
             LocationContextUnavailableError: A total blackout (every source covering the coordinate failed), an empty answer with a source that did not answer, a REData-side validation error, or the request itself failed outright.
+            LocationContextRefusedError: The point, radius or limit could never be answered, so nothing was sent.
         """
+        service = type(self).service_key or "redata"
+        with refused_as_rejection():
+            require_coordinates(service, latitude, longitude, allow_null_island=type(self).answers_at_null_island)
+            if radius_meters is not None:
+                require_in_range(service, "radius_meters", radius_meters, minimum=0, exclusive_minimum=True)
+            if limit is not None:
+                require_in_range(service, "limit", limit, minimum=1)
         params: dict[str, Any] = {"lat": latitude, "lng": longitude}
         if radius_meters is not None:
             params["radius_meters"] = radius_meters

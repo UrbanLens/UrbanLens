@@ -29,6 +29,7 @@ from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, safe_int_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
@@ -423,6 +424,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         try:
             available = GoogleStreetViewMetadataGateway(api_key=api_key).has_imagery(lat, lng)
+        except ImpossibleInputError:
+            return JsonResponse({"available": False})
         except RequestCancelledError:
             return JsonResponse({"available": False, "reason": "refused"})
         except requests.RequestException as exc:

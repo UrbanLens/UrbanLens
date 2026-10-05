@@ -128,7 +128,7 @@
                 </div>
             </div>
 
-            {% if svc.calls_30d or svc.blocked_30d or svc.geo_skipped_30d or svc.errors_30d or svc.avg_ms %}
+            {% if svc.calls_30d or svc.blocked_30d or svc.geo_skipped_30d or svc.rejected_30d or svc.errors_30d or svc.avg_ms %}
             <div class="api-limit-stats">
                 {% if svc.calls_30d %}
                 <span class="ul-chip">
@@ -141,6 +141,9 @@
                 {% endif %}
                 {% if svc.geo_skipped_30d %}
                 <span class="ul-badge ul-badge--primary">{{ svc.geo_skipped_30d }} geo-skip</span>
+                {% endif %}
+                {% if svc.rejected_30d %}
+                <span class="ul-badge ul-badge--neutral" title="Refused before sending: the input could not return data">{{ svc.rejected_30d }} refused input</span>
                 {% endif %}
                 {% if svc.errors_30d %}
                 <span class="ul-badge ul-badge--warning">{{ svc.errors_30d }} err</span>

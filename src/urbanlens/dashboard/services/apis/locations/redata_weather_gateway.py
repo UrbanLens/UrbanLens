@@ -6,7 +6,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway, refused_as_rejection
+from urbanlens.dashboard.services.core.input_validation import InputRejection, reject
 
 if TYPE_CHECKING:
     from datetime import date
@@ -17,6 +18,7 @@ class RedataWeatherGateway(RedataLocationContextGateway):
     """REST client for REData's weather endpoint."""
 
     service_key: ClassVar[str] = "redata_weather"
+    answers_at_null_island: ClassVar[bool] = True
 
     def get_weather(self, latitude: float, longitude: float) -> list[dict[str, Any]]:
         """Fetch every registered weather provider's current/forecast/sun data for a point.
@@ -40,6 +42,7 @@ class RedataWeatherHistoryGateway(RedataLocationContextGateway):
     """REST client for REData's historical (ERA5 reanalysis) weather endpoint."""
 
     service_key: ClassVar[str] = "redata_weather_history"
+    answers_at_null_island: ClassVar[bool] = True
 
     def get_history(self, latitude: float, longitude: float, *, start: date, end: date) -> list[dict[str, Any]]:
         """Fetch one recorded day's weather per day in a date range.
@@ -56,6 +59,9 @@ class RedataWeatherHistoryGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: The source was unavailable or rate-limited, REData rejected the parameters, or the request itself failed.
         """
+        if end < start:
+            with refused_as_rejection():
+                reject(type(self).service_key, InputRejection.OUT_OF_RANGE, "end_date is before start_date")
         envelope = self.near_point(
             "/api/v1/weather/history/",
             latitude,

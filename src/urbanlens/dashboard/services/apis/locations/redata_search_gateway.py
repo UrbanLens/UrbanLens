@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway, refused_as_rejection
+from urbanlens.dashboard.services.core.input_validation import require_query
 
 _WEB_SEARCH_PATH = "/api/v1/search/web/"
 _NEWS_SEARCH_PATH = "/api/v1/search/news/"
@@ -48,6 +49,8 @@ class RedataSearchGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: Every provider REData tried failed to answer, or the request to REData failed outright.
         """
+        with refused_as_rejection():
+            require_query(type(self).service_key or "redata_search_web", query, name="q")
         params: dict[str, Any] = {"q": query, "limit": max_results}
         if images:
             params["images"] = "true"
@@ -68,6 +71,8 @@ class RedataSearchGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: GDELT failed to answer, or the request to REData failed outright.
         """
+        with refused_as_rejection():
+            require_query(type(self).service_key or "redata_search_web", query, name="q")
         params: dict[str, Any] = {"q": query, "limit": max_results}
         if months is not None:
             params["months"] = months

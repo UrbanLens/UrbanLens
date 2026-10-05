@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.locations.open_historical_map import MAX_YEAR, MIN_YEAR, OpenHistoricalMapGateway, OpenHistoricalMapUnavailableError
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource
 
 if TYPE_CHECKING:
@@ -166,6 +167,9 @@ def get_temporal_features(location: Location, year: int) -> dict[str, Any]:
 
     try:
         geojson = OpenHistoricalMapGateway().get_features_at(float(location.latitude), float(location.longitude), year)
+    except ImpossibleInputError:
+        # Counted where it was refused; OHM has nothing at a point it cannot be asked about.
+        return {"type": "FeatureCollection", "features": []}
     except OpenHistoricalMapUnavailableError:
         logger.warning("OpenHistoricalMap feature fetch unavailable for location %s, year %s", location.pk, year, exc_info=True)
         return {"type": "FeatureCollection", "features": []}

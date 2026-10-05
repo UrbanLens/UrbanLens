@@ -7,11 +7,15 @@ import logging
 from typing import Any
 
 from urbanlens.dashboard.services.apis.locations.azure.gateway import AzureMapsGateway
+from urbanlens.dashboard.services.core.input_validation import require_coordinates, require_in_range, require_query
 
 logger = logging.getLogger(__name__)
 
 #: Azure Maps Search API version this gateway targets.
 SEARCH_API_VERSION = "1.0"
+
+#: The widest circle the Search API's nearby endpoint accepts; a wider one is a 400.
+MAX_NEARBY_RADIUS_METERS = 50_000
 
 
 def _normalize_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -62,13 +66,17 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             Normalized result dicts, most relevant first; empty when nothing matched.
 
         Raises:
+            ImpossibleInputError: The query is blank, or the bias point is not on the globe.
             ValueError: When no subscription key is configured.
             requests.exceptions.RequestException: When the request failed.
         """
         if not query:
             return []
+        require_query(self.service_key, query)
         params: dict[str, Any] = {"query": query, "limit": max(1, min(int(limit), 100))}
         if latitude is not None and longitude is not None:
+            # Only a bias here: a search near (0, 0) still finds what the query names elsewhere.
+            require_coordinates(self.service_key, latitude, longitude, allow_null_island=True)
             params["lat"] = latitude
             params["lon"] = longitude
             if radius is not None:
@@ -99,9 +107,12 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             Normalized POI dicts ordered by distance; empty when nothing was found nearby.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe or is ``(0, 0)``, or the radius holds nothing or, with no query, is wider than Azure's nearby search takes.
             ValueError: When no subscription key is configured.
             requests.exceptions.RequestException: When the request failed.
         """
+        require_coordinates(self.service_key, latitude, longitude)
+        require_in_range(self.service_key, "radius", radius, minimum=0, maximum=None if query else MAX_NEARBY_RADIUS_METERS, exclusive_minimum=True)
         params: dict[str, Any] = {"lat": latitude, "lon": longitude, "radius": radius, "limit": max(1, min(int(limit), 100))}
         # "poi" takes a free-text query; "nearby" (no query param) ranks every
         # POI in range purely by distance - two distinct Search API endpoints.
@@ -125,6 +136,7 @@ class AzureMapsSearchGateway(AzureMapsGateway):
             The nearest POI's normalized dict, or None when nothing is close enough.
 
         Raises:
+            ImpossibleInputError: See :meth:`search_poi`.
             ValueError: When no subscription key is configured.
             requests.exceptions.RequestException: When the request failed.
         """

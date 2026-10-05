@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
@@ -40,6 +41,10 @@ def is_answer_equivalent(raw_answer: str, accepted_answer: str, *, profile: Prof
 
     gateway = get_gateway("trivia_answer_check", profile=profile, instructions=_INSTRUCTIONS)
     if gateway is None:
+        return False
+    try:
+        require_query("trivia_answer_check", raw_answer, name="answer")
+    except ImpossibleInputError:
         return False
 
     prompt = f"Accepted answer: {wrap_user_data(accepted_answer)}\nPlayer's answer: {wrap_user_data(raw_answer)}"

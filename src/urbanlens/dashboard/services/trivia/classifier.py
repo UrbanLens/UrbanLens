@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
@@ -72,11 +73,18 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
         profile: The submitting profile, if user-submitted (used only for the AI-availability gate - AI generation has no submitting profile and passes None).
 
     Returns:
-        APPROVE, or REJECT with a reason - AI unavailable, an unparseable response, or one of the classifier's own reject categories."""
+        APPROVE, or REJECT with a reason - AI unavailable, an unparseable response, ``empty`` for a blank question or answer, or one of the classifier's own reject categories."""
     gateway = get_gateway("trivia_moderation", profile=profile, instructions=_INSTRUCTIONS)
     if gateway is None:
         logger.info("Trivia classifier unavailable (AI disabled); rejecting fail-closed")
         return ClassifierVerdict(approved=False, reason="ai_unavailable")
+
+    try:
+        require_query("trivia_moderation", prompt, name="question")
+        require_query("trivia_moderation", answer, name="answer")
+    except ImpossibleInputError:
+        # A blank question or answer has nothing to approve, so it is rejected without asking.
+        return ClassifierVerdict(approved=False, reason="empty")
 
     user_prompt = _build_prompt(prompt, answer, location)
 

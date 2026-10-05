@@ -17,6 +17,7 @@ from typing import ClassVar
 from urllib.parse import quote, urlparse
 
 from urbanlens.dashboard.services.core.gateway import Gateway, read_capped
+from urbanlens.dashboard.services.core.input_validation import InputRejection, reject
 
 #: Sent because a bare requests agent is what a CDN refuses first. The fetch is server-side, so no
 #: viewer's Referer or coordinates travel with it.
@@ -93,7 +94,14 @@ class ProtomapsBasemapGateway(Gateway):
 
         Returns:
             ``(status_code, body, content_type)``.
+
+        Raises:
+            ImpossibleInputError: ``z/x/y`` is outside the tile pyramid, so no tile can exist there.
         """
+        from urbanlens.dashboard.services.map.remote_tiles import coordinate_is_valid
+
+        if not coordinate_is_valid(z, x, y):
+            reject(self.service_key, InputRejection.OUT_OF_RANGE, "the tile is outside the pyramid")
         url = f"{_API_ROOT}/tiles/v4/{z}/{x}/{y}.mvt?key={quote(key, safe='')}"
         return self._get(url, origin, what="vector basemap tile", default_type="application/x-protobuf")
 

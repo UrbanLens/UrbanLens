@@ -19,6 +19,7 @@ import requests
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.input_validation import require_coordinates, require_in_range
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
@@ -363,7 +364,12 @@ class OverpassGateway(Gateway, BoundaryProvider):
         include_nodes: bool = True,
         include_geometry: bool = False,
     ) -> list[dict[str, Any]]:
-        """Return OSM features around a coordinate for generic location enrichment."""
+        """Return OSM features around a coordinate for generic location enrichment.
+
+        Raises:
+            ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``, open ocean OSM maps nothing at.
+        """
+        require_coordinates(self.service_key, latitude, longitude)
         query = self._nearby_features_query(
             latitude,
             longitude,
@@ -379,9 +385,11 @@ class OverpassGateway(Gateway, BoundaryProvider):
         """Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``.
             requests.RequestException: No endpoint answered, so nothing is known about this coordinate.
             OverpassUnavailableError: Every endpoint is flagged down.
         """
+        require_coordinates(self.service_key, latitude, longitude)
         query = self._nearby_features_query(
             latitude,
             longitude,
@@ -474,7 +482,12 @@ out body geom;
         return [(float(x), float(y)) for x, y in largest.exterior_ring.coords]
 
     def element(self, element_type: OsmElementType, osm_id: int, *, include_geometry: bool = True) -> dict[str, Any] | None:
-        """Return a single OSM node, way, or relation by id via Overpass."""
+        """Return a single OSM node, way, or relation by id via Overpass.
+
+        Raises:
+            ImpossibleInputError: ``osm_id`` is not positive; OSM issues no such id.
+        """
+        require_in_range(self.service_key, "osm_id", int(osm_id), minimum=1)
         out_clause = "out tags geom;" if include_geometry else "out tags center;"
         query = f"""
 [out:json][timeout:{self.ql_timeout}];

@@ -11,6 +11,7 @@ from django.core.cache import cache
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.apis.locations.base import external_data_cache_seconds
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.input_validation import require_coordinates
 
 METADATA_URL = "https://maps.googleapis.com/maps/api/streetview/metadata"
 
@@ -58,10 +59,12 @@ class GoogleStreetViewMetadataGateway(Gateway):
             True when Google reports a panorama, False when it reports none.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``, where no road runs.
             GatewayRequestError: Google refused or failed the request; not cached.
             RequestCancelledError: The rate limiter or the outbound-call policy refused it.
             requests.RequestException: The request did not complete.
         """
+        require_coordinates(self.service_key, latitude, longitude)
         lat = round(latitude, COORDINATE_DECIMALS)
         lng = round(longitude, COORDINATE_DECIMALS)
         cache_key = make_cache_key("street_view_metadata", f"{lat:.{COORDINATE_DECIMALS}f}", f"{lng:.{COORDINATE_DECIMALS}f}")

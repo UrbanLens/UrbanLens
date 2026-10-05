@@ -13,6 +13,7 @@ from django.db import DatabaseError
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway, parse_address_components
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 
@@ -46,6 +47,11 @@ class Command(BaseCommand):
 
             try:
                 data = gateway.geocode_coordinates(lat, lng)
+            except ImpossibleInputError as exc:
+                # A point no address exists at, such as (0, 0): nothing to backfill, and no call spent.
+                self.stderr.write(f"  [pk={location.pk}] skipped: {exc.detail}")
+                failed += 1
+                continue
             except (OSError, ValueError) as exc:
                 self.stderr.write(f"  [pk={location.pk}] geocoding failed: {exc}")
                 failed += 1

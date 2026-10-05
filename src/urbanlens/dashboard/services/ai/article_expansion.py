@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import nh3
 
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
 from urbanlens.dashboard.services.wiki.articles import get_article, save_article
@@ -205,7 +206,7 @@ def _draft_new_paragraphs(
     wiki: Wiki | None,
     profile,
 ) -> str | None:
-    """Call the writing gateway; return raw answer text or None on failure."""
+    """Call the writing gateway; return raw answer text, ``""`` for a blank page, or None on failure."""
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     gateway = get_gateway(
@@ -215,6 +216,11 @@ def _draft_new_paragraphs(
     )
     if gateway is None:
         return None
+    try:
+        require_query("article_expansion", page_text, name="page text")
+    except ImpossibleInputError:
+        # A blank page has nothing new to add; an empty draft says so without asking.
+        return ""
 
     parts = [
         f"The place is known as: {place_name!r}.",

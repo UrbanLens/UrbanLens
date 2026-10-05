@@ -187,6 +187,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.core.capacity import PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.colors import InvalidColorError, require_color
 from urbanlens.dashboard.services.core.request_body import MultiPartParser
+from urbanlens.dashboard.services.core.request_upstream import Outcome
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import (
@@ -3060,6 +3061,9 @@ class PlaceResolveView(ExternalApiView):
             return Response({"error": "No places provider is configured."}, status=503)
 
         resolved = resolve_google_place(place_id, api_key or "")
+        if resolved.outcome is Outcome.REFUSED:
+            # Not a place id any provider issues: asking again cannot help, so not a 503 a client retries.
+            return Response({"error": "That is not a place id."}, status=400)
         if not resolved.ok or resolved.value is None:
             headers = {"Retry-After": str(resolved.retry_after)} if resolved.retry_after is not None else None
             return Response({"error": "The places provider is unavailable right now."}, status=503, headers=headers)

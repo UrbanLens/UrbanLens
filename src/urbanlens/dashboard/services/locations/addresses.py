@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.db import DatabaseError
 
 from urbanlens.dashboard.services.core.gateway import is_source_outage
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
 if TYPE_CHECKING:
@@ -46,6 +47,9 @@ def ensure_location_address(location: Location | None) -> bool:
     for backfill in backfills:
         try:
             written = backfill(location, lat, lng)
+        except ImpossibleInputError:
+            # Nothing was sent, and no source can answer this point: this backfill wrote nothing.
+            continue
         except Exception as exc:
             if not is_source_outage(exc):
                 raise

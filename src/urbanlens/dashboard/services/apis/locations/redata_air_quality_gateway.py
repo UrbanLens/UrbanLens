@@ -14,6 +14,7 @@ class RedataAirQualityGateway(RedataLocationContextGateway):
     """REST client for REData's air-quality endpoint."""
 
     service_key: ClassVar[str] = "redata_air_quality"
+    answers_at_null_island: ClassVar[bool] = True
 
     def get_air_quality(
         self,

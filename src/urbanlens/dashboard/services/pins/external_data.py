@@ -14,6 +14,7 @@ from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_names
@@ -58,6 +59,8 @@ FAILURE_SKIP_TTL_SECONDS = 300
 #: administratively disabled. Longer than the failure TTL: these are explicit
 #: signals, not transient flakes.
 DISABLED_SKIP_TTL_SECONDS = 1800
+#: How long a source with no store of its own stays suppressed after refusing a pin's input as one it can never answer.
+REFUSED_INPUT_SKIP_TTL_SECONDS = 86_400
 #: TTL for the satellite/street "caches are warm" marker. Deliberately shorter
 #: than the 24h per-provider slide caches it summarises, so the marker always
 #: expires (and re-warms via a task) before the underlying entries do.
@@ -1850,6 +1853,15 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     try:
         if not (isinstance(source, LocationCachePanelSource) and source.adopt_site_answer(pin)):
             source.fetch(pin)
+    except ImpossibleInputError as exc:
+        # Nothing was sent: the pin's input can never return data here, so "nothing found" is the answer.
+        logger.debug("Panel fetch %s for pin %s refused its input: %s", source_key, pin.pk, exc.detail)
+        if isinstance(source, LocationCachePanelSource):
+            from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+            LocationCache.set(pin.location, source.cache_source, {}, query_key="")
+        else:
+            cache.set(source.skip_key(pin), 1, REFUSED_INPUT_SKIP_TTL_SECONDS)
     except UpstreamBusyError as exc:
         logger.info("Panel fetch %s for pin %s deferred %ss: %s", source_key, pin.pk, exc.retry_after, exc)
         cache.set(source.skip_key(pin), 1, exc.retry_after)

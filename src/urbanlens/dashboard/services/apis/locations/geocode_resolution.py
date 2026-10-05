@@ -50,8 +50,12 @@ def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
     Raises:
         RateLimitExceededError: The app-wide Nominatim budget refused the call - propagated so a caller cannot mistake "we did not ask" for "no such place"."""
     from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+    from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 
-    results = NominatimGateway().search(address, limit=1)
+    try:
+        results = NominatimGateway().search(address, limit=1)
+    except ImpossibleInputError:
+        return (None, None)
     if results:
         first = results[0]
         latitude, longitude = first.get("lat"), first.get("lon")

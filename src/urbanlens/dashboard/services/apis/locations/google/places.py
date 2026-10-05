@@ -1,9 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway, read_capped
+from urbanlens.dashboard.services.core.input_validation import (
+    MAX_PLACES_RADIUS_METERS,
+    require_coordinates,
+    require_format,
+    require_google_place_id,
+    require_in_range,
+    require_query,
+)
+
+#: A Places (New) photo's resource name, ``places/<place id>/photos/<photo reference>``.
+_PHOTO_NAME = re.compile(r"places/[A-Za-z0-9_-]+/photos/[A-Za-z0-9_-]+")
+#: The largest ``maxWidthPx``/``maxHeightPx`` Places (New) serves; outside 1..4800 it answers 400.
+MAX_PHOTO_PIXELS = 4800
 
 
 @dataclass(slots=True, kw_only=True)
@@ -21,6 +35,8 @@ class GooglePlacesGateway(Gateway):
         """
         Fetch details about locations near the given coordinates from Google Places API.
         """
+        require_coordinates(self.service_key, latitude, longitude)
+        require_in_range(self.service_key, "radius", radius, minimum=0, maximum=MAX_PLACES_RADIUS_METERS, exclusive_minimum=True)
         base_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
         params = {
             "location": f"{latitude},{longitude}",
@@ -60,6 +76,8 @@ class GooglePlacesGateway(Gateway):
         Returns:
             List of place dicts, shaped per the requested field_mask.
         """
+        require_coordinates(self.service_key, latitude, longitude)
+        require_in_range(self.service_key, "radius", radius, minimum=0, maximum=MAX_PLACES_RADIUS_METERS, exclusive_minimum=True)
         url = "https://places.googleapis.com/v1/places:searchNearby"
         body: dict = {
             "locationRestriction": {
@@ -99,6 +117,7 @@ class GooglePlacesGateway(Gateway):
         Returns:
             The place details dict for the requested fields.
         """
+        require_google_place_id(self.service_key, place_id)
         details_url = "https://maps.googleapis.com/maps/api/place/details/json"
         params = {
             "place_id": place_id,
@@ -140,6 +159,8 @@ class GooglePlacesGateway(Gateway):
         Returns:
             Up to ``max_photos`` photo resource names; empty when the place has none on file.
         """
+        require_google_place_id(self.service_key, place_id)
+        require_in_range(self.service_key, "max_photos", max_photos, minimum=1)
         url = f"https://places.googleapis.com/v1/places/{place_id}"
         headers = {"X-Goog-Api-Key": self.api_key, "X-Goog-FieldMask": "photos"}
         response = self.session.get(url, headers=headers)
@@ -158,6 +179,8 @@ class GooglePlacesGateway(Gateway):
         Returns:
             Tuple of (image bytes, Content-Type header value).
         """
+        require_format(self.service_key, "photo_name", photo_name, _PHOTO_NAME)
+        require_in_range(self.service_key, "max_width", max_width, minimum=1, maximum=MAX_PHOTO_PIXELS)
         url = f"https://places.googleapis.com/v1/{photo_name}/media"
         params = {"maxWidthPx": str(max_width), "key": self.api_key}
         response = self.session.get(url, params=params, stream=True)
@@ -165,6 +188,7 @@ class GooglePlacesGateway(Gateway):
         return read_capped(response, what="Places photo"), response.headers.get("Content-Type", "image/jpeg")
 
     def autocomplete(self, input_text):
+        require_query(self.service_key, input_text, name="input")
         autocomplete_url = "https://maps.googleapis.com/maps/api/place/autocomplete/json"
         params = {
             "input": input_text,

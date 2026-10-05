@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot, SunTimes
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_coordinates
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
@@ -63,6 +64,14 @@ class OpenMeteoGateway(Gateway):
     service_key: ClassVar[str] = "open_meteo"
     paid_service: ClassVar[bool] = False
 
+    def _can_ask(self, latitude: float, longitude: float) -> bool:
+        """Whether the point is one a forecast exists for; (0, 0) is open ocean, which still has weather."""
+        try:
+            require_coordinates(self.service_key, latitude, longitude, allow_null_island=True)
+        except ImpossibleInputError:
+            return False
+        return True
+
     def get_weather_forecast(self, latitude: float, longitude: float) -> list[ForecastSlot] | None:
         """Return a morning/evening forecast strip for the next few days.
 
@@ -71,8 +80,10 @@ class OpenMeteoGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            ``date`` stays the naive local wall clock ``timezone=auto`` returns (the pin weather panels display local time); ``date_utc`` anchors each slot in UTC using the response's ``utc_offset_seconds``, and is omitted if that field is missing or malformed.
+            ``date`` stays the naive local wall clock ``timezone=auto`` returns (the pin weather panels display local time); ``date_utc`` anchors each slot in UTC using the response's ``utc_offset_seconds``, and is omitted if that field is missing or malformed. None on failure, or for a point not on the globe (counted, never sent).
         """
+        if not self._can_ask(latitude, longitude):
+            return None
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,
@@ -146,8 +157,10 @@ class OpenMeteoGateway(Gateway):
             longitude: WGS-84 longitude.
 
         Returns:
-            Today's sun times, or None on failure.
+            Today's sun times, or None on failure or for a point not on the globe (counted, never sent).
         """
+        if not self._can_ask(latitude, longitude):
+            return None
         params: dict[str, Any] = {
             "latitude": latitude,
             "longitude": longitude,

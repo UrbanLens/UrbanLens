@@ -8,6 +8,7 @@ from typing import ClassVar
 import requests
 
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_coordinates
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -28,10 +29,20 @@ class OpenWeatherMapGateway(Gateway):
         if not self.api_key:
             raise ValueError("OpenWeatherMap API key must be provided.")
 
+    def _can_ask(self, latitude: float | Decimal, longitude: float | Decimal) -> bool:
+        """Whether the point is one a forecast exists for; (0, 0) is open ocean, which still has weather."""
+        try:
+            require_coordinates(self.service_key, latitude, longitude, allow_null_island=True)
+        except ImpossibleInputError:
+            return False
+        return True
+
     def get_weather_forecast(self, latitude: float | Decimal, longitude: float | Decimal) -> list[dict] | None:
         """
-        Retrieve a weather forecast for the given coordinates.
+        Retrieve a weather forecast for the given coordinates; None for a point not on the globe (counted, never sent).
         """
+        if not self._can_ask(latitude, longitude):
+            return None
         params = {
             "lat": float(latitude),
             "lon": float(longitude),
@@ -68,7 +79,9 @@ class OpenWeatherMapGateway(Gateway):
             return None
 
     def get_raw_forecast(self, latitude: float | Decimal, longitude: float | Decimal) -> list[dict] | None:
-        """Return all 3-hourly forecast slots with a parsed 'date' field, unfiltered."""
+        """Return all 3-hourly forecast slots with a parsed 'date' field, unfiltered; None for a point not on the globe."""
+        if not self._can_ask(latitude, longitude):
+            return None
         params = {
             "lat": float(latitude),
             "lon": float(longitude),

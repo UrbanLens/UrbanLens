@@ -9,6 +9,7 @@ import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.input_validation import require_coordinates, require_in_range
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
 logger = logging.getLogger(__name__)
@@ -118,6 +119,11 @@ class OpenHistoricalMapGateway(Gateway):
     service_key: ClassVar[str] = "open_historical_map"
     paid_service: ClassVar[bool] = False
 
+    def _require_point(self, latitude: float, longitude: float, radius_meters: float) -> None:
+        """Refuse a search OHM can only answer empty: a point off the globe, ``(0, 0)``, or a circle holding nothing."""
+        require_coordinates(self.service_key, latitude, longitude)
+        require_in_range(self.service_key, "radius_meters", radius_meters, minimum=0, exclusive_minimum=True)
+
     def get_coverage(self, latitude: float, longitude: float, *, radius_meters: float = 300) -> OhmCoverage:
         """Check whether OHM has any dated features near a point, and for which years.
         Requests tags only (``out tags``, no geometry) - this only needs to answer "does dated data exist nearby" and "what years", so there's no reason to pay for the geometry payload.
@@ -131,8 +137,10 @@ class OpenHistoricalMapGateway(Gateway):
             The coverage summary.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe or is ``(0, 0)``, or the radius holds nothing.
             OpenHistoricalMapUnavailableError: The request failed outright (network/timeout/malformed response).
         """
+        self._require_point(latitude, longitude, radius_meters)
         query = f'[out:json][timeout:15];\n(\n  nwr(around:{radius_meters},{latitude},{longitude})["start_date"];\n  nwr(around:{radius_meters},{latitude},{longitude})["end_date"];\n);\nout tags;'
         payload = self._query(query)
         elements = payload.get("elements")
@@ -168,10 +176,12 @@ class OpenHistoricalMapGateway(Gateway):
             ``{"type": "FeatureCollection", "features": [...]}``.
 
         Raises:
+            ImpossibleInputError: The point is not on the globe or is ``(0, 0)``, or the radius holds nothing.
             ValueError: ``year`` is outside the plausible :data:`MIN_YEAR`- :data:`MAX_YEAR` range.
         """
         if not MIN_YEAR <= year <= MAX_YEAR:
             raise ValueError(f"year must be between {MIN_YEAR} and {MAX_YEAR}, got {year}")
+        self._require_point(latitude, longitude, radius_meters)
 
         year_str = str(year)
         query = (

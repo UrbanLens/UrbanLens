@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.locations.display import canonical_country
 from urbanlens.dashboard.services.locations.naming import canonical_state
@@ -62,6 +63,10 @@ def _reverse_geocode_admin_cached(latitude: float, longitude: float) -> dict[str
         # A traceback per occurrence would bury the genuine failures handled below.
         logger.debug("Nominatim admin reverse geocode rate-limited for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
         cache.set(key, None, _REVERSE_GEOCODE_ERROR_CACHE_TTL_SECONDS)
+        return None
+    except ImpossibleInputError:
+        # A guess no place can be at, such as (0, 0): nothing was sent, and nothing will ever be found there.
+        cache.set(key, None, _REVERSE_GEOCODE_CACHE_TTL_SECONDS)
         return None
     except Exception:
         logger.exception("Nominatim admin reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))

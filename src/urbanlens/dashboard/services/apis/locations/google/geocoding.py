@@ -11,6 +11,7 @@ import s2sphere
 
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_coordinates, require_query
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_params
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -134,6 +135,7 @@ class GoogleGeocodingGateway(Gateway):
         """
         if not place_name:
             raise ValueError("Place name must be provided to retrieve_place_name.")
+        require_query(self.service_key, place_name, name="address")
 
         key = _address_key(place_name)
         if (cached := _cached_answer(key)) is not None:
@@ -156,6 +158,7 @@ class GoogleGeocodingGateway(Gateway):
         """
         if latitude is None or longitude is None:
             raise ValueError("Latitude and longitude must be provided to retrieve_place_name.")
+        require_coordinates(self.service_key, latitude, longitude)
 
         key = _point_key(latitude, longitude)
         if (cached := _cached_answer(key)) is not None:
@@ -253,6 +256,8 @@ class GoogleGeocodingGateway(Gateway):
                 place_name = result.get("formatted_address")
                 if place_name:
                     break
+        except ImpossibleInputError:
+            return None
         except KeyError:
             logger.exception(
                 "Error getting place name for latitude: %s, longitude: %s",
@@ -271,7 +276,10 @@ class GoogleGeocodingGateway(Gateway):
             logger.error("Place name must be provided to get_coordinates.")
             return None, None
 
-        body = self.geocode_place_name(place_name)
+        try:
+            body = self.geocode_place_name(place_name)
+        except ImpossibleInputError:
+            return None, None
         if not body:
             return None, None
 

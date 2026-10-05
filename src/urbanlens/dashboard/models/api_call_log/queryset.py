@@ -50,13 +50,17 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
 
     def billable(self) -> Self:
         """Filter to calls that actually consumed the service's quota.
-        Excludes the three kinds of entry the limiter writes for calls it *skipped* - geo-filtered, rate-limited, and service-disabled.
+        Excludes the entries written for calls that were *skipped* - geo-filtered, rate-limited, service-disabled, and refused for an input that could not return data.
         Those rows exist so a skipped attempt is visible in usage reporting, not because a request went out; counting them against a limit lets a burst of rejections spend a budget no request ever used.
 
         Returns:
             Filtered queryset.
         """
-        return self.filter(was_geo_filtered=False, was_rate_limited=False, was_service_disabled=False)
+        return self.filter(was_geo_filtered=False, was_rate_limited=False, was_service_disabled=False, was_rejected_input=False)
+
+    def rejected_input(self) -> Self:
+        """Filter to calls refused because their input could not return data."""
+        return self.filter(was_rejected_input=True)
 
     def usage_by_profile(self, window: timedelta) -> list[tuple[int, int]]:
         """Who consumed this queryset's calls over ``window``, heaviest first.
@@ -101,7 +105,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
                 total=Count("id"),
                 blocked=Count("id", filter=Q(was_rate_limited=True)),
                 geo_skipped=Count("id", filter=Q(was_geo_filtered=True)),
-                errors=Count("id", filter=Q(success=False, was_rate_limited=False, was_geo_filtered=False)),
+                rejected_inputs=Count("id", filter=Q(was_rejected_input=True)),
+                errors=Count("id", filter=Q(success=False, was_rate_limited=False, was_geo_filtered=False, was_service_disabled=False, was_rejected_input=False)),
                 avg_response_ms=Avg("response_ms"),
                 total_cost=Sum("cost_estimate"),
             )

@@ -150,6 +150,16 @@ class PlaceResolveTests(LocationSearchTestCase):
         ):
             self.assertEqual(self._resolve(place_id="nope").status_code, 404)
 
+    def test_a_place_id_no_provider_issues_is_a_400_not_a_503_a_client_retries(self) -> None:
+        with (
+            patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),
+            patch(_RESOLVE_PLACE, return_value=UpstreamResult(Outcome.REFUSED)),
+        ):
+            response = self._resolve(place_id="places/ChIJ abc")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("Retry-After", response)
+
     def test_an_unavailable_provider_is_a_503_with_its_wait_not_a_404(self) -> None:
         with (
             patch("urbanlens.dashboard.external_api.views.settings.google_unrestricted_api_key", "test-key"),

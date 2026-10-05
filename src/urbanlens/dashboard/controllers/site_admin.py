@@ -1081,6 +1081,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                     "calls_30d": summary.get("total", 0),
                     "blocked_30d": summary.get("blocked", 0),
                     "geo_skipped_30d": summary.get("geo_skipped", 0),
+                    "rejected_30d": summary.get("rejected_inputs", 0),
                     "errors_30d": summary.get("errors", 0),
                     "avg_ms": round(summary.get("avg_response_ms") or 0),
                 }
@@ -1694,6 +1695,7 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
                         "total": row.get("total", 0),
                         "blocked": row.get("blocked", 0),
                         "geo_skipped": row.get("geo_skipped", 0),
+                        "rejected": row.get("rejected_inputs", 0),
                         "errors": row.get("errors", 0),
                         "avg_ms": round(row.get("avg_response_ms") or 0),
                         "cost_30d": cost_30d,

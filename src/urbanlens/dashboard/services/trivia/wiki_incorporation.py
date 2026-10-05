@@ -12,6 +12,7 @@ from urbanlens.dashboard.services.ai.article_expansion import append_to_article,
 from urbanlens.dashboard.services.ai.article_safety import classify_article_text
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.trivia.voting import effective_score, score_expression
 from urbanlens.dashboard.services.wiki.articles import get_article
@@ -60,10 +61,16 @@ def _slice_existing(content: str) -> str:
 
 
 def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_article: str) -> str | None:
-    """Call the writing gateway; return the raw answer text, or None on failure/unavailability."""
+    """Call the writing gateway; return the raw answer text, ``""`` for a blank question or answer, or None on failure/unavailability."""
     gateway = get_gateway("trivia_wiki_incorporation", instructions=_WRITING_INSTRUCTIONS)
     if gateway is None:
         return None
+    try:
+        require_query("trivia_wiki_incorporation", prompt, name="question")
+        require_query("trivia_wiki_incorporation", answer, name="answer")
+    except ImpossibleInputError:
+        # No fact to fold in: an empty draft, which marks the question processed rather than retrying it.
+        return ""
 
     full_prompt = "\n".join(
         [

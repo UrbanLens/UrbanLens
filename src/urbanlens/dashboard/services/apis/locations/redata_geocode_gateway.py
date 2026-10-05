@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, RedataLocationContextGateway, refused_as_rejection
+from urbanlens.dashboard.services.core.input_validation import require_query
 
 
 @dataclass(slots=True, kw_only=True)
@@ -32,6 +33,8 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
         Note:
             REData's own ``../REData/docs/api-reference.md`` documents this endpoint's request parameters and its shared envelope, but doesn't show a full worked example of one result entry's own fields.
         """
+        with refused_as_rejection():
+            require_query(type(self).service_key, query, name="q")
         params: dict[str, Any] = {"q": query}
         if latitude is not None:
             params["lat"] = latitude

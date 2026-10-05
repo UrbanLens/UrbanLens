@@ -7,6 +7,7 @@ from typing import Any
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.apis.locations.redata_routing_gateway import RedataRoutingGateway
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,9 @@ def get_route_between(origin: tuple[float, float], destination: tuple[float, flo
     if redata_configured():
         try:
             return RedataRoutingGateway().get_route([origin, destination], capability="as_given", profile="driving")
+        except ImpossibleInputError:
+            # OSRM would refuse the same point; no route is the settled answer.
+            return None
         except LocationContextUnavailableError as exc:
             logger.warning("REData routing failed, falling back to direct OSRM: %s", exc)
 

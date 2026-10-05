@@ -9,6 +9,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_content
 from urbanlens.dashboard.services.core.rate_limiter import ApiCallSlot, RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
@@ -136,6 +137,10 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
 
     Returns:
         Raw keyword strings (possibly empty on failure - errors are logged)."""
+    try:
+        require_content(SERVICE_AI_PHOTO_KEYWORDS, "image", image_bytes)
+    except ImpossibleInputError:
+        return []
     target = _vision_target()
     try:
         with api_call_slot(SERVICE_AI_PHOTO_KEYWORDS, endpoint=f"{target[0]}:{target[1]}") as slot:
@@ -156,6 +161,10 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
         (label, confidence) pairs, highest confidence first; empty on failure."""
     from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, get_inference_client
 
+    try:
+        require_content(SERVICE_PHOTO_CLASSIFIER, "image", image_bytes)
+    except ImpossibleInputError:
+        return []
     request = ClassifyRequest(
         provider="cloudflare",
         model=_CF_CLASSIFIER_MODEL,

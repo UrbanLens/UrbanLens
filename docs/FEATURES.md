@@ -817,6 +817,27 @@ and wiki incorporation) reserve their ledger row before calling through
 `rate_limiter.api_call_slot()`, so their admin limits and enable switches apply, and a limiter that
 cannot read its counts refuses billable services.
 
+A request no provider could answer is refused before it spends anything: no rate-limit slot, no
+quota, no network. `services/core/input_validation.py` raises `ImpossibleInputError`, a "no data,
+don't retry" error that is not an outage. Every gateway session refuses a NaN or infinite number
+anywhere in its parameters or body, and a named latitude or longitude off the globe. Each gateway
+then refuses its own impossible inputs:
+
+- a blank query;
+- `(0, 0)` where the source has nothing at sea (weather, Wikipedia and satellite imagery still take it);
+- a malformed Google place id or photo name, Nominatim OSM id, VirusTotal SHA-256 or Twilio number;
+- a radius, limit or tile coordinate outside the provider's range;
+- an empty AI prompt or image.
+
+Each refusal writes one `ApiCallLog` row with `was_rejected_input`, which no budget window counts and
+the API-usage report shows. It logs at INFO once per service and reason every ten minutes.
+Callers treat it as an answer of nothing:
+
+- panels store `{}` or skip;
+- `request_upstream` answers 400;
+- the tile proxy answers a 404;
+- routing returns no route.
+
 Beyond on-demand fetches, an hourly **background enrichment** task drips high-value lookups
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
 is left over after real traffic, spread evenly so multi-day quotas can't be burned in one day.

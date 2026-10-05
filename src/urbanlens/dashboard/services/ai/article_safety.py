@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
@@ -53,7 +54,7 @@ class ArticleSafetyVerdict:
 
     Attributes:
         approved: True only when the model returned the APPROVE token.
-        reason: None on approval; otherwise a short machine reason (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``, or ``unparseable``)."""
+        reason: None on approval; otherwise a short machine reason (``safety``, ``inappropriate``, ``off_topic``, ``ai_unavailable``, ``unparseable``, or ``empty`` for blank text)."""
 
     approved: bool
     reason: str | None = None
@@ -75,6 +76,11 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
     if gateway is None:
         logger.info("Article safety classifier unavailable (AI disabled); rejecting fail-closed")
         return ArticleSafetyVerdict(approved=False, reason="ai_unavailable")
+
+    try:
+        require_query("article_safety", text, name="article text")
+    except ImpossibleInputError:
+        return ArticleSafetyVerdict(approved=False, reason="empty")
 
     user_prompt = f"Location: {place_name or 'Unknown location'}\nProposed article text:\n{wrap_user_data(text)}"
 
