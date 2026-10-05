@@ -80,8 +80,9 @@ refusal is now logged as answered (P320). Over the whole week, 869 of the 3,302 
    which Jess sets per deployment. Until they are set the digest goes to email only, and no SMTP relay is
    configured on the LAN yet either.
 2. **A 404 counts as answered.** That is right for a point lookup, and for a shard dataset asked only where it has
-   coverage. Dev's `google_open_buildings` 404s were all cells outside its coverage, which it no longer asks for
-   (P319); its data had not moved. A provider whose data did move would show as degraded against its baseline, never
+   coverage. Dev's `google_open_buildings` 404s were all US and Canadian cells outside its coverage, which it no
+   longer asks for (P319); its data had not moved. About 37% of the level-6 cells inside its coverage have no shard
+   either (ocean, desert), and each of those still 404s once, then is remembered for 30 days. A provider whose data did move would show as degraded against its baseline, never
    backed off. A per-service override of the outcome map would change that if one is wanted.
 3. **No per-host scope.** REData splits a mirror service by host. No UrbanLens service fans out to unrelated hosts
    under one key, so none is split.

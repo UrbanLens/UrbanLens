@@ -24187,7 +24187,7 @@ cap: [`handoffs/redata-open-buildings-shards-read-whole.md`](../handoffs/redata-
 **Tests.** `test_google_open_buildings_shards.py`: a place outside the dataset is refused without a request, logged as
 a rejected input, and the chain does not defer on it; a covered place asks for its level-6 shard; the covered cells are the 333 level-4 cells; a
 headerless shard's polygons, raw WKT and points are read, from the palace's own row; the boundary is the footprint
-holding the point; a short row is skipped. Eleven failed before the fix. `tests/live_locations/test_open_buildings.py`
+holding the point; a short row is skipped. Eleven of its 14 fail against the code before the fix. `tests/live_locations/test_open_buildings.py`
 (`live_source`, run only with `UL_LIVE_LOCATIONS=1`) asks Google for the palace.
 
 ## RESOLVED 2026-10-05: Cloudflare's classifier refused 1-pixel test uploads, which UrbanLens logged as the classifier failing, and an outage could clear a photo's keywords
