@@ -1,7 +1,7 @@
 """Every AI call writes exactly one ``ApiCallLog`` row: service, model, time, status, tokens, cost - never content.
 
 Each test drives a real AI path with only the inference client (the one thing that leaves the
-process) replaced, and the private text the path puts in its prompt set to a marker that must not
+process) replaced, and the text the path puts in its prompt set to a marker that must not
 reach any column of the row.
 """
 
@@ -35,8 +35,8 @@ from urbanlens.dashboard.services.ai.inference_client import (
 )
 from urbanlens.dashboard.services.core.rate_limiter import api_call_slot
 
-#: Private text each path sends the model. If it turns up in a row, content was logged.
-SECRET = "Zq7-private-Zq7"
+#: Text each path sends the model that belongs to the user. If it turns up in a row, content was logged.
+MARKER = "Zq7-marker-Zq7"
 CLIENT_PATH = "urbanlens.dashboard.services.ai.inference_client.get_inference_client"
 USAGE = Usage(input_tokens=1200, output_tokens=300)
 
@@ -81,7 +81,7 @@ class _LoggingCase(TestCase):
         self.assertEqual(len(rows), 1, f"{service}: {len(rows)} rows for one call")
         row = rows[0]
         for name in ("service", "endpoint", "model"):
-            self.assertNotIn(SECRET, str(getattr(row, name) or ""), f"{name} carries the prompt")
+            self.assertNotIn(MARKER, str(getattr(row, name) or ""), f"{name} carries the prompt")
         return row
 
     def assert_ledgered(self, service: str, *, model: str | None = None) -> ApiCallLog:
@@ -106,7 +106,7 @@ class GatewayCallTests(_LoggingCase):
             ):
                 gateway = get_gateway("feature_" + provider, provider=provider)
                 assert gateway is not None
-                self.assertEqual(gateway.send_prompt(f"describe {SECRET}"), "x")
+                self.assertEqual(gateway.send_prompt(f"describe {MARKER}"), "x")
 
                 row = self.assert_ledgered("feature_" + provider, model=gateway.model)
                 self.assertEqual(row.endpoint, f"{provider}:{gateway.model}")
@@ -124,7 +124,7 @@ class GatewayCallTests(_LoggingCase):
         with mock.patch(CLIENT_PATH, return_value=_client(_answer("<ANSWER>a</ANSWER><ANSWER>b</ANSWER>"))):
             gateway = get_gateway("list_feature")
             assert gateway is not None
-            self.assertEqual(gateway.send_prompt_list(SECRET), ["a", "b"])
+            self.assertEqual(gateway.send_prompt_list(MARKER), ["a", "b"])
 
         self.assert_ledgered("list_feature")
 
@@ -135,7 +135,7 @@ class GatewayCallTests(_LoggingCase):
         with mock.patch(CLIENT_PATH, return_value=_client(reply)):
             gateway = get_gateway("tool_feature", provider="anthropic")
             assert gateway is not None
-            gateway.send_with_tools(SECRET, [])
+            gateway.send_with_tools(MARKER, [])
 
         self.assert_ledgered("tool_feature")
 
@@ -145,7 +145,7 @@ class GatewayCallTests(_LoggingCase):
         with mock.patch(CLIENT_PATH, return_value=_client(failure)):
             gateway = get_gateway("failing_feature")
             assert gateway is not None
-            self.assertIsNone(gateway.send_prompt(SECRET))
+            self.assertIsNone(gateway.send_prompt(MARKER))
 
         row = self.one_row("failing_feature")
         self.assertFalse(row.success)
@@ -160,7 +160,7 @@ class GatewayCallTests(_LoggingCase):
         with mock.patch(CLIENT_PATH, return_value=_client(refused)):
             gateway = get_gateway("refused_feature")
             assert gateway is not None
-            self.assertIsNone(gateway.send_prompt(SECRET))
+            self.assertIsNone(gateway.send_prompt(MARKER))
 
         row = self.one_row("refused_feature")
         self.assertFalse(row.success)
@@ -171,7 +171,7 @@ class GatewayCallTests(_LoggingCase):
             gateway = get_gateway("inner_feature")
             assert gateway is not None
             with api_call_slot("outer_feature") as slot:
-                slot.success = gateway.send_prompt(SECRET) is not None
+                slot.success = gateway.send_prompt(MARKER) is not None
 
         self.assert_ledgered("inner_feature")
         self.assertIsNone(ApiCallLog.objects.get(service="outer_feature").model)
@@ -182,7 +182,7 @@ class GatewayCallTests(_LoggingCase):
             gateway = get_gateway("oversized_feature")
             assert gateway is not None
             with mock.patch.object(type(gateway), "construct_messages", side_effect=ValueError("too long")):
-                self.assertIsNone(gateway.send_prompt(SECRET))
+                self.assertIsNone(gateway.send_prompt(MARKER))
 
         client.send.assert_not_called()
         self.assertFalse(ApiCallLog.objects.filter(service="oversized_feature").exists())
@@ -259,7 +259,7 @@ class GatewayCallTests(_LoggingCase):
             gateway = get_gateway("slotted_feature")
             assert gateway is not None
             with api_call_slot("slotted_feature", endpoint=gateway.model) as slot:
-                slot.success = gateway.send_prompt(SECRET) is not None
+                slot.success = gateway.send_prompt(MARKER) is not None
 
         row = self.assert_ledgered("slotted_feature", model=gateway.model)
         self.assertEqual(row.endpoint, f"cloudflare:{gateway.model}")
@@ -280,7 +280,7 @@ class TextPathTests(_LoggingCase):
 
         profile = _profile()
         self.run_path("<ANSWER>x</ANSWER>")
-        suggest_label_style(f"{SECRET} Factories", profile)
+        suggest_label_style(f"{MARKER} Factories", profile)
 
         self.assert_ledgered("label_style_suggestions")
 
@@ -290,7 +290,7 @@ class TextPathTests(_LoggingCase):
 
         self.run_path("<ANSWER>Factory</ANSWER>")
         label = baker.make(Label, name="Factory")
-        AutoTagService()._ai_match(SimpleNamespace(address=f"{SECRET} Road"), [label], "category")
+        AutoTagService()._ai_match(SimpleNamespace(address=f"{MARKER} Road"), [label], "category")
 
         self.assert_ledgered("category_suggestions")
 
@@ -299,7 +299,7 @@ class TextPathTests(_LoggingCase):
 
         profile = _profile()
         self.run_path("<ANSWER>nothing</ANSWER>")
-        extract_pins_from_text("notes.txt", f"We went to {SECRET} mill.", profile)
+        extract_pins_from_text("notes.txt", f"We went to {MARKER} mill.", profile)
 
         self.assert_ledgered("document_pin_import")
 
@@ -309,12 +309,12 @@ class TextPathTests(_LoggingCase):
         from urbanlens.dashboard.services.ai.link_extraction import run_extraction
 
         profile = _profile()
-        pin = baker.make(Pin, profile=profile, name=f"{SECRET} Mill", name_is_user_provided=True)
+        pin = baker.make(Pin, profile=profile, name=f"{MARKER} Mill", name_is_user_provided=True)
         extraction = LinkExtraction.objects.create(profile=profile, pin=pin, url="https://example.com/history")
         self.run_path('<ANSWER>{"owner_name": null}</ANSWER>')
         with (
             mock.patch(
-                "urbanlens.dashboard.services.ai.link_extraction.fetch_page_text", return_value=f"page about {SECRET}"
+                "urbanlens.dashboard.services.ai.link_extraction.fetch_page_text", return_value=f"page about {MARKER}"
             ),
             mock.patch("urbanlens.dashboard.services.ai.article_expansion.expand_articles_from_page", return_value=[]),
         ):
@@ -327,7 +327,7 @@ class TextPathTests(_LoggingCase):
         from urbanlens.dashboard.services.trips.trip_ai_suggestions import generate_trip_suggestions
 
         profile = _profile()
-        trip = baker.make(Trip, name=f"{SECRET} Trip", creator=profile)
+        trip = baker.make(Trip, name=f"{MARKER} Trip", creator=profile)
         baker.make(TripMembership, trip=trip, profile=profile, status=TripMembership.STATUS_JOINED, rsvp="yes")
         self.run_path('<ANSWER>{"summary": "fine", "pin_suggestions": [], "schedule": null}</ANSWER>')
         generate_trip_suggestions(trip, profile)
@@ -338,7 +338,7 @@ class TextPathTests(_LoggingCase):
         from urbanlens.dashboard.services.trivia.generation import generate_questions_for_wiki
 
         wiki = baker.make(
-            Wiki, location=baker.make(Location), description=f"{SECRET} was a mill with a long history. " * 20
+            Wiki, location=baker.make(Location), description=f"{MARKER} was a mill with a long history. " * 20
         )
         self.run_path("<ANSWER>no separator</ANSWER>")
         generate_questions_for_wiki(wiki)
@@ -349,7 +349,7 @@ class TextPathTests(_LoggingCase):
         from urbanlens.dashboard.services.trivia.classifier import classify_trivia_question
 
         self.run_path("<ANSWER>APPROVE</ANSWER>")
-        classify_trivia_question(f"{SECRET}?", "1912", baker.make(Location))
+        classify_trivia_question(f"{MARKER}?", "1912", baker.make(Location))
 
         self.assert_ledgered("trivia_moderation")
 
@@ -358,7 +358,7 @@ class TextPathTests(_LoggingCase):
 
         profile = _profile()
         self.run_path("<ANSWER>MATCH</ANSWER>")
-        is_answer_equivalent(SECRET, "1912", profile=profile)
+        is_answer_equivalent(MARKER, "1912", profile=profile)
 
         self.assert_ledgered("trivia_answer_check")
 
@@ -366,7 +366,7 @@ class TextPathTests(_LoggingCase):
         from urbanlens.dashboard.services.trivia.wiki_incorporation import _draft_paragraph
 
         self.run_path("<ANSWER>A paragraph.</ANSWER>")
-        _draft_paragraph(place_name="Mill", prompt=f"{SECRET}?", answer="1912", existing_article="")
+        _draft_paragraph(place_name="Mill", prompt=f"{MARKER}?", answer="1912", existing_article="")
 
         self.assert_ledgered("trivia_wiki_incorporation")
 
@@ -375,7 +375,7 @@ class TextPathTests(_LoggingCase):
 
         self.run_path("<ANSWER>A paragraph.</ANSWER>")
         _draft_new_paragraphs(
-            place_name="Mill", page_text=f"page {SECRET}", pin_article="", wiki_article=None, wiki=None, profile=None
+            place_name="Mill", page_text=f"page {MARKER}", pin_article="", wiki_article=None, wiki=None, profile=None
         )
 
         self.assert_ledgered("article_expansion")
@@ -384,7 +384,7 @@ class TextPathTests(_LoggingCase):
         from urbanlens.dashboard.services.ai.article_safety import classify_article_text
 
         self.run_path("<ANSWER>APPROVE</ANSWER>")
-        classify_article_text(f"text {SECRET}", place_name="Mill")
+        classify_article_text(f"text {MARKER}", place_name="Mill")
 
         self.assert_ledgered("article_safety")
 
@@ -397,7 +397,7 @@ class TextPathTests(_LoggingCase):
         )
         client = _client(tool, _answer("Here are your trips."))
         with mock.patch(CLIENT_PATH, return_value=client):
-            run_assistant_turn(profile, [], f"what about {SECRET}?")
+            run_assistant_turn(profile, [], f"what about {MARKER}?")
 
         rows = list(ApiCallLog.objects.filter(service="assistant"))
         self.assertEqual(len(rows), 2, "one row for each call to the provider")
@@ -405,7 +405,7 @@ class TextPathTests(_LoggingCase):
             self.assertTrue(row.success)
             self.assertTrue(row.model)
             self.assertEqual((row.input_tokens, row.output_tokens), (1200, 300))
-            self.assertNotIn(SECRET, f"{row.endpoint}{row.model}")
+            self.assertNotIn(MARKER, f"{row.endpoint}{row.model}")
 
     def test_a_failed_assistant_call_is_one_failed_row(self) -> None:
         from urbanlens.dashboard.services.ai.assistant import run_assistant_turn
@@ -424,7 +424,7 @@ class VisionTests(_LoggingCase):
 
     def test_photo_keywords(self) -> None:
         with mock.patch(CLIENT_PATH, return_value=_client(_answer("brick, mill"))):
-            self.assertEqual(vision.describe_photo_keywords(SECRET.encode()), ["brick", "mill"])
+            self.assertEqual(vision.describe_photo_keywords(MARKER.encode()), ["brick", "mill"])
 
         row = self.assert_ledgered(vision.SERVICE_AI_PHOTO_KEYWORDS)
         self.assertEqual(row.model, vision._CF_VISION_MODEL)
@@ -435,7 +435,7 @@ class VisionTests(_LoggingCase):
             ai_provider="openai", openai_model="gpt-5-mini"
         )
         with mock.patch(CLIENT_PATH, return_value=_client(_answer("brick"))):
-            vision.describe_photo_keywords(SECRET.encode())
+            vision.describe_photo_keywords(MARKER.encode())
 
         row = self.assert_ledgered(vision.SERVICE_AI_PHOTO_KEYWORDS, model="gpt-5-mini")
         self.assertEqual(row.endpoint, "openai:gpt-5-mini")
@@ -444,7 +444,7 @@ class VisionTests(_LoggingCase):
         failure = InferenceError("ai-inference returned HTTP 502")
         failure.status_code = 502
         with mock.patch(CLIENT_PATH, return_value=_client(failure)):
-            vision.describe_photo_keywords(SECRET.encode())
+            vision.describe_photo_keywords(MARKER.encode())
 
         row = self.one_row(vision.SERVICE_AI_PHOTO_KEYWORDS)
         self.assertFalse(row.success)
@@ -453,7 +453,7 @@ class VisionTests(_LoggingCase):
 
     def test_photo_classifier(self) -> None:
         with mock.patch(CLIENT_PATH, return_value=_client()):
-            self.assertEqual(vision.classify_photo(SECRET.encode()), [("mill", 0.9)])
+            self.assertEqual(vision.classify_photo(MARKER.encode()), [("mill", 0.9)])
 
         row = self.one_row(vision.SERVICE_PHOTO_CLASSIFIER)
         self.assertTrue(row.success)
@@ -476,7 +476,7 @@ class OllamaTests(_LoggingCase):
         body = {"response": "brick, mill", "prompt_eval_count": 1200, "eval_count": 300}
         with mock.patch("requests.Session.request", return_value=self._wire(body)):
             keywords = OllamaGateway(base_url="http://ollama.test:11434", model="llava").describe_photo_keywords(
-                SECRET.encode()
+                MARKER.encode()
             )
 
         self.assertEqual(keywords, ["brick", "mill"])
@@ -491,7 +491,7 @@ class OllamaTests(_LoggingCase):
             mock.patch("urbanlens.dashboard.services.apis.ai.ollama._reported_tokens", return_value=None),
         ):
             keywords = OllamaGateway(base_url="http://ollama.test:11434", model="llava").describe_photo_keywords(
-                SECRET.encode()
+                MARKER.encode()
             )
 
         self.assertEqual(keywords, ["brick"])
@@ -503,7 +503,7 @@ class OllamaTests(_LoggingCase):
         from urbanlens.dashboard.services.apis.ai.ollama import OllamaGateway
 
         with mock.patch("requests.Session.request", return_value=self._wire({"response": "brick"})):
-            OllamaGateway(base_url="http://ollama.test:11434", model="llava").describe_photo_keywords(SECRET.encode())
+            OllamaGateway(base_url="http://ollama.test:11434", model="llava").describe_photo_keywords(MARKER.encode())
 
         row = self.one_row("ollama")
         self.assertEqual(row.model, "llava")
