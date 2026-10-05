@@ -71,6 +71,15 @@ def _session(service: str = _SERVICE, status: int = 200) -> _RateLimitedSession:
     return session
 
 
+class _GateTestCase(TestCase):
+    """Leaves no backoff behind: a later test outside the cache-clearing base classes must not inherit it."""
+
+    def tearDown(self) -> None:
+        provider_health.cache.delete(provider_health._SNAPSHOT_KEY)
+        provider_health.forget_snapshot()
+        super().tearDown()
+
+
 class JudgeTests(SimpleTestCase):
     def test_too_few_calls_say_nothing(self) -> None:
         self.assertIsNone(judge(Tally(failed=9)))
@@ -118,7 +127,7 @@ class JudgeTests(SimpleTestCase):
         )
 
 
-class OutcomeTests(TestCase):
+class OutcomeTests(_GateTestCase):
     def test_each_kind_of_logged_call_has_its_outcome(self) -> None:
         at = timezone.now() - timedelta(minutes=5)
         _calls(_SERVICE, 1, status=200, at=at)
@@ -155,7 +164,7 @@ class OutcomeTests(TestCase):
         self.assertEqual(provider_health._read_counts(timezone.now() - timedelta(hours=1)), [])
 
 
-class EvaluationTests(TestCase):
+class EvaluationTests(_GateTestCase):
     def test_a_provider_failing_most_calls_is_backed_off_for_fifteen_minutes(self) -> None:
         now = timezone.now()
         _calls(_SERVICE, 7, status=200, at=now - timedelta(minutes=5))
@@ -244,7 +253,7 @@ class EvaluationTests(TestCase):
         self.assertGreater(refusal.retry_after, 14 * 60)
 
 
-class AlertTests(TestCase):
+class AlertTests(_GateTestCase):
     def setUp(self) -> None:
         super().setUp()
         patcher = mock.patch.object(provider_health, "alerts_enabled", return_value=True)
@@ -322,7 +331,7 @@ class AlertTests(TestCase):
         self.assertIsNone(ProviderHealth.objects.get(provider=_SERVICE).alerted_at)
 
 
-class GateTests(TestCase):
+class GateTests(_GateTestCase):
     def test_a_backed_off_provider_refuses_background_work_without_a_request(self) -> None:
         _backed_off()
         session = _session()
@@ -418,7 +427,7 @@ class BackgroundWorkTests(SimpleTestCase):
         self.assertFalse(is_background())
 
 
-class SiteAdminTests(TestCase):
+class SiteAdminTests(_GateTestCase):
     def _page(self) -> dict:
         from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 

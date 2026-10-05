@@ -823,7 +823,7 @@ def check_admission(service: str, *, endpoint: str = "") -> None:
 
     if (refusal := refusal_for(service)) is None:
         return
-    logger.info("provider_health: refused a call to %s: %s", service, refusal.reason)
+    logger.debug("provider_health: refused a call to %s: %s", service, refusal.reason)
     log_api_call(service, success=False, endpoint=endpoint, was_rate_limited=True)
     record_unanswered(service)
     raise UpstreamThrottledError(service, retry_after=refusal.retry_after)
