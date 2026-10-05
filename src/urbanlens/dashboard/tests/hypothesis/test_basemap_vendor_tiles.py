@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway im
 from urbanlens.dashboard.services.map.basemap_catalogue import _offered_layers, tile_url_template
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES, VendorTiles, vendor_for
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 class VendorUrlTemplateTests(SimpleTestCase):
@@ -70,7 +71,7 @@ class VendorUrlTemplateTests(SimpleTestCase):
             self.assertNotIn("cartocdn", vendor.url_template, layer)
 
 
-class WhichUpstreamAnswersTests(SimpleTestCase):
+class WhichUpstreamAnswersTests(RedataConfiguredMixin, SimpleTestCase):
     """The routing decision itself."""
 
     def test_a_layer_with_a_vendor_never_reaches_redata(self) -> None:

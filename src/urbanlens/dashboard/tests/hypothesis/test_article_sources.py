@@ -25,6 +25,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
 from urbanlens.dashboard.services.core.bounded_cache import set_if_small
 from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 from urbanlens.dashboard.services.pins.search_names import search_names
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])
 _SCHEDULE = "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch"
@@ -69,7 +70,7 @@ def _items(content: str) -> list[dict[str, str]]:
     return items
 
 
-class _SourcesTestBase(TestCase):
+class _SourcesTestBase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         caches[settings.PROXIED_BYTES_CACHE].clear()

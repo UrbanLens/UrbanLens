@@ -29,6 +29,7 @@ from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_catalogue import CATALOGUE_CACHE_KEY
 from urbanlens.dashboard.services.map.tile_authorisation import TILE_AUTH_TTL, tile_auth_key
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from django.test import Client
@@ -38,7 +39,7 @@ _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gatewa
 TILE_BYTES = b"x" * 128
 
 
-class TileAuthorisationTests(TestCase):
+class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
     """The gate, probed from the outside."""
 
     def setUp(self) -> None:

@@ -27,6 +27,7 @@ from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.core.gateway import MAX_PROXIED_MEDIA_BYTES, GatewayRequestError, read_capped
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 def _streamed(body: bytes, content_type: str = "image/jpeg") -> requests.Response:
@@ -100,7 +101,7 @@ class TheDefaultIsSaneTests(SimpleTestCase):
         self.assertLessEqual(MAX_PROXIED_MEDIA_BYTES, 64 * 1024 * 1024)
 
 
-class TheGatewaysActuallyUseItTests(SimpleTestCase):
+class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
     """The existing proxy tests stub `download_listing_photo` itself, so they
     pass whatever the gateway does underneath - including against a cap that was
     never wired in, or one wired in wrongly enough to serve empty bodies. These

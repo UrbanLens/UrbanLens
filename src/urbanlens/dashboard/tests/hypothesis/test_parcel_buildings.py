@@ -267,7 +267,7 @@ class FetchParcelBuildingsTests(RedataConfiguredMixin, TestCase):
             self.assertEqual(fetch_parcel_buildings(self.location), {})
 
 
-class PanelSourceTests(TestCase):
+class PanelSourceTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.profile = baker.make("dashboard.Profile")
@@ -295,7 +295,7 @@ class PanelSourceTests(TestCase):
         self.assertEqual(len(cached.data["buildings"]), 2)
 
 
-class PartialAnswerCachingTests(TestCase):
+class PartialAnswerCachingTests(RedataConfiguredMixin, TestCase):
     """A building list REData says is missing a source is shown, and asked for again within the hour."""
 
     def setUp(self) -> None:
@@ -328,7 +328,7 @@ class PartialAnswerCachingTests(TestCase):
         self.assertTrue(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
 
 
-class EnrichmentSourceTests(TestCase):
+class EnrichmentSourceTests(RedataConfiguredMixin, TestCase):
     def test_fetch_returns_the_payload_and_a_coordinate_query_key(self) -> None:
         location = baker.make(Location, latitude="41.733150", longitude="-73.930370", google_place=None)
         with (

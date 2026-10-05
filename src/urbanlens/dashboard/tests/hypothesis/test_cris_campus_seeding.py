@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import run_panel_fetch
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import CAMPUS_LAT, CAMPUS_LNG, offset, parcel_square, rect
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -128,7 +129,7 @@ class FakeRedata:
         return {"extracted_images": []}
 
 
-class CampusSeedingTestCase(TestCase):
+class CampusSeedingTestCase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)

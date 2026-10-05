@@ -11,6 +11,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.site_admin_models import scrub_personal_keys
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _LABELS = "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway.get_model"
 _PHOTOS = "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway.get_model"
@@ -51,7 +52,7 @@ class ScrubPersonalKeysTests(SimpleTestCase):
         self.assertEqual(scrub_personal_keys(payload), payload)
 
 
-class SiteAdminModelsViewTests(TestCase):
+class SiteAdminModelsViewTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
