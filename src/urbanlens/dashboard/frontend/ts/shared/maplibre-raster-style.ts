@@ -6,17 +6,16 @@
  * vector data, no hosted style API, and (for self-hosters with no REData
  * configured) no third-party dependency beyond what this app already ships.
  *
- * The shapes below are a hand-verified subset of the real style spec (checked
- * against @maplibre/maplibre-gl-style-spec@24.8.1, the version maplibre-gl@5.24.0
- * itself depends on) rather than an import of it. They predate `maplibre-gl`
- * being installed for its types, and stay hand-written because this module's
- * output is consumed from plain JS too (`comment-map.js`), where the real spec
- * types buy nothing.
+ * The shapes below are a subset of the real style spec rather than an import of
+ * it; `maplibre-raster-style.test.ts` holds them to MapLibre's own
+ * `StyleSpecification`. They stay hand-written because this module's output is
+ * consumed from plain JS too (`comment-map.js`), where the real spec types buy
+ * nothing.
  */
 
 import { fetchOwnTile, isOwnTileUrl } from "./own-tiles";
 
-// Loaded via a CDN <script> tag on map pages, like Leaflet - see `maplibre-layers.ts`.
+// A global from the map pages' own `<script>` (`dashboard/js/maplibre-gl.js`), like Leaflet's `L` - see `maplibre-layers.ts`.
 declare const maplibregl: typeof import("maplibre-gl");
 
 /** A minimal MapLibre "raster" source - the fields this module actually sets. */
@@ -65,7 +64,7 @@ let protocolRegisteredOn: unknown = null;
  * Rewrites one of this deployment's own tile URLs into the protocol MapLibre will hand back to us,
  * registering the handler the first time one is needed.
  *
- * Registration is lazy rather than on import because `maplibregl` is a CDN global that only map
+ * Registration is lazy rather than on import because `maplibregl` is a page global that only map
  * pages load, and this module is imported by pages that have no map on them at all.
  */
 function toOwnTileProtocolUrl(url: string): string {

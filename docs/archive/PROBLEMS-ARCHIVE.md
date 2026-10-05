@@ -11,6 +11,63 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-10-05: MapLibre 5.24's attribution sanitizer could be bypassed, and the only fix was in the v6 line
+
+`id: P278` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading Dependabot alert #87 on push` · `fixed on: fix/maplibre-6`
+
+GHSA-jrc7-96c5-q579 (critical): `DOM.sanitize` iterated a live `NamedNodeMap` while removing attributes, so the
+attribute after each removed one survived, and `<details open onload ontoggle=...>` reached `innerHTML` with a live
+handler. Every version up to 6.4.0 was affected, with no 5.x backport.
+
+**It was never reachable here.** In 5.24 `DOM.sanitize` had one caller, MapLibre's own `AttributionControl`, and
+every MapLibre map was built without that control: `shared-pin-map.ts` and `comment-map.js` pass
+`attributionControl: false`, and the Leaflet bridge's `_initGL` hard-codes it.
+`shared/maplibre-attribution.contract.test.ts` still holds every map to that, because the sanitizer has needed more
+fixes since (6.9.0, 6.11.1). It scanned only `ts/` and the templates; it now reads `static/js/` too, which is
+where `comment-map.js` builds its maps.
+
+**Fixed by moving to 6.12.0**, the latest 6.x on 2026-10-05. v6 publishes only ES modules, so there is no
+`maplibre-gl.js` left on unpkg for a `<script>` tag to load. The site now builds the `maplibregl` global itself:
+
+- `frontend/ts/entries-classic/maplibre-gl.ts` becomes `static/dashboard/js/maplibre-gl.js`, a classic script the
+  23 templates load where the CDN tag was, so the global still exists before any later script runs.
+- `bin/build-frontend.ts` bundles MapLibre's worker beside it as `maplibre-gl-worker-<version>.js`. The entry starts
+  it through a `blob:` URL that imports it. A worker started from its own URL runs under the CSP of its own file's
+  response, which nginx sends none of; one started from `blob:` runs under the page's, as 5.24's did. Measured in
+  Chromium on 2026-10-05: under `connect-src 'self'` the `blob:` worker is refused a cross-origin GeoJSON fetch,
+  and the same-URL worker is not. `worker-src 'self' blob:` is unchanged.
+- `maplibre-gl` moved from `devDependencies` to `dependencies`, pinned exactly. The served version is now the one
+  Dependabot reads, rather than a CDN URL in `vendor_assets.py` that it does not.
+- The stylesheet stays on unpkg (`maplibregl_css`). `test_vendor_assets.py` holds it to `package.json`'s version and
+  checks that every template loads the bridge after Leaflet and MapLibre.
+
+**What the original entry got wrong.** It said the move "also replaces the UMD bridge, which v6 cannot feed".
+`@maplibre/maplibre-gl-leaflet@0.1.4`'s UMD build reads `globalThis.maplibregl` once, when its script runs, and
+works with a v6 namespace there. It needs only to load after MapLibre. `frontend/browser/maplibre-bundle.test.ts`
+draws through it in Chromium. 0.1.4's peer range for `maplibre-gl` also includes `^6.0.0`.
+
+**Other v6 changes that reached this code.** WebGL1 is gone and `new Map()` throws without WebGL2, so
+`map-layers.ts`'s `canDrawVectorBase` now also asks `WebGLSupport`. Without that check the bridge would throw from
+`onAdd` and leave the map with no base layer. Typed paint-property and event names needed small changes in
+`maplibre-layers.ts` and `maplibre-view.ts`. The topo dark-mode paint relies on the raster shader's brightness and
+hue maths, which are unchanged between 5.24.0 and 6.12.0 (`src/shaders/glsl/raster.fragment.glsl`,
+`src/webgl/program/raster_program.ts`).
+
+**Cost.** 5.24's UMD was 1.06 MB (276 KB gzip). 6.12.0 is 1.1 MB (290 KB gzip) for the page plus 0.51 MB (147 KB
+gzip) for the worker, because the two share a chunk that each bundle carries.
+
+**Not checked.** No page of the running app was opened in a browser: the browser test uses its own harness page.
+Rendering was not compared by eye, and no browser other than Chromium was tried.
+
+**Still true.** Leaflet's own attribution control renders raw HTML. Its strings are `TILE_DEFS` constants and the
+`attribution` that `map-layers.ts` passes to the bridge from REData's catalogue. Treat a third-party style URL as
+trusted markup until that changes. REData's own dashboard still loads 5.24.0 from jsdelivr
+(`src/redata/dashboard/templates/dashboard/partials/_map_head.html`) with the attribution control on, and this fix
+does not cover it. Its attributions are constants (`OSM_TILE_ATTRIBUTION`), so no outside input reaches that
+sanitizer there.
+
+||||||| afd48d0d9
+
 ## RESOLVED 2026-10-05: A Places photo backfill that met a spent budget marked the location done, so its photos were never fetched
 
 `id: P317` · `status: fixed` · `resolved: 2026-10-05`

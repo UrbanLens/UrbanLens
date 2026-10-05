@@ -845,7 +845,7 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
     # Street View embed.
     "frame-src": ["'self'", "https://www.google.com"],
     "media-src": ["'self'", "data:", "blob:"],
-    # MapLibre builds its tile workers from a blob: URL.
+    # MapLibre starts its tile workers from a blob: URL (entries-classic/maplibre-gl.ts), so they run under this policy.
     "worker-src": ["'self'", "blob:"],
     "object-src": ["'none'"],
     "base-uri": ["'self'"],

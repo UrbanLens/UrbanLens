@@ -6,6 +6,8 @@ import { readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { version as maplibreVersion } from "maplibre-gl/package.json";
+
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const OUT_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static/dashboard/js");
 const ENTRIES_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/ts/entries");
@@ -27,10 +29,10 @@ function tsFiles(dir: string): string[] {
 }
 
 /** Runs `bun build` over `files` with `extraArgs`, or does nothing if `files` is empty. */
-async function buildGroup(files: string[], extraArgs: string[]): Promise<void> {
+async function buildGroup(files: string[], extraArgs: string[], entryNaming = "[name].[ext]"): Promise<void> {
     if (!files.length) return;
     // Bun's default --entry-naming ("[dir]/[name].[ext]") mirrors each entry's source directory under --outdir on some Bun versions.
-    const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", OUT_DIR, "--entry-naming=[name].[ext]", ...extraArgs], {
+    const proc = Bun.spawn([process.execPath, "build", ...files, "--outdir", OUT_DIR, `--entry-naming=${entryNaming}`, ...extraArgs], {
         stdout: "inherit",
         stderr: "inherit",
     });
@@ -58,3 +60,12 @@ await buildGroup(tsFiles(ENTRIES_CLASSIC_DIR), [
     "import.meta.url='about:blank'",
     ...(minify ? ["--minify"] : []),
 ]);
+
+// MapLibre's tile worker, which `entries-classic/maplibre-gl.ts` points MapLibre at. Its published form imports a
+// shared chunk by relative path, so it is bundled into one file rather than copied; the version in the name is the one
+// that entry asks for.
+await buildGroup(
+    [Bun.resolveSync("maplibre-gl/dist/maplibre-gl-worker.mjs", ROOT)],
+    ["--target", "browser", "--format", "esm", ...(minify ? ["--minify"] : [])],
+    `[name]-${maplibreVersion}.js`,
+);

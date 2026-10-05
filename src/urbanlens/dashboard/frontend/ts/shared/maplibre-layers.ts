@@ -55,26 +55,30 @@ const CLOUDS_LAYER_ID = `${LAYER_PREFIX}weather-clouds`;
 
 const OPENWEATHER_ATTRIBUTION = 'Map data &copy; <a href="https://openweathermap.org">OpenWeatherMap</a>';
 
+/** Every raster paint property the topo layer's dark mode changes. */
+const TOPO_PAINT_PROPERTIES = ["raster-hue-rotate", "raster-brightness-min", "raster-brightness-max"] as const;
+type TopoPaint = Record<(typeof TOPO_PAINT_PROPERTIES)[number], number>;
+
 /**
  * Exactly the CSS `invert(100%) hue-rotate(180deg) brightness(90%)` the Leaflet engine applies to
  * its topo pane, expressed in the raster paint properties MapLibre has instead (it has no invert).
  *
- * The equivalence is exact, not approximate, and was checked against the pinned
- * `maplibre-gl@5.24.0` bundle's own raster fragment shader rather than the style-spec docs: it ends
+ * The equivalence is exact, not approximate, and was checked against `maplibre-gl@6.12.0`'s own
+ * raster fragment shader rather than the style-spec docs: it ends
  * `mix(vec3(brightness_min), vec3(brightness_max), rgb)`, i.e. `min + rgb * (max - min)`, so
  * `min = 0.9, max = 0` yields `0.9 * (1 - rgb)` - an inversion scaled to 90% brightness. The hue
  * rotation runs *before* that in the shader and *after* the invert in CSS, which cancels out
  * because MapLibre's hue-rotation matrix is luminance-preserving (its rows sum to 1, so it maps
  * white to white): `M(1 - c) = 1 - M(c)`.
  */
-const TOPO_DARK_PAINT: Record<string, number> = {
+const TOPO_DARK_PAINT: TopoPaint = {
     "raster-hue-rotate": 180,
     "raster-brightness-min": 0.9,
     "raster-brightness-max": 0,
 };
 
 /** MapLibre's own raster paint defaults - what `TOPO_DARK_PAINT` is reverted to in light mode. */
-const TOPO_LIGHT_PAINT: Record<string, number> = {
+const TOPO_LIGHT_PAINT: TopoPaint = {
     "raster-hue-rotate": 0,
     "raster-brightness-min": 0,
     "raster-brightness-max": 1,
@@ -239,7 +243,7 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     function applyTopoPaint(): void {
         if (!map.getLayer(BASE_LAYER_IDS.topographic)) return;
         const paint = isDarkActive() && base === "topographic" ? TOPO_DARK_PAINT : TOPO_LIGHT_PAINT;
-        for (const [property, value] of Object.entries(paint)) map.setPaintProperty(BASE_LAYER_IDS.topographic, property, value);
+        for (const property of TOPO_PAINT_PROPERTIES) map.setPaintProperty(BASE_LAYER_IDS.topographic, property, paint[property]);
     }
 
     // Exposes the effective map style for SCSS (e.g. #map[data-map-style="dark"]).

@@ -12,7 +12,7 @@
  *    `unproject` wants container-relative pixels, so the container's own rectangle is subtracted.
  */
 
-import type { LngLatBoundsLike, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import type { LngLatBoundsLike, MapEventType, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 
 import type { FitBoundsOptions, LatLng, MapPointerEvent, MapView, MapViewBounds, MapViewEventName, MapViewEvents, ScreenPoint } from "./map-view";
 
@@ -24,7 +24,7 @@ export interface TrackedPopup {
 }
 
 /** MapLibre's own event names for each shared one. `popupopen` has none and is fired by this view. */
-const MAPLIBRE_EVENTS: Record<Exclude<MapViewEventName, "popupopen">, string> = {
+const MAPLIBRE_EVENTS: Record<Exclude<MapViewEventName, "popupopen">, keyof MapEventType> = {
     move: "move",
     moveend: "moveend",
     zoomend: "zoomend",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 from unittest import mock
@@ -12,6 +13,9 @@ from django.test import SimpleTestCase
 from urbanlens.dashboard.services.core.vendor_assets import VENDOR_ASSETS, vendor_asset_tag, vendor_asset_url
 
 _TEMPLATE_ROOT = Path(__file__).resolve().parents[2] / "templates"
+_PACKAGE_JSON = Path(__file__).resolve().parents[5] / "package.json"
+#: How a template loads the MapLibre this site builds (`entries-classic/maplibre-gl.ts`).
+_MAPLIBRE_SCRIPT = "dashboard/js/maplibre-gl.js"
 _CDN_HOSTS = ("cdnjs.cloudflare.com", "unpkg.com", "cdn.jsdelivr.net", "code.jquery.com")
 
 
@@ -100,6 +104,55 @@ class NoRawCdnUrlsInTemplatesTests(SimpleTestCase):
         self.assertEqual(
             offenders, [], "add the asset to VENDOR_ASSETS and use {% vendor_asset %}:\n" + "\n".join(offenders)
         )
+
+
+class MaplibreIsOneReleaseTests(SimpleTestCase):
+    """MapLibre's script is built from package.json's release; its stylesheet comes from the CDN, so the two can drift."""
+
+    def test_the_stylesheet_is_the_release_the_script_is_built_from(self) -> None:
+        declared = json.loads(_PACKAGE_JSON.read_text(encoding="utf-8"))["dependencies"]["maplibre-gl"]
+        # A range would let `bun install` move the script to a release the pinned stylesheet does not match.
+        self.assertRegex(declared, r"^\d+\.\d+\.\d+$", "pin maplibre-gl to an exact version in package.json")
+
+        stylesheet = VENDOR_ASSETS["maplibregl_css"]
+        self.assertEqual(stylesheet.path, f"maplibre-gl/{declared}/maplibre-gl.css")
+        self.assertEqual(stylesheet.fallback, f"https://unpkg.com/maplibre-gl@{declared}/dist/maplibre-gl.css")
+
+
+class MaplibreLoadOrderTests(SimpleTestCase):
+    """Which MapLibre files a page loads, and in what order."""
+
+    @staticmethod
+    def _templates() -> list[tuple[str, str]]:
+        return [
+            (str(path.relative_to(_TEMPLATE_ROOT)), path.read_text(encoding="utf-8"))
+            for path in _TEMPLATE_ROOT.rglob("*.html")
+        ]
+
+    def test_a_page_with_the_stylesheet_has_the_script_and_the_reverse(self) -> None:
+        unpaired = [
+            name
+            for name, text in self._templates()
+            if ('vendor_asset "maplibregl_css"' in text) != (_MAPLIBRE_SCRIPT in text)
+        ]
+        self.assertEqual(unpaired, [])
+
+    def test_the_leaflet_bridge_follows_leaflet_and_maplibre(self) -> None:
+        """The bridge reads `L` and `maplibregl` once, as it runs, and draws nothing if either was missing then."""
+        bridged = 0
+        misordered: list[str] = []
+        for name, text in self._templates():
+            bridge = text.find('vendor_asset "maplibregl_leaflet_js"')
+            if bridge < 0:
+                continue
+            bridged += 1
+            if (
+                not 0 <= text.find('vendor_asset "leaflet_js"') < bridge
+                or not 0 <= text.find(_MAPLIBRE_SCRIPT) < bridge
+            ):
+                misordered.append(name)
+        self.assertGreater(bridged, 0, "no template loads the bridge - has its asset key changed?")
+        self.assertEqual(misordered, [])
 
 
 class VendorSourceMapsAreAllowedByThePolicyTests(SimpleTestCase):

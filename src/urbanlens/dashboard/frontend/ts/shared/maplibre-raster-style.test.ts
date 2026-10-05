@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import type { StyleSpecification } from "maplibre-gl";
+
 import { buildRasterStyle, fromOwnTileProtocolUrl, toMapLibreTileUrls } from "./maplibre-raster-style";
 
 const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
@@ -65,7 +67,7 @@ describe("this deployment's own tiles under MapLibre", () => {
         expect(fromOwnTileProtocolUrl("https://example.test/3/1/2.png")).toBe("https://example.test/3/1/2.png");
     });
 
-    /** Map pages load `maplibregl` from a CDN; pages with no map do not, and this module is on both. */
+    /** Map pages load `maplibregl`; pages with no map do not, and this module is on both. */
     test("a page without MapLibre still gets a URL rather than a crash", () => {
         delete (globalThis as Record<string, unknown>).maplibregl;
 
@@ -126,6 +128,12 @@ describe("toMapLibreTileUrls", () => {
 });
 
 describe("buildRasterStyle", () => {
+    test("is a style document MapLibre's own types accept", () => {
+        // The check is the assignment, made by `bun run typecheck` against the installed maplibre-gl.
+        const style: StyleSpecification = buildRasterStyle("street", { url: "https://tile.example.com/{z}/{x}/{y}.png", attribution: "Example", minZoom: 0, maxNativeZoom: 19 });
+        expect(style.layers).toHaveLength(1);
+    });
+
     test("produces a version-8 style with exactly one source and one layer", () => {
         const style = buildRasterStyle("street", { url: "https://{s}.example.com/{z}/{x}/{y}.png", attribution: "Example" });
         expect(style.version).toBe(8);

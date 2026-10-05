@@ -17,7 +17,7 @@
  */
 import { arrowheadSize, arrowheadSvg, bearing, safeColor, safeNumber, textLabelHtml, type LatLngTuple, type ShapeSpec } from "./markup-engine";
 
-// maplibregl is loaded globally via a CDN <script> tag (maplibregl_js in vendor_assets.py), never bundled here - same pattern as `L`.
+// maplibregl is a global from its own <script> (`dashboard/js/maplibre-gl.js`), never bundled here - same pattern as `L`.
 declare const maplibregl: typeof import("maplibre-gl");
 
 type LngLat = [number, number];

@@ -47,10 +47,10 @@ tile-URL template — `{"type": "raster", "tiles": ["https://.../{z}/{x}/{y}.png
 raster layer in MapLibre requires vector data, a hosted style API, or REData.
 
 **Checked, not assumed: CORS is not a blocker.** Unlike Leaflet's `<img>`-tag tile loading, MapLibre
-loads raster tiles via `XMLHttpRequest` with `responseType: "arraybuffer"`, decoding the response
-through `createImageBitmap` to upload it to a WebGL texture - confirmed by grepping the actual
-`maplibre-gl@5.24.0` bundle (the version pinned this session, see `vendor_assets.py`) for its tile
-fetch path, not assumed from general library knowledge. Functionally this is the same CORS category as
+loads raster tiles as array buffers through `makeRequest` (`util/ajax.ts`) - `fetch()` wherever the
+browser has it, `XMLHttpRequest` only for `file:` URLs or without `fetch` - decoding the response
+through `createImageBitmap` to upload it to a WebGL texture. Read from the `maplibre-gl@5.24.0` and
+`6.12.0` bundles, not assumed from general library knowledge. Functionally this is the same CORS category as
 `fetch()`, not `<img src>`: a cross-origin `XMLHttpRequest`/`fetch()` a server doesn't explicitly permit
 fails outright, where an `<img src>` load of the same URL would have succeeded regardless. Verified
 2026-09-19 with a direct `curl -H "Origin: https://example.com"` against all four `TILE_DEFS` vendor
