@@ -1,7 +1,9 @@
-{% comment %}Georeferenced historical maps covering this pin/wiki's location, from REData.{% endcomment %}
+{% comment %}Georeferenced historical maps covering this pin/wiki's location, then the catalogued map volumes of its place, from REData.{% endcomment %}
+{% load dashboard_tags %}
 {% if error %}
 <p class="map-overlay-manage-empty">{{ error }}</p>
-{% elif not maps %}
+{% else %}
+{% if not maps %}
 <p class="map-overlay-manage-empty">No georeferenced historical maps cover this spot yet.</p>
 {% else %}
 <ul class="map-overlay-historical-list">
@@ -32,4 +34,63 @@
     </li>
     {% endfor %}
 </ul>
+{% endif %}
+{% if volumes %}
+<h5 class="map-overlay-historical-subheading">Catalogued atlases of this place</h5>
+<ul class="map-overlay-historical-list map-overlay-volume-list">
+    {% for volume in volumes %}
+    <li class="map-overlay-volume">
+        <div class="map-overlay-historical-row">
+            {% if volume.thumbnail_url %}
+            <img class="map-overlay-historical-thumb" src="{{ volume.thumbnail_url }}" alt="" loading="lazy"
+                 data-thumb-fallback="map" data-thumb-fallback-class="map-overlay-historical-thumb">
+            {% endif %}
+            <div class="map-overlay-historical-info">
+                <span class="map-overlay-historical-title">
+                    {% if volume.landing_page_url %}
+                    <a href="{{ volume.landing_page_url }}" target="_blank" rel="noopener noreferrer">{{ volume.title }}</a>
+                    {% else %}
+                    {{ volume.title }}
+                    {% endif %}
+                </span>
+                <span class="map-overlay-historical-meta">
+                    {{ volume.kind }}{% if volume.date_text %} - {{ volume.date_text }}{% endif %}{% if volume.place_name %} - {{ volume.place_name }}{% if volume.same_county %} (same county){% endif %}{% endif %}{% if volume.attribution %} - {{ volume.attribution }}{% endif %}
+                </span>
+                <span class="map-overlay-historical-meta">
+                    {% if volume.status == "pending" %}Sheets are still being listed - check back shortly.{% elif volume.status == "unavailable" %}No scanned sheets published.{% else %}{{ volume.sheet_count }} sheet{{ volume.sheet_count|pluralize }}{% if volume.placed_count %}, {{ volume.placed_count }} placed on the map{% endif %}{% endif %}
+                </span>
+            </div>
+        </div>
+        {% if volume.sheets %}
+        <ul class="map-overlay-volume-sheets">
+            {% for sheet in volume.sheets %}
+            <li class="map-overlay-historical-row">
+                <div class="map-overlay-historical-info">
+                    <span class="map-overlay-historical-title">
+                        {% if sheet.landing_page_url %}
+                        <a href="{{ sheet.landing_page_url }}" target="_blank" rel="noopener noreferrer">{{ sheet.label }}</a>
+                        {% else %}
+                        {{ sheet.label }}
+                        {% endif %}
+                    </span>
+                    <span class="map-overlay-historical-meta">
+                        {% if sheet.contains_point %}covers this spot{% else %}{{ sheet.km|distance:distance_units }} away{% endif %}{% if sheet.accuracy %} - placed to {{ sheet.accuracy }}{% endif %}
+                    </span>
+                </div>
+                <button type="button" class="btn btn--icon" title="Add as overlay"
+                        hx-post="{{ post_url }}"
+                        hx-vals='{"georeference_uuid": "{{ sheet.georeference_uuid }}"}'
+                        hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+                    <i class="material-symbols-outlined">add</i>
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+{% elif volumes_unavailable %}
+<p class="map-overlay-manage-empty">Catalogued atlases of this place are temporarily unavailable.</p>
+{% endif %}
 {% endif %}
