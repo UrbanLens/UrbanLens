@@ -149,6 +149,16 @@ class ResetStoresItsWrapsKdfCostTests(TestCase):
         self.bundle.refresh_from_db()
         self.assertEqual((self.bundle.kdf_opslimit, self.bundle.kdf_memlimit), tuple(cost.values()))
 
+    def test_a_reset_that_leaves_no_password_wrap_keeps_no_cost_of_the_old_one(self) -> None:
+        response = self._reset(password_wrapped_secret="", password_wrap_salt="")
+
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        self.bundle.refresh_from_db()
+        self.assertEqual(self.bundle.password_wrapped_secret, "")
+        self.assertEqual(
+            (self.bundle.kdf_opslimit, self.bundle.kdf_memlimit), (DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT)
+        )
+
     def test_a_cost_below_the_floor_is_refused(self) -> None:
         response = self._reset(kdf_opslimit=1, kdf_memlimit=DEFAULT_KDF_MEMLIMIT)
 

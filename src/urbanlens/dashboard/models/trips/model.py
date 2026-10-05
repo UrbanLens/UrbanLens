@@ -144,10 +144,11 @@ class Trip(abstract.PublicDashboardModel):
         viewer_membership: TripMembership | None
         # Set by external_api.views._trip_detail_payload, in the same per-request-decoration spirit
         # as viewer_membership above: the trip detail response bundles what this particular caller
-        # may do, their calendar-mirroring state, and the roster, none of which are fields.
+        # may do, their calendar-mirroring state, the roster, and the creator as they may see them, none of which are fields.
         viewer: dict[str, Any]
         calendar_sync: dict[str, Any]
         members: list[TripMembership]
+        shown_creator: Profile | None
 
     objects = TripManager()
 

@@ -23804,6 +23804,8 @@ changes whenever the choices do.
 **Also found, not fixed here.** The in-process contract suite (`bin/run_contract_tests.sh --methods all`) passes 289
 of 292 operations. The three failures are P311.
 
+**Follow-up (adversarial review).** A reset that left no password wrap kept the old wrap's KDF cost beside an empty wrap. Reset now stores the defaults then, as rewrap does. Nothing read the stale cost, since every stored wrap stores its own. Test: `test_a_reset_that_leaves_no_password_wrap_keeps_no_cost_of_the_old_one`.
+
 ## RESOLVED 2026-10-05: Three external API responses did not match their published schema, and the contract suite counted a declared 503 as a crash
 
 `id: P311` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, running bin/run_contract_tests.sh --methods all`
@@ -23835,6 +23837,8 @@ of 292 operations. The three failures are P311.
 - both calendar-sync refusals validate against the declared 400 (failed: `auto_sync` required).
 
 The path lookup now matches templated paths. The full contract suite, writes included, passes 292 of 292 operations.
+
+**Follow-up (adversarial review).** A creator who was no longer in the viewer's roster was masked by visibility alone. Visibility bars only a subject who blocked the viewer, so a viewer who had blocked the creator saw the creator's real name and slug, although the roster leaves them out. `_shown_creator` returns None when a block in either direction hides the pair, as trip activities withhold `added_by`. It no longer reassigns `trip.creator`: the serializer reads `shown_creator`. Test: `test_block_hides_pair_in_trips.py::test_neither_is_named_as_the_creator_of_a_trip_the_other_views` (failed: Alice was shown Bob).
 
 ## RESOLVED 2026-10-05: The external API's interactive documentation renders under the site's CSP
 

@@ -2654,7 +2654,7 @@ class TripDetailSerializer(TripSummarySerializer):
     so making it a second round trip would only add latency.
     """
 
-    creator = TripMemberProfileSerializer(read_only=True, allow_null=True)
+    creator = TripMemberProfileSerializer(source="shown_creator", read_only=True, allow_null=True)
     permissions = TripPermissionsSerializer(source="*", read_only=True)
     viewer = TripViewerSerializer(read_only=True)
     calendar_sync = TripCalendarSyncStatusSerializer(read_only=True)

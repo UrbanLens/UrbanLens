@@ -1029,8 +1029,8 @@ class E2EEResetView(DualAuthJsonView):
             return Response({"error": "Invalid key material"}, status=400)
         if bool(password_wrapped) != bool(password_wrap_salt):
             return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
-        kdf = _new_wrap_kdf(data) if password_wrapped else None
-        if password_wrapped and kdf is None:
+        kdf = _new_wrap_kdf(data) if password_wrapped else (DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT)
+        if kdf is None:
             return Response({"error": "Invalid kdf parameters"}, status=400)
 
         rewrapped_conversations = _parse_rewrap_entries(data.get("rewrapped_conversation_keys"))
@@ -1084,12 +1084,10 @@ class E2EEResetView(DualAuthJsonView):
             bundle.password_wrap_salt = password_wrap_salt
             bundle.password_wrap_stale = False
             bundle.version += 1
-            update_fields = ["public_key", "recovery_wrapped_secret", "password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "version", "updated"]
-            if kdf is not None:
-                # Stored with the blob, as rewrap does: the next unwrap derives at what this one was made at.
-                bundle.kdf_opslimit, bundle.kdf_memlimit = kdf
-                update_fields += ["kdf_opslimit", "kdf_memlimit"]
-            bundle.save(update_fields=update_fields)
+            # Stored with the blob, as rewrap does: the next unwrap derives at what this one was made at, and a reset
+            # that leaves no password wrap keeps no cost of the old one.
+            bundle.kdf_opslimit, bundle.kdf_memlimit = kdf
+            bundle.save(update_fields=["public_key", "recovery_wrapped_secret", "password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "kdf_opslimit", "kdf_memlimit", "version", "updated"])
 
         rewrapped_count = len(conversation_rows) + len(envelope_rows)
         # Counted after the swap, so it describes the state the caller is now in.

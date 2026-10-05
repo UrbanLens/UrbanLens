@@ -162,6 +162,21 @@ class RosterTests(_BlockedPairOnATrip):
         self.assertEqual(len(detail.json()["members"]), 2)
         self.assertNotIn(self.bob.user.username, detail.content.decode())
 
+    def test_neither_is_named_as_the_creator_of_a_trip_the_other_views(self) -> None:
+        """Bob's own trip, which Alice is on, names Bob to Alice no more than Alice's names Alice to Bob."""
+        bobs_trip, _ = create_trip(self.bob, name="Bob's run")
+        TripMembership.objects.create(trip=bobs_trip, profile=self.alice, status=TripMembership.STATUS_JOINED)
+
+        def creator(viewer: Profile, trip: Trip) -> dict | None:
+            url = reverse("external_api:trips.detail", kwargs={"trip_slug": trip.slug})
+            response = self.client.get(url, **_token(viewer.user))
+            self.assertEqual(response.status_code, 200, response.content[:300])
+            return response.json()["creator"]
+
+        self.assertIsNone(creator(self.alice, bobs_trip))
+        self.assertIsNone(creator(self.bob, self.trip))
+        self.assertEqual((creator(self.carol, self.trip) or {}).get("slug"), self.alice.slug)
+
     def test_the_data_export_roster_leaves_the_other_out(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             _export_trips(self.alice, temp_dir)

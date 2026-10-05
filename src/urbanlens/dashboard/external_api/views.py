@@ -163,6 +163,7 @@ from urbanlens.dashboard.external_api.throttling import (
 )
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
+from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image
@@ -4478,19 +4479,34 @@ def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
         ready for: class:`TripDetailSerializer`.
     """
     members = list_members(trip, profile)
-    # ``trip.creator`` is its own copy of the profile, not a member row's, so it is masked either way: taken from the
-    # member row that list_members already masked, else masked here, rather than leaking a raw username.
-    if trip.creator is not None:
-        member_copy = next((m.profile for m in members if m.profile_id == trip.creator_id), None)
-        if member_copy is not None:
-            trip.creator = member_copy
-        else:
-            resolve_visible_identities(profile, [trip.creator])
-
+    trip.shown_creator = _shown_creator(trip, profile, members)
     trip.viewer = _trip_viewer_block(trip, profile)
     trip.calendar_sync = _calendar_sync_status(trip, profile)
     trip.members = members
     return trip
+
+
+def _shown_creator(trip: Trip, viewer: Profile, members: list[TripMembership]) -> Profile | None:
+    """The trip's creator as *viewer* may see them, or None when there is none or a block hides the pair.
+
+    Args:
+        trip: The trip.
+        viewer: The requesting profile.
+        members: The roster ``list_members`` resolved for *viewer*, which already masked a creator who is a member.
+
+    Returns:
+        A profile carrying its identity as resolved for *viewer*, or None.
+    """
+    if trip.creator is None:
+        return None
+    member_copy = next((m.profile for m in members if m.profile_id == trip.creator_id), None)
+    if member_copy is not None:
+        return member_copy
+    # The roster leaves out anyone in a block with the viewer, in either direction; visibility alone bars only one.
+    if SharedSpaceBlocks.for_viewer(viewer, among=[trip.creator.pk]).hides_profile(trip.creator.pk):
+        return None
+    resolve_visible_identities(viewer, [trip.creator])
+    return trip.creator
 
 
 class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
