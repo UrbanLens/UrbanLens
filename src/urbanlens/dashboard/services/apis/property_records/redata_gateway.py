@@ -8,6 +8,9 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.core.cache import DEFAULT_CACHE_ALIAS
+
+from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_or_skip
 from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
@@ -24,6 +27,9 @@ _REQUEST_TIMEOUT = 30
 _PARCEL_LOOKUP_SHARE_SECONDS = 3600
 #: Every building on a campus matches the same CRIS record, and extracting one of its documents is OCR on REData's side.
 _CULTURAL_RESOURCE_SHARE_SECONDS = 3600
+#: How long a refusal to extract a document is believed. REData's "found nothing" also covers an unreachable AI
+#: provider, so this is a backoff, not a verdict.
+_EXTRACTION_REFUSAL_SECONDS = 7 * 24 * 60 * 60
 
 #: Mirrors REData's own ``REASON_*`` string constants - a stable contract across the API boundary
 #: (REData's values, returned verbatim in its error responses' ``"error"`` field), not Python
@@ -47,12 +53,17 @@ REASON_RATE_LIMITED = "rate_limited"
 REASON_FORBIDDEN = "forbidden"
 #: An attachment REData cannot extract: not a document, a provider with no extraction, or a file it does not hold yet.
 REASON_NOT_EXTRACTABLE = "not_extractable"
+#: REData read a document and found neither fields nor photos, or could not reach its OCR or AI provider to look.
+REASON_EXTRACTION_UNAVAILABLE = "extraction_unavailable"
+#: CRIS no longer lists the attachment.
+REASON_ATTACHMENT_UNAVAILABLE = "attachment_unavailable"
 
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
 #: stores a payload for one of these turns a passing outage into a blank card for the whole
 #: ``external_data_cache_days`` window.
 TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED})
+_SETTLED_EXTRACTION_REFUSALS: frozenset[str] = frozenset({REASON_NOT_EXTRACTABLE, REASON_EXTRACTION_UNAVAILABLE, REASON_ATTACHMENT_UNAVAILABLE})
 
 
 class PropertyRecordsUnavailableError(GatewayRequestError):
@@ -653,12 +664,22 @@ class RedataGateway(Gateway):
         Raises:
             PropertyRecordsUnavailableError: See :meth:`_extract_cultural_resource_attachment_now`.
         """
-        return coalesced(
-            f"redata:cris-extract:{resource_uuid}:{attachment_id}",
-            lambda: self._extract_cultural_resource_attachment_now(resource_uuid, attachment_id, timeout=timeout),
-            ttl=_CULTURAL_RESOURCE_SHARE_SECONDS,
-            wait_seconds=2 * timeout + _REQUEST_TIMEOUT,
-        )
+        refused_key = f"redata:cris-extract-refused:{resource_uuid}:{attachment_id}"
+        refused = get_or_none(refused_key, label="CRIS extraction refusal", alias=DEFAULT_CACHE_ALIAS)
+        if isinstance(refused, dict):
+            raise PropertyRecordsUnavailableError(str(refused.get("reason") or REASON_SOURCE_ERROR), str(refused.get("message") or ""))
+        try:
+            return coalesced(
+                f"redata:cris-extract:{resource_uuid}:{attachment_id}",
+                lambda: self._extract_cultural_resource_attachment_now(resource_uuid, attachment_id, timeout=timeout),
+                ttl=_CULTURAL_RESOURCE_SHARE_SECONDS,
+                wait_seconds=2 * timeout + _REQUEST_TIMEOUT,
+            )
+        except PropertyRecordsUnavailableError as exc:
+            # Every ask runs OCR and an AI model again; dev asked one empty form twelve times.
+            if exc.reason in _SETTLED_EXTRACTION_REFUSALS:
+                set_or_skip(refused_key, {"reason": exc.reason, "message": str(exc)}, _EXTRACTION_REFUSAL_SECONDS, label="CRIS extraction refusal", alias=DEFAULT_CACHE_ALIAS)
+            raise
 
     def _extract_cultural_resource_attachment_now(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """OCR/AI-extract a ``document``-kind attachment's fields and any embedded photos.

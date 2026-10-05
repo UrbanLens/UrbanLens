@@ -562,6 +562,42 @@ class ExtractCulturalResourceAttachmentTests(SimpleTestCase):
         self.assertEqual(ctx.exception.reason, "attachment_unavailable")
         self.assertEqual(session.post.call_count, 1)
 
+    def test_a_settled_refusal_is_not_asked_again_for_a_while(self) -> None:
+        """REData re-runs OCR and an AI model on every ask; dev asked one empty form twelve times."""
+        from django.core.cache import cache
+
+        for status, error in ((503, "extraction_unavailable"), (400, "not_extractable")):
+            with self.subTest(error=error):
+                cache.clear()
+                session = MagicMock()
+                session.post.return_value = _response(status, json_body={"error": error})
+                session.get.return_value = _response(200, content=b"%PDF")
+                gateway = _gateway(session)
+
+                def ask(gateway: RedataGateway = gateway) -> str:
+                    with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                        gateway.extract_cultural_resource_attachment("r1", 31)
+                    return ctx.exception.reason
+
+                self.assertEqual(ask(), error)
+                first = session.post.call_count
+                self.assertEqual(ask(), error)
+                self.assertEqual(session.post.call_count, first, "asked again within the backoff")
+
+                cache.clear()
+                ask()
+                self.assertEqual(session.post.call_count, 2 * first, "not asked again once the backoff is gone")
+
+    def test_a_timeout_is_asked_again(self) -> None:
+        session = MagicMock()
+        session.post.return_value = _response(504, text="<html>gateway timeout</html>")
+        gateway = _gateway(session)
+        for _ in range(2):
+            with self.assertRaises(PropertyRecordsUnavailableError):
+                gateway.extract_cultural_resource_attachment("r1", 32)
+
+        self.assertEqual(session.post.call_count, 2)
+
     def test_503_extraction_unavailable_raises_unavailable(self) -> None:
         session = MagicMock()
         session.post.return_value = _response(503, json_body={"error": "extraction_unavailable"})

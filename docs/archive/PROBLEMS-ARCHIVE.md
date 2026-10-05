@@ -23255,3 +23255,21 @@ already resolved a page's visibility at once through `Profile.visible_profile_pk
 **Tests.** `test_external_api_notifications.py::NotificationSourcesAreResolvedTogetherTests`: the query count does
 not grow with the number of senders, hidden or visible (147 against 42, then 25 against 16, before each half of the
 fix), a hidden sender is still masked and a visible one named.
+
+## RESOLVED 2026-10-04: A CRIS document REData could not extract was asked for again on every panel fetch
+
+`id: P300` · `status: fixed` · `resolved: 2026-10-04` · `found by: Claude, counting REData extract calls in dev's ApiCallLog after P293`
+
+**What was wrong.** REData runs OCR and an AI model on every extract request, 20-40 s each. When it finds nothing
+(`503 extraction_unavailable`), cannot extract the attachment at all (`400 not_extractable` even after the download
+P293 added), or CRIS no longer lists it (`404 attachment_unavailable`), nothing in UrbanLens recorded the answer. The
+document stayed unextracted, so the site's refetch and every child pin's panel fetch asked again. Dev's `ApiCallLog`
+held 130 extract calls for 80 documents: 18 asked more than once, one twelve times.
+
+**Fix.** `RedataGateway.extract_cultural_resource_attachment` remembers those three refusals for each attachment for
+seven days, in the default cache, and answers from it without asking REData. REData's "found nothing" also covers an
+OCR or AI provider it could not reach, so this is a backoff, not a verdict. A timeout or other outage is not
+remembered. On dev, the same refused form asked twice made one REData call (33 s); the second answer took no time.
+
+**Tests.** `test_redata_gateway.py::ExtractCulturalResourceAttachmentTests`: each settled refusal is not asked again
+within the backoff, and is asked again after it (failed before the fix); a timeout is asked again.
