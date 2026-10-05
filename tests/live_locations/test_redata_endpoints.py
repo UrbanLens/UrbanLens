@@ -57,6 +57,30 @@ def _found(site: Site, answer: Answer, rows: list[dict[str, Any]], what: str) ->
     pytest.fail(f"{site.name}: no {what}")
 
 
+def _found_under_a_name(
+    redata: LiveRedata, site: Site, path: str, query: str, fields: tuple[str, ...], what: str
+) -> None:
+    """Search under each of the site's names in turn until an answer names the campus.
+
+    A campus is often written about under a later name (Harlem Valley Psychiatric Center), so one name finding
+    nothing is not the archive finding nothing. An empty result while a source did not answer is inconclusive.
+    """
+    unanswered: list[str] = []
+    seen = 0
+    for label in dict.fromkeys(site.labels):
+        answer = redata.get(path, q=query.format(label))
+        assert answer.status == 200, f"{site.name}: {path} answered {answer.status} {_error(answer)}"
+        if _relevant(site, answer.rows, *fields):
+            return
+        seen += len(answer.rows)
+        unanswered += answer.unanswered_providers
+    if unanswered:
+        raise InconclusiveError(
+            f"{site.name}: no {what} names the campus, and {', '.join(sorted(set(unanswered)))} did not answer"
+        )
+    pytest.fail(f"{site.name}: none of {seen} {what}s under any of its names names the campus")
+
+
 def _error(answer: Answer) -> str:
     if isinstance(answer.body, dict):
         return f"{answer.body.get('error', '')}: {answer.body.get('message', '')}".strip(": ")
@@ -178,10 +202,7 @@ def test_the_campus_wikipedia_article_is_found_near_it(redata: LiveRedata, site:
 
 @pytest.mark.live_check("documents")
 def test_archives_hold_documents_about_the_campus(redata: LiveRedata, site: Site) -> None:
-    answer = redata.get("reference-documents/search/", q=site.name)
-    assert answer.status == 200, f"{site.name}: reference-documents/search answered {answer.status} {_error(answer)}"
-    relevant = _relevant(site, answer.rows, "title", "description")
-    assert relevant, f"{site.name}: none of {len(answer.rows)} archival results names the campus"
+    _found_under_a_name(redata, site, "reference-documents/search/", "{}", ("title", "description"), "archival result")
 
 
 @pytest.mark.live_check("web_photos")
@@ -203,11 +224,8 @@ def test_a_web_search_finds_pages_about_the_campus(redata: LiveRedata, site: Sit
 
 @pytest.mark.live_check("news")
 def test_news_coverage_of_the_campus_is_found(redata: LiveRedata, site: Site) -> None:
-    answer = redata.get("search/news/", q=f'"{site.wikipedia}"')
-    assert answer.status == 200, f"{site.name}: search/news answered {answer.status} {_error(answer)}"
-    assert _relevant(site, answer.rows, "title", "snippet", "description", "link", "url"), (
-        f"{site.name}: none of {len(answer.rows)} news results names the campus"
-    )
+    fields = ("title", "snippet", "description", "link", "url")
+    _found_under_a_name(redata, site, "search/news/", '"{}"', fields, "news result")
 
 
 @pytest.mark.live_check("photos")
