@@ -467,6 +467,25 @@ class DownloadCulturalResourceAttachmentTests(SimpleTestCase):
 # -- lookup_buildings ---------------------------------------------------------------
 
 
+class LookupParcelBuildingsTests(SimpleTestCase):
+    def test_sources_redata_names_as_unanswered_are_reported(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(
+            200, json_body=[{"source": "cris"}], headers={"X-REData-Unanswered-Sources": "overture, overpass"}
+        )
+
+        answer = _gateway(session).lookup_parcel_buildings("parcel-uuid")
+
+        self.assertEqual(answer.buildings, [{"source": "cris"}])
+        self.assertEqual(answer.unanswered_sources, ("overture", "overpass"))
+
+    def test_an_answer_without_the_header_is_complete(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[], headers={"Content-Type": "application/json"})
+
+        self.assertEqual(_gateway(session).lookup_parcel_buildings("parcel-uuid").unanswered_sources, ())
+
+
 class LookupBuildingsTests(SimpleTestCase):
     def test_returns_the_building_list(self) -> None:
         session = MagicMock()

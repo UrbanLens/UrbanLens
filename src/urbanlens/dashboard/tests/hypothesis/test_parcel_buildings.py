@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from datetime import timedelta
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 from uuid import uuid4
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.inline_scripts import executable_blocks, inline_handlers
@@ -17,6 +21,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
+    PARTIAL_ANSWER_STALE_AFTER,
     ParcelBuildingsEnrichmentSource,
     ParcelBuildingsPanelSource,
     ParcelBuildingsPlugin,
@@ -25,6 +30,7 @@ from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
 )
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    ParcelBuildings,
     PropertyRecordsUnavailableError,
     RedataGateway,
 )
@@ -33,6 +39,9 @@ from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 from .place_helpers import official_geometry
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 _coord_counter = 0
 
@@ -54,6 +63,16 @@ _REDATA_BUILDINGS = [
         "longitude": -73.93000,
     },
 ]
+
+
+@contextmanager
+def _redata_answers(answer: ParcelBuildings) -> Iterator[None]:
+    with (
+        patch.object(RedataGateway, "__post_init__", lambda _self: None),
+        patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
+        patch.object(RedataGateway, "lookup_parcel_buildings", return_value=answer),
+    ):
+        yield
 
 
 def _make_location(**kwargs) -> Location:
@@ -123,17 +142,22 @@ class FetchParcelBuildingsTests(RedataConfiguredMixin, TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=_REDATA_BUILDINGS),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
         ):
             payload = fetch_parcel_buildings(self.location)
         self.assertEqual(payload["provider"], "redata")
         self.assertEqual(len(payload["buildings"]), 2)
 
+    def test_a_partial_redata_answer_names_what_did_not_answer(self) -> None:
+        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS, unanswered_sources=("overture",))):
+            payload = fetch_parcel_buildings(self.location)
+        self.assertEqual(payload["unanswered_sources"], ["overture"])
+
     def test_overpass_is_not_consulted_when_redata_answers(self) -> None:
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=_REDATA_BUILDINGS),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
             patch.object(OverpassGateway, "buildings_within") as mock_overpass,
         ):
             fetch_parcel_buildings(self.location)
@@ -264,12 +288,45 @@ class PanelSourceTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=_REDATA_BUILDINGS),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
         ):
             self.source.fetch(self.pin)
         cached = LocationCache.get_fresh(self.location, PARCEL_BUILDINGS_CACHE_SOURCE)
         assert cached is not None
         self.assertEqual(len(cached.data["buildings"]), 2)
+
+
+class PartialAnswerCachingTests(TestCase):
+    """A building list REData says is missing a source is shown, and asked for again within the hour."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.location = _make_location()
+        self.pin = baker.make(Pin, profile=baker.make("dashboard.Profile"), location=self.location)
+
+    def _fresh_after(self, elapsed: timedelta) -> bool:
+        with patch("django.utils.timezone.now", return_value=timezone.now() + elapsed):
+            return LocationCache.get_fresh(self.location, PARCEL_BUILDINGS_CACHE_SOURCE) is not None
+
+    def test_the_panel_keeps_a_partial_list_only_briefly(self) -> None:
+        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS, unanswered_sources=("overture",))):
+            ParcelBuildingsPanelSource().fetch(self.pin)
+
+        self.assertTrue(self._fresh_after(timedelta(0)))
+        self.assertFalse(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
+
+    def test_background_enrichment_keeps_a_partial_list_only_briefly(self) -> None:
+        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS, unanswered_sources=("overture",))):
+            ParcelBuildingsEnrichmentSource().enrich(self.location)
+
+        self.assertTrue(self._fresh_after(timedelta(0)))
+        self.assertFalse(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
+
+    def test_a_complete_list_keeps_the_full_window(self) -> None:
+        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS)):
+            ParcelBuildingsPanelSource().fetch(self.pin)
+
+        self.assertTrue(self._fresh_after(PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)))
 
 
 class EnrichmentSourceTests(TestCase):
@@ -278,7 +335,7 @@ class EnrichmentSourceTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=_REDATA_BUILDINGS),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings(_REDATA_BUILDINGS)),
         ):
             payload, query_key = ParcelBuildingsEnrichmentSource().fetch(location)
         self.assertEqual(len(payload["buildings"]), 2)

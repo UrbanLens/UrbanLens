@@ -17,7 +17,7 @@ from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Mapping
 
     import requests
 
@@ -147,6 +147,23 @@ def _named_wait(response: requests.Response) -> int | None:
     return upstream_retry_after(response) if str(response.headers.get("Retry-After", "")).strip() else None
 
 
+#: Names the sources REData asked and could not hear from, on an answer that is therefore partial.
+UNANSWERED_SOURCES_HEADER = "X-REData-Unanswered-Sources"
+
+
+@dataclass(slots=True, frozen=True)
+class ParcelBuildings:
+    """A parcel's buildings as REData answered them.
+
+    Attributes:
+        buildings: One dict per physical building.
+        unanswered_sources: Sources REData asked and could not hear from; when any are named the list is a floor.
+    """
+
+    buildings: list[dict[str, Any]]
+    unanswered_sources: tuple[str, ...] = ()
+
+
 @dataclass(slots=True, kw_only=True)
 class RedataGateway(Gateway):
     """REST client for REData's external property-records API."""
@@ -207,6 +224,21 @@ class RedataGateway(Gateway):
         Raises:
             PropertyRecordsUnavailableError: Network failure, a non-2xx response REData didn't shape as one of its own structured errors, or an unparseable body.
         """
+        return self._get_json_and_headers(path, params=params)[0]
+
+    def _get_json_and_headers(self, path: str, *, params: dict[str, Any] | None = None) -> tuple[Any, Mapping[str, str]]:
+        """GET one REData endpoint and return its decoded JSON body with the response headers.
+
+        Args:
+            path: Path relative to ``base_url`` (leading slash optional).
+            params: Query-string parameters, if any.
+
+        Returns:
+            The raw decoded JSON body, and the headers it came with.
+
+        Raises:
+            PropertyRecordsUnavailableError: As :meth:`_get_json`.
+        """
         base_url = self.base_url
         if base_url is None:
             # __post_init__ already validates this for the normal construction path;
@@ -217,7 +249,7 @@ class RedataGateway(Gateway):
 
         if response.status_code == 200:
             try:
-                return response.json()
+                return response.json(), response.headers
             except ValueError as exc:
                 raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
 
@@ -530,8 +562,23 @@ class RedataGateway(Gateway):
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/buildings/")
-        return list(body) if isinstance(body, list) else []
+        return self.lookup_parcel_buildings(parcel_uuid).buildings
+
+    def lookup_parcel_buildings(self, parcel_uuid: str) -> ParcelBuildings:
+        """Every building REData can find for a parcel, and which of its sources did not answer.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+
+        Returns:
+            The buildings, as :meth:`lookup_buildings` returns them, with the sources REData named as unanswered.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body, headers = self._get_json_and_headers(f"/api/v1/parcels/{parcel_uuid}/buildings/")
+        unanswered = tuple(name.strip() for name in str(headers.get(UNANSWERED_SOURCES_HEADER, "")).split(",") if name.strip())
+        return ParcelBuildings(list(body) if isinstance(body, list) else [], unanswered)
 
     def lookup_boundaries(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return every boundary candidate REData can find for a parcel, scored.

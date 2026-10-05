@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -23,6 +24,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
+
+#: How long a building list REData said was missing a source is kept before it is asked for again.
+PARTIAL_ANSWER_STALE_AFTER = timedelta(hours=1)
 
 #: Human-readable labels for each provider's own reporting system, for the per-row source chip.
 #: Shared with ``redata_building_attributes``, which shows the same provenance on its own card.
@@ -173,25 +177,26 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
 
     Returns:
         ``{"buildings": [...], "provider": "redata"|"osm"|"cris"}``, or ``{}`` when every provider answered and none
-        found anything.
+        found anything. A REData list missing a source also carries ``"unanswered_sources"``, and is cached only for
+        :data:`PARTIAL_ANSWER_STALE_AFTER`.
 
     Raises:
         Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
             ``is_source_outage``).
     """
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBuildings, PropertyRecordsUnavailableError, RedataGateway
 
     latitude = float(location.latitude or 0)
     longitude = float(location.longitude or 0)
     outages: list[Exception] = []
 
-    buildings: list[dict[str, Any]] = []
+    answer = ParcelBuildings([])
     if redata_configured():
         try:
             gateway = RedataGateway()
             parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
-            buildings = gateway.lookup_buildings(parcel_uuid) if parcel_uuid else []
+            answer = gateway.lookup_parcel_buildings(parcel_uuid) if parcel_uuid else answer
         except PropertyRecordsUnavailableError as exc:
             # handful of candidates, and exc_info would re-leak the exact coordinate
             # from the failed request's own URL. See services/security/redact.py.
@@ -199,8 +204,11 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
             if is_source_outage(exc):
                 outages.append(exc)
 
-    if buildings:
-        return {"buildings": list(buildings), "provider": "redata"}
+    if answer.buildings:
+        payload: dict[str, Any] = {"buildings": answer.buildings, "provider": "redata"}
+        if answer.unanswered_sources:
+            payload["unanswered_sources"] = list(answer.unanswered_sources)
+        return payload
 
     osm_buildings = _asked(_overpass_buildings, location, outages)
     cris_buildings = _asked(_cris_buildings, location, outages)
@@ -217,6 +225,10 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
     if outages:
         raise outages[0]
     return {}
+
+
+def _stale_after(payload: dict | None) -> timedelta | None:
+    return PARTIAL_ANSWER_STALE_AFTER if payload and payload.get("unanswered_sources") else None
 
 
 def _asked(lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: list[Exception]) -> list[dict[str, Any]]:
@@ -643,7 +655,7 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
 
         location = pin.location
         payload = fetch_parcel_buildings(location)
-        LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}")
+        LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}", stale_after=_stale_after(payload))
         building_list_cached(location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
@@ -726,6 +738,10 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
         """Enumerate the location's parcel buildings and return them for caching."""
         payload = fetch_parcel_buildings(location)
         return payload, f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}"
+
+    def stale_after(self, data: dict | None) -> timedelta | None:
+        """A partial list is asked for again soon rather than kept for the whole window."""
+        return _stale_after(data)
 
     def enrich(self, location: Location) -> bool:
         """Cache the building list, then act on it."""

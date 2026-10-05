@@ -108,7 +108,7 @@ class LocationCache(abstract.DashboardModel):
         return {(row.source, row.audience): row for row in rows}
 
     @classmethod
-    def set(cls, location: Location, source: str, data: dict, query_key: str = "", audience: str = "") -> LocationCache:
+    def set(cls, location: Location, source: str, data: dict, query_key: str = "", audience: str = "", *, stale_after: timedelta | None = None) -> LocationCache:
         """Upsert a cache entry.
 
         Args:
@@ -117,6 +117,8 @@ class LocationCache(abstract.DashboardModel):
             data: Parsed API response to store.
             query_key: The search term or address used for the lookup.
             audience: Whose row this is; the default is the one every viewer shares.
+            stale_after: Let the row go stale this soon instead of after the site-wide window, for an answer its
+                upstream said was partial.
 
         Returns:
             The saved LocationCache instance.
@@ -127,4 +129,8 @@ class LocationCache(abstract.DashboardModel):
             audience=audience,
             defaults={"data": data, "query_key": query_key, "relevance_rule": 0},
         )
+        if stale_after is not None:
+            # Dated as if written earlier, so every freshness check already in place lets it lapse on time.
+            entry.updated = min(entry.updated, cls.fresh_since() + stale_after)
+            cls.objects.filter(pk=entry.pk).update(updated=entry.updated)
         return entry

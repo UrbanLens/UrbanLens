@@ -117,8 +117,19 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
         data, query_key = self.fetch(location)
-        LocationCache.set(location, self.cache_source, data or {}, query_key=query_key)
+        LocationCache.set(location, self.cache_source, data or {}, query_key=query_key, stale_after=self.stale_after(data))
         return True
+
+    def stale_after(self, data: dict | None) -> timedelta | None:
+        """How soon a payload should go stale, when sooner than the site-wide window.
+
+        Args:
+            data: The payload :meth:`fetch` returned.
+
+        Returns:
+            None by default, keeping the site-wide window.
+        """
+        return None
 
     @abstractmethod
     def fetch(self, location: Location) -> tuple[dict | None, str]:
