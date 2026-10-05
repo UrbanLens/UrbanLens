@@ -403,8 +403,7 @@ def building_kind(building: dict[str, Any]) -> str:
         E.g. ``"Garage"``, or ``""`` when no source says anything more specific than "a building".
     """
     sources = [entry for entry in building.get("sources") or [] if isinstance(entry, dict)]
-    tags = [building.get("building_type"), *(entry["attributes"].get("building") for entry in sources if isinstance(entry.get("attributes"), dict))]
-    for tag in tags:
+    for tag in (entry["attributes"].get("building") for entry in sources if isinstance(entry.get("attributes"), dict)):
         label = str(tag or "").strip().replace("_", " ")
         if label and label.casefold() not in _GENERIC_BUILDING_TAGS:
             return label[:1].upper() + label[1:]

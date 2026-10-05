@@ -54,9 +54,15 @@ class FlattenTimelineTests(SimpleTestCase):
         self.assertEqual(entry["time_series_asset_uuid"], "hls")
 
     def test_an_unresolved_esri_date_is_flagged_as_inexact(self) -> None:
-        """captured_on is Esri's publication date until REData resolves it."""
+        """captured_on is Esri's publication date until REData resolves it, which it notes on the asset."""
         envelope = {
-            "captures": [{"captured_on": "2025-03-18", "provider": "esri_wayback", "capture_date_resolved": False}]
+            "captures": [
+                {
+                    "captured_on": "2025-03-18",
+                    "provider": "esri_wayback",
+                    "asset": {"attributes": {"capture_date_resolved": False}},
+                }
+            ]
         }
 
         self.assertFalse(flatten_timeline(envelope)[0]["date_is_exact"])
@@ -64,7 +70,10 @@ class FlattenTimelineTests(SimpleTestCase):
     def test_a_resolved_or_absent_flag_reads_as_exact(self) -> None:
         """null means the source publishes no acquisition date; only false is a warning."""
         envelope = {
-            "captures": [{"captured_on": "2025-03-18", "capture_date_resolved": True}, {"captured_on": "2024-01-01"}]
+            "captures": [
+                {"captured_on": "2025-03-18", "asset": {"attributes": {"capture_date_resolved": True}}},
+                {"captured_on": "2024-01-01", "asset": {"attributes": {}}},
+            ]
         }
 
         self.assertTrue(all(entry["date_is_exact"] for entry in flatten_timeline(envelope)))
@@ -192,7 +201,10 @@ class HistoricalCarouselSlideTests(SimpleTestCase):
         """Captioning Esri's publication date as the acquisition date is a lie of months."""
         envelope = {
             "captures": [
-                {"captured_on": "2025-03-18", "capture_date_resolved": False, "asset": {"url": "https://x/a.png"}}
+                {
+                    "captured_on": "2025-03-18",
+                    "asset": {"url": "https://x/a.png", "attributes": {"capture_date_resolved": False}},
+                }
             ]
         }
 
