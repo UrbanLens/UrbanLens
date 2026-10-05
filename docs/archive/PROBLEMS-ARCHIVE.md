@@ -23634,3 +23634,25 @@ asks for content. On dev, the same request now answers 204 and the list says `re
 **Tests.** `test_external_api_panels.py::AnAnsweredEmptyPanelTests`: the detail answers 204 and fetches nothing, and the
 list reports it answered (both failed before the fix); a listing is still served, and a panel with no answer yet is
 still fetched.
+
+## RESOLVED 2026-10-05: A Street View search with nothing nearby asked Google twenty times, a minute of the Google Maps budget
+
+`id: P307` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, fetching every panel of one pin and counting the calls each made`
+
+**What was wrong.** `GoogleMapsGateway.get_street_view_single` swept the metadata search outward 50 m at a time to
+1 km. A point with no panorama in reach asked 20 times. The `google_maps` limiter allows 20 calls a minute and 200 a day,
+shared with the Static Maps and Street View image calls that are billed, so one rural pin's Street View panel spent a
+whole minute of that budget and a tenth of the day's. On dev, one pin's panel fetch made 19 metadata calls and was then
+refused by the limiter.
+
+**Fix.** `_nearest_street_view` asks at the first radius, then at the last, then bisects between them for the smallest
+radius that finds a pano. A search reaching further finds whatever a shorter one finds, so the radius it settles on is
+the one the sweep found. A pano beside the point costs one search, as before; none within reach costs two; one at 730 m
+costs at most seven. The image request still carries the radius the pano was found at, a placeholder-sized image still
+moves the search outward, and an account-level status still stops it at once. On dev, the rural pin made 2 calls, and a
+Poughkeepsie street one search and its image.
+
+**Tests.** `test_google_maps_street_view.py` now answers from a fake Google that finds a pano by distance, rather than a
+scripted call order, so each test holds the behaviour and not the sweep: the nearest radius is found and kept, a
+nearby pano costs one search, none in reach costs two (failed before the fix, 20), a distant one at most seven (failed
+before, 15), and the earlier guards on the kept radius, the placeholder image and `OVER_QUERY_LIMIT` still hold.

@@ -506,57 +506,70 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             StreetViewNotFoundError: No Street View imagery was found within ``max_radius``.
             StreetViewStatusError: The API answered with an account or request-level status.
             requests.RequestException: The request failed."""
-        street_view_url = "https://maps.googleapis.com/maps/api/streetview/metadata"
         logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
-
-        while radius <= max_radius:
-            params = {
-                "location": f"{latitude},{longitude}",
-                "fov": fov,
-                "pitch": pitch,
-                "size": size,
-                "radius": radius,
-                "key": self.api_key,
-            }
-
-            # Checking for metadata first to avoid unnecessary data usage
-            metadata_response = self.session.get(street_view_url, params=params)
-            metadata_response.raise_for_status()
-            metadata = metadata_response.json()
-
-            status = metadata.get("status", "")
-            if status == "OK":
-                logger.debug("Found street view at radius %s", radius)
-                # Keep `radius` in image_params (don't pop it) - metadata may have only found a pano
-                # by searching out to the current, possibly-expanded radius.
-                # Dropping it here would let the image request re-search with Google's own smaller
-                # default radius, miss that same pano, and silently return Google's "Sorry, we have
-                image_params = params.copy()
-                image_params["heading"] = self.calculate_heading(
-                    metadata["location"]["lat"],
-                    metadata["location"]["lng"],
-                    latitude,
-                    longitude,
-                )
-                image_url = "https://maps.googleapis.com/maps/api/streetview"
-                image_response = self.session.get(image_url, params=image_params)
-                image_response.raise_for_status()
-                # Treat a suspiciously small response as unavailable rather than trusting the 200
-                # status alone, so a mismatch the radius fix doesn't catch still degrades to "try
-                # another location" instead of showing the placeholder.
-                if len(image_response.content) < 2000:
-                    radius += radius_increment
-                    continue
+        view = {"fov": fov, "pitch": pitch, "size": size}
+        radii = list(range(radius, max_radius + 1, radius_increment))
+        while (found := self._nearest_street_view(latitude, longitude, radii, view)) is not None:
+            index, params, metadata = found
+            logger.debug("Found street view at radius %s", params["radius"])
+            # Keep `radius` in image_params - metadata may have only found the pano by searching out to it, and
+            # Google's own smaller default radius would miss that pano and return its "no imagery" placeholder.
+            image_params = {**params, "heading": self.calculate_heading(metadata["location"]["lat"], metadata["location"]["lng"], latitude, longitude)}
+            image_response = self.session.get("https://maps.googleapis.com/maps/api/streetview", params=image_params)
+            image_response.raise_for_status()
+            # A suspiciously small image is the placeholder despite the 200, so a wider search is tried.
+            if len(image_response.content) >= 2000:
                 return image_response.content, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
-
-            if status not in {"ZERO_RESULTS", "NOT_FOUND"}:
-                # An account or request-level failure that a wider radius can't fix.
-                raise StreetViewStatusError(status)
-
-            radius += radius_increment
-            logger.debug("Street view not found at radius %s, increasing to %s", radius - radius_increment, radius)
+            radii = radii[index + 1 :]
 
         raise StreetViewNotFoundError("No Street View imagery found within the maximum search radius.")
+
+    def _nearest_street_view(self, latitude: float, longitude: float, radii: list[int], view: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str, Any]] | None:
+        """The smallest of *radii* whose search finds a pano: its index, the search's parameters and Google's metadata.
+
+        Asks at the first radius, then at the last, then bisects between them, so a pano beside the point costs one
+        search and none within reach two, where a sweep cost one per radius. A search reaching further finds whatever
+        a shorter one finds.
+
+        Raises:
+            StreetViewStatusError: The API answered with an account or request-level status.
+        """
+        if not radii:
+            return None
+        params, metadata = self._street_view_metadata(latitude, longitude, radii[0], view)
+        if metadata is not None:
+            return 0, params, metadata
+        if len(radii) == 1:
+            return None
+        params, metadata = self._street_view_metadata(latitude, longitude, radii[-1], view)
+        if metadata is None:
+            return None
+        low, high, found = 1, len(radii) - 1, (params, metadata)
+        while low < high:
+            middle = (low + high) // 2
+            params, metadata = self._street_view_metadata(latitude, longitude, radii[middle], view)
+            if metadata is None:
+                low = middle + 1
+            else:
+                high, found = middle, (params, metadata)
+        return high, *found
+
+    def _street_view_metadata(self, latitude: float, longitude: float, radius: int, view: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
+        """One metadata search: its parameters, and the metadata when it found a pano.
+
+        Raises:
+            StreetViewStatusError: The API answered with an account or request-level status a wider search can't fix.
+        """
+        params = {"location": f"{latitude},{longitude}", **view, "radius": radius, "key": self.api_key}
+        response = self.session.get("https://maps.googleapis.com/maps/api/streetview/metadata", params=params)
+        response.raise_for_status()
+        metadata = response.json()
+        status = metadata.get("status", "")
+        if status == "OK":
+            return params, metadata
+        if status not in {"ZERO_RESULTS", "NOT_FOUND"}:
+            raise StreetViewStatusError(status)
+        return params, None
 
     def _street_view_slide(self, image_bytes: bytes, capture_date: str, pano_latitude: float, pano_longitude: float) -> StreetViewSlide:
         """Return a StreetViewSlide from the given image bytes, capture date, and the pano's actual coordinates."""
