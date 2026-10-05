@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
 from urbanlens.dashboard.services.pins.search_names import search_names
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _SCHEDULE = "urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch"
 _SOURCE_URL = re.compile(r'data-source-url="([^"]*)"')
@@ -68,7 +69,7 @@ PHOTO = _item(
 BY_OWN_NAME = _item("withers-register-1880.pdf", "The Withers Asylum, Poughkeepsie: register of patients, 1880")
 
 
-class _ArchiveSourcesCase(TestCase):
+class _ArchiveSourcesCase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # the first user is promoted to site admin

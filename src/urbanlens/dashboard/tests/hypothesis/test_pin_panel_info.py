@@ -220,7 +220,7 @@ class PinDetailPageSimpleInfoPanelsContextTests(TestCase):
         self.assertContains(response, reverse("pin.panel", args=[self.pin.slug, "usgs_earthquakes"]))
 
 
-class PinDetailHeroSubnavTests(TestCase):
+class PinDetailHeroSubnavTests(RedataConfiguredMixin, TestCase):
     """The Private Pin page has a standard page hero + subnav (like every other page)."""
 
     def setUp(self) -> None:

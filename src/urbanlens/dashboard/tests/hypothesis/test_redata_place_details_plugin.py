@@ -20,6 +20,7 @@ from urbanlens.dashboard.plugins.builtin.redata_place_details import (
 )
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -323,7 +324,7 @@ class RedataPlaceDetailsRequiredFeatureTests(TestCase):
         self.assertEqual(RedataPlaceDetailsPanelSource().required_feature, SiteFeature.PLACES)
 
 
-class PanelDispatchGatingTests(TestCase):
+class PanelDispatchGatingTests(RedataConfiguredMixin, TestCase):
     """The info card (``pin.panel``) and the photo gallery (``pin.media``) both actually refuse a non-subscriber, and both actually serve a subscriber - the panel declares MEDIA as well as INFO (see ``_MAX_PHOTOS``), so the gate has to hold on both routes, not just the one the generic ``InfoPanelSource`` dispatch was already proven against in test_panel_feature_gate.py."""
 
     def setUp(self) -> None:

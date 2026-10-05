@@ -220,7 +220,7 @@ class PanelFetchTests(TestCase):
         mock_set.assert_called_once_with(stub_location, "cris_building_usn", {}, query_key="")
 
 
-class ExtractCrisAttachmentsTaskTests(TestCase):
+class ExtractCrisAttachmentsTaskTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
@@ -656,7 +656,7 @@ class DistrictPayloadTests(TestCase):
         mock_set.assert_called_once_with(self.location, "cris_building_usn", {}, query_key="41.73315,-73.93037")
 
 
-class EnrichmentSourceTests(TestCase):
+class EnrichmentSourceTests(RedataConfiguredMixin, TestCase):
     def test_fetch_returns_flattened_payload_when_a_building_is_found(self) -> None:
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
@@ -802,7 +802,7 @@ _CRIS_BUILDING = {**_BUILDING_RESOURCE, "provider": "ny_cris"}
 _CRIS_DISTRICT = {**_DISTRICT_RESOURCE, "provider": "ny_cris"}
 
 
-class ProviderScopingTests(SimpleTestCase):
+class ProviderScopingTests(RedataConfiguredMixin, SimpleTestCase):
     """This panel reads CRIS's own attribute names, so it must read CRIS's rows.
 
     REData answers `/cultural-resources/lookup/` from a registry of state and municipal inventories plus the

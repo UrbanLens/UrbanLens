@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS, PanelApiKind, PanelSource
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 class _StubPanelSource(PanelSource):
@@ -227,7 +228,7 @@ class StubbedSourceDetailTests(_PanelsApiTestCase):
         self.assertEqual(response.json(), {"info": {"summary": "hi"}})
 
 
-class AnAnsweredEmptyPanelTests(_PanelsApiTestCase):
+class AnAnsweredEmptyPanelTests(RedataConfiguredMixin, _PanelsApiTestCase):
     """A panel whose fetch answered "nothing here" is answered, not pending.
 
     ``redata_historic_registers`` judges its payload: a place no register lists fetches ``{"resources": []}``, which

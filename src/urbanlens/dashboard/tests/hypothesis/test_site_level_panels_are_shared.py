@@ -17,12 +17,13 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.pins.external_data import get_panel_source, run_panel_fetch
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _SITE_LEVEL = "nps"
 _BUILDING_LEVEL = "photon"
 
 
-class SiteLevelPanelTests(TestCase):
+class SiteLevelPanelTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         profile = Profile.objects.get(user=baker.make("auth.User"))

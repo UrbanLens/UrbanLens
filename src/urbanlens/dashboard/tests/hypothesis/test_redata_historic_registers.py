@@ -19,6 +19,7 @@ from urbanlens.dashboard.plugins.builtin.redata_historic_registers import (
     register_rows,
 )
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_cultural_resources_gateway"
 
@@ -37,7 +38,7 @@ def _resource(**overrides) -> dict:
     }
 
 
-class ProviderDiscoveryTests(TestCase):
+class ProviderDiscoveryTests(RedataConfiguredMixin, TestCase):
     """Which registers get asked, and how that list is decided."""
 
     def setUp(self) -> None:

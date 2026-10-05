@@ -18,6 +18,7 @@ from urbanlens.dashboard.plugins.builtin.redata_site_features import (
     feature_rows,
 )
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway"
 
@@ -34,7 +35,7 @@ def _camera(name: str = "Main St & 1st Ave", category: str = "Red-light camera")
     }
 
 
-class ProviderDiscoveryTests(TestCase):
+class ProviderDiscoveryTests(RedataConfiguredMixin, TestCase):
     """Which providers get asked, and how that list is decided."""
 
     def setUp(self) -> None:
