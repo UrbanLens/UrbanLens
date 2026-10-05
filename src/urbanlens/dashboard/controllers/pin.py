@@ -1347,7 +1347,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "park": data,
             "alerts": alert_facts(data, show_facility_facets=show_facility_facets),
-            "facts": park_facts(data, show_facility_facets=show_facility_facets),
+            "facts": park_facts(data, show_facility_facets=show_facility_facets, units=pin.profile.effective_distance_units),
             "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1),
         }
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
