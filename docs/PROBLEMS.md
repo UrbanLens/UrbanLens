@@ -2597,3 +2597,21 @@ asks again at once. Making it an `UpstreamBusyError` with `upstream_retry_after(
 the breaker hold it off. Not measured how often production meets it; REData's whole budget is 160 a
 day, shared by every key and its own CID resolution, and raising it is Jess's call (REData P70).
 
+## P316 — Nine tests fail under `bin/host_pytest.sh` on `release/v_0_9_0`, from three causes
+
+`id: P316` · `status: open` · `updated: 2026-10-05`
+
+Measured on 2026-10-05 against `release/v_0_9_0` (`8ff61612f`) and `integ/merge2`, with the same nine failing on
+both. Not run in a test-runner container (`bin/run_tests.sh`), so whether each is host-only is not known.
+
+- `test_basemap_tile_cost` (3) and `test_basemap_tile_authorisation` (1) count statements, and under
+  `host_pytest.sh` every request reads its session from the database (`expire_date > '<now>'`), which those
+  budgets do not allow for. `test_slug_existence_side_channel` failed 443 cases the same way until its shapes
+  ignored that timestamp.
+- `test_import_parse_memory` (4) peaks near 8.4 MB for a 12 MB and a 16 MB archive alike, against budgets of
+  1.5-2 MB. The peak does not grow with the file, so something fixed is allocated inside the measured window.
+- `test_geolocation_ping_batches_boundaries::test_a_pin_with_no_boundary_counts_only_near_its_marker` finds a
+  boundary polygon where its fixture expects none.
+
+`test_write_route_smoke` and `test_websocket_credential_scopes` each failed once in a full run under load
+and pass alone, on both branches.
