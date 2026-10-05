@@ -13,6 +13,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import timedelta
 import json
+from math import cos, radians
 from typing import TYPE_CHECKING, Any
 from unittest import mock
 from urllib.parse import parse_qs, urlsplit
@@ -376,6 +377,18 @@ class InsideTheUsTests(RedataConfiguredMixin, TestCase):
 
         assert attributes is not None
         self.assertEqual(attributes["primary_name"], "Capitol")
+
+    def test_a_pin_outside_every_footprint_gets_no_building(self) -> None:
+        """A pin on a parcel's grounds stands for the parcel; a building's data comes from the child pin made for it."""
+        latitude = _INSIDE[0]
+        longitude = -77.01 - 1.7 / (111_320 * cos(radians(latitude)))  # 1.7 m west of the Capitol footprint
+        near_miss = {**_CAPITOL, "distance_meters": 1.7}
+        with _redata_answers({_BUILDINGS: (200, _envelope([near_miss], radius_meters=10.0))}):
+            attributes = self._provider().get_building_attributes(latitude, longitude)
+            typed = _overture_step().get_typed_boundaries(latitude, longitude)
+
+        self.assertIsNone(attributes)
+        self.assertIsNone(typed["building"])
 
     def test_the_chains_overture_step_takes_redatas_footprint(self) -> None:
         with (
