@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 
+from urbanlens.dashboard.services.core.background_work import background_work, queue_is_background
 from urbanlens.dashboard.services.sandbox.queues import Queue
 
 if TYPE_CHECKING:
@@ -232,10 +233,15 @@ class UrbanLensTask(Task):
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         soft = self._soft_limit()
         try:
-            with soft_limit_escapes_broad_handlers(), task_deadline(None if soft is None else time.monotonic() + soft):
+            with soft_limit_escapes_broad_handlers(), task_deadline(None if soft is None else time.monotonic() + soft), background_work(queue_is_background(self._queue_name())):
                 return super().__call__(*args, **kwargs)
         except TaskSoftTimeLimit as exc:
             raise SoftTimeLimitExceeded(f"{self.name} exceeded its soft time limit of {self.soft_time_limit}s") from exc
+
+    def _queue_name(self) -> str | None:
+        """The queue this run was delivered from, else the one the task declares; a follow-on may be sent elsewhere."""
+        delivery = getattr(self.request, "delivery_info", None) or {}
+        return delivery.get("routing_key") or getattr(self, "queue", None)
 
     def _soft_limit(self) -> float | None:
         """This run's soft limit: the one it was sent with, else the task's own."""

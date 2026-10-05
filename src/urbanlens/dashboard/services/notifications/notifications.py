@@ -21,6 +21,7 @@ class NotificationEvent:
     PIN_IMPORT_ERROR: Final = "pin_import_error"
     SAFETY_CHECKIN_ARCHIVAL_FAILED: Final = "safety_checkin_archival_failed"
     UPLOAD_STUCK: Final = "upload_stuck"
+    PROVIDER_HEALTH: Final = "provider_health"
 
 
 # Maps each event key to the SiteSettings BooleanField that controls whether it is
@@ -38,6 +39,10 @@ _EVENT_CHANNEL_FIELDS: dict[str, dict[str, str]] = {
     NotificationEvent.UPLOAD_STUCK: {
         "email": "notify_stuck_uploads_email",
         "gotify": "notify_stuck_uploads_gotify",
+    },
+    NotificationEvent.PROVIDER_HEALTH: {
+        "email": "notify_provider_health_email",
+        "gotify": "notify_provider_health_gotify",
     },
 }
 

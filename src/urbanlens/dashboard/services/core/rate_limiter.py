@@ -759,9 +759,12 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
         The slot; set its fields before the block ends.
 
     Raises:
-        RequestCancelledError: Refused before the block ran - over a limit, disabled, or the
-            limiter could not be read.
+        RequestCancelledError: Refused before the block ran - over a limit, disabled, the
+            limiter could not be read, or the provider is backed off (``provider_health``).
     """
+    from urbanlens.dashboard.services.core import provider_health
+
+    provider_health.check_admission(service, endpoint=endpoint)
     entry_pk = _reserve_call(service, endpoint=endpoint)
     slot = ApiCallSlot()
     started = time.monotonic()
@@ -818,6 +821,7 @@ class _RateLimitedSession:
     def _do_request(self, method: str, url: str, **kwargs):
         """Reserve a rate-limit slot, make the request, finalize the logged result.
         The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
+        from urbanlens.dashboard.services.core import provider_health
         from urbanlens.dashboard.services.core.task_limits import check_task_deadline, within_task_deadline
         from urbanlens.dashboard.services.core.upstream_breaker import breaker_for
 
@@ -830,6 +834,7 @@ class _RateLimitedSession:
             log_api_call(self._service_key, success=False, endpoint=endpoint, was_rate_limited=True)
             record_unanswered(self._service_key)
             raise UpstreamThrottledError(self._service_key, retry_after=wait)
+        provider_health.check_admission(self._service_key, endpoint=endpoint)
         try:
             entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
         except RequestCancelledError as exc:

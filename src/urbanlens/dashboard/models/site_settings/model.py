@@ -482,6 +482,19 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Send a Gotify push notification when an upload has kept failing for a day while storage accepts others.",
         verbose_name="Stuck uploads (Gotify)",
     )
+    # Both on by default: a provider that stops answering is otherwise noticed only when a person goes looking.
+    notify_provider_health_email = BooleanField(
+        default=True,
+        db_default=True,
+        help_text="Email the admin notification address when an external provider has been refusing or failing this site for 30 minutes, daily while it lasts, and when it recovers.",
+        verbose_name="Provider refusing or failing (email)",
+    )
+    notify_provider_health_gotify = BooleanField(
+        default=True,
+        db_default=True,
+        help_text="Send a Gotify push notification when an external provider has been refusing or failing this site for 30 minutes, daily while it lasts, and when it recovers.",
+        verbose_name="Provider refusing or failing (Gotify)",
+    )
 
     # --- Google Places layer ---
 

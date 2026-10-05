@@ -3957,6 +3957,22 @@ def prune_api_call_logs() -> int:
 #: See prune_api_call_logs: 12 months of cost-series history plus margin.
 _API_CALL_LOG_RETENTION_DAYS = 400
 
+
+@shared_task(queue=Queue.MAINTENANCE)
+def evaluate_provider_health_task() -> dict[str, int]:
+    """Judge every external provider on its recent calls, back off the ones refusing or failing, and alert.
+
+    See ``services.core.provider_health``.
+
+    Returns:
+        How many providers were evaluated, moved, alerted on and recovered.
+    """
+    from urbanlens.dashboard.services.core.provider_health import evaluate_provider_health
+
+    report = evaluate_provider_health()
+    return {"evaluated": report.evaluated, "transitions": len(report.transitions), "alerted": len(report.alerted), "recovered": len(report.recovered), "skipped": int(report.skipped)}
+
+
 _PUBLIC_MEDIA_SWEEP_LOCK_KEY = "urbanlens:public-media-sweep-lock"
 #: Under the beat interval (15 minutes), and over a run's budget plus its last batch.
 _PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS = 600

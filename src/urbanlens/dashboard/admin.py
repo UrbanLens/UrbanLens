@@ -156,6 +156,8 @@ class SiteSettingsAdmin(admin.ModelAdmin):
                     "notify_safety_checkin_archival_failed_gotify",
                     "notify_stuck_uploads_email",
                     "notify_stuck_uploads_gotify",
+                    "notify_provider_health_email",
+                    "notify_provider_health_gotify",
                 ],
                 "description": "Which critical notification types are sent to which channels above.",
             },

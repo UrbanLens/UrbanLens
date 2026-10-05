@@ -121,12 +121,16 @@ class _CacheIsolationMixin:
         from django.core.cache import caches
 
         from urbanlens.dashboard.models.site_settings import request_cache
+        from urbanlens.dashboard.services.core import provider_health
         from urbanlens.dashboard.services.core.counters import reset_local_fallback
 
         request_cache.end_scope()
         for alias in caches:
             caches[alias].clear()
         reset_local_fallback()
+        # The gate keeps its own copy of the cached snapshot for a few seconds; a backoff one test published must
+        # not refuse the next test's calls.
+        provider_health.forget_snapshot()
         super().setUp()
 
 
