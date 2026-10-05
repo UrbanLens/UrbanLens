@@ -4,7 +4,8 @@ Two suites ask whether the *place* pipelines work for real places. Both are off 
 spend real REData budget, and are never collected by a plain `pytest` or CI.
 
 - **The live-locations suite** (`tests/live_locations/`, pytest) checks REData's answers for
-  every historic Kirkbride campus, plus Harlem Valley, endpoint by endpoint. Below.
+  every historic Kirkbride campus, plus Harlem Valley, endpoint by endpoint, and then that
+  UrbanLens turns one pin on each campus into the whole property. Below.
 - **The Hudson River State Hospital specs** (`tests/integration/specs/location/`,
   Playwright) drive one campus through the deployed application end to end. After that.
 
@@ -21,6 +22,7 @@ Harlem Valley, Athens) have hand-verified anchors and are what a default run che
 bin/run_live_location_tests.sh                          # the primary sites
 bin/run_live_location_tests.sh --sites all --report /tmp/live.json
 bin/run_live_location_tests.sh --sites hrsh -- -k footprints
+bin/run_live_location_tests.sh --pipeline               # and UrbanLens's own pipeline, below
 ```
 
 Use a key of its own: a full run spends one key's hourly budget, which is why it runs
@@ -31,8 +33,19 @@ Each check is one test per site (`test_redata_endpoints.py`): a parcel, one sugg
 holding the campus, its buildings within 1.5 km, footprint polygons for at least 80% of
 them, build dates, an owner of record, a register listing, the Wikipedia article near the
 point, archival documents, web and image search results that name the campus, news, photos,
-dated aerial imagery, historic maps and incident records. Relevance is judged by the site's
-distinctive name words, so a result about a car called a Hudson does not count.
+dated aerial imagery, historic maps and incident records. A result counts as about the campus
+only when it names it as a whole phrase (`Site.mentions`): one of its names or aliases, plus
+its town or Wikipedia disambiguator when the name could be another campus's ("Central State
+Hospital") or does not say it is an institution ("The Ridges"). A car called a Hudson, Athens
+in Greece and Warren Buffett do not count.
+
+**The pipeline** (`test_pipeline.py`, `--pipeline`) creates a root pin on each campus the way the
+map does, runs the bootstrap chain that sets off inline against the same REData, and checks
+the structure a person opening the pin expects: the top pin and its wiki on the parcel holding
+the campus point, a child pin and child wiki per building with at least 80% of them outlined,
+a build date, and the campus's property records, register listings and photos cached. It
+needs a test database, so it runs through `bin/host_pytest.sh`. The suite's own unit tests
+(`test_live_sites.py`) need neither and run in any plain `pytest tests/live_locations`.
 
 A check that cannot be decided (a budget refusal REData says to wait out for longer than
 `UL_LIVE_MAX_WAIT_SECONDS`, or an empty answer while a covering source did not answer)

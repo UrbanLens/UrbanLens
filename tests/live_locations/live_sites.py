@@ -18,18 +18,29 @@ import requests
 
 CATALOGUE = Path(__file__).with_name("kirkbrides.toml")
 
-#: Words every asylum name shares, so matching on them would call any hospital relevant.
-_GENERIC_WORDS = frozenset(
+#: Words that make a name an institution's rather than a place's or a person's.
+_INSTITUTION_WORDS = frozenset(
     {
-        "asylum", "center", "centre", "complex", "county", "developmental", "health", "hospital", "institute", "institution",
-        "lunatic", "mental", "psychiatric", "regional", "state", "the", "treatment", "insane", "correctional", "facility",
+        "asylum",
+        "campus",
+        "center",
+        "centre",
+        "complex",
+        "facility",
+        "hospital",
+        "institute",
+        "institution",
+        "sanatorium",
     }
-)  # fmt: skip
+)
 
 #: REData error codes and provider statuses that mean "not established", never "nothing there".
 _RETRYABLE_ERRORS = frozenset(
-    {"rate_limited", "search_unavailable", "all_providers_unavailable", "upstream_unavailable"}
-)
+    {
+        "rate_limited", "search_unavailable", "all_providers_unavailable", "upstream_unavailable",
+        "source_rate_limited", "source_error",
+    }
+)  # fmt: skip
 _UNANSWERED_STATUSES = frozenset({"rate_limited", "unavailable", "not_cached"})
 
 
@@ -71,25 +82,34 @@ class Site:
         return (self.name, self.wikipedia, *self.aliases)
 
     @property
-    def distinctive_words(self) -> frozenset[str]:
-        """The words of the site's names that identify it, for judging whether a result is about it."""
-        words = set()
-        for label in self.labels:
-            words |= {
-                word for word in re.findall(r"[a-z]+", label.lower()) if len(word) >= 4 and word not in _GENERIC_WORDS
-            }
-        return frozenset(words)
+    def qualifiers(self) -> tuple[str, ...]:
+        """Phrases that tell this campus from others of the same name: its town, and its wikipedia disambiguator."""
+        found = [_normalized(self.town)]
+        if match := re.search(r"\(([^)]+)\)", self.wikipedia):
+            found.append(_normalized(match.group(1)))
+        return tuple(phrase for phrase in found if phrase)
 
     def mentions(self, *texts: Any) -> bool:
-        """Whether any text names this site: every distinctive word of one of its names appears."""
-        haystack = " ".join(str(text) for text in texts if text).lower()
+        """Whether any text names this site.
+
+        One of its names must appear as a whole phrase. A name that does not say it is an institution
+        ("The Ridges"), or that other campuses share (a wikipedia title disambiguated in parentheses),
+        also needs the town or the disambiguator nearby.
+        """
+        haystack = f" {_normalized(' '.join(str(text) for text in texts if text))} "
+        qualified = any(f" {phrase} " in haystack for phrase in self.qualifiers)
+        shared = "(" in self.wikipedia
         for label in self.labels:
-            words = {
-                word for word in re.findall(r"[a-z]+", label.lower()) if len(word) >= 4 and word not in _GENERIC_WORDS
-            }
-            if words and all(word in haystack for word in words):
+            phrase = _normalized(re.sub(r"\([^)]*\)", "", label))
+            if not phrase or f" {phrase} " not in haystack:
+                continue
+            if qualified or not (shared or _INSTITUTION_WORDS.isdisjoint(phrase.split())):
                 return True
         return False
+
+
+def _normalized(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
 
 
 def load_sites(path: Path = CATALOGUE) -> list[Site]:
@@ -197,7 +217,7 @@ class LiveRedata:
                 {"path": path, "params": params, "status": response.status_code, "seconds": round(seconds, 2)}
             )
             error = body.get("error") if isinstance(body, dict) else None
-            if response.status_code in {429, 503} and (error in _RETRYABLE_ERRORS or response.status_code == 429):
+            if _asks_again_later(response, error):
                 wait = _retry_after(response, body)
                 if time.monotonic() + wait > deadline:
                     raise InconclusiveError(
@@ -206,8 +226,17 @@ class LiveRedata:
                 time.sleep(wait)
                 continue
             answer = Answer(response.status_code, body, seconds)
-            self._answers[key] = answer
+            if response.status_code < 500:
+                self._answers[key] = answer
             return answer
+
+
+def _asks_again_later(response: requests.Response, error: Any) -> bool:
+    if response.status_code == 429:
+        return True
+    return response.status_code in {502, 503, 504} and (
+        error in _RETRYABLE_ERRORS or "Retry-After" in response.headers or not isinstance(error, str)
+    )
 
 
 def _retry_after(response: requests.Response, body: Any) -> float:

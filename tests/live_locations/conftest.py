@@ -1,6 +1,6 @@
 """Gate, parametrize and report the live-locations suite.
 
-Nothing here runs unless ``UL_LIVE_LOCATIONS=1`` and a dedicated REData is named by
+No ``live_check`` test runs unless ``UL_LIVE_LOCATIONS=1`` and a dedicated REData is named by
 ``UL_LIVE_REDATA_API_URL``/``UL_LIVE_REDATA_API_KEY``. CI sets ``UL_REDATA_API_URL`` to a
 placeholder, so the ordinary settings are never read as "REData is available".
 """
@@ -52,7 +52,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         reason = "live-locations suite: set UL_LIVE_LOCATIONS=1 (see docs/LOCATION_DATA_TESTS.md)"
     elif LiveRedata.from_env() is None:
         reason = "live-locations suite: set UL_LIVE_REDATA_API_URL and UL_LIVE_REDATA_API_KEY"
-    for item in items:
+    # Only the checks themselves: the hook sees every item in the session, and the suite's own unit tests need no REData.
+    for item in (item for item in items if item.get_closest_marker("live_check")):
         item.add_marker(pytest.mark.live_locations)
         if reason:
             item.add_marker(pytest.mark.skip(reason=reason))
