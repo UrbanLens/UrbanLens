@@ -2939,7 +2939,17 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                 cid = pin_dict["cid"]
                 coords = result.resolved.get(cid)
                 if coords is None:
-                    if cid in result.unresolvable:
+                    if cid in result.rejected:
+                        record_pin_import_failure(
+                            profile,
+                            cid,
+                            name=pin_dict.get("name", ""),
+                            description=pin_dict.get("description", ""),
+                            maps_url=pin_dict.get("maps_url", "") or "",
+                            reason=PinImportFailureReason.LOOKUP_ERROR,
+                        )
+                        skipped_count += 1
+                    elif cid in result.unresolvable:
                         record_pin_import_failure(
                             profile,
                             cid,
@@ -2973,6 +2983,32 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                     skipped_count += 1
 
     return created_count, exists_count, skipped_count
+
+
+def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[dict]:
+    """*deferred_lists* with every pin's cid checked against its own Google Maps URL.
+
+    The confirm step already does this; a retry queued before it did can still carry a cid that lost
+    its low digits in the browser (REData P116), which no answer would ever be keyed by. A pin whose
+    cid is refused outright is dropped, never looked up.
+    """
+    from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError
+    from urbanlens.dashboard.services.apis.locations.google.maps import confirmed_pin_cid
+
+    checked: list[dict] = []
+    for lst in deferred_lists:
+        pins = []
+        for pin in lst.get("pins", []):
+            try:
+                cid = confirmed_pin_cid(pin)
+            except InvalidCidError as exc:
+                logger.warning("resolve_deferred_pin_locations: dropped a pin for profile %s whose cid was refused (%s)", profile_id, exc.code)
+                continue
+            if cid is not None:
+                pins.append({**pin, "cid": cid})
+        if pins:
+            checked.append({**lst, "pins": pins})
+    return checked
 
 
 @shared_task(bind=True, max_retries=None, queue=Queue.BULK)
@@ -3030,6 +3066,7 @@ def resolve_deferred_pin_locations(
         logger.info("resolve_deferred_pin_locations: profile %s no longer exists", profile_id)
         return empty
 
+    deferred_lists = _with_confirmed_cids(deferred_lists, profile_id)
     all_cids = [pin["cid"] for lst in deferred_lists for pin in lst.get("pins", [])]
     if not all_cids:
         return empty

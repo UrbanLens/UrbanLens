@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError, parse_cid
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -33,6 +34,15 @@ class CidLookupEntry:
     cid: int
     url: str | None = None
 
+    def as_request(self) -> str | dict[str, str]:
+        """This entry as ``resolve-cids`` takes it: the bare cid, or ``{"cid", "url"}`` when the URL is known.
+
+        The cid travels as decimal digits, never a JSON number, so no JSON reader on the way can hand
+        it to a float64 (REData P116). REData resolves a place more reliably from its own URL.
+        """
+        cid = str(int(self.cid))
+        return {"cid": cid, "url": self.url} if self.url else cid
+
 
 @dataclass(frozen=True, slots=True)
 class RedataCidBatchResult:
@@ -44,6 +54,8 @@ class RedataCidBatchResult:
     #: Just queued or already in flight server-side (Celery, on REData's end) -
     #: poll again later. Never overlaps with `resolved`/`unresolvable`.
     pending: set[int] = field(default_factory=set)
+    #: Refused by REData before any lookup, with its ``cid_validation`` code - never worth asking again.
+    rejected: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -104,8 +116,8 @@ class RedataCidGateway(Gateway):
 
         for cid_str, entry in raw_results.items():
             try:
-                cid = int(cid_str)
-            except (TypeError, ValueError):
+                cid = parse_cid(cid_str)
+            except InvalidCidError:
                 logger.warning("REData returned a non-integer cid key: %r", cid_str)
                 continue
             if entry is None:
@@ -119,13 +131,22 @@ class RedataCidGateway(Gateway):
 
         for cid_str in body.get("pending") or []:
             try:
-                result.pending.add(int(cid_str))
-            except (TypeError, ValueError):
+                result.pending.add(parse_cid(cid_str))
+            except InvalidCidError:
                 logger.warning("REData returned a non-integer cid in 'pending': %r", cid_str)
+
+        for refusal in body.get("rejected") or []:
+            refused = _rejected_cid(refusal, entries)
+            if refused is None:
+                logger.warning("REData refused an entry this request cannot match: %r", refusal)
+                continue
+            result.rejected[refused] = str(refusal.get("error") or "rejected")
+            result.pending.discard(refused)
+            logger.warning("REData refused cid %d: %s", refused, refusal.get("message") or result.rejected[refused])
 
         # Defensive: a cid REData didn't mention in either bucket at all -
         # treat as pending (retry later) rather than silently dropping it.
-        accounted = result.resolved.keys() | result.unresolvable | result.pending
+        accounted = result.resolved.keys() | result.unresolvable | result.pending | result.rejected.keys()
         for entry in entries:
             if entry.cid not in accounted:
                 result.pending.add(entry.cid)
@@ -137,15 +158,10 @@ class RedataCidGateway(Gateway):
             # path; this only narrows the type for mypy.
             raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
 
-        # A plain int when only the cid is known - matches the documented shorthand exactly - or
-        # {"cid", "url"} once the source Google Maps URL is available, which REData resolves via
-        # more reliably than cid alone (see CidLookupEntry).
-        payload_cids: list[int | dict[str, Any]] = [{"cid": entry.cid, "url": entry.url} if entry.url else entry.cid for entry in entries]
-
         try:
             response = self.session.post(
                 f"{base_url.rstrip('/')}/api/v1/places/resolve-cids/",
-                json={"cids": payload_cids},
+                json={"cids": [entry.as_request() for entry in entries]},
                 headers=self._headers,
                 timeout=_REQUEST_TIMEOUT,
             )
@@ -230,3 +246,13 @@ class RedataCidGateway(Gateway):
         if (wait := upstream_retry_after(response)) is not None:
             raise UpstreamBusyError(f"REData request failed with status {response.status_code}.", retry_after=wait)
         raise GatewayRequestError(f"REData request failed with status {response.status_code}.")
+
+
+def _rejected_cid(refusal: object, entries: list[CidLookupEntry]) -> int | None:
+    """Which of *entries* one of REData's ``rejected`` items refers to, by its ``index`` in the request."""
+    if not isinstance(refusal, dict):
+        return None
+    index = refusal.get("index")
+    if isinstance(index, int) and not isinstance(index, bool) and 0 <= index < len(entries):
+        return entries[index].cid
+    return None

@@ -127,3 +127,51 @@ describe("an import that fails", () => {
         expect(errors).toEqual(["The import worker stopped."]);
     });
 });
+
+describe("a Takeout pin's cid", () => {
+    // Above 2**53: as a JavaScript Number it would come back as 14522379626423718000 (REData P116).
+    const CID = "14522379626423718452";
+    const MAPS_URL = "https://www.google.com/maps/place/Willard/data=!4m2!3m1!1s0x89d0a1b2c3d4e5f6:0xc989db53ce5b1234";
+    const PREVIEW = { lists: [{ stem: "Saved", pins: [{ name: "Willard", lat: 42.68, lng: -76.86, description: "", cid: CID, maps_url: MAPS_URL }] }], total: 1 };
+    const realFetch = globalThis.fetch;
+    const realToastr = Object.getOwnPropertyDescriptor(globalThis, "toastr");
+    let confirmed: string | undefined;
+
+    beforeEach(() => {
+        confirmed = undefined;
+        const note = (): undefined => undefined;
+        Object.defineProperty(globalThis, "toastr", { value: { success: note, info: note, warning: note, error: note, clear: note }, configurable: true, writable: true });
+        globalThis.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+            const url = String(input);
+            if (url === "/status/preview/") return new Response(JSON.stringify({ status: "done", result: PREVIEW }), { headers: { "Content-Type": "application/json" } });
+            if (url === "/status/import/") return Response.json({ status: "running", progress: 0 });
+            if (init?.body instanceof FormData) return Response.json({ job_id: "p1", status_url: "/status/preview/" });
+            confirmed = String(init?.body);
+            return Response.json({ job_id: "i1", status_url: "/status/import/", total: 1 });
+        }, realFetch);
+    });
+
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+        if (realToastr) Object.defineProperty(globalThis, "toastr", realToastr);
+        else Reflect.deleteProperty(globalThis, "toastr");
+    });
+
+    test("is posted back exactly as the preview sent it", async () => {
+        mount("Import Pins");
+        document.dispatchEvent(new Event("htmx:load"));
+        const input = document.getElementById("iw-file-input") as HTMLInputElement;
+        Object.defineProperty(input, "files", { value: [new File(["Title,URL\n"], "Saved.csv", { type: "text/csv" })], configurable: true });
+        input.dispatchEvent(new Event("change"));
+        (document.getElementById("iw-btn-upload") as HTMLButtonElement).click();
+        for (let i = 0; i < 30 && document.getElementById("iw-step-2")?.hidden; i++) await new Promise((resolve) => setTimeout(resolve, 100));
+
+        (document.getElementById("iw-btn-confirm") as HTMLButtonElement).click();
+        for (let i = 0; i < 30 && confirmed === undefined; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(confirmed).toBeDefined();
+        const pin = JSON.parse(confirmed ?? "{}").lists[0].pins[0];
+        expect(pin.cid).toBe(CID);
+        expect(pin.maps_url).toBe(MAPS_URL);
+    });
+});
