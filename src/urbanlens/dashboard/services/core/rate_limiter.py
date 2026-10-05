@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 import logging
+import math
 import time
 from typing import Any, ClassVar
 
@@ -79,6 +80,15 @@ class ServiceDefaults:
     #: A new service is treated as billable until someone reads the provider's terms and says
     #: otherwise here, citing them in ``notes``.
     billable: bool = True
+    #: The vendor's whole free allowance for one calendar month. Every deployment billed on the
+    #: same account draws on it - UrbanLens's production, staging and development, and REData's.
+    #: What one deployment may spend is :func:`free_tier_ceiling`. Read from code on every check,
+    #: never from the admin-editable row: raising it is a bill, not a policy choice.
+    free_tier_per_calendar_month: int | None = None
+    #: UrbanLens's part of :attr:`free_tier_per_calendar_month` across all its deployments: at most
+    #: 0.4 of a Google Maps Platform SKU REData can also bill (REData takes 0.5), never above 0.9,
+    #: so the hours between a UTC month turning and Google's Pacific one fall in headroom.
+    free_tier_allotment: float = 0.9
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
@@ -86,10 +96,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Google Geocoding API",
         calls_per_minute=20,
         calls_per_day=500,
-        # Capped one short of that so a full month of free-tier installs never crosses into billing
-        # purely from float/rounding in the 30-day rolling window.
         calls_per_30_days=9999,
-        notes="Free tier: 10,000 calls/month (Places Details Essentials SKU).",
+        # Geocoding, and the legacy Place Details `cid:` lookup counted here (Essentials), are
+        # 10,000 a month free each; REData bills the same SKUs.
+        free_tier_per_calendar_month=10_000,
+        free_tier_allotment=0.4,
+        notes="Free tier: 10,000 calls/month for Geocoding and for Place Details Essentials, shared with REData on the same billing account.",
         cost_per_call=Decimal("0.005"),
     ),
     "redata_cid_lookup": ServiceDefaults(
@@ -398,6 +410,67 @@ def all_service_defaults() -> dict[str, ServiceDefaults]:
 # Public API
 
 
+#: What share of each billed service's allotment a deployment spends, by ``UL_ENVIRONMENT``, when
+#: ``UL_BILLED_API_SHARE`` does not say. They sum to 1.0, so every UrbanLens deployment at once
+#: still fits inside UrbanLens's allotment.
+BILLED_API_SHARE_BY_ENVIRONMENT: dict[str, float] = {
+    EnvironmentTypes.PRODUCTION: 0.8,
+    EnvironmentTypes.STAGING: 0.1,
+    EnvironmentTypes.DEVELOPMENT: 0.05,
+    EnvironmentTypes.LOCAL: 0.05,
+}
+#: The share of an environment the table does not name: a new one starts at nothing.
+UNKNOWN_ENVIRONMENT_BILLED_API_SHARE = 0.0
+
+
+def _configured_billed_api_share() -> float | None:
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    return app_settings.billed_api_share
+
+
+def billed_api_share() -> float:
+    """This deployment's share of UrbanLens's allotment of every billed service's free tier.
+
+    Returns:
+        ``UL_BILLED_API_SHARE`` when set (``0`` keeps the deployment off every billed API), else
+        the default for ``UL_ENVIRONMENT``. The test suite takes the whole allotment; it mocks
+        the network.
+    """
+    from django.conf import settings as django_settings
+
+    configured = _configured_billed_api_share()
+    if configured is not None:
+        return configured
+    if getattr(django_settings, "TESTING", False):
+        return 1.0
+    environment = str(getattr(django_settings, "ENVIRONMENT_NAME", "")).lower()
+    return BILLED_API_SHARE_BY_ENVIRONMENT.get(environment, UNKNOWN_ENVIRONMENT_BILLED_API_SHARE)
+
+
+def _service_defaults(service: str) -> ServiceDefaults | None:
+    defaults = SERVICE_REGISTRY.get(service)
+    if defaults is None:
+        defaults = all_service_defaults().get(service)
+    return defaults
+
+
+def free_tier_ceiling(service: str) -> int | None:
+    """How many calls to *service* this deployment may make this calendar month, or None.
+
+    Args:
+        service: The service key.
+
+    Returns:
+        The vendor's free allowance, times UrbanLens's allotment, times :func:`billed_api_share`,
+        rounded down; None for a service with no declared free tier.
+    """
+    defaults = _service_defaults(service)
+    if defaults is None or defaults.free_tier_per_calendar_month is None:
+        return None
+    return math.floor(defaults.free_tier_per_calendar_month * defaults.free_tier_allotment * billed_api_share())
+
+
 def _is_billable(service: str) -> bool:
     """Whether a call to *service* can cost money; unknown services are assumed to."""
     defaults = SERVICE_REGISTRY.get(service)
@@ -589,6 +662,13 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
                     recent_30_days,
                     config.calls_per_30_days,
                 )
+                return False
+
+        free_tier = free_tier_ceiling(service)
+        if free_tier is not None:
+            this_month = ApiCallLog.objects.for_service(service).this_calendar_month().billable().count()
+            if this_month >= free_tier:
+                logger.warning("Free-tier ceiling reached for %s: %d/%d calls this calendar month - refusing to spend past it", service, this_month, free_tier)
                 return False
     except DatabaseError:
         return _refuse_if_billable(service, "the rate limit counts")

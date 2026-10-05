@@ -651,6 +651,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
         ),
     )
+    billed_api_share: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "This deployment's share (0-1) of UrbanLens's allotment of each billed API's free tier - Google Maps "
+            "Platform and Azure Maps. Unset takes the UL_ENVIRONMENT default: production 0.8, staging 0.1, "
+            "development and local 0.05, anything else 0. Every deployment holding a key draws on the same "
+            "vendor allowance, so keep the shares of all of them at or below 1; 0 keeps a deployment off every "
+            "billed API. Enforced in services.core.rate_limiter.free_tier_ceiling."
+        ),
+    )
     allow_outbound_apis: bool | None = Field(
         default=None,
         description=(

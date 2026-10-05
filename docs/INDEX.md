@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P319` · `T4` · `PL11` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P319` · `T4` · `PL11` · `D26` · `X32` · `I8` · `R32` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -131,6 +131,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | R28 | current | 2026-09-15 | The WSGI tier ran gevent with no recorded rationale until D11 moved it to gthread, which persistent database connections need | [`docs/notes/wsgi-worker-model-and-connections.md`](notes/wsgi-worker-model-and-connections.md) |
 | R29 | current | 2026-10-05 | Every tier logs in as its own capped Postgres role, and only db-setup holds the owner | [`docs/notes/database-roles.md`](notes/database-roles.md) |
 | R30 | current | 2026-09-23 | mypy and pytest run on a host with no system GDAL, on the copies the pyogrio and shapely wheels vendor; pytest reaches the dev stack's test_db | [`docs/notes/host-tooling-without-root.md`](notes/host-tooling-without-root.md) |
+| R31 | current | 2026-10-05 | Each billed API is held to a monthly ceiling, so every deployment together stays inside the vendor's free tier | [`docs/notes/billed-api-free-tiers.md`](notes/billed-api-free-tiers.md) |
 | N1 | stale | 2026-09-03 | The Celery requeue loop was a two-request DoS; fixed, and the durable version now lives in NOTES.md | [`docs/archive/NOTES-celery-acks.md`](archive/NOTES-celery-acks.md) |
 | N2 | current | 2026-08-27 | 82 ways a gated wiki gives itself away collapse to eleven classes and three viewer-less chokepoints | [`docs/designs/reputation-gating-tells.md`](designs/reputation-gating-tells.md) |
 | N3 | stale | 2026-08-27 | A 631-chunk audit log whose fixes landed and whose open items were refiled into docs/PROBLEMS.md | [`docs/reports/2026-08-11-codebase-audit.md`](reports/2026-08-11-codebase-audit.md) |
