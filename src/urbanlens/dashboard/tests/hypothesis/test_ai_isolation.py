@@ -581,6 +581,20 @@ class EgressFilterTests(SimpleTestCase):
                     f"{host!r} has no matching entry in the egress filter",
                 )
 
+    def test_tool_gateways_reach_their_hosts_over_https(self) -> None:
+        # The proxy tunnels only 443 (tinyproxy.conf's ConnectPort), and a deployment may allow
+        # its egress nothing else. OpenWeatherMap also carries its key in the query string.
+        from dataclasses import fields
+
+        from urbanlens.dashboard.services.apis.routing.osrm import _DEMO_BASE_URL
+        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+        from urbanlens.dashboard.services.apis.weather.open_meteo import _FORECAST_URL
+
+        owm = next(field.default for field in fields(OpenWeatherMapGateway) if field.name == "base_url")
+        for url in (owm, _DEMO_BASE_URL, _FORECAST_URL):
+            with self.subTest(url=url):
+                self.assertTrue(str(url).startswith("https://"), url)
+
 
 #: A module or submodule name is forbidden if its root matches one of these
 #: exactly (``requests``, ``requests.adapters``, ``urllib.parse``, ...) - see
