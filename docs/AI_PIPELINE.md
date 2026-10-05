@@ -104,6 +104,16 @@ proxy its route out. Renaming either - or adding a third proxy network that
 sorts earlier - would silently cut the proxy's egress, and every AI call with
 it.
 
+A deployment that runs published images instead of building this checkout
+gets the proxy as `ghcr.io/urbanlens/urbanlens-egress-proxy`, which
+`publish.yml` builds from the same commit and tags exactly like the app image,
+so the `filter` it enforces is the one that commit's tests checked. On
+Kubernetes there are no internal networks, so the table above becomes
+NetworkPolicies: UrbanLens/infrastructure's
+`platform/urbanlens-app/components/ai-tier` runs the three tiers, and its
+`platform/cnpg-cluster/base/network-policy-ai.yaml` gives each one the
+same reach as the networks here.
+
 ### Verifying the allowlist for real
 
 The allowlist is the boundary, and a host missing from it fails at runtime

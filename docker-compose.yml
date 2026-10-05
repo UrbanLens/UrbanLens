@@ -47,6 +47,8 @@ x-app-env: &app-env
   UL_AI_INFERENCE_URL: ${UL_AI_INFERENCE_URL:-http://urbanlens_ai_inference:8002}
   UL_AI_INFERENCE_TOKEN: ${UL_AI_INFERENCE_TOKEN}
   UL_DIRECT_INFERENCE_POLICY: ${UL_DIRECT_INFERENCE_POLICY:-warn}
+  # The app gates the assistant on this (services/ai/access.py); unset, it hides an ai-worker that is running.
+  UL_AI_WORKER_ENABLED: ${UL_AI_WORKER_ENABLED:-true}
 x-sandbox-env: &sandbox-env
   UL_DB_USER: ul_sandbox
   UL_DB_NAME: ${UL_DB_NAME:-postgres}

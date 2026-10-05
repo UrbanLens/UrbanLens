@@ -21,7 +21,7 @@ class OpenWeatherMapGateway(Gateway):
 
     # default_factory so settings changes apply per instance; a bare default freezes at import.
     api_key: str | None = field(default_factory=lambda: settings.openweathermap_api_key)
-    base_url: str = "http://api.openweathermap.org/data/2.5/forecast"
+    base_url: str = "https://api.openweathermap.org/data/2.5/forecast"
 
     def __post_init__(self):
         Gateway.__post_init__(self)
