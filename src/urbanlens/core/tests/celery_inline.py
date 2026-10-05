@@ -63,8 +63,8 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
 
     def _dispatch(task, *args, **kwargs):
         # Enqueue options, not arguments the task body takes.
-        kwargs.pop("queue", None)
-        kwargs.pop("durable", None)
+        for option in ("queue", "durable", "countdown", "expires"):
+            kwargs.pop(option, None)
         if task in selected:
             # A result, as the real enqueue returns - not the task's return value, which is None for
             # a task that returns nothing and would read to the caller as a broker that refused it.

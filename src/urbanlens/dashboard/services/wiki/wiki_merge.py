@@ -173,6 +173,35 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
     return merged
 
 
+def claim_parcel_for_location_wiki(location: Location) -> bool:
+    """Give the placeless top-level wiki standing at a location the parcel the location now stands on.
+
+    A wiki made before its location's boundary arrived is created placeless. Until it holds its parcel it is not the
+    property's page: a pin elsewhere on the parcel gets a wiki of its own, and the campus's building wikis are never
+    given out (``tasks.ensure_building_wikis``). A parcel another wiki already holds is left to nesting.
+
+    Args:
+        location: A Location just resolved onto a place.
+
+    Returns:
+        Whether the wiki took the parcel.
+    """
+    from django.db import IntegrityError, transaction
+
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.places.lineage import enclosing_parcel
+
+    parcel = enclosing_parcel(location.place) if location.place_id else None
+    if parcel is None or Wiki.objects.filter(place=parcel).exists():
+        return False
+    try:
+        with transaction.atomic():
+            return bool(Wiki.objects.filter(location=location, place__isnull=True, parent_wiki__isnull=True).update(place=parcel))
+    except IntegrityError:
+        # Another wiki took the parcel meanwhile.
+        return False
+
+
 def reconcile_wiki_nesting_for_location(location: Location) -> int:
     """Reconcile nesting for a Location's wiki, if it has one.
 

@@ -68,3 +68,33 @@ class PlaceChangeInvalidatesCachesTests(TestCase):
         self.assertTrue(
             LocationCache.objects.filter(location=self.location, source=PARCEL_BUILDINGS_CACHE_SOURCE).exists()
         )
+
+
+class MovingWithinTheParcelTests(TestCase):
+    """A campus pin standing on the main building moves onto that building's place once the building list names it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.parcel = baker.make(Place, kind=PlaceKind.PARCEL, geometry=_box(0.003), area_sqm=470_000.0)
+        self.location = baker.make(Location, latitude=LAT, longitude=LNG, place=self.parcel)
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"provider": "redata", "buildings": [{"name": "Main"}]}
+        )
+
+    def test_moving_onto_a_building_on_the_same_parcel_keeps_its_building_list(self) -> None:
+        from urbanlens.dashboard.models.place.model import PlaceRelation
+
+        building = baker.make(
+            Place,
+            kind=PlaceKind.BUILDING,
+            geometry=_box(0.0002),
+            area_sqm=1_000.0,
+            parent=self.parcel,
+            parent_relation=PlaceRelation.PART_OF,
+        )
+
+        self.assertEqual(resolution.resolve_location_place(self.location), building)
+        self.assertTrue(
+            LocationCache.objects.filter(location=self.location, source=PARCEL_BUILDINGS_CACHE_SOURCE).exists(),
+            "the parcel's building list was thrown away because the pin turned out to stand on one of them",
+        )

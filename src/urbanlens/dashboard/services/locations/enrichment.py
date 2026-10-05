@@ -336,6 +336,7 @@ def enrichment_window_open(site_settings: SiteSettings, *, now: datetime | None 
 def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: GeoBoundary | None = None) -> list[Location]:
     """Pick the Locations most worth enriching next, highest impact first.
     Only locations somebody actually references (a pin or a wiki) are considered; orphaned Location rows can wait for lazy loading.
+    A location a new pin's bootstrap is filling is left to it (``services.pins.bootstrap``), so the run's cap goes to backfill.
 
     Args:
         missing: The source's :meth:`EnrichmentSource.missing_filter`.
@@ -373,7 +374,11 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
     if geo_boundary is not None and geo_boundary.geometry is not None:
         queryset = queryset.filter(point__within=geo_boundary.geometry)
 
+    from urbanlens.dashboard.services.pins.bootstrap import locations_bootstrapping
+
     shortlist = list(queryset[: limit * _DENSITY_SHORTLIST_FACTOR])
+    bootstrapping = locations_bootstrapping(candidate.pk for candidate in shortlist)
+    shortlist = [candidate for candidate in shortlist if candidate.pk not in bootstrapping]
     if len(shortlist) > limit:
         scored = [(candidate.priority_score + _nearby_density_score(candidate), candidate) for candidate in shortlist]  # type: ignore[attr-defined]  # annotation django-stubs loses (P85)
         scored.sort(key=lambda pair: pair[0], reverse=True)

@@ -256,6 +256,38 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
     return True
 
 
+#: How long :func:`generate_unless_in_flight` holds the boundary fetch's flight marker: past the hard time limit of
+#: the tasks that call it, so a killed run's marker lapses soon after.
+_UNLESS_IN_FLIGHT_TTL_SECONDS = 300
+
+
+def generate_unless_in_flight(location: Location, *, name: str | None = None) -> bool:
+    """:func:`generate_location_boundaries`, unless a fetch of this location's boundary is already running.
+
+    It holds the boundary panel's flight marker meanwhile, so the pin page and the pin bootstrap wait on this run
+    rather than starting their own.
+
+    Args:
+        location: The Location to place.
+        name: Optional place name hint.
+
+    Returns:
+        Whether this call ran the generation.
+    """
+    from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+    from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource
+
+    key = BoundaryPanelSource.location_flight_key(location.pk)
+    token = acquire_lock(key, _UNLESS_IN_FLIGHT_TTL_SECONDS)
+    if token is None:
+        return False
+    try:
+        generate_location_boundaries(location, name=name)
+    finally:
+        release_lock(key, token)
+    return True
+
+
 def generate_location_boundaries(location: Location, *, name: str | None = None, force: bool = False, attempt: int = 0) -> Place | None:
     """Resolve a Location onto a real-world place, provisioning geometry if needed.
     It answers "what is this coordinate standing on?" rather than "what shape should I draw here?", which is the change that stops one property accumulating a copy of its own outline per person who pinned it.
@@ -287,9 +319,10 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
     # (if any) now nests under - or now contains - another one.
     # Both are no-ops for the overwhelming majority of locations, which have no wiki and no
     from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
-    from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting_for_location
+    from urbanlens.dashboard.services.wiki.wiki_merge import claim_parcel_for_location_wiki, reconcile_wiki_nesting_for_location
 
     if place is not None:
+        claim_parcel_for_location_wiki(location)
         reclassify_markers_on_place(place)
         if place.parcel is not None and place.parcel.pk != place.pk:
             reclassify_markers_on_place(place.parcel)

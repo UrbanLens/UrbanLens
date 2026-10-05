@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.place.model import Place
+from urbanlens.dashboard.services.places.lineage import enclosing_parcel
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -30,12 +31,15 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
         The most specific current place containing the coordinate, or None when it is on no known parcel or building."""
     place = Place.objects.resolve_for_point(location.latitude, location.longitude)
     if save and location.place_id != (place.pk if place else None):
+        previous_parcel = enclosing_parcel(Place.objects.filter(pk=location.place_id).select_related("parent").first()) if location.place_id else None
         # Not stamped when the answer is unchanged, in particular "no known place": ``place_resolved_at`` is what
         # ``services.locations.boundaries.generation_status`` reads as "the provider chain has run here", and this
         # function calls no provider.
         stamped = timezone.now()
         Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
-        _drop_place_scoped_caches(location)
+        # Stepping onto one of the parcel's own buildings leaves the parcel - and what was fetched for it - unchanged.
+        if previous_parcel is None or previous_parcel != enclosing_parcel(place):
+            _drop_place_scoped_caches(location)
         # Mirrored onto the instance because callers act on it immediately:
         # ``generate_location_boundaries`` reads this attribute right after provisioning to decide
         # whether to record a miss, and a stale None there makes it clear the place that was just

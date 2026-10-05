@@ -47,6 +47,24 @@ def ancestors_of(place: Place) -> list[Place]:
     return chain
 
 
+def enclosing_parcel(place: Place | None) -> Place | None:
+    """The nearest place above ``place`` (or ``place`` itself) that is not a building.
+
+    Args:
+        place: The place a location resolved onto.
+
+    Returns:
+        The parcel or site, or None when the chain ends at a building with no known parcel.
+    """
+    from urbanlens.dashboard.models.place.model import PlaceKind
+
+    hops = 0
+    while place is not None and place.kind == PlaceKind.BUILDING and hops < MAX_LINEAGE_DEPTH:
+        place = place.parent if place.parent_id and place.parent_relation == PlaceRelation.PART_OF else None
+        hops += 1
+    return place if place is not None and place.kind != PlaceKind.BUILDING else None
+
+
 def would_create_cycle(place: Place, new_parent: Place | None) -> bool:
     """Whether attaching ``place`` under ``new_parent`` would form a cycle.
 

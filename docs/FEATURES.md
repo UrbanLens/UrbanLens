@@ -35,6 +35,26 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
   it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
   isn't the neutral default. See `docs/NOTES.md`.
+- **A new root pin's property is fetched without anyone opening it** (`services.pins.bootstrap`,
+  `tasks.bootstrap_location`) — creating a top-level pin (map dialog, external API) queues a staged
+  chain: REData prewarm of the point (`POST /locations/prewarm/`, scope `locations:prewarm`; a key
+  without it is remembered for a day and the chain goes on), the parcel boundary, the building list,
+  the community wiki and the building pins and wikis, then the site panels (property records and
+  ownership, historic registers, NY CRIS, news, web photos, incidents, the REData archives), and last
+  the build dates. Each fetch takes the panel's own flight marker, so a page opened meanwhile polls
+  the chain's fetch rather than starting one, and a stage that finds a page's fetch in flight waits
+  for it. Without REData the boundary and buildings come from OpenStreetMap and the panel stage is
+  skipped. Gated by the owner's external-lookups setting; community features and automatic building
+  pins gate the wikis and pins as they always do. One campus costs a fixed 25 REData requests
+  whatever its building count (`tests/hypothesis/test_pin_bootstrap.py`). Imports never bootstrap
+  (they create pins through `Pin.objects.get_nearby_or_create`) and are left to the hourly enrichment
+  job; so does a pin past its profile's ten bootstraps an hour, or the site's twenty. `manage.py bootstrap_pin <uuid|slug>`
+  queues it for an existing pin
+- **Build dates from records** (`services.pins.build_dates`) — a building pin takes its record's
+  `year_built` when it is created; the root pin takes the year of a register listing drawn around it,
+  else of the building it stands on, else the assessor's, once the bootstrap has fetched them. Only an
+  empty date is filled, stored as January 1st of the year. The same year is recorded as `built_year`
+  evidence (`EXTERNAL_SOURCE`) on the place's wikis, and the wiki's About card shows "Built <year>"
 - **Every building on a property becomes a child pin and a child wiki automatically**
   (`services.pins.auto_nest`, `services.pins.building_clusters`) — once a top-level pin's property
   outline is known and it holds several buildings, a background sweep creates one `building` sub pin
@@ -790,7 +810,9 @@ Beyond on-demand fetches, an hourly **background enrichment** task drips high-va
 (official names, aliases, street addresses, building boundaries) into whatever rate-limit budget
 is left over after real traffic, spread evenly so multi-day quotas can't be burned in one day.
 Sources are plugin-contributable (`EnrichmentSource`) and admin-tunable (run window, reserve
-buffer, per-run caps).
+buffer, per-run caps). A new root pin does not wait for it: its property is bootstrapped when it
+is created, and a location a bootstrap is filling is not a candidate, so the per-run cap goes to
+backfill (imports, and pins from before bootstraps).
 
 Neither path caches an outage. A failure `services/core/gateway.py::is_source_outage` recognises (connection failure,
 timeout, 5xx, throttle, REData `source_error`, an empty envelope REData marks incomplete) writes no `LocationCache`

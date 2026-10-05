@@ -167,7 +167,7 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
     """
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
-    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_unless_in_flight
     from urbanlens.dashboard.services.locations.google import PlaceNameResolverChain
 
     wiki = Wiki.objects.select_related("location").filter(pk=wiki_id).first()
@@ -208,7 +208,8 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
     update_task_progress(self, current=1, total=2, message="Generating boundaries...")
     if not boundary_generation_ran(location):
-        generate_location_boundaries(location, name=wiki.name or None)
+        # A new pin's bootstrap is usually drawing the same boundary right now.
+        generate_unless_in_flight(location, name=wiki.name or None)
 
     update_task_progress(self, current=2, total=2, message="Wiki ready")
     return True
@@ -291,6 +292,39 @@ def auto_nest_building_pins(pin_id: int) -> int:
     if pin is None:
         return 0
     return auto_nest_pin(pin)
+
+
+# No autoretry: each stage's fetch owns its failure policy (run_panel_fetch's suppression markers), and a stage that
+# fails still queues the next one. The limits sit under the bootstrap's own flight-marker TTL.
+@shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
+def bootstrap_location(pin_id: int, stage: str = "boundary", attempt: int = 0) -> str | None:
+    """Run one stage of a new root pin's property bootstrap, then queue the next (``services.pins.bootstrap``).
+
+    Queued on root-pin creation; queue it by hand to bootstrap any root pin on demand.
+
+    Args:
+        pin_id: PK of the root pin.
+        stage: A ``BootstrapStage`` value; the chain starts at the first.
+        attempt: How many times this stage has waited on another caller's fetch.
+
+    Returns:
+        The stage that ran, or None when the pin is gone or the stage unknown.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.bootstrap import BootstrapStage, enqueue_step, run_stage
+
+    try:
+        current = BootstrapStage(stage)
+    except ValueError:
+        logger.warning("bootstrap_location: unknown stage %r for pin %s", stage, pin_id)
+        return None
+    pin = Pin.objects.select_related("location", "profile__user").filter(pk=pin_id).first()
+    if pin is None or pin.location_id is None:
+        return None
+    step = run_stage(pin, current, attempt)
+    if step is not None:
+        enqueue_step(pin_id, step)
+    return current
 
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)

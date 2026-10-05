@@ -17,6 +17,7 @@ from django.db import transaction
 
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.services.locations import site_scope
+from urbanlens.dashboard.services.places.lineage import enclosing_parcel
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -181,24 +182,6 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
     # A campus pin resting on one of its buildings draws no property of its own; the parcel above it does.
     parcel = enclosing_parcel(pin.location.place if pin.location_id and pin.location.place_id else None)
     return parcel.geometry if parcel is not None else None
-
-
-def enclosing_parcel(place: Place | None) -> Place | None:
-    """The nearest place above ``place`` (or ``place`` itself) that is not a building.
-
-    Args:
-        place: The place a location resolved onto.
-
-    Returns:
-        The parcel or site, or None when the chain ends at a building with no known parcel.
-    """
-    from urbanlens.dashboard.models.place.model import PlaceKind, PlaceRelation
-
-    hops = 0
-    while place is not None and place.kind == PlaceKind.BUILDING and hops < MAX_PARCEL_HOPS:
-        place = place.parent if place.parent_id and place.parent_relation == PlaceRelation.PART_OF else None
-        hops += 1
-    return place if place is not None and place.kind != PlaceKind.BUILDING else None
 
 
 def nestable_root_pins(pin: Pin) -> list[Pin]:
@@ -653,6 +636,7 @@ class BuildingNester:
         from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
         from urbanlens.dashboard.models.location.model import Location
         from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.places.resolution import attach_location
 
         for latitude, longitude in self.points(cluster):
             try:
@@ -673,6 +657,11 @@ class BuildingNester:
                 place=place,
                 location=location,
             )
+            # Settled the way the provider chain settles a point on a known place (provisioning.ensure_place_outcome),
+            # so the building pin saved here next does not queue the wiki's place-name lookup - an upstream call per
+            # building - for a point whose place is already known.
+            if location.place_id is not None and location.place_resolved_at is None:
+                attach_location(location, location.place)
             return wiki, True
         logger.info("mirror_wikis: no free point on building %s for its wiki", sorted(cluster.refs))
         return None, False
@@ -724,6 +713,7 @@ class BuildingNester:
         Returns:
             Position to the pin created for it.
         """
+        from urbanlens.dashboard.services.pins.build_dates import SOURCE_BUILDING_RECORD, BuildYear, cluster_build_year
         from urbanlens.dashboard.services.pins.building_clusters import match_clusters
 
         wikis = wikis or {}
@@ -741,6 +731,7 @@ class BuildingNester:
                     continue
                 parent_index = self.index_of(cluster.parent)
                 parent = pins.get(parent_index, self.pin) if parent_index is not None else self.pin
+                year = cluster_build_year(cluster)
                 child = Pin.objects.create(
                     name=cluster.name or None,
                     # Derived from a building record, so external name refreshes may still improve it.
@@ -753,6 +744,7 @@ class BuildingNester:
                     color=BUILDING_PIN_ICON_COLOR,
                     detail_bg_color=BUILDING_PIN_BG_COLOR,
                     detail_bg_opacity=BUILDING_PIN_BG_OPACITY,
+                    date_built=BuildYear(year, SOURCE_BUILDING_RECORD).as_date if year is not None else None,
                 )
                 pins[index] = created[index] = child
         if created:
