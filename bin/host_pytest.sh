@@ -20,7 +20,16 @@ if [ -z "${UL_TEST_DB_NAME:-}" ]; then
     exit 2
 fi
 
-name=$(sed -n 's/^UL_CONTAINER_NAME=//p' .env 2>/dev/null | tr -d "\"'" | head -1)
+if [ -z "${UL_TEST_CONTAINER:-}" ]; then
+    # A worktree has no .env of its own; the main checkout's names the dev stack.
+    env_file=.env
+    [ -f "$env_file" ] || env_file="$(git rev-parse --path-format=absolute --git-common-dir)/../.env"
+    name=$(sed -n 's/^UL_CONTAINER_NAME=//p' "$env_file" 2>/dev/null | tr -d "\"'" | head -1 || true)
+    if [ -z "$name" ]; then
+        echo "error: no UL_CONTAINER_NAME in $env_file; set UL_TEST_CONTAINER to the test-runner container." >&2
+        exit 2
+    fi
+fi
 runner="${UL_TEST_CONTAINER:-urbanlens_${name}_test_runner}"
 db="${runner%_test_runner}_test_db"
 
