@@ -139,9 +139,72 @@ jobs:
           TAG: ${{ needs.plan.outputs.release-tag }}
         run: gh release upload "$TAG" dist/* --clobber -R "$GITHUB_REPOSITORY"
 
+  publish-egress-proxy:
+    # The AI tier's egress allowlist (src/urbanlens/config/egress) as an image of its own, for a
+    # deployment that runs published images rather than building this checkout - the k3s sites
+    # UrbanLens/infrastructure deploys. It carries the `filter` this commit's EgressFilterTests hold
+    # to the hosts this commit's tools call, so it is tagged exactly like the app image and an
+    # infrastructure pin of one tag names both. publish-container needs this job, so the app's
+    # :sha-<7> and :main never name a commit whose proxy is missing.
+    name: Publish egress-proxy image
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-egress-proxy
+          flavor: |
+            latest=false
+          # The same tag rules as publish-container's, which explains each one. Keep the two in step:
+          # infrastructure derives this image's tag from the app image's.
+          tags: |
+            type=match,pattern=v(.*),group=1,value=${{ needs.plan.outputs.release-tag }},enable=${{ needs.plan.outputs.release-tag != '' }}
+            type=match,pattern=v(\d+\.\d+)\.\d+$,group=1,value=${{ needs.plan.outputs.release-tag }},enable=${{ needs.plan.outputs.release-tag != '' && needs.plan.outputs.prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.plan.outputs.release-tag != '' && needs.plan.outputs.prerelease == 'false' }}
+            type=raw,value=main,enable=${{ needs.plan.outputs.move-main == 'true' }}
+            type=raw,value=sha-${{ needs.plan.outputs.short-sha }},priority=100
+          labels: |
+            org.opencontainers.image.revision=${{ needs.plan.outputs.sha }}
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: src/urbanlens/config/egress
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Its own cache scope, so this build and the app's do not evict each other's layers.
+          cache-from: type=gha,scope=egress-proxy
+          cache-to: type=gha,mode=max,scope=egress-proxy
+
+      - name: Generate image provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-egress-proxy
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
   publish-container:
     name: Publish container image
-    needs: plan
+    needs: [plan, publish-egress-proxy]
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.push.outputs.digest }}
