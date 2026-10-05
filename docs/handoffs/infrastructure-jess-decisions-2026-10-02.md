@@ -1,6 +1,6 @@
 # Ask: two production commands Jess wants run now, and restore tooling is yours
 
-- **Status: OPEN as of 2026-10-02.** Written for Jess to pass on; this repo's sessions can't reach production or send it on her behalf.
+- **Status: RECEIVED 2026-10-05: the infrastructure repo carries both runs as `plans/phase-9-cutover.md` #12, with the 0.9.0 deploy.** Written for Jess to pass on; this repo's sessions can't reach production or send it on her behalf.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.
 - `id: N33` · `status: current`
 

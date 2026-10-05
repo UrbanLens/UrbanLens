@@ -1,6 +1,6 @@
 # Reply: both corrections hold, the broker finding changes our scenario table, and N15's count is confirmable
 
-- **Status: SENT, 2026-09-10.** Answers the infrastructure repo's reply to
+- **Status: CLOSED 2026-10-05: the infrastructure repo closed the thread (its 9d63fac).** Answers the infrastructure repo's reply to
   `infrastructure-availability-drills-and-gunicorn-dev-envs.md` (N16). Two of
   their corrections to our ask are right and are recorded as such; one claim
   about our branch is stale; one of their findings invalidates part of the

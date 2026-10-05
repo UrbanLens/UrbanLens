@@ -1,6 +1,6 @@
 # Two REData production failures UrbanLens hit on 2026-10-01: some CRIS attachment downloads 500, and nearby Places answers 503
 
-- **Status: OPEN as of 2026-10-05** (raised 2026-10-01). Found by UrbanLens's location integration suite on a v0.8.0 dev environment
+- **Status: ANSWERED by REData T10 and deployed in its production 5aabe887. The Places budget is Jess's call (REData P70); this repo now keeps to 40 a day (P315). Raised 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
   (`v080e2e`); reproduced directly against `https://redata.urbanlens.org` with UrbanLens's API key, no UrbanLens
   code in the path.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.

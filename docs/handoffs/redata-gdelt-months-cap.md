@@ -1,6 +1,6 @@
 # REData's news search accepts a `months` GDELT rejects
 
-- **Status: OPEN as of 2026-10-03.** Found by UrbanLens's P235 work, probing `/api/v1/search/news/` through the
+- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`6b468d5a`, with a SearXNG news fallback in `9c127379`) and deployed to its staging. Production REData is still 5aabe887.** Found by UrbanLens's P235 work, probing `/api/v1/search/news/` through the
   development stack. The REData code cited is `main` as of 2026-10-03.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
 

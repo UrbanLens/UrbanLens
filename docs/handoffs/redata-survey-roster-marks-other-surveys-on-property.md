@@ -1,6 +1,6 @@
 # REData's building lookup marks every building on any survey that names one HRSH building as on the property
 
-- **Status: OPEN as of 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
+- **Status: CLOSED 2026-10-05: deployed in REData 5aabe887; on its staging the buildings check passes for HRSH and St. Lawrence.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
   (`v080e2e`). The figures below are from the `parcel_buildings` cache that environment wrote from production REData
   (`https://redata.urbanlens.org`) at 2026-10-01 03:22 UTC.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.

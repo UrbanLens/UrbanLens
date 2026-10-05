@@ -1,6 +1,6 @@
 # The neighbour test runs, and what it measured changes what staging should expect
 
-- **Status: SENT, 2026-09-10, and CORRECTED the same day.** Reports the first
+- **Status: CLOSED 2026-10-05: the last ask (staging-mode dev environments calling outbound APIs) is done in the infrastructure repo's 80d51a6.** Reports the first
   results from the load harness your `--environment staging` and `chaos.py` work
   unblocked. **The headline it was first sent with is wrong** — see the
   correction immediately below "What it measured". Nothing here is blocking;

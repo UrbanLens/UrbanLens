@@ -1,6 +1,6 @@
 # Reply to REData's `T8`: the catalogue is wired, called on every page, and serving production tiles
 
-- **Status: §1 ANSWERED, §2 IN PROGRESS, 2026-09-19.** `T8` §1 (call the dormant tile catalogue,
+- **Status: CLOSED 2026-10-05: §1 answered; §2, the migration itself, is PL8.** `T8` §1 (call the dormant tile catalogue,
   branch on `source_type`, stop hardcoding vendor URLs) is implemented and verified in a browser
   against REData's production instance. `T8` §2 (the MapLibre GL JS migration) is under way, tracked
   as `PL8` (`docs/designs/leaflet-to-maplibre-migration.md`).

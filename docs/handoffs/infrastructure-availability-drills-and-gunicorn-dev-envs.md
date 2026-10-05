@@ -1,6 +1,6 @@
 # Ask: a dev environment that runs gunicorn, and somewhere to put availability chaos
 
-- **Status: ANSWERED, 2026-09-10.** All three asks implemented; see the reply at
+- **Status: CLOSED 2026-10-05: the infrastructure repo closed the thread (its 9d63fac).** All three asks implemented; see the reply at
   [`infrastructure-availability-drills-reply.md`](infrastructure-availability-drills-reply.md).
   Two of the asks below were corrected in the answering: `--gunicorn` promised an
   axis the app does not have, and the ask omitted `DJANGO_SECRET_KEY`, without

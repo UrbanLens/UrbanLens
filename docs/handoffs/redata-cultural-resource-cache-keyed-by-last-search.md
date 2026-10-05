@@ -1,6 +1,6 @@
 # A cultural-resource search's cached answer is the rows last found from that point, so a search from a neighbouring point takes a listing away from it
 
-- **Status: OPEN as of 2026-10-04.** Written for UrbanLens P286 (`docs/PROBLEMS.md`). Measured against
+- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`ba890af5`, `e9f83ffb`, `bfb47503`) and deployed to its staging, where the register check passes for all four primary campuses. Production REData is still 5aabe887.** Written for UrbanLens P286 (`docs/PROBLEMS.md`). Measured against
   `https://redata.urbanlens.org` with the development key on 2026-10-04; REData read from `main` (`45faeb36`).
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
 

@@ -1,6 +1,6 @@
 # Ask: `UL_DB_APP_PASS` before the next staging or production deploy, and per-tier roles for k8s
 
-- **Status: SENT, 2026-09-15.**
+- **Status: ANSWERED 2026-10-05.** Infrastructure's question back (its `urbanlens-app-0.8.0-deploy-findings.md`, "Your per-tier database roles (N23), answered late") is answered by `UL_DB_ROLES_POOLED` (R29): behind the Pooler the roles carry no limit and the Pooler is the budget, as it proposed. Its half, running `apply_database_roles` as a superuser after `migrate`, is still to build.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.
 - `id: N23` · `status: current`
 

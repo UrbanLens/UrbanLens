@@ -1,6 +1,6 @@
 # REData's building lookup returns an OSM multipolygon building as its centre point
 
-- **Status: OPEN as of 2026-10-01.** Found by UrbanLens's P182 investigation on a v0.8.0 dev environment
+- **Status: CLOSED 2026-10-05: deployed in REData 5aabe887; on its staging HRSH's MAIN/ADMIN comes back a Polygon.** Found by UrbanLens's P182 investigation on a v0.8.0 dev environment
   (`v080e2e`). The record below is from the `parcel_buildings` cache that environment wrote from production
   REData (`https://redata.urbanlens.org`) on 2026-10-01.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.

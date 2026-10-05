@@ -1,6 +1,6 @@
 # RabbitMQ's 30-minute consumer timeout makes a Celery worker exit while a long countdown waits
 
-- **Status: OPEN as of 2026-10-04.** Written for UrbanLens P290 (`docs/archive/PROBLEMS-ARCHIVE.md`).
+- **Status: ANSWERED 2026-10-05: the infrastructure repo's 099d80f sets `consumer_timeout` to 12 h on both sites; closes when 0.9.0, which carries the app half, is deployed.** Written for UrbanLens P290 (`docs/archive/PROBLEMS-ARCHIVE.md`).
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `UrbanLens/infrastructure`.
 
 ## What happens

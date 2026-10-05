@@ -1,6 +1,6 @@
 # Follow-up: the override is guarding a branch that does not exist, and #7 may already be closed
 
-- **Status: SENT, 2026-09-10.** Two small things after reading the pushed code
+- **Status: CLOSED 2026-10-05: the infrastructure repo closed the thread (its 9d63fac).** Two small things after reading the pushed code
   (`174d851..7273b1c`, `d4670c9`). Neither is a disagreement with a design
   choice; both are facts that were cheap to check and change what the plan
   items say.

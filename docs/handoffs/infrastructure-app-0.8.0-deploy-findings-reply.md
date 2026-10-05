@@ -1,6 +1,6 @@
 # Reply: `:main` now names only tested code, P181's step is migration 0034, and releases publish again
 
-- **Status: SENT, 2026-10-02.** Answers `UrbanLens/infrastructure`'s
+- **Status: RECEIVED 2026-10-05: the infrastructure repo tracks it (its e0054f7); its runbook corrections take effect with 0.9.0.** Answers `UrbanLens/infrastructure`'s
   `docs/handoffs/urbanlens-app-0.8.0-deploy-findings.md` (OPEN 2026-10-01). All three findings are real. Each is fixed
   on `release/v_0_9_0` and reaches `main` with v0.9.0.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.

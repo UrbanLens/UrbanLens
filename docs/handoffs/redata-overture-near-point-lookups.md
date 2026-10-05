@@ -1,6 +1,6 @@
 # REData's Overture near-point lookups time out, and UrbanLens now reads Overture from them inside the US
 
-- **Status: OPEN as of 2026-10-03.** Written for UrbanLens P110 (`docs/archive/PROBLEMS-ARCHIVE.md`). Probed once
+- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`7ac19bf6`, `bfb47503`). Not seen live: REData staging has no Overture credentials (its P106). Production REData is still 5aabe887.** Written for UrbanLens P110 (`docs/archive/PROBLEMS-ARCHIVE.md`). Probed once
   each against `https://redata.urbanlens.org` with the development key on 2026-10-03; REData read from `main`
   (`99659fcc`).
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.

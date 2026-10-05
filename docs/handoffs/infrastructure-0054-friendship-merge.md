@@ -1,6 +1,6 @@
 # Reply: 0054 aborts on the rows it exists to merge — confirmed, reproduced, fixed
 
-- **Status: SENT, 2026-09-08.** The defect is real and is fixed on `release/v_0_8_0`. One detail of
+- **Status: CLOSED 2026-10-05: the infrastructure repo closed its side (its 9d63fac).** The defect is real and is fixed on `release/v_0_8_0`. One detail of
   the suggested fix would have cost the audit log; one line of the diagnosis is wrong in a way worth
   correcting, because it points at the wrong lesson for the test suite.
 - **Direction: outbound, `UrbanLens/infrastructure`.** Answering

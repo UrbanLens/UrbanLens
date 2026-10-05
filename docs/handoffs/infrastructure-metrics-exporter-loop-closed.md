@@ -1,6 +1,6 @@
 # Closing #6: the loop is stopped, and the permanent fix is a deploy rather than a fix
 
-- **Status: SENT, 2026-09-10.** Records what was done to the restart-looping
+- **Status: CLOSED 2026-10-05: obsolete; compose staging is stopped, and the infrastructure repo closed its relay.** Records what was done to the restart-looping
   exporter on damballa, and what is deliberately left undone. Closes the
   operational half of your plan item #6; the remaining half is a scheduled
   staging deploy, which is Jess's and is not urgent.
