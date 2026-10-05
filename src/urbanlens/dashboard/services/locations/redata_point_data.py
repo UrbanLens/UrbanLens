@@ -64,7 +64,7 @@ def _settled_domains(latitude: float, longitude: float) -> dict[str, LocationCon
     return {domain: envelope for domain in CONTEXT_DOMAINS if (envelope := context.settled(domain)) is not None}
 
 
-def media_near(latitude: float, longitude: float) -> list[dict[str, Any]]:
+def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
     """Every media item REData has near a point (``MediaItemSerializer`` rows).
 
     Args:
@@ -72,19 +72,19 @@ def media_near(latitude: float, longitude: float) -> list[dict[str, Any]]:
         longitude: WGS-84 longitude.
 
     Returns:
-        The rows; a floor rather than a total when a provider failed to answer.
+        The answer; its rows are a floor rather than a total when it is not ``complete``.
 
     Raises:
         LocationContextUnavailableError: No provider answered.
     """
 
-    def ask() -> list[dict[str, Any]]:
+    def ask() -> LocationContextEnvelope:
         envelope = settled_domain(latitude, longitude, "media")
         if envelope is not None:
-            return envelope.results
+            return envelope
         from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
 
-        return RedataMediaGateway().lookup(latitude, longitude)
+        return RedataMediaGateway().lookup_envelope(latitude, longitude)
 
     return coalesced(f"redata:media:{point_key(latitude, longitude)}", ask, ttl=SHARE_SECONDS)
 

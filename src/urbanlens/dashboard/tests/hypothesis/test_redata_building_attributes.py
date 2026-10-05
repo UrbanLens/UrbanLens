@@ -19,6 +19,7 @@ from urbanlens.dashboard.plugins.builtin.redata_building_attributes import (
     _render_building_attributes,
 )
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    ParcelBuildings,
     PropertyRecordsUnavailableError,
     RedataGateway,
 )
@@ -79,7 +80,9 @@ class FetchBuildingPayloadTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=[_FAR_BUILDING, _NEAR_BUILDING]),
+            patch.object(
+                RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings([_FAR_BUILDING, _NEAR_BUILDING])
+            ),
         ):
             payload = _fetch_building_payload(42.65, -73.75)
         self.assertEqual(payload, _NEAR_BUILDING)
@@ -95,7 +98,7 @@ class FetchBuildingPayloadTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=[]),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings([])),
         ):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
@@ -182,7 +185,7 @@ class PanelFetchTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=[_NEAR_BUILDING]),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings([_NEAR_BUILDING])),
             patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
         ):
             RedataBuildingAttributesPanelSource().fetch(self.pin)
@@ -229,7 +232,7 @@ class EnrichmentSourceTests(TestCase):
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
             patch.object(RedataGateway, "lookup_parcel_uuid", return_value="parcel-1"),
-            patch.object(RedataGateway, "lookup_buildings", return_value=[_NEAR_BUILDING]),
+            patch.object(RedataGateway, "lookup_parcel_buildings", return_value=ParcelBuildings([_NEAR_BUILDING])),
         ):
             payload, query_key = RedataBuildingAttributesEnrichmentSource().fetch(location)
         self.assertEqual(payload, _NEAR_BUILDING)

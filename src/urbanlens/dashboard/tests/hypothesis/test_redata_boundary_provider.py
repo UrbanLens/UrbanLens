@@ -15,6 +15,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider, suggested_boundary
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_ERROR,
+    ParcelBuildings,
     PropertyRecordsUnavailableError,
 )
 from urbanlens.UrbanLens.settings.app import settings
@@ -242,19 +243,21 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
             gw_cls.return_value.lookup_parcel.return_value = {}
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsNone(result["property"])
-        gw_cls.return_value.lookup_buildings.assert_not_called()
+        gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_three_or_more_buildings_produce_a_convex_hull_polygon(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.return_value = [
-                self._building(42.0, -73.0),
-                self._building(42.0, -73.01),
-                self._building(42.01, -73.005),
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    self._building(42.0, -73.0),
+                    self._building(42.0, -73.01),
+                    self._building(42.01, -73.005),
+                ]
+            )
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsInstance(result["property"], Polygon)
-        gw_cls.return_value.lookup_buildings.assert_called_once_with("parcel-uuid")
+        gw_cls.return_value.lookup_parcel_buildings.assert_called_once_with("parcel-uuid")
 
     def test_parcel_geometry_present_never_triggers_the_buildings_lookup(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
@@ -264,15 +267,17 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
             }
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsInstance(result["property"], Polygon)
-        gw_cls.return_value.lookup_buildings.assert_not_called()
+        gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_fewer_than_three_buildings_leaves_property_none(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.return_value = [
-                self._building(42.0, -73.0),
-                self._building(42.0, -73.01),
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    self._building(42.0, -73.0),
+                    self._building(42.0, -73.01),
+                ]
+            )
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsNone(result["property"])
 
@@ -280,37 +285,43 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         """A degenerate hull (all points on one line) is a LineString, not usable as a boundary."""
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.return_value = [
-                self._building(42.0, -73.0),
-                self._building(42.0, -73.01),
-                self._building(42.0, -73.02),
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    self._building(42.0, -73.0),
+                    self._building(42.0, -73.01),
+                    self._building(42.0, -73.02),
+                ]
+            )
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsNone(result["property"])
 
     def test_buildings_missing_coordinates_are_skipped(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.return_value = [
-                self._building(42.0, -73.0),
-                {"latitude": None, "longitude": None, "source": "cris"},
-                self._building(42.0, -73.01),
-                self._building(42.01, -73.005),
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    self._building(42.0, -73.0),
+                    {"latitude": None, "longitude": None, "source": "cris"},
+                    self._building(42.0, -73.01),
+                    self._building(42.01, -73.005),
+                ]
+            )
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsInstance(result["property"], Polygon)
 
     def test_a_settled_buildings_failure_leaves_property_none(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
+            gw_cls.return_value.lookup_parcel_buildings.side_effect = PropertyRecordsUnavailableError(
+                "no_data_found", "none"
+            )
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsNone(result["property"])
 
     def test_a_buildings_outage_defers(self) -> None:
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_buildings.side_effect = PropertyRecordsUnavailableError(
+            gw_cls.return_value.lookup_parcel_buildings.side_effect = PropertyRecordsUnavailableError(
                 REASON_SOURCE_ERROR, "down"
             )
             with self.assertRaises(BoundaryProviderDeferredError):
@@ -407,13 +418,14 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
         self.assertIsInstance(result["property"], Polygon)
-        gw_cls.return_value.lookup_buildings.assert_not_called()
+        gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_the_ranking_is_requested_unfiltered(self) -> None:
         """Any ?source= makes REData skip scoring, leaving is_suggested false everywhere."""
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings([])
 
             RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -423,11 +435,13 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.return_value = []
-            gw_cls.return_value.lookup_buildings.return_value = [
-                {"latitude": 42.0, "longitude": -73.0},
-                {"latitude": 42.0, "longitude": -73.01},
-                {"latitude": 42.01, "longitude": -73.005},
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    {"latitude": 42.0, "longitude": -73.0},
+                    {"latitude": 42.0, "longitude": -73.01},
+                    {"latitude": 42.01, "longitude": -73.005},
+                ]
+            )
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -437,7 +451,7 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
-            gw_cls.return_value.lookup_buildings.return_value = []
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings([])
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -450,16 +464,18 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
             gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError(
                 REASON_SOURCE_ERROR, "Could not reach REData: Read timed out."
             )
-            gw_cls.return_value.lookup_buildings.return_value = [
-                {"latitude": 42.0, "longitude": -73.0},
-                {"latitude": 42.0, "longitude": -73.01},
-                {"latitude": 42.01, "longitude": -73.005},
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    {"latitude": 42.0, "longitude": -73.0},
+                    {"latitude": 42.0, "longitude": -73.01},
+                    {"latitude": 42.01, "longitude": -73.005},
+                ]
+            )
 
             with self.assertRaises(BoundaryProviderDeferredError):
                 RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
-        gw_cls.return_value.lookup_buildings.assert_not_called()
+        gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_buildings_spread_across_a_county_never_become_the_parcel(self) -> None:
         """P148: REData's live answer for 19 Schultz Rd, one house lot.
@@ -480,7 +496,7 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.return_value = []
-            gw_cls.return_value.lookup_buildings.return_value = near + far
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(near + far)
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -493,11 +509,13 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.return_value = []
-            gw_cls.return_value.lookup_buildings.return_value = [
-                {"latitude": 42.0, "longitude": -73.0, "match_scope": "project", "is_on_property": True},
-                {"latitude": 42.0, "longitude": -73.01, "match_scope": "project", "is_on_property": True},
-                {"latitude": 42.01, "longitude": -73.005, "match_scope": "project", "is_on_property": True},
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    {"latitude": 42.0, "longitude": -73.0, "match_scope": "project", "is_on_property": True},
+                    {"latitude": 42.0, "longitude": -73.01, "match_scope": "project", "is_on_property": True},
+                    {"latitude": 42.01, "longitude": -73.005, "match_scope": "project", "is_on_property": True},
+                ]
+            )
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -508,11 +526,13 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.return_value = []
-            gw_cls.return_value.lookup_buildings.return_value = [
-                {"latitude": 42.0, "longitude": -73.0},
-                {"latitude": 42.0, "longitude": -73.01},
-                {"latitude": 42.01, "longitude": -73.005, "on_parcel": False},
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    {"latitude": 42.0, "longitude": -73.0},
+                    {"latitude": 42.0, "longitude": -73.01},
+                    {"latitude": 42.01, "longitude": -73.005, "on_parcel": False},
+                ]
+            )
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -523,13 +543,15 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.return_value = []
-            gw_cls.return_value.lookup_buildings.return_value = [
-                {"latitude": 42.0, "longitude": -73.0, "is_on_property": True},
-                {"latitude": 42.0, "longitude": -73.01, "is_on_property": True},
-                {"latitude": 42.01, "longitude": -73.005, "is_on_property": True},
-                # A CRIS building known only via a county-scale sensitivity zone.
-                {"latitude": 43.0, "longitude": -74.0, "is_on_property": False},
-            ]
+            gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
+                [
+                    {"latitude": 42.0, "longitude": -73.0, "is_on_property": True},
+                    {"latitude": 42.0, "longitude": -73.01, "is_on_property": True},
+                    {"latitude": 42.01, "longitude": -73.005, "is_on_property": True},
+                    # A CRIS building known only via a county-scale sensitivity zone.
+                    {"latitude": 43.0, "longitude": -74.0, "is_on_property": False},
+                ]
+            )
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 

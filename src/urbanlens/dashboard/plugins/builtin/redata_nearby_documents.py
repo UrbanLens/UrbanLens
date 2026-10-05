@@ -101,7 +101,7 @@ class NearbyReferenceDocumentsSource(DocumentPanelSource):
             return
         matched_url, matched_page_id = _matched_article(pin.location)
         documents = [stored for row in envelope.results if not _is_matched(stored := _stored_document(row), matched_url, matched_page_id) and stored.get("url")]
-        LocationCache.set(pin.location, self.cache_source, {"documents": documents}, query_key=point_key(latitude, longitude))
+        LocationCache.set(pin.location, self.cache_source, envelope.marked({"documents": documents}), query_key=point_key(latitude, longitude))
 
     def may_list_documents(self, data: dict) -> bool:
         """Whether the cached payload holds any document."""

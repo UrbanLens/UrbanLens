@@ -142,7 +142,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
             # Writing the row would record the outage as a settled "nothing here" for the whole
             # cache window; leaving it absent is what makes it retryable.
             return
-        data = {self.payload_key: self.transform_rows(envelope.results)}
+        # A floor rather than a total when a source did not answer, which the cache keeps only briefly.
+        data = envelope.marked({self.payload_key: self.transform_rows(envelope.results)})
         LocationCache.set(pin.location, self.cache_source, data, query_key=f"{latitude:.5f},{longitude:.5f}")
         self.landed(pin, data)
 

@@ -111,7 +111,13 @@ class StreetLevelPhotosSource(GalleryMediaSource):
         if not found.complete and not found.dates:
             # An outage, not an answer; leaving the row absent keeps it retryable.
             return
-        LocationCache.set(pin.location, self.cache_source, {"dates": [_stored_date(entry) for entry in found.dates]}, query_key=point_key(latitude, longitude))
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
+        payload: dict[str, Any] = {"dates": [_stored_date(entry) for entry in found.dates]}
+        if not found.complete:
+            # A network did not answer, so these dates are a floor, kept only briefly.
+            payload[UNANSWERED_SOURCES_KEY] = ["unknown"]
+        LocationCache.set(pin.location, self.cache_source, payload, query_key=point_key(latitude, longitude))
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """One tile per cached date with a picture, in cached (newest-first) order."""

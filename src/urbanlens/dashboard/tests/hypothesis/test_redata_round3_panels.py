@@ -239,7 +239,8 @@ class AerialMediaSourceTests(TestCase):
         ]
         with (
             mock.patch(
-                "urbanlens.dashboard.services.locations.redata_point_data.media_near", return_value=rows
+                "urbanlens.dashboard.services.locations.redata_point_data.media_near",
+                return_value=LocationContextEnvelope(count=len(rows), complete=True, results=rows),
             ) as media_near,
         ):
             self.source.fetch(self.pin)

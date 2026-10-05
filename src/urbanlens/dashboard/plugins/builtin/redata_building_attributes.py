@@ -77,19 +77,26 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
     Raises:
         PropertyRecordsUnavailableError: REData could not answer for a transient reason.
         ValueError: REData is not configured."""
+    from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
-    from urbanlens.dashboard.services.locations.site_scope import parcel_buildings
+    from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 
-    cached_buildings = parcel_buildings(location)
-    if cached_buildings is not None:
-        return _nearest_building(cached_buildings, latitude, longitude) or {}
+    def marked(building: dict[str, Any] | None, unanswered: list[str]) -> dict[str, Any]:
+        # The nearest building of a partial list may not be the nearest building, so it is kept as briefly.
+        payload = dict(building or {})
+        return {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
+
+    cached = LocationCache.get_fresh(location, PARCEL_BUILDINGS_CACHE_SOURCE) if location is not None else None
+    if cached is not None:
+        data = cached.data or {}
+        return marked(_nearest_building(list(data.get("buildings") or []), latitude, longitude), list(data.get(UNANSWERED_SOURCES_KEY) or []))
 
     try:
         gateway = RedataGateway()
         parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
         if not parcel_uuid:
             return {}
-        buildings = gateway.lookup_buildings(parcel_uuid)
+        answer = gateway.lookup_parcel_buildings(parcel_uuid)
     except PropertyRecordsUnavailableError as exc:
         if exc.is_outage:
             raise
@@ -103,7 +110,7 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
         )
         return {}
 
-    return _nearest_building(buildings, latitude, longitude) or {}
+    return marked(_nearest_building(answer.buildings, latitude, longitude), list(answer.unanswered_sources))
 
 
 def _render_building_attributes(data: dict[str, Any]) -> dict[str, Any] | None:

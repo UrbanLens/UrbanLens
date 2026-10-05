@@ -172,19 +172,23 @@ class RedataBoundaryProvider(BoundaryProvider):
             A convex-hull ``Polygon`` around the buildings that can stand on this property (see :func:`hull_buildings`), or None when there's no uuid, fewer than 3 of them, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed.
 
         Raises:
-            BoundaryProviderDeferredError: The buildings lookup failed transiently.
+            BoundaryProviderDeferredError: The buildings lookup failed transiently, or found fewer than 3 buildings
+                while REData named a source it could not hear from.
         """
         if not parcel_uuid:
             return None
         try:
-            buildings = gateway.lookup_buildings(parcel_uuid)
+            answer = gateway.lookup_parcel_buildings(parcel_uuid)
         except PropertyRecordsUnavailableError as exc:
             self._defer_if_transient(exc)
             logger.debug("REData buildings lookup unavailable for parcel %s: %s", parcel_uuid, exc)
             return None
 
-        points = [Point(float(building["longitude"]), float(building["latitude"]), srid=4326) for building in hull_buildings(buildings, latitude, longitude)]
+        points = [Point(float(building["longitude"]), float(building["latitude"]), srid=4326) for building in hull_buildings(answer.buildings, latitude, longitude)]
         if len(points) < 3:
+            if answer.unanswered_sources:
+                # Too few buildings because a source did not answer is no answer; settling on None would stop asking.
+                raise BoundaryProviderDeferredError(self.service_key or "redata_boundary")
             return None
 
         hull = MultiPoint(points, srid=4326).convex_hull

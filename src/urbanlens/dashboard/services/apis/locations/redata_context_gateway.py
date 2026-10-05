@@ -30,6 +30,8 @@ REASON_ALL_PROVIDERS_UNAVAILABLE = "all_providers_unavailable"
 REASON_SOURCE_ERROR = "source_error"
 #: REData refused the key for the endpoint (401/403): a scope it lacks, not anything about the place asked about.
 REASON_FORBIDDEN = "forbidden"
+#: A provider status in REData's envelope meaning the provider was not heard from, so the answer is a floor.
+_UNANSWERED_STATUSES = frozenset({"unavailable", "rate_limited", "not_cached"})
 #: The largest near-point ``limit`` REData accepts; it answers 400 for more.
 MAX_NEAR_POINT_LIMIT = 200
 
@@ -104,6 +106,32 @@ class LocationContextEnvelope:
     complete: bool
     results: list[dict[str, Any]] = field(default_factory=list)
     providers: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def unanswered_sources(self) -> list[str]:
+        """The providers that did not answer, when the answer is incomplete; ``[]`` for a complete one.
+
+        Returns:
+            Provider names, or ``["unknown"]`` for an incomplete answer that names none.
+        """
+        if self.complete:
+            return []
+        named = [str(entry.get("provider")) for entry in self.providers if entry.get("status") in _UNANSWERED_STATUSES and entry.get("provider")]
+        return named or ["unknown"]
+
+    def marked(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """``payload``, marked partial when this answer is, so the cache keeps it only briefly.
+
+        Args:
+            payload: What a caller is about to cache from this answer.
+
+        Returns:
+            The payload, with ``unanswered_sources`` added for an incomplete answer.
+        """
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
+        unanswered = self.unanswered_sources
+        return {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
 
 
 @dataclass(slots=True, kw_only=True)

@@ -12,6 +12,8 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import M
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
 _MEDIA_LOOKUP_PATH = "/api/v1/media/lookup/"
 
 
@@ -59,6 +61,47 @@ class RedataMediaGateway(RedataLocationContextGateway):
         Returns:
             The envelope's ``results`` list, provider-tagged dicts per REData's ``MediaItemSerializer`` shape (``provider``, ``external_id``, ``kind``, ``title``, ``description``, ``url``, ``thumbnail_url``, ``credit``, ``latitude``, ``longitude``, ``attributes``, ...).
         """
+        envelope = self.lookup_envelope(
+            latitude,
+            longitude,
+            kind=kind,
+            provider=provider,
+            radius_meters=radius_meters,
+            limit=MAX_NEAR_POINT_LIMIT if is_aerial else limit,
+            force_refresh=force_refresh,
+        )
+        if is_aerial:
+            return [item for item in envelope.results if item.get("is_aerial")][:limit]
+        return envelope.results
+
+    def lookup_envelope(
+        self,
+        latitude: float,
+        longitude: float,
+        *,
+        kind: str | list[str] | None = None,
+        provider: str | list[str] | None = None,
+        radius_meters: float | None = None,
+        limit: int | None = None,
+        force_refresh: bool = False,
+    ) -> LocationContextEnvelope:
+        """Look up media items near a coordinate, keeping whether every provider answered.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            kind: As :meth:`lookup`.
+            provider: As :meth:`lookup`.
+            radius_meters: As :meth:`lookup`.
+            limit: Most items per provider.
+            force_refresh: Bypass REData's cache and re-query live.
+
+        Returns:
+            The envelope; ``complete`` is False when a provider did not answer, so its rows are a floor.
+
+        Raises:
+            LocationContextUnavailableError: No provider answered.
+        """
         extra_params: dict[str, Any] = {}
         if kind is not None:
             extra_params["kind"] = kind
@@ -69,16 +112,14 @@ class RedataMediaGateway(RedataLocationContextGateway):
             radius_meters=radius_meters,
             provider=provider,
             force_refresh=force_refresh,
-            limit=MAX_NEAR_POINT_LIMIT if is_aerial else limit,
+            limit=limit,
             extra_params=extra_params,
         )
         if not envelope.complete and not envelope.results:
             # An outage rather than an answer, and callers cache what they get -
             # see services.pins.redata_panel for the same rule stated in full.
             raise LocationContextUnavailableError(REASON_ALL_PROVIDERS_UNAVAILABLE, "Every media source covering this point failed to answer.")
-        if is_aerial:
-            return [item for item in envelope.results if item.get("is_aerial")][:limit]
-        return envelope.results
+        return envelope
 
     def download(self, media_uuid: str) -> tuple[bytes, str]:
         """REData's mirrored copy of one media item's image (``cached_url`` names it once it exists).

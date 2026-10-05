@@ -74,8 +74,8 @@ def fetch_redata_temporal_features(location: Location, latitude: float, longitud
     features = [feature for row in envelope.results if (feature := _redata_feature(row)) is not None]
     years = sorted({year for feature in features for name in ("start_year", "end_year") if (year := _year(feature["properties"].get(name))) is not None})
     query_key = point_key(latitude, longitude)
-    LocationCache.set(location, REDATA_FEATURES_CACHE_SOURCE, {"features": features}, query_key=query_key)
-    LocationCache.set(location, OHM_COVERAGE_CACHE_SOURCE, {"available": bool(years), "years": years}, query_key=query_key)
+    LocationCache.set(location, REDATA_FEATURES_CACHE_SOURCE, envelope.marked({"features": features}), query_key=query_key)
+    LocationCache.set(location, OHM_COVERAGE_CACHE_SOURCE, envelope.marked({"available": bool(years), "years": years}), query_key=query_key)
     return features
 
 

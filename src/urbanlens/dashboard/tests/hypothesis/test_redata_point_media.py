@@ -235,9 +235,9 @@ class SharedPointDataTests(SimpleTestCase):
         with (
             _redata_on(),
             mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=context),
-            mock.patch.object(RedataMediaGateway, "lookup") as lookup,
+            mock.patch.object(RedataMediaGateway, "lookup_envelope") as lookup,
         ):
-            rows = redata_point_data.media_near(41.7, -73.9)
+            rows = redata_point_data.media_near(41.7, -73.9).results
         lookup.assert_not_called()
         self.assertEqual([row["uuid"] for row in rows], [_MEDIA_UUID])
 
@@ -245,7 +245,7 @@ class SharedPointDataTests(SimpleTestCase):
         with (
             _redata_on(),
             mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
-            mock.patch.object(RedataMediaGateway, "lookup", return_value=[_media_row()]) as lookup,
+            mock.patch.object(RedataMediaGateway, "lookup_envelope", return_value=_envelope([_media_row()])) as lookup,
         ):
             redata_point_data.media_near(41.7, -73.9)
             redata_point_data.media_near(41.7, -73.9)
@@ -259,9 +259,9 @@ class SharedPointDataTests(SimpleTestCase):
                 "get_context",
                 side_effect=LocationContextUnavailableError("source_error", "down"),
             ),
-            mock.patch.object(RedataMediaGateway, "lookup", return_value=[]) as lookup,
+            mock.patch.object(RedataMediaGateway, "lookup_envelope", return_value=_envelope([])) as lookup,
         ):
-            self.assertEqual(redata_point_data.media_near(41.7, -73.9), [])
+            self.assertEqual(redata_point_data.media_near(41.7, -73.9).results, [])
         lookup.assert_called_once()
 
     def test_street_view_dates_come_from_cached_captures_with_the_nearest_frame(self) -> None:
@@ -361,7 +361,7 @@ class NearbyMediaSourceTests(TestCase):
         with (
             _redata_on(),
             mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
-            mock.patch.object(RedataMediaGateway, "lookup", return_value=self.rows) as lookup,
+            mock.patch.object(RedataMediaGateway, "lookup_envelope", return_value=_envelope(self.rows)) as lookup,
         ):
             NearbyMediaSource().fetch(self.pin)
             AerialMediaSource().fetch(self.pin)

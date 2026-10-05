@@ -16,12 +16,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.inline_scripts import executable_blocks, inline_handlers
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.cache.location_cache import PARTIAL_ANSWER_STALE_AFTER, LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
-    PARTIAL_ANSWER_STALE_AFTER,
     ParcelBuildingsEnrichmentSource,
     ParcelBuildingsPanelSource,
     ParcelBuildingsPlugin,

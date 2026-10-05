@@ -36,8 +36,9 @@ class AerialMediaSource(GalleryMediaSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        items = [stored_media_row(row) for row in media_near(lat, lng) if row.get("is_aerial")]
-        LocationCache.set(pin.location, self.cache_source, {"items": items}, query_key=point_key(lat, lng))
+        envelope = media_near(lat, lng)
+        items = [stored_media_row(row) for row in envelope.results if row.get("is_aerial")]
+        LocationCache.set(pin.location, self.cache_source, envelope.marked({"items": items}), query_key=point_key(lat, lng))
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached REData media rows into gallery tiles, mirrored images read through this site's proxy."""

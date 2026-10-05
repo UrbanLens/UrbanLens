@@ -125,8 +125,9 @@ class NearbyMediaSource(GalleryMediaSource):
 
         latitude = float(pin.effective_latitude or 0)
         longitude = float(pin.effective_longitude or 0)
-        rows = [stored_media_row(row) for row in media_near(latitude, longitude) if not row.get("is_aerial") and row.get("provider") not in STREET_LEVEL_PROVIDERS]
-        LocationCache.set(pin.location, self.cache_source, {"items": rows}, query_key=point_key(latitude, longitude))
+        envelope = media_near(latitude, longitude)
+        rows = [stored_media_row(row) for row in envelope.results if not row.get("is_aerial") and row.get("provider") not in STREET_LEVEL_PROVIDERS]
+        LocationCache.set(pin.location, self.cache_source, envelope.marked({"items": rows}), query_key=point_key(latitude, longitude))
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """One tile per cached row with a picture."""

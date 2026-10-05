@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_ERROR,
+    ParcelBuildings,
     PropertyRecordsUnavailableError,
 )
 from urbanlens.dashboard.services.geo.boundary_voting import apply_winning_boundary, boundary_options
@@ -271,7 +272,7 @@ class ProvisioningReproductionTests(TestCase):
 
     def _provision_west(self, gateway) -> None:
         gateway.return_value.lookup_parcel.return_value = {"uuid": "781dd879"}
-        gateway.return_value.lookup_buildings.return_value = self._spread_buildings()
+        gateway.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(self._spread_buildings())
         provision_places_for_coordinate(self.west)
         self.west.refresh_from_db()
         self.east.refresh_from_db()

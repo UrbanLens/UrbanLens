@@ -16,6 +16,12 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
 
 
+#: The payload key naming the sources an upstream asked and could not hear from. A payload carrying it is a floor.
+UNANSWERED_SOURCES_KEY = "unanswered_sources"
+#: How long a payload marked with :data:`UNANSWERED_SOURCES_KEY` is kept before it is asked for again.
+PARTIAL_ANSWER_STALE_AFTER = timedelta(hours=1)
+
+
 class LocationCache(abstract.DashboardModel):
     """Caches responses from external data sources keyed to a shared Location.
     An empty-dict ``data`` field means "we searched and found nothing" - this is still a valid cached result so we don't hammer the upstream API again.
@@ -117,12 +123,15 @@ class LocationCache(abstract.DashboardModel):
             data: Parsed API response to store.
             query_key: The search term or address used for the lookup.
             audience: Whose row this is; the default is the one every viewer shares.
-            stale_after: Let the row go stale this soon instead of after the site-wide window, for an answer its
-                upstream said was partial.
+            stale_after: Let the row go stale this soon instead of after the site-wide window. A payload marked
+                with :data:`UNANSWERED_SOURCES_KEY` gets :data:`PARTIAL_ANSWER_STALE_AFTER` without asking. The row is
+                dated as if written earlier, so raising ``external_data_cache_days`` afterwards lengthens it too.
 
         Returns:
             The saved LocationCache instance.
         """
+        if stale_after is None and isinstance(data, dict) and data.get(UNANSWERED_SOURCES_KEY):
+            stale_after = PARTIAL_ANSWER_STALE_AFTER
         entry, _ = cls.objects.update_or_create(
             location=location,
             source=source,
