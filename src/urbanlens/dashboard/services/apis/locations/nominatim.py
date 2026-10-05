@@ -8,11 +8,15 @@ import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
+from urbanlens.dashboard.services.core.input_validation import InputRejection, reject, require_coordinates, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
+
+#: A Nominatim lookup id: N, W or R and a positive OSM id.
+_OSM_ID = re.compile(r"[NWRnwr][1-9][0-9]*")
 
 _API_URL = "https://nominatim.openstreetmap.org"
 _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urbanlens.org) python-requests/2.x"
@@ -77,6 +81,7 @@ class NominatimGateway(Gateway):
 
     def search(self, query: str, *, limit: int = 5, **params: Any) -> list[dict[str, Any]]:
         """Search OpenStreetMap places by free-text query through Nominatim."""
+        require_query(self.service_key, query, name="q")
         request_params: dict[str, Any] = {
             "q": query,
             "format": "json",
@@ -107,8 +112,12 @@ class NominatimGateway(Gateway):
         """Lookup OSM objects by ids like ``N123``, ``W456``, or ``R789``."""
         if not osm_ids:
             return []
+        # An id outside Nominatim's N/W/R-prefixed form names nothing; it is dropped, and a list of only those is refused.
+        valid_ids = [osm_id for osm_id in osm_ids if isinstance(osm_id, str) and _OSM_ID.fullmatch(osm_id)]
+        if not valid_ids:
+            reject(self.service_key, InputRejection.MALFORMED_ID, "no osm_ids are in Nominatim's N123/W456/R789 form")
         request_params: dict[str, Any] = {
-            "osm_ids": ",".join(osm_ids[:50]),
+            "osm_ids": ",".join(valid_ids[:50]),
             "format": "json",
             "extratags": 1,
             "namedetails": 1,
@@ -141,6 +150,7 @@ class NominatimGateway(Gateway):
         Raises:
             Exception: on a request/transport failure (including a ``RateLimitExceededError`` from the shared rate-limited session) - deliberately NOT swallowed to None here, so a transient failure isn't indistinguishable from a real "no result" to...
         """
+        require_coordinates(self.service_key, latitude, longitude)
         # English, because the names are compared with Google's, which are stored in English.
         params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1, "accept-language": "en"}
         resp = self.session.get(
@@ -177,6 +187,7 @@ class NominatimGateway(Gateway):
         Raises:
             Exception: Nominatim could not be asked (see ``is_source_outage``).
         """
+        require_coordinates(self.service_key, latitude, longitude)
         try:
             params: dict[str, str | int | float] = {
                 "lat": latitude,
