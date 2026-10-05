@@ -23752,3 +23752,46 @@ second and 16 MB of bandwidth from Microsoft's public storage per boundary resol
 - the real session passes `stream`.
 
 Six failed before the fix. `test_google_open_buildings_shards.py` passes unchanged through the shared reader.
+
+## RESOLVED 2026-10-05: The published E2EE schema left out fields its views require, and a key reset kept the old KDF cost
+
+`id: P310` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading drf-spectacular's warnings in manage.py check --deploy`
+
+**What was wrong.** A native client generates its E2EE calls from the published schema, and four operations had
+drifted from what their views read:
+- **Rewrap** omitted `current_password`, which a password-backed account is refused without, and the
+  `kdf_opslimit`/`kdf_memlimit` a new password wrap may name.
+- **Reset** omitted `current_password` and the `rewrapped_conversation_keys`/`rewrapped_group_envelopes` lists that
+  carry the caller's key copies across.
+- **Both passkey-wrap operations** documented no body at all. drf-spectacular warned it could not guess a serializer
+  (W002), which the 2026-08-11 audit had brought to zero.
+
+A generated client's rewrap or reset on a password account would always get 403.
+
+Reset also documented the KDF cost but never stored it: the bundle kept its old cost beside a password wrap made at
+another. Enroll accepts a cost above the default, so an account enrolled stronger and then reset in the browser, which
+wraps at the default, would derive the wrong key at its next password unlock.
+
+Separately, alias kinds (`PinAlias`, `WikiAliasCreate`) were published as `KindA19Enum`, a hash-suffixed name that
+changes whenever the choices do.
+
+**Fix.**
+- The three request serializers document every field their views read, and passkey-wrap POST has
+  `E2EEPasskeyWrapRequestSerializer`.
+- drf-spectacular documents no DELETE body, as OpenAPI 3.0 leaves one undefined, so passkey-wrap DELETE's
+  description names `current_password`.
+- Rewrap's KDF parsing became `_new_wrap_kdf`, and reset uses it too: the cost a new password wrap names, else the
+  default, is stored with the wrap, under enroll's floor.
+- `ENUM_NAME_OVERRIDES` names the alias choices `AliasKindEnum`.
+
+**Tests.** `test_e2ee_request_schema_drift.py`:
+- every E2EE write's body keys, read from its view and from the module helpers it hands the body to, are in the
+  published request schema, or the description for a DELETE (failed for 4 operations);
+- an anti-vacuity check that the scan finds the passkey-wrap, rewrap and DELETE reads;
+- no schema component is named by its hash (failed on `KindA19Enum`);
+- reset stores the default cost for a wrap naming none, and the named cost for one naming it (both failed, keeping
+  `(4, 134217728)`);
+- reset refuses a cost below the floor and writes nothing.
+
+**Also found, not fixed here.** The in-process contract suite (`bin/run_contract_tests.sh --methods all`) passes 289
+of 292 operations. The three failures are P311.

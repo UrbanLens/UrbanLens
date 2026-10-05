@@ -10,6 +10,10 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+#: The password proof every write that can destroy or replace an unlock path asks for.
+_PROOF_HELP = "Proof of possession; required on accounts that have a password."
+_KDF_HELP = "The KDF cost the new password wrap was made at; the default when omitted, and never below it."
+
 
 class E2EEEnrollRequestSerializer(serializers.Serializer):
     """POST /e2ee/keys/ body."""
@@ -20,7 +24,7 @@ class E2EEEnrollRequestSerializer(serializers.Serializer):
     password_wrap_salt = serializers.CharField(required=False, allow_blank=True)
     auth_key = serializers.CharField(required=False, allow_blank=True, help_text="Derived login credential; password accounts only.")
     auth_salt = serializers.CharField(required=False, allow_blank=True)
-    current_password = serializers.CharField(required=False, allow_blank=True, help_text="Proof of possession; required on accounts that have a password.")
+    current_password = serializers.CharField(required=False, allow_blank=True, help_text=_PROOF_HELP)
     kdf_opslimit = serializers.IntegerField()
     kdf_memlimit = serializers.IntegerField()
 
@@ -98,6 +102,9 @@ class E2EERewrapRequestSerializer(serializers.Serializer):
     password_wrapped_secret = serializers.CharField(required=False, allow_blank=True)
     password_wrap_salt = serializers.CharField(required=False, allow_blank=True)
     recovery_wrapped_secret = serializers.CharField(required=False, allow_blank=True)
+    kdf_opslimit = serializers.IntegerField(required=False, help_text=_KDF_HELP)
+    kdf_memlimit = serializers.IntegerField(required=False, help_text=_KDF_HELP)
+    current_password = serializers.CharField(required=False, allow_blank=True, help_text=_PROOF_HELP)
 
 
 class E2EEOkResponseSerializer(serializers.Serializer):
@@ -128,8 +135,11 @@ class E2EEResetRequestSerializer(serializers.Serializer):
     recovery_wrapped_secret = serializers.CharField()
     password_wrapped_secret = serializers.CharField(required=False, allow_blank=True)
     password_wrap_salt = serializers.CharField(required=False, allow_blank=True)
-    kdf_opslimit = serializers.IntegerField(required=False)
-    kdf_memlimit = serializers.IntegerField(required=False)
+    kdf_opslimit = serializers.IntegerField(required=False, help_text=_KDF_HELP)
+    kdf_memlimit = serializers.IntegerField(required=False, help_text=_KDF_HELP)
+    current_password = serializers.CharField(required=False, allow_blank=True, help_text=_PROOF_HELP)
+    rewrapped_conversation_keys = E2EEEnvelopeRefSerializer(many=True, required=False, help_text="Conversation keys re-sealed to the new key, by id, from rewrap-all.")
+    rewrapped_group_envelopes = E2EEEnvelopeRefSerializer(many=True, required=False, help_text="Group key envelopes re-sealed to the new key, by id, from rewrap-all.")
 
 
 class E2EEResetResponseSerializer(serializers.Serializer):
@@ -140,3 +150,12 @@ class E2EEResetResponseSerializer(serializers.Serializer):
     not_rewrapped = serializers.IntegerField(
         help_text=("The caller's own conversation keys and group envelopes that were NOT re-sealed. They remain sealed to the retired key and are permanently unreadable - surface this to the user."),
     )
+
+
+class E2EEPasskeyWrapRequestSerializer(serializers.Serializer):
+    """POST passkey-wrap body: the private key wrapped under one of the caller's own passkeys."""
+
+    credential_id = serializers.CharField(help_text="The passkey's rawId, base64url-encoded.")
+    prf_input = serializers.CharField(help_text="The 32-byte WebAuthn prf evaluation input, base64-encoded.")
+    wrapped_secret = serializers.CharField()
+    current_password = serializers.CharField(required=False, allow_blank=True, help_text=_PROOF_HELP)

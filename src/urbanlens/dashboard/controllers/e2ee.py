@@ -484,18 +484,10 @@ class E2EERewrapView(DualAuthJsonView):
         if not password_wrapped and not recovery_wrapped:
             return Response({"error": "Nothing to update"}, status=400)
 
-        # The KDF cost the *new* blob was wrapped under.
-        rewrap_opslimit, rewrap_memlimit = DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT
-        if password_wrapped and ("kdf_opslimit" in data or "kdf_memlimit" in data):
-            try:
-                rewrap_opslimit = int(data.get("kdf_opslimit", 0))
-                rewrap_memlimit = int(data.get("kdf_memlimit", 0))
-            except (TypeError, ValueError):
-                return Response({"error": "Invalid kdf parameters"}, status=400)
-            # The same floor enroll applies, for the same reason: this decides
-            # how expensive the stored blob is to attack offline.
-            if rewrap_opslimit < DEFAULT_KDF_OPSLIMIT or rewrap_memlimit < DEFAULT_KDF_MEMLIMIT:
-                return Response({"error": "Invalid kdf parameters"}, status=400)
+        kdf = _new_wrap_kdf(data) if password_wrapped else (DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT)
+        if kdf is None:
+            return Response({"error": "Invalid kdf parameters"}, status=400)
+        rewrap_opslimit, rewrap_memlimit = kdf
         # Proof is required for *either* wrapped copy, not just the password one. (OAuth-only accounts have no
         # password to prove and pass through - see the helper.)
         proof_error = _require_current_password_proof(profile.user, data)
@@ -517,6 +509,29 @@ class E2EERewrapView(DualAuthJsonView):
             update_fields.append("recovery_wrapped_secret")
         bundle.save(update_fields=update_fields)
         return Response({"ok": True})
+
+
+def _new_wrap_kdf(data: dict[str, Any]) -> tuple[int, int] | None:
+    """The KDF cost a new password wrap was made at: the body's, else the default; None when it is invalid.
+
+    The floor is the one enroll applies, for the same reason: it decides how expensive the stored blob is to attack
+    offline.
+
+    Args:
+        data: The parsed JSON body.
+
+    Returns:
+        ``(opslimit, memlimit)``, or None.
+    """
+    if "kdf_opslimit" not in data and "kdf_memlimit" not in data:
+        return DEFAULT_KDF_OPSLIMIT, DEFAULT_KDF_MEMLIMIT
+    try:
+        opslimit, memlimit = int(data.get("kdf_opslimit", 0)), int(data.get("kdf_memlimit", 0))
+    except (TypeError, ValueError):
+        return None
+    if opslimit < DEFAULT_KDF_OPSLIMIT or memlimit < DEFAULT_KDF_MEMLIMIT:
+        return None
+    return opslimit, memlimit
 
 
 class _E2EEPasskeyWrapBase(DualAuthJsonView):
@@ -567,6 +582,10 @@ class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
             "secret. Requires `current_password` on password-backed accounts, even for OAuth2 callers - "
             "see the enroll endpoint for the rationale."
         ),
+    )
+    @extend_schema(
+        request=e2ee_schema.E2EEPasskeyWrapRequestSerializer,
+        responses={200: e2ee_schema.E2EEOkResponseSerializer, 201: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None, 404: None},
     )
     def post(self, request: Request) -> Response:
         """Create or replace the wrap for one of the caller's passkeys.
@@ -630,6 +649,7 @@ class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
             "unlock path is a data-loss lever, and a bearer token alone must not reach it."
         ),
     )
+    @extend_schema(responses={200: e2ee_schema.E2EEOkResponseSerializer, 403: None, 404: None})
     def delete(self, request: Request, credential_id: str) -> Response:
         """Delete the wrap for one of the caller's passkeys.
 
@@ -1009,6 +1029,9 @@ class E2EEResetView(DualAuthJsonView):
             return Response({"error": "Invalid key material"}, status=400)
         if bool(password_wrapped) != bool(password_wrap_salt):
             return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
+        kdf = _new_wrap_kdf(data) if password_wrapped else None
+        if password_wrapped and kdf is None:
+            return Response({"error": "Invalid kdf parameters"}, status=400)
 
         rewrapped_conversations = _parse_rewrap_entries(data.get("rewrapped_conversation_keys"))
         rewrapped_envelopes = _parse_rewrap_entries(data.get("rewrapped_group_envelopes"))
@@ -1061,17 +1084,12 @@ class E2EEResetView(DualAuthJsonView):
             bundle.password_wrap_salt = password_wrap_salt
             bundle.password_wrap_stale = False
             bundle.version += 1
-            bundle.save(
-                update_fields=[
-                    "public_key",
-                    "recovery_wrapped_secret",
-                    "password_wrapped_secret",
-                    "password_wrap_salt",
-                    "password_wrap_stale",
-                    "version",
-                    "updated",
-                ],
-            )
+            update_fields = ["public_key", "recovery_wrapped_secret", "password_wrapped_secret", "password_wrap_salt", "password_wrap_stale", "version", "updated"]
+            if kdf is not None:
+                # Stored with the blob, as rewrap does: the next unwrap derives at what this one was made at.
+                bundle.kdf_opslimit, bundle.kdf_memlimit = kdf
+                update_fields += ["kdf_opslimit", "kdf_memlimit"]
+            bundle.save(update_fields=update_fields)
 
         rewrapped_count = len(conversation_rows) + len(envelope_rows)
         # Counted after the swap, so it describes the state the caller is now in.

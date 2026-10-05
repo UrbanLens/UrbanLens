@@ -1282,6 +1282,7 @@ SPECTACULAR_SETTINGS = {
         "TripActivityStatusEnum": "urbanlens.dashboard.models.trips.model.TripActivity.STATUS_CHOICES",
         "TripActivitySettableStatusEnum": ["proposed", "confirmed"],
         "LabelKindEnum": "urbanlens.dashboard.models.labels.meta.KIND_CHOICES",
+        "AliasKindEnum": "urbanlens.dashboard.models.aliases.model.AliasType.choices",
     },
 }
 
