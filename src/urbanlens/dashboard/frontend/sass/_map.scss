@@ -3119,6 +3119,63 @@ div.container .addr-search-bar {
     color: var(--ul-grey-4) !important;
 }
 
+// The same card for a MapLibre map's pin popup (maplibre-markers.ts gives it `map-popup`), which otherwise
+// keeps maplibre-gl.css's white box under the light text the popup markup inherits.
+.maplibregl-popup.map-popup {
+    .maplibregl-popup-content {
+        background: rgba(18, 22, 34, 0.90);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, .5);
+        color: var(--ul-grey-5);
+        padding: 0;
+        min-width: 200px;
+    }
+
+    .maplibregl-popup-close-button {
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 1rem;
+        right: 6px;
+        top: 6px;
+
+        &:hover {
+            background: none;
+            color: var(--ul-grey-4);
+        }
+
+        // MapLibre focuses the close button as the popup opens; a pointer that opened it needs no ring.
+        &:focus:not(:focus-visible) {
+            outline: none;
+        }
+    }
+
+    &.maplibregl-popup-anchor-bottom,
+    &.maplibregl-popup-anchor-bottom-left,
+    &.maplibregl-popup-anchor-bottom-right {
+        .maplibregl-popup-tip {
+            border-top-color: rgba(18, 22, 34, 0.97);
+        }
+    }
+
+    &.maplibregl-popup-anchor-top,
+    &.maplibregl-popup-anchor-top-left,
+    &.maplibregl-popup-anchor-top-right {
+        .maplibregl-popup-tip {
+            border-bottom-color: rgba(18, 22, 34, 0.97);
+        }
+    }
+
+    &.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+        border-right-color: rgba(18, 22, 34, 0.97);
+    }
+
+    &.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+        border-left-color: rgba(18, 22, 34, 0.97);
+    }
+}
+
 .pin-popup {
     // Right padding is wider than the other sides so the title (and any other first-line content) never runs under Leaflet's own close.
     padding: 12px 26px 10px 14px;
