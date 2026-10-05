@@ -228,6 +228,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
             MediaRelevance.objects.for_gallery(profile, location, source).votes().filter(item_key=item_key).delete()
         elif is_relevant and source != "photos" and url:
             # An explicit click overrides any prior vote.
+            from urbanlens.dashboard.services.pins.external_data import shows_members_media
+
             result = record_relevant_and_cache(
                 location=location,
                 profile=profile,
@@ -237,6 +239,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 caption=caption,
                 wiki=wiki,
                 item_key=item_key,
+                # A member's photo stays where they shared it: an up-vote here is a vote, not a copy into this wiki.
+                materialize=not shows_members_media(source),
             )
             if result.error:
                 response["materialize_error"] = result.error

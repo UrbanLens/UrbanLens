@@ -51,7 +51,15 @@
         <span class="media-item-caption" data-tooltip="{{ item.caption }}" data-tooltip-float="true" data-tooltip-pos="above">{{ item.caption|truncatechars:80 }}</span>
         {% endif %}
     </button>
-    {% if wiki_mode %}
+    {% if members_media %}
+    {# Other members' photos from this site: viewable, never voted into or saved onto this pin or wiki. #}
+    <div class="media-item-actions{% if wiki_mode %} media-item-actions--wiki{% endif %}">
+        <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"
+           target="_blank" rel="noopener noreferrer" title="Open photo">
+            <i class="material-symbols-outlined">open_in_new</i>
+        </a>
+    </div>
+    {% elif wiki_mode %}
     {# Community wiki: thumbs are votes (net score shown), applied to every source including shared photos. #}
     <div class="media-item-actions media-item-actions--wiki">
         <a class="media-item-action-btn media-item-open-source" href="{{ item.page_url|default:item.url }}"

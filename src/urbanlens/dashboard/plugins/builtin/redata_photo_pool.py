@@ -96,12 +96,14 @@ class NearbyPhotosSource(GalleryMediaSource):
     def for_viewer(self, data: dict, viewer: Profile, location: Location) -> dict:
         """The cached photos ``viewer`` may see, as tiles: their own, or ones shared into a wiki they can reach.
 
-        Photos of ``location`` itself are left out, and so is a photo shown to the viewer only because a direct
-        message or safety check-in named them - that consent does not extend to a gallery.
+        Photos of ``location`` itself are left out - filed there, or under its pin or wiki - and so is a photo shown to
+        the viewer only because a direct message or safety check-in named them: that consent does not extend to a
+        gallery, so another member's photo must sit in a wiki the viewer reaches, whatever else it is filed under.
         """
         from django.db.models import Q
 
         from urbanlens.dashboard.models.images.model import Image
+        from urbanlens.dashboard.services.wiki.wiki_access import visible_wiki_locations
 
         ranked: dict[uuid.UUID, int] = {}
         for index, entry in enumerate((data or {}).get("photos") or []):
@@ -111,7 +113,17 @@ class NearbyPhotosSource(GalleryMediaSource):
                 continue
         if not ranked:
             return {"items": []}
-        images = Image.objects.filter(uuid__in=list(ranked)).exclude(location_id=location.pk).filter(Q(profile=viewer) | Q(wiki__isnull=False)).photos().servable().exclude(image="").visible_to(viewer)
+        images = (
+            Image.objects.filter(uuid__in=list(ranked))
+            .exclude(location_id=location.pk)
+            .exclude(pin__location_id=location.pk)
+            .exclude(wiki__location_id=location.pk)
+            .filter(Q(profile=viewer) | Q(wiki__location_id__in=visible_wiki_locations(viewer)))
+            .photos()
+            .servable()
+            .exclude(image="")
+            .visible_to(viewer)
+        )
         ordered = sorted(images, key=lambda image: ranked[image.uuid])[:_MAX_PHOTOS]
         items = [
             MediaItem(

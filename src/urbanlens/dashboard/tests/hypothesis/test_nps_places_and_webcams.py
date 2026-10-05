@@ -7,6 +7,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -174,12 +175,20 @@ class ParkFacetFetchTests(TestCase):
         self.assertEqual([place["name"] for place in cached["places"]], ["Old Faithful Inn", "Lake Hotel"])
         self.assertEqual(cached["webcams"][0]["title"], "Old Faithful")
 
-    def test_a_facet_redata_cannot_answer_leaves_the_card(self) -> None:
-        self.gateway_cls.return_value.get_places.side_effect = LocationContextUnavailableError("source_error", "down")
+    def test_a_facet_redata_refuses_leaves_the_card(self) -> None:
+        self.gateway_cls.return_value.get_places.side_effect = LocationContextUnavailableError(
+            "invalid_parameter", "no", rejected=True
+        )
         NpsPanelSource().fetch(self.pin)
         cached = self._cached()
         self.assertEqual(cached["places"], [])
         self.assertEqual(cached["full_name"], "Yellowstone National Park")
+
+    def test_a_facet_outage_caches_nothing_so_the_card_is_fetched_again(self) -> None:
+        self.gateway_cls.return_value.get_webcams.side_effect = LocationContextUnavailableError("source_error", "down")
+        with pytest.raises(LocationContextUnavailableError):
+            NpsPanelSource().fetch(self.pin)
+        self.assertIsNone(LocationCache.get_fresh(self.location, "nps"))
 
     def test_the_web_card_links_the_webcam_for_a_pin_inside_the_park(self) -> None:
         LocationCache.set(

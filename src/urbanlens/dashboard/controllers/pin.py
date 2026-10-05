@@ -724,6 +724,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         response: dict = {"is_relevant": bool(is_relevant)}
         if is_relevant:
             # An explicit click overrides any prior vote for this profile.
+            from urbanlens.dashboard.services.pins.external_data import shows_members_media
+
             result = record_relevant_and_cache(
                 location=pin.location,
                 profile=profile,
@@ -733,6 +735,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 caption=caption,
                 pin=pin,
                 item_key=item_key,
+                # A member's photo stays theirs: marking it relevant here is a vote, not a copy into this pin.
+                materialize=not shows_members_media(source),
             )
             if result.error:
                 response["materialize_error"] = result.error
@@ -769,6 +773,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.pins.external_data import shows_members_media
         from urbanlens.dashboard.tasks import cache_media_item_into_wiki
 
         try:
@@ -803,6 +808,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             except (KeyError, TypeError, ValueError):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
                 errors.append("Could not save this photo.")
+                continue
+            if shows_members_media(source):
+                errors.append("Nearby Photos are shared from their own pin, not sent from here.")
                 continue
             safely_enqueue_task(cache_media_item_into_wiki, wiki.pk, profile.pk, source, url, page_url, caption)
             queued += 1

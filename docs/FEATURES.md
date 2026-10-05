@@ -602,8 +602,9 @@ direct-only because REData's contract can't reproduce what they show:
   index places near the pin or on its parcel (`/photos/lookup/`, `/parcels/{uuid}/photos/`), ranked
   by REData's score. Only the photo ids are cached; each viewer sees only the ones they could
   already see elsewhere - their own, or ones shared to a wiki they can reach - never a photo shown
-  to them only through a message or check-in, and never one of this pin's own place
-  (`plugins.builtin.redata_photo_pool`, `GalleryMediaSource.for_viewer`)
+  to them only through a message or check-in, and never one of this pin's own place. Its tiles offer
+  no save, send-to-wiki or relevance copy - a member's photo stays where they shared it
+  (`plugins.builtin.redata_photo_pool`, `GalleryMediaSource.for_viewer`, `shows_members_media`)
 - **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only
 - **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
   PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as

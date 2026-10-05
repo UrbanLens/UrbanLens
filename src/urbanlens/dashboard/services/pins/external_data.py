@@ -1525,6 +1525,19 @@ def get_panel_source(source_key: str) -> PanelSource | None:
     return panel_sources().get(source_key)
 
 
+def shows_members_media(source_key: str) -> bool:
+    """Whether a gallery source's tiles are other members' photos from this site, which no gallery action copies.
+
+    Args:
+        source_key: A :func:`panel_sources` key, as a gallery request names it.
+
+    Returns:
+        True for a :attr:`GalleryMediaSource.members_media` source.
+    """
+    panel = get_panel_source(source_key)
+    return isinstance(panel, GalleryMediaSource) and panel.members_media
+
+
 def document_panel_sources() -> list[DocumentPanelSource]:
     """Every registered panel source that lists documents for Article > Sources.
 

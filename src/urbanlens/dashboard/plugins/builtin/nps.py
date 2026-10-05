@@ -340,11 +340,16 @@ def _park_with_facets(gateway: RedataNationalParksGateway, park: dict[str, Any] 
 
 
 def _optional_facet(fetch: Callable[[str], list[dict[str, Any]]], park_code: str) -> list[dict[str, Any]]:
-    """A facet the card can do without: REData failing to answer it leaves it empty rather than the card unshown."""
+    """A facet the card can do without: REData refusing to answer it leaves it empty rather than the card unshown.
+
+    An outage still raises, as the other facets' do, so the card is fetched again rather than cached without it.
+    """
     try:
         return fetch(park_code)
     except LocationContextUnavailableError as exc:
-        logger.info("NPS %s facet unavailable for %s: %s", getattr(fetch, "__name__", "park"), park_code, exc)
+        if exc.is_outage:
+            raise
+        logger.info("NPS %s facet refused for %s: %s", getattr(fetch, "__name__", "park"), park_code, exc)
         return []
 
 

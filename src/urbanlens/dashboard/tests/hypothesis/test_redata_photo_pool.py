@@ -102,7 +102,7 @@ class _PoolCase(TestCase):
         self.shared_out_of_reach = self._image(self.other, self.far_side, wiki=self.far_side_wiki, caption="Far wiki")
         self.own_here = self._image(self.viewer, self.here, caption="Already on this pin")
 
-    def _image(self, profile, location: Location, *, wiki: Wiki | None = None, caption: str) -> Image:
+    def _image(self, profile, location: Location | None, *, wiki: Wiki | None = None, caption: str) -> Image:
         return baker.make(
             Image,
             profile=profile,
@@ -142,6 +142,20 @@ class NearbyPhotosVisibilityTests(_PoolCase):
         with mock.patch("urbanlens.dashboard.models.images.queryset._named_this_viewer", return_value=named):
             self.assertTrue(Image.objects.filter(pk=self.unshared_next_door.pk).visible_to(self.viewer).exists())
             data = NearbyPhotosSource().for_viewer(self._payload(self.unshared_next_door), self.viewer, self.here)
+        self.assertEqual(data["items"], [])
+
+    def test_a_check_in_photo_filed_in_a_wiki_out_of_reach_is_not_listed(self) -> None:
+        """Naming the viewer on a check-in lets them see its photos there, not wherever else the photo is filed."""
+        named = Q(pk=self.shared_out_of_reach.pk)
+        with mock.patch("urbanlens.dashboard.models.images.queryset._named_this_viewer", return_value=named):
+            self.assertTrue(Image.objects.filter(pk=self.shared_out_of_reach.pk).visible_to(self.viewer).exists())
+            data = NearbyPhotosSource().for_viewer(self._payload(self.shared_out_of_reach), self.viewer, self.here)
+        self.assertEqual(data["items"], [])
+
+    def test_a_photo_shared_to_this_places_own_wiki_is_left_to_that_wiki(self) -> None:
+        here_wiki = baker.make(Wiki, location=self.here)
+        unfiled = self._image(self.other, None, wiki=here_wiki, caption="Sent straight to this wiki")
+        data = NearbyPhotosSource().for_viewer(self._payload(unfiled), self.viewer, self.here)
         self.assertEqual(data["items"], [])
 
     def test_cached_order_is_kept(self) -> None:
@@ -242,3 +256,46 @@ class MembersMediaPicturesTests(TestCase):
         )
         self.assertEqual(NearbyPhotosSource().pictures([item]), [GalleryUrls(thumb=item.thumb_url, view="")])
         self.assertIn("media-copy/", NearbyMediaSource().pictures([item])[0].thumb)
+
+
+class NearbyPhotosAreNeverCopiedTests(_PoolCase):
+    """A member's photo stays where they put it: the tab's tiles offer no vote, save or send."""
+
+    _MATERIALIZE = "urbanlens.dashboard.services.media.media_materialize.materialize_media_item"
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_login(self.viewer_user)
+
+    def test_the_tiles_carry_no_vote_or_relevance_button(self) -> None:
+        LocationCache.set(self.here, "redata_photo_pool", self._payload(self.shared_next_door), query_key="q")
+        with (
+            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(settings, "redata_api_key", "k"),
+        ):
+            body = self.client.get(reverse("pin.media", args=[self.pin.slug, "redata_photo_pool"])).content.decode()
+        self.assertIn("Shared", body)
+        self.assertNotIn('data-media-action="relevant"', body)
+        self.assertNotIn('data-media-action="vote-up"', body)
+
+    def test_marking_one_relevant_records_the_vote_without_a_copy(self) -> None:
+        with mock.patch(self._MATERIALIZE) as materialize:
+            response = self.client.post(
+                reverse("pin.media.relevance", args=[self.pin.slug]),
+                {"source": "redata_photo_pool", "url": self.shared_next_door.display_url, "is_relevant": True},
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        materialize.assert_not_called()
+        self.assertFalse(Image.objects.filter(pin=self.pin).exists())
+
+    def test_sending_one_to_the_wiki_is_refused(self) -> None:
+        baker.make(Wiki, location=self.here)
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            response = self.client.post(
+                reverse("pin.media.send_to_wiki", args=[self.pin.slug]),
+                {"items": [{"source": "redata_photo_pool", "url": self.shared_next_door.display_url}]},
+                content_type="application/json",
+            )
+        enqueue.assert_not_called()
+        self.assertEqual(response.json()["queued"], 0)
