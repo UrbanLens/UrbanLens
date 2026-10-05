@@ -5,7 +5,7 @@ Off unless ``UL_LIVE_LOCATIONS=1``; needs no REData. Downloads one 37 MiB level-
 
     UL_LIVE_LOCATIONS=1 UL_TEST_DB_NAME=test_<unique> bin/host_pytest.sh --reuse-db tests/live_locations/test_open_buildings.py
 
-The Royal Palace (Haw Kham) in Luang Prabang, Laos, at its Wikipedia coordinate. Its level-4 shard is 3.5 GB
+The Royal Palace (Haw Kham) in Luang Prabang, Laos, at its Wikipedia coordinate. Its level-4 shard is 3.7 GB
 compressed, past the cap, so before the gateway read level-6 shards (P319) this answered nothing.
 """
 

@@ -25,7 +25,9 @@ and nothing told anyone.
 Replaying the judge's rules (below) over dev's `dashboard_api_call_log` for 28 Sep – 4 Oct, hour by hour, eight
 providers would have been backed off for 32 provider-hours between them. `redata_api` alone spent 14 of those hours
 answering 84 of 2,105 calls (dev calls production REData, which answered 503). `redata_places` answered 0 of 121, and
-`cloudflare_image_classifier` 0 of 68. Over the whole week, 869 of the 3,302 REData calls dev sent were answered 5xx.
+`cloudflare_image_classifier` 0 of 68, though every one of those was a 1-pixel test upload Cloudflare refused, and a
+refusal is now logged as answered (P320). Over the whole week, 869 of the 3,302 REData calls dev sent were answered
+5xx.
 
 ## How it works
 
@@ -77,9 +79,10 @@ answering 84 of 2,105 calls (dev calls production REData, which answered 503). `
 1. **Gotify credentials** for UrbanLens come from `SiteSettings` (`UL_GOTIFY_URL` / `UL_GOTIFY_TOKEN` by default),
    which Jess sets per deployment. Until they are set the digest goes to email only, and no SMTP relay is
    configured on the LAN yet either.
-2. **A 404 counts as answered.** That is right for a point lookup, so a provider whose every tile now 404s (dev's
-   `google_open_buildings`) is degraded only against its baseline, never backed off. A per-service override of
-   the outcome map would fix it if one is wanted.
+2. **A 404 counts as answered.** That is right for a point lookup, and for a shard dataset asked only where it has
+   coverage. Dev's `google_open_buildings` 404s were all cells outside its coverage, which it no longer asks for
+   (P319); its data had not moved. A provider whose data did move would show as degraded against its baseline, never
+   backed off. A per-service override of the outcome map would change that if one is wanted.
 3. **No per-host scope.** REData splits a mirror service by host. No UrbanLens service fans out to unrelated hosts
    under one key, so none is split.
 4. **Thresholds are REData's**, which were chosen for one residential IP shared by every host on the LAN. Production

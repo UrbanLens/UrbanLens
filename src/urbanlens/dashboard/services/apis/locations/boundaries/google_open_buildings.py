@@ -44,7 +44,7 @@ S2_SHARD_LEVEL = 6
 #: The level-4 shards' header row, which the level-6 shards share without stating.
 POLYGON_COLUMNS = ("latitude", "longitude", "area_in_meters", "confidence", "geometry", "full_plus_code")
 POINT_COLUMNS = ("latitude", "longitude", "area_in_meters", "confidence", "full_plus_code")
-#: Shards run to gigabytes where the dataset is dense (Luang Prabang's level-4 shard is 3.5 GB compressed, its
+#: Shards run to gigabytes where the dataset is dense (Luang Prabang's level-4 shard is 3.7 GB compressed, its
 #: level-6 one 37 MiB); one past this is skipped.
 MAX_SHARD_BYTES = 64 * 1024 * 1024
 

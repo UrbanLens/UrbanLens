@@ -47,6 +47,14 @@ a build date, and the campus's property records, register listings and photos ca
 needs a test database, so it runs through `bin/host_pytest.sh`. The suite's own unit tests
 (`test_live_sites.py`) need neither and run in any plain `pytest tests/live_locations`.
 
+**Public sources** (`live_source` tests, such as `test_open_buildings.py`) ask a source
+directly, with no REData, so they need only `UL_LIVE_LOCATIONS=1` and a test database. Google
+Open Buildings must find the Royal Palace in Luang Prabang, a 37 MiB download per run:
+
+```bash
+UL_LIVE_LOCATIONS=1 UL_TEST_DB_NAME=test_<unique> bin/host_pytest.sh --reuse-db tests/live_locations/test_open_buildings.py
+```
+
 A check that cannot be decided (a budget refusal REData says to wait out for longer than
 `UL_LIVE_MAX_WAIT_SECONDS`, or an empty answer while a covering source did not answer)
 fails as *inconclusive* in the report rather than passing. A site's `known_issues` maps a

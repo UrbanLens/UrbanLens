@@ -2,8 +2,8 @@
 
 The rate limiter caps how often a provider is asked, and ``upstream_breaker`` honours a wait a provider names. Neither
 judges a provider by what it has *done*: a provider answering 500, timing out or refusing every call is called at the
-full budget until someone goes looking. On 2026-10-05 the dev deployment's Cloudflare image classifier had failed 33
-of its last 40 calls and REData was answering 503 to a quarter of the calls made to it, and nothing had said so.
+full budget until someone goes looking. On 2026-10-05 REData was answering 503 to a quarter of the calls the dev
+deployment made to it, and nothing had said so.
 This is the UrbanLens half of REData's provider health (REData's PL13; this repository's PL10).
 
 ## How

@@ -23482,8 +23482,9 @@ limiter, 1,569 404s, 750 failures, 358 while the service was disabled, and one r
 or by reading one byte past the cap when there is none. It decompresses and parses the shards it keeps as a stream, and
 remembers a missing or skipped shard for 30 days in the default cache. On dev, a Poughkeepsie lookup asked once and
 then not again, and a Lagos lookup skipped its shard in 0.4 s. 133 of the 333 polygon shards fit the cap. REData
-already serves the dataset per query extent (parcel buildings, `?source=google_open_buildings`); a boundary provider on
-that route would cover the rest without downloading a shard.
+serves the dataset per query extent (parcel buildings, `?source=google_open_buildings`), but by downloading the same
+level-4 shards whole, so routing through it would move the download rather than avoid it. P319 moved this gateway to
+the level-6 shards and stopped it asking outside the dataset's coverage.
 
 **Tests.** `test_google_open_buildings_shards.py`: a missing shard is asked for once, a shard past the cap is not
 read and not asked for again, nor is one that gives no size and runs past it, and a small shard is parsed (the first
@@ -24146,3 +24147,81 @@ fixture bbox from Boston to Paris, and the panel's budget tests patch `OvertureP
 **Not verified:** any response from a live REData. The 2026-10-03 probes of the deployed REData timed out (P240);
 REData 0.3.0 fixed that, but production REData did not yet run it, and this session's probe of staging could not
 resolve its host. The fixtures follow REData's code and tests, not a captured response.
+
+## RESOLVED 2026-10-05: Google Open Buildings had not moved; its 404s were cells it never covered, and its level-4 shards were too large to read where it does
+
+`id: P319` · `status: fixed` · `resolved: 2026-10-05` · `found by: a provider-health audit of dev's ApiCallLog, which read the 404s as "v3 tiles return 404"`
+
+**What was wrong.** The audit's guess, that Google had moved v3 and its tiles now 404, was wrong. v3 is still at
+`gs://open-buildings-data/v3/` (`storage.googleapis.com/storage/v1/b/open-buildings-data/o?prefix=v3/`, every object
+last modified 2023-06-23), and `103_buildings.csv.gz` (Benin and Nigeria) answered 200. All 1,570 404s dev logged
+from 2026-09-24 were five level-4 cells the dataset never covered: `89d` (1,211, the Hudson Valley), `89f`, `4cb`,
+`899` and `87b`, all in the US and Canada. v3 covers 333 level-4 cells in Africa, South and Southeast Asia, Latin
+America and the Caribbean. P301 had already stopped the repeats.
+
+Where it does cover, it answered nothing in most places that matter. 200 of the 333 level-4 polygon shards are past
+`MAX_SHARD_BYTES` (64 MiB, median 138 MiB, Luang Prabang's `313` 3.7 GB), so P301's cap skipped them; the 133 that fit
+hold 1.3% of the dataset's bytes. The same release is published as 3,330 level-6 shards with no header row
+(`polygons_s2_level_6_gzip_no_header/`, and `points_...` beside it), median 8.8 MiB; 2,704 fit, holding 19% of the
+bytes. The 2.5D Temporal dataset is published only as Earth Engine rasters, so it is not a replacement source.
+
+**Fix.** `GoogleOpenBuildingsGateway` reads the level-6 shards, naming their columns from the level-4 header, and
+skips a row whose column count is wrong. It asks only for level-6 cells under one of the 333 covered level-4 cells,
+listed in `boundaries/data/open_buildings_v3_level_4_cells.txt`, so a US lookup makes no request and logs no call.
+Live, the Royal Palace in Luang Prabang (Wikipedia's 19.8921, 102.1356) resolves to its 2,382 m² footprint, about 65
+by 69 m, from a 37 MiB shard in about 6 s. Before, its 3.7 GB shard was skipped and it answered nothing.
+
+**Redundancy.** In its own regions the boundary chain asks `OvertureProvider` first, which reads the public Overture
+release outside the US, and Overture conflates Google Open Buildings into its buildings theme. So this gateway is the
+fallback there, used when Overture has no footprint holding the point or does not answer. REData's Overture mirror is
+US-only (synced by state), so it covers none of this dataset's area. Not measured: how often Overture already answers
+where this gateway would.
+
+**Not fixed.** A lookup downloads its shard each time (median 8.8 MiB, up to the cap); a usable shard is not kept
+between lookups, as for Microsoft's footprints (P309). The 626 level-6 shards past the cap are the densest cities, so
+those still answer nothing here. REData's own `GoogleOpenBuildingsGateway` reads the level-4 shards whole, with no
+cap: [`handoffs/redata-open-buildings-shards-read-whole.md`](../handoffs/redata-open-buildings-shards-read-whole.md).
+
+**Tests.** `test_google_open_buildings_shards.py`: a place outside the dataset asks for nothing and logs no call
+through the real session; a covered place asks for its level-6 shard; the covered cells are the 333 level-4 cells; a
+headerless shard's polygons, raw WKT and points are read, from the palace's own row; the boundary is the footprint
+holding the point; a short row is skipped. Ten failed before the fix. `tests/live_locations/test_open_buildings.py`
+(`live_source`, run only with `UL_LIVE_LOCATIONS=1`) asks Google for the palace.
+
+## RESOLVED 2026-10-05: Cloudflare's classifier refused 1-pixel test uploads, which UrbanLens logged as the classifier failing, and an outage could clear a photo's keywords
+
+`id: P320` · `status: fixed` · `resolved: 2026-10-05` · `found by: a provider-health audit of dev's ApiCallLog (PL10's "cloudflare_image_classifier 0 of 68")`
+
+**What was wrong.** Dev logged 237 failed `cloudflare_image_classifier` calls from 2026-09-13 to 2026-09-30, and
+none after. Loki holds ai-inference's log for the 234 from 2026-09-23 on (the other 3 are from 2026-09-13, before
+it): every one is Cloudflare's AI Gateway answering 400 to `@cf/microsoft/resnet-50`. The response body was thrown away (`raise_for_status` kept only "400 Client Error: Bad
+Request for url: ..." with the account's gateway URL), and ai-inference answered the app 502. Each burst lines up with
+a HeadlessChrome upload to a test pin (`p34-lightbox-repro`, 2026-09-30 02:13-02:15) of the integration suite's
+1-pixel PNGs and tiny JPEGs. Asked again with a 1x1 JPEG on 2026-10-05, Cloudflare answers HTTP 400, code 3011:
+"AiError: AiError: image too small, expected image at least 4x4". A 224x224 JPEG classifies. Real photos classified
+throughout (7 of 7 since 2026-09-30 04:36). The endpoint, model, key and payload were never the problem.
+
+It mattered more than a noisy log. Provider health (PL10) judges a provider failing at 20% or fewer calls answered,
+and would back the classifier off for every real photo after one run of the integration suite. And
+`classify_photo` returned `[]` for a failure or a limiter refusal as well as for "no labels", so a keyword re-run
+during an outage or a backoff replaced a photo's classifier keywords with none. `describe_photo_keywords` did the same.
+
+**Fix.**
+- `CloudflareAdapter` reads Cloudflare's `errors` into the exception (code and message, never the URL), and raises
+  `ProviderInputRefusedError` for a 400 that says the image is too small. Any other 400 (an unknown model, a payload
+  the model no longer accepts) stays a failure, so a real API change still counts against the provider.
+- ai-inference answers 422 for a refused input, and both inference clients raise `InferenceInputRefusedError`.
+- `vision.classify_photo` and `describe_photo_keywords` log a refusal as answered and return no labels, and return
+  None when no answer came. The two keyword providers raise `KeywordSourceUnavailableError` on None, and
+  `generate_keywords_for_image` keeps that provider's stored keywords.
+
+**Not fixed.** Nothing skips an image too small to classify before asking; the app tier never decodes the analysis
+copy, so it does not know the size. Each refusal is one cheap call, logged as answered. A photo whose keywording ran
+during an outage is not retried; the next re-run (a regenerated analysis copy) picks it up. `OllamaKeywordProvider`
+still returns no keywords on failure.
+
+**Tests.** `test_cloudflare_input_refusal.py`, 18 tests: Cloudflare's captured 3011 body is a refusal carrying its
+reason and not the account id; a 5007 "No such model" and a non-JSON 502 stay failures; ai-inference answers 422 and
+502; both clients map 422; a refusal is logged answered with no labels; a failure or a limiter refusal is None; an
+unanswered classifier keeps a photo's keywords, and a refusal clears them. Three existing tests asserted `[]` for a
+failure and now assert None.
