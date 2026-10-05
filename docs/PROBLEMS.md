@@ -188,26 +188,16 @@ leaves a second `BUILDING` place for the same footprint - reproduced by the stri
 place's `provider_key` as `building_ref` (`services/floorplans/resolution.py`), so they inherit the
 same assumption; not re-tested here.
 
-## P9 — REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision
+## P9 — Land-use-area boundary geometry is not drawn, pending a map-overlay decision
 
-`id: P9` · `status: open` · `updated: 2026-09-15`
+`id: P9` · `status: open` · `updated: 2026-10-05`
 
-Previously titled "REData gaps: mostly closed 2026-09-08", and before that "REData consumption gaps
-left after this session's sweep".
-
-A full cross-repo sweep of UrbanLens's REData integration (2026-08-19, expanded 2026-09-08) found and
-fixed everything that was *wrong*, and built everything worth building except these two, which need a
-decision this session isn't the one to make. The sweep's own changelog moved to
-`archive/PROBLEMS-ARCHIVE.md` (2026-09-15).
-
-**`?limit=` is still inert on every REData near-point endpoint** (unchanged - not re-verified this
-session). `NearPointQuery` (`REData/src/redata/api/coordinates.py`) parses `lat`/`lng`/
-`radius_meters`/`provider`/`force_refresh` and nothing else; the `limit` parsing at :411 belongs to
-the *text*-query parser. So every panel that passes `limit=20`/`25`/`30`/`50` caches up to REData's
-own server-side cap instead. Not fixed here on purpose: trimming client-side would change the
-user-visible counts panels report ("N mapped within 250 m") from REData's floor to our own
-arbitrary bound, which is less accurate, not more. The fix belongs in REData - have
-`parse_near_point_query` accept `limit` - after which the UrbanLens side needs no change at all.
+Previously titled "REData's `?limit=` param is inert client-side, and land-use-area boundary geometry
+needs a map-overlay decision". The `limit` half is closed: REData 0.3.0 applies `limit` per provider
+(its `parse_result_limit`, clamped to 200), and `RedataLocationContextGateway.near_point` caps each
+provider's rows the same way (`cap_per_provider`), so a panel's "N+" floor is decided per provider
+(`redata_panel.at_limit`). Production REData still runs 5aabe887, which ignores `limit`, until 0.3.0
+is deployed there; the client-side cap bounds the cache rows meanwhile.
 
 **Land-use-areas' boundary geometry is still not rendered, on purpose.** The category chips already
 shown on the Property Records card come from a different, already-consumed field; rendering the
@@ -518,22 +508,6 @@ Removed on 2026-10-02, measured rather than assumed:
   starved: it took the lowest-pk unprocessed questions without filtering on score, and never marked the
   ones below the threshold, so a batch's worth of them blocked every later question. The sweep now
   filters on `voting.score_expression()` in SQL.
-
-## P22 — REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron
-
-`id: P22` · `status: open` · `updated: 2026-07-31`
-
-Previously titled "2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron".
-
-Found while investigating the `resolve_deferred_pin_locations` retry-forever bug below - unrelated
-endpoint, noticed in the same gunicorn log sweep on `redata-production-app-1`. Repeated `WORKER
-TIMEOUT` followed by `SIGKILL` and worker respawn, i.e. requests to that endpoint are exhausting
-memory or wall-clock badly enough for gunicorn's own supervisor to kill the worker. Not
-investigated further - REData is a separate codebase/service another agent maintains (per
-`CLAUDE.local.md`), and this session only had read access there. Whether this crash loop
-contributed to or is independent of the CID-resolution backlog (both endpoints share the same
-gunicorn workers, so one starving the other for memory is plausible) was not determined.
-
 
 ## P24 — A campus pin's CRIS detail fetches stop at a per-pass cap, and a child the site's roster misses fetches its own
 
@@ -1322,63 +1296,6 @@ decision below.
 
 The sweep was not exhaustive: family 4 (request-path loops with no ceiling) was worked through
 per-endpoint rather than to completion, so more instances of it likely exist beyond these findings.
-
-## P114 — Staging outranks production for CPU on the host they share
-
-`id: P114` · `status: open` · `updated: 2026-09-11`
-
-Measured on damballa, 2026-09-11, with `docker inspect` against the running containers:
-
-| container | `NanoCpus` | `CpuShares` | `Memory` |
-|---|---|---|---|
-| `urbanlens_production_app` | 0 | **0** | 0 |
-| `urbanlens_staging_app` | 2 | **2048** | 2g |
-| `urbanlens_production_db` | 0 | **0** | 0 |
-| `urbanlens_staging_db` | 2 | **2048** | 2g |
-| `urbanlens_production_celery_worker` | 6 | 0 | 24g |
-| `urbanlens_staging_celery_worker` | 2 | 256 | 3g |
-
-`CpuShares: 0` means the key was absent when the container was created, and the kernel uses 1024.
-So under contention on a host that runs both stacks, staging's web tier and database each carry
-**twice** production's weight. Every other production container is unlimited and unweighted too;
-only `celery_worker` carries any limit at all.
-
-This is not a compose bug. Staging's numbers are exactly `docker-compose.yml`'s defaults, so staging
-sets none of these variables and simply runs what the file says. Production's containers predate the
-`cpu_shares` keys entirely - they were created from a compose file that did not have them. The
-inversion is an artefact of deployment order, which means it will recur on any host where the two
-stacks are recreated at different times.
-
-**It cannot be fixed from this repository alone.** Production has to be recreated from the current
-compose file for its `cpu_shares` to exist at all. Until then no repo-side default can put it above
-staging, because an absent key is 1024 and any positive staging value at or above that wins.
-
-### What this repository can do
-
-`config/env/staging.sample.env` holds a full set of limits below the base defaults, so bringing
-staging up with them is a copy rather than a judgement call, and
-`test_staging_limits_are_below_production.py` fails if any variable `docker-compose.yml` reads is
-missing from it or is not lower. That makes the *intent* enforceable here even though the fix is a
-deploy.
-
-### "Staging shouldn't be running when not needed"
-
-Three options, and they are not exclusive:
-
-| option | buys | costs |
-|---|---|---|
-| **Idle detector** - a timer that stops the stack after N hours with no nginx access-log entry | Matches the actual requirement ("when not needed") rather than a guess at it. Nothing to remember. | Needs a definition of idle that a health check or uptime monitor does not satisfy - both hit nginx. A cold start is then the first visit's latency. |
-| **Scheduled stop** - stop at a fixed hour, start on demand | Trivial, no state | Wrong whenever someone works outside those hours, and they will |
-| **Alert only** - page when staging has been up and idle for N hours | No surprise shutdowns | Relies on somebody acting on it, which is the thing that already did not happen |
-
-Recommendation: the idle detector, with the alert as its fallback for when the detector itself has
-not run. The definition of idle that avoids the health-check problem is an access-log line whose
-`$http_user_agent` is not the monitor's and whose path is not `/health/`; nginx already logs both
-fields. It belongs in the `infrastructure` repo beside the other host timers, not here.
-
-Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
-is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
-still several gigabytes of a host production also lives on.
 
 ## P125 — This deployment's ceiling is between 500 and 1,000 concurrent users, and every wall it has hit so far was a container CPU limit: 175 on 2 app cores, 350 on 4, 500 on a 2-core database, and 1,000 on the same 4 app cores once the database was given 4 of its own
 
@@ -2666,4 +2583,17 @@ upload."
 **For Jess:** should such a file import? Options: a longer limit for history files; or writing visits and routes to
 disk as they are read, which bounds memory but not time, so it only helps together with a longer limit. Leaving it as
 it is refuses the rare multi-year export.
+
+## P315 — A `503 rate_limited` from REData Places is not held off for the wait it names
+
+`id: P315` · `status: open` · `updated: 2026-10-05`
+
+REData's T11 (`../REData/docs/infrastructure-2026-10-02-replies.md`, item 3) asks clients to keep
+uncached Places searches to about 40 a UTC day and to honour `Retry-After` on `503 rate_limited`.
+The first is done: `redata_places` defaults to 40 calls a day (`services/core/rate_limiter.py`). The
+second is not: `RedataPlacesGateway._error_for` turns REData's rate-limited body into a
+`GatewayRateLimitedError`, which carries no wait, so a caller stops its own run but the next request
+asks again at once. Making it an `UpstreamBusyError` with `upstream_retry_after(response)` would let
+the breaker hold it off. Not measured how often production meets it; REData's whole budget is 160 a
+day, shared by every key and its own CID resolution, and raising it is Jess's call (REData P70).
 

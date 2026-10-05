@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P315` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P316` · `T4` · `PL9` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -37,13 +37,12 @@ still resolves after it is fixed, and the id is never handed out again.
 | P5 | open | 2026-09-15 | Dialog forms still post every field; edit handlers write only the columns that changed, but submits are not dirty-only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P6 | open | 2026-08-21 | Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P7 | open | 2026-09-23 | REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P9 | open | 2026-09-15 | REData's `?limit=` param is inert client-side, and land-use-area boundary geometry needs a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P9 | open | 2026-10-05 | Land-use-area boundary geometry is not drawn, pending a map-overlay decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P11 | open | 2026-10-02 | Frontend TS audit: its correctness bullets are fixed, the structural debt it found is not | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P13 | open | 2026-07-23 | Pin-detail external-data freshness is one site-wide `external_data_cache_days` knob, not per-source | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P14 | open | 2026-10-04 | Historical `pin_images/` files whose Image row is gone: `sweep_unnamed_pin_images` exists, not yet run on any environment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P15 | open | 2026-07-22 | openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P19 | open | 2026-10-02 | Audit residue: group chats lack direct messages' features, and the hypothesis strategies are barely shared | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P22 | open | 2026-07-31 | REData's `/api/v1/parcels/lookup/` crash-loops gunicorn workers with OOM/WORKER TIMEOUT on chiron | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P24 | open | 2026-10-04 | A campus pin's CRIS detail fetches stop at a per-pass cap, and a child the site's roster misses fetches its own | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P36 | open | 2026-10-03 | 43 BEM modifiers are applied in templates with no CSS rule, so intended visual states never render | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P50 | open | 2026-09-29 | `test_safety_chat` and `test_migration_0039_reverse` fail only under a randomized suite order | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -61,7 +60,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | P110 | open | 2026-10-03 | The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P111 | open | 2026-09-17 | A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P113 | open | 2026-09-17 | 54 verified places where one account's ordinary use can degrade the site for everyone else, all fixed except 4 parked by decision | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P114 | open | 2026-09-11 | Staging outranks production for CPU on the host they share | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | D1 | accepted | 2026-08-27 | Product intent is human-owned: privacy by construction, wiki access must be earned, E2EE is not optional | [`docs/GOALS.md`](GOALS.md) |
 | D2 | accepted | 2026-09-01 | Concealment must make a wiki byte-equivalent to a zero-contribution place, so most of the work is aggregates | [`docs/designs/concealed-wiki-spec.md`](designs/concealed-wiki-spec.md) |
 | D3 | accepted | 2026-08-27 | One public location per 15km region, gated on five eligibility rules and a community vote - built 2026-07-23 | [`docs/designs/drafts/public-pins-by-vote.md`](designs/drafts/public-pins-by-vote.md) |
@@ -210,3 +208,4 @@ still resolves after it is fixed, and the id is never handed out again.
 | P279 | open | 2026-10-04 | Legacy `BLOCKED` friendship rows may still record the wrong blocker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P286 | open | 2026-10-04 | A campus pin can lose its own National Register listing, because REData answers a point with the rows last found from it | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P304 | open | 2026-10-05 | A Location History file over about 180 MB, or a GPX file over about 60 MB, fails its preview on the time limit | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P315 | open | 2026-10-05 | A `503 rate_limited` from REData Places is not held off for the wait it names | [`docs/PROBLEMS.md`](PROBLEMS.md) |

@@ -11,6 +11,90 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-10-05: Staging outranked production for CPU on the host they shared
+
+`id: P114` · `status: dismissed` · `resolved: 2026-10-05`
+
+**Dismissed: the two stacks no longer share the host.** On 2026-10-05 damballa runs only
+`urbanlens_production_db` of either compose stack (`docker ps`); production's web and workers run
+on k3s site-b, and the compose staging stack is stopped. The inversion below was real while both
+ran there, and recurs on any host where the two stacks are recreated at different times, which is
+why `test_staging_limits_are_below_production.py` stays. The idle-staging recommendation belongs to
+the `infrastructure` repo.
+
+Measured on damballa, 2026-09-11, with `docker inspect` against the running containers:
+
+| container | `NanoCpus` | `CpuShares` | `Memory` |
+|---|---|---|---|
+| `urbanlens_production_app` | 0 | **0** | 0 |
+| `urbanlens_staging_app` | 2 | **2048** | 2g |
+| `urbanlens_production_db` | 0 | **0** | 0 |
+| `urbanlens_staging_db` | 2 | **2048** | 2g |
+| `urbanlens_production_celery_worker` | 6 | 0 | 24g |
+| `urbanlens_staging_celery_worker` | 2 | 256 | 3g |
+
+`CpuShares: 0` means the key was absent when the container was created, and the kernel uses 1024.
+So under contention on a host that runs both stacks, staging's web tier and database each carry
+**twice** production's weight. Every other production container is unlimited and unweighted too;
+only `celery_worker` carries any limit at all.
+
+This is not a compose bug. Staging's numbers are exactly `docker-compose.yml`'s defaults, so staging
+sets none of these variables and simply runs what the file says. Production's containers predate the
+`cpu_shares` keys entirely - they were created from a compose file that did not have them. The
+inversion is an artefact of deployment order, which means it will recur on any host where the two
+stacks are recreated at different times.
+
+**It cannot be fixed from this repository alone.** Production has to be recreated from the current
+compose file for its `cpu_shares` to exist at all. Until then no repo-side default can put it above
+staging, because an absent key is 1024 and any positive staging value at or above that wins.
+
+### What this repository can do
+
+`config/env/staging.sample.env` holds a full set of limits below the base defaults, so bringing
+staging up with them is a copy rather than a judgement call, and
+`test_staging_limits_are_below_production.py` fails if any variable `docker-compose.yml` reads is
+missing from it or is not lower. That makes the *intent* enforceable here even though the fix is a
+deploy.
+
+### "Staging shouldn't be running when not needed"
+
+Three options, and they are not exclusive:
+
+| option | buys | costs |
+|---|---|---|
+| **Idle detector** - a timer that stops the stack after N hours with no nginx access-log entry | Matches the actual requirement ("when not needed") rather than a guess at it. Nothing to remember. | Needs a definition of idle that a health check or uptime monitor does not satisfy - both hit nginx. A cold start is then the first visit's latency. |
+| **Scheduled stop** - stop at a fixed hour, start on demand | Trivial, no state | Wrong whenever someone works outside those hours, and they will |
+| **Alert only** - page when staging has been up and idle for N hours | No surprise shutdowns | Relies on somebody acting on it, which is the thing that already did not happen |
+
+Recommendation: the idle detector, with the alert as its fallback for when the detector itself has
+not run. The definition of idle that avoids the health-check problem is an access-log line whose
+`$http_user_agent` is not the monitor's and whose path is not `/health/`; nginx already logs both
+fields. It belongs in the `infrastructure` repo beside the other host timers, not here.
+
+Not recommended: relying on staging's limits alone. Lower limits bound what staging can take when it
+is busy; they do nothing about it being up at all, and an idle Postgres plus Valkey plus ClamAV is
+still several gigabytes of a host production also lives on.
+
+## RESOLVED 2026-10-05: REData's `/api/v1/parcels/lookup/` crash-looped gunicorn workers with OOM/WORKER TIMEOUT on chiron
+
+`id: P22` · `status: dismissed` · `resolved: 2026-10-05`
+
+**Dismissed as obsolete.** REData production moved to damballa, and the 2026-10-02 `parcels/lookup`
+503s seen from UrbanLens production had a different cause: REData's background prewarm spending the
+county GIS daily budget in the 00:00Z hour (REData `902a9b09`). Nothing here was ever investigated
+further than the log sweep below.
+
+Previously titled "2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron".
+
+Found while investigating the `resolve_deferred_pin_locations` retry-forever bug below - unrelated
+endpoint, noticed in the same gunicorn log sweep on `redata-production-app-1`. Repeated `WORKER
+TIMEOUT` followed by `SIGKILL` and worker respawn, i.e. requests to that endpoint are exhausting
+memory or wall-clock badly enough for gunicorn's own supervisor to kill the worker. Not
+investigated further - REData is a separate codebase/service another agent maintains (per
+`CLAUDE.local.md`), and this session only had read access there. Whether this crash loop
+contributed to or is independent of the CID-resolution backlog (both endpoints share the same
+gunicorn workers, so one starving the other for memory is plausible) was not determined.
+
 ## RESOLVED 2026-09-21: Every page inlined its JavaScript, so half the compressed bytes a logged-in user downloaded were re-sent on every navigation and could never be cached
 
 `id: P133` · `status: fixed` · `resolved: 2026-09-21`
