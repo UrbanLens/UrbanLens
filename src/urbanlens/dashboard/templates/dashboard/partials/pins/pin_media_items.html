@@ -10,6 +10,7 @@
 {% with item=entry.item %}
 <div class="media-item{% if entry.is_relevant == False %} media-item--not-relevant{% elif entry.is_relevant == True %} media-item--relevant{% endif %}"
      data-media-source="{{ source_key }}"
+     {% if members_media %}data-members-media="true"{% endif %}
      data-media-source-name="{{ item.source }}"
      data-media-key="{{ entry.key }}"
      data-media-url="{{ entry.local_url|default:item.url }}"

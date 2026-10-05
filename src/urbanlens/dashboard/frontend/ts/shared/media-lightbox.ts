@@ -37,7 +37,8 @@ function mediaLightboxItemFromElement(el: HTMLElement, relevanceEnabled: boolean
         uuid: "",
         isMine: parseIsMine(el.dataset.mine),
         // Your own photos aren't "relevant"-markable - manage those from the gallery's own "Mine"/"Manage" tab instead.
-        canRelevance: relevanceEnabled && mediaSource !== "photos",
+        // Another member's photo shown through Nearby Photos is only to look at.
+        canRelevance: relevanceEnabled && mediaSource !== "photos" && el.dataset.membersMedia !== "true",
         relevant: parseRelevant(el.dataset.mediaRelevant),
         latitude: parseNumberOrNull(el.dataset.lat),
         longitude: parseNumberOrNull(el.dataset.lng),

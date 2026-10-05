@@ -133,6 +133,21 @@ class NearbyPhotosVisibilityTests(_PoolCase):
         captions = sorted(item["caption"] for item in data["items"])
         self.assertEqual(captions, ["My shot of the boiler house", "Shared"])
 
+    def test_another_members_photo_carries_no_position(self) -> None:
+        """Their own map_hidden choice is not this tab's to override, and nothing on the tab places a tile."""
+        Image.objects.filter(pk__in=[self.shared_next_door.pk, self.own_next_door.pk]).update(
+            latitude="41.700400", longitude="-73.900400"
+        )
+
+        data = NearbyPhotosSource().for_viewer(
+            self._payload(self.shared_next_door, self.own_next_door), self.viewer, self.here
+        )
+
+        by_caption = {item["caption"]: item for item in data["items"]}
+        self.assertIsNone(by_caption["Shared"]["latitude"])
+        self.assertIsNone(by_caption["Shared"]["longitude"])
+        self.assertIsNotNone(by_caption["My shot of the boiler house"]["latitude"])
+
     def test_the_cached_row_alone_yields_no_tile(self) -> None:
         """A reader that forgets to narrow the row for its viewer shows nothing rather than someone's photo."""
         self.assertEqual(NearbyPhotosSource().media_items(self._payload(*self._all_images())), [])

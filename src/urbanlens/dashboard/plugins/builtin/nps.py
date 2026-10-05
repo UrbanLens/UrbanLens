@@ -42,7 +42,8 @@ _MAX_ALERT_FACTS = 8
 #: handful, names stop being useful and just take up card space.
 _MAX_FACILITY_NAMES = 5
 
-#: The park's places nearest the pin that are cached; the card names the first few.
+#: The park's places nearest the fetching location that are cached; the card names the first few. The card is
+#: site-level, so a building pin nested on a site shows the distances measured from the site's pin.
 _MAX_PLACES_CACHED = 10
 _MAX_PLACE_NAMES = 4
 #: Webcams cached and linked from the card.

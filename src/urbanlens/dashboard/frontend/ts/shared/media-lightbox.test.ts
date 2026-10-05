@@ -185,6 +185,13 @@ describe("openMediaLightbox", () => {
         expect(calls[1]?.list[1]?.canRelevance).toBe(true);
     });
 
+    test("canRelevance is false for another member's photo shown through Nearby Photos", () => {
+        const tile = buildTile({ mediaUrl: "a", mediaSource: "redata_photo_pool", membersMedia: "true" });
+        buildGrid("media-gallery-grid", "/relevance", [tile]);
+        openMediaLightbox(tile.querySelector("button") as HTMLElement);
+        expect(calls[0]?.list[0]?.canRelevance).toBe(false);
+    });
+
     test("canRelevance is false on a grid with no relevance url at all (the wiki page)", () => {
         const tile = buildTile({ mediaUrl: "a", mediaSource: "flickr" });
         buildGrid("wiki-media-grid", null, [tile]);

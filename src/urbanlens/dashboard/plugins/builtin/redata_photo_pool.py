@@ -132,8 +132,9 @@ class NearbyPhotosSource(GalleryMediaSource):
                 caption=image.display_caption,
                 source="Your photo" if image.profile_id == viewer.pk else "Member photo",
                 author=image.author or "",
-                latitude=float(image.latitude) if image.latitude is not None else None,
-                longitude=float(image.longitude) if image.longitude is not None else None,
+                # Only the viewer's own: another member's map_hidden is not this tab's to override, and no tile is placed.
+                latitude=float(image.latitude) if image.latitude is not None and image.profile_id == viewer.pk else None,
+                longitude=float(image.longitude) if image.longitude is not None and image.profile_id == viewer.pk else None,
             )
             for image in ordered
             if image.display_url
