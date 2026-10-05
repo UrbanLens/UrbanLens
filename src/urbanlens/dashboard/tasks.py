@@ -892,9 +892,10 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
     if pin_id is not None:
         _seed_new_pin_from_cached_wikipedia(location, pin_id)
 
+    from urbanlens.dashboard.plugins.builtin.nps import NpsPanelSource
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
-    if redata_configured() and LocationCache.get_fresh(location, "nps") is None:
+    if redata_configured() and LocationCache.get_fresh(location, NpsPanelSource.cache_source, max_age=NpsPanelSource.cache_max_age) is None:
         try:
             from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 

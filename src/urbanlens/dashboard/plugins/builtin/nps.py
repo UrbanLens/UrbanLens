@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
@@ -280,6 +281,8 @@ class NpsPanelSource(LocationCachePanelSource):
     # an ordinary information card, so the API serves it through the same INFO contract every other
     # panel uses rather than inventing an NPS-shaped response only this one plugin's clients know.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
+    #: The card carries the park's alerts and closures, which REData refreshes within hours (its own ceiling is 6).
+    cache_max_age: ClassVar[timedelta | None] = timedelta(hours=6)
 
     def gate(self, pin: Pin) -> bool:
         """Requires REData to be configured and coordinates to search near."""

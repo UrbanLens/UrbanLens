@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
@@ -29,6 +30,8 @@ class AirQualityPanelSource(RedataInfoPanelSource):
     tab_order: ClassVar[int] = 60
 
     payload_key: ClassVar[str] = "readings"
+    #: Concentrations change hourly, and REData itself keeps a reading 1-3 hours.
+    cache_max_age: ClassVar[timedelta | None] = timedelta(hours=1)
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Current modelled readings plus nearby community sensors."""
@@ -68,7 +71,32 @@ class AirQualityPanelSource(RedataInfoPanelSource):
 
         if not facts and not sensors:
             return None
-        return {"facts": facts, "chips": chips}
+        context: dict = {"facts": facts, "chips": chips}
+        if observed := _observed_label([modelled] if modelled else sensors):
+            context["meta"] = [{"label": "Observed", "value": observed}]
+        return context
+
+
+def _observed_label(readings: list[dict]) -> str:
+    """When the newest of ``readings`` was taken, for the card.
+
+    Args:
+        readings: REData air-quality rows, each with an ISO 8601 ``observed_at``.
+
+    Returns:
+        Such as ``"5 Oct 2026, 14:00 UTC"``, or ``""`` when none carries a readable time.
+    """
+    times = []
+    for reading in readings:
+        try:
+            observed = datetime.fromisoformat(str(reading.get("observed_at") or ""))
+        except ValueError:
+            continue
+        times.append(observed if observed.tzinfo else observed.replace(tzinfo=UTC))
+    if not times:
+        return ""
+    newest = max(times).astimezone(UTC)
+    return f"{newest.day} {newest:%b %Y, %H:%M} UTC"
 
 
 class AirQualityPlugin(UrbanLensPlugin):
