@@ -28,14 +28,14 @@ fails or is undecided:
 
 | Check | Sites | Why | Tracked |
 |---|---|---|---|
-| footprints | HRSH 37%, St. Lawrence 66%, Harlem Valley 76% of buildings outlined | REData staging has no Overture credentials, so Microsoft's footprints stand in; HRSH's CRIS roster also lists demolished buildings | REData P106 |
+| footprints | HRSH 35%, St. Lawrence 61%, Harlem Valley 72% of on-property buildings outlined | Staging reads Overture since 2026-10-05 (`overture_ro`), and every building left without an outline is a CRIS roster row no footprint source matches: some demolished, some perhaps a CRIS point off its building | REData P114 |
 | historic_maps | Harlem Valley | loc.gov holds no Sanborn atlas of Wingdale, and REData offers Poughkeepsie's, 26 km off, as same-county. HRSH, St. Lawrence and Athens pass since a paced harvest on 2026-10-05, once REData `052692a6` stopped the walk failing after its first page | REData P112 |
 | incidents | all four | no incident source covers New York or Ohio | REData P110 |
 | build_dates | Athens | Ohio buildings come from OSM and Microsoft, which carry no year | REData P111 |
 | web_search | Athens | Only mwmbl answers staging now that yep refuses it too, and it has nothing for Athens. HRSH, St. Lawrence and Harlem Valley pass since REData stopped reading an empty answer, or one index timing out, as a block that backs all web search off (`4c883a78`, `10425d61`) | REData P113 |
 | photos | three of four, inconclusive | background sweeps spend the Commons and SearXNG-media budgets by about 03:30 UTC | REData P108 |
 
-These are `known_issues` in `kirkbrides.toml`, so each turns red when fixed. The historic_maps and web_search rows
+These are `known_issues` in `kirkbrides.toml`, so each turns red when fixed. The footprints, historic_maps and web_search rows
 were re-run against REData `10425d61` the same morning.
 
 The pipeline layer (`test_pipeline.py`: one pin dropped on the campus, UrbanLens's own bootstrap run against the
@@ -47,18 +47,20 @@ records, register listings and image search cached. The one gap is Athens's buil
 
 **P1 - blocks the goal on production.**
 
-1. Deploy REData 0.3.0 to production. Everything above that is fixed, is fixed only there and on staging:
-   NY parcels by polygon, campus footprints beyond the parcel box, Athens County's owner, web and news search,
-   the cultural-resource cache, Chronicling America descriptions, per-provider `limit`. Its migrations also grant
-   production keys `locations:prewarm` and `public_locations:read`. Jess's call.
-2. Deploy UrbanLens 0.9.0, which carries this batch (bootstrap, ingestion tabs, partial-answer caching).
-3. A read-only Overture role for REData staging (REData P106), so the footprints check measures Overture.
-4. The media budgets (REData P108), the shared Places budget (REData P70, UrbanLens P315), and a key for one
-   keyed web index, since the metasearch engines refuse the shared egress IP (REData P113).
+1. Deploy REData 0.3.0 to production, then UrbanLens 0.9.0 (Jess approved both on 2026-10-05). Everything above
+   that is fixed is fixed only on staging until then: NY parcels by polygon, campus footprints beyond the parcel
+   box, Athens County's owner, web and news search, the cultural-resource cache, Chronicling America
+   descriptions, per-provider `limit`, the loc.gov walk.
+2. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
+   (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and should
+   honour REData's `Retry-After` (P315, REData P70).
+3. Web search that does not rest on mwmbl alone (REData P113): the self-hosted SearXNG relays to engines that
+   refuse the shared egress IP, so either more engines that tolerate it or one keyed index.
 
 **P2 - data gaps on the campuses.**
 
-5. Sanborn volumes for New York and Ohio (REData P112).
+4. Footprints for the CRIS roster rows no source matches, or a way to tell a demolished one (REData P114).
+5. An atlas for Wingdale, or another map source for Harlem Valley (REData P112).
 6. An incident source for New York and Ohio (REData P110).
 7. Ohio build years (REData P111).
 8. A completeness envelope on the buildings endpoints instead of a header (REData P103).
