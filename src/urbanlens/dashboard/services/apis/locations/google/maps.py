@@ -389,6 +389,11 @@ class StreetViewStatusError(GatewayRequestError, ValueError):
         return self.status in _STREET_VIEW_TRANSIENT_STATUSES
 
 
+#: Searches after a placeholder image. Google answers the pano closest to the point, so a wider search usually names
+#: the same one; a search that names it again ends the search without fetching its image.
+_STREET_VIEW_PLACEHOLDER_RETRIES = 1
+
+
 @dataclass(kw_only=True)
 class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     """Gateway for the Google Maps API."""
@@ -503,14 +508,21 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             Tuple of ``(image_bytes, capture_date, pano_latitude, pano_longitude)`` - the pano's own coordinates are returned alongside the image (rather than just echoing back the input) since a widened search radius can resolve to a pano some distance from the requested point.
 
         Raises:
-            StreetViewNotFoundError: No Street View imagery was found within ``max_radius``.
+            StreetViewNotFoundError: No Street View imagery was found within ``max_radius``, or only a placeholder.
             StreetViewStatusError: The API answered with an account or request-level status.
             requests.RequestException: The request failed."""
         logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
         view = {"fov": fov, "pitch": pitch, "size": size}
         radii = list(range(radius, max_radius + 1, radius_increment))
-        while (found := self._nearest_street_view(latitude, longitude, radii, view)) is not None:
+        placeholders: set[str] = set()
+        for _search in range(1 + _STREET_VIEW_PLACEHOLDER_RETRIES):
+            found = self._nearest_street_view(latitude, longitude, radii, view)
+            if found is None:
+                break
             index, params, metadata = found
+            pano_id = metadata.get("pano_id")
+            if pano_id and pano_id in placeholders:
+                break
             logger.debug("Found street view at radius %s", params["radius"])
             # Keep `radius` in image_params - metadata may have only found the pano by searching out to it, and
             # Google's own smaller default radius would miss that pano and return its "no imagery" placeholder.
@@ -520,6 +532,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             # A suspiciously small image is the placeholder despite the 200, so a wider search is tried.
             if len(image_response.content) >= 2000:
                 return image_response.content, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
+            if pano_id:
+                placeholders.add(pano_id)
             radii = radii[index + 1 :]
 
         raise StreetViewNotFoundError("No Street View imagery found within the maximum search radius.")

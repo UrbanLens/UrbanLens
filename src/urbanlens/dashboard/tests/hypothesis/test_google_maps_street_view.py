@@ -24,10 +24,16 @@ class _FakeStreetView:
     """Google's Street View answers: a pano *pano_at* metres away is found by any search reaching that far."""
 
     def __init__(
-        self, *, pano_at: float | None, status: str | None = None, image_for=lambda radius: _REAL_IMAGE_BYTES
+        self,
+        *,
+        pano_at: float | None,
+        status: str | None = None,
+        image_for=lambda radius: _REAL_IMAGE_BYTES,
+        pano_id: str | None = None,
     ) -> None:
         self.pano_at = pano_at
         self.status = status
+        self.pano_id = pano_id
         self.image_for = image_for
         self.searched: list[int] = []
         self.images: list[dict] = []
@@ -39,7 +45,8 @@ class _FakeStreetView:
                 return _response(json_data={"status": self.status})
             if self.pano_at is None or params["radius"] < self.pano_at:
                 return _response(json_data={"status": "ZERO_RESULTS"})
-            return _response(json_data={"status": "OK", "location": {"lat": 1.0, "lng": 2.0}, "date": "2024-01"})
+            found = {"status": "OK", "location": {"lat": 1.0, "lng": 2.0}, "date": "2024-01"}
+            return _response(json_data={**found, "pano_id": self.pano_id} if self.pano_id else found)
         self.images.append(params)
         return _response(content=self.image_for(params["radius"]))
 
@@ -99,6 +106,25 @@ class GetStreetViewSingleTests(SimpleTestCase):
 
         self.assertEqual(content, _REAL_IMAGE_BYTES)
         self.assertEqual([image["radius"] for image in google.images], [50, 100])
+
+    def test_a_placeholder_costs_one_more_search_not_a_sweep(self) -> None:
+        """Restarting the bisection after each placeholder asked 25 times and fetched 19 images for one pano at 100 m."""
+        google = _FakeStreetView(pano_at=100, image_for=lambda radius: _PLACEHOLDER_IMAGE_BYTES)
+
+        with self.assertRaises(ValueError):
+            self._gateway(google).get_street_view_single(1.0, 2.0, radius=50, radius_increment=50, max_radius=1000)
+
+        self.assertLessEqual(len(google.searched), 8)
+        self.assertEqual(len(google.images), 2)
+
+    def test_a_wider_search_naming_the_same_pano_is_not_fetched_again(self) -> None:
+        """Google answers the pano closest to the point, so a wider search names the one whose image was the placeholder."""
+        google = _FakeStreetView(pano_at=100, image_for=lambda radius: _PLACEHOLDER_IMAGE_BYTES, pano_id="CAoSLEFGMVFp")
+
+        with self.assertRaises(ValueError):
+            self._gateway(google).get_street_view_single(1.0, 2.0, radius=50, radius_increment=50, max_radius=1000)
+
+        self.assertEqual(len(google.images), 1)
 
     def test_exhausting_the_radius_on_only_small_responses_raises(self) -> None:
         google = _FakeStreetView(pano_at=50, image_for=lambda radius: _PLACEHOLDER_IMAGE_BYTES)

@@ -23648,14 +23648,21 @@ refused by the limiter.
 **Fix.** `_nearest_street_view` asks at the first radius, then at the last, then bisects between them for the smallest
 radius that finds a pano. A search reaching further finds whatever a shorter one finds, so the radius it settles on is
 the one the sweep found. A pano beside the point costs one search, as before; none within reach costs two; one at 730 m
-costs at most seven. The image request still carries the radius the pano was found at, a placeholder-sized image still
-moves the search outward, and an account-level status still stops it at once. On dev, the rural pin made 2 calls, and a
-Poughkeepsie street one search and its image.
+costs at most seven. The image request still carries the radius the pano was found at, and an account-level status
+still stops it at once. On dev, the rural pin made 2 calls, and a Poughkeepsie street one search and its image.
+
+A placeholder-sized image moves the search outward once (`_STREET_VIEW_PLACEHOLDER_RETRIES`), and a search naming the
+pano whose image was the placeholder ends it without fetching that image again. The adversarial review found that
+restarting the bisection after every placeholder cost more than the old sweep: a pano at 100 m whose every image was
+the placeholder took 25 searches and 19 billed images, against the sweep's 20 and 19. Google answers the pano closest
+to the point, so a wider search names the same pano and fetches the same placeholder.
 
 **Tests.** `test_google_maps_street_view.py` now answers from a fake Google that finds a pano by distance, rather than a
 scripted call order, so each test holds the behaviour and not the sweep: the nearest radius is found and kept, a
 nearby pano costs one search, none in reach costs two (failed before the fix, 20), a distant one at most seven (failed
-before, 15), and the earlier guards on the kept radius, the placeholder image and `OVER_QUERY_LIMIT` still hold.
+before, 15), and the earlier guards on the kept radius, the placeholder image and `OVER_QUERY_LIMIT` still hold. A
+placeholder costs one more search and image, not a sweep (failed with 25 searches), and a wider search naming the same
+pano fetches nothing more (failed with 19 images).
 
 ## RESOLVED 2026-10-05: A link the Wayback Machine could not archive at once was never asked about again
 
