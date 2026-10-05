@@ -71,6 +71,7 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
     "task-outbox-drain": tasks_module._OUTBOX_DRAIN_LOCK_SECONDS,
     "public-pin-candidate-evaluation": tasks_module.PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS,
     "public-media-cache-sweep": tasks_module._PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS,
+    "wayback-archive-sweep": tasks_module._WAYBACK_SWEEP_LOCK_SECONDS,
 }
 
 

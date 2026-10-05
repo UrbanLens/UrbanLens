@@ -32,18 +32,21 @@ FORMER = "hudson-river-state-hospital"
 NEVER_USED = "sleepy-hollow-grain-elevator"
 
 _SAVEPOINT = re.compile(r'"?s\d+_x\d+"?')
+#: The session read compares its expiry with the moment of the request, so wherever sessions are read from the
+#: database (``bin/host_pytest.sh``) that moment is in every request's statements.
+_TIMESTAMP = re.compile(r"'\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(?:\.\d+)?\+00:00'::timestamptz")
 _EXTRA_ARGS = {"int": 1, "str": "x", "slug": "x", "uuid": "00000000-0000-4000-8000-000000000000"}
 #: Values for the named groups of regex-routed prefixes, which carry no converter to read a type from.
 _REGEX_ARGS = {"label_kind": "tags"}
 
 
 def _shape(queries: list[dict], probe: str) -> list[str]:
-    """The statements a request ran, with the probed slug (or uuid, which Postgres is sent undashed) and savepoint
-    names made comparable."""
+    """The statements a request ran, with the probed slug (or uuid, which Postgres is sent undashed), savepoint
+    names and the request's own timestamp made comparable."""
     shapes = []
     for query in queries:
         sql = query["sql"].replace(probe, "<probe>").replace(probe.replace("-", ""), "<probe>")
-        shapes.append(_SAVEPOINT.sub("<savepoint>", sql))
+        shapes.append(_TIMESTAMP.sub("<now>", _SAVEPOINT.sub("<savepoint>", sql)))
     return shapes
 
 

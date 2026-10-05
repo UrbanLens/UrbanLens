@@ -29,7 +29,7 @@ class WikiLocationConflictNoticeTests(SimpleTestCase):
                 "other_locations": other_locations,
                 "user_pin": user_pin,
                 "location": location,
-                "wiki": types.SimpleNamespace(location=location),
+                "wiki": types.SimpleNamespace(location=location, pk=None),
             },
         )
 
