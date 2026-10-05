@@ -301,14 +301,14 @@ class ClassifyTests(TestCase):
         self.assertEqual(request.provider, "cloudflare")
         self.assertEqual(base64.b64decode(request.image.data), _ONE_PIXEL)
 
-    def test_a_failure_is_swallowed_into_an_empty_list(self) -> None:
+    def test_a_failure_is_none_not_an_empty_answer(self) -> None:
         from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
         from urbanlens.dashboard.services.ai.inference_client import InferenceError
 
         client = mock.Mock()
         client.classify.side_effect = InferenceError("boom")
         with mock.patch("urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=client):
-            self.assertEqual(vision.classify_photo(_ONE_PIXEL), [])
+            self.assertIsNone(vision.classify_photo(_ONE_PIXEL))
 
         self.assertFalse(ApiCallLog.objects.filter(service=vision.SERVICE_PHOTO_CLASSIFIER).latest("created").success)
 

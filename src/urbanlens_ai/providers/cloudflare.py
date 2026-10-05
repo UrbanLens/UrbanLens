@@ -3,17 +3,47 @@
 from __future__ import annotations
 
 import base64
+import re
 from typing import Any
 
 import requests
 
 from urbanlens_ai import policy
-from urbanlens_ai.providers.base import ProviderAdapter, ProviderError
+from urbanlens_ai.providers.base import ProviderAdapter, ProviderError, ProviderInputRefusedError
 from urbanlens_ai.schema import ClassificationLabel, ClassifyRequest, ClassifyResponse, InferenceRequest, InferenceResponse, TextBlock, Usage
 
 #: Joins the system prompt and each turn's text into the single flat
 #: ``prompt`` string Workers AI vision models take instead of a messages array.
 NEWLINE = chr(10)
+
+#: Cloudflare's 400 for an input a model will not take, as opposed to a request this adapter got wrong (an unknown
+#: model, a payload shape the model no longer accepts), which stays a failure. ResNet-50 answers code 3011,
+#: ``AiError: image too small, expected image at least 4x4``.
+_REFUSED_INPUT = re.compile(r"image too small", re.IGNORECASE)
+
+#: Most of an error body kept in an exception message.
+_ERROR_DETAIL_CHARS = 300
+
+
+def _error_detail(response: requests.Response) -> str:
+    """Cloudflare's own ``code: message`` pairs from an error body, or the HTTP reason when it has none.
+
+    Args:
+        response: A non-2xx Workers AI response.
+
+    Returns:
+        The provider's reason for refusing, without the request URL (it names the account).
+    """
+    try:
+        body = response.json()
+    except ValueError:
+        body = None
+    errors = body.get("errors") if isinstance(body, dict) else None
+    if isinstance(errors, list):
+        detail = "; ".join(f"{error.get('code')}: {error.get('message')}" for error in errors if isinstance(error, dict))
+        if detail:
+            return detail[:_ERROR_DETAIL_CHARS]
+    return response.reason or "no reason given"
 
 
 class CloudflareAdapter(ProviderAdapter):
@@ -29,10 +59,15 @@ class CloudflareAdapter(ProviderAdapter):
         url = f"{self._endpoint}/{model.lstrip('/')}"
         try:
             response = requests.post(url, headers={"Authorization": f"Bearer {self._api_key}"}, json=payload, timeout=timeout)
-            response.raise_for_status()
-            body = response.json()
         except requests.RequestException as exc:
             raise ProviderError(f"Cloudflare Workers AI call failed: {exc}") from exc
+        if not response.ok:
+            detail = _error_detail(response)
+            if response.status_code == 400 and _REFUSED_INPUT.search(detail):
+                raise ProviderInputRefusedError(f"Cloudflare Workers AI refused the input (HTTP 400): {detail}")
+            raise ProviderError(f"Cloudflare Workers AI answered HTTP {response.status_code}: {detail}")
+        try:
+            body = response.json()
         except ValueError as exc:
             raise ProviderError(f"Cloudflare Workers AI returned unparseable JSON: {exc}") from exc
         if not isinstance(body, dict):

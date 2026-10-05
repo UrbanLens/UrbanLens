@@ -257,7 +257,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="Google Open Buildings",
         calls_per_minute=20,
         calls_per_day=500,
-        notes="Downloads gzip CSV shards of Google's public Open Buildings dataset during boundary lookups, skipping any past MAX_SHARD_BYTES and remembering missing ones. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.google_open_buildings.",
+        notes="Downloads level-6 gzip CSV shards of Google's public Open Buildings v3 dataset during boundary lookups, only for cells it covers (none in the US), skipping any past MAX_SHARD_BYTES and remembering missing ones. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.google_open_buildings.",
     ),
     "microsoft_building_footprints": ServiceDefaults(
         display_name="Microsoft Building Footprints",

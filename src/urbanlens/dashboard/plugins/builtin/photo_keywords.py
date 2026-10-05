@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, analysis_jpeg_bytes
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, KeywordSourceUnavailableError, PhotoKeywordProvider, analysis_jpeg_bytes
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -99,14 +99,20 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
             image: The uploaded image.
 
         Returns:
-            AI-described keywords; empty when the call fails (errors logged).
+            AI-described keywords; empty when the provider refused the image.
+
+        Raises:
+            KeywordSourceUnavailableError: The provider did not answer.
         """
         from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
 
         small = analysis_jpeg_bytes(image)
         if small is None:
             return []
-        return [KeywordResult(keyword=keyword) for keyword in describe_photo_keywords(small)]
+        keywords = describe_photo_keywords(small)
+        if keywords is None:
+            raise KeywordSourceUnavailableError("the AI vision provider did not answer")
+        return [KeywordResult(keyword=keyword) for keyword in keywords]
 
 
 class AiVisionKeywordsPlugin(UrbanLensPlugin):
@@ -165,14 +171,20 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
 
         Returns:
             Scored keywords above ``CLASSIFIER_MIN_CONFIDENCE``.
+
+        Raises:
+            KeywordSourceUnavailableError: The classifier did not answer.
         """
         from urbanlens.dashboard.services.ai.vision import classify_photo
 
         small = analysis_jpeg_bytes(image)
         if small is None:
             return []
+        labels = classify_photo(small)
+        if labels is None:
+            raise KeywordSourceUnavailableError("the image classifier did not answer")
         results: list[KeywordResult] = []
-        for label, score in classify_photo(small):
+        for label, score in labels:
             if score < CLASSIFIER_MIN_CONFIDENCE:
                 continue
             for synonym in label.split(","):

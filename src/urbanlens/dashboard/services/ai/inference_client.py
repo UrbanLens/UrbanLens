@@ -36,6 +36,7 @@ __all__ = [
     "ImagePart",
     "InferenceClient",
     "InferenceError",
+    "InferenceInputRefusedError",
     "InferenceRequest",
     "InferenceResponse",
     "LocalInferenceClient",
@@ -55,6 +56,14 @@ logger = logging.getLogger(__name__)
 
 class InferenceError(RuntimeError):
     """The inference call failed: network error, HTTP error, or an unparseable response."""
+
+
+class InferenceInputRefusedError(InferenceError):
+    """The provider answered, refusing the input (an image too small to classify, say); it is not failing."""
+
+
+#: What ai-inference answers when the provider refused the input (``urbanlens_ai.wsgi.REFUSED_STATUS``).
+_REFUSED_STATUS_CODE = 422
 
 
 #: How much longer than a request's own budget the HTTP hop to ai-inference waits, for the hop itself.
@@ -89,6 +98,8 @@ class RemoteInferenceClient:
         except requests.RequestException as exc:
             raise InferenceError(f"ai-inference request failed: {exc}") from exc
 
+        if response.status_code == _REFUSED_STATUS_CODE:
+            raise InferenceInputRefusedError("ai-inference: the provider refused the input")
         if response.status_code != 200:
             raise InferenceError(f"ai-inference returned HTTP {response.status_code}")
 
@@ -123,12 +134,14 @@ class LocalInferenceClient:
         check_direct_inference()
 
         from urbanlens_ai.policy import PolicyError, validate_request
-        from urbanlens_ai.providers import ProviderError, build_adapter
+        from urbanlens_ai.providers import ProviderError, ProviderInputRefusedError, build_adapter
 
         try:
             validate_request(request)
             adapter = build_adapter(request.provider, self._build_config())
             return adapter.send(request)
+        except ProviderInputRefusedError as exc:
+            raise InferenceInputRefusedError(str(exc)) from exc
         except (PolicyError, ProviderError) as exc:
             # Normalized to InferenceError so callers (gateway.py) only ever
             # handle one exception type regardless of which client ran -
@@ -141,12 +154,14 @@ class LocalInferenceClient:
         check_direct_inference()
 
         from urbanlens_ai.policy import PolicyError, validate_classify_request
-        from urbanlens_ai.providers import ProviderError, build_adapter
+        from urbanlens_ai.providers import ProviderError, ProviderInputRefusedError, build_adapter
 
         try:
             validate_classify_request(request)
             adapter = build_adapter(request.provider, self._build_config())
             return adapter.classify(request)
+        except ProviderInputRefusedError as exc:
+            raise InferenceInputRefusedError(str(exc)) from exc
         except (PolicyError, ProviderError) as exc:
             raise InferenceError(str(exc)) from exc
 

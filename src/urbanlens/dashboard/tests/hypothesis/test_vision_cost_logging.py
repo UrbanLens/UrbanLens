@@ -44,20 +44,22 @@ class OpenAIVisionCostLoggingTests(TestCase):
     def test_the_cost_estimate_is_recorded(self) -> None:
         entry = self._run(Usage(input_tokens=1000, output_tokens=200))
 
-        self.assertIsNotNone(entry.cost_estimate, "cost was computed from token usage but never stored")
+        assert entry.cost_estimate is not None, "cost was computed from token usage but never stored"
         self.assertGreater(entry.cost_estimate, Decimal(0))
 
     def test_a_response_without_usage_still_records_a_fallback_cost(self) -> None:
         """No usage counts means the fallback token estimate, not a null cost."""
         entry = self._run(Usage())
 
-        self.assertIsNotNone(entry.cost_estimate)
+        assert entry.cost_estimate is not None
         self.assertGreater(entry.cost_estimate, Decimal(0))
 
     def test_more_tokens_cost_more(self) -> None:
         cheap = self._run(Usage(input_tokens=100, output_tokens=10)).cost_estimate
         pricey = self._run(Usage(input_tokens=10_000, output_tokens=1_000)).cost_estimate
 
+        assert pricey is not None
+        assert cheap is not None
         self.assertGreater(pricey, cheap)
 
     def test_a_failed_call_records_a_failure_row_and_returns_nothing(self) -> None:
@@ -66,7 +68,7 @@ class OpenAIVisionCostLoggingTests(TestCase):
         client = mock.Mock()
         client.send.side_effect = InferenceError("ai-inference returned HTTP 502")
         with mock.patch("urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=client):
-            self.assertEqual(vision.describe_photo_keywords(b"fake-image-bytes"), [])
+            self.assertIsNone(vision.describe_photo_keywords(b"fake-image-bytes"))
 
         entry = ApiCallLog.objects.filter(service=vision.SERVICE_AI_PHOTO_KEYWORDS).latest("created")
         self.assertFalse(entry.success)

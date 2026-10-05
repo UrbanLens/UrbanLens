@@ -368,6 +368,18 @@ Rate limiting, the service-key buckets and cost accounting stay in
 `vision.py`, on the app side, for the same reason `LLMGateway` keeps its
 own: `ai-inference` has no database and no idea what a service key is.
 
+A provider that answers and refuses the input is answering, not failing.
+Cloudflare's ResNet-50 takes no image under 4x4 pixels: HTTP 400, code 3011,
+"image too small". The adapter raises `ProviderInputRefusedError` with
+Cloudflare's code and message, `ai-inference` answers 422, and both clients
+raise `InferenceInputRefusedError`. `vision.py` logs that call as answered,
+with no labels. Any other provider error stays a 502 and a failed call, so an
+unknown model or a payload a model stopped accepting still counts against
+the provider in provider health (PL10). When no answer came at all,
+`classify_photo` and `describe_photo_keywords` return None, and the keyword
+providers raise `KeywordSourceUnavailableError`, so a photo keeps the
+keywords it had (P320).
+
 ## Follow-ups (not yet done)
 
 - **Read-only Postgres role for `ai-worker`**: the only write the loop

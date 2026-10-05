@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 MAX_KEYWORDS_PER_SOURCE = 30
 
 
+class KeywordSourceUnavailableError(RuntimeError):
+    """A provider's source did not answer for this photo, so the keywords it stored before stand."""
+
+
 @dataclass(frozen=True, slots=True)
 class KeywordResult:
     """One keyword produced by a provider.
@@ -139,6 +143,9 @@ def generate_keywords_for_image(image_id: int) -> dict[str, int]:
             if not provider.is_available_for(image):
                 continue
             keywords = normalize_keywords(provider.generate(image))
+        except KeywordSourceUnavailableError as exc:
+            logger.info("Photo keyword provider '%s' kept image %s's keywords: %s", provider.slug, image_id, exc)
+            continue
         except Exception:
             logger.exception("Photo keyword provider '%s' failed for image %s", provider.slug, image_id)
             continue
