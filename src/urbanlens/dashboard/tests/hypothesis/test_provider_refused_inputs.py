@@ -250,6 +250,24 @@ class ProtomapsTests(TestCase):
         self.assertEqual(response.status_code, 404)
         wire.assert_not_called()
 
+    def test_asking_again_for_a_tile_outside_the_pyramid_writes_no_row_each_time(self) -> None:
+        from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+        cache.clear()
+        baker.make(User)
+        self.client.force_login(baker.make(User))
+        with (
+            mock.patch.object(app_settings, "protomaps_api_key", "SECRET"),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            for _ in range(5):
+                self.assertEqual(
+                    self.client.get(reverse("map.basemap_vector_tiles", kwargs={"z": 25, "x": 3, "y": 4})).status_code,
+                    404,
+                )
+        wire.assert_not_called()
+        self.assertFalse(ApiCallLog.objects.filter(was_rejected_input=True).exists())
+
 
 class VirusTotalTests(TestCase):
     def test_a_value_that_is_not_a_sha256_never_reaches_virustotal(self) -> None:
@@ -491,3 +509,69 @@ class RoutingTests(TestCase):
         ):
             self.assertIsNone(routing_resolution.get_route_between((0.0, 0.0), (41.7, -73.9)))
         wire.assert_not_called()
+
+
+GOOGLE_ONLY = mock.Mock(google_unrestricted_api_key="k", redata_api_url=None, redata_api_key=None)
+
+
+class NullIslandCallerTests(TestCase):
+    """Callers of a gateway that refuses (0, 0) answer "nothing here" rather than raise."""
+
+    def test_the_google_name_resolver_finds_no_name_at_null_island(self) -> None:
+        from urbanlens.dashboard.services.apis.locations import places_resolution
+
+        with (
+            mock.patch.object(places_resolution, "settings", GOOGLE_ONLY),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            self.assertIsNone(places_resolution.resolve_name_from_nearby(0.0, 0.0, 50.0, api_key="k"))
+        wire.assert_not_called()
+
+    def test_the_country_backfill_skips_a_null_island_row_and_carries_on(self) -> None:
+        from django.core.management import call_command
+
+        from urbanlens.dashboard.models.location.model import Location
+
+        baker.make(Location, latitude="0.000000", longitude="0.000000", country="")
+        real = baker.make(Location, latitude="41.700000", longitude="-73.900000", country="")
+        answer = {
+            "results": [
+                {
+                    "address_components": [
+                        {"long_name": "United States", "short_name": "US", "types": ["country", "political"]}
+                    ]
+                }
+            ]
+        }
+        original = GoogleGeocodingGateway.geocode_coordinates
+
+        def geocode(gateway: GoogleGeocodingGateway, latitude: float, longitude: float) -> Any:
+            # (0, 0) goes through the real method, which refuses it before any I/O.
+            return original(gateway, latitude, longitude) if (latitude, longitude) == (0.0, 0.0) else answer
+
+        with (
+            mock.patch("urbanlens.dashboard.management.commands.backfill_location_country.app_settings", GOOGLE_ONLY),
+            mock.patch.object(GoogleGeocodingGateway, "geocode_coordinates", autospec=True, side_effect=geocode),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            call_command("backfill_location_country", "--sleep", "0", stdout=mock.Mock(), stderr=mock.Mock())
+        wire.assert_not_called()
+        real.refresh_from_db()
+        self.assertTrue(real.country)
+
+    def test_place_photos_retire_a_null_island_location_with_a_marker(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.photos.photo_enrichment import PlacePhotoEnrichmentSource
+
+        location = baker.make(Location, latitude="0.000000", longitude="0.000000")
+        source = PlacePhotoEnrichmentSource()
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings", GOOGLE_ONLY),
+            mock.patch("urbanlens.UrbanLens.settings.app.settings.google_unrestricted_api_key", "k"),
+            mock.patch("requests.Session.request") as wire,
+        ):
+            self.assertTrue(source.enrich(location))
+        wire.assert_not_called()
+        self.assertTrue(LocationCache.objects.filter(location=location, source=source.marker_source).exists())
+        self.assertFalse(Location.objects.filter(source.missing_filter(), pk=location.pk).exists())

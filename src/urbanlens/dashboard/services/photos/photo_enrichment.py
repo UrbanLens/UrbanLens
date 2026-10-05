@@ -165,7 +165,14 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
             photo_names: list[str] = (cached.data or {}).get("photo_names") or []
             saved: list[str] = (cached.data or {}).get("saved_names") or []
         else:
-            place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng, api_key=api_key)
+            try:
+                place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng, api_key=api_key)
+            except ImpossibleInputError as exc:
+                # A point Google has nothing at, such as (0, 0): settled, so the marker retires it like the
+                # Street View and satellite sources do, rather than refusing it again every cycle.
+                logger.info("Place photos refused for location=%s: %s", location.pk, exc.detail)
+                LocationCache.set(location, self.marker_source, {"created": 0, "found": 0, "refused": exc.reason})
+                return True
             saved = []
             LocationCache.set(location, _PLACE_PHOTO_LIST_CACHE_SOURCE, {"place_id": place_id, "photo_names": photo_names}, query_key=f"{lat},{lng}")
 

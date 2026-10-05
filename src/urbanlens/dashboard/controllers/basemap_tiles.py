@@ -365,12 +365,17 @@ class VectorBasemapTileView(AccessMixin, View):
             the pyramid, or an uncached 503 when the upstream could not be reached.
         """
         from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import ProtomapsBasemapGateway
+        from urbanlens.dashboard.services.map.remote_tiles import coordinate_is_valid
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
         from urbanlens.dashboard.services.map.tile_cache_keys import vector_tile_cache_key
 
         key = app_settings.protomaps_api_key
         if not key:
             return HttpResponse(status=404)
+        if not coordinate_is_valid(z, x, y):
+            # Outside the tile pyramid: no tile exists. Answered here, before the gateway, so a client
+            # asking for it again and again writes no refusal row each time.
+            return _keep_for(HttpResponse(status=404))
 
         cache_key = vector_tile_cache_key(z, x, y)
         session_key = session_key_for(request)

@@ -11,6 +11,7 @@ from urbanlens.dashboard.services.apis.locations.google.geocoding import LOCALIT
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
@@ -255,7 +256,8 @@ def resolve_name_from_nearby(latitude: float, longitude: float, radius: float, *
             return None
         try:
             candidates = GooglePlacesGateway(api_key=api_key).get_data(latitude, longitude, radius=radius)
-        except (OSError, ValueError, requests.RequestException, RequestCancelledError) as exc:
+        except (OSError, ValueError, requests.RequestException, RequestCancelledError, ImpossibleInputError) as exc:
+            # ImpossibleInputError: a point Google has nothing at, such as a photo's 0,0 GPS - no name, not a failure.
             logger.debug("Google Places name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
             return None
 
