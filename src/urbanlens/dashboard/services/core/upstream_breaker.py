@@ -374,9 +374,19 @@ class WaybackBreaker(UpstreamBreaker):
         Returns:
             The scope to trip, or None.
         """
-        if response.status_code == 429 or (response.status_code == 503 and response.headers.get("Retry-After")):
-            return self.scopes(url, params)[0]
-        return None
+        return self.scopes(url, params)[0] if self.refuses_every_caller(response) else None
+
+    @staticmethod
+    def refuses_every_caller(response: requests.Response) -> bool:
+        """Whether the Archive refused for now rather than failed the one page: a 429, or a 503 naming a wait.
+
+        Args:
+            response: The Archive's answer.
+
+        Returns:
+            True for a refusal for now.
+        """
+        return response.status_code == 429 or (response.status_code == 503 and bool(response.headers.get("Retry-After")))
 
     def default_seconds(self, scope: str) -> int:
         """:attr:`BUSY_SECONDS`.

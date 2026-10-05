@@ -23708,6 +23708,18 @@ Seventeen of the nineteen failed before the fix; the last two guard against the 
 `test_wayback_archive.py::test_a_failed_lookup_frees_the_url_for_the_next_task_once_it_is_due` keeps its lock check
 under the shared wait.
 
+**Adversarial review.** It demonstrated two defects, both fixed with failing tests first:
+- **A bare 503 starved the sweep.** Every 503 counted as the Archive refusing for now, which holds nothing against the
+  URL. A URL whose lookup kept answering a bare 503 stayed the longest-waiting, so every sweep asked about it first and
+  stopped there; five sweeps never reached a healthy URL behind it. Only a 429, or a 503 naming a wait, refuses for
+  now (`WaybackBreaker.refuses_every_caller`, shared by the breaker and the archive). A bare 503 counts against the URL.
+- **A new link skipped its URL's wait.** A link added while its URL waited out a failure, or after it was given up, read
+  only its own row and asked at once. The gate now reads the URL's state across every waiting link and copies it to the
+  new one.
+
+`ALinkAddedLaterTests` and `test_a_bare_503_is_held_against_its_url_not_the_sweep` failed before;
+`test_a_503_naming_a_wait_ends_the_sweep` guards the other side.
+
 ## RESOLVED 2026-10-05: A Microsoft building-footprints lookup held a whole part in memory twice and parsed every building in it
 
 `id: P309` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading a week of dev's ApiCallLog`

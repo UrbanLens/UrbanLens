@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections import Counter
 import contextlib
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 import hashlib
 import logging
@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway, is_own_site_url
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.core.upstream_breaker import WaybackBreaker
 from urbanlens.dashboard.services.security.capability_urls import is_capability_url
 from urbanlens.dashboard.services.security.link_urls import is_link_url
 
@@ -48,8 +49,6 @@ MAX_ATTEMPTS = len(RETRY_DELAYS) + 1
 NEW_LINK_GRACE = timedelta(minutes=15)
 #: URLs one sweep asks about. Each costs a lookup and perhaps a save, against the Archive's ten calls a minute here.
 SWEEP_BATCH = 5
-#: The Archive's answers that refuse every caller for now, rather than failing the one page.
-_BUSY_STATUSES = frozenset({429, 503})
 #: How long one task may hold a URL's lookup before another may try; a save can take a minute and a half.
 _LOCK_SECONDS = 180
 #: What the cache raises when it cannot answer; ``RuntimeError`` is the test suite's network guard.
@@ -99,7 +98,10 @@ def archive_link(link_model: str, link_id: int) -> ArchiveOutcome:
     if known:
         return _given(link_model, link_id, link.url, known)
 
-    if link.wayback_attempts >= MAX_ATTEMPTS or (link.wayback_retry_at is not None and link.wayback_retry_at > timezone.now()):
+    # The URL's state, not this row's: a link added while its URL waits, or after it was given up, keeps to it.
+    attempts, retry_at = _url_state(link.url)
+    if attempts >= MAX_ATTEMPTS or (retry_at is not None and retry_at > timezone.now()):
+        _record(link.url, attempts, retry_at)
         return ArchiveOutcome.SKIPPED
 
     lock_key = f"wayback-archive:{hashlib.sha256(link.url.encode()).hexdigest()}"
@@ -175,7 +177,7 @@ def _ask(link_model: str, link_id: int, url: str) -> ArchiveOutcome:
         logger.info("archive_link: the Wayback Machine is refused for now: %s", exc)
         return ArchiveOutcome.BUSY
     except requests.RequestException as exc:
-        if isinstance(exc, requests.HTTPError) and exc.response is not None and exc.response.status_code in _BUSY_STATUSES:
+        if isinstance(exc, requests.HTTPError) and exc.response is not None and WaybackBreaker.refuses_every_caller(exc.response):
             logger.info("archive_link: the Wayback Machine answered %s", exc.response.status_code)
             return ArchiveOutcome.BUSY
         logger.warning("archive_link: could not archive %s", url, exc_info=True)
@@ -232,18 +234,30 @@ def _given(link_model: str, link_id: int, url: str, snapshot: str) -> ArchiveOut
     return ArchiveOutcome.ARCHIVED if given else ArchiveOutcome.SKIPPED
 
 
-def _note_failure(url: str) -> None:
-    """Count a failed attempt against every link waiting on *url*, and set when it may be asked about again."""
-    attempts = 1 + max(_waiting(model, url).aggregate(most=Max("wayback_attempts"))["most"] or 0 for model in _MODELS.values())
-    attempts = min(attempts, MAX_ATTEMPTS)
-    retry_at = timezone.now() + RETRY_DELAYS[attempts - 1] if attempts < MAX_ATTEMPTS else None
+def _url_state(url: str) -> tuple[int, datetime | None]:
+    """The most attempts, and the latest retry time, among the links waiting on *url*."""
+    attempts, retry_at = 0, None
+    for model in _MODELS.values():
+        state = _waiting(model, url).aggregate(attempts=Max("wayback_attempts"), retry_at=Max("wayback_retry_at"))
+        attempts = max(attempts, state["attempts"] or 0)
+        if state["retry_at"] is not None and (retry_at is None or state["retry_at"] > retry_at):
+            retry_at = state["retry_at"]
+    return attempts, retry_at
+
+
+def _record(url: str, attempts: int, retry_at: datetime | None) -> None:
     for model in _MODELS.values():
         _waiting(model, url).update(wayback_attempts=attempts, wayback_retry_at=retry_at)
 
 
+def _note_failure(url: str) -> None:
+    """Count a failed attempt against every link waiting on *url*, and set when it may be asked about again."""
+    attempts = min(_url_state(url)[0] + 1, MAX_ATTEMPTS)
+    _record(url, attempts, timezone.now() + RETRY_DELAYS[attempts - 1] if attempts < MAX_ATTEMPTS else None)
+
+
 def _give_up(url: str) -> None:
-    for model in _MODELS.values():
-        _waiting(model, url).update(wayback_attempts=MAX_ATTEMPTS, wayback_retry_at=None)
+    _record(url, MAX_ATTEMPTS, None)
 
 
 def _due_links(limit: int) -> list[tuple[str, int]]:
