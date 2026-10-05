@@ -31,7 +31,8 @@ if [ -z "${UL_TEST_CONTAINER:-}" ]; then
     fi
 fi
 runner="${UL_TEST_CONTAINER:-urbanlens_${name}_test_runner}"
-db="${runner%_test_runner}_test_db"
+# Every runner (test_runner, test_runner_a, ...) shares the one test_db.
+db=$(sed -E 's/_test_runner(_[a-z0-9]+)?$/_test_db/' <<<"$runner")
 
 for container in "$runner" "$db"; do
     if [ "$(docker inspect -f '{{.State.Running}}' "$container" 2>/dev/null)" != "true" ]; then
@@ -44,7 +45,22 @@ runner_env() {
     docker inspect "$runner" --format '{{range .Config.Env}}{{println .}}{{end}}' | sed -n "s/^$1=//p" | head -1
 }
 
-UL_DB_HOST=$(docker inspect "$runner" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' | awk '{print $1}')
+# The lettered runners join another container's network namespace and have no address of their own.
+bridge_ip() {
+    local mode
+    mode=$(docker inspect "$1" --format '{{.HostConfig.NetworkMode}}')
+    if [[ "$mode" == container:* ]]; then
+        bridge_ip "${mode#container:}"
+    else
+        docker inspect "$1" --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' | awk '{print $1}'
+    fi
+}
+
+UL_DB_HOST=$(bridge_ip "$runner")
+if [ -z "$UL_DB_HOST" ]; then
+    echo "error: found no bridge address for $runner." >&2
+    exit 2
+fi
 UL_DB_PORT=$(runner_env UL_DB_PORT)
 UL_DB_USER=$(runner_env UL_DB_USER)
 UL_DB_PASS=$(runner_env UL_DB_PASS)

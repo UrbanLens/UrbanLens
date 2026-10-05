@@ -10,5 +10,6 @@ export const DEFAULT_PRODUCTION_HOSTS: readonly string[] = ["urbanlens.org", "ww
  * @param productionHosts - The denylist to check against (already lowercased, as `env.ts`'s `readList` produces).
  */
 export function isProductionHost(hostname: string, productionHosts: string[]): boolean {
-    return productionHosts.includes(hostname.toLowerCase());
+    // "urbanlens.org." is the same host, fully qualified, and resolves to the same place.
+    return productionHosts.includes(hostname.toLowerCase().replace(/\.+$/, ""));
 }

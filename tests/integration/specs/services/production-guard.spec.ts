@@ -25,6 +25,10 @@ test.describe("production-write guard", () => {
         expect(isProductionHost("URBANLENS.ORG", ["urbanlens.org"])).toBe(true);
     });
 
+    test("a fully-qualified hostname with its trailing dot is caught", () => {
+        expect(isProductionHost("urbanlens.org.", ["urbanlens.org"])).toBe(true);
+    });
+
     test("an empty denylist catches nothing", () => {
         expect(isProductionHost("urbanlens.org", [])).toBe(false);
     });
