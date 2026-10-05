@@ -256,6 +256,38 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
     return True
 
 
+#: How long :func:`generate_unless_in_flight` holds the boundary fetch's flight marker: past the hard time limit of
+#: the tasks that call it, so a killed run's marker lapses soon after.
+_UNLESS_IN_FLIGHT_TTL_SECONDS = 300
+
+
+def generate_unless_in_flight(location: Location, *, name: str | None = None) -> bool:
+    """:func:`generate_location_boundaries`, unless a fetch of this location's boundary is already running.
+
+    It holds the boundary panel's flight marker meanwhile, so the pin page and the pin bootstrap wait on this run
+    rather than starting their own.
+
+    Args:
+        location: The Location to place.
+        name: Optional place name hint.
+
+    Returns:
+        Whether this call ran the generation.
+    """
+    from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+    from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource
+
+    key = BoundaryPanelSource.location_flight_key(location.pk)
+    token = acquire_lock(key, _UNLESS_IN_FLIGHT_TTL_SECONDS)
+    if token is None:
+        return False
+    try:
+        generate_location_boundaries(location, name=name)
+    finally:
+        release_lock(key, token)
+    return True
+
+
 def generate_location_boundaries(location: Location, *, name: str | None = None, force: bool = False, attempt: int = 0) -> Place | None:
     """Resolve a Location onto a real-world place, provisioning geometry if needed.
     It answers "what is this coordinate standing on?" rather than "what shape should I draw here?", which is the change that stops one property accumulating a copy of its own outline per person who pinned it.

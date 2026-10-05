@@ -1,4 +1,6 @@
 {% comment %}Wiki "About" card - description, identity fields, coordinates, dates, and security indicators.{% endcomment %}
+{% load dashboard_tags %}
+{% wiki_built_year wiki as built_year %}
 <div class="card wiki-card wiki-meta" id="wiki-about-card" data-collapse-scope="wiki" data-collapse-section="about">
     <div class="card-header">
         <i class="material-symbols-outlined">info</i>
@@ -26,8 +28,11 @@
         {% endif %}
         {# wiki_links: passed in by the caller (LocationWikiEditView.post / LocationWikiView.get), already narrowed by concealment.visible_rows. #}
         {% include "dashboard/partials/pins/_pin_links_row.html" with wiki=wiki links=wiki_links delete_url_name="location.wiki.link.delete" row_id="wiki-links-row" owner_slug=wiki.location.slug dialog_id="wiki-link-add-dialog" show_label=True %}
-        {% if wiki.date_abandoned or wiki.effective_date_last_active %}
+        {% if built_year or wiki.date_abandoned or wiki.effective_date_last_active %}
         <div class="wiki-meta-dates">
+            {% if built_year %}
+            <span class="wiki-meta-date"><i class="material-symbols-outlined">construction</i> Built {{ built_year }}</span>
+            {% endif %}
             {% if wiki.date_abandoned %}
             <span class="wiki-meta-date"><i class="material-symbols-outlined">event_busy</i> Abandoned {{ wiki.date_abandoned|date:"M j, Y" }}</span>
             {% endif %}

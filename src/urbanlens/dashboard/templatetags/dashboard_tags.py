@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 register = template.Library()
 
@@ -511,6 +512,21 @@ def assistant_enabled_flag(user) -> bool:
     except Profile.DoesNotExist:
         profile, _ = Profile.objects.get_or_create(user=user)
     return assistant_available(profile)
+
+
+@register.simple_tag
+def wiki_built_year(wiki: Wiki) -> int | None:
+    """The year a wiki's place was built, when a record or the community says (``services.pins.build_dates``).
+
+    Args:
+        wiki: The wiki being rendered.
+
+    Returns:
+        The year, or None.
+    """
+    from urbanlens.dashboard.services.pins.build_dates import wiki_build_year
+
+    return wiki_build_year(wiki)
 
 
 @register.simple_tag

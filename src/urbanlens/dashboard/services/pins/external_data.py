@@ -1119,6 +1119,22 @@ class BoundaryPanelSource(PanelSource):
         """Location-scoped: default boundaries are keyed by Location."""
         return f"loc{pin.location_id}"
 
+    @classmethod
+    def location_flight_key(cls, location_id: int | None) -> str:
+        """The flight marker of a location's boundary fetch, for a caller generating it with no pin in hand.
+
+        Args:
+            location_id: The location.
+
+        Returns:
+            The key :meth:`flight_key` gives for any pin standing there.
+        """
+        return f"ulfetch:flight:{cls.key}:loc{location_id}"
+
+    def flight_key(self, pin: Pin) -> str:
+        """Single-flight cache key for this location's boundary fetch."""
+        return self.location_flight_key(pin.location_id)
+
     def is_ready(self, pin: Pin) -> bool:
         """True when the provider chain has a fresh answer for the pin's Location.
 
