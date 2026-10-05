@@ -100,6 +100,15 @@ class MediaProvider(Gateway, ABC):
     # ranking isn't a phrase match, so searching guarantees noise rather than useful results for
     reject_address_derived_names: ClassVar[bool] = False
 
+    def available(self) -> bool:
+        """Whether this install can ask this provider at all. An unavailable one is not scheduled and caches nothing,
+        so its first answer once configured is a real one.
+
+        Returns:
+            True unless the provider needs configuration this install lacks.
+        """
+        return True
+
     @abstractmethod
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
         """Yield MediaItems for ``search_term``.
@@ -151,6 +160,8 @@ class MediaProvider(Gateway, ABC):
 
         if (service_key := self.service_key) is None:
             raise RuntimeError(f"{type(self).__name__} has no service_key configured")
+        if not self.available():
+            return [], False
 
         # Truncated to LocationCache.query_key's own max_length so the value compared below is the
         # value that can actually be stored - otherwise an over-long key would never match what came

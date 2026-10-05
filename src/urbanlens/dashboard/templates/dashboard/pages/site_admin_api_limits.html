@@ -146,6 +146,38 @@
     {% endfor %}
     </div>
 
+    {% if redata_refusals %}
+    <section class="api-limits-capabilities card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">block</i>
+            <h3>REData refused this key</h3>
+        </div>
+        <div class="card__body">
+            <p class="api-limits-capabilities-note">
+                REData answered 401 or 403 at these endpoints, which usually means the key lacks the
+                endpoint's scope. Their panels stay hidden until the key is fixed; each endpoint is asked
+                again once an hour.
+            </p>
+            <div class="table-scroll">
+                <table class="api-limits-capabilities-table">
+                    <thead>
+                        <tr><th>Endpoint</th><th>Last refused</th><th>Next try</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for refusal in redata_refusals %}
+                        <tr>
+                            <td><code>{{ refusal.endpoint }}</code></td>
+                            <td>{{ refusal.refused_at|date:"Y-m-d H:i e" }}</td>
+                            <td>{{ refusal.retry_at|date:"Y-m-d H:i e" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
     {% if redata_capabilities %}
     <section class="api-limits-capabilities card">
         <div class="card-header">

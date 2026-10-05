@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.media.previews import tile_preview_url
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
+from urbanlens.dashboard.services.pins.redata_panel import RedataBackedSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -16,8 +17,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: How soon a parcel whose listings REData has only just queued a fetch for is asked again. The fetch runs in REData's
+#: background queue, paced against LoopNet's own budget, so minutes rather than seconds.
+_REFRESH_RECHECK_SECONDS = 15 * 60
 
-class LoopnetPanelSource(GalleryMediaSource):
+
+class LoopnetPanelSource(RedataBackedSource, GalleryMediaSource):
     """LoopNet commercial real-estate listings for the pin's address, via REData."""
 
     key = "loopnet"
@@ -51,8 +56,8 @@ class LoopnetPanelSource(GalleryMediaSource):
         return ", ".join(p for p in parts if p).strip(", ")
 
     def gate(self, pin: Pin) -> bool:
-        """Skip scheduling a fetch for a pin with no usable address."""
-        return bool(self.address(pin))
+        """Requires an address for LoopNet to search by (and, through :class:`RedataBackedSource`, REData)."""
+        return bool(self.address(pin)) and super().gate(pin)
 
     def has_content(self, data: dict | None) -> bool:
         """Whether REData found any listing for the parcel."""
@@ -63,9 +68,10 @@ class LoopnetPanelSource(GalleryMediaSource):
 
         Raises:
             PropertyRecordsUnavailableError: REData could not be asked, so there is no answer to cache.
+            PropertyRecordsBusyError: REData holds no listings yet and has queued a fetch, so the parcel is asked again soon.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsBusyError, PropertyRecordsUnavailableError, RedataGateway
 
         address = self.address(pin)
         location = pin.location
@@ -82,14 +88,17 @@ class LoopnetPanelSource(GalleryMediaSource):
                 LocationCache.set(pin.location, self.cache_source, {}, query_key=address)
                 return
             listings_body = gateway.lookup_listings(parcel_uuid)
-        except (PropertyRecordsUnavailableError, ValueError) as exc:
-            if isinstance(exc, PropertyRecordsUnavailableError) and exc.is_outage:
+        except PropertyRecordsUnavailableError as exc:
+            if exc.is_outage:
                 raise
             logger.debug("LoopnetPanelSource.fetch: no listings available for pin %s (address=%r)", pin.pk, address, exc_info=True)
             LocationCache.set(pin.location, self.cache_source, {}, query_key=address)
             return
 
         listings = listings_body.get("results") or []
+        if not listings and listings_body.get("refresh_queued"):
+            # REData never fetches inline: an empty answer with a fetch queued means "not looked yet".
+            raise PropertyRecordsBusyError("refresh_queued", "REData has queued a LoopNet fetch for this parcel.", retry_after=_REFRESH_RECHECK_SECONDS)
         data = {"listings": listings} if listings else {}
         LocationCache.set(pin.location, self.cache_source, data, query_key=address)
 

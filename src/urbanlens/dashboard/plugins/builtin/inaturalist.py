@@ -8,6 +8,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
+from urbanlens.dashboard.services.pins.redata_panel import count_label
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -29,6 +30,8 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
     # (the footer link's radius param) so the "View nearby" link always
     # matches what was actually searched.
     radius_km: ClassVar[float] = 2
+    #: Most sightings asked for; an answer this long is a first page.
+    row_limit: ClassVar[int] = 10
 
     def gate(self, pin: Pin) -> bool:
         """Also requires REData to be configured - this panel has no other data source."""
@@ -41,7 +44,7 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        envelope = RedataNatureObservationsGateway().get_nearby_observations(lat, lng, radius_meters=self.radius_km * 1000, limit=10)
+        envelope = RedataNatureObservationsGateway().get_nearby_observations(lat, lng, radius_meters=self.radius_km * 1000, limit=self.row_limit)
         LocationCache.set(pin.location, self.cache_source, {"observations": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -75,7 +78,7 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
             footer_url += f"?lat={lat}&lng={lng}&radius={self.radius_km}"
 
         return {
-            "chips": [f"{len(observations)} nearby"],
+            "chips": [f"{count_label(observations, self.row_limit)} nearby"],
             "meta": meta,
             "footer_link": {"url": footer_url, "label": "View nearby observations on iNaturalist"},
         }

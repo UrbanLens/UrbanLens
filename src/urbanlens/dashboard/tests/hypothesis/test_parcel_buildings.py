@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
 )
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.pin_restructure import match_marker
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 from .place_helpers import official_geometry
 
@@ -111,7 +112,7 @@ def _box(latitude: float, longitude: float, half_lat: float, half_lng: float) ->
     return {"type": "Polygon", "coordinates": [ring]}
 
 
-class FetchParcelBuildingsTests(TestCase):
+class FetchParcelBuildingsTests(RedataConfiguredMixin, TestCase):
     """REData first, Overpass only when REData has nothing."""
 
     def setUp(self) -> None:

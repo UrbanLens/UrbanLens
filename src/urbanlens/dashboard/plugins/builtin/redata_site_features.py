@@ -19,6 +19,7 @@ _SHOWN_ELSEWHERE: frozenset[str] = frozenset(
         "epa_echo",  # plugins.builtin.epa_echo - its own exact-site card and nearby list
         "yelp",  # plugins.builtin.yelp
         "nps_places",  # plugins.builtin.nps
+        "overture",  # plugins.builtin.overture_building_attributes - its nearby places
     },
 )
 
@@ -32,6 +33,8 @@ _TOO_GENERIC: frozenset[str] = frozenset({"osm"})
 #: centre - a block can hold a dozen cameras - and the panel is a summary, not an
 #: inventory.
 _MAX_ROWS = 10
+#: Rows asked for and cached, for the per-category counts: REData's own ceiling.
+_MAX_FEATURES = 200
 
 
 class SiteFeaturesPanelSource(RedataInfoPanelSource):
@@ -46,6 +49,7 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
     #: A dense city block and an empty field both fetch successfully; only one
     #: has a tab worth showing.
     inspects_content: ClassVar[bool] = True
+    row_limit: ClassVar[int | None] = _MAX_FEATURES
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Ask every applicable provider except the ones with their own panel."""
@@ -63,7 +67,7 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
             return Envelope(count=0, complete=True, results=[], providers=[])
 
         gateway = RedataPointsOfInterestGateway()
-        return gateway.near_point("/api/v1/points-of-interest/lookup/", latitude, longitude, provider=wanted)
+        return gateway.near_point("/api/v1/points-of-interest/lookup/", latitude, longitude, provider=wanted, limit=self.row_limit)
 
     def has_content(self, data: dict | None) -> bool:
         """A row with neither a name nor a category renders nothing worth a tab."""
@@ -71,7 +75,8 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Group the features by REData's own category label."""
-        rows = feature_rows((data or {}).get(self.payload_key) or [])
+        features = (data or {}).get(self.payload_key) or []
+        rows = feature_rows(features)
         if not rows:
             return None
 
@@ -80,6 +85,8 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
             by_category[row["category"]] = by_category.get(row["category"], 0) + 1
 
         chips = [f"{count} {category.lower()}{'s' if count != 1 else ''}" for category, count in sorted(by_category.items(), key=lambda item: (-item[1], item[0]))]
+        if self.is_full(features):
+            chips.append("more than shown")
         meta = [{"label": row["category"], "value": row["name"], "href": row["url"]} for row in rows[:_MAX_ROWS]]
         return {"chips": chips, "meta": meta}
 

@@ -9,7 +9,8 @@ import logging
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.coalesce import coalesced
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError, read_capped
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError, read_capped
+from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -105,8 +106,10 @@ class RedataPlacesGateway(Gateway):
             message: The exception message.
 
         Returns:
-            :class:`~urbanlens.dashboard.services.core.gateway.GatewayRateLimitedError` when REData's body identifies its own exhausted request budget, else the plain, less specific ``GatewayRequestError``.
+            :class:`~urbanlens.dashboard.services.core.gateway.GatewayRateLimitedError` when REData's body identifies its own exhausted request budget, an ``UpstreamBusyError`` held for as long as the breaker holds the endpoint when REData refused the key, else the plain, less specific ``GatewayRequestError``.
         """
+        if response.status_code in RedataBreaker.REFUSED_STATUSES:
+            return UpstreamBusyError(f"{message} REData refused this key; it may lack the endpoint's scope.", retry_after=RedataBreaker.REFUSED_SECONDS)
         try:
             body = response.json()
         except ValueError:

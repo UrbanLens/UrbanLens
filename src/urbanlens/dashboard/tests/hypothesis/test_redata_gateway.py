@@ -112,9 +112,10 @@ class LookupParcelSuccessTests(SimpleTestCase):
         gateway = _gateway(session)
         self.assertEqual(gateway.lookup_parcel(42.65, -73.75), {})
 
-    def test_top_level_geojson_geometry_overrides_record_payloads_own_copy(self) -> None:
-        """The top-level Parcel fields are already-converted GeoJSON; record_payload's own
-        parcel_geometry/building_geometry are still the raw Esri-ring-shaped snapshot."""
+    def test_top_level_geojson_parcel_geometry_overrides_record_payloads_own_copy(self) -> None:
+        """The Parcel's top-level parcel_geometry is already-converted GeoJSON; record_payload's own
+        parcel_geometry/building_geometry are the raw Esri-ring snapshot, and the building one is the only copy."""
+        building_rings = {"format": "esri_rings", "rings": [[[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 2.0]]]}
         session = MagicMock()
         session.get.return_value = _response(
             200,
@@ -122,12 +123,9 @@ class LookupParcelSuccessTests(SimpleTestCase):
                 "record_payload": {
                     "owner_name": ["Jane Smith"],
                     "parcel_geometry": {"format": "esri_rings", "rings": [[[0.0, 0.0]]]},
+                    "building_geometry": building_rings,
                 },
                 "parcel_geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]],
-                },
-                "building_geometry": {
                     "type": "Polygon",
                     "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]],
                 },
@@ -140,10 +138,7 @@ class LookupParcelSuccessTests(SimpleTestCase):
             payload["parcel_geometry"],
             {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
         )
-        self.assertEqual(
-            payload["building_geometry"],
-            {"type": "Polygon", "coordinates": [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]]]},
-        )
+        self.assertEqual(payload["building_geometry"], building_rings)
 
     def test_no_top_level_geometry_leaves_record_payload_untouched(self) -> None:
         session = MagicMock()

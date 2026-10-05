@@ -28,12 +28,13 @@ class HistoricalFeaturesPanelSource(RedataInfoPanelSource):
     title = "Historical Features"
 
     payload_key: ClassVar[str] = "features"
+    row_limit: ClassVar[int | None] = 25
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Historical buildings/roads/water/etc. mapped near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_historical_features_gateway import RedataHistoricalFeaturesGateway
 
-        return RedataHistoricalFeaturesGateway().get_historical_features(latitude, longitude, limit=25)
+        return RedataHistoricalFeaturesGateway().get_historical_features(latitude, longitude, limit=self.row_limit)
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
         """Drop each feature's geometry before caching."""
@@ -51,9 +52,10 @@ class HistoricalFeaturesPanelSource(RedataInfoPanelSource):
         # standing" - see RedataHistoricalFeaturesGateway's module docstring
         # - so this chip names what the data actually shows: no recorded end.
         undated_end = [feature for feature in features if feature.get("start_year") is not None and feature.get("end_year") is None]
-        chips = [f"{len(features)} traced within 250 m"]
+        floor = "+" if self.is_full(features) else ""
+        chips = [f"{len(features)}{floor} traced within 250 m"]
         if undated_end:
-            chips.append(f"{len(undated_end)} with no recorded end date")
+            chips.append(f"{len(undated_end)}{floor} with no recorded end date")
 
         meta = []
         for feature in features[:_MAX_ROWS]:

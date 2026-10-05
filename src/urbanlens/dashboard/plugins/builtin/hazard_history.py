@@ -9,6 +9,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import r
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
+from urbanlens.dashboard.services.pins.redata_panel import at_limit
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -50,6 +51,8 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
     tab_label: ClassVar[str] = "Disasters"
     tab_order: ClassVar[int] = 40
     geo_boundary: ClassVar[GeoBoundary | None] = USA
+    #: Most events asked for; an answer this long is a first page, so its counts are floors.
+    row_limit: ClassVar[int] = 40
 
     def gate(self, pin: Pin) -> bool:
         """Requires US coordinates (both providers are US-only) and REData to be configured."""
@@ -62,7 +65,7 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        envelope = RedataHazardsGateway().get_hazard_events(lat, lng, providers=list(_PROVIDERS), years=80, limit=40)
+        envelope = RedataHazardsGateway().get_hazard_events(lat, lng, providers=list(_PROVIDERS), years=80, limit=self.row_limit)
         # Belt-and-braces: ?provider= already restricts which sources run.
         events = [event for event in envelope.results if event.get("provider") in _PROVIDERS]
         LocationCache.set(pin.location, self.cache_source, {"events": events}, query_key=f"{lat:.5f},{lng:.5f}")
@@ -76,11 +79,12 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
         fires = [event for event in events if event.get("provider") == "nifc_wildfires"]
         declarations = [event for event in events if event.get("provider") == "fema_disasters"]
 
+        floor = "+" if at_limit(events, self.row_limit) else ""
         chips = []
         if fires:
-            chips.append(f"{len(fires)} wildfire{'s' if len(fires) != 1 else ''} reached within 2 km")
+            chips.append(f"{len(fires)}{floor} wildfire{'s' if len(fires) != 1 else ''} reached within 2 km")
         if declarations:
-            chips.append(f"{len(declarations)} federal disaster declaration{'s' if len(declarations) != 1 else ''} for this county")
+            chips.append(f"{len(declarations)}{floor} federal disaster declaration{'s' if len(declarations) != 1 else ''} for this county")
 
         def newest_first(rows: list[dict]) -> list[dict]:
             return sorted(rows, key=lambda event: event.get("occurred_at") or "", reverse=True)

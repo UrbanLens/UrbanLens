@@ -48,7 +48,7 @@
         <p>
             <strong>Model version {{ model.summary.version|default:"?" }}</strong> is answering{% if model.summary.algorithm %},
             trained with {{ model.summary.algorithm }}{% endif %}{% if model.summary.trained_at %} on {{ model.summary.trained_at }}{% endif %}.
-            {% if model.summary.training_rows %}<span class="form-hint">{{ model.summary.training_rows }} training rows.</span>{% endif %}
+            {% if model.summary.training_size %}<span class="form-hint">{{ model.summary.training_size }}.</span>{% endif %}
         </p>
 
         {% if model.summary.metrics %}

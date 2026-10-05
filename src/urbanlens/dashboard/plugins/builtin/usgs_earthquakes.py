@@ -5,20 +5,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
+from urbanlens.dashboard.services.pins.external_data import PanelPlacement
+from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
-#: This panel is specifically "Recent Seismic Activity" - REData's hazards endpoint pools other event
-#: kinds (flood, wildfire, ...) behind the same shared registry, so results are filtered to this one
-#: even though the only provider configured today (usgs_earthquakes) never returns anything else.
+#: The one provider in REData's hazards registry this panel reads. Unnamed, REData also runs its wildfire and FEMA
+#: providers, applies ``min_magnitude`` to their magnitudes (burned acres), and an outage of either leaves the
+#: earthquake answer incomplete.
+_EARTHQUAKE_PROVIDER = "usgs_earthquakes"
+#: Kept as a filter too: the endpoint pools every hazard kind under one row shape.
 _EARTHQUAKE_EVENT_TYPE = "earthquake"
 
 
-class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
+class UsgsEarthquakePanelSource(RedataInfoPanelSource):
     """Recent nearby seismic activity for the pin's location."""
 
     key = "usgs_earthquakes"
@@ -31,20 +34,18 @@ class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
     tab_label: ClassVar[str] = "Seismic"
     tab_order: ClassVar[int] = 30
 
-    def gate(self, pin: Pin) -> bool:
-        """Also requires REData to be configured - this panel has no other data source."""
-        return super().gate(pin) and redata_configured()
+    payload_key: ClassVar[str] = "events"
+    row_limit: ClassVar[int | None] = 10
 
-    def fetch(self, pin: Pin) -> None:
-        """Search REData's hazards registry for nearby recent earthquakes and cache the results."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
+        """Recent magnitude 3+ earthquakes within 100 km, from REData's USGS provider only."""
         from urbanlens.dashboard.services.apis.locations.redata_hazards_gateway import RedataHazardsGateway
 
-        lat = float(pin.effective_latitude or 0)
-        lng = float(pin.effective_longitude or 0)
-        envelope = RedataHazardsGateway().get_hazard_events(lat, lng, radius_meters=100_000, min_magnitude=3.0, years=10, limit=10)
-        events = [event for event in envelope.results if event.get("event_type") == _EARTHQUAKE_EVENT_TYPE]
-        LocationCache.set(pin.location, self.cache_source, {"events": events}, query_key=f"{lat:.5f},{lng:.5f}")
+        return RedataHazardsGateway().get_hazard_events(latitude, longitude, radius_meters=100_000, providers=[_EARTHQUAKE_PROVIDER], min_magnitude=3.0, years=10, limit=self.row_limit)
+
+    def transform_rows(self, rows: list[dict]) -> list[dict]:
+        """Earthquakes only."""
+        return [event for event in rows if isinstance(event, dict) and event.get("event_type") == _EARTHQUAKE_EVENT_TYPE]
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the seismic-event list from REData's hazards results."""
@@ -68,11 +69,7 @@ class UsgsEarthquakePanelSource(CoordinateGatedInfoPanelSource):
                 },
             )
 
-        return {"chips": [f"{len(events)} in the last 10 years"], "meta": meta}
-
-    def debug_count(self, data: dict) -> int:
-        """Number of seismic events found."""
-        return len((data or {}).get("events") or [])
+        return {"chips": [f"{self.counted(events)} in the last 10 years"], "meta": meta}
 
 
 class UsgsEarthquakePlugin(UrbanLensPlugin):

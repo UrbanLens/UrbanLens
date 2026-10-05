@@ -989,6 +989,22 @@ def _redata_capabilities() -> dict | None:
     return body
 
 
+def _redata_refusals() -> list[dict]:
+    """The REData endpoints that refused this deployment's key recently, for the api-limits page.
+
+    A refusal is a key missing a scope: nothing retries its way past it, so the page says which endpoint and when it is
+    next tried.
+
+    Returns:
+        ``{"endpoint", "refused_at", "retry_at"}`` dicts, most recent first.
+    """
+    from datetime import UTC, datetime
+
+    from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
+
+    return [{"endpoint": entry.endpoint, "refused_at": datetime.fromtimestamp(entry.refused_at, tz=UTC), "retry_at": datetime.fromtimestamp(entry.retry_at, tz=UTC)} for entry in RedataBreaker().refused_endpoints()]
+
+
 class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """API rate limit configuration page.
 
@@ -1055,6 +1071,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "services": enriched,
                 "tabs": tabs,
                 "redata_capabilities": _redata_capabilities(),
+                "redata_refusals": _redata_refusals(),
             },
         )
 

@@ -31,12 +31,13 @@ class BuildingPermitsPanelSource(RedataInfoPanelSource):
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     payload_key: ClassVar[str] = "filings"
+    row_limit: ClassVar[int | None] = 25
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Permit/violation filings for the pin's site."""
         from urbanlens.dashboard.services.apis.locations.redata_permits_gateway import RedataPermitsGateway
 
-        return RedataPermitsGateway().get_permits(latitude, longitude, years=_YEARS, limit=25)
+        return RedataPermitsGateway().get_permits(latitude, longitude, years=_YEARS, limit=self.row_limit)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the filing chronology (already ordered by issued/cited date)."""
@@ -51,9 +52,9 @@ class BuildingPermitsPanelSource(RedataInfoPanelSource):
             kind = filing.get("kind") or "permit"
             by_kind[kind] = by_kind.get(kind, 0) + 1
         chips = [f"{count} {PERMIT_KIND_LABELS.get(kind, kind).lower()}{'s' if count != 1 else ''}" for kind, count in sorted(by_kind.items())]
-        # A dense block fills the portal's page size; the count is then a
+        # A dense block fills the portal's page size, or this panel's own; the count is then a
         # floor, not a total, and presenting it unqualified would misread.
-        if any((filing.get("attributes") or {}).get("result_capped") for filing in filings):
+        if self.is_full(filings) or any((filing.get("attributes") or {}).get("result_capped") for filing in filings):
             chips.append("more than shown")
 
         meta = []

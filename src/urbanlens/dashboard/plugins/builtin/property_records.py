@@ -10,11 +10,12 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, TRANSIENT_REASONS
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelApiKind, PanelPlacement
+from urbanlens.dashboard.services.pins.redata_panel import RedataBackedSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -63,13 +64,13 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         ``{"available": True, ...record payload}`` on success, or ``{"available": False, "reason": ..., "message": ..., "links": {...}?}`` - ``links`` (assessor/treasurer/recorder URLs) is present for the manual-lookup reasons...
 
     Raises:
-        PropertyRecordsUnavailableError: Only for a reason in ``TRANSIENT_REASONS`` (``source_error``, ``source_rate_limited``, ``rate_limited``) - a transient outage (REData itself, or a source it depends on) must not be written to the cache as a durable "no data" fact; the..."""
+        PropertyRecordsUnavailableError: Only when nothing was learned (``is_outage``: REData or a source it depends on is down, or REData said to ask again later) - that must not be written to the cache as a durable "no data" fact."""
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
     try:
         payload = RedataGateway().lookup_parcel(latitude, longitude, situs_address=location.address or "")
     except PropertyRecordsUnavailableError as exc:
-        if exc.reason in TRANSIENT_REASONS:
+        if exc.is_outage:
             raise
         result: dict[str, Any] = {"available": False, "reason": exc.reason, "message": str(exc)}
         if exc.links:
@@ -830,7 +831,7 @@ def _render_manual_only(data: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
+class PropertyRecordsPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
     """County property ownership/tax record card on the Private Pin page."""
 
     key = "property_records"

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import MAX_NEAR_POINT_LIMIT, REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway, redata_configured
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -44,13 +44,15 @@ class RedataMediaGateway(RedataLocationContextGateway):
             radius_meters: Search radius in meters. Mapillary/KartaView/Panoramax
                 are fixed at 100m on REData's own side regardless of this value;
                 harmless to pass for the other registered media providers.
-            limit: Bounded positive integer (REData caps at 200).
+            limit: Most items to return (REData caps at 200).
             is_aerial: Keep only drone/aerial footage, which REData flags on
                 each item from the publisher's own title and description.
                 Applied here rather than sent as a query parameter: ``is_aerial``
                 is a ``filterset_fields`` entry on REData's ``/media/`` viewset,
                 not something ``/media/lookup/`` reads, so passing it did
-                nothing and the whole nearby set came back as "aerial".
+                nothing and the whole nearby set came back as "aerial". The
+                filter then needs REData's largest page, not ``limit`` rows of
+                every kind, and ``limit`` applies to what it keeps.
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
@@ -66,7 +68,7 @@ class RedataMediaGateway(RedataLocationContextGateway):
             radius_meters=radius_meters,
             provider=provider,
             force_refresh=force_refresh,
-            limit=limit,
+            limit=MAX_NEAR_POINT_LIMIT if is_aerial else limit,
             extra_params=extra_params,
         )
         if not envelope.complete and not envelope.results:
@@ -74,7 +76,7 @@ class RedataMediaGateway(RedataLocationContextGateway):
             # see services.pins.redata_panel for the same rule stated in full.
             raise LocationContextUnavailableError(REASON_ALL_PROVIDERS_UNAVAILABLE, "Every media source covering this point failed to answer.")
         if is_aerial:
-            return [item for item in envelope.results if item.get("is_aerial")]
+            return [item for item in envelope.results if item.get("is_aerial")][:limit]
         return envelope.results
 
 
@@ -84,6 +86,10 @@ class _RedataStreetViewProvider(StreetViewProvider):
 
     _redata_provider: ClassVar[str] = ""
     _display_name: ClassVar[str] = ""
+
+    def available(self) -> bool:
+        """Only through REData."""
+        return redata_configured()
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield one dated slide per capture *date* from this provider, newest first.

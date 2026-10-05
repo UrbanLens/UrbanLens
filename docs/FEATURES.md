@@ -703,7 +703,8 @@ direct-only because REData's contract can't reproduce what they show:
   walkability index (incl. transit distance), and USDA SSURGO soil composition (dominant-first, no
   invented averages) folded into one panel, via REData (`plugins.builtin.redata_site_conditions`)
 - **Air Quality** (a Regional Data tab) — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
-  average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
+  average — of nearby community sensors, and when the reading was taken; refreshed hourly, via REData
+  (`plugins.builtin.redata_air_quality`)
 - **Fire & Disaster History** (USA, the Regional Data "Disasters" tab) — NIFC wildfire perimeters that reached the site (back to
   ~1900) and FEMA disaster declarations for its county (since 1953, with which assistance
   programmes were authorised), via REData's hazards registry (`plugins.builtin.hazard_history`)
@@ -763,6 +764,23 @@ Neither path caches an outage. A failure `services/core/gateway.py::is_source_ou
 timeout, 5xx, throttle, REData `source_error`, an empty envelope REData marks incomplete) writes no `LocationCache`
 row, so the next view or batch asks again; a real empty answer is cached for `external_data_cache_days`.
 `tests/hypothesis/test_outage_not_cached_registry.py` holds every registered panel and enrichment source to this.
+A REData 503 is never a settled answer whatever its reason (REData answers 404 for a permanent one), and a parcel
+lookup it could not settle is not asked again for 12 hours. A panel source whose upstream keeps its data for hours
+declares `cache_max_age` (air quality 1 h, the NPS card's alerts 6 h), which shortens the site-wide window for that
+source alone.
+
+An adopted site answer keeps the site row's age. Near-point panels send a `limit` of at most 200 (REData answers 400
+above that), keep no more than they asked for, and say "N+" or "more than shown" when an answer filled it.
+
+**REData refusals.** A 401/403 from REData (a key lacking an endpoint's scope) opens that endpoint's breaker
+(`services/core/upstream_breaker.py::RedataBreaker`) for an hour across every caller, is logged once at error level,
+and is listed on the site admin's API limits page until a day passes without one. Both are per API key, so a rotated
+`UL_REDATA_API_KEY` is asked at once.
+
+**Without REData** (`UL_REDATA_API_URL` unset) every REData-only surface is unavailable rather than failing: panels
+gate through `services/pins/redata_panel.py::RedataBackedSource`, and media, satellite and street-view providers
+through `available()`. Nothing is scheduled and nothing is cached, so REData's first answer once configured is real.
+`tests/hypothesis/test_redata_absent_surfaces.py` sweeps every registered panel and imagery provider for this.
 
 ## Extensibility: Plugin System
 

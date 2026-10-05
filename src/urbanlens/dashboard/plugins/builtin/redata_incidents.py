@@ -22,7 +22,6 @@ _YEARS = 3
 # default is 3, the free panel's window above) - see
 # ``RedataIncidentsGateway.get_incidents``.
 _HISTORY_YEARS = 25
-_HISTORY_LIMIT = 500
 _HISTORY_MAX_ROWS = 15
 
 _TOP_CATEGORIES = 3
@@ -31,6 +30,27 @@ _TOP_CATEGORIES = 3
 # built from these rows says so rather than letting a point imply
 # address-level knowledge.
 _PRECISION_CAVEAT: dict[str, str] = {"label": "Precision", "value": "Locations are approximate (block scale, as published)"}
+
+
+def _crime(incidents: list[dict]) -> list[dict]:
+    """The incidents that are crime, by REData's category.
+
+    Args:
+        incidents: Cached incident rows.
+
+    Returns:
+        Those whose ``category`` is in ``CRIME_INCIDENT_CATEGORIES``.
+    """
+    from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import CRIME_INCIDENT_CATEGORIES
+
+    return [incident for incident in incidents if isinstance(incident, dict) and (incident.get("category") or "other") in CRIME_INCIDENT_CATEGORIES]
+
+
+def _crime_categories() -> list[str]:
+    """The crime categories, in a stable order, for REData's ``category`` filter."""
+    from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import CRIME_INCIDENT_CATEGORIES
+
+    return sorted(CRIME_INCIDENT_CATEGORIES)
 
 
 def _top_category_chips(incidents: list[dict], category_labels: dict[str, str]) -> list[str]:
@@ -62,26 +82,24 @@ class PoliceIncidentsPanelSource(RedataInfoPanelSource):
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     payload_key: ClassVar[str] = "incidents"
+    row_limit: ClassVar[int | None] = 50
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
-        """Block-scale police incident reports near the pin."""
+        """Block-scale police incident reports near the pin, crime only, so the limit counts crime."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import RedataIncidentsGateway
 
-        return RedataIncidentsGateway().get_incidents(latitude, longitude, years=_YEARS, limit=50)
+        return RedataIncidentsGateway().get_incidents(latitude, longitude, categories=_crime_categories(), years=_YEARS, limit=self.row_limit)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Summarize by category, then list the most recent incidents."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import INCIDENT_CATEGORY_LABELS
 
-        incidents = (data or {}).get("incidents") or []
-        # Traffic collisions are police *reports* rather than crime, and only
-        # some feeds publish any - including them would make the same block
-        # look "worse" in one city than another purely by publishing scope.
-        incidents = [incident for incident in incidents if incident.get("category") != "traffic"]
+        rows = (data or {}).get("incidents") or []
+        incidents = _crime(rows)
         if not incidents:
             return None
 
-        chips = [f"{len(incidents)} on this block in {_YEARS} years"]
+        chips = [f"{self.counted(incidents)} on this block in {_YEARS} years"]
         chips.extend(_top_category_chips(incidents, INCIDENT_CATEGORY_LABELS))
 
         meta = []
@@ -109,25 +127,22 @@ class IncidentHistoryPanelSource(RedataInfoPanelSource):
     required_feature: ClassVar[SiteFeature | None] = SiteFeature.INCIDENT_HISTORY
 
     payload_key: ClassVar[str] = "incidents"
+    row_limit: ClassVar[int | None] = 200
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
-        """The full 25-year incident window near the pin."""
+        """The full 25-year incident window near the pin, crime only."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import RedataIncidentsGateway
 
         # force_refresh=True: REData's coverage cache has no `years` dimension - it keys purely on
         # coordinate + a radius pinned the same for every provider - so a cached hit here could
         # silently be the free panel's narrower 3-year fetch.
-        return RedataIncidentsGateway().get_incidents(latitude, longitude, years=_HISTORY_YEARS, limit=_HISTORY_LIMIT, force_refresh=True)
+        return RedataIncidentsGateway().get_incidents(latitude, longitude, categories=_crime_categories(), years=_HISTORY_YEARS, limit=self.row_limit, force_refresh=True)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Summarize the whole window by year, most recent first."""
         from urbanlens.dashboard.services.apis.locations.redata_incidents_gateway import INCIDENT_CATEGORY_LABELS
 
-        incidents = (data or {}).get("incidents") or []
-        # Same exclusion as the free panel, for the same reason: traffic
-        # collisions are police reports, not crime, and comparing counts
-        # across cities would compare publishing scope rather than safety.
-        incidents = [incident for incident in incidents if incident.get("category") != "traffic"]
+        incidents = _crime((data or {}).get("incidents") or [])
         if not incidents:
             return None
 
@@ -137,7 +152,7 @@ class IncidentHistoryPanelSource(RedataInfoPanelSource):
             year = occurred[:4] if len(occurred) >= 4 else "Undated"
             by_year[year] = by_year.get(year, 0) + 1
 
-        chips = [f"{len(incidents)} on this block in {_HISTORY_YEARS} years"]
+        chips = [f"{self.counted(incidents)} on this block in {_HISTORY_YEARS} years"]
         chips.extend(_top_category_chips(incidents, INCIDENT_CATEGORY_LABELS))
 
         # Numeric years first, most recent leading; "Undated" trails rather
@@ -157,7 +172,9 @@ class PoliceIncidentsPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "redata_incidents"
     verbose_name: ClassVar[str] = "Reported Police Incidents"
-    description: ClassVar[str] = "Shows recent reported police incidents on the pin's block as visit-safety context, from city open-data portals via REData. Locations are block-scale by publication; traffic collisions are excluded."
+    description: ClassVar[str] = (
+        "Shows recent reported police incidents on the pin's block as visit-safety context, from city open-data portals via REData. Locations are block-scale by publication; traffic collisions and fire and EMS responses are excluded."
+    )
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:

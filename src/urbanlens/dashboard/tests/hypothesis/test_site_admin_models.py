@@ -136,6 +136,19 @@ class SiteAdminModelsViewTests(TestCase):
 
         self.assertEqual(response.context["models"][1]["summary"]["ranker"], "model")
 
+    def test_each_model_reports_what_it_trained_on_in_its_own_unit(self) -> None:
+        """REData's label model counts ``training_rows``; its photo model counts ``training_photos``."""
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(_LABELS, return_value={"active": {"version": 3, "training_rows": 1204}, "ranker": "model"}),
+            mock.patch(_PHOTOS, return_value={"active": {"version": 9, "training_photos": 380}, "scorer": "model"}),
+        ):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.context["models"][0]["summary"]["training_size"], "1,204 training rows")
+        self.assertEqual(response.context["models"][1]["summary"]["training_size"], "380 training photos")
+        self.assertContains(response, "380 training photos")
+
     def test_a_malformed_active_renders_rather_than_500ing(self) -> None:
         """A diagnostics page that dies on an unexpected shape hides what it was reporting."""
         with (

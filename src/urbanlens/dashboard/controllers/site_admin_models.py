@@ -68,6 +68,22 @@ def scrub_personal_keys(value: Any) -> Any:
     return value
 
 
+def _training_size(active: dict[str, Any]) -> str:
+    """What the active model trained on, in the unit its endpoint counts, or ``""``.
+
+    Args:
+        active: The serialized model version.
+
+    Returns:
+        Such as ``"1,204 training rows"`` or ``"380 training photos"``.
+    """
+    for key, unit in (("training_rows", "training rows"), ("training_photos", "training photos")):
+        count = active.get(key)
+        if isinstance(count, int) and not isinstance(count, bool):
+            return f"{count:,} {unit}"
+    return ""
+
+
 def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str, Any]:
     """Fetch one model's metadata, or describe why it is unavailable.
 
@@ -113,12 +129,13 @@ def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str,
         "version": active.get("version"),
         "algorithm": active.get("algorithm") or "",
         "trained_at": active.get("trained_at") or "",
-        "training_rows": active.get("training_rows"),
+        # Labels count training rows; photo relevance counts the photos it trained on.
+        "training_size": _training_size(active),
         "metrics": active.get("metrics") or {},
         "ranking_metrics": active.get("ranking_metrics") or {},
         "baseline_metrics": active.get("baseline_metrics") or {},
         "features": payload.get("features") or [],
-        "schema_fingerprint": payload.get("feature_schema_fingerprint") or payload.get("schema_fingerprint") or "",
+        "schema_fingerprint": payload.get("feature_schema_fingerprint") or "",
     }
 
 

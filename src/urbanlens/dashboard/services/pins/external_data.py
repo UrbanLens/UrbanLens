@@ -20,7 +20,7 @@ from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Iterable, Sequence
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     from django.contrib.auth.base_user import AbstractBaseUser
     from django.contrib.auth.models import AnonymousUser
@@ -337,6 +337,24 @@ class LocationCachePanelSource(PanelSource, ABC):
     site_level: ClassVar[bool] = False
     #: A nested pin farther than this from its site is not on it, whatever the user filed it under.
     SITE_RADIUS_METERS: ClassVar[float] = 1000.0
+    #: How long this source's answer stays current, when that is shorter than the site-wide
+    #: ``external_data_cache_days``: for data its upstream itself keeps for hours. None keeps the site-wide window.
+    cache_max_age: ClassVar[timedelta | None] = None
+
+    def fresh_since(self, since: datetime) -> datetime:
+        """The oldest ``updated`` this source's rows may have and still be fresh.
+
+        Args:
+            since: The site-wide cutoff, ``LocationCache.fresh_since()``.
+
+        Returns:
+            The later of the two cutoffs.
+        """
+        if self.cache_max_age is None:
+            return since
+        from django.utils import timezone
+
+        return max(since, timezone.now() - self.cache_max_age)
 
     def site_pin(self, pin: Pin) -> Pin | None:
         """The pin whose answer this one should share, when this panel is site-level and ``pin`` is nested.
@@ -394,16 +412,18 @@ class LocationCachePanelSource(PanelSource, ABC):
         site = self.site_pin(pin)
         if site is None or pin.location is None or not self.gate(site):
             return False
-        row = LocationCache.get_fresh(site.location, self.cache_source)
+        row = LocationCache.get_fresh(site.location, self.cache_source, max_age=self.cache_max_age)
         if row is None:
             # Every building on the site opens at once; one of them asks for the site.
             coalesced(f"ulfetch:site:{self.key}:loc{site.location_id}", lambda: self.fetch(site), ttl=FAILURE_SKIP_TTL_SECONDS)
-            row = LocationCache.get_fresh(site.location, self.cache_source)
+            row = LocationCache.get_fresh(site.location, self.cache_source, max_age=self.cache_max_age)
         if row is None:
             return True
         if not self.site_answer_covers(pin, row.data):
             return False
-        LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
+        entry = LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
+        # The copy is as old as the site's answer, so it goes stale when that does.
+        LocationCache.objects.filter(pk=entry.pk).update(updated=row.updated)
         self.adopted(pin, row.data)
         return True
 
@@ -929,7 +949,7 @@ class NameSearchSource(LocationCachePanelSource, ABC):
         if pin.location is None:
             return
         for scope in self.search_scopes(pin):
-            if LocationCache.get_fresh(pin.location, self.cache_source, scope.audience) is not None:
+            if LocationCache.get_fresh(pin.location, self.cache_source, scope.audience, max_age=self.cache_max_age) is not None:
                 continue
             key = f"ulfetch:search:{self.key}:loc{pin.location_id}:{scope.audience or 'shared'}"
             coalesced(key, lambda scope=scope: self.fetch_scope(pin, scope), ttl=FAILURE_SKIP_TTL_SECONDS)
@@ -1043,8 +1063,10 @@ class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
         gateway.get_media(pin.location, terms, audience=scope.audience, search_names=scope.provenance())
 
     def gate(self, pin: Pin) -> bool:
-        """Geo-restricted providers and pins with no usable search name are skipped."""
+        """Unavailable and geo-restricted providers, and pins with no usable search name, are skipped."""
         gateway = self.make_gateway()
+        if not gateway.available():
+            return False
         if gateway.geo_boundary is not None and not gateway.geo_boundary.contains(pin.effective_latitude, pin.effective_longitude):
             return False
         return any(self.search_terms(pin, gateway, scope) for scope in self.search_scopes(pin))
@@ -1500,8 +1522,8 @@ def _scopes_by_source(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> 
     return {source.key: source.search_scopes(pin, names) for source in sources}
 
 
-def _fresh_location_cache_keys(pin: Pin, audiences: Iterable[str], since: datetime) -> set[tuple[str, str]]:
-    """Every ``(source, audience)`` of these audiences with a non-stale row at this pin's location.
+def _fresh_location_cache_keys(pin: Pin, audiences: Iterable[str], since: datetime) -> dict[tuple[str, str], datetime]:
+    """Every ``(source, audience)`` of these audiences with a row at this pin's location fresh by the site-wide window.
 
     Args:
         pin: The pin whose location's cache rows are being examined.
@@ -1509,13 +1531,14 @@ def _fresh_location_cache_keys(pin: Pin, audiences: Iterable[str], since: dateti
         since: ``LocationCache.fresh_since()``.
 
     Returns:
-        The fresh keys; empty when the pin has no location."""
+        Each fresh key's ``updated``, for a source with a shorter window of its own to judge; empty when the pin has
+        no location."""
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
     if pin.location_id is None:
-        return set()
+        return {}
     rows = LocationCache.objects.filter(location_id=pin.location_id, audience__in=list(audiences), updated__gte=since)
-    return set(rows.values_list("source", "audience"))
+    return {(source, audience): updated for source, audience, updated in rows.values_list("source", "audience", "updated")}
 
 
 def _entries(pin: Pin, sources: Sequence[LocationCachePanelSource], scopes: dict[str, tuple[SearchScope, ...]], since: datetime | None = None) -> dict[str, CachedEntry | None]:
@@ -1525,10 +1548,12 @@ def _entries(pin: Pin, sources: Sequence[LocationCachePanelSource], scopes: dict
     if pin.location_id is None:
         return {source.key: None for source in sources}
     audiences = {scope.audience for source in sources for scope in scopes[source.key]}
+    since = since if since is not None else LocationCache.fresh_since()
     rows = LocationCache.fresh_rows(pin.location_id, {source.cache_source for source in sources}, audiences, since)
     entries: dict[str, CachedEntry | None] = {}
     for source in sources:
-        found = [rows.get((source.cache_source, scope.audience)) for scope in scopes[source.key]]
+        cutoff = source.fresh_since(since)
+        found = [row if (row := rows.get((source.cache_source, scope.audience))) is not None and row.updated >= cutoff else None for scope in scopes[source.key]]
         present = [row for row in found if row is not None]
         if not present or len(present) < len(found):
             entries[source.key] = None
@@ -1601,7 +1626,7 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None, *, r
         scopes = _scopes_by_source(pin, cache_backed)
         since = LocationCache.fresh_since()
         fresh = _fresh_location_cache_keys(pin, {scope.audience for source_scopes in scopes.values() for scope in source_scopes}, since)
-        landed = {source.key: all((source.cache_source, scope.audience) in fresh for scope in scopes[source.key]) for source in cache_backed}
+        landed = {source.key: all((updated := fresh.get((source.cache_source, scope.audience))) is not None and updated >= source.fresh_since(since) for scope in scopes[source.key]) for source in cache_backed}
         # Panels that opt into a content check need their payload, which the key query above deliberately does not
         # carry; fetched in one extra query covering only those sources.
         inspecting = [source for source in cache_backed if require_content and source.inspects_content and landed[source.key]]

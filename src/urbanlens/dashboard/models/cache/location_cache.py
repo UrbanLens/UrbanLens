@@ -54,19 +54,17 @@ class LocationCache(abstract.DashboardModel):
     @property
     def is_stale(self) -> bool:
         """True if the cached entry is older than the site's configured minimum cache duration."""
-        from urbanlens.dashboard.models.site_settings import SiteSettings
-
-        max_age_days = SiteSettings.get_current().external_data_cache_days
-        return timezone.now() - self.updated > timedelta(days=max_age_days)
+        return self.updated < self.fresh_since()
 
     @classmethod
-    def get_fresh(cls, location: Location, source: str, audience: str = "") -> LocationCache | None:
+    def get_fresh(cls, location: Location, source: str, audience: str = "", *, max_age: timedelta | None = None) -> LocationCache | None:
         """Returns a non-stale cache entry, or None if missing or stale.
 
         Args:
             location: The Location to look up.
             source: Data source identifier (e.g. 'wikipedia').
             audience: Whose row to read; the default is the one every viewer shares.
+            max_age: How old the source's answers may be, when that is shorter than the site-wide window.
 
         Returns:
             A fresh LocationCache instance or None.
@@ -75,14 +73,22 @@ class LocationCache(abstract.DashboardModel):
             entry = cls.objects.get(location=location, source=source, audience=audience)
         except cls.DoesNotExist:
             return None
-        return None if entry.is_stale else entry
+        return None if entry.updated < cls.fresh_since(max_age) else entry
 
     @classmethod
-    def fresh_since(cls) -> datetime:
-        """The oldest ``updated`` a row may have and still be fresh."""
+    def fresh_since(cls, max_age: timedelta | None = None) -> datetime:
+        """The oldest ``updated`` a row may have and still be fresh.
+
+        Args:
+            max_age: A source's own limit, honoured when it is shorter than the site-wide ``external_data_cache_days``.
+
+        Returns:
+            The cutoff.
+        """
         from urbanlens.dashboard.models.site_settings import SiteSettings
 
-        return timezone.now() - timedelta(days=SiteSettings.get_current().external_data_cache_days)
+        window = timedelta(days=SiteSettings.get_current().external_data_cache_days)
+        return timezone.now() - (window if max_age is None else min(window, max_age))
 
     @classmethod
     def fresh_rows(cls, location_id: int, sources: Iterable[str], audiences: Iterable[str], since: datetime | None = None) -> dict[tuple[str, str], LocationCache]:

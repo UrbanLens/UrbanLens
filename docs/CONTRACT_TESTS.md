@@ -157,3 +157,25 @@ were not provided`, because by the time it looks the key is gone.
   client had no branch for the most likely failure it would meet. Fixed by a postprocessing hook,
   `external_api.schema.document_error_responses`, that `setdefault`s 401/403 on any operation
   declaring `security` and 404 on any templated path.
+
+## REData, from the consumer's side
+
+The suite above checks UrbanLens's own document. The reverse - that UrbanLens reads only what REData publishes -
+is `src/urbanlens/dashboard/tests/hypothesis/test_redata_consumer_contract.py`, an ordinary unit test that needs no
+REData and no network.
+
+- **The table** is `tests/hypothesis/redata_contract.py::READS`: one row per UrbanLens reader and REData operation,
+  listing every response field the reader uses (`results[].sheet.thumbnail_url`; `[]` steps into an array, `{}` into a
+  free-keyed map, a final `*` marks an object REData publishes untyped).
+- **The schema** is REData's own OpenAPI document, trimmed to the table's operations and vendored at
+  `tests/hypothesis/fixtures/redata_openapi.json`. `bin/vendor_redata_schema.py` refreshes it from a REData checkout
+  or deployment; its docstring has the commands.
+- **Adding a REData read** means adding its fields to the table and re-vendoring. The test fails on a field REData
+  does not publish where it is read, on an untyped object REData has since typed, and on vendored operations the table
+  no longer names. It also holds REData's incident `category` vocabulary to the categories UrbanLens labels and sends.
+- **`gaps`** on a row lists fields the reader looks for that REData does not publish there: a tolerated fallback, or a
+  known mismatch such as the floorplan editor reading UrbanLens's own plan shape from REData's plan document. Each must
+  stay unpublished, so the row is revisited when REData fills the gap.
+- **What it cannot see:** fields REData sends but does not document (a parcel sub-resource's 404 `message` is one,
+  hence a gap), and reads the harvest missed. The table was built by tracing every REData reader in the code; a new
+  reader that is not added to it goes unchecked.

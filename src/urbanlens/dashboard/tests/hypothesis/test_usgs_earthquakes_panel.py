@@ -91,7 +91,7 @@ class UsgsEarthquakePanelSourceFetchTests(TestCase):
         self.assertEqual(len(cached.data["events"]), 1)
         self.assertEqual(cached.data["events"][0]["event_type"], "earthquake")
         mock_gateway_cls.return_value.get_hazard_events.assert_called_once_with(
-            40.5, -74.5, radius_meters=100_000, min_magnitude=3.0, years=10, limit=10
+            40.5, -74.5, radius_meters=100_000, providers=["usgs_earthquakes"], min_magnitude=3.0, years=10, limit=10
         )
 
     def test_fetch_caches_an_explicit_empty_result(self) -> None:
@@ -119,9 +119,13 @@ class UsgsEarthquakePanelSourceGateTests(TestCase):
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=location)
 
     def test_gate_is_false_when_redata_is_not_configured(self) -> None:
-        with mock.patch("urbanlens.dashboard.plugins.builtin.usgs_earthquakes.redata_configured", return_value=False):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False
+        ):
             self.assertFalse(self.source.gate(self.pin))
 
     def test_gate_is_true_when_redata_is_configured_and_coordinates_exist(self) -> None:
-        with mock.patch("urbanlens.dashboard.plugins.builtin.usgs_earthquakes.redata_configured", return_value=True):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
             self.assertTrue(self.source.gate(self.pin))

@@ -61,18 +61,16 @@ def flatten_timeline(envelope: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _resolved_flag(capture: dict[str, Any]) -> Any:
-    """Read ``capture_date_resolved`` from wherever this REData version puts it.
-    It belongs to the capture's ``attributes`` blob; the top level is checked too so a deployment that promotes it later keeps working.
+    """Read ``capture_date_resolved``, which REData keeps in the capture's asset's ``attributes``.
 
     Args:
-        capture: One ``captures`` entry.
+        capture: One ``captures`` entry: ``{"captured_on", "provider", "asset": {..., "attributes": {...}}}``.
 
     Returns:
         ``True``/``False``/``None`` as REData reports it, or ``None`` when absent - which means the source publishes no acquisition date at all, and is not the same claim as ``False``."""
-    attributes = capture.get("attributes")
-    if isinstance(attributes, dict) and "capture_date_resolved" in attributes:
-        return attributes["capture_date_resolved"]
-    return capture.get("capture_date_resolved")
+    asset = capture.get("asset")
+    attributes = asset.get("attributes") if isinstance(asset, dict) else None
+    return attributes.get("capture_date_resolved") if isinstance(attributes, dict) else None
 
 
 def _sort_key(entry: dict[str, Any]) -> str:
