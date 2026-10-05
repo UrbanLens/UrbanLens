@@ -4,7 +4,7 @@
  * relative to the subject - themselves, a friend, a stranger.
  */
 
-import { expect, ifSecondaryAccount, test } from "../../lib/fixtures.js";
+import { expect, ifSecondaryAccount, ifStrangerAccount, test } from "../../lib/fixtures.js";
 import { resourceName } from "../../lib/env.js";
 import type { ApiClient } from "../../lib/api-client.js";
 
@@ -33,13 +33,13 @@ test.describe("profiles", () => {
         expect(profile.is_self, "a profile fetched by its owner does not report is_self").toBe(true);
     });
 
-    ifSecondaryAccount()("a stranger's profile is indistinguishable from one that does not exist", async ({ api, secondaryApi }) => {
+    ifStrangerAccount()("a stranger's profile is indistinguishable from one that does not exist", async ({ api, strangerApi }) => {
         // Not a 403. A profile you have no relationship with answers exactly
         // as a profile that was never created does, which is what stops a slug
         // being an oracle for who has an account here. Asserted as the two
         // answers being *identical* rather than against any particular
         // wording, for the same reason the pin suite does.
-        const them = await whoami(secondaryApi);
+        const them = await whoami(strangerApi);
 
         const stranger = await api.get(`profiles/${them.slug}/`);
         const nonexistent = await api.get("profiles/definitely-not-a-real-profile-91b2c/");

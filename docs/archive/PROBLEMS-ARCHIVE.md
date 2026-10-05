@@ -23835,3 +23835,40 @@ of 292 operations. The three failures are P311.
 - both calendar-sync refusals validate against the declared 400 (failed: `auto_sync` required).
 
 The path lookup now matches templated paths. The full contract suite, writes included, passes 292 of 292 operations.
+
+## RESOLVED 2026-10-05: The external API's interactive documentation renders under the site's CSP
+
+`id: P312` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, running the api integration project`
+
+**What was wrong.** `GET dashboard/api/external/v1/docs/` answered 200 with an empty page. drf-spectacular's Swagger
+view loaded Swagger UI from `cdn.jsdelivr.net/npm/swagger-ui-dist@latest` and started it with an inline script.
+`script-src` admits neither jsdelivr nor inline script, so the browser blocked all three scripts. The
+`published contract › interactive documentation › renders` spec failed on both attempts in the 2026-10-03 and
+2026-10-05 runs. The `@latest` URL also carried no integrity hash, so it ran whatever the CDN served.
+
+**Fix.** `drf-spectacular-sidecar` serves Swagger UI's files from this site's static files
+(`SWAGGER_UI_DIST` and `SWAGGER_UI_FAVICON_HREF` set to `SIDECAR`). `SpectacularSwaggerSplitView` serves the
+start-up script as a file at `docs/?script=`. The package is a new entry in `INSTALLED_APPS`, so every image built
+before this commit lacks it; a container must be rebuilt (or have the package installed) before it loads these
+settings.
+
+**Tests.** `test_api_docs_page_csp.py` reads the page's own CSP header and checks every script and stylesheet it loads
+against it, and that the start-up script answers as JavaScript (failed: the jsdelivr scripts, and an inline script).
+In Chromium on dev, the page renders its title and operations with no console error and no CSP violation; the api
+project passes.
+
+## RESOLVED 2026-10-05: The stranger-profile spec no longer races the specs that relate its two accounts
+
+`id: P313` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, running the api integration project`
+
+**What was wrong.** `profiles › a stranger's profile is indistinguishable from one that does not exist` failed on
+both attempts in the 2026-10-03 and 2026-10-05 runs, with the secondary account's profile answering 200. The spec
+treated `secondary` as a stranger to `primary`. `cross-user-isolation.spec.ts` runs at the same time and pins `primary`
+5 m from `secondary`'s pin, giving them a place in common. Under the default `anything_in_common`, that makes each
+profile visible to the other. `social.spec.ts` befriends the pair as well. Run alone, the spec passed: the
+application was right.
+
+**Fix.** A `stranger` role joins the default provisioning, and no spec acts as it. The spec gates on
+`ifStrangerAccount()` and reads `stranger` through `strangerApi`. `docs/INTEGRATION_TESTS.md` describes the role.
+
+**Tests.** The api project passes 134 with `stranger` provisioned, the spec included.

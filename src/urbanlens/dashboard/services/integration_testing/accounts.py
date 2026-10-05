@@ -25,10 +25,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 #: Roles provisioned when the caller does not name any.
-#: Two, because a large share of this application is about what one account can see of another's -
-#: sharing, friendships, messages, wiki visibility - and none of that is testable with a single
-#: account.
-DEFAULT_ROLES: tuple[str, ...] = ("primary", "secondary")
+#: A second account, because a large share of this application is about what one account can see of another's -
+#: sharing, friendships, messages, wiki visibility - and none of that is testable with a single account. The specs
+#: befriend and pin beside ``secondary`` while others run, so ``stranger``, which no spec acts as, is the one account
+#: ``primary`` is guaranteed to have nothing in common with.
+DEFAULT_ROLES: tuple[str, ...] = ("primary", "secondary", "stranger")
 
 #: Password length in bytes of entropy. These accounts are reachable on a
 #: hostname anyone can find, so the password is the only thing protecting them.

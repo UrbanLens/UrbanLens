@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Final
 
 from django.urls import path
 from django.urls.resolvers import RoutePattern, URLResolver
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerSplitView
 
 from urbanlens.dashboard.external_api import (
     urls_assistant,
@@ -265,7 +265,8 @@ _CORE_URLPATTERNS: list[URLPattern] = [
     # The machine-readable contract (and a browsable view of it) for exactly this surface - internal endpoints
     # are excluded by schema.preprocess_external_api_only.
     path("schema/", SpectacularAPIView.as_view(authentication_classes=[], permission_classes=[]), name="schema"),
-    path("docs/", SpectacularSwaggerView.as_view(authentication_classes=[], permission_classes=[], url_name="external_api:schema"), name="docs"),
+    # The split view serves its start-up script as a file, since script-src refuses inline script.
+    path("docs/", SpectacularSwaggerSplitView.as_view(authentication_classes=[], permission_classes=[], url_name="external_api:schema"), name="docs"),
 ]
 
 # Concatenation, not include(): see the module docstring for why the flat namespace is load-bearing.

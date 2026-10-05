@@ -66,6 +66,8 @@ export const SUBSCRIBER_ROLE = "subscriber";
 /** A friend pair reserved for consent-copy specs (pin shares, DMs, trips), so they never race `social.spec.ts` over primary and secondary. */
 export const SHARER_ROLE = "sharer";
 export const SHAREE_ROLE = "sharee";
+/** Never acts and is never acted on, so primary has nothing in common with it while specs relate primary to secondary. */
+export const STRANGER_ROLE = "stranger";
 /** Holds the courtyard HRSH pin, so the location suite never gives primary and secondary pins in common. */
 export const NEIGHBOUR_ROLE = "neighbour";
 /** The `SiteFeature` a subscriber holds and every other role must not. */

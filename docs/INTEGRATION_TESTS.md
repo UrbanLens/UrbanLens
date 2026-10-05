@@ -526,7 +526,7 @@ verification email, and nothing in a headless run can click the link. So the
 accounts are provisioned by a management command instead.
 
 `provision_integration_env` creates or refreshes one account per role
-(`primary` and `secondary` by default) and puts each in the state a headless run
+(`primary`, `secondary` and `stranger` by default) and puts each in the state a headless run
 needs:
 
 - active, with a verified email record, so sign-in is not refused;
@@ -591,11 +591,19 @@ test, so anything that relies on one being in place races it. The `sharer` and
 fixtures, and call `ensureFriends()` (`lib/friendship.ts`), which makes them
 friends idempotently and leaves the friendship in place.
 
+### The `stranger` account
+
+Specs relate `primary` to `secondary` while others run: `social.spec.ts` befriends them, and
+`cross-user-isolation.spec.ts` pins `primary` five metres from `secondary`'s pin, which gives them a place in
+common and makes each profile visible to the other under the default `anything_in_common` setting. A spec
+whose premise is that two accounts share nothing gates with `ifStrangerAccount()` and uses `strangerApi`.
+Nothing may act as `stranger` beyond reading who it is.
+
 The full set of roles the default and opt-in projects use:
 
 ```bash
 python src/urbanlens/manage.py provision_integration_env \
-    --roles primary,secondary,subscriber,sharer,sharee \
+    --roles primary,secondary,stranger,subscriber,sharer,sharee \
     --subscriber-roles subscriber --external-apis --out /tmp/e2e.json
 ```
 

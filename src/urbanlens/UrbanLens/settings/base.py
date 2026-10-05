@@ -98,6 +98,8 @@ INSTALLED_APPS = [
     "oauth2_provider",
     # OpenAPI schema for the external API surface only.
     "drf_spectacular",
+    # Swagger UI served from this site, where script-src admits it.
+    "drf_spectacular_sidecar",
 ]
 
 # Prometheus counters, only on processes that serve /metrics.
@@ -1268,6 +1270,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "Versioned API for external applications and native clients holding a user's API key or OAuth2 token.",
     "VERSION": "v1",
     "SERVE_INCLUDE_SCHEMA": False,
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
     "PREPROCESSING_HOOKS": ["urbanlens.dashboard.external_api.schema.preprocess_external_api_only"],
     # Replaces (not extends) defaults; keep the enum postprocessor.
     "POSTPROCESSING_HOOKS": [

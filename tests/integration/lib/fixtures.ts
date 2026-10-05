@@ -16,6 +16,7 @@ import {
     SHAREE_ROLE,
     SHARER_ROLE,
     storageStatePath,
+    STRANGER_ROLE,
     SUBSCRIBER_ROLE,
     type IntegrationAccount,
 } from "./accounts.js";
@@ -91,6 +92,8 @@ export interface IntegrationFixtures {
     sharerPage: Page;
     /** A signed-in page as `sharee`. Gate with {@link ifSharingPair}. */
     shareePage: Page;
+    /** External-API client as `stranger`, which nothing relates to primary. Gate with {@link ifStrangerAccount}. */
+    strangerApi: ApiClient;
 }
 
 export interface IntegrationWorkerFixtures {
@@ -288,6 +291,10 @@ export const test = base.extend<IntegrationOptions & IntegrationFixtures, Integr
         requireAccount(SHAREE_ROLE);
         await withSignedInPage(browser, SHAREE_ROLE, use);
     },
+
+    strangerApi: async ({ apiRequestContext }, use, testInfo) => {
+        await withAccountApi(apiRequestContext, requireAccount(STRANGER_ROLE), use, testInfo);
+    },
 });
 
 /** Whether this run has an account for `role`. */
@@ -340,6 +347,15 @@ export function ifSharingPair(): typeof test | typeof test.skip {
     return hasAccountFor(SHARER_ROLE) && hasAccountFor(SHAREE_ROLE) ? test : test.skip;
 }
 
+/**
+ * `test`, or a skipped `test`, depending on whether the `stranger` account exists.
+ *
+ * Default provisioning creates it; an older manifest may lack it.
+ */
+export function ifStrangerAccount(): typeof test | typeof test.skip {
+    return hasAccountFor(STRANGER_ROLE) ? test : test.skip;
+}
+
 export { expect };
-export { HEAVY_ROLE, PRIMARY_ROLE, PROPERTY_OWNERS_FEATURE, SECONDARY_ROLE, SHAREE_ROLE, SHARER_ROLE, STAFF_ROLE, SUBSCRIBER_ROLE } from "./accounts.js";
+export { HEAVY_ROLE, PRIMARY_ROLE, PROPERTY_OWNERS_FEATURE, SECONDARY_ROLE, SHAREE_ROLE, SHARER_ROLE, STAFF_ROLE, STRANGER_ROLE, SUBSCRIBER_ROLE } from "./accounts.js";
 export { env } from "./env.js";
