@@ -19,6 +19,7 @@ _SHOWN_ELSEWHERE: frozenset[str] = frozenset(
         "epa_echo",  # plugins.builtin.epa_echo - its own exact-site card and nearby list
         "yelp",  # plugins.builtin.yelp
         "nps_places",  # plugins.builtin.nps
+        "overture",  # plugins.builtin.overture_building_attributes - its nearby places
     },
 )
 
@@ -32,6 +33,8 @@ _TOO_GENERIC: frozenset[str] = frozenset({"osm"})
 #: centre - a block can hold a dozen cameras - and the panel is a summary, not an
 #: inventory.
 _MAX_ROWS = 10
+#: Rows asked for and cached, for the per-category counts: REData's own ceiling.
+_MAX_FEATURES = 200
 
 
 class SiteFeaturesPanelSource(RedataInfoPanelSource):
@@ -63,7 +66,7 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
             return Envelope(count=0, complete=True, results=[], providers=[])
 
         gateway = RedataPointsOfInterestGateway()
-        return gateway.near_point("/api/v1/points-of-interest/lookup/", latitude, longitude, provider=wanted)
+        return gateway.near_point("/api/v1/points-of-interest/lookup/", latitude, longitude, provider=wanted, limit=_MAX_FEATURES)
 
     def has_content(self, data: dict | None) -> bool:
         """A row with neither a name nor a category renders nothing worth a tab."""

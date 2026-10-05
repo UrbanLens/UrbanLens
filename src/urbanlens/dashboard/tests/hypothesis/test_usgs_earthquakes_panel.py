@@ -91,7 +91,7 @@ class UsgsEarthquakePanelSourceFetchTests(TestCase):
         self.assertEqual(len(cached.data["events"]), 1)
         self.assertEqual(cached.data["events"][0]["event_type"], "earthquake")
         mock_gateway_cls.return_value.get_hazard_events.assert_called_once_with(
-            40.5, -74.5, radius_meters=100_000, min_magnitude=3.0, years=10, limit=10
+            40.5, -74.5, radius_meters=100_000, providers=["usgs_earthquakes"], min_magnitude=3.0, years=10, limit=10
         )
 
     def test_fetch_caches_an_explicit_empty_result(self) -> None:

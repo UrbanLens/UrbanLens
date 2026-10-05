@@ -9,8 +9,6 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import L
 _INCIDENTS_PATH = "/api/v1/incidents/"
 
 #: REData's closed ``category`` vocabulary, mapped to display labels.
-#: ``traffic`` is a road collision rather than a crime, and only some feeds
-#: publish any - filter it out before comparing counts across places.
 INCIDENT_CATEGORY_LABELS: dict[str, str] = {
     "theft": "Theft",
     "robbery": "Robbery",
@@ -25,8 +23,18 @@ INCIDENT_CATEGORY_LABELS: dict[str, str] = {
     "fraud": "Fraud",
     "disorder": "Disorder",
     "traffic": "Traffic collision",
+    "fire": "Fire response",
+    "medical": "Medical response",
     "other": "Other",
 }
+
+#: The categories that are crime. Listed rather than derived by exclusion, so a category REData adds later (another
+#: emergency-service feed, say) is not counted as crime before anyone has looked at it. ``traffic`` is a road
+#: collision, ``fire`` and ``medical`` are fire and EMS responses, and only some feeds publish any of them, so counting
+#: them would compare publishing scope rather than safety.
+CRIME_INCIDENT_CATEGORIES: frozenset[str] = frozenset(
+    {"theft", "robbery", "burglary", "vehicle", "assault", "homicide", "sex_offense", "weapons", "narcotics", "vandalism", "fraud", "disorder", "other"},
+)
 
 
 class RedataIncidentsGateway(RedataLocationContextGateway):

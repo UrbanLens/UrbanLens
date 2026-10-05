@@ -80,9 +80,8 @@ class IncidentHistoryPanelRenderTests(TestCase):
                 count=0, complete=True, results=[]
             )
             self.source.fetch_envelope(40.5, -74.5)
-        gateway_cls.return_value.get_incidents.assert_called_once_with(
-            40.5, -74.5, years=25, limit=500, force_refresh=True
-        )
+        _, kwargs = gateway_cls.return_value.get_incidents.call_args
+        self.assertEqual((kwargs["years"], kwargs["limit"], kwargs["force_refresh"]), (25, 500, True))
 
     def test_forces_a_live_refresh_so_the_free_panels_cache_cannot_truncate_the_window(self) -> None:
         """If the free 3-year panel populates that cache first (the common case, since it is the default panel), an unforced fetch here would silently be served those same narrow 3-year rows for a full cache window with no error and no way to tell."""

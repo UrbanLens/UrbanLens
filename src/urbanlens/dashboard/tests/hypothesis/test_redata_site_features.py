@@ -77,6 +77,20 @@ class ProviderDiscoveryTests(TestCase):
 
         self.assertEqual(near.call_args.kwargs["provider"], ["fcc_asr"])
 
+    def test_overture_places_are_left_to_the_building_panel(self) -> None:
+        """The Building Characteristics panel lists Overture's nearby places, and REData's Overture lookup can run to
+        a 90 s timeout that holds up the whole request."""
+        with (
+            mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["fcc_asr", "overture"]),
+            mock.patch(
+                f"{_GATEWAY}.RedataPointsOfInterestGateway.near_point",
+                return_value=LocationContextEnvelope(count=0, complete=True),
+            ) as near,
+        ):
+            self.source.fetch_envelope(41.9, -87.6)
+
+        self.assertEqual(near.call_args.kwargs["provider"], ["fcc_asr"])
+
     def test_a_new_redata_provider_is_asked_without_a_code_change(self) -> None:
         """The property the capability lookup exists for."""
         with (
