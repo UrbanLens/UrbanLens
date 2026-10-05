@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from urbanlens_ai.config import get_config
 from urbanlens_ai.policy import PolicyError, validate_classify_request, validate_request
-from urbanlens_ai.providers import ProviderError, build_adapter
+from urbanlens_ai.providers import ProviderError, ProviderInputRefusedError, build_adapter
 from urbanlens_ai.schema import ClassifyRequest, InferenceRequest
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -32,6 +32,10 @@ get_config()
 MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 StartResponse = Callable[[str, list[tuple[str, str]]], object]
+
+#: The provider answered and refused the input (``ProviderInputRefusedError``): unlike a 502, asking again will not
+#: help, and the provider is not failing.
+REFUSED_STATUS = "422 Unprocessable Content"
 
 
 def _json_response(start_response: StartResponse, status: str, payload: dict[str, Any]) -> Iterable[bytes]:
@@ -81,6 +85,9 @@ def _handle_classify(environ: dict[str, Any], start_response: StartResponse) -> 
     try:
         adapter = build_adapter(request.provider, get_config())
         response = adapter.classify(request)
+    except ProviderInputRefusedError as exc:
+        logger.info("request=%s provider=%s model=%s classify refused the input after %.2fs: %s", request_id, request.provider, request.model, time.monotonic() - started, exc)
+        return _json_response(start_response, REFUSED_STATUS, {"error": "provider refused the input"})
     except ProviderError as exc:
         logger.warning("request=%s provider=%s model=%s classify failed after %.2fs: %s", request_id, request.provider, request.model, time.monotonic() - started, exc)
         return _json_response(start_response, "502 Bad Gateway", {"error": "provider call failed"})
@@ -110,6 +117,9 @@ def _handle_messages(environ: dict[str, Any], start_response: StartResponse) -> 
     try:
         adapter = build_adapter(request.provider, get_config())
         response = adapter.send(request)
+    except ProviderInputRefusedError as exc:
+        logger.info("request=%s provider=%s model=%s refused the input after %.2fs: %s", request_id, request.provider, request.model, time.monotonic() - started, exc)
+        return _json_response(start_response, REFUSED_STATUS, {"error": "provider refused the input"})
     except ProviderError as exc:
         logger.warning(
             "request=%s provider=%s model=%s failed after %.2fs: %s",

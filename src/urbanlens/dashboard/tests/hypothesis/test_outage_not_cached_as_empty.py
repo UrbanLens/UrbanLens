@@ -19,7 +19,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
-class SearxngImageOutageTests(TestCase):
+class SearxngImageOutageTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # absorbs the bootstrap site-admin promotion
@@ -74,7 +74,7 @@ class SearxngImageOutageTests(TestCase):
         self.assertEqual(self._cached(), 1)
 
 
-class SiteConditionsOutageTests(TestCase):
+class SiteConditionsOutageTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)
@@ -185,7 +185,7 @@ class RedataPartialProviderOutageTests(TestCase):
                 )
 
 
-class HistoricalMapMediaOutageTests(TestCase):
+class HistoricalMapMediaOutageTests(RedataConfiguredMixin, TestCase):
     _LOOKUP = (
         "urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway."
         "RedataHistoricalMapsGateway.get_maps_covering"
@@ -403,7 +403,7 @@ class ParcelBuildingsOutageTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(self._rows() + self._rows("redata_building_attributes"), 0)
 
 
-class MediaArchiveOutageTests(TestCase):
+class MediaArchiveOutageTests(RedataConfiguredMixin, TestCase):
     """Smithsonian, LOC, Internet Archive and the rest share ``MediaProvider.get_media``, for base and audience rows."""
 
     _SEARCH = (

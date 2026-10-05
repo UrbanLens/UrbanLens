@@ -21,6 +21,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _MODULE = "urbanlens.dashboard.services.map.basemap_catalogue"
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
@@ -70,7 +71,7 @@ def _embedded(html: str) -> list[dict[str, object]]:
     return json.loads(match.group(1))
 
 
-class BasemapCatalogueEmbedTests(TestCase):
+class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -170,7 +171,7 @@ class BasemapCatalogueEmbedTests(TestCase):
         self.assertEqual(list_sources.call_count, 1, "the render must have come from the cache the view filled")
 
 
-class TheCatalogueIsFetchedOncePerColdWindowTests(TestCase):
+class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCase):
     """The catalogue is cached for a day with no jitter, so it goes cold at one moment for
     everybody. Every authenticated page load's `registerRedataLayers()` XHR misses in the ~1.5s
     that refill takes (P131), and each miss holds a request thread for the whole of it: production

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from urbanlens_ai.providers.base import ProviderAdapter, ProviderError
+from urbanlens_ai.providers.base import ProviderAdapter, ProviderError, ProviderInputRefusedError
 from urbanlens_ai.schema import Provider
 
 if TYPE_CHECKING:
     from urbanlens_ai.config import InferenceConfig
 
-__all__ = ["ProviderAdapter", "ProviderError", "build_adapter"]
+__all__ = ["ProviderAdapter", "ProviderError", "ProviderInputRefusedError", "build_adapter"]
 
 
 def build_adapter(provider: Provider, config: InferenceConfig) -> ProviderAdapter:

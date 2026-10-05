@@ -99,8 +99,8 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
         max_tokens: Response budget.
 
     Returns:
-        The model's raw text answer, or None when the call failed (logged)."""
-    from urbanlens.dashboard.services.ai.inference_client import ImagePart, InferenceError, InferenceRequest, Message, TextPart, get_inference_client
+        The model's raw text answer; ``""`` when the provider refused the image; None when the call failed (logged)."""
+    from urbanlens.dashboard.services.ai.inference_client import ImagePart, InferenceError, InferenceInputRefusedError, InferenceRequest, Message, TextPart, get_inference_client
 
     provider, model = target
     image = ImagePart(media_type="image/jpeg", data=base64.b64encode(image_bytes).decode("ascii"))
@@ -115,6 +115,10 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
     started = time.monotonic()
     try:
         response = get_inference_client().send(request)
+    except InferenceInputRefusedError as exc:
+        slot.success = True
+        logger.info("AI vision call refused the image (provider=%s, model=%s): %s", provider, model, exc)
+        return ""
     except InferenceError as exc:
         slot.status_code = failure_status(exc)
         logger.exception("AI vision call failed (provider=%s, model=%s)", provider, model)
@@ -132,7 +136,7 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
     return response.text
 
 
-def describe_photo_keywords(image_bytes: bytes) -> list[str]:
+def describe_photo_keywords(image_bytes: bytes) -> list[str] | None:
     """Generate descriptive keywords for a (downscaled) photo via the site's AI provider.
     Caller is responsible for permission checks (site/profile AI toggles and the AI photo processing subscription feature); this function only handles the provider call, rate limiting, and cost logging.
 
@@ -140,7 +144,8 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
         image_bytes: JPEG bytes, already downscaled (never the full upload).
 
     Returns:
-        Raw keyword strings (possibly empty on failure - errors are logged)."""
+        Raw keyword strings, empty when the image is empty or the provider refused it; None when no answer came
+        (refused before sending, or the call failed), so nothing is known about the photo."""
     try:
         require_content(SERVICE_AI_PHOTO_KEYWORDS, "image", image_bytes)
     except ImpossibleInputError:
@@ -150,11 +155,11 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
         with api_call_slot(SERVICE_AI_PHOTO_KEYWORDS, endpoint=f"{target[0]}:{target[1]}") as slot:
             answer = _describe(image_bytes, _KEYWORD_PROMPT, target=target, slot=slot, max_tokens=_KEYWORD_MAX_TOKENS)
     except RequestCancelledError:
-        return []
-    return [] if answer is None else _parse_keyword_text(answer)
+        return None
+    return None if answer is None else _parse_keyword_text(answer)
 
 
-def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
+def classify_photo(image_bytes: bytes) -> list[tuple[str, float]] | None:
     """Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
     Unlike :func:`describe_photo_keywords` this is not a chat completion - no prompt, no tokens - so it takes the inference service's separate classify call.
 
@@ -162,8 +167,9 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
         image_bytes: JPEG bytes, already downscaled.
 
     Returns:
-        (label, confidence) pairs, highest confidence first; empty on failure."""
-    from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, get_inference_client
+        (label, confidence) pairs, highest confidence first, empty when the image is empty or the classifier refused
+        it (one under 4x4 pixels); None when no answer came (refused before sending, or the call failed)."""
+    from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, InferenceInputRefusedError, get_inference_client
 
     try:
         require_content(SERVICE_PHOTO_CLASSIFIER, "image", image_bytes)
@@ -180,11 +186,16 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
             slot.model = _CF_CLASSIFIER_MODEL
             try:
                 response = get_inference_client().classify(request)
+            except InferenceInputRefusedError as exc:
+                # The classifier answered; this image is one it cannot take, so it has no labels.
+                slot.success = True
+                logger.info("Photo classification refused the image: %s", exc)
+                return []
             except InferenceError as exc:
                 slot.status_code = failure_status(exc)
                 logger.exception("Photo classification failed")
-                return []
+                return None
             slot.success = True
     except RequestCancelledError:
-        return []
+        return None
     return [(label.label, label.score) for label in response.labels]

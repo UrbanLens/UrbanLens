@@ -28,6 +28,7 @@ from urbanlens.dashboard.services.ai.inference_client import (
     ClassificationLabel,
     ClassifyResponse,
     InferenceError,
+    InferenceInputRefusedError,
     InferenceResponse,
     TextBlock,
     ToolUseBlock,
@@ -153,6 +154,17 @@ class GatewayCallTests(_LoggingCase):
         self.assertTrue(row.model)
         self.assertIsNone(row.input_tokens)
         self.assertIsNone(row.cost_estimate)
+
+    def test_a_provider_refusing_the_input_is_an_answered_call(self) -> None:
+        with mock.patch(CLIENT_PATH, return_value=_client(InferenceInputRefusedError("refused"))):
+            gateway = get_gateway("refused_input_feature")
+            assert gateway is not None
+            self.assertIsNone(gateway.send_prompt(MARKER))
+
+        row = self.one_row("refused_input_feature")
+        self.assertTrue(row.success)
+        self.assertTrue(row.model)
+        self.assertIsNone(row.status_code)
 
     def test_only_a_server_failure_records_a_status(self) -> None:
         """A 401 from ai-inference is our credential refused; recorded, provider_health would read it as the provider saying no."""
@@ -450,6 +462,16 @@ class VisionTests(_LoggingCase):
         self.assertFalse(row.success)
         self.assertEqual(row.model, vision._CF_VISION_MODEL)
         self.assertEqual(row.status_code, 502)
+
+    def test_a_classifier_refusing_the_image_keeps_the_model(self) -> None:
+        client = _client()
+        client.classify.side_effect = InferenceInputRefusedError("image too small")
+        with mock.patch(CLIENT_PATH, return_value=client):
+            self.assertEqual(vision.classify_photo(MARKER.encode()), [])
+
+        row = self.one_row(vision.SERVICE_PHOTO_CLASSIFIER)
+        self.assertTrue(row.success)
+        self.assertEqual(row.model, vision._CF_CLASSIFIER_MODEL)
 
     def test_photo_classifier(self) -> None:
         with mock.patch(CLIENT_PATH, return_value=_client()):

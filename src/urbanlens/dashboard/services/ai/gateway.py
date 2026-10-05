@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import tiktoken
 
 from urbanlens.dashboard.services.ai.call_log import AiCall, ai_endpoint, failure_status, recorded_ai_call
-from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceRequest, Message, ToolSpec
+from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceInputRefusedError, InferenceRequest, Message, ToolSpec
 from urbanlens.dashboard.services.ai.message import MessageQueue
 from urbanlens.dashboard.services.ai.meta import (
     FORMATTING,
@@ -405,6 +405,8 @@ class LLMGateway(ABC):
             try:
                 response = self._inference_client.send(request)
             except InferenceError as exc:
+                # A provider that answers and refuses the input is answering, not failing (see vision.py).
+                call.success = isinstance(exc, InferenceInputRefusedError)
                 call.status_code = failure_status(exc)
                 logger.exception("Inference call failed for provider %s model %s", self.PROVIDER, self.model)
                 return None

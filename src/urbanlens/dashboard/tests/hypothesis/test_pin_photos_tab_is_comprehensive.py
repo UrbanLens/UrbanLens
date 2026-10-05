@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.services.media.remote_copies import url_digest
 from urbanlens.dashboard.services.photos.pin_photos import MAX_PAGE_SIZE, PIN_MEDIA_GALLERY_SOURCES
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _PNG_BYTES = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00"
@@ -46,7 +47,7 @@ def _wikimedia_item(n: int, **overrides) -> dict:
     return item
 
 
-class PinPhotosTabTestCase(TestCase):
+class PinPhotosTabTestCase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)

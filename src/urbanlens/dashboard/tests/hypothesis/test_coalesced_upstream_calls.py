@@ -15,6 +15,7 @@ import pytest
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 from urbanlens.dashboard.services.core.coalesce import coalesced
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 class CoalescedTests(SimpleTestCase):
@@ -114,7 +115,7 @@ def _ok(body: object) -> mock.Mock:
     return response
 
 
-class SiteLevelAnswersTests(SimpleTestCase):
+class SiteLevelAnswersTests(RedataConfiguredMixin, SimpleTestCase):
     """Answers that describe the area, not the point, are asked once per area."""
 
     def test_the_capability_index_is_read_once_for_every_domain(self) -> None:

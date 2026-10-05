@@ -13,6 +13,10 @@ class ProviderError(RuntimeError):
     """A provider call failed: network error, API error, or an unparseable response."""
 
 
+class ProviderInputRefusedError(ProviderError):
+    """The provider answered, refusing this input as one it cannot process; the same input gets the same answer."""
+
+
 class ProviderAdapter(ABC):
     """Translates a normalized :class:`InferenceRequest` to/from one provider's SDK."""
 

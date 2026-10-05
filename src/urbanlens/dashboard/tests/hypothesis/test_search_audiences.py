@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.apis.locations.redata_search_gateway import Re
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.photos.pin_photos import external_photos_for_pin
 from urbanlens.dashboard.services.pins.external_data import get_panel_source, run_panel_fetch
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -135,7 +136,7 @@ class Upstream:
         ]
 
 
-class AudienceTestCase(TestCase):
+class AudienceTestCase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         baker.make(User)  # the first user is promoted to site admin
@@ -375,7 +376,7 @@ class SharedNamesAreNotCustomTests(AudienceTestCase):
         self.assertEqual(LocationCache.objects.filter(location=location).exclude(audience="").count(), 0)
 
 
-class SiteAdoptionTests(TestCase):
+class SiteAdoptionTests(RedataConfiguredMixin, TestCase):
     """A building nested under a site takes the site's shared answer, never one cached for someone's own names."""
 
     def test_a_building_copies_only_the_sites_shared_row(self) -> None:

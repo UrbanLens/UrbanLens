@@ -33,11 +33,12 @@ from django.urls import resolve, reverse
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.security import throttle
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _CACHE_KEY = "ul_loopnet_photo_abc_1"
 
 
-class TheProxyCachesOnlyWhatItShouldTests(TestCase):
+class TheProxyCachesOnlyWhatItShouldTests(RedataConfiguredMixin, TestCase):
     """The per-entry half."""
 
     def setUp(self) -> None:

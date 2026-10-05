@@ -22,6 +22,7 @@ from urbanlens.dashboard.services.apis import request_upstreams
 from urbanlens.dashboard.services.apis.flickr.public import FlickrAlbum, FlickrPublicGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.security.throttle import Rate
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _MAPS_GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway.RedataHistoricalMapsGateway"
 _MAPS_CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
@@ -117,7 +118,7 @@ class HistoricalMapBrowseTests(_Case):
         self.assertEqual(gateway_cls.return_value.get_maps_covering.call_count, 1)
 
 
-class RedataMediaSlotTests(_Case):
+class RedataMediaSlotTests(RedataConfiguredMixin, _Case):
     upstreams = (request_upstreams.RedataMediaUpstream,)
 
     def setUp(self) -> None:

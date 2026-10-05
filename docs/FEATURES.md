@@ -402,7 +402,8 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
   REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider`, US-only,
   coverage varies by jurisdiction), then OSM/Overpass, Overture Maps, Microsoft Building
-  Footprints, and Google Open Buildings; editable
+  Footprints, and Google Open Buildings (asked only where its v3 release has coverage: Africa,
+  South and Southeast Asia, Latin America; P319); editable
   by the user. Overture comes from REData's own Overture mirror where it holds the point and from
   Overture's public release elsewhere (`services.apis.locations.boundaries.overture.OvertureProvider`)
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations

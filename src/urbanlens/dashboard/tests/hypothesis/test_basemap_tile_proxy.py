@@ -14,6 +14,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
 from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
@@ -23,7 +24,7 @@ _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gat
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
 
 
-class BasemapTileProxyTests(TestCase):
+class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -250,7 +251,7 @@ class BasemapTileProxyTests(TestCase):
                 self.assertEqual(cache.get(basemap_catalogue.CATALOGUE_CACHE_KEY), cached)
 
 
-class BasemapCatalogueTests(TestCase):
+class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()
@@ -408,7 +409,7 @@ _D15_STREET = {
 }
 
 
-class SignedOutCatalogueTests(TestCase):
+class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
     """What a public share page may be handed: the proxy is login-required, so a template offered to
     an anonymous visitor paints 404s where a working layer used to be."""
 
@@ -504,7 +505,7 @@ class TileLogPrivacyTests(SimpleTestCase):
         self.assertEqual(Gateway.endpoint_for_log(url), url)
 
 
-class BasemapTileConcurrencyTests(TestCase):
+class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
     """The bound that keeps a cold map load from occupying every request thread in the process.
 
     A viewport is ~30 tiles requested at once and each uncached one blocks on a slow upstream, so

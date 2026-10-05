@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_RATE_LIMITED,
     PropertyRecordsUnavailableError,
 )
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _CAMPUS = MultiPolygon(Polygon.from_bbox((-73.934, 41.730, -73.923, 41.737)), srid=4326)
 
@@ -96,7 +97,7 @@ class MergeTests(SimpleTestCase):
         self.assertEqual(merge_cris_buildings([footprint], [_BLDG45], _CAMPUS)[0]["name"], "Mortuary")
 
 
-class FallbackRosterTests(TestCase):
+class FallbackRosterTests(RedataConfiguredMixin, TestCase):
     def test_the_fallback_roster_includes_cris_buildings_in_new_york(self) -> None:
         parcel = Place.objects.create(kind=PlaceKind.PARCEL, geometry=_CAMPUS)
         Place.objects.filter(pk=parcel.pk).update(domain_root=parcel.pk)

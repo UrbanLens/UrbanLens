@@ -30,6 +30,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
@@ -46,7 +47,7 @@ def _breaking(operation: str, reason: str = "dragonfly is full"):
     return mock.patch.object(caches[settings.PROXIED_BYTES_CACHE], operation, side_effect=ConnectionError(reason))
 
 
-class _TileCase(TestCase):
+class _TileCase(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         cache.clear()

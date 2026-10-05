@@ -1,6 +1,9 @@
 # Secrets must never enter an image layer.
 .env*
 !.env-sample
+# `.env*` above is anchored to the build context root, so it misses an .env backup
+# left in a subdirectory, and `COPY . /app` reads the filesystem rather than git.
+**/.env.bak*
 
 __pycache__
 *.pyc
