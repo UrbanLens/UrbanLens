@@ -576,6 +576,9 @@ class GalleryPageTests(TestCase):
         panel = MagicMock(spec=GalleryMediaSource)
         panel.required_feature = None
         panel.cache_source = "stub_gallery"
+        panel.key = "stub_gallery"
+        panel.members_media = False
+        panel.pictures.side_effect = lambda items: GalleryMediaSource.pictures(panel, items)
         panel.gate.return_value = True
         panel.media_is_ready.return_value = True
         panel.gallery_items.return_value = items or [

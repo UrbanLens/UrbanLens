@@ -16,6 +16,10 @@ from urbanlens.dashboard.tests.hypothesis.redata_helpers import EveryPanelGateCo
 
 #: The most load-triggered HTMX requests the Private Pin page may fire.
 #:
+#: Raised to **46** on 2026-10-05 for four REData media-gallery loaders (aerial, nearby media, nearby photos,
+#: street level). Like the gallery's other fourteen they queue on the media lane; aerial, nearby media and street
+#: level share one REData read per point (``services.locations.redata_point_data``).
+#:
 #: Since 2026-10-04 the page leaves out panels already known to be empty (P53), so this is measured on a pin where
 #: none is: every gate passes and nothing is cached. Still 42 there.
 #:
@@ -44,7 +48,7 @@ from urbanlens.dashboard.tests.hypothesis.redata_helpers import EveryPanelGateCo
 #: rather than the static count. The static count is still the right thing to
 #: bound, because it is the ceiling a user with everything expanded actually
 #: reaches.
-MAX_LOAD_TRIGGERED_REQUESTS = 42
+MAX_LOAD_TRIGGERED_REQUESTS = 46
 
 #: An element that fetches as soon as the page loads. `load` may carry a filter
 #: (`load[!window.ulSectionCollapsed(...)]`) or sit alongside other triggers, so
