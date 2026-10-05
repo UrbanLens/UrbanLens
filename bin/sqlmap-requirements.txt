@@ -14,6 +14,6 @@
 # fetch https://pypi.org/pypi/sqlmap/<version>/json, and update the version and
 # BOTH hashes below together - a partial update (version without hashes, or
 # vice versa) is exactly the mistake --require-hashes exists to catch.
-sqlmap==1.10.8 \
-    --hash=sha256:e4725e27d4d53b1be4a35c8c4d28aee7033230a245c281995eabd5ba2199eea3 \
-    --hash=sha256:5fb241ca5359a1e5be23bc8f5c2827bb1e60501b147b989c3bf3dac57aec9db6
+sqlmap==1.10.9 \
+    --hash=sha256:6220a8951ccee7bc17e4246407ffbe2c948689a83192f2194c35489c7a255076 \
+    --hash=sha256:75aa0c244c687f82a7b3f4583d0655a352a443f835ec75fc83fe4d5f44a206b8
