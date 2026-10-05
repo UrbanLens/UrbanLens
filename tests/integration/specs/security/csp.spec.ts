@@ -33,11 +33,17 @@ test.describe("the Content-Security-Policy", () => {
     test("refuses eval, and the page guard records it", async ({ page, guard }) => {
         await page.goto(appRoutes.home);
 
-        // From a page task: eval inside DevTools' own evaluation is exempt from the page's policy.
+        // From a timer task: eval inside DevTools' own evaluation is exempt from the page's policy, and an inline
+        // script carrying the probe would be refused before it reached eval.
         await page.evaluate(() => {
-            const script = document.createElement("script");
-            script.textContent = "try { eval('1'); document.documentElement.dataset.cspEval = 'ran'; } catch (e) { document.documentElement.dataset.cspEval = 'refused'; }";
-            setTimeout(() => document.head.appendChild(script), 0);
+            setTimeout(() => {
+                try {
+                    eval("1");
+                    document.documentElement.dataset.cspEval = "ran";
+                } catch {
+                    document.documentElement.dataset.cspEval = "refused";
+                }
+            }, 0);
         });
         await page.waitForFunction(() => document.documentElement.dataset.cspEval !== undefined);
         const threw = await page.evaluate(() => document.documentElement.dataset.cspEval === "refused");

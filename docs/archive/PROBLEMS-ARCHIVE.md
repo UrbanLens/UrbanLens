@@ -23876,3 +23876,17 @@ application was right.
 `ifStrangerAccount()` and reads `stranger` through `strangerApi`. `docs/INTEGRATION_TESTS.md` describes the role.
 
 **Tests.** The api project passes 134 with `stranger` provisioned, the spec included.
+
+## RESOLVED 2026-10-05: The e2e check that eval is refused could no longer reach eval
+
+`id: P314` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, running the security integration project`
+
+**What was wrong.** `security › csp › refuses eval, and the page guard records it` timed out on both attempts. Its
+probe was an inline script that tried `eval`. Since b5dbcb5af (2026-10-02) `script-src` refuses inline script, so
+the probe was blocked before it reached `eval`, and nothing checked that the policy refuses `eval`.
+
+**Fix.** The probe calls `eval` from a `setTimeout` callback. That runs as an ordinary page task, outside DevTools'
+evaluation, which is exempt from the page's policy. Probed in Chromium on dev: `eval` inside `page.evaluate` ran,
+the same call from the timer was refused and raised `enforce script-src eval`.
+
+**Tests.** The spec passes; the policy still refuses `eval`.
