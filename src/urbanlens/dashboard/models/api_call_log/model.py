@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveSmallIntegerField, TextField
+from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveIntegerField, PositiveSmallIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
@@ -43,6 +43,22 @@ class ApiCallLog(abstract.DashboardModel):
         null=True,
         blank=True,
         help_text="The upstream's HTTP status. Null when no response arrived (refused before sending, a network error) or the caller had none to record.",
+    )
+    model = CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text="The AI model that answered, as the provider names it (a Cloudflare '@cf/...' path, an OpenAI or Anthropic id, an Ollama tag). Null for every call that is not an AI call, and for an AI call refused before it was made.",
+    )
+    input_tokens = PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Prompt tokens, as the provider reported them. Null when it reported none (a classifier, some Cloudflare models) or the call is not an AI call.",
+    )
+    output_tokens = PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Completion tokens, as the provider reported them. Null when it reported none or the call is not an AI call.",
     )
     was_rate_limited = BooleanField(
         default=False,

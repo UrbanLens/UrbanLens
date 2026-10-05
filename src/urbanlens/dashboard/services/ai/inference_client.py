@@ -54,7 +54,16 @@ logger = logging.getLogger(__name__)
 
 
 class InferenceError(RuntimeError):
-    """The inference call failed: network error, HTTP error, or an unparseable response."""
+    """The inference call failed: network error, HTTP error, or an unparseable response.
+
+    Args:
+        message: What failed.
+        status_code: The HTTP status ai-inference answered with, when it answered at all.
+    """
+
+    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 #: How much longer than a request's own budget the HTTP hop to ai-inference waits, for the hop itself.
@@ -90,7 +99,7 @@ class RemoteInferenceClient:
             raise InferenceError(f"ai-inference request failed: {exc}") from exc
 
         if response.status_code != 200:
-            raise InferenceError(f"ai-inference returned HTTP {response.status_code}")
+            raise InferenceError(f"ai-inference returned HTTP {response.status_code}", status_code=response.status_code)
 
         try:
             body = response.json()

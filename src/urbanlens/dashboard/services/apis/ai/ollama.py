@@ -11,9 +11,24 @@ import requests
 
 from urbanlens.dashboard.services.ai.vision import _KEYWORD_PROMPT, _parse_keyword_text  # reuse the shared...
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.rate_limiter import annotate_calls
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _reported_tokens(response: requests.Response) -> tuple[int | None, int | None]:
+    """The prompt and completion token counts Ollama reports with a non-streamed answer.
+
+    Args:
+        response: A ``/api/generate`` response.
+
+    Returns:
+        ``(prompt_eval_count, eval_count)``; either is None when the server sent none.
+    """
+    body = response.json()
+    prompt, completion = body.get("prompt_eval_count"), body.get("eval_count")
+    return (prompt if isinstance(prompt, int) else None), (completion if isinstance(completion, int) else None)
 
 
 @dataclass(slots=True, kw_only=True)
@@ -45,7 +60,8 @@ class OllamaGateway(Gateway):
             "stream": False,
         }
         try:
-            response = self.session.post(f"{self.base_url.rstrip('/')}/api/generate", json=payload, timeout=60)
+            with annotate_calls(model=self.model, usage=_reported_tokens):
+                response = self.session.post(f"{self.base_url.rstrip('/')}/api/generate", json=payload, timeout=60)
             response.raise_for_status()
             body = response.json()
         except requests.exceptions.RequestException:

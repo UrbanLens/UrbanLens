@@ -9,6 +9,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.services.ai.call_log import failure_status
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_content
 from urbanlens.dashboard.services.core.rate_limiter import ApiCallSlot, RequestCancelledError, api_call_slot
 
@@ -110,13 +111,16 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
         max_tokens=max_tokens,
     )
 
+    slot.model = model
     started = time.monotonic()
     try:
         response = get_inference_client().send(request)
-    except InferenceError:
+    except InferenceError as exc:
+        slot.status_code = failure_status(exc)
         logger.exception("AI vision call failed (provider=%s, model=%s)", provider, model)
         return None
     elapsed_ms = int((time.monotonic() - started) * 1000)
+    slot.input_tokens, slot.output_tokens = response.usage.input_tokens, response.usage.output_tokens
 
     # Priced from the provider's own token counts where it reports them - more accurate than the
     # flat ServiceDefaults.cost_per_call the HTTP gateway wrapper applies elsewhere, so it is worth
@@ -173,9 +177,11 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
 
     try:
         with api_call_slot(SERVICE_PHOTO_CLASSIFIER, endpoint=f"cloudflare:{_CF_CLASSIFIER_MODEL}") as slot:
+            slot.model = _CF_CLASSIFIER_MODEL
             try:
                 response = get_inference_client().classify(request)
-            except InferenceError:
+            except InferenceError as exc:
+                slot.status_code = failure_status(exc)
                 logger.exception("Photo classification failed")
                 return []
             slot.success = True
