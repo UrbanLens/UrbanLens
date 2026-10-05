@@ -23608,3 +23608,24 @@ refused in 0.1 s and a Smithsonian search still went out.
 
 **Tests.** `test_redata_breaker.py::BusySourceTests::test_a_named_provider_redata_could_not_reach_stops_calls_to_it`
 (both statuses failed before the fix) and `test_a_provider_the_request_did_not_name_trips_nothing`.
+
+## RESOLVED 2026-10-05: The external API kept a panel that had answered "nothing here" pending forever, and fetched it again
+
+`id: P306` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, fetching every panel of one pin and listing those that landed nothing`
+
+**What was wrong.** Four panels judge their payload (`inspects_content`): Historic Registers, Site Features, Photon and
+Open Elevation. A place no register lists fetches `{"resources": []}`, a real answer, and the web page reads it as one.
+`PanelSource.is_ready` means "has something to show", though, and the external API's panel endpoints used it as "has
+answered". So `GET .../panels/redata_historic_registers/` answered `202 {"ready": false}` to every poll, the list said
+`ready: false`, and once the worker's five-minute "landed nothing" suppression lapsed the next poll fetched from REData
+again. A client polling such a panel never got an answer. Reproduced on dev for an e2e-primary pin.
+
+**Fix.** `PanelSource.has_landed` says whether a fetch has answered either way (for a cached source, a fresh row; for
+the rest, `is_ready`). The detail endpoint answers 204 for a panel that has landed with nothing to show, and schedules
+nothing; the list reports `ready` from `panel_readiness(..., require_content=False)`, documented in the schema as "has
+an answer"; and `run_panel_fetch` suppresses only a fetch that landed nothing at all. The web page's tab choice still
+asks for content. On dev, the same request now answers 204 and the list says `ready: true`.
+
+**Tests.** `test_external_api_panels.py::AnAnsweredEmptyPanelTests`: the detail answers 204 and fetches nothing, and the
+list reports it answered (both failed before the fix); a listing is still served, and a panel with no answer yet is
+still fetched.

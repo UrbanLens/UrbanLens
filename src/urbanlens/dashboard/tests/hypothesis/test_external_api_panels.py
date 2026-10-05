@@ -225,3 +225,57 @@ class StubbedSourceDetailTests(_PanelsApiTestCase):
             response = self.client.get(self._detail_url(stub.key), **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"info": {"summary": "hi"}})
+
+
+class AnAnsweredEmptyPanelTests(_PanelsApiTestCase):
+    """A panel whose fetch answered "nothing here" is answered, not pending.
+
+    ``redata_historic_registers`` judges its payload: a place no register lists fetches ``{"resources": []}``, which
+    the web page treats as answered. The API read it as not ready, answered 202 to every poll and fetched from REData
+    again whenever the five-minute suppression lapsed.
+    """
+
+    _KEY = "redata_historic_registers"
+
+    def setUp(self) -> None:
+        super().setUp()
+        from urbanlens.dashboard.models.location.model import Location
+
+        self.pin.location = baker.make(Location, latitude=42.4172, longitude=-73.3851)
+        self.pin.save(update_fields=["location"])
+
+    def _cache(self, resources: list[dict]) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        LocationCache.set(self.pin.location, self._KEY, {"resources": resources})
+
+    def test_the_detail_answers_204_and_fetches_nothing(self) -> None:
+        self._cache([])
+
+        with mock.patch.object(views_panels, "schedule_panel_fetch", return_value=True) as scheduled:
+            response = self.client.get(self._detail_url(self._KEY), **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, 204)
+        scheduled.assert_not_called()
+
+    def test_the_list_reports_it_answered(self) -> None:
+        self._cache([])
+
+        listed = {entry["key"]: entry for entry in self.client.get(self._list_url(), **_bearer(self.raw_key)).json()}
+
+        self.assertTrue(listed[self._KEY]["ready"])
+
+    def test_a_listing_is_still_served(self) -> None:
+        self._cache([{"provider": "nrhp", "name": "Canaan Mill", "latitude": 42.4172, "longitude": -73.3851}])
+
+        response = self.client.get(self._detail_url(self._KEY), **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Canaan Mill", response.content.decode())
+
+    def test_before_any_answer_it_is_still_fetched(self) -> None:
+        with mock.patch.object(views_panels, "schedule_panel_fetch", return_value=True) as scheduled:
+            response = self.client.get(self._detail_url(self._KEY), **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, 202)
+        scheduled.assert_called_once_with(self._KEY, mock.ANY)

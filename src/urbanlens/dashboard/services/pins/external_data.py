@@ -282,6 +282,17 @@ class PanelSource(ABC):
             True when the controller can render directly from the store.
         """
 
+    def has_landed(self, pin: Pin) -> bool:
+        """Whether a fetch has answered for ``pin``, whether or not the answer has anything to show.
+
+        Args:
+            pin: The pin whose panel is being read.
+
+        Returns:
+            True when fetching again would only repeat the answer.
+        """
+        return self.is_ready(pin)
+
     @abstractmethod
     def fetch(self, pin: Pin) -> None:
         """Fetch from the upstream provider(s) and persist to the panel's store.
@@ -505,6 +516,10 @@ class LocationCachePanelSource(PanelSource, ABC):
         if entry is None:
             return False
         return self.has_content(entry.data) if self.inspects_content else True
+
+    def has_landed(self, pin: Pin) -> bool:
+        """True when a fresh answer is stored for ``pin``, including one with nothing to show."""
+        return self.cached_entry(pin) is not None
 
     def cached_data(self, pin: Pin) -> dict | None:
         """This source's fresh cached payload, or None when nothing has landed.
@@ -1560,13 +1575,16 @@ def gate_allows(source: PanelSource, pin: Pin) -> bool:
         return False
 
 
-def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> dict[str, bool]:
+def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None, *, require_content: bool = True) -> dict[str, bool]:
     """Whether each panel source already has data for ``pin``, in one pass.
     Anything that needs the readiness of more than one source should call this instead of looping.
 
     Args:
         pin: The pin whose panels are being checked.
         sources: The sources to report on; defaults to every registered source.
+        require_content: Count a source that judges its payload (``inspects_content``) ready only when the payload has
+            something to show, as :meth:`PanelSource.is_ready` does; False counts any stored answer, as
+            :meth:`PanelSource.has_landed` does.
 
     Returns:
         Mapping of source key to readiness."""
@@ -1586,11 +1604,11 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
         landed = {source.key: all((source.cache_source, scope.audience) in fresh for scope in scopes[source.key]) for source in cache_backed}
         # Panels that opt into a content check need their payload, which the key query above deliberately does not
         # carry; fetched in one extra query covering only those sources.
-        inspecting = [source for source in cache_backed if source.inspects_content and landed[source.key]]
+        inspecting = [source for source in cache_backed if require_content and source.inspects_content and landed[source.key]]
         entries = _entries(pin, inspecting, scopes, since) if inspecting else {}
         for cache_source in cache_backed:
             fresh_enough = landed[cache_source.key]
-            if fresh_enough and cache_source.inspects_content:
+            if fresh_enough and require_content and cache_source.inspects_content:
                 entry = entries.get(cache_source.key)
                 fresh_enough = cache_source.has_content(entry.data if entry is not None else None)
             readiness[cache_source.key] = fresh_enough
@@ -1765,7 +1783,7 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     else:
         logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
-        if not source.is_ready(pin):
+        if not source.has_landed(pin):
             # A source that met an outage returns without writing it down as "nothing here"; left
             # unsuppressed, every poll of every open page would dispatch the same call again.
             logger.info("Panel fetch %s for pin %s landed nothing; suppressing for %ss", source_key, pin.pk, FAILURE_SKIP_TTL_SECONDS)

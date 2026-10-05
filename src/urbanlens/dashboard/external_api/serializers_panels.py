@@ -13,7 +13,7 @@ class PanelListEntrySerializer(serializers.Serializer):
 
     key = serializers.CharField(read_only=True)
     kinds = serializers.ListField(child=serializers.CharField(), read_only=True)
-    ready = serializers.BooleanField(read_only=True)
+    ready = serializers.BooleanField(read_only=True, help_text="True once the panel has an answer: its detail returns 200 with the data, or 204 when there is nothing to show.")
 
 
 class PanelPendingSerializer(serializers.Serializer):

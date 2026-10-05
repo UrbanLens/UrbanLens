@@ -55,7 +55,7 @@ class PinPanelsListView(OwnedPinMixin, ExternalApiView):
             (source for source in panel_sources().values() if source.api_kinds and gate_allows(source, pin) and panel_visible_to(request.user, source)),
             key=lambda source: source.key,
         )
-        readiness = panel_readiness(pin, exposed)
+        readiness = panel_readiness(pin, exposed, require_content=False)
         entries = [{"key": source.key, "kinds": sorted(kind.value for kind in source.api_kinds), "ready": readiness.get(source.key, False)} for source in exposed]
         return Response(PanelListEntrySerializer(entries, many=True).data)
 
@@ -80,8 +80,8 @@ class PinPanelDetailView(OwnedPinMixin, ExternalApiView):
             # must read identically to one that doesn't exist, never a 403.
             return Response({"error": "No such panel."}, status=404)
 
-        if source.is_ready(pin):
-            payload = source.api_payload(pin)
+        if source.has_landed(pin):
+            payload = source.api_payload(pin) if source.is_ready(pin) else None
             if payload is not None:
                 return Response(payload)
             # Landed-but-nothing-there is a real answer for some sources (a media search that found zero
