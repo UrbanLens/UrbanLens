@@ -12,9 +12,9 @@
 
 Jess's requirement (2026-10-05): every external provider is watched for refusing or failing, background work backs
 off automatically, and a person is told, so that a provider that stops answering is never noticed only when someone
-goes looking. REData's half is REData's PL13 (its `provider-health.md` design) and its P120 (the providers that were
-refusing or failing, unnoticed, on 2026-10-05). This is the UrbanLens half, the same design on UrbanLens's own
-machinery.
+goes looking. REData's half is REData's PL13 (its `provider-health.md` design), with a problem record beside it of
+the providers that were refusing or failing, unnoticed, on 2026-10-05. This is the UrbanLens half, the same design on
+UrbanLens's own machinery.
 
 ## What was missing
 
@@ -74,7 +74,7 @@ answering 84 of 2,105 calls (dev calls production REData, which answered 503). `
    which Jess sets per deployment. Until they are set the digest goes to email only, and no SMTP relay is
    configured on the LAN yet either.
 2. **A 404 counts as answered.** That is right for a point lookup, so a provider whose every tile now 404s (dev's
-   `google_open_buildings`, P120) is degraded only against its baseline, never backed off. A per-service override of
+   `google_open_buildings`) is degraded only against its baseline, never backed off. A per-service override of
    the outcome map would fix it if one is wanted.
 3. **No per-host scope.** REData splits a mirror service by host. No UrbanLens service fans out to unrelated hosts
    under one key, so none is split.

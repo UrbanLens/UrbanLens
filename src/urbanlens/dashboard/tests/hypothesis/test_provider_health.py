@@ -1,7 +1,7 @@
 """A provider that stops answering is noticed, backed off, probed and reported, without a person going looking.
 
 On 2026-10-05 the dev deployment's Cloudflare image classifier had failed 33 of its last 40 calls and REData was
-answering 503 to a quarter of the calls made to it, and nothing had said so (REData's P120).
+answering 503 to a quarter of the calls made to it, and nothing had said so.
 """
 
 from __future__ import annotations
