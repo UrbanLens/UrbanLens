@@ -905,6 +905,7 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "redata_soil": "Boundaries & GIS",
     "redata_hydrology": "Boundaries & GIS",
     "redata_underground": "Boundaries & GIS",
+    "redata_buildings": "Boundaries & GIS",
     # Reference & Archives
     "wikipedia": "Reference & Archives",
     "wikimedia": "Reference & Archives",

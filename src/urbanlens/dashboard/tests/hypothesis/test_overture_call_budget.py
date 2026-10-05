@@ -23,8 +23,8 @@ from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 
-#: A bbox the size every caller here actually uses - a single building.
-SMALL_BBOX = (-71.059, 42.36, -71.058, 42.361)
+#: A bbox the size every caller here actually uses - a single building - outside the US, the only place the public release is read.
+SMALL_BBOX = (2.294, 48.858, 2.295, 48.859)
 
 _SERVICE = "overture_maps"
 _GEODATAFRAME = "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._read_files"
