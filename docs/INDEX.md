@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P318` · `T4` · `PL10` · `D26` · `X32` · `I8` · `R31` · `N34`
+**Next free id:** `P318` · `T4` · `PL11` · `D26` · `X32` · `I8` · `R31` · `N34`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -170,6 +170,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | N25 | current | 2026-09-19 | Reply to REData's T8: the catalogue is embedded ahead of every map and serving production tiles; T8 §0 is stale, the contract IS deployed | [`docs/handoffs/redata-maplibre-catalogue-wiring.md`](handoffs/redata-maplibre-catalogue-wiring.md) |
 | PL8 | live | 2026-10-05 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | PL9 | live | 2026-10-05 | Every REData answer UrbanLens can use, surfaced, cached for as long as it is true, and checked against real campuses | [`docs/notes/redata-integration-programme.md`](notes/redata-integration-programme.md) |
+| PL10 | live | 2026-10-05 | A provider refusing or failing UrbanLens is backed off automatically (background work first, live calls keep a trickle), probed, alerted through `notify`, and listed on the api-limits page; the UrbanLens half of REData's PL13 | [`docs/notes/provider-health.md`](notes/provider-health.md) |
 | D17 | accepted | 2026-09-19 | Self-hosted instances keep today's free raster vendors as the basemap fallback; MapLibre's style is built client-side, no new third-party dependency for them | [`docs/designs/basemap-self-hosting-fallback.md`](designs/basemap-self-hosting-fallback.md) |
 | N26 | current | 2026-09-21 | The audit of the basemap and performance range: 30 findings, 23 fixed, five closed with a number or a decision, two refuted and one open, and what measurement took back - `vector_layer_not_served` is live and not dead, the external API's deferred write-source saves no query, and two findings were declined with numbers | [`docs/notes/basemap-and-performance-audit-2026-09-21.md`](notes/basemap-and-performance-audit-2026-09-21.md) |
 | X28 | holds | 2026-09-21 | 1,000 concurrent users demand ~4.0 app cores against a 4-core limit, so p95 goes from 231 ms at 500 users to 6.2 s with nothing failing; the database is at 1.75 of 4 cores and is no longer the wall, and basemap tiles are 56% of requests for 6% of CPU; 12 workers on the same 4 cores peak at 3,180MiB and take search_panel from 554 to 473 ms | [`docs/notes/capacity-ladder-to-1000-users-measured.md`](notes/capacity-ladder-to-1000-users-measured.md) |
