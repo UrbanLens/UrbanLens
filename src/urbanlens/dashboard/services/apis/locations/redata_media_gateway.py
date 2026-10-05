@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import quote
 
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway
@@ -77,6 +78,21 @@ class RedataMediaGateway(RedataLocationContextGateway):
             return [item for item in envelope.results if item.get("is_aerial")]
         return envelope.results
 
+    def download(self, media_uuid: str) -> tuple[bytes, str]:
+        """REData's mirrored copy of one media item's image (``cached_url`` names it once it exists).
+
+        Args:
+            media_uuid: The item's REData ``uuid``.
+
+        Returns:
+            ``(bytes, content type)`` - a downscaled WebP.
+
+        Raises:
+            LocationContextUnavailableError: REData has not mirrored the item (``media_not_cached``, which it never
+                fetches on demand), or the request failed.
+        """
+        return self.get_bytes(f"/api/v1/media/{quote(media_uuid, safe='')}/download/", what="REData media")
+
 
 @dataclass(slots=True, kw_only=True)
 class _RedataStreetViewProvider(StreetViewProvider):
@@ -88,6 +104,9 @@ class _RedataStreetViewProvider(StreetViewProvider):
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield one dated slide per capture *date* from this provider, newest first.
 
+        The three networks share one REData answer for the point (``services.locations.redata_point_data``) rather
+        than each asking for its own.
+
         Args:
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
@@ -98,10 +117,9 @@ class _RedataStreetViewProvider(StreetViewProvider):
         Yields:
             ``StreetViewSlide`` entries, newest capture date first.
         """
-        from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+        from urbanlens.dashboard.services.locations.redata_point_data import street_view_dates
 
-        timeline = RedataStreetViewGateway().get_timeline(latitude, longitude, provider=self._redata_provider)
-        dates = sorted(timeline.get("dates") or [], key=lambda entry: entry.get("captured_on") or "", reverse=True)
+        dates = [entry for entry in street_view_dates(latitude, longitude).dates if entry.get("provider") == self._redata_provider]
         for entry in dates:
             representative = entry.get("representative") or {}
             # download_url (REData's archived copy) needs API auth, so the

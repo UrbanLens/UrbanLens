@@ -220,33 +220,55 @@ class AerialMediaSourceTests(TestCase):
         location = baker.make("dashboard.Location", latitude=40.5, longitude=-74.5)
         self.pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=location)
 
-    def test_fetch_requests_aerial_only_and_caches(self) -> None:
+    def test_fetch_caches_the_aerial_rows_of_the_shared_lookup(self) -> None:
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_media_gateway.RedataMediaGateway"
-        ) as gateway_cls:
-            gateway_cls.return_value.lookup.return_value = [
-                {"url": "https://example.test/a.mp4", "title": "Drone flyover"}
-            ]
+        rows = [
+            {
+                "url": "https://example.test/a",
+                "thumbnail_url": "https://example.test/a.jpg",
+                "title": "Drone flyover",
+                "is_aerial": True,
+            },
+            {
+                "url": "https://example.test/b",
+                "thumbnail_url": "https://example.test/b.jpg",
+                "title": "Street",
+                "is_aerial": False,
+            },
+        ]
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.locations.redata_point_data.media_near", return_value=rows
+            ) as media_near,
+        ):
             self.source.fetch(self.pin)
 
-        gateway_cls.return_value.lookup.assert_called_once_with(40.5, -74.5, is_aerial=True, limit=24)
+        media_near.assert_called_once_with(40.5, -74.5)
         cached = LocationCache.get_fresh(self.pin.location, "redata_aerial")
         assert cached is not None
-        self.assertEqual(len(cached.data["items"]), 1)
+        self.assertEqual([row["title"] for row in cached.data["items"]], ["Drone flyover"])
 
-    def test_media_items_maps_rows_and_skips_urlless(self) -> None:
+    def test_media_items_maps_rows_and_skips_pictureless(self) -> None:
+        """A row's ``url`` is the publisher's page, never a picture: a row with nothing to show has no tile."""
         data = {
             "items": [
-                {"url": "https://example.test/a.jpg", "title": "Roof view", "credit": "Wikimedia Commons"},
-                {"title": "no url"},
+                {
+                    "provider": "wikimedia_commons",
+                    "url": "https://example.test/page",
+                    "thumbnail_url": "https://example.test/a.jpg",
+                    "title": "Roof view",
+                    "credit": "Jane Doe",
+                },
+                {"url": "https://example.test/video-page", "title": "no picture"},
             ]
         }
         items = self.source.media_items(data)
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].caption, "Roof view")
         self.assertEqual(items[0].source, "Wikimedia Commons")
+        self.assertEqual(items[0].author, "Jane Doe")
+        self.assertEqual(items[0].page_url, "https://example.test/page")
 
 
 class RedataCapabilitiesHelperTests(TestCase):

@@ -2228,3 +2228,43 @@ class PinPlaceCidMediaView(RedataMediaProxyMixin, View):
             lambda: RedataCidGateway().download_media(cid, media_id),
             unavailable_errors=(GatewayRequestError, ValueError),
         )
+
+
+class PinRedataMediaView(RedataMediaProxyMixin, View):
+    """GET pin/redata/media/<media_uuid>/ - proxies REData's mirrored copy of one nearby media item.
+
+    Same reasoning and the same "no login required" call as ``PinPlaceCidMediaView``: the key stays server-side, the
+    items are public photographs (Commons, Flickr, NPS galleries), and ``materialize_media_item`` re-downloads this
+    URL without a session. REData never fetches a missing mirror on demand, so its ``media_not_cached`` is a 404.
+    """
+
+    def get(self, request: HttpRequest, media_uuid: UUID) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
+
+        return self.serve_media(
+            request,
+            f"ul_redata_media_{media_uuid}",
+            lambda: RedataMediaGateway().download(str(media_uuid)),
+            unavailable_errors=(LocationContextUnavailableError, ValueError),
+        )
+
+
+class PinRedataStreetViewView(RedataMediaProxyMixin, View):
+    """GET pin/redata/street-view/<capture_uuid>/ - proxies REData's permanent archive of one street-level capture.
+
+    The archive is what still shows a frame after its contributor deleted the sequence upstream. Same "no login
+    required" call as ``PinRedataMediaView``. REData fetches the frame from its network on the first request, so the
+    lightbox asks for it only when opened; gallery tiles show the network's own thumbnail.
+    """
+
+    def get(self, request: HttpRequest, capture_uuid: UUID) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+
+        return self.serve_media(
+            request,
+            f"ul_redata_street_view_{capture_uuid}",
+            lambda: RedataStreetViewGateway().download_capture(str(capture_uuid)),
+            unavailable_errors=(LocationContextUnavailableError, ValueError),
+        )

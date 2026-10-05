@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import quote
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
 
@@ -52,3 +53,20 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
         if until:
             params["until"] = until.isoformat()
         return self.get_json(_STREET_VIEW_TIMELINE_PATH, params)
+
+    def download_capture(self, capture_uuid: str) -> tuple[bytes, str]:
+        """REData's permanent archived copy of one capture, which outlives the contributor deleting it upstream.
+
+        REData fetches the image from the network on the first request for it, so this is charged to the lookup pool.
+
+        Args:
+            capture_uuid: The capture's REData ``uuid``.
+
+        Returns:
+            ``(bytes, content type)``.
+
+        Raises:
+            LocationContextUnavailableError: The capture has no downloadable image (``404``), the network would not
+                supply it (``503``), or the request failed.
+        """
+        return self.get_bytes(f"/api/v1/street-view/{quote(capture_uuid, safe='')}/download/", what="REData street-view capture")

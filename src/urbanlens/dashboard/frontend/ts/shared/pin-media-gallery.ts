@@ -48,6 +48,10 @@ const TAB_LABELS: Record<string, string> = {
     digital_commonwealth: "Digital Commonwealth",
     loopnet: "LoopNet",
     cris_building: "NY Historic Preservation (CRIS)",
+    historical_maps: "Historical Maps",
+    redata_media: "Nearby Media",
+    redata_aerial: "Aerial & Drone",
+    redata_street_level: "Street-level",
 };
 
 function section(): HTMLElement | null {

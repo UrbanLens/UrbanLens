@@ -461,6 +461,16 @@ urlpatterns = [
                                 throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinPlaceCidMediaView.as_view()),
                                 name="pin.place_cid.media",
                             ),
+                            path(
+                                "redata/media/<uuid:media_uuid>/",
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinRedataMediaView.as_view()),
+                                name="pin.redata.media",
+                            ),
+                            path(
+                                "redata/street-view/<uuid:capture_uuid>/",
+                                throttled("redata.media", pin.REDATA_MEDIA_RATE, pin.REDATA_MEDIA_METHODS, account_or_address)(pin.PinRedataStreetViewView.as_view()),
+                                name="pin.redata.street_view",
+                            ),
                             path("<slug:pin_slug>/", pin.PinController.as_view({"get": "view"}), name="pin.details"),
                             path("<slug:pin_slug>/share/", pin_sharing.PinShareDialogView.as_view(), name="pin.share.dialog"),
                             path("<slug:pin_slug>/share/send/", pin_sharing.PinShareCreateView.as_view(), name="pin.share.send"),

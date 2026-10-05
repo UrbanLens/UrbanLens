@@ -1,4 +1,4 @@
-"""REData-backed archive clients: the Media gallery's name-searched archives (Smithsonian Open Access, Library of Congress, Digital Commonwealth, Internet Archive, Chronicling America)."""
+"""REData-backed archive clients: the Media gallery's name-searched archives (Smithsonian Open Access, Library of Congress, Digital Commonwealth, Internet Archive, Chronicling America), and the Wikipedia/Wikidata material placed near a coordinate."""
 
 from __future__ import annotations
 
@@ -12,14 +12,16 @@ from urbanlens.dashboard.services.geo.geo_boundary import USA, state_boundary
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 _SEARCH_PATH = "/api/v1/reference-documents/search/"
+_NEAR_PATH = "/api/v1/reference-documents/"
 
 
 @dataclass(slots=True, kw_only=True)
 class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
-    """REST client for REData's ``/api/v1/reference-documents/search/``: archival material by name. ``lat``/``lng`` are only a region hint; it is not a near-a-coordinate lookup."""
+    """REST client for REData's reference documents: ``search/`` finds archival material by name (``lat``/``lng`` only a region hint), and the bare path finds what is placed near a coordinate."""
 
     service_key: ClassVar[str] = "redata_reference_documents"
 
@@ -62,6 +64,24 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
             params["force_refresh"] = "true"
         envelope = self._get_envelope(_SEARCH_PATH, params)
         return envelope.results
+
+    def near(self, latitude: float, longitude: float, *, radius_meters: float | None = None) -> LocationContextEnvelope:
+        """Encyclopaedic material placed near a coordinate - the sources with a real geosearch index (Wikipedia, Wikidata).
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: Search radius; REData defaults to 1 km and caps at 10 km.
+
+        Returns:
+            The envelope; each row is a ``ReferenceDocumentSerializer`` dict (``provider``, ``kind``, ``title``,
+            ``description``, ``url``, ``thumbnail_url``, ``date_text``, ``creator``, ``license``, ``latitude``,
+            ``longitude``, ``distance_meters``, ``attributes``). Wikidata rows carry their claims in ``attributes``.
+
+        Raises:
+            LocationContextUnavailableError: Every source failed to answer, or the request failed.
+        """
+        return self.near_point(_NEAR_PATH, latitude, longitude, radius_meters=radius_meters)
 
 
 @dataclass(slots=True, kw_only=True)

@@ -33,6 +33,9 @@ PIN_MEDIA_GALLERY_SOURCES: tuple[str, ...] = (
     "loopnet",
     "cris_building",
     "historical_maps",
+    "redata_media",
+    "redata_aerial",
+    "redata_street_level",
 )
 
 #: Upper bound on one page of any Photos-tab grid.

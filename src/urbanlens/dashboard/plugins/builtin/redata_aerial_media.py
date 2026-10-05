@@ -6,13 +6,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.apis.assets.base import MediaItem
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
@@ -29,33 +29,21 @@ class AerialMediaSource(GalleryMediaSource):
         return bool(pin.effective_latitude and pin.effective_longitude) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Look up aerial items near the pin via REData and cache them."""
+        """Cache the aerial rows of the point's shared REData media answer, which the Nearby Media tab also reads."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
+        from urbanlens.dashboard.plugins.builtin.redata_nearby_media import stored_media_row
+        from urbanlens.dashboard.services.locations.redata_point_data import media_near, point_key
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        items = RedataMediaGateway().lookup(lat, lng, is_aerial=True, limit=24)
-        LocationCache.set(pin.location, self.cache_source, {"items": items}, query_key=f"{lat:.5f},{lng:.5f}")
+        items = [stored_media_row(row) for row in media_near(lat, lng) if row.get("is_aerial")]
+        LocationCache.set(pin.location, self.cache_source, {"items": items}, query_key=point_key(lat, lng))
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached REData media rows into gallery tiles."""
-        items = []
-        for row in (data or {}).get("items") or []:
-            page_url = row.get("url") or ""
-            image_url = row.get("cached_url") or row.get("thumbnail_url") or ""
-            if not image_url and not page_url:
-                continue
-            items.append(
-                MediaItem(
-                    url=image_url or page_url,
-                    thumb_url=row.get("thumbnail_url") or row.get("cached_url") or "",
-                    caption=row.get("title") or "Aerial view",
-                    source=row.get("credit") or "Aerial",
-                    page_url=page_url,
-                ),
-            )
-        return items
+        """Turn cached REData media rows into gallery tiles, mirrored images read through this site's proxy."""
+        from urbanlens.dashboard.plugins.builtin.redata_nearby_media import media_item_from_row
+
+        return [item for row in (data or {}).get("items") or [] if isinstance(row, dict) and (item := media_item_from_row(row, fallback_caption="Aerial view")) is not None]
 
 
 class AerialMediaPlugin(UrbanLensPlugin):

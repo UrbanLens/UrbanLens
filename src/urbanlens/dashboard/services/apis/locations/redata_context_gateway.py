@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, NoReturn
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, upstream_retry_after
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -204,6 +204,45 @@ class RedataLocationContextGateway(Gateway):
                 return response.json()
             except ValueError as exc:
                 raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+        return self._raise_for_error_status(response, path)
+
+    def get_bytes(self, path: str, *, what: str) -> tuple[bytes, str]:
+        """GET one of REData's file endpoints (a mirrored image, an archived capture).
+
+        Args:
+            path: Path relative to ``base_url`` (leading slash optional).
+            what: What is being downloaded, for the size-cap refusal.
+
+        Returns:
+            ``(bytes, content type)``.
+
+        Raises:
+            LocationContextUnavailableError: REData holds no such file (a ``404``, marked ``rejected``), the body was
+                over the proxied-media cap, or the request failed.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise LocationContextUnavailableError(REASON_SOURCE_ERROR, "UL_REDATA_API_URL is not configured.")
+        try:
+            response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", headers=self._headers, timeout=_REQUEST_TIMEOUT, stream=True)
+        except UpstreamBusyError as exc:
+            raise LocationContextBusyError(str(exc), retry_after=exc.retry_after) from exc
+        except OSError as exc:
+            # See _request: the exception text would carry the URL.
+            raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {type(exc).__name__}") from exc
+        if response.status_code == 200:
+            try:
+                content = read_capped(response, what=what)
+            except GatewayRequestError as exc:
+                raise LocationContextUnavailableError(REASON_SOURCE_ERROR, str(exc)) from exc
+            return content, response.headers.get("Content-Type", "application/octet-stream")
+        if response.status_code == 404:
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+            reason = body.get("error") if isinstance(body, dict) else None
+            raise LocationContextUnavailableError(str(reason or "not_found"), str(body.get("message", "")) if isinstance(body, dict) else "", rejected=True)
         return self._raise_for_error_status(response, path)
 
     def _get_envelope(self, path: str, params: dict[str, Any]) -> LocationContextEnvelope:

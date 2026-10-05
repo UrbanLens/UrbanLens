@@ -311,6 +311,15 @@
             <div class="media-provider-loader" id="wiki-media-loader-cris_building"
                 hx-get="{% url 'location.wiki.media' location.slug 'cris_building' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-redata_media"
+                hx-get="{% url 'location.wiki.media' location.slug 'redata_media' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-redata_aerial"
+                hx-get="{% url 'location.wiki.media' location.slug 'redata_aerial' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-redata_street_level"
+                hx-get="{% url 'location.wiki.media' location.slug 'redata_street_level' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
 
         </div>
 

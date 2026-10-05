@@ -212,6 +212,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Street-level capture timelines via /street-view/timeline/, spent by the Mapillary, KartaView and Panoramax providers. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_street_view_gateway.",
     ),
+    "redata_locations_context": ServiceDefaults(
+        display_name="REData Location Context",
+        calls_per_minute=60,
+        calls_per_day=None,
+        notes="Cache-only reads of several near-point domains at once via GET /locations/context/, asked before each domain's own endpoint by services.locations.redata_point_data. Charged to REData's 2,000/hour default pool, not the 1,000/hour lookup pool.",
+    ),
     "redata_historical_maps": ServiceDefaults(
         display_name="REData Historical Maps",
         # One call per uncached overlay tile, so a daily cap blanks overlays for the rest of the day.
