@@ -1,6 +1,6 @@
 # Two REData production failures UrbanLens hit on 2026-10-01: some CRIS attachment downloads 500, and nearby Places answers 503
 
-- **Status: OPEN as of 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
+- **Status: OPEN as of 2026-10-05** (raised 2026-10-01). Found by UrbanLens's location integration suite on a v0.8.0 dev environment
   (`v080e2e`); reproduced directly against `https://redata.urbanlens.org` with UrbanLens's API key, no UrbanLens
   code in the path.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
@@ -40,8 +40,13 @@ tell "not available" from "try later".
 ```
 
 Earlier the same day it answered `503 {"error":"rate_limited","message":"Places API (New) request budget is
-exhausted ..."}`. UrbanLens opens its breaker for 60 s on either. Every new pin's naming and wiki enrichment asks
-this endpoint first, so while it holds, pins get worse names.
+exhausted ..."}`. UrbanLens opens its breaker for 60 s on either (on `places_api_unavailable` only since 2026-10-05,
+P302). Every new pin's naming and wiki enrichment asks this endpoint first, so while it holds, pins get worse names.
+
+**Still failing 2026-10-05**, with the same body. Dev's `ApiCallLog` shows nearby search has barely worked for a month:
+of the calls that reached REData, 2 answered on 10-04, 0 on 10-03, and 10 of 1,933 since 09-23. News search fails the
+same way: `503 {"error":"search_unavailable","message":"GDELT request failed with status 429"}`. Neither 503 carries a
+`Retry-After`, because REData sets one only when the upstream sent one, and Google and GDELT do not.
 
 **Asked:** whether REData's Google Places quota or budget is the limit being hit, and whether UrbanLens's key
 should be sharing it. The intent recorded on UrbanLens's side is that production REData is effectively unlimited

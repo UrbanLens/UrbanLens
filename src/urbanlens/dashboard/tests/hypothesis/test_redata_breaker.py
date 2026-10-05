@@ -165,6 +165,22 @@ class BusySourceTests(TestCase):
         with pytest.raises(UpstreamThrottledError):
             _session("redata_street_view").get(timeline, params={"provider": "kartaview"})
 
+    def test_a_provider_refusing_redata_stops_calls_to_that_endpoint(self) -> None:
+        """REData answers so when Google or GDELT throttles it, without a wait; on dev, 53 such calls in two days."""
+        refusals = (
+            (_NEARBY, {"error": "places_api_unavailable", "message": "Places API (New) answered 429 for ..."}),
+            (
+                f"{_BASE}search/news/",
+                {"error": "search_unavailable", "message": "GDELT request failed with status 429"},
+            ),
+        )
+        for url, body in refusals:
+            with self.subTest(body["error"]):
+                _session("redata_places", _response(503, body)).get(url)
+
+                with pytest.raises(UpstreamThrottledError):
+                    _session("redata_places").get(url)
+
     def test_a_503_about_one_place_trips_nothing(self) -> None:
         """``source_rate_limited`` is one county's scraper; the next point may be in another county."""
         _session("redata_api", _response(503, {"error": "source_rate_limited", "message": "county"})).get(_PARCEL)

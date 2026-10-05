@@ -23295,3 +23295,25 @@ that route would cover the rest without downloading a shard.
 **Tests.** `test_google_open_buildings_shards.py`: a missing shard is asked for once, a shard past the cap is not
 read and not asked for again, nor is one that gives no size and runs past it, and a small shard is parsed (the first
 two failed before the fix).
+
+## RESOLVED 2026-10-05: A REData provider refusing REData did not open the breaker, so every call still went out
+
+`id: P302` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading dev's ApiCallLog by service`
+
+**What was wrong.** When Google throttles REData's Places calls, REData answers nearby search with
+`503 places_api_unavailable`. When GDELT throttles it, news search gets `503 search_unavailable`. Neither carries a
+`Retry-After`. `RedataBreaker` opened a source's breaker only on a 503 with a wait or REData's own `rate_limited`
+code, so UrbanLens kept asking: dev made 53 such nearby searches and 36 news searches in two days, each a REData
+call that kept Google's or GDELT's window full. The 2026-10-01 REData handoff said UrbanLens already backed off on
+`places_api_unavailable`; it did not.
+
+**Fix.** `RedataBreaker.SOURCE_BUSY_ERRORS` adds both codes to `rate_limited`. Each names a provider behind the whole
+endpoint, unlike a county's `source_rate_limited`, so the breaker opens that endpoint (and provider) for 60 s and
+leaves the others alone. On dev, the first nearby search answered 503 and opened the breaker; the next was refused
+without a request.
+
+**Tests.** `test_redata_breaker.py::BusySourceTests::test_a_provider_refusing_redata_stops_calls_to_that_endpoint`,
+one subtest per code (both failed before the fix).
+
+**Not fixed here.** REData's Places nearby search has barely answered on dev for a month, which is REData's quota
+question in `handoffs/redata-cris-attachment-500-and-places-429.md`.

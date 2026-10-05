@@ -164,7 +164,7 @@ class RedataBreaker(UpstreamBreaker):
     REData throttles each key in pools: every endpoint but a tile draws on the key's default budget,
     the endpoints that can start a live fetch draw on the smaller lookup budget as well, tiles have a
     pool of their own, and a few writes have theirs. A 429 trips the pool the endpoint draws from.
-    A 503 that names a wait, or REData's ``rate_limited`` error, is one of REData's own sources out of
+    A 503 that names a wait, or one of ``SOURCE_BUSY_ERRORS``, is one of REData's own sources out of
     budget or down: it trips that source only, so a Places outage leaves parcels alone.
     """
 
@@ -193,10 +193,10 @@ class RedataBreaker(UpstreamBreaker):
     #: Tiles replace the default budget rather than stacking on it.
     TILES: ClassVar[re.Pattern[str]] = re.compile(r"^tiles/(?!sources/)")
 
-    #: REData's code for "every provider behind this endpoint is out of outbound budget". Unlike a
-    #: per-county ``source_rate_limited``, it does not depend on the point asked about.
-    SOURCE_BUSY_ERROR: ClassVar[str] = "rate_limited"
-    #: REData's ``rate_limited`` names no wait.
+    #: REData's codes for a provider behind the whole endpoint being out of budget or refusing REData, as Google and
+    #: GDELT do with a 429. Unlike a per-county ``source_rate_limited``, none depends on the point asked about.
+    SOURCE_BUSY_ERRORS: ClassVar[frozenset[str]] = frozenset({"rate_limited", "places_api_unavailable", "search_unavailable"})
+    #: None of them names a wait.
     SOURCE_BUSY_SECONDS: ClassVar[int] = 60
 
     def covers(self, service: str) -> bool:
@@ -281,7 +281,7 @@ class RedataBreaker(UpstreamBreaker):
             body = response.json()
         except ValueError:
             return None
-        if isinstance(body, dict) and body.get("error") == self.SOURCE_BUSY_ERROR:
+        if isinstance(body, dict) and body.get("error") in self.SOURCE_BUSY_ERRORS:
             return f"source:{self.source(url, params)}"
         return None
 
