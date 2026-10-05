@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any
 
 from live_sites import InconclusiveError, LiveRedata, Site, load_sites, select_sites
@@ -85,13 +86,26 @@ def pytest_runtest_makereport(
 ) -> Generator[None, pytest.TestReport, pytest.TestReport]:
     report = yield
     site = _site(item)
-    if site is not None and (report.when == "call" or (report.when == "setup" and report.outcome != "passed")):
+    if site is not None and (report.when == "call" or report.outcome != "passed"):
         inconclusive = call.excinfo is not None and call.excinfo.errisinstance(InconclusiveError)
         _RESULTS.setdefault(site.key, {})[_check_name(item) or item.name] = {
             "outcome": "inconclusive" if inconclusive else report.outcome,
             "detail": str(call.excinfo.value)[:300] if call.excinfo else "",
         }
     return report
+
+
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    """Record each subtest of a check under its own name, which the check's own report does not carry."""
+    context = getattr(report, "context", None)
+    match = re.search(r"\[([^\]]+)\]$", report.nodeid)
+    if context is None or match is None or report.when != "call" or match.group(1) not in _RESULTS:
+        return
+    detail = str(report.longrepr)[-300:] if report.failed else ""
+    if report.skipped and isinstance(report.longrepr, tuple):
+        detail = str(report.longrepr[2])[:300]
+    outcome = "known issue" if report.skipped else report.outcome
+    _RESULTS[match.group(1)][f"pipeline: {getattr(context, 'msg', '')}"] = {"outcome": outcome, "detail": detail}
 
 
 def _site(item: pytest.Item) -> Site | None:

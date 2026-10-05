@@ -113,12 +113,13 @@ def test_one_pin_becomes_the_whole_property(site: Site, bootstrapped: Any, subte
             assert children and len(outlined) / len(children) >= _OUTLINED_SHARE, (
                 f"{site.name}: {len(outlined)} of {len(children)} building pins outlined"
             )
-        with subtests.test("each building pin has a wiki under the campus wiki"):
-            child_wikis = Wiki.objects.filter(parent_wiki=wiki) if wiki else Wiki.objects.none()
-            assert child_wikis.count() >= len(children) * _OUTLINED_SHARE, (
-                f"{site.name}: {child_wikis.count()} child wikis for {len(children)} building pins"
+        with _subcheck(subtests, site, "building_wikis", "each building pin resolves to a wiki under the campus wiki"):
+            # Pins on parts of one building share its wiki, so the count of wikis is not the measure.
+            resolved = [child for child in children if wiki is not None and _building_wiki(child, wiki) is not None]
+            assert len(resolved) >= len(children) * _OUTLINED_SHARE, (
+                f"{site.name}: {len(resolved)} of {len(children)} building pins resolve to a building wiki"
             )
-        with subtests.test("the campus carries its build date"):
+        with _subcheck(subtests, site, "build_date", "the campus carries its build date"):
             assert root.date_built is not None, f"{site.name}: no date_built on the root pin"
 
     for key in _SITE_PANELS:
@@ -129,6 +130,41 @@ def test_one_pin_becomes_the_whole_property(site: Site, bootstrapped: Any, subte
                 location__in=_campus_locations(root), source=panel.cache_source
             ).exclude(data={})
             assert rows.exists(), f"{site.name}: no {key} answer cached"
+
+
+@contextmanager
+def _subcheck(subtests: Any, site: Site, name: str, title: str) -> Iterator[None]:
+    """One subtest, reported as skipped when ``kirkbrides.toml`` names it a known issue and it still fails.
+
+    A known issue that passes fails instead, so a fix cannot hide behind its entry.
+    """
+    issue = site.known_issues.get(f"pipeline.{name}")
+    with subtests.test(title):
+        if issue is None:
+            yield
+            return
+        try:
+            yield
+        except AssertionError:
+            pytest.skip(f"{site.key} pipeline.{name}: known issue, {issue}")
+        else:
+            pytest.fail(f"{site.key} pipeline.{name} passes now; remove its known_issues entry ({issue})")
+
+
+def _building_wiki(child: Any, campus_wiki: Any) -> Any:
+    """The wiki a building pin's location reads as its own: its location's, its building place's, or the one
+    the building it stands on already has."""
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.wiki.building_wikis import standing_building
+
+    location = child.location
+    own = Wiki.objects.filter(location=location).first() or (
+        Wiki.objects.filter(place=location.place).first() if location.place_id else None
+    )
+    if own is not None:
+        return own
+    standing = standing_building(location, campus_wiki)
+    return standing.wiki if standing is not None else None
 
 
 def _campus_locations(root: Any) -> list[int]:

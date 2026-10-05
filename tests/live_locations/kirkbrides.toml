@@ -386,7 +386,7 @@ status = "standing"
 nrhp = "80002936"
 aliases = ["The Ridges", "Athens State Hospital", "Athens Mental Health Center"]
 tier = "primary"
-known_issues = { build_dates = "REData P111", historic_maps = "REData P112", incidents = "REData P110" }
+known_issues = { build_dates = "REData P111", historic_maps = "REData P112", incidents = "REData P110", web_search = "REData P113", "pipeline.build_date" = "REData P111" }
 # The Ridges, Athens OH (Wikipedia coordinate, on the NRHP district parcel).
 
 [[site]]
