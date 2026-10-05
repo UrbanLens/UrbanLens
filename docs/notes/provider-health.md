@@ -58,10 +58,14 @@ answering 84 of 2,105 calls (dev calls production REData, which answered 503). `
   fetches included.
 - **Alerting**: one digest per evaluation through `notify("provider_health", ...)`. It goes out after 30 minutes
   unhealthy, as a reminder every 24 hours, and as a recovery notice. It is off under `DEBUG` and in tests.
+  - A degraded provider that then backs off is reported again at once. A degraded or probing provider that nothing
+    calls any more is cleared after a day, and reported once as called too rarely to judge, rather than reminded
+    about forever.
   - Routing is `SiteSettings.notify_provider_health_email` and `notify_provider_health_gotify`. Both are on by
     default, because the point is that nobody has to remember to turn it on.
   - The subject names REData when at least 3 of its services are failing, and the outbound network when at least half
-    of 5+ other providers are.
+    of 5+ other providers are. A provider counts as failing when it is backed off or probing as failing, or had at
+    least 10 mostly unanswered calls in the hour. A refusal does not count: a dead network times out.
 - **Visibility**: a Provider health card at the top of Site admin › API Rate Limits. It lists every provider not
   healthy, with why, since when, until when, its last answer and the calls refused today. It says so when the evaluator
   has not run for 30 minutes.
