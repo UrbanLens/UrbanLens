@@ -40,7 +40,7 @@ class _Plan:
 def _plan() -> _Plan:
     plan = _Plan()
     for cid in GooglePlace.objects.filter(cid__gt=FLOAT64_EXACT_LIMIT).values_list("cid", flat=True).iterator():
-        if looks_float_rounded(int(cid)):
+        if cid is not None and looks_float_rounded(int(cid)):
             plan.places_kept += 1
 
     taken = {(profile_id, int(cid)) for profile_id, cid in PinImportFailure.objects.values_list("profile_id", "cid").iterator()}
