@@ -25,7 +25,7 @@ _ON_PROPERTY_REACH_METERS = 1500
 #: City of Poughkeepsie.
 _TOWN_ATLAS_REACH_METERS = 5000
 
-#: REData clamps every confidence into this range (docs/api-reference.md, boundaries).
+#: REData clamps every confidence into this range (../REData/docs/api-reference.md, boundaries).
 _CONFIDENCE_RANGE = (0.01, 0.95)
 
 
