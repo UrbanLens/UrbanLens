@@ -2412,9 +2412,9 @@ both. Not run in a test-runner container (`bin/run_tests.sh`), so whether each i
 `test_write_route_smoke` and `test_websocket_credential_scopes` each failed once in a full run under load
 and pass alone, on both branches.
 
-## P318 — The import wizard sent each Google Maps CID through the browser as a JSON number, zeroing its low digits; fixed, but stored rounded CIDs need `fix_float_rounded_cids`
+## P318 — The import wizard sent each Google Maps CID through the browser as a JSON number, zeroing its low digits; fixed, but stored rounded CIDs in import failures need `fix_float_rounded_cids`
 
-`id: P318` · `status: open` · `updated: 2026-10-05` · REData counterpart: REData `docs/PROBLEMS.md` P116
+`id: P318` · `status: open` · `updated: 2026-10-05` · REData counterpart: REData `docs/PROBLEMS.md` P120 (and P116, the Google refusal it fed)
 
 **What happened.** The import preview put each Takeout pin's CID into its JSON as a number
 (`GoogleMapsGateway._iter_preview_pins`). The wizard's `res.json()` made it a JavaScript `Number`, and
@@ -2424,7 +2424,7 @@ above 2**53 - nearly all of them - lost its low digits. The confirm step trusted
 
 On 2026-07-31 the deferred lookup sent those as bare CIDs, and REData stored 1,945 of them on staging,
 none of which ever resolved; its sweep asked Google about them every night, which spent the
-`google_places` budget and helped get the LAN's address refused by Google (REData P116 has the
+`google_places` budget and helped get the LAN's address refused by Google (REData P120 has the
 counts). `6a10bada7` (2026-07-31) started sending each pin's `maps_url` alongside, and REData derives
 the CID from the URL's feature id, so REData stopped storing new rounded CIDs. The browser round trip
 itself stayed: until this fix, a deferred pin was keyed by the rounded CID while REData answered under
@@ -2445,13 +2445,13 @@ the preview, the browser, the confirm step, the request body and the response
 (`test_cid_validation.py`, `test_cid_float_rounding_import.py`, `test_redata_cid_gateway.py`), and
 `import-wizard.test.ts` checks that a 20-digit CID string reaches the confirm body unchanged.
 
-**Still open.** `python manage.py fix_float_rounded_cids` (dry run unless `--execute`) clears a
-float-shaped CID from `dashboard_google_places` and repairs or deletes one in
-`dashboard_pin_import_failures`. Its dry run on dev on 2026-10-05 found nothing: dev was rebuilt on
-2026-09-06 and none of its 2,678 Google place rows holds a CID. Production was not read. The
-`google_places` count deserves a look before `--execute`: no URL is stored there, and about 1 real
-CID in 370 has the float-rounded shape, while the import path could never store a rounded CID in that
-table (a rounded CID never resolved). A CID REData refuses is recorded with the existing
+**Still open.** `python manage.py fix_float_rounded_cids` (dry run unless `--execute`) repairs a
+float-shaped CID in `dashboard_pin_import_failures` from the failure's own `maps_url`, or deletes the
+failure when nothing recovers it. It only counts float-shaped CIDs in `dashboard_google_places` and
+keeps them: every row there holds coordinates, so its CID resolved, a rounded CID never resolved, and
+a real CID has the shape about once in a few hundred. Its dry run on dev on 2026-10-05 found nothing:
+dev was rebuilt on 2026-09-06 and none of its 2,678 Google place rows holds a CID. Production was not
+read. A CID REData refuses is recorded with the existing
 `LOOKUP_ERROR` reason rather than a new one, so its owner-facing wording ("lookup service was
 unreachable") is imprecise for that case.
 

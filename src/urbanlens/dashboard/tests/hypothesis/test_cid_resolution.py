@@ -233,7 +233,7 @@ class ResolveViaGoogleTests(SimpleTestCase):
 
 
 class ResolveCidsRefusesBeforeAnyLookupTests(SimpleTestCase):
-    """A cid that cannot name a place costs no lookup, from REData or from Google Places (REData P116)."""
+    """A cid that cannot name a place costs no lookup, from REData or from Google Places (REData P120)."""
 
     ROUNDED = 14522379626423718000  # 0xc989db53ce5b1234 after a JavaScript Number.
     TRUE = 0xC989DB53CE5B1234

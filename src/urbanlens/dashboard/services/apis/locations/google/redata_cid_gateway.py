@@ -38,7 +38,7 @@ class CidLookupEntry:
         """This entry as ``resolve-cids`` takes it: the bare cid, or ``{"cid", "url"}`` when the URL is known.
 
         The cid travels as decimal digits, never a JSON number, so no JSON reader on the way can hand
-        it to a float64 (REData P116). REData resolves a place more reliably from its own URL.
+        it to a float64 (REData P120). REData resolves a place more reliably from its own URL.
         """
         cid = str(int(self.cid))
         return {"cid": cid, "url": self.url} if self.url else cid

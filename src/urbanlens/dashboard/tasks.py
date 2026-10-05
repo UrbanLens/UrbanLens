@@ -2989,7 +2989,7 @@ def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[di
     """*deferred_lists* with every pin's cid checked against its own Google Maps URL.
 
     The confirm step already does this; a retry queued before it did can still carry a cid that lost
-    its low digits in the browser (REData P116), which no answer would ever be keyed by. A pin whose
+    its low digits in the browser (REData P120), which no answer would ever be keyed by. A pin whose
     cid is refused outright is dropped, never looked up.
     """
     from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError

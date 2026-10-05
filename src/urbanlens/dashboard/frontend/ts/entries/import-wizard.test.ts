@@ -129,7 +129,7 @@ describe("an import that fails", () => {
 });
 
 describe("a Takeout pin's cid", () => {
-    // Above 2**53: as a JavaScript Number it would come back as 14522379626423718000 (REData P116).
+    // Above 2**53: as a JavaScript Number it would come back as 14522379626423718000 (REData P120).
     const CID = "14522379626423718452";
     const MAPS_URL = "https://www.google.com/maps/place/Willard/data=!4m2!3m1!1s0x89d0a1b2c3d4e5f6:0xc989db53ce5b1234";
     const PREVIEW = { lists: [{ stem: "Saved", pins: [{ name: "Willard", lat: 42.68, lng: -76.86, description: "", cid: CID, maps_url: MAPS_URL }] }], total: 1 };

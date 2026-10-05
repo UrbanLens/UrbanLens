@@ -1,4 +1,8 @@
-"""The ``fix_float_rounded_cids`` cleanup: dry run by default, and only CIDs a float64 visibly rounded."""
+"""The ``fix_float_rounded_cids`` cleanup: dry run by default, and only CIDs a float64 visibly rounded.
+
+A ``GooglePlace`` row with a float-shaped CID is reported but kept: it holds coordinates, so the CID
+resolved, and a real CID has that shape about once in a few hundred.
+"""
 
 from __future__ import annotations
 
@@ -53,18 +57,18 @@ class FixFloatRoundedCidsCommandTests(TestCase):
     def test_a_dry_run_reports_per_table_and_changes_nothing(self) -> None:
         output = self._run()
 
-        self.assertIn("dashboard_google_places: 1 float-shaped cid(s) would be cleared", output)
+        self.assertIn("dashboard_google_places: 1 float-shaped cid(s) kept", output)
         self.assertIn("1 would be repaired from maps_url, 1 would be deleted, 1 kept", output)
         self.rounded_place.refresh_from_db()
         self.assertEqual(int(self.rounded_place.cid), ROUNDED)
         self.assertEqual(PinImportFailure.objects.count(), 4)
 
-    def test_execute_clears_repairs_and_deletes_only_rounded_cids(self) -> None:
+    def test_execute_repairs_and_deletes_only_rounded_failure_cids(self) -> None:
         self._run("--execute")
 
         self.rounded_place.refresh_from_db()
         self.real_place.refresh_from_db()
-        self.assertIsNone(self.rounded_place.cid)
+        self.assertEqual(int(self.rounded_place.cid), ROUNDED)
         self.assertEqual(int(self.real_place.cid), OTHER_TRUE_CID)
         self.assertEqual(
             {(f.pk, int(f.cid)) for f in PinImportFailure.objects.all()},

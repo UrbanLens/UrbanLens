@@ -43,7 +43,7 @@ disagree). Summary:
   call (REData returns `400` above that; UrbanLens's gateway chunks transparently so callers never
   have to think about this). UrbanLens sends every cid as a **string of decimal digits**, never a
   JSON number: a cid is an unsigned 64-bit integer, and a JSON number above 2**53 that passes through
-  a float64 anywhere comes back with its low digits zeroed (REData P116; UrbanLens P318).
+  a float64 anywhere comes back with its low digits zeroed (REData P120; UrbanLens P318).
 - **Response** (`200`):
   ```jsonc
   {

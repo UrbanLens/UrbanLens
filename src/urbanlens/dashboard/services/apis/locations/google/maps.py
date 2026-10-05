@@ -132,7 +132,7 @@ def confirmed_pin_cid(pin: dict[str, Any]) -> int | None:
     """The CID a pin the browser posted back names, checked against the Google Maps URL it came from.
 
     The confirm step's pins are client data. A ``cid`` that crossed the browser as a JSON number has
-    lost its low digits (REData P116); when the pin still carries its source URL, the URL's own CID
+    lost its low digits (REData P120); when the pin still carries its source URL, the URL's own CID
     stands in for it.
 
     A pin that claims no CID - a falsy one included, as a zero-CID feature id used to post - has
@@ -963,7 +963,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # description to save.
                 "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
                 # A string: the browser holds this as JSON, and a JSON number above 2**53 comes back
-                # from a JavaScript Number with its low digits zeroed (REData P116).
+                # from a JavaScript Number with its low digits zeroed (REData P120).
                 "cid": str(cid) if cid else None,
                 # Also just carried through to the confirm step - not displayed -
                 # so a deferred lookup can pass it to REData. See _csv_row_iter.

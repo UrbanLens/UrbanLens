@@ -180,7 +180,7 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
 
 
 class RedataCidGatewayWireRoundTripTests(SimpleTestCase):
-    """Every 64-bit cid crosses the wire to REData and back exactly (REData P116)."""
+    """Every 64-bit cid crosses the wire to REData and back exactly (REData P120)."""
 
     def _gateway(self, session: mock.Mock) -> RedataCidGateway:
         return RedataCidGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
