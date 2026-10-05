@@ -88,3 +88,33 @@ describe("clearProfileKeys", () => {
         expect(await getIdentity("jess2")).toBeNull();
     });
 });
+
+describe("asking for persistent storage", () => {
+    const original = Object.getOwnPropertyDescriptor(navigator, "storage");
+
+    afterEach(() => {
+        if (original) Object.defineProperty(navigator, "storage", original);
+        else Reflect.deleteProperty(navigator, "storage");
+    });
+
+    test("caching an identity does not wait for the visitor to answer the browser's prompt", async () => {
+        // Firefox answers persist() with a permission prompt, and the promise settles only once it is answered;
+        // awaiting it held sign-in on its spinner until the visitor found the prompt.
+        let asked = false;
+        Object.defineProperty(navigator, "storage", {
+            configurable: true,
+            value: {
+                persisted: () => Promise.resolve(false),
+                persist: () => {
+                    asked = true;
+                    return new Promise<boolean>(() => {});
+                },
+            },
+        });
+
+        const outcome = await Promise.race([putIdentity("jess", identity("pub-jess")).then(() => "cached"), Bun.sleep(200).then(() => "waiting on the prompt")]);
+
+        expect(outcome).toBe("cached");
+        expect(asked).toBe(true);
+    });
+});

@@ -33,7 +33,18 @@ function layersFor(): Parameters<typeof window.MapLayers.create>[1] {
     return { root: document.getElementById("shared-pin-map-layers"), onAttribution: window.MapLayers.setAttribution };
 }
 
-function maplibreEngine(gl: typeof import("maplibre-gl")): SharedPinEngine {
+/**
+ * The marker's label: the site's pin popup card, holding the name as text because the sender chose it.
+ * @param name - The shared place's name.
+ */
+export function sharedPinLabel(name: string): HTMLElement {
+    const label = document.createElement("div");
+    label.className = "pin-popup";
+    label.textContent = name;
+    return label;
+}
+
+export function maplibreEngine(gl: typeof import("maplibre-gl")): SharedPinEngine {
     let map: import("maplibre-gl").Map | null = null;
     return {
         createMap(el, view) {
@@ -46,7 +57,7 @@ function maplibreEngine(gl: typeof import("maplibre-gl")): SharedPinEngine {
             if (!map) return;
             new gl.Marker()
                 .setLngLat([point[1], point[0]])
-                .setPopup(new gl.Popup({ offset: 25 }).setText(name))
+                .setPopup(new gl.Popup({ offset: 25, className: "map-popup", focusAfterOpen: false }).setDOMContent(sharedPinLabel(name)))
                 .addTo(map)
                 .togglePopup();
         },
@@ -63,10 +74,8 @@ function leafletEngine(): SharedPinEngine {
         },
         addMarker(point, name) {
             if (!map) return;
-            // A node, not a string: Leaflet renders a string popup as HTML, and the sender chose this name.
-            const label = document.createElement("span");
-            label.textContent = name;
-            L.marker(point).addTo(map).bindPopup(label).openPopup();
+            // A node, not a string: Leaflet renders a string popup as HTML.
+            L.marker(point).addTo(map).bindPopup(sharedPinLabel(name)).openPopup();
         },
     };
 }

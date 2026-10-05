@@ -106,7 +106,7 @@ const REVIEWED_SAFE = new Map<string, string>([
     ["shared/maplibre-markers.ts: html", "MapMarker.bindPopup pass-through"],
     ["shared/maplibre-markers.ts: null", "the popup's initial empty value"],
     ["entries/trip-detail.ts: document.createElement(\"div\")", "a DOM node handed to bindPopup, not a string"],
-    ["shared/shared-pin-map.ts: document.createElement(\"span\")", "a DOM node handed to bindPopup, not a string"],
+    ["shared/shared-pin-map.ts: sharedPinLabel(name)", "a DOM node handed to bindPopup, built with textContent"],
     ["shared/common-pins-map.ts: commonPinPopup(point)", "a DOM node handed to bindPopup, built with textContent"],
     ["shared/trip-calendar.ts: day", "WEEKDAYS constant"],
     ["shared/trip-calendar.ts: isoDay(month.y, month.m, d)", "digits and dashes built from numbers"],
