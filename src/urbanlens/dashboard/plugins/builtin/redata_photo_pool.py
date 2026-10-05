@@ -75,9 +75,9 @@ class NearbyPhotosSource(GalleryMediaSource):
         The parcel's photos are asked for only when the Property Records card has already resolved the parcel, and
         are a bonus: a parcel REData does not hold, or a failure asking, leaves the nearby photos to stand alone.
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
         from urbanlens.dashboard.services.apis.photos.redata_photos_gateway import RedataPhotosGateway
-        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
         from urbanlens.dashboard.services.locations.redata_point_data import point_key
 
         latitude = float(pin.effective_latitude or 0)
@@ -86,12 +86,18 @@ class NearbyPhotosSource(GalleryMediaSource):
         nearby = gateway.lookup_near(latitude, longitude)
         parcel_uuid = _parcel_uuid(pin.location) if pin.location is not None else ""
         on_parcel: list[dict[str, Any]] = []
+        unanswered: list[str] = []
         if parcel_uuid:
             try:
                 on_parcel = gateway.photos_for_parcel(parcel_uuid)
-            except GatewayRequestError as exc:
+            except GatewayRequestError as exc:  # outage-cache-ok: the nearby photos are kept, marked partial, for the hour
                 logger.info("REData parcel photos unavailable for location %s: %s", pin.location_id, exc)
-        LocationCache.set(pin.location, self.cache_source, {"photos": _merged(nearby, on_parcel, parcel_uuid)}, query_key=point_key(latitude, longitude))
+                if is_source_outage(exc):
+                    unanswered.append("parcel_photos")
+        data: dict[str, Any] = {"photos": _merged(nearby, on_parcel, parcel_uuid)}
+        if unanswered:
+            data[UNANSWERED_SOURCES_KEY] = unanswered
+        LocationCache.set(pin.location, self.cache_source, data, query_key=point_key(latitude, longitude))
 
     def for_viewer(self, data: dict, viewer: Profile, location: Location) -> dict:
         """The cached photos ``viewer`` may see, as tiles: their own, or ones shared into a wiki they can reach.
