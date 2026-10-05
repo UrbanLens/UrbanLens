@@ -633,6 +633,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             lines = _without_leading_boms(file_contents)
         record = _CsvRecordBudget(lines)
         reader = csv.DictReader(record)
+        _ = reader.fieldnames  # The header is read here, so it is a record of its own rather than part of the first row.
+        record.used = 0
         for row in reader:
             record.used = 0
             lowered_row = {normalize_header_key(k): v for k, v in row.items() if k is not None}

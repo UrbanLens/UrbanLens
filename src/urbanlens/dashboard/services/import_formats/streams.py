@@ -76,26 +76,28 @@ def iter_lines(pieces: Iterable[str], *, max_line: int | None = None) -> Iterato
         LineTooLongError: A line ran past ``max_line``, raised once it does rather than once it ends.
     """
     held: list[str] = []
-    held_length = 0
+    arriving = 0  # The line still arriving, past any whole line held back in case a "\r" completes it.
     for piece in pieces:
         held.append(piece)
-        held_length += len(piece)
         if not _LINE_BREAK_RE.search(piece):
-            if max_line is not None and held_length > max_line:
+            arriving += len(piece)
+            if max_line is not None and arriving > max_line:
                 raise LineTooLongError(f"a line is longer than {max_line:,} characters")
             continue
         lines = "".join(held).splitlines(keepends=True)
         # The last line may go on in the next piece, as may a "\r" that the next piece's "\n" completes.
         held = [lines.pop()]
-        held_length = len(held[0])
+        arriving = 0 if _LINE_BREAK_RE.match(held[0][-1:]) else len(held[0])
         for line in lines:
-            if max_line is not None and len(line) > max_line + 2:
-                raise LineTooLongError(f"a line is longer than {max_line:,} characters")
-            yield line.splitlines()[0]
-    remainder = "".join(held)
-    if max_line is not None and len(remainder) > max_line:
+            yield _within(line.splitlines()[0], max_line)
+    for text in "".join(held).splitlines():
+        yield _within(text, max_line)
+
+
+def _within(line: str, max_line: int | None) -> str:
+    if max_line is not None and len(line) > max_line:
         raise LineTooLongError(f"a line is longer than {max_line:,} characters")
-    yield from remainder.splitlines()
+    return line
 
 
 def is_valid_text(stream: IO[bytes], encoding: str) -> bool:

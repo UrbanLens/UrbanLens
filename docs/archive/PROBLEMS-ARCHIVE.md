@@ -23546,13 +23546,16 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
     now fails only its own file (`AnOversizedCsvCellFailsOnlyItsFileTests`). A row of very many small cells is bounded below.
 - **A CSV record is bounded, 2026-10-05.** `csv` builds a whole record before anything sees it, a string per cell:
   a 12 MB row of two-letter cells peaked at 263 MB (21.9x), and a 12.4 MB header at 526 MB (42.5x), so a zipped CSV
-  under the upload cap could exhaust `media-worker`. `maps.MAX_CSV_RECORD_CHARS` (1 MiB) bounds one record, header
-  included. `streams.iter_lines(max_line=...)` refuses a line once it passes the bound rather than once it ends, and
-  `maps._CsvRecordBudget` refuses a record quoted across many short lines. The file fails alone, as an oversized cell
+  under the upload cap could exhaust `media-worker`. `maps.MAX_CSV_RECORD_CHARS` (1 MiB) bounds one record; the
+  header is a record of its own. `streams.iter_lines(max_line=...)` refuses a line once it passes the bound rather
+  than once it ends, and `maps._CsvRecordBudget` refuses a record quoted across many short lines. The file fails alone, as an oversized cell
   does. A real row is far shorter: `csv`'s own field limit is 128 KiB, so the bound leaves room for eight cells at
   that limit. `test_import_parse_memory.py::AWideCsvRecordIsRefusedTests` holds each shape under 3x the file (all
   three failed before), and `test_import_streaming_parsers.py::ACsvRecordPastTheBoundFailsOnlyItsFileTests` checks
-  that only that file fails and that records within the bound still read.
+  that only that file fails and that records within the bound still read. A hypothesis property in `LinesTests`
+  holds the bounded split to `str.splitlines`: the same lines, or a refusal exactly when a line is past the bound.
+  It was added after review found the first version let a line one character over through when `\n` ended it, and
+  charged the header to the first row.
 - **History grows with the file, by design.** Location History's visits and routes and GPX's routes
   are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
   16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates
