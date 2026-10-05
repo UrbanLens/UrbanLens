@@ -985,177 +985,6 @@ variadic tuple. A 2026-10-05 pass over the 75 outside the two large kinds found 
 `Trip.objects` as `Any` on 2026-09-29 against the same code the full run typed, so a single-file
 probe proves nothing either way.
 
-## P110 — The app reads Overture from its public S3 copy, although REData serves the same themes from our own instance
-
-`id: P110` · `status: open, decided` · `updated: 2026-10-03`
-
-**Implemented 2026-10-03 on branch `p110-overture-via-redata`, not merged.** Inside the US it asks REData only, and abroad it keeps the public read behind the guards below. It waits on REData: both Overture near-point lookups timed out when probed (P240).
-
-**Jess, 2026-10-02: "We're self hosting Overture. Why are we contacting external services instead of using our self
-hosted instance?"** Because `OvertureMapsGateway` predates REData's Overture stack and was never moved onto it. It
-reads Overture's public GeoParquet on S3, with `stac.overturemaps.org` as its index. Three callers use it:
-`BoundaryProviderChain` (third, after REData and Overpass), and the `overture_building_attributes` plugin's
-`get_building_attributes` and `get_nearby_places`. REData syncs Overture's buildings, places, addresses and
-transportation for every US state and territory monthly (`docker/overture/README.md`). It serves them from
-`/buildings/` (`OvertureBuilding`: `height`, `num_floors`, `building_class`, `subtype`, `sources`) and from the
-`overture` provider of points of interest.
-
-**Fix:** answer all three from REData. The public read stays only for coordinates outside REData's synced area, the US,
-behind the guards it has now. Inside the US the app then makes no call to Overture at all, which is what this problem
-was trying to bound, and the live load check becomes moot there. REData reports a missing Overture database as "no
-results, not an error". So the move needs a test that an empty REData answer inside the US does not fall through to the
-public read.
-
-A recurrence of
-[the problem resolved 2026-08-31](archive/PROBLEMS-ARCHIVE.md), under a condition that resolution
-did not consider. That fix passes `stac=True` to `overturemaps.geodataframe()` so a bbox resolves
-against Overture's small STAC index to the handful of S3 partitions that intersect it, instead of
-opening the whole theme. It works — when the STAC index answers.
-
-**The library falls back to the unbounded path on any STAC failure, silently.**
-`overturemaps/core.py:185-187` catches every exception, prints, and returns `None`; the caller then
-does:
-
-```python
-dataset = ds.dataset(
-    intersecting_files if intersecting_files is not None else path,   # path = the entire theme
-```
-
-So `stac=True` is a request, not a guarantee, and the failure is a `print` rather than a raise.
-
-**The trigger is self-inflicted, which is what makes it a loop.** Enrichment tasks call Overture per
-location; enough of them earn `HTTP Error 429: Too Many Requests` from
-`https://stac.overturemaps.org/2026-08-19.0/collections.parquet`; the 429 disables the narrowing;
-the un-narrowed reads then allocate gigabytes each. The more enrichment is queued, the more certain
-the mitigation is to be off exactly when it is needed.
-
-Observed 2026-09-10 on the development stack, during the load suite's import phase:
-
-```
-Thread 327 (idle): "MainThread"
-    arrow_to_geopandas (geopandas/io/_geoarrow.py:476)
-    from_arrow (geopandas/geodataframe.py:952)
-    _fetch (urbanlens/dashboard/services/apis/locations/boundaries/overture_maps.py:130)
-    get_buildings (.../overture_maps.py:154)
-    generate_location_boundaries (urbanlens/dashboard/services/locations/boundaries.py:328)
-    enrich_wiki_location (urbanlens/dashboard/tasks.py:157)
-```
-
-with the worker's four children at **1,743 MB / 831 MB / 342 MB / 233 MB** against a 512 MiB
-`CELERY_WORKER_MAX_MEMORY_PER_CHILD` and a 3 GiB container limit. That setting is checked *between*
-tasks, so a single task that allocates 1.7 GB is never caught by it — the archived entry called it
-"defense in depth, not a fix", and this is the case it does not defend.
-
-**What it costs, measured.** The load suite's `import_confirmed` phase (X15) with this happening:
-
-| phase | neighbour p95 |
-|---|---|
-| idle | 241 ms |
-| during the import | 11.2 s |
-| **cooldown, after the import finished** | **60.0 s (timeout)** |
-
-Cooldown is worse than the acting phase. 19.2% of the neighbour's requests failed and
-`/health/ready` itself began timing out — *after* the user who ran the import had received their
-504 and gone.
-
-**Not fixed by the outbound guard added the same day.** The reads happen inside `pyarrow`/`S3FileSystem`, not
-through `self.session`. `OvertureMapsGateway` also sets `service_key = None` ("no HTTP endpoint of ours to
-rate-limit"), but that does not opt it out: `ServiceMeta.__new__` replaces any falsy key with one derived from the
-class name, so the class carries `overture_maps` and its unused session is wrapped under that key (found by P93). Nothing in `rate_limiter` sees them: the guard reported zero successful
-outbound calls while this was reading from S3 throughout. That is the documented bypass
-(`dashboard/CLAUDE.md`: "code that bypasses `self.session` — a bare `requests.*` call, an SDK
-client"), and it is worth knowing that the largest consumer of both memory and egress is on it.
-
-**Fixed 2026-09-10.** `OvertureMapsGateway._require_narrowing` resolves the file list itself before
-reading and raises `GatewayRateLimitedError` when the index cannot answer — the error that already
-means "the provider's budget is exhausted, stop early", which scheduled enrichment already catches.
-Falling back to scanning the planet is never what we want, and nothing in the library's API can
-express that to it.
-
-A refusal opens a **short per-process circuit** (120s). Without one, every queued enrichment task
-would keep probing an index that is refusing us, which is the loop that earned the rate limit — the
-breaker turns a self-amplifying failure into a self-limiting one. Per process rather than shared, so
-it still works when Valkey is down, which is exactly when a lookup storm is least welcome; a pool of
-four children probes at most four times a window instead of once per task.
-
-Known cost: one extra read of the (small) index on the healthy path, because the library re-resolves
-it and will not accept a resolved file list. Worth paying to never scan the theme, and it disappears
-if `overturemaps` grows a strict mode or takes the files.
-
-**A second defect, found by shipping the first.** `_get_files_from_stac` calls `urlopen(stac_url)`
-with **no timeout at all**, so a stalled connection parks the calling thread indefinitely — and this
-is reached from the request path (the pin-detail panels), not only from tasks. Adding the
-precondition without a deadline wedged the development app immediately: every worker thread parked,
-`/health/ready` timing out, **0% CPU** — a different signature from P108's spin, and the same
-outcome. The lookup now runs under `call_with_deadline` at 15s with `default=None`, which joins the
-timeout to the refusal path: an index too slow to answer is as useless as one that refuses, and both
-stop the read rather than let it widen.
-
-**Verified end to end on the development stack**, importing 50 pins:
-
-| | before | after |
-|---|---|---|
-| import request | 504 at 120 s (app wedged) | **200 in 12.3 s** |
-| queue drain | 0.20/s | **2.57/s — 154 tasks to zero in 60 s** |
-| worker memory | pinned at 3 GiB, children SIGKILLed | **896 MiB** |
-| `/health/ready` | timing out | 200 in 58 ms |
-
-Of 50 building lookups, **4 probed the index and 46 were refused by the circuit without touching the
-network** — which is the breaker doing exactly its job. No `arrow_to_geopandas`, no `WorkerLostError`.
-Note that `stac.overturemaps.org` is not reachable from this box, so the *narrowed* path was
-exercised only in tests; what was verified live is that being unable to narrow now costs a fast
-refusal instead of a planet scan.
-
-**Fixed 2026-09-17: the reads are no longer invisible to the rate limiter.**
-`OvertureMapsGateway._fetch` (`services/apis/locations/boundaries/overture_maps.py:110-138`) now
-calls `_reserve_call_budget(overture_type)` (`overture_maps.py:140-175`) at the very top — before
-`_require_narrowing`'s STAC lookup and before the pyarrow/geopandas read itself. That method calls
-`_reserve_call(service, endpoint=overture_type)` from `services/core/rate_limiter.py`: the same
-atomically-locked (`transaction.atomic()` + `select_for_update()`) reserve-then-finalize pair
-`_RateLimitedSession._do_request` already uses for every ordinary `self.session` call. It returns
-the pk of a reserved `ApiCallLog` row, or raises `RequestCancelledError` — re-raised as
-`GatewayRateLimitedError` — if the service is disabled or its budget is spent for the window,
-mirroring `_require_narrowing`'s existing refusal contract, which callers already catch.
-`_finalize_call(entry_pk, success=..., response_ms=...)` records the outcome afterward on both the
-success and exception paths, so a real Overture/pyarrow failure is logged rather than swallowed. A
-new `SERVICE_REGISTRY["overture_maps"]` entry (`rate_limiter.py:187-198`) gives it a budget —
-`calls_per_minute=20`, `calls_per_day=500`, `billable=False`, the same generic-fallback numbers
-already used by its open-dataset siblings (e.g. Microsoft Building Footprints) since Overture
-publishes no documented quota either; not independently tuned against a real one.
-
-**Deliberately not the codebase's own documented simpler pattern.** `dashboard/CLAUDE.md`'s
-convention for `self.session`-bypassing code is `service_is_enabled()` → `check_rate_limit()` →
-call → `log_api_call()`, and four AI-service files (`vision.py`, `article_expansion.py`,
-`article_safety.py`, `assistant.py`) use it as-is. `_reserve_call_budget`'s own docstring explains
-why Overture instead uses the stronger atomic `_reserve_call`/`_finalize_call` pair: those four
-callers make one call per task, but Overture is reached from concurrent per-pin enrichment fan-out —
-the exact burst this entry is about — and a plain check-then-log gap would let every concurrent
-caller pass the check before any of them logs, defeating the budget precisely when it matters most.
-
-**Verified by unit tests only — not re-run live.** 19 tests pass across the three relevant files
-(`docker exec ... pytest src/urbanlens/dashboard/tests/hypothesis/test_overture_call_budget.py
-src/urbanlens/dashboard/tests/hypothesis/test_overture_maps_stac_narrowing.py
-src/urbanlens/dashboard/tests/hypothesis/test_overture_stac_is_required.py`, confirmed this session:
-19 passed in 214.84s): 7 of them new (`test_overture_call_budget.py`), covering a call within
-budget reaching Overture and being logged successful, a budget-exceeding call refusing *before* the
-STAC lookup runs at all, a refusal logged rate-limited, a failed read logged unsuccessful rather
-than swallowed, and a disabled service refusing without touching Overture at all. `ruff check` and
-`mypy` both pass clean on the two touched source files (confirmed this session).
-
-**Not verified: whether bounding the request rate actually stops Overture from rate-limiting us.**
-Unlike the 2026-09-10 fix above, this has not been run against the load suite — there is no
-before/after neighbour-p95, queue-drain, or 429-count table for it, the way there is for the circuit
-breaker. Nothing here confirms that 20 calls/minute keeps enrichment under whatever threshold
-actually earns Overture's 429, or that a bulk import's fan-out (P109) now produces bounded
-refusals instead of retriggering the loop this entry is named for — only that the code path exists,
-is reachable, and behaves as designed in isolation. That live measurement is what would close this
-entry; it has not been attempted this session.
-
-Still open in this entry, and the reason it is not archived: **live confirmation, under the same
-load-suite shape as the 2026-09-10 table above (import phase + cooldown), that this budget actually
-prevents the 429-triggered fallback loop** — plus whether 20/minute is the right number for a real
-bulk-import fan-out rather than just a plausible default carried over from an unrelated service.
-
 ## P111 — A gunicorn worker's memory is set by peak concurrent response size, and it never gives it back
 
 `id: P111` · `status: open` · `updated: 2026-09-17` · `corrects the 2026-09-10 "worth fixing: the comment" note below - the comment was already gone`
@@ -2410,36 +2239,44 @@ alone, for example by keeping the dateline out of `title` and `caption`, or have
 Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03, and on
 2026-10-04 REData's search still ended in `chronicling_america could not be reached: ReadTimeout`.
 
-## P240 — Inside the US the Building Characteristics panel and the chain's Overture step get nothing, because REData's Overture near-point lookups time out
+## P240 — Inside the US, Overture data needs REData 0.3.0's index-backed lookups, which production REData does not run yet
 
-`id: P240` · `status: open` · `updated: 2026-10-03` · `follows: P110`
+`id: P240` · `status: open` · `updated: 2026-10-05` · `follows: P110`
 
-P110's fix, held on branch `p110-overture-via-redata` (24f7ca3ce), sends every US Overture question to REData: buildings to `GET /buildings/?provider=overture`, places to
-`GET /points-of-interest/lookup/?provider=overture` (`services.apis.locations.boundaries.overture.OvertureProvider`).
-Probed once each against the deployed REData on 2026-10-03, at the US Capitol: `/buildings/` gave no response within
-60 s, and the places lookup was a 504 from REData's proxy at 90 s. `/capabilities/` answered in 0.3 s, so REData was
-up.
+Since P110 (archived 2026-10-05), every Overture question REData's mirror covers goes to REData: buildings to
+`GET /buildings/?provider=overture&radius_meters=10`, places to
+`GET /points-of-interest/lookup/?provider=overture&radius_meters=150`
+(`services.apis.locations.boundaries.overture.OvertureProvider`). Probed once each against the deployed REData on
+2026-10-03, at the US Capitol: `/buildings/` gave no response within 60 s, and the places lookup was a 504 from
+REData's proxy at 90 s. `/capabilities/` answered in 0.3 s, so REData was up.
 
-The likely cause is on REData's side, from reading its `main` rather than a query plan: both lookups filter with
-`geometry__distance_lte` on SRID 4326 columns, which Django compiles to `ST_DistanceSphere(...) <= r`. That cannot use
-the spatial index, so each request scans the whole US table.
+The cause was on REData's side. Both lookups filtered with `geometry__distance_lte` on SRID 4326 columns, which
+compiles to `ST_DistanceSphere(...) <= r`, cannot use the spatial index, and scans the whole US table. REData
+`release/0.3.0` replaced it with an index-backed `ST_DWithin` prefilter (`7ac19bf6`, `bfb47503`; REData checked the
+plan with `EXPLAIN`). The same release syncs `roof_shape`, `roof_material` and places' `operating_status` into
+`attributes`, where UrbanLens already reads them, takes a place's category from Overture's `taxonomy` now that
+release 2026-09-23 dropped `categories`, and backfills `buildings:read` onto existing keys (its migration `0007`).
 
-What it costs UrbanLens until REData changes it:
+What it costs while the deployed REData predates 0.3.0:
 
 - Every US Building Characteristics fetch waits 30 s (`redata_context_gateway._REQUEST_TIMEOUT`), raises an outage, and
   caches nothing, so the panel stays empty and is retried.
 - The chain's Overture step defers after the same 30 s, which schedules up to `MAX_DEFERRED_RETRIES` reruns of the
   location's boundary generation.
-- Each of those calls probably starts one of the scans on REData's Overture database; not checked on REData's side. `redata_buildings` is limited to
-  20 calls a minute, and the places calls share `redata_points_of_interest`'s 120.
+- Each call probably starts one of the scans on REData's Overture database; not checked on REData's side.
 
-Asked of REData in [`handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md),
-with three smaller gaps: `roof_shape`, `roof_material` and places' `operating_status` are not ingested; the providers
-claim the generous US boxes, which reach border places no shard syncs (Hermosillo, Nassau); and `buildings:read` is
-not backfilled onto existing keys. The development key holds it, since `/buildings/` did not answer 403.
+So UrbanLens 0.9.0 has to reach production after REData 0.3.0, the order PL9 already plans.
 
-The P110 branch should not merge before REData's lookups answer in a few seconds. Re-probe both requests above when
-REData says it has changed them.
+A point inside `is_usa_coordinates` but outside every shard REData syncs (Montreal, Nassau, Hermosillo, the western
+Aleutians) gets "ok" with no rows from REData (its P97). UrbanLens does not ask there: `served_by_redata` also requires
+one of REData's shard boxes, vendored as `boundaries.redata_overture_shards` and held to REData's by
+`OvertureShardTableTests`, so those points read the public release. Still open on REData's side: a shard it has not
+synced yet answers "ok" with no rows too, which UrbanLens takes as final. The handoff is
+[`handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md).
+
+**Not verified:** any answer from REData 0.3.0. On 2026-10-05 this session's probe of REData staging could not
+resolve its host from the agent sandbox. Re-probe both requests above against staging, and against production once
+it runs 0.3.0; close this when both answer in a few seconds with rows at the Capitol.
 
 ## P242 — Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column
 

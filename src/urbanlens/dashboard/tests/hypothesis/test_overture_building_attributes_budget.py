@@ -38,7 +38,7 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         gateway = self._gateway(attributes={"subtype": "commercial"}, places=[{"name": "Cafe"}])
         with (
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.OvertureMapsGateway",
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
                 return_value=gateway,
             ),
             mock.patch(
@@ -53,7 +53,7 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         gateway = self._gateway(attributes={"subtype": "commercial"})
         with (
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.OvertureMapsGateway",
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
                 return_value=gateway,
             ),
             mock.patch(
@@ -70,7 +70,7 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         gateway = self._gateway(attributes={"subtype": "commercial", "height_m": 12.0})
         with (
             mock.patch(
-                "urbanlens.dashboard.services.apis.locations.boundaries.overture_maps.OvertureMapsGateway",
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
                 return_value=gateway,
             ),
             mock.patch(
@@ -84,6 +84,44 @@ class OvertureBuildingAttributesBudgetTests(TestCase):
         assert cached is not None
         self.assertEqual(cached.data["subtype"], "commercial")
         self.assertEqual(cached.data["nearby_places"], [])
+
+    def test_skipped_nearby_places_are_marked_unasked_so_the_row_lapses_within_the_hour(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
+
+        gateway = self._gateway(attributes={"subtype": "commercial"})
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
+                return_value=gateway,
+            ),
+            mock.patch(
+                "urbanlens.dashboard.plugins.builtin.overture_building_attributes.time.monotonic",
+                side_effect=[0.0, _NEARBY_PLACES_BUDGET_SECONDS + 1],
+            ),
+        ):
+            self.source.fetch(self.pin)
+
+        row = LocationCache.objects.get(location=self.pin.location, source="overture_building_attributes")
+        self.assertTrue(row.data[UNANSWERED_SOURCES_KEY])
+
+    def test_a_fast_answer_is_not_marked(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
+
+        gateway = self._gateway(attributes={"subtype": "commercial"}, places=[{"name": "Cafe"}])
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.boundaries.overture.OvertureProvider",
+                return_value=gateway,
+            ),
+            mock.patch(
+                "urbanlens.dashboard.plugins.builtin.overture_building_attributes.time.monotonic",
+                side_effect=[0.0, 1.0],
+            ),
+        ):
+            self.source.fetch(self.pin)
+
+        row = LocationCache.objects.get(location=self.pin.location, source="overture_building_attributes")
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
 
 
 class OvertureBuildingAttributesScopeTests(TestCase):

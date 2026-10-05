@@ -1,6 +1,6 @@
 # REData's Overture near-point lookups time out, and UrbanLens now reads Overture from them inside the US
 
-- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`7ac19bf6`, `bfb47503`). Not seen live: REData staging has no Overture credentials (its P106). Production REData is still 5aabe887.** Written for UrbanLens P110 (`docs/archive/PROBLEMS-ARCHIVE.md`). Probed once
+- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`7ac19bf6`, `bfb47503`). Not seen live: REData staging has no Overture credentials (its P106). Production REData is still 5aabe887. UrbanLens's side (P110) ported onto `release/v_0_9_0` 2026-10-05.** Written for UrbanLens P110 (`docs/archive/PROBLEMS-ARCHIVE.md`). Probed once
   each against `https://redata.urbanlens.org` with the development key on 2026-10-03; REData read from `main`
   (`99659fcc`).
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
@@ -43,7 +43,8 @@ answered in production on 2026-10-01 (31 Overture records for one parcel).
 index.
 
 Until this is fixed, UrbanLens cannot show Overture buildings or places for any US pin, and each panel fetch or
-boundary run probably starts one of these scans. That is why the UrbanLens change is held, not merged.
+boundary run probably starts one of these scans. The UrbanLens change was held on that account until REData fixed
+it; it was ported onto `release/v_0_9_0` on 2026-10-05, so UrbanLens 0.9.0 needs REData 0.3.0 in production first.
 
 A side effect on REData's own fan-out: `/points-of-interest/lookup/` runs its providers one after another, so any
 lookup that includes `overture` waits for that scan. UrbanLens's "Cameras & Structures" panel asked for every
@@ -72,11 +73,13 @@ cities but not all. Each of these is inside `is_usa_coordinates` and outside eve
 | Sudbury | 46.49, -80.99 |
 | Saguenay | 48.43, -71.06 |
 
-REData answers these "ok" with no rows. UrbanLens uses the same boxes, so it treats them as REData's and shows no
-Overture data there; before P110 it read the public release.
+REData answers these "ok" with no rows.
 
-**Asked:** could the providers report `not_applicable` where no synced shard covers the point? UrbanLens would then
-need a small change to send those coordinates to the public release. That change is not made yet.
+**Asked:** could the providers report `not_applicable` where no synced shard covers the point? REData tracks this as
+its P97. UrbanLens no longer waits on it: since 2026-10-05 it asks REData only inside both `is_usa_coordinates` and a
+vendored copy of `US_STATE_BBOXES` (`boundaries.redata_overture_shards`, re-vendored with
+`bin/vendor_redata_schema.py --shards`), and reads the public release for these points. A shard REData has not synced
+yet still answers "ok" with no rows, which UrbanLens cannot tell from an empty place.
 
 ## 4. Smaller items
 

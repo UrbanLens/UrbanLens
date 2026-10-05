@@ -50,7 +50,8 @@ records, register listings and image search cached. The one gap is Athens's buil
 1. Deploy REData 0.3.0 to production, then UrbanLens 0.9.0 (Jess approved both on 2026-10-05). Everything above
    that is fixed is fixed only on staging until then: NY parcels by polygon, campus footprints beyond the parcel
    box, Athens County's owner, web and news search, the cultural-resource cache, Chronicling America
-   descriptions, per-provider `limit`, the loc.gov walk.
+   descriptions, per-provider `limit`, the loc.gov walk. The order is required, not only preferred: inside the US
+   0.9.0 reads Overture only from REData (P110), whose lookups time out before 0.3.0 (P240).
 2. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
    (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
    REData's `Retry-After` (P315, REData P70).
@@ -72,8 +73,9 @@ records, register listings and image search cached. The one gap is Athens's buil
     structured, `related-buildings`, `land-use-areas` (P9, needs a map-overlay decision).
 11. Direct third-party calls REData already answers, which could go through it (each a separate decision):
     Wikipedia geosearch and summary (REData has no infobox or full extract, so not the rest), Nominatim reverse,
-    Google Geocoding outside CID resolution, Esri and USGS imagery (excluded on purpose today), the
-    OpenHistoricalMap time slider's coverage query, and the Overture GeoParquet building-attributes panel.
+    Google Geocoding outside CID resolution, Esri and USGS imagery (excluded on purpose today), and the
+    OpenHistoricalMap time slider's coverage query. The Overture building-attributes panel and the boundary chain's
+    Overture step read REData inside the US since P110.
     Assistant tools stay direct by design: REData is off under the AI process role.
 
 ## Known limits of what was built

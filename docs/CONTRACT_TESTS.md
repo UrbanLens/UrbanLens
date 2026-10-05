@@ -173,6 +173,10 @@ REData and no network.
 - **Adding a REData read** means adding its fields to the table and re-vendoring. The test fails on a field REData
   does not publish where it is read, on an untyped object REData has since typed, and on vendored operations the table
   no longer names. It also holds REData's incident `category` vocabulary to the categories UrbanLens labels and sends.
+- **REData's Overture shard boxes** (`parcels.services.overture.shards.US_STATE_BBOXES`) decide where UrbanLens asks
+  REData for Overture rather than the public release. `--shards <REData checkout>` vendors them beside the schema, at
+  `tests/hypothesis/fixtures/redata_overture_shards.json`, and `OvertureShardTableTests` holds
+  `boundaries.redata_overture_shards` equal to them and to the schema's REData revision.
 - **`gaps`** on a row lists fields the reader looks for that REData does not publish there: a tolerated fallback, or a
   known mismatch such as the floorplan editor reading UrbanLens's own plan shape from REData's plan document. Each must
   stay unpublished, so the row is revisited when REData fills the gap.
