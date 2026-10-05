@@ -531,6 +531,15 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertIn("ai-inference", compose["services"]["ai-worker"]["depends_on"])
 
+    def test_the_app_tier_is_told_the_ai_worker_exists(self) -> None:
+        # assistant_available() reads UL_AI_WORKER_ENABLED in the process serving the page, so
+        # setting it on ai-worker alone left the assistant hidden while its worker ran.
+        compose = _compose()
+        self.assertIn("ai-worker", compose["services"])
+        for service in ("app", "app-ws"):
+            value = str(compose["services"][service]["environment"].get("UL_AI_WORKER_ENABLED", ""))
+            self.assertRegex(value, r"^\$\{UL_AI_WORKER_ENABLED:-true\}$", service)
+
 
 def _egress_filter_lines() -> list[str]:
     import pathlib
