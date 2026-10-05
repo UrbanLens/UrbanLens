@@ -7,10 +7,12 @@
 
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const TS_ROOT = join(import.meta.dir, "..");
 const TEMPLATES_ROOT = join(import.meta.dir, "../../../templates/dashboard");
+/** Hand-written scripts, `comment-map.js` among them, which builds a map per comment thumbnail. */
+const STATIC_JS_ROOT = join(import.meta.dir, "../../static/js");
 const LEAFLET_BRIDGE = join(import.meta.dir, "../../../../../../node_modules/@maplibre/maplibre-gl-leaflet/leaflet-maplibre-gl.js");
 const MAP_CONSTRUCTOR = /new\s+(?:window\.)?(?:gl|maplibregl|maplibre_gl)\.Map\s*\(/g;
 
@@ -39,9 +41,14 @@ function callArguments(source: string, start: number): string {
     return source.slice(start);
 }
 
+/** Every file that could build a MapLibre map or add a control to one. */
+function guardedFiles(): string[] {
+    return [...sourceFiles(TS_ROOT, ".ts"), ...sourceFiles(STATIC_JS_ROOT, ".js"), ...sourceFiles(TEMPLATES_ROOT, ".html")];
+}
+
 function mapConstructions(): { path: string; options: string }[] {
     const calls: { path: string; options: string }[] = [];
-    for (const path of [...sourceFiles(TS_ROOT, ".ts"), ...sourceFiles(TEMPLATES_ROOT, ".html")]) {
+    for (const path of guardedFiles()) {
         const source = code(readFileSync(path, "utf8"));
         for (const match of source.matchAll(MAP_CONSTRUCTOR)) {
             calls.push({ path, options: callArguments(source, (match.index ?? 0) + match[0].length) });
@@ -54,7 +61,9 @@ describe("MapLibre's attribution control", () => {
     const constructions = mapConstructions();
 
     test("the scan finds the maps it is meant to guard", () => {
-        expect(constructions.length).toBeGreaterThan(0);
+        const files = new Set(constructions.map(({ path }) => basename(path)));
+        expect(files.has("shared-pin-map.ts")).toBe(true);
+        expect(files.has("comment-map.js")).toBe(true);
     });
 
     test("the scan would catch a map built with it, and not one quoted in a comment", () => {
@@ -69,7 +78,7 @@ describe("MapLibre's attribution control", () => {
     });
 
     test("no page adds it by hand", () => {
-        const added = [...sourceFiles(TS_ROOT, ".ts"), ...sourceFiles(TEMPLATES_ROOT, ".html")].filter((path) => code(readFileSync(path, "utf8")).includes("AttributionControl"));
+        const added = guardedFiles().filter((path) => code(readFileSync(path, "utf8")).includes("AttributionControl"));
         expect(added).toEqual([]);
     });
 

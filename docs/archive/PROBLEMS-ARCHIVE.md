@@ -23,7 +23,8 @@ handler. Every version up to 6.4.0 was affected, with no 5.x backport.
 every MapLibre map was built without that control: `shared-pin-map.ts` and `comment-map.js` pass
 `attributionControl: false`, and the Leaflet bridge's `_initGL` hard-codes it.
 `shared/maplibre-attribution.contract.test.ts` still holds every map to that, because the sanitizer has needed more
-fixes since (6.9.0, 6.11.1).
+fixes since (6.9.0, 6.11.1). It scanned only `ts/` and the templates; it now reads `static/js/` too, which is
+where `comment-map.js` builds its maps.
 
 **Fixed by moving to 6.12.0**, the latest 6.x on 2026-10-05. v6 publishes only ES modules, so there is no
 `maplibre-gl.js` left on unpkg for a `<script>` tag to load. The site now builds the `maplibregl` global itself:
@@ -43,7 +44,7 @@ fixes since (6.9.0, 6.11.1).
 **What the original entry got wrong.** It said the move "also replaces the UMD bridge, which v6 cannot feed".
 `@maplibre/maplibre-gl-leaflet@0.1.4`'s UMD build reads `globalThis.maplibregl` once, when its script runs, and
 works with a v6 namespace there. It needs only to load after MapLibre. `frontend/browser/maplibre-bundle.test.ts`
-draws through it in Chromium. 0.1.4 also declares `maplibre-gl ^6.0.0` as a peer.
+draws through it in Chromium. 0.1.4's peer range for `maplibre-gl` also includes `^6.0.0`.
 
 **Other v6 changes that reached this code.** WebGL1 is gone and `new Map()` throws without WebGL2, so
 `map-layers.ts`'s `canDrawVectorBase` now also asks `WebGLSupport`. Without that check the bridge would throw from
