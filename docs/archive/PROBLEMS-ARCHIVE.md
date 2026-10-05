@@ -23656,3 +23656,47 @@ Poughkeepsie street one search and its image.
 scripted call order, so each test holds the behaviour and not the sweep: the nearest radius is found and kept, a
 nearby pano costs one search, none in reach costs two (failed before the fix, 20), a distant one at most seven (failed
 before, 15), and the earlier guards on the kept radius, the placeholder image and `OVER_QUERY_LIMIT` still hold.
+
+## RESOLVED 2026-10-05: A link the Wayback Machine could not archive at once was never asked about again
+
+`id: P308` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading a week of archive.org 429s in ApiCallLog`
+
+**What was wrong.** A link's archive task asked the Wayback Machine once. A lookup that timed out or met a 429 or 5xx,
+or a save that failed, was logged and dropped, and nothing looked for links still without a snapshot. On dev, 86 links
+naming 63 URLs had none. Of the 473 calls to the Archive since 2026-09-06, 56 lookups were 429s, 153 got no answer, and
+most saves ended in a 500, 520 or 523 or got no answer. Asked again, nine of ten sampled Wikipedia pages had a snapshot,
+one dating from March: a lookup can answer that a page has no snapshot when it does. One save the task logged as failed
+had made its capture. The deployment's own limit for the Archive (10 calls a minute) raised `RateLimitExceededError`,
+which is not a `requests` error, so it escaped the task: an import's links past the tenth in a minute were dropped the
+same way. One pin link on dev still had no snapshot although 13 other links naming the URL held one, because its task
+ran before snapshots were shared and nothing came back for it.
+
+**Fix.** The archive moved to `services/links/wayback_archive.py`. Each attempt ends in one of five outcomes:
+archived, skipped, refused for good, failed, or busy.
+- **Failed.** The URL's failure is counted on every link waiting on it, in the new `wayback_attempts` and
+  `wayback_retry_at` (migration 0058). It is asked about again after 1 h, 6 h, 1 d, 3 d, 7 d and 30 d, then given up.
+- **Busy.** A 429 or 503, the deployment's own limit, or an open breaker holds nothing against the URL. It stops a sweep
+  or an import chunk, and leaves the rest of its links to the sweep.
+- **Refused for good.** Own-site and share links, and a snapshot too long to store, are given up at once so they never
+  hold a sweep's place.
+- **The sweep.** `sweep_unarchived_links` runs every 15 minutes. It asks about at most five due URLs, the
+  longest-waiting first and once however many links name them. A link created more than 15 minutes ago that was never
+  asked about counts as due, and a snapshot another link already holds is given to it without a request.
+- **The breaker.** `WaybackBreaker` joins `BREAKERS`: a 429 from archive.org or web.archive.org, or a 503 naming a wait,
+  holds that host off for every process for the wait it named or five minutes.
+
+**Tests.** `test_wayback_archive_retry.py`:
+- a failed lookup, a failed save and a URL named by two links are archived by a later sweep, not before their wait;
+- the waits grow, and the URL is given up within 120 days;
+- a 429 and the deployment's own limit are not held against the URL and end the sweep;
+- an import chunk stops asking once refused, and the sweep archives the rest;
+- the sweep leaves a new link to its own task, takes up one whose task never ran, gives a held snapshot without
+  asking, asks about a bounded number of URLs, and asks once per URL;
+- refused links do not hold its place;
+- the sweep is scheduled;
+- a 429 holds the host off with or without a wait, and a save throttle or a 520 holds the lookups open.
+
+Seventeen of the nineteen failed before the fix; the last two guard against the breaker reaching too far.
+`test_bulk_followup_chunk_tasks.py` now drives the chunk tasks through the service, and
+`test_wayback_archive.py::test_a_failed_lookup_frees_the_url_for_the_next_task_once_it_is_due` keeps its lock check
+under the shared wait.

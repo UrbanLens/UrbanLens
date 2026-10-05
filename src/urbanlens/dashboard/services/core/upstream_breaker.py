@@ -329,8 +329,69 @@ class RedataBreaker(UpstreamBreaker):
         return self.SOURCE_BUSY_SECONDS if scope.startswith("source:") else super().default_seconds(scope)
 
 
+class WaybackBreaker(UpstreamBreaker):
+    """The Internet Archive's throttles, one per host: archive.org answers availability lookups, and web.archive.org
+    takes saves and serves the indexes and snapshots.
+
+    A 429, or a 503 naming a wait, refuses every caller; anything else is about the one page asked for.
+    """
+
+    name: ClassVar[str] = "wayback"
+    #: How long a refusal naming no wait holds the host off.
+    BUSY_SECONDS: ClassVar[int] = 300
+
+    def covers(self, service: str) -> bool:
+        """The Wayback Machine's service key.
+
+        Args:
+            service: The rate-limiter service key.
+
+        Returns:
+            True for the Wayback Machine.
+        """
+        return service == "wayback_machine"
+
+    def scopes(self, url: str, params: object = None) -> tuple[str, ...]:
+        """The host the call goes to.
+
+        Args:
+            url: The URL about to be requested.
+            params: Unused.
+
+        Returns:
+            One scope.
+        """
+        return ((urlsplit(url).hostname or "").lower(),)
+
+    def scope_tripped_by(self, url: str, params: object, response: requests.Response) -> str | None:
+        """The host, when it refused every caller.
+
+        Args:
+            url: The URL that was requested.
+            params: Unused.
+            response: The Archive's answer.
+
+        Returns:
+            The scope to trip, or None.
+        """
+        if response.status_code == 429 or (response.status_code == 503 and response.headers.get("Retry-After")):
+            return self.scopes(url, params)[0]
+        return None
+
+    def default_seconds(self, scope: str) -> int:
+        """:attr:`BUSY_SECONDS`.
+
+        Args:
+            scope: The scope being tripped.
+
+        Returns:
+            Seconds.
+        """
+        return self.BUSY_SECONDS
+
+
 #: Every upstream with a breaker.
-BREAKERS: tuple[UpstreamBreaker, ...] = (RedataBreaker(),)
+BREAKERS: tuple[UpstreamBreaker, ...] = (RedataBreaker(), WaybackBreaker())
 
 
 def breaker_for(service: str) -> UpstreamBreaker | None:

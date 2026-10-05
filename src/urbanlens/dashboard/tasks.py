@@ -29,7 +29,6 @@ from celery import shared_task
 from celery.exceptions import SoftTimeLimitExceeded
 from channels.layers import get_channel_layer
 from django.utils import timezone
-from redis.exceptions import RedisError
 
 from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's autodiscover_tasks() only imports <app>/tasks.py, so this is what registers the task on the worker
     run_assistant_turn_task,
@@ -746,25 +745,8 @@ def backfill_location_address(location_id: int) -> bool:
         return False
 
 
-#: How long one task may hold a URL's Wayback lookup before another may try; a save can take a minute.
-_WAYBACK_ARCHIVE_LOCK_SECONDS = 180
-#: What the cache raises when it cannot answer; ``RuntimeError`` is the test suite's network guard.
-_LOCK_CACHE_ERRORS = (RedisError, ConnectionError, OSError, RuntimeError)
-
-
 def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Shared logic for :func:`archive_link_to_wayback` and its per-model chunk-batching siblings.
-
-    A plain function, not a task - the siblings call this directly rather than invoking
-    ``archive_link_to_wayback`` itself, so a transient failure here surfaces as this *caller's*
-    exception rather than being swallowed by ``archive_link_to_wayback``'s own retry wrapper, which
-    would immediately re-raise instead of scheduling a delayed retry (Celery only defers a retry
-    when the task was reached through the broker, not called as a plain function).
-
-    A URL is looked up once, however many links name it: an auto link is a ``PinLink`` and a
-    ``WikiLink`` at once, and a popular page is linked from many pins. A snapshot another link already
-    holds is reused, a snapshot found is given to every link still waiting on the URL, and a link whose
-    URL another task is looking up is left to that task.
+    """Archive one link, for :func:`archive_link_to_wayback` and its single-id siblings.
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -773,95 +755,9 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
     Returns:
         True when this link was given a wayback_url, False otherwise.
     """
-    import hashlib
+    from urbanlens.dashboard.services.links.wayback_archive import ArchiveOutcome, archive_link
 
-    import requests
-
-    from urbanlens.dashboard.models.links.model import PinLink, WikiLink
-    from urbanlens.dashboard.services.apis.locations.wayback_machine import WaybackMachineGateway, is_own_site_url
-    from urbanlens.dashboard.services.security.capability_urls import is_capability_url
-
-    model = {"PinLink": PinLink, "WikiLink": WikiLink}.get(link_model)
-    if model is None:
-        logger.warning("archive_link_to_wayback: unknown link_model %r", link_model)
-        return False
-
-    link = model.objects.filter(pk=link_id).first()
-    if link is None or link.wayback_url:
-        return False
-
-    if is_own_site_url(link.url) or is_capability_url(link.url):
-        return False
-
-    known = _stored_wayback_snapshot(link.url)
-    if known:
-        return _give_wayback_snapshot(link_model, link_id, link.url, known)
-
-    lock_key = f"wayback-archive:{hashlib.sha256(link.url.encode()).hexdigest()}"
-    try:
-        token = acquire_lock(lock_key, _WAYBACK_ARCHIVE_LOCK_SECONDS)
-    except _LOCK_CACHE_ERRORS:
-        # The lock only saves a duplicate lookup; archive without it rather than not at all.
-        token = ""
-    if token is None:
-        return False
-    try:
-        gateway = WaybackMachineGateway()
-        try:
-            availability = gateway.get_availability(link.url)
-            wayback_url = (availability.get("archived_snapshots") or {}).get("closest", {}).get("url", "")
-            if not wayback_url:
-                saved = gateway.save_url(link.url)
-                wayback_url = saved.get("archived_url", "")
-        except requests.RequestException:
-            logger.warning("archive_link_to_wayback: could not archive %s", link.url, exc_info=True)
-            return False
-
-        from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
-        from urbanlens.dashboard.services.security.link_urls import is_link_url
-
-        # The snapshot URL embeds the original, so a near-cap link comes back too long to store.
-        if not is_link_url(wayback_url, max_length=MAX_LINK_URL_LENGTH):
-            logger.info("archive_link_to_wayback: snapshot url for %s %s is not storable", link_model, link_id)
-            return False
-        return _give_wayback_snapshot(link_model, link_id, link.url, wayback_url)
-    finally:
-        if token:
-            with contextlib.suppress(*_LOCK_CACHE_ERRORS):
-                release_lock(lock_key, token)
-
-
-def _stored_wayback_snapshot(url: str) -> str:
-    """A snapshot some link naming *url* already holds, or ""."""
-    from urbanlens.dashboard.models.links.model import PinLink, WikiLink
-
-    for model in (PinLink, WikiLink):
-        stored = model.objects.filter(url=url).exclude(wayback_url="").values_list("wayback_url", flat=True).first()
-        if stored:
-            return stored
-    return ""
-
-
-def _give_wayback_snapshot(link_model: str, link_id: int, url: str, snapshot: str) -> bool:
-    """Store *snapshot* on every link naming *url* that has none, returning whether link ``link_id`` was one.
-
-    *snapshot* has passed ``is_link_url``, so it is what ``save`` would have stored. A bulk update sends no
-    ``post_save``, so each pin whose link changed is marked changed here, as ``resync_pin_on_link_saved`` would have
-    marked it: the external API's sync feed pages by ``Pin.updated``.
-    """
-    from urbanlens.dashboard.models.links.model import PinLink, WikiLink
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    now = timezone.now()
-    given = False
-    for model in (PinLink, WikiLink):
-        waiting = model.objects.filter(url=url, wayback_url="")
-        given = given or (model.__name__ == link_model and waiting.filter(pk=link_id).exists())
-        pin_ids = list(waiting.values_list("pin_id", flat=True)) if model is PinLink else []
-        waiting.update(wayback_url=snapshot, updated=now)
-        if pin_ids:
-            Pin.objects.filter(pk__in=pin_ids).update(updated=now)
-    return given
+    return archive_link(link_model, link_id) is ArchiveOutcome.ARCHIVED
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
@@ -890,7 +786,8 @@ def archive_pin_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
 
     A confirmed import that extracts embedded links from each pin's raw description
     (``maps.py::_attach_description_extras``) creates one ``PinLink`` per link, each of which
-    otherwise queues its own Wayback-archive task.
+    otherwise queues its own Wayback-archive task. Links left when the Archive refuses for now are
+    taken up by :func:`sweep_unarchived_links`.
 
     Args:
         link_ids: PKs of the PinLinks to archive.
@@ -898,17 +795,9 @@ def archive_pin_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     Returns:
         Whether archiving saved a wayback_url, per link id.
     """
-    results: dict[int, bool] = {}
-    for link_id in link_ids:
-        try:
-            results[link_id] = _archive_link_to_wayback("PinLink", link_id)
-        except OSError:
-            logger.warning("archive_pin_links_to_wayback: transient failure on link %s, retrying chunk", link_id)
-            raise
-        except Exception:
-            logger.exception("archive_pin_links_to_wayback: link %s failed", link_id)
-            results[link_id] = False
-    return results
+    from urbanlens.dashboard.services.links.wayback_archive import archive_links
+
+    return archive_links("PinLink", link_ids)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
@@ -927,17 +816,34 @@ def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
     Returns:
         Whether archiving saved a wayback_url, per link id.
     """
-    results: dict[int, bool] = {}
-    for link_id in link_ids:
-        try:
-            results[link_id] = _archive_link_to_wayback("WikiLink", link_id)
-        except OSError:
-            logger.warning("archive_wiki_links_to_wayback: transient failure on link %s, retrying chunk", link_id)
-            raise
-        except Exception:
-            logger.exception("archive_wiki_links_to_wayback: link %s failed", link_id)
-            results[link_id] = False
-    return results
+    from urbanlens.dashboard.services.links.wayback_archive import archive_links
+
+    return archive_links("WikiLink", link_ids)
+
+
+#: Longer than a sweep's soft limit, so a run that overruns still holds off the next.
+_WAYBACK_SWEEP_LOCK_SECONDS = 660
+
+
+@shared_task(soft_time_limit=600, time_limit=_WAYBACK_SWEEP_LOCK_SECONDS, queue=Queue.MAINTENANCE)
+def sweep_unarchived_links(limit: int | None = None) -> dict[str, int]:
+    """Ask the Wayback Machine again about links it has not archived yet (P308).
+
+    Takes up a URL whose wait after a failure has passed, and a link whose own task never ran.
+
+    Args:
+        limit: The most URLs to ask about; the service's batch by default.
+
+    Returns:
+        How many links came to each outcome.
+    """
+    from urbanlens.dashboard.services.core.locks import beat_lock
+    from urbanlens.dashboard.services.links.wayback_archive import SWEEP_BATCH, sweep
+
+    with beat_lock("urbanlens:wayback-archive:sweep-lock", _WAYBACK_SWEEP_LOCK_SECONDS) as acquired:
+        if not acquired:
+            return {}
+        return {str(outcome): count for outcome, count in sweep(limit or SWEEP_BATCH).items()}
 
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)

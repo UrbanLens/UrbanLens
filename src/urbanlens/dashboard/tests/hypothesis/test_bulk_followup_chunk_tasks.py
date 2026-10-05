@@ -13,10 +13,13 @@ its one item so the rest of the chunk still runs.
 
 from __future__ import annotations
 
+from typing import ClassVar
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard import tasks
+from urbanlens.dashboard.services.links import wayback_archive
+from urbanlens.dashboard.services.links.wayback_archive import ArchiveOutcome
 
 
 class EnsureWikisForLocationsChunkTests(SimpleTestCase):
@@ -117,56 +120,50 @@ class ScoreReputationEventsChunkTests(SimpleTestCase):
         score_reputation_event_task.assert_not_called()
 
 
-class ArchivePinLinksToWaybackChunkTests(SimpleTestCase):
+class _ArchiveLinksChunkCase(SimpleTestCase):
+    """The two link chunk tasks share ``wayback_archive.archive_links``; each fixes its own model."""
+
+    __test__ = False
+
+    model: ClassVar[str]
+
+    def _run(self, link_ids: list[int]) -> dict[int, bool]:
+        task = tasks.archive_pin_links_to_wayback if self.model == "PinLink" else tasks.archive_wiki_links_to_wayback
+        return task(link_ids)
+
     def test_a_permanent_failure_is_isolated_and_the_rest_of_the_chunk_still_runs(self) -> None:
-        def fake(link_model: str, link_id: int) -> bool:
+        def fake(link_model: str, link_id: int) -> ArchiveOutcome:
             if link_id == 2:
                 raise ValueError("boom")
-            return True
+            return ArchiveOutcome.ARCHIVED
 
-        with mock.patch.object(tasks, "_archive_link_to_wayback", side_effect=fake):
-            result = tasks.archive_pin_links_to_wayback([1, 2, 3])
+        with mock.patch.object(wayback_archive, "archive_link", side_effect=fake):
+            result = self._run([1, 2, 3])
 
         self.assertEqual(result, {1: True, 2: False, 3: True})
 
     def test_a_transient_oserror_reraises_to_retry_the_whole_chunk_not_swallowed(self) -> None:
         with (
-            mock.patch.object(tasks, "_archive_link_to_wayback", side_effect=OSError("transient")),
+            mock.patch.object(wayback_archive, "archive_link", side_effect=OSError("transient")),
             self.assertRaises(OSError),
         ):
-            tasks.archive_pin_links_to_wayback([1, 2, 3])
+            self._run([1, 2, 3])
 
-    def test_archives_under_the_pin_link_model(self) -> None:
-        with mock.patch.object(tasks, "_archive_link_to_wayback", return_value=True) as archive:
-            tasks.archive_pin_links_to_wayback([1])
+    def test_archives_under_its_own_model(self) -> None:
+        with mock.patch.object(wayback_archive, "archive_link", return_value=ArchiveOutcome.ARCHIVED) as archive:
+            self._run([1])
 
-        archive.assert_called_once_with("PinLink", 1)
+        archive.assert_called_once_with(self.model, 1)
 
 
-class ArchiveWikiLinksToWaybackChunkTests(SimpleTestCase):
-    def test_a_permanent_failure_is_isolated_and_the_rest_of_the_chunk_still_runs(self) -> None:
-        def fake(link_model: str, link_id: int) -> bool:
-            if link_id == 2:
-                raise ValueError("boom")
-            return True
+class ArchivePinLinksToWaybackChunkTests(_ArchiveLinksChunkCase):
+    __test__ = True
+    model = "PinLink"
 
-        with mock.patch.object(tasks, "_archive_link_to_wayback", side_effect=fake):
-            result = tasks.archive_wiki_links_to_wayback([1, 2, 3])
 
-        self.assertEqual(result, {1: True, 2: False, 3: True})
-
-    def test_a_transient_oserror_reraises_to_retry_the_whole_chunk_not_swallowed(self) -> None:
-        with (
-            mock.patch.object(tasks, "_archive_link_to_wayback", side_effect=OSError("transient")),
-            self.assertRaises(OSError),
-        ):
-            tasks.archive_wiki_links_to_wayback([1, 2, 3])
-
-    def test_archives_under_the_wiki_link_model(self) -> None:
-        with mock.patch.object(tasks, "_archive_link_to_wayback", return_value=True) as archive:
-            tasks.archive_wiki_links_to_wayback([1])
-
-        archive.assert_called_once_with("WikiLink", 1)
+class ArchiveWikiLinksToWaybackChunkTests(_ArchiveLinksChunkCase):
+    __test__ = True
+    model = "WikiLink"
 
 
 class ArchiveLinkToWaybackSingleItemShimTests(SimpleTestCase):

@@ -208,14 +208,16 @@ class OneUrlIsArchivedOnceTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.wayback_url, self._SNAPSHOT)
 
-    def test_a_failed_lookup_frees_the_url_for_the_next_task(self) -> None:
+    def test_a_failed_lookup_frees_the_url_for_the_next_task_once_it_is_due(self) -> None:
         first = baker.make(PinLink, pin=self.pin, url="https://example.com/a", wayback_url="")
         second = baker.make(WikiLink, wiki=self.wiki, url="https://example.com/a", wayback_url="")
         found = {"archived_snapshots": {"closest": {"url": self._SNAPSHOT}}}
+        due = timezone.now() + timedelta(hours=2)
 
         with mock.patch(f"{_GATEWAY}.get_availability", side_effect=[requests.RequestException("boom"), found]):
             self.assertFalse(archive_link_to_wayback("PinLink", first.pk))
-            self.assertTrue(archive_link_to_wayback("WikiLink", second.pk))
+            with mock.patch("django.utils.timezone.now", return_value=due):
+                self.assertTrue(archive_link_to_wayback("WikiLink", second.pk))
 
     def test_an_unavailable_cache_archives_without_the_lock(self) -> None:
         """The lock only saves a duplicate lookup; a cache outage must not stop archiving, as it did not before it."""

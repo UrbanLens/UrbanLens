@@ -530,6 +530,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.requeue_stalled_pending_uploads",
         "schedule": crontab(minute=19),
     },
+    # Links the Wayback Machine has not archived yet: failed lookups come due again, lost enqueues are taken up.
+    "wayback-archive-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_unarchived_links",
+        "schedule": crontab(minute="5-59/15"),
+    },
     # Calendar auto-sync pushes that were lost or failed.
     "calendar-push-sweep": {
         "task": "urbanlens.dashboard.tasks.requeue_pending_calendar_pushes",

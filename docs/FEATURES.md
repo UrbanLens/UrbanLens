@@ -1417,6 +1417,12 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   refusing (not truncating) anything larger and refusing a response that was not streamed.
 - **`reorder_id_ceiling`** (`services/core/reorder_limits.py`) - the most ids a drag-and-drop reorder may
   name: the container's own item limit, or that setting's validator maximum when it is unlimited.
+- **`UpstreamBreaker`** (`services/core/upstream_breaker.py`) - an upstream that tells this deployment
+  to wait opens a breaker held in the shared cache, and until it closes every process refuses the
+  call without a request, raising `UpstreamThrottledError` and logging `was_rate_limited=True`.
+  `RedataBreaker` opens REData's throttle pools and its busy sources; `WaybackBreaker` opens the
+  Internet Archive host that answered a 429 (archive.org for lookups, web.archive.org for saves).
+  A new upstream subclasses it and joins `BREAKERS`.
 - **`beat_lock` / `acquire_lock` / `release_lock`** (`services/core/locks.py`) - a named overlap lock in
   the cache for scheduled sweeps; release deletes the key only while the caller's token still holds it.
 - **Log redaction** (`UrbanLens/logging_filters.py::SecretRedactionFilter`, `services/security/redact.py::redact_urls`)
@@ -1452,7 +1458,10 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
   marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
   PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
-  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`).
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`),
+  `sweep_unarchived_links` (a pin or wiki link without a Wayback snapshot: a failed URL waits
+  1 h, 6 h, 1 d, 3 d, 7 d, then 30 d before it is given up, in `wayback_retry_at`; a link whose
+  own task never ran is taken up after 15 minutes; `services/links/wayback_archive.py`).
 - **Retention sweeps** (`services/core/retention.py`, nightly) - `prune_expired_sessions`
   (`clearsessions`) and `prune_read_notifications`, deleting in bounded primary-key batches. The period is
   `SiteSettings.notification_retention_days` ("Data retention" in the Django admin; 0 keeps rows for ever).

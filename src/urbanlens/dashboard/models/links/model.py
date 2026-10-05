@@ -1,9 +1,8 @@
 """Link models - external website URLs attached to Pins (personal) and Wikis (shared).
 
 Each link may carry a Wayback Machine snapshot URL, captured asynchronously
-(see tasks.archive_link_to_wayback and services.apis.locations.wayback_machine)
-so a dead or altered external page can still be viewed as it was when the
-link was added.
+(see services.links.wayback_archive) so a dead or altered external page can
+still be viewed as it was when the link was added.
 """
 
 from __future__ import annotations
@@ -13,8 +12,8 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from django.contrib.postgres.indexes import HashIndex
-from django.db.models import CASCADE, SET_NULL, F, ForeignKey, TextChoices, UniqueConstraint
-from django.db.models.fields import CharField, IntegerField, URLField
+from django.db.models import CASCADE, SET_NULL, F, ForeignKey, Index, Q, TextChoices, UniqueConstraint
+from django.db.models.fields import CharField, DateTimeField, IntegerField, PositiveSmallIntegerField, URLField
 from django.db.models.functions import MD5
 
 from urbanlens.dashboard.models import abstract
@@ -40,6 +39,8 @@ class _LinkBase(abstract.DashboardModel):
 
     Attributes:
         auto_source: The :class:`AutoLinkSource` that added this link, or ``""`` when a person did.
+        wayback_attempts: Failed attempts to archive ``url``, shared by every link waiting on it.
+        wayback_retry_at: When ``url`` may next be asked about; None before the first attempt and once given up.
     """
 
     name = CharField(max_length=255, blank=True, default="")
@@ -47,6 +48,8 @@ class _LinkBase(abstract.DashboardModel):
     wayback_url = URLField(max_length=MAX_LINK_URL_LENGTH, blank=True, default="")
     order = IntegerField(default=0)
     auto_source = CharField(max_length=32, choices=AutoLinkSource.choices, blank=True, default="", db_default="")
+    wayback_attempts = PositiveSmallIntegerField(default=0, db_default=0)
+    wayback_retry_at = DateTimeField(null=True, blank=True)
 
     objects = LinkManager()
 
@@ -100,8 +103,11 @@ class PinLink(_LinkBase):
         constraints = [
             UniqueConstraint(F("pin"), MD5("url"), name="db_plink_pin_url_unique"),
         ]
-        # The Wayback archive finds every link naming a URL (tasks._archive_link_to_wayback); a URL can outgrow a btree entry.
-        indexes = [HashIndex(fields=["url"], name="db_plink_url_hash")]
+        # The Wayback archive finds every link naming a URL (services.links.wayback_archive); a URL can outgrow a btree entry.
+        indexes = [
+            HashIndex(fields=["url"], name="db_plink_url_hash"),
+            Index(fields=["wayback_retry_at"], condition=Q(wayback_url=""), name="db_plink_wayback_due"),
+        ]
 
 
 class WikiLink(_LinkBase):
@@ -130,4 +136,7 @@ class WikiLink(_LinkBase):
             # Hashed for the same reason as PinLink's - see the note there.
             UniqueConstraint(F("wiki"), MD5("url"), name="db_wlink_wiki_url_unique"),
         ]
-        indexes = [HashIndex(fields=["url"], name="db_wlink_url_hash")]
+        indexes = [
+            HashIndex(fields=["url"], name="db_wlink_url_hash"),
+            Index(fields=["wayback_retry_at"], condition=Q(wayback_url=""), name="db_wlink_wayback_due"),
+        ]
