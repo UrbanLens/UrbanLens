@@ -162,26 +162,39 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
         if cached is not None:
             place_id = (cached.data or {}).get("place_id")
             photo_names: list[str] = (cached.data or {}).get("photo_names") or []
+            saved: list[str] = (cached.data or {}).get("saved_names") or []
         else:
             place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng, api_key=api_key)
+            saved = []
             LocationCache.set(location, _PLACE_PHOTO_LIST_CACHE_SOURCE, {"place_id": place_id, "photo_names": photo_names}, query_key=f"{lat},{lng}")
 
         page_url = f"https://www.google.com/maps/place/?q=place_id:{place_id}" if place_id else ""
 
-        created = 0
         for photo_name in photo_names[:MAX_PLACE_PHOTOS]:
+            if photo_name in saved:
+                continue
             try:
                 content, _content_type = places_resolution.download_photo(photo_name, api_key=api_key)
             except (PhotoNotFoundError, GatewayRequestError, requests.exceptions.RequestException) as exc:
+                # An outage ends the run before the marker, which would retire this location for good; the
+                # photos already saved are recorded below, so the next run picks up where this one stopped.
+                if is_source_outage(exc):
+                    raise
                 logger.info("Place photo %s unavailable for location=%s: %s", photo_name, location.pk, exc)
                 continue
             # No queue_photo_submission here: _save_enriched_image hands the row
             # to process_image_upload, whose tail submits it - after the
             # downscale, so REData is offered the file that will be served.
             _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
-            created += 1
+            saved = [*saved, photo_name]
+            LocationCache.set(
+                location,
+                _PLACE_PHOTO_LIST_CACHE_SOURCE,
+                {"place_id": place_id, "photo_names": photo_names, "saved_names": saved},
+                query_key=f"{lat},{lng}",
+            )
 
-        LocationCache.set(location, self.marker_source, {"created": created, "found": len(photo_names)})
+        LocationCache.set(location, self.marker_source, {"created": len(saved), "found": len(photo_names)})
         return True
 
 

@@ -11,6 +11,58 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-10-05: A Places photo backfill that met a spent budget marked the location done, so its photos were never fetched
+
+`id: P317` · `status: fixed` · `resolved: 2026-10-05`
+
+**Fixed:** `PlacePhotoEnrichmentSource.enrich` (`services/photos/photo_enrichment.py`) caught every
+`GatewayRequestError` per photo download, a `PlacesRateLimitedError` included, and still wrote its
+backfill marker after the loop, so a location whose photo list was already cached was retired with
+none of its photos. A download failure that `is_source_outage` calls an outage (a spent budget, a
+throttle, a 5xx, an unreachable host) now ends the run before the marker, and the enrichment runner
+stops the source as it does for any other. A photo that is gone or refused for good is still
+skipped. Each saved photo's name is recorded in the place's cached photo list (`saved_names`), so the
+next run downloads only the rest and stores nothing twice. Tests: `test_photo_enrichment.py::
+PlacePhotoEnrichmentSourceTests` (`test_a_spent_budget_mid_backfill_writes_no_marker`,
+`test_an_unreachable_photo_host_writes_no_marker`, `test_a_rerun_after_an_outage_saves_no_photo_twice`).
+
+## RESOLVED 2026-10-05: A `503 rate_limited` from REData Places reached its callers without the wait REData named
+
+`id: P315` · `status: fixed` · `resolved: 2026-10-05`
+
+**Fixed:** `RedataPlacesGateway._error_for` returns a `PlacesRateLimitedError` for REData's
+`rate_limited` body. It is both a `GatewayRateLimitedError` and an `UpstreamBusyError`, and its
+`retry_after` is REData's `Retry-After` (through `upstream_retry_after`, so at most 900 s), or
+`RedataBreaker.SOURCE_BUSY_SECONDS` (60 s, as long as the breaker holds a busy source) when REData
+named none. Every other Places failure is still a plain `GatewayRequestError`. Tests:
+`test_redata_places_gateway.py::RateLimitedTests` and `test_redata_places_budget_backs_off.py`.
+
+**The original entry was half wrong.** It said the next request asked again at once. For the same
+endpoint it did not: `_RateLimitedSession` already let `RedataBreaker.scope_tripped_by` open
+`source:<endpoint>` on any `503 rate_limited`, for the `Retry-After` up to an hour
+(`test_redata_breaker.py::BusySourceTests::test_it_stops_calls_to_that_endpoint`). What was missing
+was the wait on the error the first caller saw, so:
+
+- the Google Maps photos panel (`run_panel_fetch`) suppressed itself for the 300 s failure window,
+  not REData's wait;
+- the request-path callers (place details, autocomplete, place resolve and nearby landmarks, all
+  through `RequestUpstream`) answered `502` with no `Retry-After`, not `503` with one.
+
+Unchanged: enrichment still stops a source at it, since it is still a `GatewayRateLimitedError` (the
+Places photo backfill swallowed it per photo until P317, also fixed 2026-10-05);
+name resolution still swallows it and falls back to geocoding; the photo proxy still answers `502`;
+nothing caches it as an empty answer. CID resolution does not use this gateway.
+
+**Left as it is:** the breaker's scope is the endpoint, so a spent budget met on
+`places/search/nearby/` leaves `places/{id}/`, text search, autocomplete and photo downloads
+callable. REData keeps a separate budget for each Places SKU (`google_places_details`,
+`_essentials`, `_text_search_ids_only`, `_photos`, `google_places_autocomplete` in its
+`parcels/services/google_places_details/gateway.py`), and a wider scope would also refuse answers
+REData has cached, which cost nothing. `BREAKER_MAX_SECONDS` cuts a wait to the next UTC day down to
+an hour, so a busy endpoint is asked once an hour until then; each such refusal counts toward
+UrbanLens's own 40-a-day `redata_places` limit, since `ApiCallLog.billable()` counts a `503`. Not
+measured how often production meets any of this.
+
 ## RESOLVED 2026-10-05: Staging outranked production for CPU on the host they shared
 
 `id: P114` · `status: dismissed` · `resolved: 2026-10-05`
