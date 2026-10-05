@@ -23753,6 +23753,12 @@ second and 16 MB of bandwidth from Microsoft's public storage per boundary resol
 
 Six failed before the fix. `test_google_open_buildings_shards.py` passes unchanged through the shared reader.
 
+**Adversarial review.** It showed that a multi-part geometry, whose first part lies far from the box and a later one
+inside it, would have been dropped unparsed. Microsoft's files hold only single polygons today: two real parts were
+checked, and its documentation agrees. Now only a single polygon is judged by its first vertex
+(`test_a_multipart_building_whose_first_part_is_far_is_kept`, which failed). A server error being remembered as an
+unusable shard was confirmed only by reading; `test_a_server_error_is_not_remembered_as_unusable` now pins it.
+
 ## RESOLVED 2026-10-05: The published E2EE schema left out fields its views require, and a key reset kept the old KDF cost
 
 `id: P310` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading drf-spectacular's warnings in manage.py check --deploy`

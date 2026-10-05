@@ -143,7 +143,12 @@ def _features_within(lines: Iterable[bytes], bbox: BBox) -> Iterator[dict]:
 
 
 def _far_from(line: bytes, bbox: BBox) -> bool:
-    """Whether a GeoJSON line's first vertex lies too far from *bbox* for its building to overlap it."""
+    """Whether a GeoJSON line's first vertex lies too far from *bbox* for its building to overlap it.
+
+    Only a single polygon is judged by its first vertex: a later part of a multi-part geometry can lie anywhere.
+    """
+    if b"Multi" in line or b"Collection" in line:
+        return False
     match = _FIRST_VERTEX.search(line)
     if match is None:
         return False

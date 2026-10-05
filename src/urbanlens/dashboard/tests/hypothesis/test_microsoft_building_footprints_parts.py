@@ -152,6 +152,25 @@ class PartTests(SimpleTestCase):
 
         self.assertEqual(self._gateway().get_buildings(_BBOX), [straddling, multi])
 
+    def test_a_multipart_building_whose_first_part_is_far_is_kept(self) -> None:
+        """Its first vertex lies far from the box; a later part lies inside it."""
+        parts = [_OUTSIDE["geometry"]["coordinates"], _INSIDE["geometry"]["coordinates"]]
+        multi = {"type": "Feature", "geometry": {"type": "MultiPolygon", "coordinates": parts}, "properties": {}}
+        self.session.get.return_value = _response(200, _part(multi))
+
+        self.assertEqual(self._gateway().get_buildings(_BBOX), [multi])
+
+    def test_a_server_error_is_not_remembered_as_unusable(self) -> None:
+        failing = _response(503)
+        failing.raise_for_status.side_effect = requests.HTTPError("503")
+        self.session.get.side_effect = [failing, _response(200, _part(_INSIDE))]
+
+        with self.assertRaises(requests.HTTPError):
+            self._gateway().get_buildings(_BBOX)
+
+        self.assertEqual(self._gateway().get_buildings(_BBOX), [_INSIDE])
+        self.assertEqual(self.session.get.call_count, 2)
+
 
 class RateLimitedSessionTests(TestCase):
     """The gateway's own session, which logs each call, passes ``stream`` through and leaves the body unread."""
