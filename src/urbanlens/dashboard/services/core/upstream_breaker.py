@@ -164,8 +164,9 @@ class RedataBreaker(UpstreamBreaker):
     REData throttles each key in pools: every endpoint but a tile draws on the key's default budget,
     the endpoints that can start a live fetch draw on the smaller lookup budget as well, tiles have a
     pool of their own, and a few writes have theirs. A 429 trips the pool the endpoint draws from.
-    A 503 that names a wait, or one of ``SOURCE_BUSY_ERRORS``, is one of REData's own sources out of
-    budget or down: it trips that source only, so a Places outage leaves parcels alone.
+    A 503 that names a wait, REData's ``rate_limited`` error, or a provider behind the endpoint answering
+    REData with a 429 or 5xx is one of REData's own sources out of budget or down: it trips that source
+    only, so a Places outage leaves parcels alone.
     """
 
     name: ClassVar[str] = "redata"
@@ -193,9 +194,13 @@ class RedataBreaker(UpstreamBreaker):
     #: Tiles replace the default budget rather than stacking on it.
     TILES: ClassVar[re.Pattern[str]] = re.compile(r"^tiles/(?!sources/)")
 
-    #: REData's codes for a provider behind the whole endpoint being out of budget or refusing REData, as Google and
-    #: GDELT do with a 429. Unlike a per-county ``source_rate_limited``, none depends on the point asked about.
-    SOURCE_BUSY_ERRORS: ClassVar[frozenset[str]] = frozenset({"rate_limited", "places_api_unavailable", "search_unavailable"})
+    #: REData's code for "every provider behind this endpoint is out of outbound budget". Unlike a
+    #: per-county ``source_rate_limited``, it does not depend on the point asked about.
+    SOURCE_BUSY_ERROR: ClassVar[str] = "rate_limited"
+    #: REData's codes for a provider failing behind the endpoint. They also cover one bad input (Google's 400 for a
+    #: malformed place id), so only a message naming the provider's 429 or 5xx trips the breaker.
+    PROVIDER_FAILURE_ERRORS: ClassVar[frozenset[str]] = frozenset({"places_api_unavailable", "search_unavailable"})
+    PROVIDER_REFUSED: ClassVar[re.Pattern[str]] = re.compile(r"\b(?:answered|status)\s+(?:429|5\d\d)\b")
     #: None of them names a wait.
     SOURCE_BUSY_SECONDS: ClassVar[int] = 60
 
@@ -230,7 +235,7 @@ class RedataBreaker(UpstreamBreaker):
         return ("default",)
 
     #: Query parameters that choose which of an endpoint's providers answer.
-    PROVIDER_PARAMS: ClassVar[tuple[str, ...]] = ("provider", "source")
+    PROVIDER_PARAMS: ClassVar[tuple[str, ...]] = ("provider", "source", "images")
 
     def source(self, url: str, params: object = None) -> str:
         """The providers behind a request: its endpoint with identifiers blanked, and any provider it named.
@@ -281,9 +286,11 @@ class RedataBreaker(UpstreamBreaker):
             body = response.json()
         except ValueError:
             return None
-        if isinstance(body, dict) and body.get("error") in self.SOURCE_BUSY_ERRORS:
-            return f"source:{self.source(url, params)}"
-        return None
+        if not isinstance(body, dict):
+            return None
+        error = body.get("error")
+        refused = error in self.PROVIDER_FAILURE_ERRORS and self.PROVIDER_REFUSED.search(str(body.get("message", ""))) is not None
+        return f"source:{self.source(url, params)}" if error == self.SOURCE_BUSY_ERROR or refused else None
 
     def default_seconds(self, scope: str) -> int:
         """A minute for a busy source, which never names its wait.

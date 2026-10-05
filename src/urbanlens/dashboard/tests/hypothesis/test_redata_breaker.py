@@ -181,6 +181,30 @@ class BusySourceTests(TestCase):
                 with pytest.raises(UpstreamThrottledError):
                     _session("redata_places").get(url)
 
+    def test_one_bad_place_id_leaves_every_other_place_callable(self) -> None:
+        """REData answers Google's 400 for a malformed id with the same code; any signed-in user can send one."""
+        bad_id = {
+            "error": "places_api_unavailable",
+            "message": "Places API (New) answered 400 for place_id 'bogus1': ...",
+        }
+        _session("redata_places", _response(503, bad_id)).get(f"{_BASE}places/bogus1/")
+        other = _session("redata_places", _response(200, {}))
+
+        other.get(f"{_BASE}places/ChIJ2eUgeAK6j4AR/")
+
+        other._session.request.assert_called_once()
+
+    def test_an_image_search_failure_leaves_web_search_callable(self) -> None:
+        """Image search is asked of other providers on the same endpoint, chosen by ``images``."""
+        web = f"{_BASE}search/web/"
+        refused = {"error": "search_unavailable", "message": "Image provider answered 503"}
+        _session("redata_search_web", _response(503, refused)).get(web, params={"q": "mill", "images": "true"})
+        text = _session("redata_search_web", _response(200, {}))
+
+        text.get(web, params={"q": "mill"})
+
+        text._session.request.assert_called_once()
+
     def test_a_503_about_one_place_trips_nothing(self) -> None:
         """``source_rate_limited`` is one county's scraper; the next point may be in another county."""
         _session("redata_api", _response(503, {"error": "source_rate_limited", "message": "county"})).get(_PARCEL)

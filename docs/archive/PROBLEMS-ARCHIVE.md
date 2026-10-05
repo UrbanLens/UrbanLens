@@ -23308,13 +23308,16 @@ code, so UrbanLens kept asking: dev made 53 such nearby searches and 36 news sea
 call that kept Google's or GDELT's window full. The 2026-10-01 REData handoff said UrbanLens already backed off on
 `places_api_unavailable`; it did not.
 
-**Fix.** `RedataBreaker.SOURCE_BUSY_ERRORS` adds both codes to `rate_limited`. Each names a provider behind the whole
-endpoint, unlike a county's `source_rate_limited`, so the breaker opens that endpoint (and provider) for 60 s and
-leaves the others alone. On dev, the first nearby search answered 503 and opened the breaker; the next was refused
-without a request.
+**Fix.** `RedataBreaker` opens that endpoint's source breaker for 60 s on either code when REData's message says the
+provider answered 429 or 5xx. The codes alone are not enough: REData also answers Google's 400 for a malformed place
+id with `places_api_unavailable`, and the first version of this fix, tripping on the code, let one signed-in user's
+bogus `place_id` close place details for everyone for a minute. Image search is asked of different providers on the
+same endpoint, so `images` joins `provider` and `source` in the scope. On dev, the first nearby search answered 503
+and opened the breaker; the next was refused without a request.
 
-**Tests.** `test_redata_breaker.py::BusySourceTests::test_a_provider_refusing_redata_stops_calls_to_that_endpoint`,
-one subtest per code (both failed before the fix).
+**Tests.** `test_redata_breaker.py::BusySourceTests`: a provider's 429 stops calls to that endpoint, one subtest per
+code (both failed before the fix); one bad place id leaves other places callable, and an image-search failure leaves
+web search callable (both failed against the first version).
 
 **Not fixed here.** REData's Places nearby search has barely answered on dev for a month, which is REData's quota
 question in `handoffs/redata-cris-attachment-500-and-places-429.md`.
