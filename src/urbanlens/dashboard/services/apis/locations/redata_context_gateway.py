@@ -29,6 +29,8 @@ REASON_ALL_PROVIDERS_UNAVAILABLE = "all_providers_unavailable"
 REASON_SOURCE_ERROR = "source_error"
 #: REData refused the key for the endpoint (401/403): a scope it lacks, not anything about the place asked about.
 REASON_FORBIDDEN = "forbidden"
+#: The largest near-point ``limit`` REData accepts; it answers 400 for more.
+MAX_NEAR_POINT_LIMIT = 200
 
 
 class LocationContextUnavailableError(GatewayRequestError):
@@ -128,9 +130,9 @@ class RedataLocationContextGateway(Gateway):
             provider: Restrict which source(s) actually run - a single tag or
                 a repeatable list, per REData's ``?provider=`` semantics.
             force_refresh: Bypass REData's cache and re-query live.
-            limit: Most rows to keep (REData caps it at 200). Sent, and applied
-                here as well, so a REData that ignores it cannot fill a
-                cache row with every row in the radius.
+            limit: Most rows to keep, at most :data:`MAX_NEAR_POINT_LIMIT`.
+                Sent, and applied here as well, so a REData that ignores it
+                cannot fill a cache row with every row in the radius.
             extra_params: Any endpoint-specific query params beyond the shared
                 set above (e.g. hazards' ``min_magnitude``/``years``).
 
@@ -148,6 +150,7 @@ class RedataLocationContextGateway(Gateway):
         if force_refresh:
             params["force_refresh"] = "true"
         if limit is not None:
+            limit = min(limit, MAX_NEAR_POINT_LIMIT)
             params["limit"] = limit
         if extra_params:
             params.update(extra_params)

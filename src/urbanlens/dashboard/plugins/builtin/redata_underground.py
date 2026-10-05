@@ -29,12 +29,13 @@ class UndergroundPanelSource(RedataInfoPanelSource):
     title = "Underground Structures"
 
     payload_key: ClassVar[str] = "structures"
+    row_limit: ClassVar[int | None] = 25
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Tunnels, culverts, shafts and buried utility runs near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_underground_gateway import RedataUndergroundGateway
 
-        return RedataUndergroundGateway().get_underground_structures(latitude, longitude, limit=25)
+        return RedataUndergroundGateway().get_underground_structures(latitude, longitude, limit=self.row_limit)
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
         """Drop each structure's geometry before caching.
@@ -50,9 +51,10 @@ class UndergroundPanelSource(RedataInfoPanelSource):
             return None
 
         enterable = [s for s in structures if s.get("is_enterable")]
-        chips = [f"{len(structures)} mapped within 250 m"]
+        floor = "+" if self.is_full(structures) else ""
+        chips = [f"{len(structures)}{floor} mapped within 250 m"]
         if enterable:
-            chips.append(f"{len(enterable)} enterable")
+            chips.append(f"{len(enterable)}{floor} enterable")
 
         meta = []
         for structure in (enterable + [s for s in structures if not s.get("is_enterable")])[:_MAX_ROWS]:

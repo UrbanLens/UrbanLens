@@ -127,7 +127,7 @@ class IncidentHistoryPanelSource(RedataInfoPanelSource):
     required_feature: ClassVar[SiteFeature | None] = SiteFeature.INCIDENT_HISTORY
 
     payload_key: ClassVar[str] = "incidents"
-    row_limit: ClassVar[int | None] = 500
+    row_limit: ClassVar[int | None] = 200
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """The full 25-year incident window near the pin, crime only."""

@@ -119,9 +119,13 @@ class UsgsEarthquakePanelSourceGateTests(TestCase):
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=location)
 
     def test_gate_is_false_when_redata_is_not_configured(self) -> None:
-        with mock.patch("urbanlens.dashboard.plugins.builtin.usgs_earthquakes.redata_configured", return_value=False):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False
+        ):
             self.assertFalse(self.source.gate(self.pin))
 
     def test_gate_is_true_when_redata_is_configured_and_coordinates_exist(self) -> None:
-        with mock.patch("urbanlens.dashboard.plugins.builtin.usgs_earthquakes.redata_configured", return_value=True):
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True
+        ):
             self.assertTrue(self.source.gate(self.pin))

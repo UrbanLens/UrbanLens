@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from unittest import mock
 
 from django.core.cache import cache
@@ -25,6 +26,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import UpstreamThrottledError, _RateLimitedSession
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 _BASE = "https://redata.example.test/api/v1/"
 _HAZARDS = f"{_BASE}hazards/"
@@ -80,7 +82,7 @@ class RefusedEndpointBreakerTests(TestCase):
         with self.assertLogs("urbanlens.dashboard.services.core.upstream_breaker", level=logging.INFO) as logs:
             _session("redata_hazards", _response(403, _REFUSED)).get(_HAZARDS)
             # The breaker's own wait elapsing, and the key still lacking the scope.
-            cache.delete(RedataBreaker()._key("refused:hazards"))
+            cache.delete(RedataBreaker()._key(RedataBreaker()._refused_scope(_HAZARDS)))
             _session("redata_hazards", _response(403, _REFUSED)).get(_HAZARDS)
 
         self.assertEqual(len([record for record in logs.records if record.levelno >= logging.ERROR]), 1)
@@ -120,6 +122,40 @@ class RefusalIsBusyNotAnOutageTests(TestCase):
         self.assertIsInstance(caught.value, UpstreamBusyError)
         self.assertGreaterEqual(caught.value.retry_after, _LONG)
         self.assertTrue(caught.value.is_outage)
+
+    def test_a_new_key_is_asked_at_once(self) -> None:
+        """Rotating UL_REDATA_API_KEY is how a refusal gets fixed; the old key's hour must not hold the new one off."""
+        _session("redata_hazards", _response(403, _REFUSED)).get(_HAZARDS)
+        hazards = _session("redata_hazards", _response(200, {"count": 0, "results": []}))
+
+        with mock.patch.object(app_settings, "redata_api_key", "a-key-with-the-scope"):
+            hazards.get(_HAZARDS)
+
+        hazards._session.request.assert_called_once()
+
+    def test_a_refusal_a_day_old_is_no_longer_listed(self) -> None:
+        """Another endpoint's refusal rewrites the list; it must not carry a long-fixed one along with it."""
+        breaker = RedataBreaker()
+        long_ago = time.time() - breaker.REFUSAL_MEMORY_SECONDS - 60
+        # As a shared cache holds it: each rewrite renews the whole list's expiry.
+        cache.set(breaker._refusals_key(), {"hazards": (long_ago, long_ago + breaker.REFUSED_SECONDS)}, timeout=None)
+
+        _session("redata_api", _response(403, _REFUSED)).get(_OWNERS)
+
+        self.assertEqual({entry.endpoint for entry in breaker.refused_endpoints()}, {"parcels/{id}/owners"})
+        self.assertNotIn("hazards", cache.get(breaker._refusals_key()))
+
+    def test_a_refused_parcel_lookup_is_not_held_off_past_the_breaker(self) -> None:
+        """The 12-hour parcel deferral is for a question REData could not settle, not for a key it refused."""
+        session = mock.Mock()
+        session.get.side_effect = [_response(403, _REFUSED), _response(200, {"uuid": "p-1", "record_payload": {}})]
+        gateway = RedataGateway(base_url="https://redata.example.test", api_key="k", session=session)
+
+        with pytest.raises(PropertyRecordsUnavailableError) as caught:
+            gateway.lookup_parcel(41.7, -73.9)
+        self.assertEqual(caught.value.retry_after, RedataBreaker.REFUSED_SECONDS)
+
+        self.assertEqual(gateway.lookup_parcel(41.7, -73.9)["uuid"], "p-1")
 
 
 class RefusalsOnTheApiLimitsPageTests(TestCase):

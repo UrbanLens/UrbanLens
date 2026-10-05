@@ -34,12 +34,13 @@ class HydrologyPanelSource(RedataInfoPanelSource):
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     payload_key: ClassVar[str] = "features"
+    row_limit: ClassVar[int | None] = 30
 
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
         """Streams, waterbodies and wetlands near the pin."""
         from urbanlens.dashboard.services.apis.locations.redata_hydrology_gateway import RedataHydrologyGateway
 
-        return RedataHydrologyGateway().get_hydrology(latitude, longitude, limit=30)
+        return RedataHydrologyGateway().get_hydrology(latitude, longitude, limit=self.row_limit)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Watershed as the heading; nearest features as the grid."""
@@ -62,6 +63,8 @@ class HydrologyPanelSource(RedataInfoPanelSource):
             by_kind[kind] = by_kind.get(kind, 0) + 1
         plurals = {"stream": "streams", "waterbody": "waterbodies", "wetland": "wetlands"}
         context["chips"] = [f"{count} {(plurals.get(kind, kind + 's') if count != 1 else HYDROLOGY_KIND_LABELS.get(kind, kind).lower())} within 1 km" for kind, count in sorted(by_kind.items())]
+        if self.is_full(features):
+            context["chips"].append("more than shown")
 
         # Features with a measured distance first, nearest first; unmeasurable
         # rows (NWI wetlands - the source layer has no geometry) follow rather

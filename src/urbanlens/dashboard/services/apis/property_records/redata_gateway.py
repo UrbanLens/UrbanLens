@@ -284,7 +284,8 @@ class RedataGateway(Gateway):
         try:
             return coalesced(f"redata:parcels-lookup:{question}", lambda: dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {}), ttl=_PARCEL_LOOKUP_SHARE_SECONDS)
         except PropertyRecordsUnavailableError as exc:
-            if not exc.retry_later or exc.reason in TRANSIENT_REASONS:
+            # A busy error already says when to ask again (Retry-After, a throttle, a refused key the breaker holds).
+            if not exc.retry_later or exc.reason in TRANSIENT_REASONS or isinstance(exc, PropertyRecordsBusyError):
                 raise
             # Nothing was learned and nothing is down: no county source found the parcel, or none could be searched.
             set_or_skip(deferred_key, {"reason": exc.reason, "message": str(exc)}, _UNSETTLED_PARCEL_RETRY_SECONDS, label="parcel lookup deferral", alias=DEFAULT_CACHE_ALIAS)

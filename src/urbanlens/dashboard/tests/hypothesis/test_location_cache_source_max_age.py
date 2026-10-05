@@ -89,6 +89,22 @@ class SourceMaxAgeTests(RedataConfiguredMixin, TestCase):
 
         self.assertIsNone(self.source.cached_data(self.pin))
 
+    def test_an_adopted_answer_keeps_the_sites_age(self) -> None:
+        """Copied as new, a 50-minute-old site reading would read as current to the building for another hour."""
+        site_location = baker.make(Location, latitude=40.5001, longitude=-74.5001)
+        site = baker.make(Pin, profile=self.pin.profile, location=site_location, parent_pin=None)
+        self.pin.parent_pin = site
+        self.pin.save()
+        LocationCache.set(site_location, self.source.cache_source, {"readings": [_READING]})
+        fetched = timezone.now() - timedelta(minutes=50)
+        LocationCache.objects.filter(location=site_location).update(updated=fetched)
+
+        with self._no_upstream():
+            self.assertTrue(self.source.adopt_site_answer(self.pin))
+
+        adopted = LocationCache.objects.get(location=self.pin.location, source=self.source.cache_source)
+        self.assertEqual(adopted.updated, fetched)
+
     def _no_upstream(self):
         from unittest import mock
 

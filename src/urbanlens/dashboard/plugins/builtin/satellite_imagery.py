@@ -239,6 +239,9 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         height: int = 400,
         limit: int = -1,
     ) -> Generator[SatelliteSlide]:
+        if not self.available():
+            return
+
         wanted = _wanted_providers(latitude, longitude)
         if not wanted:
             return

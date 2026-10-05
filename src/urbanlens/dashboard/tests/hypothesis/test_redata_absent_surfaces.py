@@ -149,3 +149,11 @@ class RedataAbsentTests(TestCase):
         for provider in providers:
             with self.subTest(provider=provider.service_key):
                 self.assertFalse(provider.get_street_view_slides(41.7321, -73.9262).from_cache, "nothing was cached")
+
+    def test_queued_cris_tasks_end_quietly(self) -> None:
+        """Queued while REData was configured, they run after it was taken away."""
+        from urbanlens.dashboard.tasks import extract_cris_attachments, fill_cris_campus_details
+
+        with self._never_building_a_redata_gateway():
+            self.assertEqual(extract_cris_attachments(self.pin.location_id, "a1b2", [1, 2]), 0)
+            self.assertEqual(fill_cris_campus_details(self.pin.location_id), 0)

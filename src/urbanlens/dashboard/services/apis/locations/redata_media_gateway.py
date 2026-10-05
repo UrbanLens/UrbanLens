@@ -6,14 +6,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway, redata_configured
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import MAX_NEAR_POINT_LIMIT, REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway, redata_configured
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
 _MEDIA_LOOKUP_PATH = "/api/v1/media/lookup/"
-#: REData's ceiling on a near-point ``limit``.
-_MAX_NEAR_POINT_LIMIT = 200
 
 
 @dataclass(slots=True, kw_only=True)
@@ -70,7 +68,7 @@ class RedataMediaGateway(RedataLocationContextGateway):
             radius_meters=radius_meters,
             provider=provider,
             force_refresh=force_refresh,
-            limit=_MAX_NEAR_POINT_LIMIT if is_aerial else limit,
+            limit=MAX_NEAR_POINT_LIMIT if is_aerial else limit,
             extra_params=extra_params,
         )
         if not envelope.complete and not envelope.results:

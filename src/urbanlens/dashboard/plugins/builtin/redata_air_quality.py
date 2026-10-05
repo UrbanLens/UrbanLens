@@ -30,6 +30,7 @@ class AirQualityPanelSource(RedataInfoPanelSource):
     tab_order: ClassVar[int] = 60
 
     payload_key: ClassVar[str] = "readings"
+    row_limit: ClassVar[int | None] = 20
     #: Concentrations change hourly, and REData itself keeps a reading 1-3 hours.
     cache_max_age: ClassVar[timedelta | None] = timedelta(hours=1)
 
@@ -37,7 +38,7 @@ class AirQualityPanelSource(RedataInfoPanelSource):
         """Current modelled readings plus nearby community sensors."""
         from urbanlens.dashboard.services.apis.locations.redata_air_quality_gateway import RedataAirQualityGateway
 
-        return RedataAirQualityGateway().get_air_quality(latitude, longitude, limit=20)
+        return RedataAirQualityGateway().get_air_quality(latitude, longitude, limit=self.row_limit)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Modelled reading as facts; nearby sensors as a count, never averaged in."""
@@ -67,7 +68,8 @@ class AirQualityPanelSource(RedataInfoPanelSource):
         if sensors:
             # Deliberately a count, not values: volunteer sensors of unknown
             # calibration are not summarizable into one number.
-            chips.append(f"{len(sensors)} community sensor{'s' if len(sensors) != 1 else ''} within 5 km")
+            floor = "+" if self.is_full(readings) else ""
+            chips.append(f"{len(sensors)}{floor} community sensor{'s' if len(sensors) != 1 else ''} within 5 km")
 
         if not facts and not sensors:
             return None

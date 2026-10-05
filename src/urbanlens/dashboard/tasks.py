@@ -1543,8 +1543,11 @@ def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_id
     Returns:
         How many attachments gained extracted images.
     """
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 
+    if not redata_configured():
+        return 0
     gateway = RedataGateway()
     merged = 0
     for attachment_id in attachment_ids:
@@ -1571,10 +1574,11 @@ def fill_cris_campus_details(location_id: int, attempt: int = 0) -> int:
     """
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.plugins.builtin.cris_buildings import CrisBuildingPanelSource
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 
     location = Location.objects.filter(pk=location_id).first()
-    if location is None:
+    if location is None or not redata_configured():
         return 0
     source = CrisBuildingPanelSource()
     try:
@@ -1582,9 +1586,6 @@ def fill_cris_campus_details(location_id: int, attempt: int = 0) -> int:
     except PropertyRecordsUnavailableError:
         logger.info("fill_cris_campus_details: REData's lookup failed for location %s", location_id, exc_info=True)
         filled, remaining = 0, 1
-    except ValueError:
-        logger.debug("fill_cris_campus_details: REData is not configured", exc_info=True)
-        return 0
     if remaining:
         source.queue_campus_fill(location_id, attempt + 1)
     return filled

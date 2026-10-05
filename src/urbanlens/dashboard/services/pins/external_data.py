@@ -421,7 +421,9 @@ class LocationCachePanelSource(PanelSource, ABC):
             return True
         if not self.site_answer_covers(pin, row.data):
             return False
-        LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
+        entry = LocationCache.set(pin.location, self.cache_source, row.data, query_key=row.query_key)
+        # The copy is as old as the site's answer, so it goes stale when that does.
+        LocationCache.objects.filter(pk=entry.pk).update(updated=row.updated)
         self.adopted(pin, row.data)
         return True
 

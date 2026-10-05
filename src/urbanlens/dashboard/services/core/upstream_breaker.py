@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+import hashlib
 import logging
 import re
 import time
@@ -323,7 +324,25 @@ class RedataBreaker(UpstreamBreaker):
         Returns:
             Every pool it draws from, its source, and its endpoint whatever providers were named.
         """
-        return (*(f"pool:{pool}" for pool in self.pools(url)), f"source:{self.source(url, params)}", f"{self.REFUSED_SCOPE}{self.endpoint(url)}")
+        return (*(f"pool:{pool}" for pool in self.pools(url)), f"source:{self.source(url, params)}", self._refused_scope(url))
+
+    @staticmethod
+    def _key_fingerprint() -> str:
+        """Which REData key a refusal was for, so a new key is asked at once rather than after the old key's hour."""
+        from urbanlens.UrbanLens.settings.app import settings
+
+        return hashlib.sha256(str(settings.redata_api_key or "").encode()).hexdigest()[:12]
+
+    def _refused_scope(self, url: str) -> str:
+        """The scope a refusal of ``url`` opens: its endpoint, for the key now configured.
+
+        Args:
+            url: A REData URL.
+
+        Returns:
+            Such as ``refused:3f2a9c0e1b7d:parcels/{id}/owners``.
+        """
+        return f"{self.REFUSED_SCOPE}{self._key_fingerprint()}:{self.endpoint(url)}"
 
     def scope_tripped_by(self, url: str, params: object, response: requests.Response) -> str | None:
         """The pool on a 429, the source on a 503 that says it is busy, the endpoint on a refusal.
@@ -337,7 +356,7 @@ class RedataBreaker(UpstreamBreaker):
             The scope to open, or None.
         """
         if response.status_code in self.REFUSED_STATUSES:
-            return f"{self.REFUSED_SCOPE}{self.endpoint(url)}"
+            return self._refused_scope(url)
         if response.status_code == 429:
             return f"pool:{self.pools(url)[0]}"
         if response.status_code != 503:
@@ -378,7 +397,7 @@ class RedataBreaker(UpstreamBreaker):
         return self.SOURCE_BUSY_SECONDS if scope.startswith("source:") else super().default_seconds(scope)
 
     def _refusals_key(self) -> str:
-        return self._key("refusals")
+        return self._key(f"refusals:{self._key_fingerprint()}")
 
     def announce(self, scope: str, seconds: int, retry_at: float) -> None:
         """Report a refused endpoint once, at error level, and remember it for the site admin; anything else as usual.
@@ -391,12 +410,14 @@ class RedataBreaker(UpstreamBreaker):
         if not scope.startswith(self.REFUSED_SCOPE):
             super().announce(scope, seconds, retry_at)
             return
-        endpoint = scope.removeprefix(self.REFUSED_SCOPE)
+        endpoint = scope.removeprefix(self.REFUSED_SCOPE).partition(":")[2]
+        now = time.time()
         try:
             refusals = cache.get(self._refusals_key())
-            refusals = dict(refusals) if isinstance(refusals, dict) else {}
+            # Each rewrite renews the whole list's expiry, so an endpoint refused long ago is dropped here.
+            refusals = {name: times for name, times in refusals.items() if self._recent(times, now)} if isinstance(refusals, dict) else {}
             known = endpoint in refusals
-            refusals[endpoint] = (time.time(), retry_at)
+            refusals[endpoint] = (now, retry_at)
             cache.set(self._refusals_key(), refusals, timeout=self.REFUSAL_MEMORY_SECONDS)
         except _CACHE_ERRORS:
             known = False
@@ -417,8 +438,23 @@ class RedataBreaker(UpstreamBreaker):
             return []
         if not isinstance(refusals, dict):
             return []
-        entries = [RefusedEndpoint(str(endpoint), float(times[0]), float(times[1])) for endpoint, times in refusals.items() if isinstance(times, tuple | list) and len(times) == 2 and all(isinstance(value, int | float) for value in times)]
+        now = time.time()
+        entries = [RefusedEndpoint(str(endpoint), float(times[0]), float(times[1])) for endpoint, times in refusals.items() if self._recent(times, now)]
         return sorted(entries, key=lambda entry: entry.refused_at, reverse=True)
+
+    def _recent(self, times: object, now: float) -> bool:
+        """Whether a registry entry is well-formed and its refusal within :attr:`REFUSAL_MEMORY_SECONDS` of ``now``.
+
+        Args:
+            times: The entry's ``(refused_at, retry_at)``.
+            now: The current Unix time.
+
+        Returns:
+            True when the entry still belongs on the list.
+        """
+        if not isinstance(times, tuple | list) or len(times) != 2 or not all(isinstance(value, int | float) for value in times):
+            return False
+        return now - float(times[0]) < self.REFUSAL_MEMORY_SECONDS
 
 
 class WaybackBreaker(UpstreamBreaker):

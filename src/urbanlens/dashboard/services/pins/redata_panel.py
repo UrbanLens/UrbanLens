@@ -9,8 +9,36 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelSource
 
 if TYPE_CHECKING:
+    from collections.abc import Sized
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
+
+def at_limit(rows: Sized, limit: int | None) -> bool:
+    """Whether an answer filled the ``limit`` it was asked under, which makes any count drawn from it a floor.
+
+    Args:
+        rows: The rows the answer held.
+        limit: The most rows asked for, or None for no limit.
+
+    Returns:
+        True when there may be more than ``rows``.
+    """
+    return limit is not None and len(rows) >= limit
+
+
+def count_label(rows: Sized, limit: int | None) -> str:
+    """How many rows an answer holds, said as a floor when it stopped at ``limit``.
+
+    Args:
+        rows: The rows the count describes.
+        limit: The most rows asked for, or None for no limit.
+
+    Returns:
+        Such as ``"12"`` or ``"50+"``.
+    """
+    return f"{len(rows)}+" if at_limit(rows, limit) else str(len(rows))
 
 
 class RedataBackedSource(PanelSource):
@@ -44,7 +72,7 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
     payload_key: ClassVar[str]
     row_limit: ClassVar[int | None] = None
 
-    def counted(self, rows: list) -> str:
+    def counted(self, rows: Sized) -> str:
         """How many rows an answer holds, said as a floor when the answer stopped at :attr:`row_limit`.
 
         Args:
@@ -53,7 +81,18 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
         Returns:
             Such as ``"12"`` or ``"50+"``.
         """
-        return f"{len(rows)}+" if self.row_limit is not None and len(rows) >= self.row_limit else str(len(rows))
+        return count_label(rows, self.row_limit)
+
+    def is_full(self, rows: Sized) -> bool:
+        """Whether an answer stopped at :attr:`row_limit`, so counts of its subsets are floors too.
+
+        Args:
+            rows: The rows the answer held.
+
+        Returns:
+            True when there may be more.
+        """
+        return at_limit(rows, self.row_limit)
 
     @abstractmethod
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
