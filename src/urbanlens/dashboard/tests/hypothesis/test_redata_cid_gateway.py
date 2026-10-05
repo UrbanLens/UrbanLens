@@ -10,7 +10,9 @@ import pytest
 import requests
 from urllib3 import HTTPResponse
 
+from hypothesis import assume, given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.services.apis.locations.cid_validation import MAX_CID, parse_cid
 from urbanlens.dashboard.services.apis.locations.google import redata_cid_gateway as gw_module
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import (
     CidLookupEntry,
@@ -89,7 +91,7 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         # 5 cids at a cap of 2 -> 3 requests (2 + 2 + 1).
         self.assertEqual(session.post.call_count, 3)
         sent_batches = [call.kwargs["json"]["cids"] for call in session.post.call_args_list]
-        self.assertEqual(sent_batches, [[1, 2], [3, 4], [5]])
+        self.assertEqual(sent_batches, [["1", "2"], ["3", "4"], ["5"]])
 
     def test_empty_input_makes_no_request(self) -> None:
         session = mock.Mock()
@@ -111,7 +113,7 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         )
 
         sent = session.post.call_args.kwargs["json"]["cids"]
-        self.assertEqual(sent, [{"cid": 1, "url": "https://maps.google.com/maps/place/X/data=!4m2!3m1!1s0x0:0x1"}])
+        self.assertEqual(sent, [{"cid": "1", "url": "https://maps.google.com/maps/place/X/data=!4m2!3m1!1s0x0:0x1"}])
 
     def test_mixed_plain_and_url_entries_are_sent_in_their_own_shape(self) -> None:
         session = mock.Mock()
@@ -120,7 +122,7 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         self._gateway(session).resolve_cids([1, CidLookupEntry(cid=2, url="https://maps.google.com/maps/place/Y")])
 
         sent = session.post.call_args.kwargs["json"]["cids"]
-        self.assertEqual(sent, [1, {"cid": 2, "url": "https://maps.google.com/maps/place/Y"}])
+        self.assertEqual(sent, ["1", {"cid": "2", "url": "https://maps.google.com/maps/place/Y"}])
 
     def test_a_cid_url_entry_still_resolves_keyed_by_its_own_cid(self) -> None:
         session = mock.Mock()
@@ -131,6 +133,83 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         )
 
         self.assertEqual(result.resolved, {1: (38.456, -77.123)})
+
+    def test_a_rejected_entry_is_matched_by_its_index_and_never_pending(self) -> None:
+        session = mock.Mock()
+        session.post.return_value = _response(
+            200,
+            {
+                "results": {"1": {"lat": 38.456, "lng": -77.123}},
+                "pending": [],
+                "rejected": [
+                    {
+                        "index": 1,
+                        "cid": "9007199254740993000",
+                        "error": "cid_float_rounded",
+                        "message": "lost its low digits",
+                    }
+                ],
+            },
+        )
+
+        result = self._gateway(session).resolve_cids([1, 9007199254740993000])
+
+        self.assertEqual(result.rejected, {9007199254740993000: "cid_float_rounded"})
+        self.assertEqual(result.pending, set())
+
+    def test_a_response_without_rejected_still_parses(self) -> None:
+        """REData before the rejected bucket existed answers without it."""
+        session = mock.Mock()
+        session.post.return_value = _response(200, {"results": {}, "pending": ["7"]})
+
+        result = self._gateway(session).resolve_cids([7])
+
+        self.assertEqual(result.pending, {7})
+        self.assertEqual(result.rejected, {})
+
+    def test_a_rejected_entry_with_an_unknown_index_is_left_pending(self) -> None:
+        session = mock.Mock()
+        session.post.return_value = _response(
+            200, {"results": {}, "pending": [], "rejected": [{"index": 5, "error": "x"}, "junk"]}
+        )
+
+        result = self._gateway(session).resolve_cids([7])
+
+        self.assertEqual(result.pending, {7})
+        self.assertEqual(result.rejected, {})
+
+
+class RedataCidGatewayWireRoundTripTests(SimpleTestCase):
+    """Every 64-bit cid crosses the wire to REData and back exactly (REData P120)."""
+
+    def _gateway(self, session: mock.Mock) -> RedataCidGateway:
+        return RedataCidGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
+
+    @given(st.integers(min_value=1, max_value=MAX_CID))
+    def test_the_request_body_round_trips_every_cid(self, cid: int) -> None:
+        session = mock.Mock()
+        session.post.return_value = _response(200, {"results": {}, "pending": []})
+        url = f"https://www.google.com/maps/place/X/data=!4m2!3m1!1s0x1:0x{cid:x}"
+
+        self._gateway(session).resolve_cids([cid, CidLookupEntry(cid=cid, url=url)])
+
+        # What REData's JSON parser reads, then the cid each entry names.
+        received = json.loads(json.dumps(session.post.call_args.kwargs["json"]))["cids"]
+        self.assertEqual(
+            [parse_cid(entry["cid"] if isinstance(entry, dict) else entry) for entry in received], [cid, cid]
+        )
+
+    @given(st.integers(min_value=1, max_value=MAX_CID), st.integers(min_value=1, max_value=MAX_CID))
+    def test_the_response_round_trips_every_cid(self, resolved: int, pending: int) -> None:
+        assume(resolved != pending)
+        session = mock.Mock()
+        body = json.loads(json.dumps({"results": {str(resolved): {"lat": 1.5, "lng": 2.5}}, "pending": [str(pending)]}))
+        session.post.return_value = _response(200, body)
+
+        result = self._gateway(session).resolve_cids([resolved, pending])
+
+        self.assertEqual(result.resolved, {resolved: (1.5, 2.5)})
+        self.assertEqual(result.pending, {pending})
 
 
 class RedataCidGatewayGetPlaceDetailTests(SimpleTestCase):

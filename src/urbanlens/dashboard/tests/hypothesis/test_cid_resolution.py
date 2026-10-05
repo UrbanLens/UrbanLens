@@ -230,3 +230,64 @@ class ResolveViaGoogleTests(SimpleTestCase):
         self.assertEqual(result.pending, [1])
         self.assertEqual(result.resolved, {2: (3.0, 4.0)})
         self.assertEqual(result.unresolvable, set())
+
+
+class ResolveCidsRefusesBeforeAnyLookupTests(SimpleTestCase):
+    """A cid that cannot name a place costs no lookup, from REData or from Google Places (REData P120)."""
+
+    ROUNDED = 14522379626423718000  # 0xc989db53ce5b1234 after a JavaScript Number.
+    TRUE = 0xC989DB53CE5B1234
+
+    def test_a_float_rounded_cid_never_reaches_reData(self) -> None:
+        with (
+            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(settings, "redata_api_key", "test-key"),
+            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway") as gateway_cls,
+        ):
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(resolved={7: (1.0, 2.0)})
+            result = cid_resolution.resolve_cids([7, self.ROUNDED])
+
+        sent = gateway_cls.return_value.resolve_cids.call_args.args[0]
+        self.assertEqual([entry.cid for entry in sent], [7])
+        self.assertEqual(result.rejected, {self.ROUNDED: "cid_float_rounded"})
+        self.assertEqual(result.resolved, {7: (1.0, 2.0)})
+
+    def test_a_float_rounded_cid_never_reaches_google_places(self) -> None:
+        with (
+            mock.patch.object(settings, "redata_api_url", None),
+            mock.patch.object(settings, "redata_api_key", None),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.GoogleGeocodingGateway"
+            ) as gateway_cls,
+        ):
+            result = cid_resolution.resolve_cids([self.ROUNDED])
+
+        gateway_cls.return_value.get_coordinates_by_cid.assert_not_called()
+        self.assertEqual(result.rejected, {self.ROUNDED: "cid_float_rounded"})
+        self.assertEqual(result.pending, [])
+
+    def test_a_cid_its_own_url_would_replace_is_refused_so_no_answer_goes_astray(self) -> None:
+        url = f"https://www.google.com/maps/place/X/data=!4m2!3m1!1s0x1:0x{self.TRUE:x}"
+        with (
+            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(settings, "redata_api_key", "test-key"),
+            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway") as gateway_cls,
+        ):
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult()
+            result = cid_resolution.resolve_cids([self.ROUNDED], urls_by_cid={self.ROUNDED: url})
+
+        self.assertEqual(gateway_cls.return_value.resolve_cids.call_args.args[0], [])
+        self.assertEqual(result.rejected, {self.ROUNDED: "cid_float_rounded"})
+
+    def test_reDatas_own_refusals_are_passed_through(self) -> None:
+        with (
+            mock.patch.object(settings, "redata_api_url", "https://redata.example.test"),
+            mock.patch.object(settings, "redata_api_key", "test-key"),
+            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway") as gateway_cls,
+        ):
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult(
+                rejected={7: "cid_conflicts_with_url"}
+            )
+            result = cid_resolution.resolve_cids([7])
+
+        self.assertEqual(result.rejected, {7: "cid_conflicts_with_url"})

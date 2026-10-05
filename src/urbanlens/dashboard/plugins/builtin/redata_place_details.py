@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError, parse_cid
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.media.previews import tile_preview_url
@@ -46,7 +47,8 @@ def place_detail(cid: int) -> dict[str, Any]:
         cid: The Google Maps CID.
 
     Returns:
-        The detail payload; ``{}`` when REData confirmed the CID has no place; or a
+        The detail payload; ``{}`` when REData confirmed the CID has no place or refused it as one
+        that cannot name a place (``cid_validation``); or a
         :data:`_RESOLUTION_PENDING` marker while REData resolves it.
 
     Raises:
@@ -59,7 +61,7 @@ def place_detail(cid: int) -> dict[str, Any]:
     if detail is not None:
         return detail
     result = gateway.resolve_cids([cid])
-    if cid in result.unresolvable:
+    if cid in result.unresolvable or cid in result.rejected:
         return {}
     if cid in result.resolved:
         return gateway.get_place_detail(cid) or {_RESOLUTION_PENDING: True}
@@ -75,8 +77,8 @@ def _coerce_cid(cid_value: Any) -> int | None:
     if cid_value is None:
         return None
     try:
-        return int(cid_value)
-    except (TypeError, ValueError):
+        return parse_cid(cid_value)
+    except InvalidCidError:
         return None
 
 

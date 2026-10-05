@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
+from urbanlens.dashboard.services.apis.locations.cid_validation import InvalidCidError, reconcile_cid
 from urbanlens.dashboard.services.apis.locations.google.geocoding import CoordinatesNeedNetworkError, GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
@@ -125,6 +126,26 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
         if image.pin_id is None:
             image.pin = pin
             image.save(update_fields=["pin", "updated"])
+
+
+def confirmed_pin_cid(pin: dict[str, Any]) -> int | None:
+    """The CID a pin the browser posted back names, checked against the Google Maps URL it came from.
+
+    The confirm step's pins are client data. A ``cid`` that crossed the browser as a JSON number has
+    lost its low digits (REData P120); when the pin still carries its source URL, the URL's own CID
+    stands in for it.
+
+    A pin that claims no CID - a falsy one included, as a zero-CID feature id used to post - has
+    none, even when its URL states one: the URL only checks a claim here, it never adds one.
+
+    Raises:
+        InvalidCidError: See :func:`cid_validation.reconcile_cid`.
+    """
+    claimed = pin.get("cid")
+    if claimed in (None, "", 0, "0"):
+        return None
+    url = pin.get("maps_url")
+    return reconcile_cid(claimed, url=url if isinstance(url, str) else "")
 
 
 def _on_the_globe(latitude: Any, longitude: Any) -> tuple[float, float] | None:
@@ -914,7 +935,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 legacy-repair candidates, see the TEMPORARY block below.
 
         Returns:
-            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``, and - on records the TEMPORARY legacy CID repair would apply to, or whose own cid came from the imprecise S2-cell URL guess - ``needs_repair``.
+            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid`` (a decimal string, or None), ``maps_url``, and - on records the TEMPORARY legacy CID repair would apply to, or whose own cid came from the imprecise S2-cell URL guess - ``needs_repair``.
         """
         return list(GoogleMapsGateway._iter_preview_pins(raw_pins, user_profile))
 
@@ -941,7 +962,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # (which re-uses this exact dict, not a fresh parse of the file) has the real
                 # description to save.
                 "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
-                "cid": cid,
+                # A string: the browser holds this as JSON, and a JSON number above 2**53 comes back
+                # from a JavaScript Number with its low digits zeroed (REData P120).
+                "cid": str(cid) if cid else None,
                 # Also just carried through to the confirm step - not displayed -
                 # so a deferred lookup can pass it to REData. See _csv_row_iter.
                 "maps_url": p.get("maps_url"),
@@ -968,7 +991,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             - ``create_category`` (bool): create a ``kind="category"`` label from *stem*.
             - ``label_ids`` (list[int]): label IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, ``maps_url`` (the source Google Maps
+              ``description``, ``cid`` (decimal digits; checked by
+              :func:`confirmed_pin_cid`, and a pin it refuses is skipped), ``maps_url`` (the source Google Maps
               URL, when the pin came from one - passed to REData for a more
               reliable deferred lookup), and ``label_ids`` (list[int]) fields.
               Imports never hit external APIs synchronously; each created pin's
@@ -1039,10 +1063,27 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
                 list_deferred_pins: list[dict[str, Any]] = []
 
-                for pin_dict in lst.get("pins", []):
+                for posted_pin in lst.get("pins", []):
                     current += 1
-                    pin_name = (pin_dict.get("name") or "")[:255]
-                    cid = pin_dict.get("cid")
+                    pin_name = (posted_pin.get("name") or "")[:255]
+                    try:
+                        cid = confirmed_pin_cid(posted_pin)
+                    except InvalidCidError as exc:
+                        logger.warning("Confirmed import for profile %s: skipped a pin whose cid was refused (%s)", user_profile.pk, exc.code)
+                        skipped_count += 1
+                        yield {
+                            "type": "progress",
+                            "current": current,
+                            "total": total,
+                            "percent": min(100, int(current / total * 100)) if total > 0 else 100,
+                            "created": created_count,
+                            "exists": exists_count,
+                            "skipped": skipped_count,
+                            "outcome": "skipped",
+                            "name": pin_name,
+                        }
+                        continue
+                    pin_dict = {**posted_pin, "cid": cid}
 
                     location = Location.objects.by_cid(cid).first() if cid else None
 

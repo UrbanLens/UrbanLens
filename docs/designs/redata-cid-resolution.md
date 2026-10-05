@@ -39,8 +39,11 @@ disagree). Summary:
 
 - **Auth**: same bearer-token REData account already used for property records
   (`UL_REDATA_API_URL`/`UL_REDATA_API_KEY`) — the key needs REData's `places:read` scope.
-- **Request**: `{"cids": [<int>, ...]}`, up to 10,000 per call (REData returns `400` above that;
-  UrbanLens's gateway chunks transparently so callers never have to think about this).
+- **Request**: `{"cids": ["<cid>", {"cid": "<cid>", "url": "<maps url>"}, ...]}`, up to 10,000 per
+  call (REData returns `400` above that; UrbanLens's gateway chunks transparently so callers never
+  have to think about this). UrbanLens sends every cid as a **string of decimal digits**, never a
+  JSON number: a cid is an unsigned 64-bit integer, and a JSON number above 2**53 that passes through
+  a float64 anywhere comes back with its low digits zeroed (REData P120; UrbanLens P318).
 - **Response** (`200`):
   ```jsonc
   {
@@ -48,11 +51,20 @@ disagree). Summary:
       "123456789012345678": { "lat": 38.456, "lng": -77.123 },
       "987654321098765432": null   // confirmed, after repeated attempts, unresolvable
     },
-    "pending": ["555555555555555555"]   // just queued / in flight server-side - poll again later
+    "pending": ["555555555555555555"],   // just queued / in flight server-side - poll again later
+    // Refused before any lookup; `index` is the entry's position in the request's "cids".
+    "rejected": [{"index": 3, "cid": "14522379626423718000", "error": "cid_float_rounded", "message": "..."}]
   }
   ```
   Resolution is asynchronous on REData's end, so a cid not yet settled comes back in `pending`,
-  not as an error or a missing key.
+  not as an error or a missing key. `rejected` is absent from REData versions that predate it.
+- **Refusals** (`services/apis/locations/cid_validation.py`, mirroring REData's
+  `google_places.cid_validation`): `cid_not_integer` (a float, bool or non-digit string),
+  `cid_out_of_range` (not 1 to 2**64 - 1), `cid_conflicts_with_url` (the cid disagrees with the
+  one its own URL or feature id states, other than by a float round trip - in that case the URL's
+  cid is used), `cid_float_rounded` (above 2**53, exactly what a float64 prints for itself, and
+  nothing corroborates it), `no_identifier`. UrbanLens applies the same checks before asking any
+  provider, so a refused cid never spends REData's or Google's quota.
 - **Rate limits**: a dedicated 200 requests/hour per API key on this endpoint specifically (on top
   of REData's general 2,000/hour per-key budget), rated in calls, not CIDs — see api-reference.md's
   "Rate limiting" section.
@@ -62,7 +74,7 @@ disagree). Summary:
 `src/urbanlens/dashboard/services/apis/locations/cid_resolution.py` — `resolve_cids()` — is the
 single chokepoint deciding REData vs. a direct-Google-Places fallback (used only for installs that
 never configured REData at all - e.g. someone else self-hosting UrbanLens). It returns a
-`CidResolutionResult` with `resolved`/`unresolvable`/`pending` buckets regardless of which provider
+`CidResolutionResult` with `resolved`/`unresolvable`/`pending`/`rejected` buckets regardless of which provider
 answered, so callers (`tasks.resolve_deferred_pin_locations`) don't need to know which one ran.
 
 `src/urbanlens/dashboard/services/apis/locations/google/redata_cid_gateway.py`

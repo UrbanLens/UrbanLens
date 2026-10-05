@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import logging
 
 import requests
 
+from urbanlens.dashboard.services.apis.locations.cid_validation import CID_FLOAT_ROUNDED, InvalidCidError, reconcile_cid
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
@@ -40,6 +41,9 @@ class CidResolutionResult:
     #: this attempt" from a response that resolved/deferred cids normally.
     #: Lets the caller count *consecutive* failures across retries and eventually give up on a
     request_failed: bool = False
+    #: Refused before any lookup, by ``cid_validation`` here or by REData, with the refusal's code -
+    #: a cid that cannot name a place, never retried.
+    rejected: dict[int, str] = field(default_factory=dict)
 
 
 def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
@@ -50,10 +54,37 @@ def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> 
         urls_by_cid: The source Google Maps URL for any of ``cids`` that came from one (e.g. a Takeout CSV import) - passed through to REData when it's the configured provider, since it resolves via a place's own URL faster and more reliably than the bare cid alone...
 
     Returns:
-        A :class:`CidResolutionResult` partitioning every input cid into resolved/unresolvable/pending."""
+        A :class:`CidResolutionResult` partitioning every input cid into resolved/unresolvable/pending/rejected."""
+    usable, rejected = _usable_cids(cids, urls_by_cid or {})
     if settings.redata_api_url and settings.redata_api_key:
-        return _resolve_via_redata(cids, urls_by_cid)
-    return _resolve_via_google(cids)
+        result = _resolve_via_redata(usable, urls_by_cid)
+    else:
+        result = _resolve_via_google(usable)
+    return replace(result, rejected={**rejected, **result.rejected}) if rejected else result
+
+
+def _usable_cids(cids: list[int], urls_by_cid: dict[int, str]) -> tuple[list[int], dict[int, str]]:
+    """Split *cids* into those worth a lookup and those refused, before any provider spends anything on them.
+
+    A cid its own URL would replace is refused too: the caller keys its pins by the cid it passed,
+    so an answer for the URL's cid would never reach them. Canonicalise first (see
+    ``maps.confirmed_pin_cid``).
+    """
+    usable: list[int] = []
+    rejected: dict[int, str] = {}
+    for cid in cids:
+        try:
+            canonical = reconcile_cid(cid, url=urls_by_cid.get(cid) or "")
+        except InvalidCidError as exc:
+            rejected[cid] = exc.code
+            continue
+        if canonical != cid:
+            rejected[cid] = CID_FLOAT_ROUNDED
+            continue
+        usable.append(cid)
+    if rejected:
+        logger.warning("Refused %d cid(s) before any lookup: %s", len(rejected), sorted(set(rejected.values())))
+    return usable, rejected
 
 
 def _resolve_via_redata(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
@@ -72,6 +103,7 @@ def _resolve_via_redata(cids: list[int], urls_by_cid: dict[int, str] | None = No
         resolved=batch.resolved,
         unresolvable=batch.unresolvable,
         pending=list(batch.pending),
+        rejected=batch.rejected,
     )
 
 
