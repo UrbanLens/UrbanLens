@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from django.contrib.auth.models import User
@@ -27,6 +28,8 @@ _ENDPOINTS: list[tuple[str, dict[str, Any] | None]] = [
     ("external_api:custom_fields", None),
     ("external_api:saved_filters", None),
     ("external_api:notifications", None),
+    # A cursor page built by hand rather than by the paginator (P311).
+    ("external_api:memories.timeline", None),
 ]
 
 
@@ -143,18 +146,29 @@ class ResponseSchemaConformanceTests(TestCase):
         return SchemaGenerator().get_schema(request=None, public=True)
 
     @staticmethod
-    def _response_schema(document: dict, path: str) -> dict | None:
-        """The schema declared for `path`'s 200 response, ready to validate against.
+    def _response_schema(document: dict, path: str, method: str = "get", status: str = "200") -> dict | None:
+        """The schema declared for `path`'s response, ready to validate against.
 
         Args:
-            document: The generated OpenAPI document. path: The URL path to look up.
+            document: The generated OpenAPI document.
+            path: The URL path to look up.
+            method: The operation's method.
+            status: The response's status code.
 
         Returns:
-            A JSON Schema with the document's components attached so ``$ref`` resolves, or None when the operation declares no JSON 200 body."""
-        operation = (document.get("paths", {}).get(path) or {}).get("get")
+            A JSON Schema with the document's components attached so ``$ref`` resolves, or None when the operation declares no JSON body for it."""
+        template = next(
+            (
+                key
+                for key in document.get("paths", {})
+                if re.fullmatch("[^/]+".join(map(re.escape, re.split(r"\{[^}]+\}", key))), path)
+            ),
+            path,
+        )
+        operation = (document.get("paths", {}).get(template) or {}).get(method)
         if not operation:
             return None
-        content = ((operation.get("responses") or {}).get("200") or {}).get("content") or {}
+        content = ((operation.get("responses") or {}).get(status) or {}).get("content") or {}
         schema = (content.get("application/json") or {}).get("schema")
         if not schema:
             return None
@@ -195,3 +209,44 @@ class ResponseSchemaConformanceTests(TestCase):
             failures,
             "responses do not match the schema the API publishes for them:\n  " + "\n  ".join(failures),
         )
+
+    def _assert_matches(self, document: dict, response, path: str, method: str, status: str) -> None:
+        import jsonschema
+
+        self.assertEqual(response.status_code, int(status), response.content[:300])
+        schema = self._response_schema(document, path, method, status)
+        self.assertIsNotNone(schema, f"{method.upper()} {path} declares no JSON {status} body")
+        jsonschema.validate(instance=response.json(), schema=schema)
+
+    def test_a_trip_its_creator_belongs_to_matches_its_declared_detail(self) -> None:
+        """The creator is a member, so the payload skipped masking the creator's own copy and it lost ``display_name`` (P311)."""
+        document = self._document()
+        path = reverse("external_api:trips")
+
+        created = self.client.post(
+            path, data={"name": "Turbine Hall Circuit"}, content_type="application/json", headers=_bearer(self.raw_key)
+        )
+        self._assert_matches(document, created, path, "post", "201")
+        detail_path = reverse("external_api:trips.detail", kwargs={"trip_slug": created.json()["slug"]})
+        self._assert_matches(
+            document, self.client.get(detail_path, headers=_bearer(self.raw_key)), detail_path, "get", "200"
+        )
+
+    def test_both_refusals_of_a_calendar_sync_toggle_match_its_declared_400(self) -> None:
+        """A malformed body is refused with ``error`` alone; the 400 declared only the not-exported refusal (P311)."""
+        document = self._document()
+        created = self.client.post(
+            reverse("external_api:trips"),
+            data={"name": "Turbine Hall Circuit"},
+            content_type="application/json",
+            headers=_bearer(self.raw_key),
+        )
+        path = reverse("external_api:trips.calendar_sync", kwargs={"trip_slug": created.json()["slug"]})
+
+        not_exported = self.client.post(
+            path, data={"enabled": True}, content_type="application/json", headers=_bearer(self.raw_key)
+        )
+        malformed = self.client.post(path, data="{", content_type="application/json", headers=_bearer(self.raw_key))
+
+        self._assert_matches(document, not_exported, path, "post", "400")
+        self._assert_matches(document, malformed, path, "post", "400")

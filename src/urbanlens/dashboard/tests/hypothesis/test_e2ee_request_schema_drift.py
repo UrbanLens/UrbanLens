@@ -29,8 +29,6 @@ if TYPE_CHECKING:
 _WRITES = frozenset({"post", "put", "patch", "delete"})
 #: Fills any path parameter, a UUID one included.
 _PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
-#: drf-spectacular's suffix for a choice set whose name collided: three hex digits of its hash.
-_HASH_NAMED = re.compile(r"[0-9A-F]{3}Enum$")
 
 
 def _document() -> dict:
@@ -97,12 +95,6 @@ class TheDocumentedRequestIsTheReadRequestTests(SimpleTestCase):
             {"kdf_opslimit", "kdf_memlimit", "current_password"}, _body_reads(e2ee.E2EERewrapView.post)
         )
         self.assertEqual(_body_reads(e2ee.E2EEPasskeyWrapItemView.delete), {"current_password"})
-
-    def test_no_choice_set_is_named_by_its_hash(self) -> None:
-        """A hash-suffixed name changes whenever its choices do, renaming a generated client's type."""
-        names = list(_document()["components"]["schemas"])
-        self.assertEqual([name for name in names if _HASH_NAMED.search(name)], [])
-        self.assertIn("AliasKindEnum", names)
 
 
 def _b64(raw: bytes) -> str:

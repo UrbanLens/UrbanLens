@@ -60,7 +60,9 @@ for reasons unrelated to the schema.
 
 Per operation, on every generated request:
 
-- **`not_a_server_error`** — no 500.
+- **`not_an_undeclared_server_error`** — no 500, and no other 5xx the operation does not declare. A declared 503,
+  such as the assistant's while AI is turned off, is a documented refusal rather than a crash
+  (`schema_source.py`, wrapping schemathesis's `not_a_server_error`).
 - **`response_schema_conformance`** — a returned body validates against the
   schema declared for that response.
 

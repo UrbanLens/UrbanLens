@@ -120,22 +120,43 @@ def strict_enabled() -> bool:
     return os.environ.get(STRICT_ENV, "").strip().lower() in {"1", "true", "yes"}
 
 
+def not_an_undeclared_server_error(ctx, response, case) -> bool | None:
+    """Schemathesis's ``not_a_server_error``, except for a 5xx other than 500 that the operation declares.
+
+    A declared 503 is a refusal the API documents, such as the assistant's while AI is turned off for the account,
+    rather than a crash.
+
+    Args:
+        ctx: The check context.
+        response: The response under test.
+        case: The generated request.
+
+    Returns:
+        None; a failure raises.
+    """
+    from schemathesis.checks import not_a_server_error
+
+    declared = case.operation.definition.raw.get("responses", {})
+    if response.status_code != 500 and str(response.status_code) in declared:
+        return None
+    return not_a_server_error(ctx, response, case)
+
+
 def response_checks() -> list:
     """The checks each response is held to.
 
-    The default pair is the part that is about *this* application's behaviour: it must not 500, and a body it
+    The default pair is the part that is about *this* application's behaviour: it must not crash, and a body it
     returns must validate against the schema it published for that response.
 
     Returns:
         Check callables to pass to ``call_and_validate``."""
-    from schemathesis.checks import not_a_server_error
     from schemathesis.specs.openapi.checks import (
         content_type_conformance,
         response_schema_conformance,
         status_code_conformance,
     )
 
-    checks = [not_a_server_error, response_schema_conformance]
+    checks = [not_an_undeclared_server_error, response_schema_conformance]
     if strict_enabled():
         checks += [status_code_conformance, content_type_conformance]
     return checks

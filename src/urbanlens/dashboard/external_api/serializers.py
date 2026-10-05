@@ -2356,6 +2356,15 @@ class MemoryEventSerializer(serializers.Serializer):
     extra = serializers.JSONField(read_only=True)
 
 
+class MemoryEventPageSerializer(serializers.Serializer):
+    """One cursor page of the Memories timeline (schema-only). ``previous`` and ``count`` are always null."""
+
+    count = serializers.IntegerField(read_only=True, allow_null=True)
+    next = serializers.CharField(read_only=True, allow_null=True)
+    previous = serializers.CharField(read_only=True, allow_null=True)
+    results = MemoryEventSerializer(many=True, read_only=True)
+
+
 class MemoriesTimelineQuerySerializer(serializers.Serializer):
     """Validates the query params of the Memories timeline endpoint."""
 
@@ -2578,6 +2587,19 @@ class TripCalendarSyncStatusSerializer(serializers.Serializer):
     #: Whether later edits keep pushing to the linked event.
     auto_sync = serializers.BooleanField(read_only=True)
     last_synced = serializers.DateTimeField(read_only=True, allow_null=True)
+
+
+class TripCalendarSyncRefusalSerializer(ErrorSerializer):
+    """A refused calendar-sync toggle (schema-only).
+
+    A refusal naming the export as the blocker carries the trip's sync status beside ``error``, so a client can tell
+    whether the calendar or the export is missing; a malformed request carries ``error`` alone.
+    """
+
+    connected = serializers.BooleanField(required=False)
+    linked = serializers.BooleanField(required=False)
+    auto_sync = serializers.BooleanField(required=False)
+    last_synced = serializers.DateTimeField(required=False, allow_null=True)
 
 
 class TripPermissionsSerializer(serializers.Serializer):

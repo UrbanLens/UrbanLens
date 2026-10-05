@@ -23794,10 +23794,44 @@ changes whenever the choices do.
 - every E2EE write's body keys, read from its view and from the module helpers it hands the body to, are in the
   published request schema, or the description for a DELETE (failed for 4 operations);
 - an anti-vacuity check that the scan finds the passkey-wrap, rewrap and DELETE reads;
-- no schema component is named by its hash (failed on `KindA19Enum`);
 - reset stores the default cost for a wrap naming none, and the named cost for one naming it (both failed, keeping
   `(4, 134217728)`);
 - reset refuses a cost below the floor and writes nothing.
 
+`test_published_schema_properties.py::StableNameTests` checks that no schema component is named by its hash (failed on
+`KindA19Enum`).
+
 **Also found, not fixed here.** The in-process contract suite (`bin/run_contract_tests.sh --methods all`) passes 289
 of 292 operations. The three failures are P311.
+
+## RESOLVED 2026-10-05: Three external API responses did not match their published schema, and the contract suite counted a declared 503 as a crash
+
+`id: P311` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, running bin/run_contract_tests.sh --methods all`
+
+**What was wrong.** The in-process contract suite passed 289 of 292 operations; a second run found a fourth:
+- **`GET memories/timeline/`** declared a bare array of `MemoryEvent`, but has always answered the cursor page
+  `{count, next, previous, results}`. A client generated from the schema could not read it.
+- **A trip's `creator`** (`POST trips/`, `GET trips/{slug}/`) lost `display_name` whenever the creator was also a
+  member, which is every trip a person creates. `_trip_detail_payload` masked the creator's own copy of the profile
+  only when it was not a member, and the member row's masked copy is a different object, so DRF skipped the
+  attribute it never received.
+- **`POST trips/{slug}/calendar-sync/`** declared its 400 as the sync-status object. A malformed body is refused with
+  `{error}` alone, and only the not-exported refusal carries the status beside `error`.
+- **The assistant's `POST assistant/message/`** answers a declared 503 while AI is turned off for the account or the
+  site. Schemathesis's `not_a_server_error` fails every 5xx, although the suite's documentation says the check means
+  "no 500".
+
+**Fix.**
+- `MemoryEventPageSerializer` declares the page the view returns.
+- The trip payload takes the creator from the member row `list_members` already masked, and masks it itself only
+  when the creator is not a member.
+- `TripCalendarSyncRefusalSerializer` extends the error envelope with the four status fields, optional.
+- The contract suite's `not_an_undeclared_server_error` passes a 5xx other than 500 that the operation declares, and
+  otherwise defers to schemathesis's check. The assistant's status is unchanged; a client may already branch on it.
+
+**Tests.** `test_response_matches_schema.py`:
+- the timeline joins the listed endpoints (failed: an object where an array was declared);
+- a created trip, and its detail, validate against their declared bodies (failed: `display_name` required);
+- both calendar-sync refusals validate against the declared 400 (failed: `auto_sync` required).
+
+The path lookup now matches templated paths. The full contract suite, writes included, passes 292 of 292 operations.

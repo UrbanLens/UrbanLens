@@ -51,6 +51,7 @@ from urbanlens.dashboard.external_api.serializers import (
     LocationSearchQuerySerializer,
     LocationSearchResponseSerializer,
     MemoriesTimelineQuerySerializer,
+    MemoryEventPageSerializer,
     MemoryEventSerializer,
     NotificationListQuerySerializer,
     NotificationListResponseSerializer,
@@ -128,6 +129,7 @@ from urbanlens.dashboard.external_api.serializers import (
     TripActivityStatusSerializer,
     TripActivityUpdateSerializer,
     TripActivityVoteSerializer,
+    TripCalendarSyncRefusalSerializer,
     TripCalendarSyncStatusSerializer,
     TripCalendarSyncToggleSerializer,
     TripCommentCreateSerializer,
@@ -1696,7 +1698,7 @@ class MemoriesTimelineView(ExternalApiView):
     @extend_schema(
         parameters=[MemoriesTimelineQuerySerializer],
         description=("Newest first, cursor-paginated. Pass `?before=<occurred_at>` (the `next` link does this for you) to walk further back. `previous` and `count` are always null."),
-        responses={200: MemoryEventSerializer(many=True), 400: ErrorSerializer},
+        responses={200: MemoryEventPageSerializer, 400: ErrorSerializer},
     )
     def get(self, request: Request) -> Response:
         """Return one page of MemoryEvents for the requested date range/viewport."""
@@ -4476,10 +4478,14 @@ def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
         ready for: class:`TripDetailSerializer`.
     """
     members = list_members(trip, profile)
-    # The creator may not be one of the membership rows resolve_visible_identities
-    # just masked, so mask that reference too rather than leaking a raw username.
-    if trip.creator is not None and not any(m.profile_id == trip.creator_id for m in members):
-        resolve_visible_identities(profile, [trip.creator])
+    # ``trip.creator`` is its own copy of the profile, not a member row's, so it is masked either way: taken from the
+    # member row that list_members already masked, else masked here, rather than leaking a raw username.
+    if trip.creator is not None:
+        member_copy = next((m.profile for m in members if m.profile_id == trip.creator_id), None)
+        if member_copy is not None:
+            trip.creator = member_copy
+        else:
+            resolve_visible_identities(profile, [trip.creator])
 
     trip.viewer = _trip_viewer_block(trip, profile)
     trip.calendar_sync = _calendar_sync_status(trip, profile)
@@ -4660,7 +4666,7 @@ class TripCalendarSyncView(TripScopedApiView):
 
     @extend_schema(
         request=TripCalendarSyncToggleSerializer,
-        responses={200: TripCalendarSyncStatusSerializer, 400: TripCalendarSyncStatusSerializer, 404: ErrorSerializer},
+        responses={200: TripCalendarSyncStatusSerializer, 400: TripCalendarSyncRefusalSerializer, 404: ErrorSerializer},
     )
     def post(self, request: Request, trip_slug: str) -> Response:
         """Set auto-sync for the caller's export link on this trip."""
