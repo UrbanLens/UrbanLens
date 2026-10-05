@@ -607,6 +607,7 @@ def log_api_call(
     was_service_disabled: bool = False,
     cost_estimate: Decimal | None = None,
     status_code: int | None = None,
+    was_rejected_input: bool = False,
 ) -> None:
     """Record one API call in the ``ApiCallLog`` table.
     Failures are swallowed so that logging problems never break callers.
@@ -619,7 +620,8 @@ def log_api_call(
         was_rate_limited: True if the call was blocked by rate limiting.
         was_geo_filtered: True if the call was skipped due to geo filtering.
         cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
-        status_code: The upstream's HTTP status, when the caller holds the response."""
+        status_code: The upstream's HTTP status, when the caller holds the response.
+        was_rejected_input: True if the call was refused before it was made because its input could not return data."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     try:
@@ -634,6 +636,7 @@ def log_api_call(
             was_service_disabled=was_service_disabled,
             cost_estimate=cost_estimate,
             status_code=status_code,
+            was_rejected_input=was_rejected_input,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
@@ -822,11 +825,14 @@ class _RateLimitedSession:
         """Reserve a rate-limit slot, make the request, finalize the logged result.
         The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
         from urbanlens.dashboard.services.core import provider_health
+        from urbanlens.dashboard.services.core.input_validation import check_request_parameters
         from urbanlens.dashboard.services.core.task_limits import check_task_deadline, within_task_deadline
         from urbanlens.dashboard.services.core.upstream_breaker import breaker_for
 
         if _EXTERNAL_CALLS_FORBIDDEN.get():
             raise ExternalCallForbiddenError(f"{self._service_key}: {method}")
+        # Before the breaker and the reservation: an input no API can answer is "no data" whatever else is true.
+        check_request_parameters(self._service_key, params=kwargs.get("params"), json=kwargs.get("json"))
         check_task_deadline()
         endpoint = self._endpoint_for_log(str(url))
         breaker = breaker_for(self._service_key)

@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
+from urbanlens.dashboard.services.core.input_validation import MAX_PLACES_RADIUS_METERS, require_coordinates, require_google_place_id, require_in_range, require_query
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -137,6 +138,8 @@ class RedataPlacesGateway(Gateway):
             GatewayRequestError: The request failed outright, or REData reported a transient failure (rate-limited, unreachable Google, or REData's own API key not configured).
         """
 
+        require_google_place_id(self.service_key, place_id)
+
         def details() -> dict[str, Any] | None:
             response = self._request(f"/api/v1/places/{place_id}/")
             if response.status_code == 200:
@@ -165,6 +168,9 @@ class RedataPlacesGateway(Gateway):
         Raises:
             GatewayRequestError: The request failed outright.
         """
+        require_coordinates(self.service_key, latitude, longitude)
+        require_in_range(self.service_key, "radius_meters", radius_meters, minimum=0, maximum=MAX_PLACES_RADIUS_METERS, exclusive_minimum=True)
+        require_in_range(self.service_key, "max_results", max_results, minimum=1)
         params: dict[str, Any] = {"latitude": latitude, "longitude": longitude, "radius_meters": radius_meters, "max_results": max_results}
         if included_types:
             params["included_type"] = list(included_types)
@@ -194,6 +200,7 @@ class RedataPlacesGateway(Gateway):
         Raises:
             GatewayRequestError: The request failed outright.
         """
+        require_query(self.service_key, query)
         params: dict[str, Any] = {"query": query, "radius_meters": radius_meters, "max_results": max_results}
         if latitude is not None:
             params["latitude"] = latitude
@@ -220,6 +227,7 @@ class RedataPlacesGateway(Gateway):
         Raises:
             GatewayRequestError: The request failed outright.
         """
+        require_query(self.service_key, query)
         params: dict[str, Any] = {"query": query, "radius_meters": radius_meters}
         if latitude is not None:
             params["latitude"] = latitude
@@ -246,6 +254,7 @@ class RedataPlacesGateway(Gateway):
         Raises:
             GatewayRequestError: The request failed outright, REData reported a transient failure, or the photo is over the proxied-media cap.
         """
+        require_google_place_id(self.service_key, place_id)
         response = self._request(f"/api/v1/places/{place_id}/photos/{photo_record_id}/download/", stream=True)
         if response.status_code == 200:
             return read_capped(response, what="REData place photo"), response.headers.get("Content-Type", "image/jpeg")

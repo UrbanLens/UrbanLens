@@ -13,6 +13,7 @@ class RedataElevationGateway(RedataLocationContextGateway):
     """REST client for REData's elevation-lookup endpoint."""
 
     service_key: ClassVar[str] = "redata_elevation"
+    answers_at_null_island: ClassVar[bool] = True
 
     def get_elevation(self, latitude: float, longitude: float, *, force_refresh: bool = False) -> LocationContextEnvelope:
         """Fetch every configured DEM's elevation reading at a coordinate.

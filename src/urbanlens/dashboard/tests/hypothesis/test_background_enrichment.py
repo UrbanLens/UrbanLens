@@ -810,3 +810,56 @@ class RefreshOfficialNamesTests(TestCase):
         ):
             result = refresh_official_names({broken.pk, healthy.pk})
         self.assertEqual(result, 1)
+
+
+class ImpossibleInputEnrichmentTests(TestCase):
+    """A location whose input no source can answer is settled, not retried every cycle as a failure."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        ApiRateLimit.objects.create(
+            service="svc_cycle",
+            display_name="Cycle service",
+            calls_per_minute=None,
+            calls_per_day=100,
+            calls_per_30_days=None,
+        )
+
+    def _run(self, source: EnrichmentSource):
+        with (
+            patch("urbanlens.dashboard.services.locations.enrichment.enrichment_sources", return_value=[source]),
+            patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
+        ):
+            return run_enrichment_cycle(sleep=lambda _seconds: None)
+
+    def test_a_refused_input_is_counted_apart_from_failures_and_logged_without_a_traceback(self) -> None:
+        from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
+
+        baker.make(Pin, profile=_make_profile(), location=_make_location())
+        source = _RecordingSource(
+            fail_after=0, fail_with=ImpossibleInputError("svc_cycle", InputRejection.NULL_ISLAND, "(0, 0)")
+        )
+        with self.assertNoLogs("urbanlens.dashboard.services.locations.enrichment", level="ERROR"):
+            summary = self._run(source)
+
+        entry = summary["sources"]["recording"]
+        self.assertEqual(entry["failed"], 0)
+        self.assertEqual(entry["rejected"], 1)
+
+    def test_a_cache_backed_source_stores_nothing_found_for_a_refused_input(self) -> None:
+        from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
+        from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
+
+        class _Refusing(LocationCacheEnrichmentSource):
+            key = "refusing"
+            cache_source = "refusing_source"
+            service_keys = ("svc_cycle",)
+
+            def fetch(self, location: Location) -> tuple[dict | None, str]:
+                raise ImpossibleInputError("svc_cycle", InputRejection.NULL_ISLAND, "(0, 0)")
+
+        location = _make_location(lat="0.000000", lng="0.000000")
+        self.assertTrue(_Refusing().enrich(location))
+
+        row = LocationCache.objects.get(location=location, source="refusing_source")
+        self.assertEqual(row.data, {})

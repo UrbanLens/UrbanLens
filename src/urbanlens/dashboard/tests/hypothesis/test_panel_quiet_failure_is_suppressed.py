@@ -81,3 +81,27 @@ class QuietFailureTests(TestCase):
             run_panel_fetch(_SOURCE_KEY, self.pin, None)
 
         setter.assert_any_call(self.source.skip_key(self.pin), 1, 120)
+
+
+class RefusedInputTests(TestCase):
+    """An input the upstream can never answer is that panel's settled empty answer, not a failure to retry."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = Profile.objects.get(user=baker.make("auth.User"))
+        self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=0, longitude=0))
+        self.source = get_panel_source(_SOURCE_KEY)
+
+    def test_a_cache_backed_panel_stores_nothing_found_and_logs_no_traceback(self) -> None:
+        from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
+
+        refusal = ImpossibleInputError("photon", InputRejection.NULL_ISLAND, "(0, 0)")
+        with (
+            mock.patch.object(type(self.source), "fetch", side_effect=refusal),
+            self.assertNoLogs("urbanlens.dashboard.services.pins.external_data", level="WARNING"),
+        ):
+            run_panel_fetch(_SOURCE_KEY, self.pin, None)
+
+        row = LocationCache.objects.get(location=self.pin.location, source=self.source.cache_source)
+        self.assertEqual(row.data, {})
+        self.assertTrue(self.source.has_landed(self.pin))

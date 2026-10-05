@@ -21,6 +21,7 @@
                 <th style="text-align:right">Calls</th>
                 <th style="text-align:right">Blocked</th>
                 <th style="text-align:right">Geo-skipped</th>
+                <th style="text-align:right" title="Refused before sending: the input could not return data">Refused&nbsp;input</th>
                 <th style="text-align:right">Errors</th>
                 <th style="text-align:right">Avg&nbsp;ms</th>
                 <th style="text-align:right">Est.&nbsp;cost</th>
@@ -38,6 +39,7 @@
             <td style="text-align:right">{% if row.total %}{{ row.total }}{% else %}<span style="color:var(--ul-text-muted,#6b7280)">-</span>{% endif %}</td>
             <td style="text-align:right">{% if row.blocked %}<span style="color:#b91c1c">{{ row.blocked }}</span>{% else %}-{% endif %}</td>
             <td style="text-align:right">{% if row.geo_skipped %}<span style="color:#0369a1">{{ row.geo_skipped }}</span>{% else %}-{% endif %}</td>
+            <td style="text-align:right">{% if row.rejected %}{{ row.rejected }}{% else %}-{% endif %}</td>
             <td style="text-align:right">{% if row.errors %}<span style="color:#b91c1c">{{ row.errors }}</span>{% else %}-{% endif %}</td>
             <td style="text-align:right">{% if row.avg_ms %}{{ row.avg_ms }}{% else %}-{% endif %}</td>
             <td style="text-align:right">
@@ -64,7 +66,7 @@
             </td>
         </tr>
         {% empty %}
-        <tr><td colspan="9" style="text-align:center;color:var(--ul-text-muted,#6b7280);padding:1rem">No API services configured.</td></tr>
+        <tr><td colspan="10" style="text-align:center;color:var(--ul-text-muted,#6b7280);padding:1rem">No API services configured.</td></tr>
         {% endfor %}
         </tbody>
     </table>

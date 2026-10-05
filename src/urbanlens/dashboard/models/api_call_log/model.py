@@ -56,6 +56,11 @@ class ApiCallLog(abstract.DashboardModel):
         default=False,
         help_text="True if this entry records a call that was skipped due to service being disabled.",
     )
+    was_rejected_input = BooleanField(
+        default=False,
+        db_default=False,
+        help_text="True if this entry records a call refused before it was made because its input could not return data (services.core.input_validation).",
+    )
     cost_estimate = DecimalField(
         max_digits=10,
         decimal_places=6,

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.db.models import Q
 
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, is_source_outage
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, get_limit_config, service_is_enabled
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
@@ -116,7 +117,11 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
         """Fetch upstream data and upsert the cache row (empty dict = "nothing found")."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        data, query_key = self.fetch(location)
+        try:
+            data, query_key = self.fetch(location)
+        except ImpossibleInputError:
+            # Settled: this location's input can never return data, so "nothing found" is the true answer.
+            data, query_key = None, ""
         LocationCache.set(location, self.cache_source, data or {}, query_key=query_key, stale_after=self.stale_after(data))
         return True
 
@@ -497,6 +502,11 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     logger.info("Enrichment source %s stopped early: %s", source.key, exc)
                     entry["skipped"] = "rate_limited"
                     break
+                except ImpossibleInputError as exc:
+                    # Nothing was sent and nothing is broken; input_validation already counted and logged it.
+                    logger.debug("Enrichment source %s refused location %s's input: %s", source.key, location.pk, exc.detail)
+                    entry["rejected"] = entry.get("rejected", 0) + 1
+                    continue
                 except Exception as exc:
                     # TODO: Catch specific exceptions
                     if is_source_outage(exc):

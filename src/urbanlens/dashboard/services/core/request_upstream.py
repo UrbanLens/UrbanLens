@@ -27,6 +27,7 @@ import requests
 
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, UpstreamBusyError
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.timeout_utils import submit_bounded
 from urbanlens.dashboard.services.core.upstream_slots import UpstreamSlots
 from urbanlens.dashboard.services.security import throttle
@@ -53,11 +54,13 @@ class Outcome(enum.StrEnum):
     BUSY = "busy"
     TIMED_OUT = "timed_out"
     FAILED = "failed"
+    #: The input could never return data, so nothing was sent; asking again with it cannot help.
+    REFUSED = "refused"
 
 
 _ANSWERED = frozenset({Outcome.FRESH, Outcome.CACHED})
 
-_REFUSAL_STATUS = {Outcome.THROTTLED: 429, Outcome.BUSY: 503, Outcome.TIMED_OUT: 503, Outcome.FAILED: 502}
+_REFUSAL_STATUS = {Outcome.THROTTLED: 429, Outcome.BUSY: 503, Outcome.TIMED_OUT: 503, Outcome.FAILED: 502, Outcome.REFUSED: 400}
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +70,7 @@ class UpstreamResult[T]:
     Attributes:
         outcome: How the call ended.
         value: The fetched or cached value, when there is one.
-        error: The exception the fetch raised, for :attr:`Outcome.FAILED`.
+        error: The exception the fetch raised, for :attr:`Outcome.FAILED` and :attr:`Outcome.REFUSED`.
         retry_after: Seconds the caller should wait before asking again, when that is known.
     """
 
@@ -152,6 +155,9 @@ class Pending[T]:
             else:
                 logger.warning("Upstream %s missed its %.0fs deadline; leaving the fetch to finish in the background", name, self.upstream.deadline)
             self.resolved = UpstreamResult(Outcome.TIMED_OUT, retry_after=self.upstream.busy_retry_seconds)
+        except ImpossibleInputError as exc:
+            # input_validation already counted and logged it.
+            self.resolved = UpstreamResult(Outcome.REFUSED, error=exc)
         except self.errors as exc:
             # Only the type: a requests error's text is the full URL, key and coordinates included.
             logger.warning("Upstream %s failed: %s", name, type(exc).__name__)

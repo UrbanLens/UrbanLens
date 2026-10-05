@@ -33,6 +33,7 @@ class RedataImageryGateway(RedataLocationContextGateway):
     """REST client for REData's cross-provider imagery endpoint."""
 
     service_key: ClassVar[str] = "redata_imagery"
+    answers_at_null_island: ClassVar[bool] = True
 
     def get_imagery(self, latitude: float, longitude: float, *, providers: list[str] | None = None) -> list[dict[str, Any]]:
         """Return REData's normalized imagery results for a coordinate.
