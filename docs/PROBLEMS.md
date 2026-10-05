@@ -2501,34 +2501,6 @@ What is left of P53's options, both still undecided:
   returning one, but only for a visit 30 s or more after creation, since the slow answers above take that long
   whoever asks. A bulk import would need to be left out, or it would spend REData's time on pins nobody opens.
 
-## P278 — MapLibre 5.24's attribution sanitizer can be bypassed, and the fix is only in the v6 line this app pins against
-
-`id: P278` · `status: open` · `updated: 2026-10-04` · `found by: Claude, reading Dependabot alert #87 on push`
-
-GHSA-jrc7-96c5-q579 (critical): `DOM.sanitize` iterates a live `NamedNodeMap` while removing attributes, so the
-attribute after each removed one survives. An attribution such as `<details open onload ontoggle=...>` reaches
-`innerHTML` with a live handler. Every version up to 6.4.0 is affected and there is no 5.x backport. The vendored
-build is 5.24.0 (`services/core/vendor_assets.py`), deliberately pinned below v6 because v6 is ESM-only and
-`maplibre-gl-leaflet`'s UMD build reads the `maplibregl` global (REData's D12 reasoned through the same pin).
-
-**Not reachable today.** In 5.24 `DOM.sanitize` has one caller: MapLibre's own `AttributionControl`. Every MapLibre
-map here is built without that control. `shared-pin-map.ts` passes `attributionControl: false`, and the Leaflet
-bridge's `_initGL` hard-codes it. Attribution on Leaflet maps is Leaflet's control, which never calls MapLibre's
-sanitizer. `shared/maplibre-attribution.contract.test.ts` now fails if any MapLibre map is built with the control,
-or if any page adds it by hand. It also checks the bridge, and checks itself against a synthetic constructor.
-
-**What is left.** Dependabot alert #87 stays open while the lockfile holds 5.24.0. Two ways to close it:
-
-- **Dismiss the alert** as "vulnerable code is not actually used", pointing at the guard test. This is a GitHub
-  action, so it is for Jess to take.
-- **Move to 6.4.1 or later** as part of PL8 (`docs/designs/leaflet-to-maplibre-migration.md`). That also replaces
-  the UMD bridge, which v6 cannot feed. PL8's port is the point where the control is likely to be wanted back, and
-  the guard test will stop it being turned on before then.
-
-Leaflet's own attribution control renders raw HTML. Its strings are `TILE_DEFS` constants, plus a vector style's
-source attributions, which the bridge's `getAttribution` passes through. Treat a third-party style URL as trusted
-markup until that changes.
-
 ## P279 — Legacy `BLOCKED` friendship rows may still record the wrong blocker
 
 `id: P279` · `status: open` · `updated: 2026-10-04` · `split from P21, whose other half was fixed on 2026-10-04`

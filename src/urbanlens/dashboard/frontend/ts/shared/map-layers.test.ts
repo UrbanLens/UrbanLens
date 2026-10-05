@@ -2,7 +2,7 @@
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { BASE_ERROR_TILE_COLOR, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
+import { BASE_ERROR_TILE_COLOR, baseLayer, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 
 describe("normalizeBase", () => {
@@ -299,6 +299,46 @@ describe("registerRedataLayers", () => {
         const state = stubLeaflet();
         tileLayer("street");
         expect(state.calls[0]?.url).toContain("cartocdn.com");
+    });
+
+    /** MapLibre throws from its constructor without WebGL2, and the bridge calls it from `onAdd`, which would leave no base at all. */
+    describe("baseLayer hands a vector entry to the Leaflet bridge only where MapLibre can draw it", () => {
+        const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
+        const realWebGLSupport = window.WebGLSupport;
+
+        afterEach(() => {
+            (globalThis as Record<string, unknown>).maplibregl = realMaplibregl;
+            window.WebGLSupport = realWebGLSupport;
+        });
+
+        async function streetBase(webgl2: boolean): Promise<{ bridged: unknown[]; raster: LeafletStub }> {
+            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://x/style.json", attribution: "Attr" }] } });
+            await registerRedataLayers();
+            const raster = stubLeaflet();
+            const bridged: unknown[] = [];
+            Object.assign((globalThis as Record<string, unknown>).L as object, {
+                maplibreGL: (options: unknown) => {
+                    bridged.push(options);
+                    return { __kind: "maplibreGL" };
+                },
+            });
+            (globalThis as Record<string, unknown>).maplibregl = {};
+            window.WebGLSupport = { supportsWebGL2: () => webgl2 };
+            baseLayer("street");
+            return { bridged, raster };
+        }
+
+        test("with WebGL2, the style goes to the bridge", async () => {
+            const { bridged, raster } = await streetBase(true);
+            expect(bridged).toEqual([{ style: "https://x/style.json", attribution: "Attr" }]);
+            expect(raster.calls).toEqual([]);
+        });
+
+        test("without WebGL2, the raster source is drawn instead", async () => {
+            const { bridged, raster } = await streetBase(false);
+            expect(bridged).toEqual([]);
+            expect(raster.calls[0]?.url).toContain("cartocdn.com");
+        });
     });
 
     test("resolves a vector entry through the same legacy aliases as a raster one", async () => {

@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: PL8` · `status: live` · `updated: 2026-09-19`
+`id: PL8` · `status: live` · `updated: 2026-10-05`
 
 Written 2026-09-19, against `release/v_0_8_0`. This plan exists because REData's `docs/urbanlens-handoff.md`
 (their `T8`, in `../REData`) describes this side of the work in detail and that detail should not be
@@ -27,7 +27,7 @@ vector source only once REData actually serves one. `D17`'s style-construction s
 just decision text: `ts/shared/maplibre-raster-style.ts` (`buildRasterStyle`, `toMapLibreTileUrls`) turns
 a `TILE_DEFS`-shaped source into a minimal MapLibre style document, correcting a real incompatibility
 found while building it - MapLibre's TileJSON-based `tiles` array has no `{s}`/`{r}` token at all
-(verified against the actual `maplibre-gl@5.24.0` bundle's own tile-URL substitution logic), unlike
+(verified against `maplibre-gl@5.24.0`'s own tile-URL substitution logic, unchanged in 6.12.0), unlike
 Leaflet's template syntax every `TILE_DEFS` entry is written in, so `{s}` is expanded into one literal
 URL per subdomain and `{r}` is dropped. Subdomains are an explicit `RasterSourceInput.subdomains` parameter
 (defaulting to Leaflet's own `"abc"`), not a hardcoded constant - caught on reassessment: `TileDef.options`
@@ -89,8 +89,8 @@ than this document's repeated attempts to correct it.
   separate overview map), `pin_lists/saved_filter_detail.html`, `vault/photos.html`, `trips/detail.html`,
   `profile/common_pins.html`, `memories/index.html`.
 
-**As of 2026-09-19, two conversions are live** - `maplibre-gl` is a `package.json` `devDependency`
-(types only; the runtime is CDN-loaded via the already-pinned `vendor_assets.py` entries),
+**As of 2026-09-19, two conversions are live** - `maplibre-gl` is a `package.json` dependency
+(its types, and the bundle this site builds as `dashboard/js/maplibre-gl.js`; see item 1),
 `_renderMapThumb` genuinely renders through it on WebGL2-capable browsers, and the shared layers
 engine behind `MapLayers.create()` now runs on either engine, with `pin_share/detail.html` as its
 first converted consumer. See "The first real conversion" and "The shared layers engine runs on both
@@ -101,9 +101,11 @@ engines" below for what shipped, what is blocked on what, and what is still Leaf
 Each item below is REData's description of what this side needs, kept close to verbatim because it is
 already specific and file-accurate, not because it should be treated as this repo's own design.
 
-1. **Pin MapLibre GL JS v5, not v6.** v6 is ESM-only, and that switch "has failed silently under
-   bundlers elsewhere" per `D12`'s own research. Move to v6 deliberately and separately, once checked
-   against this project's actual bundler (bun) - not as part of this migration.
+1. **MapLibre GL JS is on v6** (6.12.0 since 2026-10-05; see `P278` in the problems archive). v6 is
+   ESM-only, so this site builds the `maplibregl` global itself (`entries-classic/maplibre-gl.ts`) and
+   bundles the worker beside it (`bin/build-frontend.ts`). A bundled MapLibre that cannot find its
+   worker fails at the first map, not at build time, which is the silent failure `D12` warned of;
+   `frontend/browser/maplibre-bundle.test.ts` starts the worker in Chromium to catch it.
 2. **A WebGL2 fallback engine is required, not optional, here** - unlike REData's own staff-only
    dashboard, which shipped a plain "unsupported browser" message instead. `D12`'s decision is explicit
    that Leaflet stays on hand as a genuine second rendering engine for the browsers that fail WebGL2.
@@ -150,7 +152,7 @@ already specific and file-accurate, not because it should be treated as this rep
    live map. It currently rasterizes by reading a private `_tileZoom` and calling `getTileUrl()` per
    tile - both read directly from `map-export.ts`'s own source, not assumed. MapLibre's equivalent needs
    `preserveDrawingBuffer`, confirmed as a real `canvasContextAttributes` option (defaulting `false`) in
-   the pinned `maplibre-gl@5.24.0` bundle itself, not taken from MapLibre's public docs; that flag's
+   `maplibre-gl@5.24.0` itself and still there in 6.12.0, not taken from MapLibre's public docs; that flag's
    per-frame cost must never touch the interactive map. Not addressed anywhere yet, caught cross-checking
    against item 2, tightened on reassessment - the coupling isn't simply "needs WebGL2 too," it's what
    the module's own doc comment says it does: "rasterizes the CURRENTLY VISIBLE view of a Leaflet map,"
@@ -255,7 +257,7 @@ already specific and file-accurate, not because it should be treated as this rep
 9. **The CSP shift raster tiles need.** REData's own two internal maps, already converted
    (`feat/scout-campaign`, per `T8`), found that MapLibre fetches tiles via `fetch()`/XHR - governed by
    `connect-src` - where Leaflet loads them as `<img>`, governed by `img-src`. Checked directly against
-   this app's own pinned `maplibre-gl@5.24.0` bundle, not just REData's framing: the mechanism is
+   `maplibre-gl@5.24.0` (its `util/ajax.ts` is unchanged in 6.12.0), not just REData's framing: the mechanism is
    specifically `XMLHttpRequest` (`responseType: "arraybuffer"`, then `createImageBitmap()`d), not
    `fetch()` - same `connect-src`-governed CSP category either way (see `D17`), so REData's conclusion
    holds, just via one specific API rather than either-of-two. Any CSP that only allows the vendor/REData
@@ -345,14 +347,13 @@ should check it for its own equivalent of `_renderMapThumb`'s markup-rendering g
   `*.tile.opentopomap.org`, `server.arcgisonline.com`/`services.arcgisonline.com`) item 9 above
   said MapLibre's XHR-based tile fetches need, mirroring `img-src`'s existing entries for the same
   vendors.
-- **Templates**: `{% vendor_asset "maplibregl_css/js" %}` added alongside every existing
+- **Templates**: `{% vendor_asset "maplibregl_css" %}` and the `dashboard/js/maplibre-gl.js` script added alongside every existing
   `leaflet_css/js` pair (22 templates) - the same set of pages, not a broader rollout, so a page that
   never loaded Leaflet still never loads MapLibre either.
-- **`maplibre-gl@5.24.0`** added as a `devDependency` (`bun add -D`, matching the version already
-  vendor-pinned in `vendor_assets.py`) for its own shipped TypeScript types only - every reference to
-  it in this codebase's `.ts` files is `import type`, so nothing bundles it; the runtime library is
-  still loaded exclusively via the CDN `<script>` tag, exactly like Leaflet's own `declare const L`
-  pattern. `node_modules/` write permission, blocked as of 2026-09-05, was re-checked this session and
+- **`maplibre-gl`** is in `package.json` for its TypeScript types and its bundle. Every reference to
+  it in this codebase's `.ts` files except `entries-classic/maplibre-gl.ts` is `import type`, so only
+  that entry bundles it; everything else reads the `maplibregl` global it defines, exactly like
+  Leaflet's own `declare const L` pattern. `node_modules/` write permission, blocked as of 2026-09-05, was re-checked this session and
   is open again.
 
 Verified in a real browser (`bin/sync_app.sh --frontend` into `development_main`, Playwright against
@@ -383,8 +384,8 @@ layer and never creates a layers engine at all. Every other candidate hits it im
   `createLeafletMapLayers` (its former body, otherwise unchanged) and the MapLibre engine.
 - **Dark mode's topo inversion has an exact MapLibre equivalent, not an approximation.** The
   Leaflet engine inverts topographic tiles with a CSS `invert(100%) hue-rotate(180deg)
-  brightness(90%)` filter on their own pane; MapLibre has no invert. Checked against the pinned
-  `maplibre-gl@5.24.0` bundle's own raster fragment shader rather than the style-spec docs: it ends
+  brightness(90%)` filter on their own pane; MapLibre has no invert. Checked against
+  `maplibre-gl@6.12.0`'s own raster fragment shader rather than the style-spec docs: it ends
   `mix(vec3(brightness_min), vec3(brightness_max), rgb)`, so `raster-brightness-min: 0.9,
   raster-brightness-max: 0` is exactly `0.9 * (1 - rgb)`. The hue rotation runs *before* that in the
   shader and *after* the invert in CSS, which cancels because MapLibre's hue-rotation matrix is

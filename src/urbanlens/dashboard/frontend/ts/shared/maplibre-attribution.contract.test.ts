@@ -1,7 +1,8 @@
 /**
- * MapLibre 5.x's own attribution control runs each source's attribution through `DOM.sanitize`, which skips the
- * attribute after each one it removes (GHSA-jrc7-96c5-q579, fixed only in 6.4.1). While the vendored build stays on
- * 5.x (`services/core/vendor_assets.py`), no MapLibre map may show that control.
+ * MapLibre's own attribution control writes each source's attribution into the page through its HTML sanitizer, which
+ * has needed repeated fixes: GHSA-jrc7-96c5-q579 in 6.4.1, `iframe`/`srcdoc` handling in 6.9.0, and a switch from a
+ * deny list to an allow list in 6.11.1. These maps credit their sources through the site's own attribution line
+ * instead, so none shows that control and a style's attribution never reaches that sanitizer.
  */
 
 import { describe, expect, test } from "bun:test";

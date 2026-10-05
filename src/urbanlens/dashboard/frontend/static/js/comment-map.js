@@ -653,7 +653,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
         // Mirrors L.LatLng.distanceTo's own formula (haversine, R = 6371000,
         // the same value L.CRS.Earth.R uses) - the MapLibre path below must not
-        // depend on L (it can run on any page that loads maplibregl_js, and
+        // depend on L (it can run on any page that loads MapLibre, and
         // L.map() itself is never called on that path).
         function _haversineMeters(lat1, lng1, lat2, lng2) {
             var R = 6371000, rad = Math.PI / 180;
@@ -712,7 +712,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
         // Renders a thumbnail via MapLibre - PL8 item 2's WebGL2 path.
         // _renderMapThumb below picks this over the Leaflet path when the
-        // browser supports WebGL2 and maplibregl_js is loaded on this page;
+        // browser supports WebGL2 and MapLibre is loaded on this page;
         // the Leaflet path stays exactly as it was for the ~4.27% that don't,
         // per D12's "genuine second rendering engine, not a migration crutch."
         function _renderMapThumbMaplibre(el, data, refLatLng) {
@@ -867,7 +867,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         // Caller is responsible for sizing `el` (height/width) before calling.
         window._renderMapThumb = function (el, data, refLatLng) {
             // PL8 item 2's dual-engine branch: MapLibre when this browser
-            // supports WebGL2 and maplibregl_js is loaded on this page,
+            // supports WebGL2 and MapLibre is loaded on this page,
             // Leaflet otherwise - unchanged below, a permanent fallback path,
             // not a migration-period stopgap (D12).
             if (typeof maplibregl !== 'undefined' && window.WebGLSupport && window.WebGLSupport.supportsWebGL2()) {

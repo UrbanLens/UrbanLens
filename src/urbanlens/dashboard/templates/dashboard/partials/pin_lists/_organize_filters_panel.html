@@ -1,4 +1,4 @@
-{% load vendor_assets %}
+{% load static vendor_assets %}
 {% comment %}Filters tab content, lazy-loaded via HTMX into Organize's "Filters" panel.{% endcomment %}
 <div class="pin-lists-toolbar">
     <input type="search" id="saved-filters-search" class="pin-lists-search" placeholder="Search filters..." autocomplete="off">
@@ -10,11 +10,11 @@
         New Filter
     </button>
 </div>
-{# For the dialog's region map. After the toolbar: htmx keeps a response's <body>, and leading <link>/<script> tags parse into <head>. #}
+{# For the dialog's region map. After the toolbar: htmx keeps a response's <body>, and leading link and script tags parse into <head>. #}
 {% vendor_asset "leaflet_css" %}
 {% vendor_asset "leaflet_js" %}
 {% vendor_asset "maplibregl_css" %}
-{% vendor_asset "maplibregl_js" %}
+<script src="{% static 'dashboard/js/maplibre-gl.js' %}"></script>
 {% vendor_asset "leaflet_draw_css" %}
 {% vendor_asset "leaflet_draw_js" %}
 <div id="saved-filters-tab-body">

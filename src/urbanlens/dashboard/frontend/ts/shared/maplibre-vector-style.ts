@@ -22,7 +22,7 @@ import { Protocol } from "pmtiles";
 
 import type { LayerSpecification, SourceSpecification, StyleSpecification } from "maplibre-gl";
 
-// Loaded via a CDN <script> tag on map pages, like Leaflet - see `maplibre-layers.ts`.
+// A global from the map pages' own `<script>` (`dashboard/js/maplibre-gl.js`), like Leaflet's `L` - see `maplibre-layers.ts`.
 declare const maplibregl: typeof import("maplibre-gl");
 
 /**

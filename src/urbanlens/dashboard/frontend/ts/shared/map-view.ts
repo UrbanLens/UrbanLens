@@ -24,7 +24,7 @@ export type MapEngineKind = "leaflet" | "maplibre";
  * Whether `map` is a MapLibre map rather than a Leaflet one.
  *
  * Duck-typed on a MapLibre-only method rather than `instanceof maplibregl.Map`, because
- * `maplibregl` is a CDN global that is simply absent on pages that never load it.
+ * `maplibregl` is a page global that is simply absent on pages that never load it.
  *
  * Lives in this module, which imports nothing, so the engine test costs a caller no bundle: the
  * marker and cluster facades need it and have no other reason to reach the layers engine.

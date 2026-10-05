@@ -250,8 +250,8 @@ export function templateTileLayer(url: string, options?: L.TileLayerOptions): L.
     return isOwnTileUrl(url) ? new (ownTileLayerClass())(url, options) : L.tileLayer(url, options);
 }
 
-// Both are CDN globals, loaded only by pages that ask for the vector base (`maplibregl_js` and
-// `maplibregl_leaflet_js`), so neither can be imported.
+// Both are page globals, loaded only by pages that ask for the vector base (`dashboard/js/maplibre-gl.js`
+// and `maplibregl_leaflet_js`), so neither can be imported.
 declare const maplibregl: typeof import("maplibre-gl") | undefined;
 
 declare module "leaflet" {
@@ -263,10 +263,11 @@ declare module "leaflet" {
  * Whether this page can draw a vector base inside its Leaflet map.
  *
  * Read per call rather than latched at import: `core.js` loads on every page, and the two globals
- * arrive from `<script>` tags only the map pages carry.
+ * arrive from `<script>` tags only the map pages carry. MapLibre needs WebGL2 and throws from its
+ * constructor without it, which inside the bridge's `onAdd` would leave the map with no base at all.
  */
 function canDrawVectorBase(): boolean {
-    return typeof maplibregl !== "undefined" && typeof L.maplibreGL === "function";
+    return typeof maplibregl !== "undefined" && typeof L.maplibreGL === "function" && window.WebGLSupport?.supportsWebGL2() === true;
 }
 
 /**
