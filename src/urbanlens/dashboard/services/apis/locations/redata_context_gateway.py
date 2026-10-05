@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any, NoReturn
 
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, upstream_retry_after
+from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -26,6 +27,8 @@ REASON_ALL_PROVIDERS_UNAVAILABLE = "all_providers_unavailable"
 #: network failure, a malformed response, an unexpected status code, or a
 #: REData-side outage not shaped like its own error responses).
 REASON_SOURCE_ERROR = "source_error"
+#: REData refused the key for the endpoint (401/403): a scope it lacks, not anything about the place asked about.
+REASON_FORBIDDEN = "forbidden"
 
 
 class LocationContextUnavailableError(GatewayRequestError):
@@ -47,10 +50,10 @@ class LocationContextUnavailableError(GatewayRequestError):
 
 
 class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyError):
-    """REData throttled this key, so the request was refused or not made; a caller may retry after ``retry_after`` seconds."""
+    """REData throttled or refused this key, so the request was refused or not made; a caller may retry after ``retry_after`` seconds."""
 
-    def __init__(self, message: str, *, retry_after: int) -> None:
-        super().__init__(REASON_RATE_LIMITED, message)
+    def __init__(self, message: str, *, retry_after: int, reason: str = REASON_RATE_LIMITED) -> None:
+        super().__init__(reason, message)
         self.retry_after = retry_after
 
 
@@ -125,8 +128,9 @@ class RedataLocationContextGateway(Gateway):
             provider: Restrict which source(s) actually run - a single tag or
                 a repeatable list, per REData's ``?provider=`` semantics.
             force_refresh: Bypass REData's cache and re-query live.
-            limit: Bounded positive integer (REData caps at 200 for most of
-                these endpoints).
+            limit: Most rows to keep (REData caps it at 200). Sent, and applied
+                here as well, so a REData that ignores it cannot fill a
+                cache row with every row in the radius.
             extra_params: Any endpoint-specific query params beyond the shared
                 set above (e.g. hazards' ``min_magnitude``/``years``).
 
@@ -147,7 +151,10 @@ class RedataLocationContextGateway(Gateway):
             params["limit"] = limit
         if extra_params:
             params.update(extra_params)
-        return self._get_envelope(path, params)
+        envelope = self._get_envelope(path, params)
+        if limit is None or len(envelope.results) <= limit:
+            return envelope
+        return LocationContextEnvelope(count=limit, complete=envelope.complete, results=envelope.results[:limit], providers=envelope.providers)
 
     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
         """GET any REData endpoint outside the near-a-coordinate envelope and return its raw JSON body.
@@ -256,6 +263,9 @@ class RedataLocationContextGateway(Gateway):
             reason = body.get("error") or REASON_SOURCE_ERROR
             raise LocationContextUnavailableError(reason, body.get("message", ""), rejected=response.status_code == 400)
 
+        if response.status_code in RedataBreaker.REFUSED_STATUSES:
+            # Reported once by the breaker, which holds the endpoint off for as long as this asks the caller to wait.
+            raise LocationContextBusyError(f"REData refused this key at {path} ({response.status_code}); it may lack the endpoint's scope.", retry_after=RedataBreaker.REFUSED_SECONDS, reason=REASON_FORBIDDEN)
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
         if response.status_code == 429:
             raise LocationContextBusyError("REData throttled this key.", retry_after=upstream_retry_after(response) or 1)

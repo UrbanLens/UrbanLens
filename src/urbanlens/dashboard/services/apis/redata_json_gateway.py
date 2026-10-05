@@ -6,7 +6,8 @@ from __future__ import annotations
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError
+from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,8 @@ class RedataJsonGateway(Gateway):
             The decoded body.
 
         Raises:
-            GatewayRequestError: Non-2xx status, or a body that is not a JSON object.
+            UpstreamBusyError: REData refused the key at this endpoint; the breaker holds it off for as long.
+            GatewayRequestError: Any other non-2xx status, or a body that is not a JSON object.
         """
         if response.status_code in (200, 201):
             try:
@@ -80,6 +82,8 @@ class RedataJsonGateway(Gateway):
                 raise GatewayRequestError(f"REData returned {type(body).__name__}, expected an object.")
             return body
 
+        if response.status_code in RedataBreaker.REFUSED_STATUSES:
+            raise UpstreamBusyError(f"REData refused this key at {path} ({response.status_code}); it may lack the endpoint's scope.", retry_after=RedataBreaker.REFUSED_SECONDS)
         logger.warning("REData request to %s failed (%s)", path, response.status_code)
         raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
 

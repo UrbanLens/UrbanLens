@@ -12,7 +12,7 @@ from collections.abc import Mapping
 import logging
 import re
 import time
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, NamedTuple
 from urllib.parse import parse_qsl, urlsplit
 
 from django.core.cache import cache
@@ -133,6 +133,16 @@ class UpstreamBreaker(ABC):
         except _CACHE_ERRORS:
             logger.warning("Could not record the %s breaker for %s", self.name, scope, exc_info=True)
             return
+        self.announce(scope, seconds, retry_at)
+
+    def announce(self, scope: str, seconds: int, retry_at: float) -> None:
+        """Report that ``scope`` was opened.
+
+        Args:
+            scope: The scope opened.
+            seconds: How long it is held open.
+            retry_at: When it closes, as a Unix time.
+        """
         logger.warning("%s breaker %s open for %ss", self.name, scope, seconds)
 
 
@@ -167,6 +177,20 @@ def _api_path(url: str) -> str:
     path = urlsplit(url).path
     marker = "/api/v1/"
     return path.split(marker, 1)[1] if marker in path else path.lstrip("/")
+
+
+class RefusedEndpoint(NamedTuple):
+    """An endpoint REData refused this deployment's key, as the site admin sees it.
+
+    Attributes:
+        endpoint: The endpoint, its identifiers blanked (``parcels/{id}/owners``).
+        refused_at: When REData last refused it, as a Unix time.
+        retry_at: When it will next be asked, as a Unix time.
+    """
+
+    endpoint: str
+    refused_at: float
+    retry_at: float
 
 
 class RedataBreaker(UpstreamBreaker):
@@ -218,6 +242,15 @@ class RedataBreaker(UpstreamBreaker):
     PROVIDER_UNANSWERED: ClassVar[frozenset[str]] = frozenset({"unavailable", "rate_limited"})
     #: None of them names a wait.
     SOURCE_BUSY_SECONDS: ClassVar[int] = 60
+    #: REData's answers for a key it will not serve at an endpoint: no key it recognises, or a scope the key lacks.
+    REFUSED_STATUSES: ClassVar[frozenset[int]] = frozenset({401, 403})
+    #: How long a refused endpoint is left alone. Waiting does not grant a scope - someone editing the key does - so
+    #: this is how long such a fix can go unnoticed, traded against one refused call per endpoint per period.
+    REFUSED_SECONDS: ClassVar[int] = 3600
+    #: How long a refusal is remembered after the last one, so a standing refusal is reported once rather than hourly.
+    REFUSAL_MEMORY_SECONDS: ClassVar[int] = 24 * 3600
+    #: Scope prefix of a refused endpoint.
+    REFUSED_SCOPE: ClassVar[str] = "refused:"
 
     def covers(self, service: str) -> bool:
         """REData's services are the ones named for it.
@@ -252,6 +285,19 @@ class RedataBreaker(UpstreamBreaker):
     #: Query parameters that choose which of an endpoint's providers answer.
     PROVIDER_PARAMS: ClassVar[tuple[str, ...]] = ("provider", "source", "images")
 
+    @staticmethod
+    def endpoint(url: str) -> str:
+        """The endpoint behind a URL, its identifiers blanked.
+
+        Args:
+            url: A REData URL.
+
+        Returns:
+            Such as ``hazards`` or ``parcels/{id}/owners``.
+        """
+        segments = [segment for segment in _api_path(url).split("/") if segment]
+        return "/".join("{id}" if any(char.isdigit() for char in segment) else segment for segment in segments) or "root"
+
     def source(self, url: str, params: object = None) -> str:
         """The providers behind a request: its endpoint with identifiers blanked, and any provider it named.
 
@@ -262,8 +308,7 @@ class RedataBreaker(UpstreamBreaker):
         Returns:
             Such as ``places/search/nearby`` or ``street-view/timeline?provider=kartaview``.
         """
-        segments = [segment for segment in _api_path(url).split("/") if segment]
-        endpoint = "/".join("{id}" if any(char.isdigit() for char in segment) else segment for segment in segments) or "root"
+        endpoint = self.endpoint(url)
         query = _query(url, params)
         chosen = "&".join(f"{name}={query[name]}" for name in self.PROVIDER_PARAMS if query.get(name))
         return f"{endpoint}?{chosen}" if chosen else endpoint
@@ -276,12 +321,12 @@ class RedataBreaker(UpstreamBreaker):
             params: The request's query parameters.
 
         Returns:
-            Every pool it draws from, and its source.
+            Every pool it draws from, its source, and its endpoint whatever providers were named.
         """
-        return (*(f"pool:{pool}" for pool in self.pools(url)), f"source:{self.source(url, params)}")
+        return (*(f"pool:{pool}" for pool in self.pools(url)), f"source:{self.source(url, params)}", f"{self.REFUSED_SCOPE}{self.endpoint(url)}")
 
     def scope_tripped_by(self, url: str, params: object, response: requests.Response) -> str | None:
-        """The pool on a 429, the source on a 503 that says it is busy.
+        """The pool on a 429, the source on a 503 that says it is busy, the endpoint on a refusal.
 
         Args:
             url: The URL that was requested.
@@ -291,6 +336,8 @@ class RedataBreaker(UpstreamBreaker):
         Returns:
             The scope to open, or None.
         """
+        if response.status_code in self.REFUSED_STATUSES:
+            return f"{self.REFUSED_SCOPE}{self.endpoint(url)}"
         if response.status_code == 429:
             return f"pool:{self.pools(url)[0]}"
         if response.status_code != 503:
@@ -318,7 +365,7 @@ class RedataBreaker(UpstreamBreaker):
         return named <= unanswered
 
     def default_seconds(self, scope: str) -> int:
-        """A minute for a busy source, which never names its wait.
+        """A minute for a busy source, which never names its wait; :attr:`REFUSED_SECONDS` for a refused endpoint.
 
         Args:
             scope: The scope being tripped.
@@ -326,7 +373,52 @@ class RedataBreaker(UpstreamBreaker):
         Returns:
             Seconds.
         """
+        if scope.startswith(self.REFUSED_SCOPE):
+            return self.REFUSED_SECONDS
         return self.SOURCE_BUSY_SECONDS if scope.startswith("source:") else super().default_seconds(scope)
+
+    def _refusals_key(self) -> str:
+        return self._key("refusals")
+
+    def announce(self, scope: str, seconds: int, retry_at: float) -> None:
+        """Report a refused endpoint once, at error level, and remember it for the site admin; anything else as usual.
+
+        Args:
+            scope: The scope opened.
+            seconds: How long it is held open.
+            retry_at: When it closes, as a Unix time.
+        """
+        if not scope.startswith(self.REFUSED_SCOPE):
+            super().announce(scope, seconds, retry_at)
+            return
+        endpoint = scope.removeprefix(self.REFUSED_SCOPE)
+        try:
+            refusals = cache.get(self._refusals_key())
+            refusals = dict(refusals) if isinstance(refusals, dict) else {}
+            known = endpoint in refusals
+            refusals[endpoint] = (time.time(), retry_at)
+            cache.set(self._refusals_key(), refusals, timeout=self.REFUSAL_MEMORY_SECONDS)
+        except _CACHE_ERRORS:
+            known = False
+        if known:
+            logger.info("REData still refuses this key at %s; asking again in %ss", endpoint, seconds)
+        else:
+            logger.error("REData refused this key at %s - it may lack the endpoint's scope. Not asking again for %ss.", endpoint, seconds)
+
+    def refused_endpoints(self) -> list[RefusedEndpoint]:
+        """The endpoints REData has refused this key in the last :attr:`REFUSAL_MEMORY_SECONDS`, most recent first.
+
+        Returns:
+            One entry per endpoint; empty when there are none or the cache cannot say.
+        """
+        try:
+            refusals = cache.get(self._refusals_key())
+        except _CACHE_ERRORS:
+            return []
+        if not isinstance(refusals, dict):
+            return []
+        entries = [RefusedEndpoint(str(endpoint), float(times[0]), float(times[1])) for endpoint, times in refusals.items() if isinstance(times, tuple | list) and len(times) == 2 and all(isinstance(value, int | float) for value in times)]
+        return sorted(entries, key=lambda entry: entry.refused_at, reverse=True)
 
 
 class WaybackBreaker(UpstreamBreaker):
