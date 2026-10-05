@@ -2,7 +2,8 @@
 
 No ``live_check`` test runs unless ``UL_LIVE_LOCATIONS=1`` and a dedicated REData is named by
 ``UL_LIVE_REDATA_API_URL``/``UL_LIVE_REDATA_API_KEY``. CI sets ``UL_REDATA_API_URL`` to a
-placeholder, so the ordinary settings are never read as "REData is available".
+placeholder, so the ordinary settings are never read as "REData is available". A ``live_source``
+test asks a public source directly, so it needs only ``UL_LIVE_LOCATIONS=1``.
 """
 
 from __future__ import annotations
@@ -53,6 +54,14 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         reason = "live-locations suite: set UL_LIVE_LOCATIONS=1 (see docs/LOCATION_DATA_TESTS.md)"
     elif LiveRedata.from_env() is None:
         reason = "live-locations suite: set UL_LIVE_REDATA_API_URL and UL_LIVE_REDATA_API_KEY"
+    for item in (item for item in items if item.get_closest_marker("live_source")):
+        item.add_marker(pytest.mark.live_locations)
+        if not _enabled():
+            item.add_marker(
+                pytest.mark.skip(
+                    reason="live-locations suite: set UL_LIVE_LOCATIONS=1 (see docs/LOCATION_DATA_TESTS.md)"
+                )
+            )
     # Only the checks themselves: the hook sees every item in the session, and the suite's own unit tests need no REData.
     for item in (item for item in items if item.get_closest_marker("live_check")):
         item.add_marker(pytest.mark.live_locations)
@@ -125,6 +134,9 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.addinivalue_line(
         "markers", "live_check(name): the kirkbrides.toml known_issues key and report name of a live-locations check"
+    )
+    config.addinivalue_line(
+        "markers", "live_source: asks a public source directly, without REData (tests/live_locations)"
     )
     if path := config.getoption("--live-report", default=""):
         os.environ["UL_LIVE_REPORT"] = path
