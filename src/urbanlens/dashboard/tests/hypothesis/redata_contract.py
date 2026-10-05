@@ -61,6 +61,7 @@ _ENVELOPE = ("count", "complete", "results", "providers")
 #: Near-a-coordinate endpoints read through ``RedataLocationContextGateway``'s envelope.
 _ENVELOPED = (
     "/api/v1/air-quality/",
+    "/api/v1/buildings/",
     "/api/v1/cultural-resources/lookup/",
     "/api/v1/elevation/",
     "/api/v1/geocode/",
@@ -99,6 +100,7 @@ _CONTEXT_ERRORS = (
 #: 503 bodies that name each provider's state, which the breaker reads to trip one provider rather than the pool.
 _PER_PROVIDER_503 = frozenset(
     {
+        "/api/v1/buildings/",
         "/api/v1/cultural-resources/lookup/",
         "/api/v1/geocode/reverse/",
         "/api/v1/hazards/",
@@ -387,6 +389,16 @@ READS: tuple[Read, ...] = (
         "plugins/builtin/epa_echo.py",
         "/api/v1/points-of-interest/lookup/",
         *_within("results[].", ("external_id", "name", "latitude", "longitude", "attributes.*")),
+    ),
+    _get(
+        "services/apis/locations/boundaries/overture.py",
+        "/api/v1/buildings/",
+        *_within("results[].", ("name", "geometry", "attributes.*")),
+    ),
+    _get(
+        "services/apis/locations/boundaries/overture.py",
+        "/api/v1/points-of-interest/lookup/",
+        *_within("results[].", ("name", "category", "latitude", "longitude", "attributes.*")),
     ),
     _get(
         "plugins/builtin/redata_site_features.py",

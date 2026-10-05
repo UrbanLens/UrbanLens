@@ -339,6 +339,46 @@
     ],
     "type": "object"
    },
+   "BuildingRecordResults": {
+    "properties": {
+     "complete": {
+      "type": "boolean"
+     },
+     "count": {
+      "type": "integer"
+     },
+     "error": {
+      "enum": [
+       "all_providers_unavailable",
+       "rate_limited"
+      ],
+      "type": "string"
+     },
+     "message": {
+      "nullable": true,
+      "type": "string"
+     },
+     "providers": {
+      "items": {
+       "$ref": "#/components/schemas/ProviderOutcome"
+      },
+      "type": "array"
+     },
+     "results": {
+      "items": {
+       "$ref": "#/components/schemas/BuildingRecord"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "complete",
+     "count",
+     "providers",
+     "results"
+    ],
+    "type": "object"
+   },
    "Capabilities": {
     "properties": {
      "computed_domains": {
@@ -5120,6 +5160,36 @@
     ],
     "type": "object"
    },
+   "NewsSearchResults": {
+    "properties": {
+     "count": {
+      "type": "integer"
+     },
+     "months": {
+      "type": "integer"
+     },
+     "provider": {
+      "type": "string"
+     },
+     "query": {
+      "type": "string"
+     },
+     "results": {
+      "items": {
+       "$ref": "#/components/schemas/SearchResult"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "count",
+     "months",
+     "provider",
+     "query",
+     "results"
+    ],
+    "type": "object"
+   },
    "PaginatedParcelLienList": {
     "properties": {
      "count": {
@@ -7528,7 +7598,7 @@
      },
      "sources": {
       "items": {
-       "$ref": "#/components/schemas/BuildingRecord"
+       "$ref": "#/components/schemas/ReconciledBuildingSource"
       },
       "readOnly": true,
       "type": "array"
@@ -7560,6 +7630,104 @@
      "ref",
      "residual_geometry",
      "sources",
+     "year_built"
+    ],
+    "type": "object"
+   },
+   "ReconciledBuildingSource": {
+    "properties": {
+     "address": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "attributes": {
+      "additionalProperties": {},
+      "readOnly": true,
+      "type": "object"
+     },
+     "attribution": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "building_number": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "distance_meters": {
+      "format": "double",
+      "nullable": true,
+      "readOnly": true,
+      "type": "number"
+     },
+     "geometry": {
+      "additionalProperties": {},
+      "nullable": true,
+      "readOnly": true,
+      "type": "object"
+     },
+     "is_on_property": {
+      "readOnly": true,
+      "type": "boolean"
+     },
+     "latitude": {
+      "format": "double",
+      "nullable": true,
+      "readOnly": true,
+      "type": "number"
+     },
+     "longitude": {
+      "format": "double",
+      "nullable": true,
+      "readOnly": true,
+      "type": "number"
+     },
+     "match_scope": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "name": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "on_parcel": {
+      "nullable": true,
+      "readOnly": true,
+      "type": "boolean"
+     },
+     "on_survey_roster": {
+      "readOnly": true,
+      "type": "boolean"
+     },
+     "ref": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "source": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "year_built": {
+      "nullable": true,
+      "readOnly": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "address",
+     "attributes",
+     "attribution",
+     "building_number",
+     "distance_meters",
+     "geometry",
+     "is_on_property",
+     "latitude",
+     "longitude",
+     "match_scope",
+     "name",
+     "on_parcel",
+     "on_survey_roster",
+     "ref",
+     "source",
      "year_built"
     ],
     "type": "object"
@@ -9305,7 +9473,7 @@
  "info": {
   "title": "REData API",
   "version": "1.0.0",
-  "x-redata-revision": "release/0.3.0 621e98c8"
+  "x-redata-revision": "release/0.3.1 84b3c436"
  },
  "openapi": "3.0.3",
  "paths": {
@@ -9354,6 +9522,58 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/AirQualityObservationResults"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/buildings/": {
+   "get": {
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BuildingRecordResults"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BuildingRecordResults"
         }
        }
       }
@@ -12525,7 +12745,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/SearchResults"
+         "$ref": "#/components/schemas/NewsSearchResults"
         }
        }
       }

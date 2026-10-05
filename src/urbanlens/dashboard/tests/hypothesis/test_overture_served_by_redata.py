@@ -357,6 +357,18 @@ class InsideTheUsTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(query["provider"], ["overture"])
         self.assertEqual(float(query["radius_meters"][0]), 150.0)
 
+    def test_a_buildings_name_is_read_from_the_published_name_field(self) -> None:
+        """``name`` is in REData's schema; ``attributes.names`` is an untyped copy it may stop sending."""
+        record = _building_record(
+            _CAPITOL_RING, name="Capitol", subtype="civic", building_class="", height=None, num_floors=None
+        )
+        del record["attributes"]["names"]
+        with _redata_answers({_BUILDINGS: (200, _envelope([record], radius_meters=10.0))}):
+            attributes = self._provider().get_building_attributes(*_INSIDE)
+
+        assert attributes is not None
+        self.assertEqual(attributes["primary_name"], "Capitol")
+
     def test_the_chains_overture_step_takes_redatas_footprint(self) -> None:
         with (
             _public_release_refused() as touched,

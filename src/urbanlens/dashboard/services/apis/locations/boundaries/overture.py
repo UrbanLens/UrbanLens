@@ -140,9 +140,13 @@ def _building_feature(record: dict[str, Any]) -> dict[str, Any]:
     """A REData ``BuildingRecord`` from its Overture mirror, as the feature it was mirrored from.
 
     Its ``attributes`` are the Overture row's own properties: the promoted ``subtype``/``class``/``height``/
-    ``num_floors``/``sources`` plus every other column REData stores, ``names`` and the roof columns among them.
+    ``num_floors``/``sources`` plus every other column REData stores, the roof columns among them. The name is taken
+    from the record's published ``name`` (Overture's ``names.primary``), falling back to the untyped ``attributes``.
     """
-    return {"type": "Feature", "geometry": record.get("geometry"), "properties": dict(record.get("attributes") or {})}
+    properties = dict(record.get("attributes") or {})
+    if record.get("name"):
+        properties["names"] = {"primary": record["name"]}
+    return {"type": "Feature", "geometry": record.get("geometry"), "properties": properties}
 
 
 def _place_feature(row: dict[str, Any]) -> dict[str, Any]:
