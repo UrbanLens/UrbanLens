@@ -31,21 +31,21 @@ class WelcomeOnboardingForm(forms.ModelForm):
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="History",
-        help_text="Your visit journal, GPS route imports, live location tracking, and GPS data kept on uploaded photos. Disabling this will turn off your visit journal, strip GPS data from photos you upload, and stop the site from recording your live location or importing GPS routes. Your Maps and Sharing pages aren't affected.",
+        help_text="UrbanLens allows you to keep a visit journal, and upload location data if you choose to. Disabling this will prevent you from uploading location data, even if you try.",
     )
     community_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="Community",
-        help_text="Community wikis, trip invitations, and friend requests. Disabling this will turn off community wikis, trip invitations, and friend requests, making you invisible to other users.",
+        help_text="We support community wikis, trip invitations, and friend requests. Disabling this will turn off those features, making you invisible to other users.",
     )
     external_apis_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="External Services",
-        help_text="Weather, geocoding, place data, web searches, and AI research about locations. Disabling this will turn off all of the above, so no research data will be displayed unless it was already cached from another user's request.",
+        help_text="We integrate with weather, geocoding, and place data services. Disabling this will turn them off, so you will not see research data unless it was already cached from another user.",
     )
     # Unlike the toggles above, this defaults unchecked - agreement has to be an
     # explicit action, not something a user "leaves on" by not noticing it.
