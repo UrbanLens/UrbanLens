@@ -2584,19 +2584,6 @@ upload."
 disk as they are read, which bounds memory but not time, so it only helps together with a longer limit. Leaving it as
 it is refuses the rare multi-year export.
 
-## P315 — A `503 rate_limited` from REData Places is not held off for the wait it names
-
-`id: P315` · `status: open` · `updated: 2026-10-05`
-
-REData's T11 (`../REData/docs/infrastructure-2026-10-02-replies.md`, item 3) asks clients to keep
-uncached Places searches to about 40 a UTC day and to honour `Retry-After` on `503 rate_limited`.
-The first is done: `redata_places` defaults to 40 calls a day (`services/core/rate_limiter.py`). The
-second is not: `RedataPlacesGateway._error_for` turns REData's rate-limited body into a
-`GatewayRateLimitedError`, which carries no wait, so a caller stops its own run but the next request
-asks again at once. Making it an `UpstreamBusyError` with `upstream_retry_after(response)` would let
-the breaker hold it off. Not measured how often production meets it; REData's whole budget is 160 a
-day, shared by every key and its own CID resolution, and raising it is Jess's call (REData P70).
-
 ## P316 — Nine tests fail under `bin/host_pytest.sh` on `release/v_0_9_0`, from three causes
 
 `id: P316` · `status: open` · `updated: 2026-10-05`

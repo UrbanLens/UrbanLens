@@ -52,8 +52,8 @@ records, register listings and image search cached. The one gap is Athens's buil
    box, Athens County's owner, web and news search, the cultural-resource cache, Chronicling America
    descriptions, per-provider `limit`, the loc.gov walk.
 2. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
-   (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and should
-   honour REData's `Retry-After` (P315, REData P70).
+   (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
+   REData's `Retry-After` (P315, REData P70).
 3. Web search that does not rest on mwmbl alone (REData P113): the self-hosted SearXNG relays to engines that
    refuse the shared egress IP, so either more engines that tolerate it or one keyed index.
 
