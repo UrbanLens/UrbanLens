@@ -200,6 +200,8 @@ class RedataBreaker(UpstreamBreaker):
     #: Endpoints with a pool of their own on top of the default budget.
     OWN_POOLS: ClassVar[dict[str, re.Pattern[str]]] = {
         "resolve_cids": re.compile(r"^places/resolve-cids/"),
+        # ``ApiKeyPrewarmThrottle``: a prewarm refused for its own budget leaves every lookup callable.
+        "prewarm": re.compile(r"^locations/prewarm/"),
         "writes": re.compile(r"^(?:labels/(?:assignments/)?$|photos/(?:votes/)?$|places/confirm-coordinates/|floorplans/)"),
     }
     #: Tiles replace the default budget rather than stacking on it.

@@ -188,6 +188,14 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Which REData domains and providers cover a point, via GET /capabilities/. Answers from REData's own registries with no upstream call; cached for an hour per coarse coordinate.",
     ),
+    "redata_prewarm": ServiceDefaults(
+        display_name="REData Prewarm",
+        # One per new root pin's location (services.pins.bootstrap). Not in REData's lookup pool: REData
+        # bills it to its all-endpoint budget and its own prewarm throttle.
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Queues REData's own background fetches for a newly pinned point via POST /locations/prewarm/ (scope locations:prewarm). A key without the scope is remembered and not asked again for a day.",
+    ),
     "redata_weather_history": ServiceDefaults(
         display_name="REData Historical Weather",
         calls_per_minute=20,

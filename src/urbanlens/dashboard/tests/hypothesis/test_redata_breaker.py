@@ -27,6 +27,7 @@ _PARCEL = f"{_BASE}parcels/lookup/"
 _CAPABILITIES = f"{_BASE}capabilities/"
 _PARKS_NEARBY = f"{_BASE}parks/nearby/"
 _TILE = f"{_BASE}tiles/street/14/4823/6160/"
+_PREWARM = f"{_BASE}locations/prewarm/"
 _THROTTLED = {"error": "throttled", "message": "Request was throttled. Expected available in 989 seconds."}
 
 
@@ -122,6 +123,17 @@ class ThrottlePoolsTests(TestCase):
 
         with pytest.raises(UpstreamThrottledError):
             _session("redata_api").get(_PARCEL)
+
+    def test_a_prewarm_throttle_leaves_every_other_endpoint_callable(self) -> None:
+        _session("redata_prewarm", _response(429, _THROTTLED)).post(_PREWARM)
+
+        for service, url in (("redata_api", _PARCEL), ("redata_capabilities", _CAPABILITIES)):
+            with self.subTest(url=url):
+                session = _session(service, _response(200, {}))
+                session.get(url)
+                session._session.request.assert_called_once()
+        with pytest.raises(UpstreamThrottledError):
+            _session("redata_prewarm").post(_PREWARM)
 
     def test_tiles_have_their_own_pool(self) -> None:
         _session("redata_capabilities", _response(429, _THROTTLED)).get(_CAPABILITIES)

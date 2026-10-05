@@ -939,6 +939,7 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "loopnet": "Business & Places Data",
     "redata_points_of_interest": "Business & Places Data",
     "redata_capabilities": "Business & Places Data",
+    "redata_prewarm": "Business & Places Data",
     "redata_api": "Business & Places Data",
     # Notifications
     "sms": "Notifications",
