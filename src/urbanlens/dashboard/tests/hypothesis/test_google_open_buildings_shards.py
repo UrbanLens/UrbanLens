@@ -12,9 +12,10 @@ from unittest import mock
 from unittest.mock import MagicMock
 
 from django.core.cache import cache
+import requests
 from urllib3 import HTTPResponse
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.boundaries import google_open_buildings
 from urbanlens.dashboard.services.apis.locations.boundaries.google_open_buildings import GoogleOpenBuildingsGateway
 
@@ -82,3 +83,24 @@ class ShardTests(SimpleTestCase):
 
         self.assertEqual([(point["latitude"], point["longitude"]) for point in points], [(41.73, -73.93)])
         self.assertEqual(points[0]["area_in_meters"], 120.5)
+
+
+class RateLimitedSessionTests(TestCase):
+    """The gateway's own session, which logs each call, passes ``stream`` through and leaves the body unread."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_a_shard_past_the_cap_is_not_read_through_the_real_session(self) -> None:
+        gateway = GoogleOpenBuildingsGateway()
+        huge = _response(200, b"", length=google_open_buildings.MAX_SHARD_BYTES + 1)
+        huge.raw = MagicMock()
+        huge.ok = True
+
+        with mock.patch.object(requests.Session, "request", return_value=huge) as request:
+            self.assertEqual(gateway.get_building_points(_BBOX), [])
+
+        self.assertTrue(request.call_args.kwargs["stream"])
+        huge.raw.read.assert_not_called()

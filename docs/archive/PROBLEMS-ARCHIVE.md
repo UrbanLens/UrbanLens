@@ -23282,8 +23282,8 @@ within the backoff, and is asked again after it (failed before the fix); a timeo
 shard at a time. It read the response whole and `gzip.decompress`ed it in memory. A real shard is large: Lagos's
 polygons are 1.9 GB compressed, Sao Paulo's 2.4 GB and Dhaka's 3.4 GB; the median of the 333 polygon shards is
 138 MiB. A lookup anywhere the dataset covers would have exhausted a worker. In the US, where there are no shards, every
-lookup asked again for a missing one: dev's `ApiCallLog` held 5,357 calls and no 200s (1,554 404s, 2,679 refused by our
-own rate limiter, 750 failures).
+lookup asked again for a missing one: dev's `ApiCallLog` held 5,357 calls and no 200s (2,679 refused by our own rate
+limiter, 1,569 404s, 750 failures, 358 while the service was disabled, and one row with no status).
 
 **Fix.** The gateway streams each shard and skips one larger than `MAX_SHARD_BYTES` (64 MiB) from its Content-Length,
 or by reading one byte past the cap when there is none. It decompresses and parses the shards it keeps as a stream, and
@@ -23294,7 +23294,8 @@ that route would cover the rest without downloading a shard.
 
 **Tests.** `test_google_open_buildings_shards.py`: a missing shard is asked for once, a shard past the cap is not
 read and not asked for again, nor is one that gives no size and runs past it, and a small shard is parsed (the first
-two failed before the fix).
+two failed before the fix). A fifth makes the call through the gateway's real rate-limited session, to show
+`stream` reaches `requests` and the body stays unread.
 
 ## RESOLVED 2026-10-05: A REData provider refusing REData did not open the breaker, so every call still went out
 
