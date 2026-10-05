@@ -550,6 +550,21 @@ def _paris_building() -> dict[str, Any]:
     }
 
 
+def _paris_place() -> dict[str, Any]:
+    """A place in the public release's schema since 2026-09-23, which has ``taxonomy`` and no ``categories``."""
+    return {
+        "type": "Feature",
+        "geometry": {"type": "Point", "coordinates": [2.2946, 48.8585]},
+        "properties": {
+            "names": {"primary": "Le Cafe"},
+            "taxonomy": {"primary": "cafe", "hierarchy": ["food_and_drink", "cafe"], "alternates": []},
+            "basic_category": "cafe",
+            "confidence": 0.8,
+            "operating_status": "open",
+        },
+    }
+
+
 class OutsideTheUsTests(RedataConfiguredMixin, TestCase):
     """Abroad, the public release is still read, under its own budget, and REData is not asked."""
 
@@ -578,6 +593,19 @@ class OutsideTheUsTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(attributes["roof_shape"], "flat")
         entry = ApiCallLog.objects.for_service("overture_maps").latest("created")
         self.assertTrue(entry.success)
+
+    def test_a_place_abroad_takes_its_category_from_the_taxonomy(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries.overture import OvertureProvider
+
+        with (
+            _redata_answers({}) as asked,
+            mock.patch(f"{_MAPS}._intersecting_files", return_value=["bucket/one.parquet"]),
+            mock.patch(f"{_MAPS}._read_files", return_value=[_paris_place()]),
+        ):
+            places = OvertureProvider().get_nearby_places(*_ABROAD)
+
+        self.assertEqual(asked, [])
+        self.assertEqual([(place["name"], place["category"]) for place in places], [("Le Cafe", "cafe")])
 
     def test_the_chains_overture_step_abroad_reads_the_public_release(self) -> None:
         with (

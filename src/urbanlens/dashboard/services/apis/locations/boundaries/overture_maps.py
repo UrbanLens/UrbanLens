@@ -480,7 +480,8 @@ def nearby_places(features: list[dict], latitude: float, longitude: float, *, ra
         if distance_m > radius_m:
             continue
 
-        primary_category = _primary(properties.get("categories"))
+        # Overture's 2026-09-23 release replaced ``categories`` with ``taxonomy``.
+        primary_category = _primary(properties.get("categories")) or _primary(properties.get("taxonomy"))
         candidates.append(
             {
                 "name": primary_name,
