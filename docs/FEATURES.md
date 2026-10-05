@@ -722,7 +722,10 @@ direct-only because REData's contract can't reproduce what they show:
   Elsewhere, including border cities in Canada and Mexico, the Bahamas and the western Aleutians, it reads
   Overture's public release (`plugins.builtin.overture_building_attributes`, `OvertureProvider`). An
   install without REData shows it only where REData's mirror does not reach. A building whose nearby
-  places were not heard from is kept for an hour, not the cache window (P240)
+  places were not heard from is kept for an hour, not the cache window (P240). Only a footprint containing
+  the pin counts, with no nearest-building fallback: a pin outside every footprint, such as a parcel's pin
+  set on its grounds, stands for the parcel and gets no building data, which comes instead from the child
+  pin made for each building (Buildings on this Property)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
