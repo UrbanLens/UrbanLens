@@ -2243,7 +2243,7 @@ Check the shape against the live collection first; it was returning 503s and tim
 
 `id: P240` · `status: open` · `updated: 2026-10-05` · `follows: P110`
 
-Since P110 (archived 2026-10-05), every US Overture question goes to REData: buildings to
+Since P110 (archived 2026-10-05), every Overture question REData's mirror covers goes to REData: buildings to
 `GET /buildings/?provider=overture&radius_meters=10`, places to
 `GET /points-of-interest/lookup/?provider=overture&radius_meters=150`
 (`services.apis.locations.boundaries.overture.OvertureProvider`). Probed once each against the deployed REData on
@@ -2267,9 +2267,11 @@ What it costs while the deployed REData predates 0.3.0:
 
 So UrbanLens 0.9.0 has to reach production after REData 0.3.0, the order PL9 already plans.
 
-Still open on REData's side, as its P97: a point inside `is_usa_coordinates` but outside every synced shard
-(Hermosillo, Nassau, Sudbury, Saguenay) gets "ok" with no rows. UrbanLens shows no Overture data there; before P110 it
-read the public release. The handoff is
+A point inside `is_usa_coordinates` but outside every shard REData syncs (Montreal, Nassau, Hermosillo, the western
+Aleutians) gets "ok" with no rows from REData (its P97). UrbanLens does not ask there: `served_by_redata` also requires
+one of REData's shard boxes, vendored as `boundaries.redata_overture_shards` and held to REData's by
+`OvertureShardTableTests`, so those points read the public release. Still open on REData's side: a shard it has not
+synced yet answers "ok" with no rows too, which UrbanLens takes as final. The handoff is
 [`handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md).
 
 **Not verified:** any answer from REData 0.3.0. On 2026-10-05 this session's probe of REData staging could not

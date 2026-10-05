@@ -23996,10 +23996,15 @@ reaches Overture. Abroad it has still not been run.
 **What changed.** First written 2026-10-03 on `p110-overture-via-redata` (24f7ca3ce) and held there on P240;
 ported onto `release/v_0_9_0` on 2026-10-05 as `fix/overture-us-via-redata`, against the REData integration work the
 release gained meanwhile. The three callers go through `services.apis.locations.boundaries.overture.OvertureProvider`,
-which routes by coordinate: `overture.served_by_redata` is `is_usa_coordinates`, whose boxes are the ones REData gates
-its own Overture providers on (compared number for number with REData `release/0.3.0`'s `core.services.geo_filter`).
+which routes by coordinate. `overture.served_by_redata` holds where REData both applies its `overture` providers
+(`is_usa_coordinates`, whose boxes match REData `release/0.3.0`'s `core.services.geo_filter` number for number) and
+syncs a shard (`boundaries.redata_overture_shards`, a vendored copy of REData's `shards.US_STATE_BBOXES` that
+`OvertureShardTableTests` holds equal to it). `is_usa_coordinates` alone reaches Canada and Mexico near the border and
+the Bahamas, where REData holds nothing, and Alaska's shard stops at -179.9, so it also sent the western Aleutians to an
+empty mirror; adversarial review of the port found it (Montreal, Nassau, Shemya are now tests). Points outside every
+shard read the public release, as before P110.
 
-- Inside the US, buildings come from `GET /buildings/?provider=overture&radius_meters=10` through the new
+- Where REData covers the point, buildings come from `GET /buildings/?provider=overture&radius_meters=10` through the new
   `RedataBuildingsGateway` (service key `redata_buildings`, 20 a minute, in REData's lookup pool). Places come from
   `GET /points-of-interest/lookup/?provider=overture&radius_meters=150` through the existing
   `RedataPointsOfInterestGateway`. A REData `BuildingRecord`'s `attributes` are the Overture row's own properties, so

@@ -403,8 +403,8 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider`, US-only,
   coverage varies by jurisdiction), then OSM/Overpass, Overture Maps, Microsoft Building
   Footprints, and Google Open Buildings; editable
-  by the user. Overture comes from REData's own Overture mirror inside the US and from Overture's
-  public release only elsewhere (`services.apis.locations.boundaries.overture.OvertureProvider`)
+  by the user. Overture comes from REData's own Overture mirror where it holds the point and from
+  Overture's public release elsewhere (`services.apis.locations.boundaries.overture.OvertureProvider`)
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
@@ -716,11 +716,13 @@ direct-only because REData's contract can't reproduce what they show:
   building of a site, P230's rule), and a CRIS record standing on the building or, on a site, the site
   record holding it. It fetches its tabs' data and removes empty tabs, as Location Data's does
 - **Building Characteristics** — Overture Maps' class, height, floor count and roof of the building at
-  the pin, plus named places within 150 m. Inside the US it reads REData's Overture mirror (`/buildings/`
-  and the `overture` points-of-interest provider), and an empty answer there is final; elsewhere it reads
+  the pin, plus named places within 150 m. Where REData's Overture mirror holds the point - inside REData's US
+  boxes and one of the padded state shards it syncs (`overture.served_by_redata`) - it reads REData
+  (`/buildings/` and the `overture` points-of-interest provider), and an empty answer there is final.
+  Elsewhere, including border cities in Canada and Mexico, the Bahamas and the western Aleutians, it reads
   Overture's public release (`plugins.builtin.overture_building_attributes`, `OvertureProvider`). An
-  install without REData shows it only outside the US. A building whose nearby places were not heard
-  from is kept for an hour, not the cache window (P240)
+  install without REData shows it only where REData's mirror does not reach. A building whose nearby
+  places were not heard from is kept for an hour, not the cache window (P240)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering

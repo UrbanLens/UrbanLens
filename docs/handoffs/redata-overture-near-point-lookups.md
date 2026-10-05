@@ -73,12 +73,13 @@ cities but not all. Each of these is inside `is_usa_coordinates` and outside eve
 | Sudbury | 46.49, -80.99 |
 | Saguenay | 48.43, -71.06 |
 
-REData answers these "ok" with no rows. UrbanLens uses the same boxes, so it treats them as REData's and shows no
-Overture data there; before P110 it read the public release.
+REData answers these "ok" with no rows.
 
-**Asked:** could the providers report `not_applicable` where no synced shard covers the point? UrbanLens would then
-need a small change to send those coordinates to the public release. That change is not made yet. REData tracks
-this as its P97.
+**Asked:** could the providers report `not_applicable` where no synced shard covers the point? REData tracks this as
+its P97. UrbanLens no longer waits on it: since 2026-10-05 it asks REData only inside both `is_usa_coordinates` and a
+vendored copy of `US_STATE_BBOXES` (`boundaries.redata_overture_shards`, re-vendored with
+`bin/vendor_redata_schema.py --shards`), and reads the public release for these points. A shard REData has not synced
+yet still answers "ok" with no rows, which UrbanLens cannot tell from an empty place.
 
 ## 4. Smaller items
 
