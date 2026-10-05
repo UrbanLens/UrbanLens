@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any
 
-from live_sites import InconclusiveError, LiveRedata, Site, load_sites, select_sites
+from live_sites import InconclusiveError, LiveRedata, Site, load_sites, select_sites, settled
 import pytest
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ def redata() -> Iterator[LiveRedata]:
     yield client
     path = os.environ.get("UL_LIVE_REPORT", "")
     if path:
-        Path(path).write_text(json.dumps({"checks": _RESULTS, "calls": client.log}, indent=1, default=str))
+        Path(path).write_text(json.dumps({"checks": settled(_RESULTS), "calls": client.log}, indent=1, default=str))
 
 
 @pytest.hookimpl(wrapper=True)

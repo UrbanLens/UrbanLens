@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest import mock
 
-from live_sites import Answer, InconclusiveError, LiveRedata, Site, load_sites
+from live_sites import Answer, InconclusiveError, LiveRedata, Site, load_sites, settled
 import pytest
 import requests
 
@@ -156,3 +156,26 @@ class TestLiveRedataGet:
         assert client.get("parcels/", lat=1) is first
         assert isinstance(first, Answer)
         assert get.call_count == 1
+
+
+class TestSettledReport:
+    def test_a_failed_subtest_fails_the_pipeline_check(self) -> None:
+        results = {
+            "hrsh": {
+                "pipeline": {"outcome": "passed", "detail": ""},
+                "pipeline: building wikis": {"outcome": "failed", "detail": "3 of 20"},
+                "pipeline: build date": {"outcome": "known issue", "detail": ""},
+            }
+        }
+
+        assert settled(results)["hrsh"]["pipeline"]["outcome"] == "failed"
+
+    def test_a_known_issue_alone_leaves_it_passed(self) -> None:
+        results = {
+            "athens": {
+                "pipeline": {"outcome": "passed", "detail": ""},
+                "pipeline: build date": {"outcome": "known issue", "detail": ""},
+            }
+        }
+
+        assert settled(results)["athens"]["pipeline"]["outcome"] == "passed"

@@ -168,6 +168,19 @@ class InfoPanelTests(_Case):
         self.assert_partial_and_brief(source.cache_source)
         self.assertEqual(self.row(source.cache_source).data[UNANSWERED_SOURCES_KEY], ["youtube"])
 
+    def test_a_partial_answer_for_a_source_kept_an_hour_is_shown_for_that_hour(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.redata_air_quality import AirQualityPanelSource
+
+        source = AirQualityPanelSource()
+        with mock.patch.object(source, "fetch_envelope", return_value=_partial([{"parameter": "pm25", "value": 4.0}])):
+            source.fetch(self.pin)
+
+        max_age = source.cache_max_age
+        self.assertIsNotNone(LocationCache.get_fresh(self.location, source.cache_source, max_age=max_age))
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNone(LocationCache.get_fresh(self.location, source.cache_source, max_age=max_age))
+
 
 class MediaTests(_Case):
     _ROWS = [

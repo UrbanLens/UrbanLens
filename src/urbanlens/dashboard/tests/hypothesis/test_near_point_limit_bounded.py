@@ -182,3 +182,13 @@ class FullAnswersAreCountedAsFloorsTests(TestCase):
 
                 assert context is not None
                 self.assertFalse(_qualified(context["chips"]), context["chips"])
+
+    def test_each_hazard_chip_is_a_floor_only_when_its_own_provider_filled_the_limit(self) -> None:
+        source = HazardHistoryPanelSource()
+        fires = [{"provider": "nifc_wildfires", "occurred_at": "2020-01-01"}] * source.row_limit
+        declarations = [{"provider": "fema_disasters", "occurred_at": "2011-08-31"}] * 5
+
+        context = source.render_context(self.pin, {"events": fires + declarations})
+
+        assert context is not None
+        self.assertEqual([("+" in chip) for chip in context["chips"]], [True, False], context["chips"])

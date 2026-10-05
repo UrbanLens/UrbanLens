@@ -132,6 +132,20 @@ def select_sites(sites: list[Site], selector: str) -> list[Site]:
     return [site for site in sites if site.key in keys]
 
 
+def settled(results: dict[str, dict[str, dict[str, Any]]]) -> dict[str, dict[str, dict[str, Any]]]:
+    """Mark the pipeline check failed when one of its subtests failed.
+
+    Its own report is written before pytest's subtests plugin fails it, so it reads as passed.
+    """
+    for checks in results.values():
+        failed = [
+            name for name, entry in checks.items() if name.startswith("pipeline: ") and entry["outcome"] == "failed"
+        ]
+        if failed and checks.get("pipeline", {}).get("outcome") == "passed":
+            checks["pipeline"] = {"outcome": "failed", "detail": f"failed: {', '.join(failed)}"[:300]}
+    return results
+
+
 class InconclusiveError(Exception):
     """REData could not establish an answer (budget, upstream outage) within the wait allowed."""
 

@@ -144,7 +144,7 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
             return
         # A floor rather than a total when a source did not answer, which the cache keeps only briefly.
         data = envelope.marked({self.payload_key: self.transform_rows(envelope.results)})
-        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{latitude:.5f},{longitude:.5f}")
+        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{latitude:.5f},{longitude:.5f}", max_age=self.cache_max_age)
         self.landed(pin, data)
 
     def landed(self, pin: Pin, data: dict) -> None:

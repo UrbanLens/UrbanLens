@@ -1017,7 +1017,7 @@ class NameSearchSource(LocationCachePanelSource, ABC):
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        LocationCache.set(pin.location, self.cache_source, {**data, SEARCH_NAMES_KEY: scope.provenance()}, query_key=query_key[:255], audience=scope.audience)
+        LocationCache.set(pin.location, self.cache_source, {**data, SEARCH_NAMES_KEY: scope.provenance()}, query_key=query_key[:255], audience=scope.audience, max_age=self.cache_max_age)
 
 
 class GatewayMediaPanelSource(GalleryMediaSource):

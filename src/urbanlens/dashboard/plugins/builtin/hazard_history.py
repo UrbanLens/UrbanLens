@@ -79,12 +79,14 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
         fires = [event for event in events if event.get("provider") == "nifc_wildfires"]
         declarations = [event for event in events if event.get("provider") == "fema_disasters"]
 
-        floor = "+" if at_limit(events, self.row_limit) else ""
+        def floor(rows: list[dict]) -> str:
+            return "+" if at_limit(rows, self.row_limit) else ""
+
         chips = []
         if fires:
-            chips.append(f"{len(fires)}{floor} wildfire{'s' if len(fires) != 1 else ''} reached within 2 km")
+            chips.append(f"{len(fires)}{floor(fires)} wildfire{'s' if len(fires) != 1 else ''} reached within 2 km")
         if declarations:
-            chips.append(f"{len(declarations)}{floor} federal disaster declaration{'s' if len(declarations) != 1 else ''} for this county")
+            chips.append(f"{len(declarations)}{floor(declarations)} federal disaster declaration{'s' if len(declarations) != 1 else ''} for this county")
 
         def newest_first(rows: list[dict]) -> list[dict]:
             return sorted(rows, key=lambda event: event.get("occurred_at") or "", reverse=True)

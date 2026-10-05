@@ -114,7 +114,7 @@ class LocationCache(abstract.DashboardModel):
         return {(row.source, row.audience): row for row in rows}
 
     @classmethod
-    def set(cls, location: Location, source: str, data: dict, query_key: str = "", audience: str = "", *, stale_after: timedelta | None = None) -> LocationCache:
+    def set(cls, location: Location, source: str, data: dict, query_key: str = "", audience: str = "", *, stale_after: timedelta | None = None, max_age: timedelta | None = None) -> LocationCache:
         """Upsert a cache entry.
 
         Args:
@@ -126,6 +126,8 @@ class LocationCache(abstract.DashboardModel):
             stale_after: Let the row go stale this soon instead of after the site-wide window. A payload marked
                 with :data:`UNANSWERED_SOURCES_KEY` gets :data:`PARTIAL_ANSWER_STALE_AFTER` without asking. The row is
                 dated as if written earlier, so raising ``external_data_cache_days`` afterwards lengthens it too.
+            max_age: The source's own limit, as its readers pass it to :meth:`get_fresh`; the row is dated against
+                that rather than the site-wide window, or a source kept an hour would read it as stale at once.
 
         Returns:
             The saved LocationCache instance.
@@ -140,6 +142,6 @@ class LocationCache(abstract.DashboardModel):
         )
         if stale_after is not None:
             # Dated as if written earlier, so every freshness check already in place lets it lapse on time.
-            entry.updated = min(entry.updated, cls.fresh_since() + stale_after)
+            entry.updated = min(entry.updated, cls.fresh_since(max_age) + stale_after)
             cls.objects.filter(pk=entry.pk).update(updated=entry.updated)
         return entry
