@@ -287,9 +287,10 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
     # (if any) now nests under - or now contains - another one.
     # Both are no-ops for the overwhelming majority of locations, which have no wiki and no
     from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
-    from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting_for_location
+    from urbanlens.dashboard.services.wiki.wiki_merge import claim_parcel_for_location_wiki, reconcile_wiki_nesting_for_location
 
     if place is not None:
+        claim_parcel_for_location_wiki(location)
         reclassify_markers_on_place(place)
         if place.parcel is not None and place.parcel.pk != place.pk:
             reclassify_markers_on_place(place.parcel)

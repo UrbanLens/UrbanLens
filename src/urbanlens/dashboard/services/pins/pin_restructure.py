@@ -17,6 +17,7 @@ from django.db import transaction
 
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.services.locations import site_scope
+from urbanlens.dashboard.services.places.lineage import enclosing_parcel
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -181,24 +182,6 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
     # A campus pin resting on one of its buildings draws no property of its own; the parcel above it does.
     parcel = enclosing_parcel(pin.location.place if pin.location_id and pin.location.place_id else None)
     return parcel.geometry if parcel is not None else None
-
-
-def enclosing_parcel(place: Place | None) -> Place | None:
-    """The nearest place above ``place`` (or ``place`` itself) that is not a building.
-
-    Args:
-        place: The place a location resolved onto.
-
-    Returns:
-        The parcel or site, or None when the chain ends at a building with no known parcel.
-    """
-    from urbanlens.dashboard.models.place.model import PlaceKind, PlaceRelation
-
-    hops = 0
-    while place is not None and place.kind == PlaceKind.BUILDING and hops < MAX_PARCEL_HOPS:
-        place = place.parent if place.parent_id and place.parent_relation == PlaceRelation.PART_OF else None
-        hops += 1
-    return place if place is not None and place.kind != PlaceKind.BUILDING else None
 
 
 def nestable_root_pins(pin: Pin) -> list[Pin]:
