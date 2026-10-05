@@ -66,6 +66,60 @@ trusted markup until that changes. REData's own dashboard still loads 5.24.0 fro
 does not cover it. Its attributions are constants (`OSM_TILE_ATTRIBUTION`), so no outside input reaches that
 sanitizer there.
 
+||||||| afd48d0d9
+
+## RESOLVED 2026-10-05: A Places photo backfill that met a spent budget marked the location done, so its photos were never fetched
+
+`id: P317` · `status: fixed` · `resolved: 2026-10-05`
+
+**Fixed:** `PlacePhotoEnrichmentSource.enrich` (`services/photos/photo_enrichment.py`) caught every
+`GatewayRequestError` per photo download, a `PlacesRateLimitedError` included, and still wrote its
+backfill marker after the loop, so a location whose photo list was already cached was retired with
+none of its photos. A download failure that `is_source_outage` calls an outage (a spent budget, a
+throttle, a 5xx, an unreachable host) now ends the run before the marker, and the enrichment runner
+stops the source as it does for any other. A photo that is gone or refused for good is still
+skipped. Each saved photo's name is recorded in the place's cached photo list (`saved_names`), so the
+next run downloads only the rest and stores nothing twice. Tests: `test_photo_enrichment.py::
+PlacePhotoEnrichmentSourceTests` (`test_a_spent_budget_mid_backfill_writes_no_marker`,
+`test_an_unreachable_photo_host_writes_no_marker`, `test_a_rerun_after_an_outage_saves_no_photo_twice`).
+
+## RESOLVED 2026-10-05: A `503 rate_limited` from REData Places reached its callers without the wait REData named
+
+`id: P315` · `status: fixed` · `resolved: 2026-10-05`
+
+**Fixed:** `RedataPlacesGateway._error_for` returns a `PlacesRateLimitedError` for REData's
+`rate_limited` body. It is both a `GatewayRateLimitedError` and an `UpstreamBusyError`, and its
+`retry_after` is REData's `Retry-After` (through `upstream_retry_after`, so at most 900 s), or
+`RedataBreaker.SOURCE_BUSY_SECONDS` (60 s, as long as the breaker holds a busy source) when REData
+named none. Every other Places failure is still a plain `GatewayRequestError`. Tests:
+`test_redata_places_gateway.py::RateLimitedTests` and `test_redata_places_budget_backs_off.py`.
+
+**The original entry was half wrong.** It said the next request asked again at once. For the same
+endpoint it did not: `_RateLimitedSession` already let `RedataBreaker.scope_tripped_by` open
+`source:<endpoint>` on any `503 rate_limited`, for the `Retry-After` up to an hour
+(`test_redata_breaker.py::BusySourceTests::test_it_stops_calls_to_that_endpoint`). What was missing
+was the wait on the error the first caller saw, so:
+
+- the Google Maps photos panel (`run_panel_fetch`) suppressed itself for the 300 s failure window,
+  not REData's wait;
+- the request-path callers (place details, autocomplete, place resolve and nearby landmarks, all
+  through `RequestUpstream`) answered `502` with no `Retry-After`, not `503` with one.
+
+Unchanged: enrichment still stops a source at it, since it is still a `GatewayRateLimitedError` (the
+Places photo backfill swallowed it per photo until P317, also fixed 2026-10-05);
+name resolution still swallows it and falls back to geocoding; the photo proxy still answers `502`;
+nothing caches it as an empty answer. CID resolution does not use this gateway.
+
+**Left as it is:** the breaker's scope is the endpoint, so a spent budget met on
+`places/search/nearby/` leaves `places/{id}/`, text search, autocomplete and photo downloads
+callable. REData keeps a separate budget for each Places SKU (`google_places_details`,
+`_essentials`, `_text_search_ids_only`, `_photos`, `google_places_autocomplete` in its
+`parcels/services/google_places_details/gateway.py`), and a wider scope would also refuse answers
+REData has cached, which cost nothing. `BREAKER_MAX_SECONDS` cuts a wait to the next UTC day down to
+an hour, so a busy endpoint is asked once an hour until then; each such refusal counts toward
+UrbanLens's own 40-a-day `redata_places` limit, since `ApiCallLog.billable()` counts a `503`. Not
+measured how often production meets any of this.
+
 ## RESOLVED 2026-10-05: Staging outranked production for CPU on the host they shared
 
 `id: P114` · `status: dismissed` · `resolved: 2026-10-05`
@@ -24029,3 +24083,66 @@ evaluation, which is exempt from the page's policy. Probed in Chromium on dev: `
 the same call from the timer was refused and raised `enforce script-src eval`.
 
 **Tests.** The spec passes; the policy still refuses `eval`.
+
+## RESOLVED 2026-10-05: Inside the US the app reads Overture from REData's mirror, and the public release only abroad
+
+`id: P110` · `status: fixed` · `resolved: 2026-10-05` · `follow-up: P240`
+
+**Jess, 2026-10-02: "We're self hosting Overture. Why are we contacting external services instead of using our self
+hosted instance?"** Because `OvertureMapsGateway` predated REData's Overture stack and was never moved onto it. Its
+three callers - `BoundaryProviderChain`'s Overture step and the Building Characteristics panel's
+`get_building_attributes` and `get_nearby_places` - read Overture's public GeoParquet on S3, with
+`stac.overturemaps.org` as the index, for every coordinate. REData syncs Overture's buildings, places, addresses and
+transportation for every US state and territory monthly and serves them from its own database.
+
+The entry opened 2026-09-10 as the cost of that public read. A 429 from the STAC index silently widened a lookup to
+the whole theme: one task allocated 1.7 GB, and the load suite's neighbour p95 reached its 60 s timeout during
+cooldown. The 2026-09-10 fix refuses a lookup the index cannot narrow, behind a 120 s per-process breaker and a 15 s
+deadline. The 2026-09-17 fix charges every read to an `overture_maps` budget (20 a minute, 500 a day). It stayed open
+for a live check that the budget stops the 429 loop. Inside the US that check no longer applies, since nothing there
+reaches Overture. Abroad it has still not been run.
+
+**What changed.** First written 2026-10-03 on `p110-overture-via-redata` (24f7ca3ce) and held there on P240;
+ported onto `release/v_0_9_0` on 2026-10-05 as `fix/overture-us-via-redata`, against the REData integration work the
+release gained meanwhile. The three callers go through `services.apis.locations.boundaries.overture.OvertureProvider`,
+which routes by coordinate. `overture.served_by_redata` holds where REData both applies its `overture` providers
+(`is_usa_coordinates`, whose boxes match REData `release/0.3.0`'s `core.services.geo_filter` number for number) and
+syncs a shard (`boundaries.redata_overture_shards`, a vendored copy of REData's `shards.US_STATE_BBOXES` that
+`OvertureShardTableTests` holds equal to it). `is_usa_coordinates` alone reaches Canada and Mexico near the border and
+the Bahamas, where REData holds nothing, and Alaska's shard stops at -179.9, so it also sent the western Aleutians to an
+empty mirror; adversarial review of the port found it (Montreal, Nassau, Shemya are now tests). Points outside every
+shard read the public release, as before P110.
+
+- Where REData covers the point, buildings come from `GET /buildings/?provider=overture&radius_meters=10` through the new
+  `RedataBuildingsGateway` (service key `redata_buildings`, 20 a minute, in REData's lookup pool). Places come from
+  `GET /points-of-interest/lookup/?provider=overture&radius_meters=150` through the existing
+  `RedataPointsOfInterestGateway`. A REData `BuildingRecord`'s `attributes` are the Overture row's own properties, so
+  both copies go through the same parsing, `overture_maps.building_attributes` and `nearby_places`. The panel's cache
+  row keeps its shape.
+- An empty REData answer is final. Without REData configured a US coordinate gets no Overture data, and the panel's
+  gate does not schedule it.
+- A REData outage on the building lookup raises, so the panel caches nothing (P187). The chain's step defers instead of
+  answering "no building", carrying REData's `Retry-After` when it throttles.
+- Nearby places are the panel's secondary answer. When they are not heard from - their lookup is out, or the building
+  lookup used up `_NEARBY_PLACES_BUDGET_SECONDS` - the building is cached marked `unanswered_sources`, so the row lapses
+  within the hour, as `redata_photo_pool` does for parcel photos. With no building either, nothing is cached. The
+  2026-10-03 version cached nothing when places failed after a good building answer; the release's partial-answer
+  rule (`LocationCache.set`, PL9) arrived after it.
+- Abroad, `OvertureMapsGateway` reads the public release behind the guards above, and refuses any bbox centred inside
+  the US with a `ValueError`, so no caller reaches the public release there by going around the provider.
+- `nearby_places` takes a place's category from `taxonomy` when `categories` is absent: Overture's 2026-09-23 release
+  dropped `categories` (found by REData, whose places sync failed every shard on it). Abroad that left every place
+  without a category.
+- "Cameras & Structures" (`redata_site_features`) already left REData's `overture` provider out on the release
+  (b99275172), since those places are this panel's.
+
+**Tests.** `tests/hypothesis/test_overture_served_by_redata.py` answers REData at the transport
+(`requests.adapters.HTTPAdapter.send`), with fixtures in the wire shapes of REData `release/0.3.0`'s serializers,
+roof columns and `operating_status` included. It trips on every way into the public release: constructing the
+gateway, `_overture_geodataframe`, `_overture_core`, `urlopen`. Before the port 18 of its 20 tests failed; the two that
+passed are controls for the path abroad. The public reader's existing tests moved their
+fixture bbox from Boston to Paris, and the panel's budget tests patch `OvertureProvider`.
+
+**Not verified:** any response from a live REData. The 2026-10-03 probes of the deployed REData timed out (P240);
+REData 0.3.0 fixed that, but production REData did not yet run it, and this session's probe of staging could not
+resolve its host. The fixtures follow REData's code and tests, not a captured response.

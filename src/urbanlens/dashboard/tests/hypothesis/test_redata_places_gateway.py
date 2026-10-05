@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 
 import pytest
@@ -11,13 +12,19 @@ from urllib3 import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
+from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+_RATE_LIMITED = {"error": "rate_limited", "message": "Places API (New) request budget is exhausted right now."}
 
 
-def _response(status_code: int, body: object) -> mock.Mock:
+def _response(status_code: int, body: object, headers: dict[str, str] | None = None) -> mock.Mock:
     resp = mock.Mock(status_code=status_code)
     resp.json.return_value = body
-    resp.headers = {"Content-Type": "image/jpeg"}
+    resp.headers = {"Content-Type": "image/jpeg", **(headers or {})}
     resp.content = b"fake-bytes"
     resp.text = ""
     return resp
@@ -163,6 +170,57 @@ class DownloadPhotoTests(SimpleTestCase):
 
         with pytest.raises(GatewayRequestError):
             _gateway(session).download_photo("p1", 5)
+
+
+def _every_call(gateway: RedataPlacesGateway) -> dict[str, Callable[[], Any]]:
+    return {
+        "get_place": lambda: gateway.get_place("p1"),
+        "search_nearby": lambda: gateway.search_nearby(41.7, -73.9),
+        "search_text": lambda: gateway.search_text("asylum"),
+        "autocomplete": lambda: gateway.autocomplete("asy"),
+        "download_photo": lambda: gateway.download_photo("p1", 5),
+    }
+
+
+class RateLimitedTests(SimpleTestCase):
+    """REData's ``503 rate_limited`` is its Places budget spent; the caller is told how long to leave it."""
+
+    def _raised(self, call: str, response: mock.Mock) -> GatewayRequestError:
+        session = mock.Mock()
+        session.get.return_value = response
+        with pytest.raises(GatewayRequestError) as caught:
+            _every_call(_gateway(session))[call]()
+        return caught.value
+
+    def test_the_wait_redata_named_is_passed_on(self) -> None:
+        for call in _every_call(_gateway(mock.Mock())):
+            with self.subTest(call):
+                raised = self._raised(call, _response(503, _RATE_LIMITED, {"Retry-After": "120"}))
+
+                assert isinstance(raised, UpstreamBusyError)
+                self.assertEqual(raised.retry_after, 120)
+                self.assertIsInstance(raised, GatewayRateLimitedError, "an enrichment run still stops at it")
+
+    def test_without_a_wait_it_holds_off_as_long_as_the_breaker_does(self) -> None:
+        for call in _every_call(_gateway(mock.Mock())):
+            with self.subTest(call):
+                raised = self._raised(call, _response(503, _RATE_LIMITED))
+
+                self.assertIsInstance(raised, GatewayRateLimitedError)
+                assert isinstance(raised, UpstreamBusyError)
+                self.assertEqual(raised.retry_after, RedataBreaker.SOURCE_BUSY_SECONDS)
+                self.assertTrue(raised.is_outage, "a spent budget says nothing about the place, so nothing is cached")
+
+    def test_other_failures_are_unchanged(self) -> None:
+        failures = (
+            _response(503, {"error": "places_api_unavailable", "message": "Places API (New) answered 500"}),
+            _response(500, {"error": "server_error"}),
+            _response(400, {"error": "invalid_parameter"}),
+        )
+        for response in failures:
+            for call in _every_call(_gateway(mock.Mock())):
+                with self.subTest(call, status=response.status_code):
+                    self.assertIs(type(self._raised(call, response)), GatewayRequestError)
 
 
 class ConstructionTests(SimpleTestCase):

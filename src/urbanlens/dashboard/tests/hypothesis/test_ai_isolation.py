@@ -531,6 +531,15 @@ class ComposeTopologyTests(SimpleTestCase):
         compose = _compose()
         self.assertIn("ai-inference", compose["services"]["ai-worker"]["depends_on"])
 
+    def test_the_app_tier_is_told_the_ai_worker_exists(self) -> None:
+        # assistant_available() reads UL_AI_WORKER_ENABLED in the process serving the page, so
+        # setting it on ai-worker alone left the assistant hidden while its worker ran.
+        compose = _compose()
+        self.assertIn("ai-worker", compose["services"])
+        for service in ("app", "app-ws"):
+            value = str(compose["services"][service]["environment"].get("UL_AI_WORKER_ENABLED", ""))
+            self.assertRegex(value, r"^\$\{UL_AI_WORKER_ENABLED:-true\}$", service)
+
 
 def _egress_filter_lines() -> list[str]:
     import pathlib
@@ -580,6 +589,20 @@ class EgressFilterTests(SimpleTestCase):
                     any(pattern.match(host) for pattern in patterns),
                     f"{host!r} has no matching entry in the egress filter",
                 )
+
+    def test_tool_gateways_reach_their_hosts_over_https(self) -> None:
+        # The proxy tunnels only 443 (tinyproxy.conf's ConnectPort), and a deployment may allow
+        # its egress nothing else. OpenWeatherMap also carries its key in the query string.
+        from dataclasses import fields
+
+        from urbanlens.dashboard.services.apis.routing.osrm import _DEMO_BASE_URL
+        from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+        from urbanlens.dashboard.services.apis.weather.open_meteo import _FORECAST_URL
+
+        owm = next(field.default for field in fields(OpenWeatherMapGateway) if field.name == "base_url")
+        for url in (owm, _DEMO_BASE_URL, _FORECAST_URL):
+            with self.subTest(url=url):
+                self.assertTrue(str(url).startswith("https://"), url)
 
 
 #: A module or submodule name is forbidden if its root matches one of these

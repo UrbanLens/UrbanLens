@@ -27,7 +27,7 @@ class OvertureMapsGatewayStacNarrowingTests(SimpleTestCase):
             patch.object(OvertureMapsGateway, "_reserve_call_budget", return_value=1),
             patch("urbanlens.dashboard.services.apis.locations.boundaries.overture_maps._finalize_call"),
         ):
-            gateway.get_buildings((-71.059, 42.36, -71.058, 42.361))
+            gateway.get_buildings((2.294, 48.858, 2.295, 48.859))
 
         mock_geodataframe.assert_called_once()
         self.assertEqual(
