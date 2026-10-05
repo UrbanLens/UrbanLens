@@ -455,14 +455,14 @@ ignore_missing_model_attributes = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.test"
-# tests/contract is on the path so that suite's conftest and test modules can
-# share `schema_source` by plain import. It holds no `test_*` modules of its own
-# and is not in `testpaths`, so this affects imports only, never collection.
-pythonpath = ["src", "tests/contract"]
+# tests/contract and tests/live_locations are on the path so each suite's conftest
+# and test modules can share a helper module by plain import. Neither is in
+# `testpaths`, so this affects imports only, never what a plain `pytest` collects.
+pythonpath = ["src", "tests/contract", "tests/live_locations"]
 # `tests/` is deliberately outside this. The Playwright suite under
-# tests/integration/ is not Python, and tests/contract/ needs either a running
-# deployment or an explicit opt-in to fuzzing, so neither belongs in the run
-# that a pre-commit hook or a plain `pytest` performs.
+# tests/integration/ is not Python, tests/contract/ needs either a running
+# deployment or an explicit opt-in to fuzzing, and tests/live_locations/ calls a
+# real REData, so none belongs in the run a pre-commit hook or a plain `pytest` performs.
 testpaths = ["src/urbanlens"]
 # -p no:randomly: pytest-randomly is installed but off unless asked for.
 # Shuffling was probed across three seeds on a subset and found no order

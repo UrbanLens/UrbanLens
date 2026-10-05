@@ -96,7 +96,12 @@ class GatedUrlTests(SimpleTestCase):
 
     @given(
         st.lists(
-            st.text(alphabet=st.characters(min_codepoint=32, blacklist_characters="/\\"), min_size=1, max_size=12),
+            # Lone surrogates are excluded: no stored name can hold one, since Postgres text is UTF-8.
+            st.text(
+                alphabet=st.characters(min_codepoint=32, blacklist_characters="/\\", blacklist_categories=("Cs",)),
+                min_size=1,
+                max_size=12,
+            ),
             min_size=1,
             max_size=4,
         ),
@@ -336,6 +341,17 @@ class ObjectStorageCheckTests(SimpleTestCase):
             messages = self._run()
         self.assertEqual([message.id for message in messages], ["dashboard.W002"])
         self.assertIn("exports/", messages[0].msg)
+
+    def test_the_warning_names_every_subtree_written_beside_the_storage_backend(self) -> None:
+        """The import preview and confirmed-import artifacts are kept under MEDIA_ROOT too, so a
+        deployment that mounts only the subtrees W002 names would lose them between containers."""
+        from urbanlens.dashboard.services.pins import confirmed_import, import_preview
+
+        with override_settings(**_object_storage_settings()):
+            message = self._run()[0].msg
+        for subtree in (import_preview.ARTIFACT_DIRNAME, confirmed_import.ARTIFACT_DIRNAME):
+            with self.subTest(subtree=subtree):
+                self.assertIn(f"MEDIA_ROOT/{subtree}/", message)
 
     def test_upstream_backend_without_the_url_override_is_an_error(self) -> None:
         """The whole point of the subclass, asserted as a refusal to start."""

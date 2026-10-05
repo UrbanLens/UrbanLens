@@ -1,4 +1,49 @@
-# The Hudson River State Hospital specs
+# Location data tests
+
+Two suites ask whether the *place* pipelines work for real places. Both are off by default,
+spend real REData budget, and are never collected by a plain `pytest` or CI.
+
+- **The live-locations suite** (`tests/live_locations/`, pytest) checks REData's answers for
+  every historic Kirkbride campus, plus Harlem Valley, endpoint by endpoint. Below.
+- **The Hudson River State Hospital specs** (`tests/integration/specs/location/`,
+  Playwright) drive one campus through the deployed application end to end. After that.
+
+## The live-locations suite
+
+`tests/live_locations/kirkbrides.toml` lists 57 campuses: Wikipedia's table of notable US
+Kirkbride hospitals, with coordinates from each article or its Wikidata item, plus
+St. Lawrence and Harlem Valley. The four `tier = "primary"` sites (HRSH, St. Lawrence,
+Harlem Valley, Athens) have hand-verified anchors and are what a default run checks.
+`--sites all` checks every campus; a demolished one skips the building checks.
+
+```bash
+# UL_LIVE_REDATA_API_URL / _API_KEY / _HOST from the environment or .env
+bin/run_live_location_tests.sh                          # the primary sites
+bin/run_live_location_tests.sh --sites all --report /tmp/live.json
+bin/run_live_location_tests.sh --sites hrsh -- -k footprints
+```
+
+Use a key of its own: a full run spends one key's hourly budget, which is why it runs
+serially. Against staging REData the URL is an address, so `UL_LIVE_REDATA_HOST` names the
+Host header the deployment answers to.
+
+Each check is one test per site (`test_redata_endpoints.py`): a parcel, one suggested boundary
+holding the campus, its buildings within 1.5 km, footprint polygons for at least 80% of
+them, build dates, an owner of record, a register listing, the Wikipedia article near the
+point, archival documents, web and image search results that name the campus, news, photos,
+dated aerial imagery, historic maps and incident records. Relevance is judged by the site's
+distinctive name words, so a result about a car called a Hudson does not count.
+
+A check that cannot be decided (a budget refusal REData says to wait out for longer than
+`UL_LIVE_MAX_WAIT_SECONDS`, or an empty answer while a covering source did not answer)
+fails as *inconclusive* in the report rather than passing. A site's `known_issues` maps a
+check to the problem id tracking why it fails today, and marks it `xfail(strict=True)`, so
+the fix turns it red until the entry is removed.
+
+`--report` writes every check's outcome and every REData call with its latency, for comparing
+runs.
+
+## The Hudson River State Hospital specs
 
 `tests/integration/specs/location/` exercises one real place end to end - the
 former Hudson River State Hospital campus in Poughkeepsie, NY, which has been
@@ -20,7 +65,7 @@ UL_E2E_ACCOUNTS_FILE=/tmp/e2e.json bin/run_integration_tests.sh --url http://loc
 # or, from tests/integration with UL_E2E_LOCATION_DATA=1 exported: npm run test:location
 ```
 
-## Why a separate project
+### Why a separate project
 
 Three reasons, and each one is also a reason not to fold these into `api` or `ui`:
 
@@ -38,7 +83,7 @@ on a single property, and the application enforces one root pin per property per
 profile, so a second worker would be refused and a third would delete the pin out
 from under the others.
 
-## What the numbers here are, and are not
+### What the numbers here are, and are not
 
 Everything asserted falls into one of three shapes, and the distinction is the
 whole design:
@@ -69,7 +114,7 @@ application at all; "the last sale" is whatever sorts first under
 assert the *ordering contract* and that nothing is dated in the future. A deed
 recorded tomorrow satisfies both.
 
-## The campus pin, and the courtyard pin
+### The campus pin, and the courtyard pin
 
 `specs/location/fixtures.ts` builds one fixture per *site* (`SiteConfig`). Two sites stand on the same
 tax parcel (3532 North Rd):
@@ -108,7 +153,7 @@ restarted after a failure resumes instead of waiting again. Waits that ran out
 (`waitForWiki`, `waitForChildPins`) are remembered the same way, so a stalled
 pipeline costs one timeout per run, not one per test.
 
-## Reading a failure
+### Reading a failure
 
 The directory is arranged so a broken pipeline produces **one** red, not thirty.
 The campus fixture never throws once it has a pin; it carries either the geometry
@@ -119,7 +164,7 @@ with a pointer to it.
 So: **read the boundary failure first.** If it is red, the skips below it are
 consequences, not separate problems.
 
-## Metrics
+### Metrics
 
 Recorded through `lib/metrics.ts` and compared by `npm run metrics:report` (see
 `INTEGRATION_TESTS.md`, "Metrics"):
@@ -134,7 +179,7 @@ Recorded through `lib/metrics.ts` and compared by `npm run metrics:report` (see
 | `hrsh.child_pins.count`, `hrsh.child_pins.seconds_to_min` | count, s | `waitForChildPins` |
 | `hrsh.wiki.available`, `hrsh.wiki.seconds_to_available` | 0/1, s | `waitForCampusWiki` |
 
-## Waiting
+### Waiting
 
 The suite's `lib/waiting.ts` exists for this directory. Playwright's `expect.poll`
 covers the simple cases; what it does not give is a diagnosis when the wait runs
@@ -161,7 +206,7 @@ Media has its own trap: the gallery's pending loaders poll with
 gaps between polls and asserts on an empty grid. Count `.media-provider-loader`
 down to zero instead, which is what `settleGallery` in `hrsh-media.spec.ts` does.
 
-## What the first run found
+### What the first run found
 
 Written and then run against a real deployment rather than left untried. The
 headline finding is recorded in `docs/PROBLEMS.md` under "a new pin never gets
@@ -174,7 +219,7 @@ That one defect is upstream of most of this directory, which is why the fixture
 is built to report it once and skip the rest. It is now fixed, along with two
 others found while confirming it - see `docs/PROBLEMS.md`.
 
-### Presence is not provenance
+#### Presence is not provenance
 
 The most instructive failure in this directory is one the original
 `hrsh-boundary.spec.ts` could not produce. Every assertion in it passed while

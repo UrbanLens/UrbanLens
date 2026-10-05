@@ -1,0 +1,680 @@
+# Historic Kirkbride-plan asylum campuses, plus Harlem Valley, that the live-locations suite checks.
+#
+# Source: the "Notable Kirkbride hospitals / United States" table of Wikipedia's "Kirkbride Plan"
+# article (2026-10-05), coordinates from each article or its Wikidata item (P625), NRHP
+# reference numbers from the table or Wikidata (P649). St. Lawrence and Harlem Valley are
+# added by hand; Harlem Valley is not a Kirkbride but is a required reference campus.
+# Omitted for want of any published coordinate: Mount Pleasant State Hospital (IA),
+# Nevada State Hospital (MO), San Antonio State Hospital (TX).
+#
+# tier = "primary": anchor verified by hand; every check must pass.
+# status = "demolished": the Kirkbride building is gone, so building checks do not apply.
+# known_issues maps a check name to the problem id tracking why it fails today; the test
+# for that check is marked xfail(strict=True), so a fix turns it red until the entry goes.
+
+[[site]]
+key = "trenton-psychiatric-hospital"
+name = "Trenton State Hospital"
+wikipedia = "Trenton Psychiatric Hospital"
+place = "Trenton, New Jersey"
+state = "NJ"
+lat = 40.2436
+lng = -74.8055
+built = 1848
+status = "standing"
+
+[[site]]
+key = "central-state-hospital-indiana"
+name = "Central State Hospital"
+wikipedia = "Central State Hospital (Indiana)"
+place = "Indianapolis, Indiana"
+state = "IN"
+lat = 39.7693
+lng = -86.2112
+built = 1848
+status = "standing"
+
+[[site]]
+key = "jacksonville-developmental-center"
+name = "Jacksonville State Hospital"
+wikipedia = "Jacksonville Developmental Center"
+place = "Jacksonville, Illinois"
+state = "IL"
+lat = 39.719248
+lng = -90.229773
+built = 1848
+status = "standing"
+nrhp = "75000669"
+
+[[site]]
+key = "harrisburg-state-hospital"
+name = "Harrisburg State Hospital"
+wikipedia = "Harrisburg State Hospital"
+place = "Harrisburg, Pennsylvania"
+state = "PA"
+lat = 40.283056
+lng = -76.873333
+built = 1851
+status = "standing"
+nrhp = "86000057"
+
+[[site]]
+key = "taunton-state-hospital"
+name = "Taunton State Hospital"
+wikipedia = "Taunton State Hospital"
+place = "Taunton, Massachusetts"
+state = "MA"
+lat = 41.911886
+lng = -71.100561
+built = 1853
+status = "demolished"
+nrhp = "93001484"
+
+[[site]]
+key = "western-state-hospital-kentucky"
+name = "Western State Hospital"
+wikipedia = "Western State Hospital (Kentucky)"
+place = "Hopkinsville, Kentucky"
+state = "KY"
+lat = 36.865
+lng = -87.451111
+built = 1854
+status = "standing"
+nrhp = "79003612"
+
+[[site]]
+key = "augusta-mental-health-institute"
+name = "Maine Insane Hospital"
+wikipedia = "Augusta Mental Health Institute"
+place = "Augusta, Maine"
+state = "ME"
+lat = 44.30183
+lng = -69.76975
+built = 1854
+status = "standing"
+nrhp = "82000754"
+
+[[site]]
+key = "mississippi-state-hospital"
+name = "Jackson State Hospital"
+wikipedia = "Mississippi State Hospital"
+place = "Jackson, Mississippi"
+state = "MS"
+lat = 32.242526
+lng = -90.070705
+built = 1855
+status = "standing"
+
+[[site]]
+key = "southern-ohio-lunatic-asylum"
+name = "Dayton State Hospital"
+wikipedia = "Southern Ohio Lunatic Asylum"
+place = "Dayton, Ohio"
+state = "OH"
+lat = 39.737778
+lng = -84.161111
+built = 1855
+status = "standing"
+nrhp = "79001902"
+
+[[site]]
+key = "st-elizabeths-hospital"
+name = "St. Elizabeths Hospital"
+wikipedia = "St. Elizabeths Hospital"
+place = "Washington, D.C."
+state = "DC"
+lat = 38.850833
+lng = -76.994444
+built = 1855
+status = "standing"
+nrhp = "79003101"
+
+[[site]]
+key = "austin-state-hospital"
+name = "Austin State Hospital"
+wikipedia = "Austin State Hospital"
+place = "Austin, Texas"
+state = "TX"
+lat = 30.3074
+lng = -97.7372
+built = 1856
+status = "standing"
+nrhp = "87002115"
+
+[[site]]
+key = "northampton-state-hospital"
+name = "Northampton State Hospital"
+wikipedia = "Northampton State Hospital"
+place = "Northampton, Massachusetts"
+state = "MA"
+lat = 42.311
+lng = -72.649
+built = 1858
+status = "demolished"
+nrhp = "94000696"
+
+[[site]]
+key = "mendota-mental-health-institute"
+name = "Mendota Mental Health Institute"
+wikipedia = "Mendota Mental Health Institute"
+place = "Madison, Wisconsin"
+state = "WI"
+lat = 43.132
+lng = -89.4013
+built = 1858
+status = "standing"
+
+[[site]]
+key = "institute-of-the-pennsylvania-hospital"
+name = "The Institute of the Pennsylvania Hospital"
+wikipedia = "Institute of the Pennsylvania Hospital"
+place = "Philadelphia, Pennsylvania"
+state = "PA"
+lat = 39.961667
+lng = -75.217222
+built = 1859
+status = "standing"
+nrhp = "66000684"
+
+[[site]]
+key = "kalamazoo-regional-psychiatric-hospital"
+name = "Kalamazoo Regional Psychiatric Hospital"
+wikipedia = "Kalamazoo Regional Psychiatric Hospital"
+place = "Kalamazoo, Michigan"
+state = "MI"
+lat = 42.279324
+lng = -85.604318
+built = 1859
+status = "standing"
+
+[[site]]
+key = "bryce-hospital"
+name = "Bryce Hospital"
+wikipedia = "Bryce Hospital"
+place = "Tuscaloosa, Alabama"
+state = "AL"
+lat = 33.21626
+lng = -87.53831
+built = 1859
+status = "standing"
+nrhp = "77000216"
+
+[[site]]
+key = "dixmont-state-hospital"
+name = "Dixmont State Hospital"
+wikipedia = "Dixmont State Hospital"
+place = "Pittsburgh, Pennsylvania"
+state = "PA"
+lat = 40.515833
+lng = -80.112222
+built = 1862
+status = "demolished"
+nrhp = "80003401"
+
+[[site]]
+key = "trans-allegheny-lunatic-asylum"
+name = "Trans-Allegheny Lunatic Asylum"
+wikipedia = "Trans-Allegheny Lunatic Asylum"
+place = "Weston, West Virginia"
+state = "WV"
+lat = 39.038611
+lng = -80.471389
+built = 1863
+status = "standing"
+nrhp = "78002805"
+
+[[site]]
+key = "minnesota-security-hospital"
+name = "St. Peter State Hospital"
+wikipedia = "Minnesota Security Hospital"
+place = "St. Peter, Minnesota"
+state = "MN"
+lat = 44.307958
+lng = -93.982136
+built = 1866
+status = "standing"
+
+[[site]]
+key = "hrsh"
+name = "Hudson River State Hospital"
+wikipedia = "Hudson River State Hospital"
+place = "Poughkeepsie, New York"
+state = "NY"
+lat = 41.733181
+lng = -73.928493
+built = 1868
+status = "standing"
+nrhp = "89001166"
+aliases = ["Hudson River Psychiatric Center"]
+tier = "primary"
+# HRSH campus, west range of the Kirkbride (tests/integration/lib/hrsh.ts).
+
+[[site]]
+key = "osawatomie-state-hospital"
+name = "Osawatomie State Hospital"
+wikipedia = "Osawatomie State Hospital"
+place = "Osawatomie, Kansas"
+state = "KS"
+lat = 38.510246
+lng = -94.94011
+built = 1868
+status = "standing"
+
+[[site]]
+key = "anna-state-hospital"
+name = "Anna State Hospital"
+wikipedia = "Anna State Hospital"
+place = "Anna, Illinois"
+state = "IL"
+lat = 37.477222
+lng = -89.241944
+built = 1869
+status = "standing"
+
+[[site]]
+key = "central-state-hospital-kentucky"
+name = "Central State Hospital"
+wikipedia = "Central State Hospital (Kentucky)"
+place = "Anchorage, Kentucky"
+state = "KY"
+lat = 38.278056
+lng = -85.555
+built = 1869
+status = "demolished"
+nrhp = "83002646"
+
+[[site]]
+key = "danville-state-hospital"
+name = "Danville State Hospital"
+wikipedia = "Danville State Hospital"
+place = "Danville, Pennsylvania"
+state = "PA"
+lat = 40.949
+lng = -76.596
+built = 1869
+status = "standing"
+
+[[site]]
+key = "central-state-hospital-virginia"
+name = "Central State Hospital"
+wikipedia = "Central State Hospital (Virginia)"
+place = "Petersburg, Virginia"
+state = "VA"
+lat = 37.2094
+lng = -77.4513
+built = 1870
+status = "standing"
+
+[[site]]
+key = "richardson-olmsted-complex"
+name = "Buffalo State Hospital"
+wikipedia = "Richardson Olmsted Complex"
+place = "Buffalo, New York"
+state = "NY"
+lat = 42.928611
+lng = -78.881972
+built = 1870
+status = "standing"
+nrhp = "73001186"
+
+[[site]]
+key = "spring-grove-hospital-center"
+name = "Spring Grove State Hospital"
+wikipedia = "Spring Grove Hospital Center"
+place = "Catonsville, Maryland"
+state = "MD"
+lat = 39.264722
+lng = -76.7225
+built = 1872
+status = "demolished"
+
+[[site]]
+key = "elgin-mental-health-center"
+name = "Elgin State Hospital"
+wikipedia = "Elgin Mental Health Center"
+place = "Elgin, Illinois"
+state = "IL"
+lat = 42.01545
+lng = -88.28812
+built = 1872
+status = "standing"
+
+[[site]]
+key = "topeka-state-hospital"
+name = "Topeka State Hospital"
+wikipedia = "Topeka State Hospital"
+place = "Topeka, Kansas"
+state = "KS"
+lat = 39.064722
+lng = -95.710973
+built = 1872
+status = "demolished"
+
+[[site]]
+key = "winnebago-mental-health-institute"
+name = "Winnebago State Hospital"
+wikipedia = "Winnebago Mental Health Institute"
+place = "Oshkosh, Wisconsin"
+state = "WI"
+lat = 44.075
+lng = -88.518
+built = 1873
+status = "standing"
+
+[[site]]
+key = "independence-state-hospital"
+name = "Independence State Hospital"
+wikipedia = "Independence State Hospital"
+place = "Independence, Iowa"
+state = "IA"
+lat = 42.457702
+lng = -91.925919
+built = 1873
+status = "standing"
+
+[[site]]
+key = "athens"
+name = "Athens Lunatic Asylum"
+wikipedia = "Athens Lunatic Asylum"
+place = "Athens, Ohio"
+state = "OH"
+lat = 39.32
+lng = -82.10944444
+built = 1874
+status = "standing"
+nrhp = "80002936"
+aliases = ["The Ridges", "Athens State Hospital", "Athens Mental Health Center"]
+tier = "primary"
+# The Ridges, Athens OH (Wikipedia coordinate, on the NRHP district parcel).
+
+[[site]]
+key = "warren-state-hospital"
+name = "Warren State Hospital"
+wikipedia = "Warren State Hospital"
+place = "Warren, Pennsylvania"
+state = "PA"
+lat = 41.8792
+lng = -79.1458
+built = 1874
+status = "standing"
+
+[[site]]
+key = "greystone-park-psychiatric-hospital"
+name = "Greystone Park Psychiatric Hospital"
+wikipedia = "Greystone Park Psychiatric Hospital"
+place = "Hanover, New Jersey"
+state = "NJ"
+lat = 40.834722
+lng = -74.505278
+built = 1876
+status = "standing"
+
+[[site]]
+key = "napa-state-hospital"
+name = "Napa State Hospital"
+wikipedia = "Napa State Hospital"
+place = "Napa, California"
+state = "CA"
+lat = 38.278056
+lng = -122.266944
+built = 1876
+status = "standing"
+
+[[site]]
+key = "columbus-state-hospital"
+name = "Columbus State Hospital"
+wikipedia = "Columbus State Hospital"
+place = "Columbus, Ohio"
+state = "OH"
+lat = 39.958333
+lng = -83.055556
+built = 1877
+status = "demolished"
+nrhp = "86000851"
+
+[[site]]
+key = "worcester-state-hospital"
+name = "Worcester State Hospital"
+wikipedia = "Worcester State Hospital"
+place = "Worcester, Massachusetts"
+state = "MA"
+lat = 42.278667
+lng = -71.769306
+built = 1877
+status = "standing"
+nrhp = "80000530"
+
+[[site]]
+key = "danvers-state-hospital"
+name = "Danvers State Hospital"
+wikipedia = "Danvers State Hospital"
+place = "Danvers, Massachusetts"
+state = "MA"
+lat = 42.581234
+lng = -70.974394
+built = 1878
+status = "demolished"
+nrhp = "84002436"
+
+[[site]]
+key = "clinton-valley-center"
+name = "Pontiac State Hospital"
+wikipedia = "Clinton Valley Center"
+place = "Pontiac, Michigan"
+state = "MI"
+lat = 42.645472
+lng = -83.322389
+built = 1878
+status = "demolished"
+nrhp = "81000315"
+
+[[site]]
+key = "kankakee-state-hospital"
+name = "Kankakee State Hospital"
+wikipedia = "Kankakee State Hospital"
+place = "Kankakee, Illinois"
+state = "IL"
+lat = 41.105502
+lng = -87.867183
+built = 1879
+status = "standing"
+
+[[site]]
+key = "oregon-state-hospital"
+name = "Oregon State Hospital"
+wikipedia = "Oregon State Hospital"
+place = "Salem, Oregon"
+state = "OR"
+lat = 44.93979
+lng = -123.00348
+built = 1883
+status = "standing"
+nrhp = "08000118"
+
+[[site]]
+key = "broughton-hospital"
+name = "Broughton Hospital"
+wikipedia = "Broughton Hospital"
+place = "Morganton, North Carolina"
+state = "NC"
+lat = 35.731316
+lng = -81.6729
+built = 1883
+status = "standing"
+nrhp = "77000996"
+
+[[site]]
+key = "arkansas-state-hospital"
+name = "Arkansas State Hospital"
+wikipedia = "Arkansas State Hospital"
+place = "Little Rock, Arkansas"
+state = "AR"
+lat = 34.7507
+lng = -92.3243
+built = 1883
+status = "standing"
+
+[[site]]
+key = "clarinda-treatment-complex"
+name = "Clarinda State Hospital"
+wikipedia = "Clarinda Treatment Complex"
+place = "Clarinda, Iowa"
+state = "IA"
+lat = 40.757897
+lng = -95.037625
+built = 1884
+status = "standing"
+
+[[site]]
+key = "traverse-city-state-hospital"
+name = "Northern Michigan Asylum"
+wikipedia = "Traverse City State Hospital"
+place = "Traverse City, Michigan"
+state = "MI"
+lat = 44.755278
+lng = -85.640556
+built = 1885
+status = "standing"
+nrhp = "78001499"
+
+[[site]]
+key = "agnews-developmental-center"
+name = "Agnews State Hospital"
+wikipedia = "Agnews Developmental Center"
+place = "Santa Clara, California"
+state = "CA"
+lat = 37.393889
+lng = -121.952778
+built = 1885
+status = "standing"
+nrhp = "97000829"
+
+[[site]]
+key = "terrell-state-hospital"
+name = "Terrell State Hospital"
+wikipedia = "Terrell State Hospital"
+place = "Terrell, Texas"
+state = "TX"
+lat = 32.742
+lng = -96.264
+built = 1885
+status = "standing"
+
+[[site]]
+key = "cherokee-mental-health-institute"
+name = "Cherokee Mental Health Institute"
+wikipedia = "Cherokee Mental Health Institute"
+place = "Cherokee, Iowa"
+state = "IA"
+lat = 42.757
+lng = -95.573
+built = 1890
+status = "standing"
+
+[[site]]
+key = "sheppard-and-enoch-pratt-hospital"
+name = "Sheppard Pratt Hospital"
+wikipedia = "Sheppard and Enoch Pratt Hospital"
+place = "Towson, Maryland"
+state = "MD"
+lat = 39.391111
+lng = -76.619167
+built = 1891
+status = "standing"
+nrhp = "71000369"
+
+[[site]]
+key = "eastern-state-hospital-washington"
+name = "Eastern State Hospital"
+wikipedia = "Eastern State Hospital (Washington)"
+place = "Medical Lake, Washington"
+state = "WA"
+lat = 47.573
+lng = -117.696
+built = 1891
+status = "standing"
+
+[[site]]
+key = "mendocino-state-hospital"
+name = "Mendocino State Hospital"
+wikipedia = "Mendocino State Hospital"
+place = "Ukiah, California"
+state = "CA"
+lat = 39.134
+lng = -123.16
+built = 1893
+status = "standing"
+
+[[site]]
+key = "patton-state-hospital"
+name = "Patton State Hospital"
+wikipedia = "Patton State Hospital"
+place = "San Bernardino, California"
+state = "CA"
+lat = 34.138077
+lng = -117.21454
+built = 1893
+status = "standing"
+
+[[site]]
+key = "st-vincent-s-hospital-normandy-missouri"
+name = "St. Vincent's Hospital"
+wikipedia = "St. Vincent's Hospital (Normandy, Missouri)"
+place = "Normandy, Missouri"
+state = "MO"
+lat = 38.6925
+lng = -90.306667
+built = 1894
+status = "standing"
+nrhp = "82004722"
+
+[[site]]
+key = "fergus-falls-regional-treatment-center"
+name = "Fergus Falls Regional Treatment Center"
+wikipedia = "Fergus Falls Regional Treatment Center"
+place = "Fergus Falls, Minnesota"
+state = "MN"
+lat = 46.299394
+lng = -96.081313
+built = 1895
+status = "standing"
+nrhp = "86001386"
+
+[[site]]
+key = "eastern-oregon-correctional-institution"
+name = "Eastern Oregon State Hospital"
+wikipedia = "Eastern Oregon Correctional Institution"
+place = "Pendleton, Oregon"
+state = "OR"
+lat = 45.6715
+lng = -118.817
+built = 1913
+status = "standing"
+
+[[site]]
+key = "st-lawrence"
+name = "St. Lawrence State Hospital"
+wikipedia = "Ogdensburg Correctional Facility"
+place = "Ogdensburg, New York"
+state = "NY"
+lat = 44.7266457
+lng = -75.4400743
+built = 1890
+status = "standing"
+aliases = ["St. Lawrence Psychiatric Center"]
+tier = "primary"
+# St. Lawrence Psychiatric Center, 1 Chimney Point Dr (OSM way centroid).
+
+[[site]]
+key = "harlem-valley"
+name = "Harlem Valley State Hospital"
+wikipedia = "Harlem Valley State Hospital"
+place = "Wingdale, New York"
+state = "NY"
+lat = 41.63825
+lng = -73.56661
+built = 1924
+status = "standing"
+aliases = ["Harlem Valley Psychiatric Center"]
+tier = "primary"
+# Campus point of CRIS project 'Olivet Center Full Build [Harlem Valley Psych Center]'.
