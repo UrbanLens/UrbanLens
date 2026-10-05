@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.locations.temporal_imagery import (
     get_temporal_features,
     temporal_slider_years,
 )
+from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -45,10 +46,11 @@ class OhmTemporalCoveragePanelSourceGateTests(TestCase):
 
 
 class OhmTemporalCoveragePanelSourceFetchTests(TestCase):
-    """fetch() persists (or withholds) a LocationCache row depending on the gateway's outcome."""
+    """fetch() persists (or withholds) a LocationCache row depending on the gateway's outcome, asking OHM directly without REData."""
 
     def setUp(self) -> None:
         super().setUp()
+        self.enterContext(mock.patch.object(settings, "redata_api_url", None))
         self.source = OhmTemporalCoveragePanelSource()
         self.location: Location = baker.make("dashboard.Location", latitude=40.5, longitude=-74.5)
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=baker.make(User).profile, location=self.location)
@@ -131,10 +133,11 @@ class TemporalSliderYearsTests(TestCase):
 
 
 class GetTemporalFeaturesTests(TestCase):
-    """get_temporal_features() validates the year and caches results per-year."""
+    """get_temporal_features() validates the year and, without REData, caches OHM's results per-year."""
 
     def setUp(self) -> None:
         super().setUp()
+        self.enterContext(mock.patch.object(settings, "redata_api_url", None))
         self.location: Location = baker.make("dashboard.Location", latitude=40.5, longitude=-74.5)
 
     def test_rejects_year_out_of_bounds(self) -> None:

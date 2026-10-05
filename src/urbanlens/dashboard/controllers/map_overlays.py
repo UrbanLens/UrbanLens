@@ -21,11 +21,11 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.apis.request_upstreams import HistoricalMapsBrowseUpstream
+from urbanlens.dashboard.services.apis.request_upstreams import HistoricalMapsBrowseUpstream, HistoricalMapVolumesUpstream
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
-from urbanlens.dashboard.services.core.request_upstream import Outcome, UpstreamResult
+from urbanlens.dashboard.services.core.request_upstream import Outcome, Pending, UpstreamResult, wait_all
 from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.map.image_overlays import (
     MAX_OVERLAYS_PER_MAP,
@@ -678,6 +678,18 @@ HISTORICAL_MAP_BROWSE_METHODS = frozenset({"GET"})
 HISTORICAL_MAPS_CACHE_TTL = 86400
 
 
+def _start_historical_maps(request: HttpRequest, location: Location) -> Pending[list[dict[str, Any]]]:
+    from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+
+    latitude, longitude = float(location.latitude), float(location.longitude)
+    return HistoricalMapsBrowseUpstream.start(
+        lambda: RedataHistoricalMapsGateway().get_maps_covering(latitude, longitude, radius_meters=2000, limit=25),
+        key=f"{latitude:.6f}:{longitude:.6f}",
+        ttl=HISTORICAL_MAPS_CACHE_TTL,
+        caller=account_or_address(request),
+    )
+
+
 def historical_maps_covering(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
     """REData's georeferenced sheets covering a location, from cache or under the request-path policy.
 
@@ -688,15 +700,115 @@ def historical_maps_covering(request: HttpRequest, location: Location) -> Upstre
     Returns:
         Match dicts, most detailed first, or why there are none.
     """
+    return _start_historical_maps(request, location).result()
+
+
+#: How far a catalogued town or county may be from the spot for its atlases to list: a town's volumes cover its outskirts.
+HISTORICAL_MAP_VOLUME_RADIUS_METERS = 2000
+#: Placed sheets listed under one volume, nearest first. A county atlas can hold a hundred; the rest are a click away
+#: at the institution.
+HISTORICAL_MAP_VOLUME_SHEETS = 5
+
+
+def _volumes_settled(volumes: list[dict[str, Any]]) -> bool:
+    """Whether every volume's sheets are listed; one REData is still listing reads differently a little later."""
+    return not any((match.get("volume") or {}).get("sheets_status") == "pending" for match in volumes)
+
+
+def _start_historical_map_volumes(request: HttpRequest, location: Location) -> Pending[list[dict[str, Any]]]:
     from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
 
     latitude, longitude = float(location.latitude), float(location.longitude)
-    return HistoricalMapsBrowseUpstream.call(
-        lambda: RedataHistoricalMapsGateway().get_maps_covering(latitude, longitude, radius_meters=2000, limit=25),
+    return HistoricalMapVolumesUpstream.start(
+        lambda: RedataHistoricalMapsGateway().get_volumes_near(latitude, longitude, radius_meters=HISTORICAL_MAP_VOLUME_RADIUS_METERS),
         key=f"{latitude:.6f}:{longitude:.6f}",
         ttl=HISTORICAL_MAPS_CACHE_TTL,
         caller=account_or_address(request),
+        cacheable=_volumes_settled,
     )
+
+
+def historical_map_volumes_near(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
+    """REData's catalogued map volumes of the place a location is in, from cache or under the request-path policy.
+
+    An answer with a volume whose sheets REData is still listing is not cached, so the next browse shows them.
+
+    Args:
+        request: The current request, charged against the per-account rate on a miss.
+        location: The spot to search around.
+
+    Returns:
+        Volume match dicts, most specific place first, or why there are none.
+    """
+    return _start_historical_map_volumes(request, location).result()
+
+
+def _meters_to_bounds(latitude: float, longitude: float, bounds: list[float]) -> float:
+    """Metres from a point to a ``[min_lon, min_lat, max_lon, max_lat]`` box; zero inside it."""
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    min_lon, min_lat, max_lon, max_lat = bounds
+    return haversine_meters(latitude, longitude, min(max(latitude, min_lat), max_lat), min(max(longitude, min_lon), max_lon))
+
+
+def _volume_sheet_row(sheet: dict[str, Any], latitude: float, longitude: float) -> dict[str, Any] | None:
+    """One placed sheet of a volume, as an addable row; None for a sheet nobody has placed."""
+    georeference = sheet.get("georeference") or {}
+    bounds = georeference.get("bounds")
+    if not georeference.get("uuid") or not isinstance(bounds, list) or len(bounds) != 4:
+        return None
+    try:
+        meters = _meters_to_bounds(latitude, longitude, [float(value) for value in bounds])
+    except (TypeError, ValueError):
+        return None
+    return {
+        "georeference_uuid": georeference["uuid"],
+        "label": sheet.get("label") or "Sheet",
+        "landing_page_url": sheet.get("landing_page_url") or "",
+        "meters": meters,
+        "km": meters / 1000,
+        "contains_point": meters == 0,
+        "accuracy": georeference_accuracy(georeference),
+    }
+
+
+def historical_volume_row(match: dict[str, Any], latitude: float, longitude: float, listed: set[str]) -> dict[str, Any] | None:
+    """One catalogued volume as a picker row, or None to skip it.
+
+    Its placed sheets nearest the spot are addable here unless the covering list above already offers them; the
+    rest of the volume - usually most of it, since few scans are placed - is at the institution's landing page.
+
+    Args:
+        match: One entry from ``RedataHistoricalMapsGateway.get_volumes_near``.
+        latitude: The spot's latitude.
+        longitude: The spot's longitude.
+        listed: Georeference uuids the covering-sheets list already offers.
+
+    Returns:
+        A template-ready row.
+    """
+    volume = match.get("volume") or {}
+    if not volume.get("uuid"):
+        return None
+    sheets = [row for row in (_volume_sheet_row(sheet, latitude, longitude) for sheet in match.get("sheets") or [] if isinstance(sheet, dict)) if row is not None]
+    placed = len(sheets)
+    addable = sorted((row for row in sheets if row["georeference_uuid"] not in listed), key=lambda row: row["meters"])[:HISTORICAL_MAP_VOLUME_SHEETS]
+    years = [year for year in (volume.get("year_start"), volume.get("year_end")) if isinstance(year, int)]
+    year_text = "-".join(str(year) for year in sorted(set(years)))
+    return {
+        "title": volume.get("title") or "Untitled atlas",
+        "date_text": volume.get("date_text") or year_text,
+        "kind": (volume.get("kind") or "other").replace("_", " "),
+        "attribution": volume.get("attribution") or "",
+        "place_name": (match.get("place") or {}).get("name") or volume.get("place_name") or "",
+        "same_county": match.get("match") == "same_county",
+        "thumbnail_url": volume.get("thumbnail_url") or "",
+        "landing_page_url": volume.get("landing_page_url") or "",
+        "sheet_count": volume.get("sheet_count") or len(match.get("sheets") or []),
+        "placed_count": placed,
+        "status": volume.get("sheets_status") or "",
+        "sheets": addable,
+    }
 
 
 def _historical_maps_unavailable_message(found: UpstreamResult[list[dict[str, Any]]]) -> str:
@@ -705,15 +817,50 @@ def _historical_maps_unavailable_message(found: UpstreamResult[list[dict[str, An
     return "Historical map search is temporarily unavailable."
 
 
+def _chosen_georeference(request: HttpRequest, location: Location, georeference_uuid: str) -> tuple[dict[str, Any], str] | str:
+    """The georeference a browse POST chose and the overlay's name, from REData's own lists for the spot; else why not.
+
+    The lists (usually still cached from the browse) are the authority rather than posted bounds or titles: the uuid
+    must be a sheet covering this location or a placed sheet of a volume catalogued to its place, and the canonical
+    metadata comes with it.
+
+    Args:
+        request: The current request, charged on a cache miss.
+        location: The pin's or wiki's location.
+        georeference_uuid: What the POST named.
+
+    Returns:
+        ``(georeference, overlay name)``, or the message to show instead.
+    """
+    found = historical_maps_covering(request, location)
+    if not found.ok:
+        return _historical_maps_unavailable_message(found)
+    for match in found.value_or([]):
+        georeference = match.get("georeference") or {}
+        if georeference.get("uuid") == georeference_uuid:
+            sheet = match.get("sheet") or {}
+            return georeference, " - ".join(part for part in (sheet.get("title"), sheet.get("date_text")) if part)
+    volumes = historical_map_volumes_near(request, location)
+    for match in volumes.value_or([]):
+        volume = match.get("volume") or {}
+        for sheet in match.get("sheets") or []:
+            georeference = (sheet.get("georeference") if isinstance(sheet, dict) else None) or {}
+            if georeference.get("uuid") == georeference_uuid:
+                return georeference, " - ".join(part for part in (volume.get("title"), sheet.get("label"), volume.get("date_text")) if part)
+    if not volumes.ok:
+        return _historical_maps_unavailable_message(volumes)
+    return "That historical map doesn't cover this location."
+
+
 class HistoricalMapBrowseView(LoginRequiredMixin, View):
-    """Browse REData's georeferenced historical maps covering this pin/wiki, and add one as an overlay.
+    """Browse REData's georeferenced historical maps covering this pin/wiki and the catalogued map volumes of its place, and add a sheet as an overlay.
 
     The overlay's ``tile_url_template`` points at UrbanLens's own tile proxy (``map.historical_tiles``)
     rather than REData's template - REData's API key must never reach the browser.
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Render the list of georeferenced sheets covering the owner's location, most detailed first."""
+        """Render the georeferenced sheets covering the owner's location, most detailed first, then its place's catalogued volumes."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
         owner, _qs = _resolve_owner(request, pin_slug, location_slug)
@@ -726,14 +873,22 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
             context["error"] = "Historical map search isn't available on this install."
             return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
-        found = historical_maps_covering(request, _owner_location(owner))
+        location = _owner_location(owner)
+        maps_call, volumes_call = _start_historical_maps(request, location), _start_historical_map_volumes(request, location)
+        wait_all([maps_call, volumes_call], timeout=HistoricalMapsBrowseUpstream.deadline)
+        found, volumes = maps_call.result(0), volumes_call.result(0)
         if not found.ok:
             context["error"] = _historical_maps_unavailable_message(found)
             return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
         rows = [row for row in (historical_map_row(match) for match in found.value_or([])) if row is not None]
-        copies = copy_urls(RemoteImage(row["thumbnail_url"], "redata_historical_sheet", row["landing_page_url"]) for row in rows)
+        listed = {row["georeference_uuid"] for row in rows}
+        latitude, longitude = float(location.latitude), float(location.longitude)
+        volume_rows = [row for row in (historical_volume_row(match, latitude, longitude, listed) for match in volumes.value_or([]) if isinstance(match, dict)) if row is not None]
+        copies = copy_urls([RemoteImage(row["thumbnail_url"], "redata_historical_sheet", row["landing_page_url"]) for row in rows] + [RemoteImage(row["thumbnail_url"], "redata_map_volume", row["landing_page_url"]) for row in volume_rows])
         context["maps"] = [{**row, "thumbnail_url": copies.get(row["thumbnail_url"], "")} for row in rows]
+        context["volumes"] = [{**row, "thumbnail_url": copies.get(row["thumbnail_url"], "")} for row in volume_rows]
+        context["volumes_unavailable"] = not volumes.ok
         return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
@@ -749,28 +904,23 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
             return _render_overlay_list(request, owner, qs, error="Historical map search isn't available on this install.")
 
         georeference_uuid = (request.POST.get("georeference_uuid") or "").strip()
-        # REData's own list for this location (usually still cached from the GET), not posted bounds or titles:
-        # the uuid must be a sheet covering this location, and the canonical metadata comes with it.
-        found = historical_maps_covering(request, _owner_location(owner))
-        if not found.ok:
-            return _render_overlay_list(request, owner, qs, error=_historical_maps_unavailable_message(found))
-        match = next((m for m in found.value_or([]) if (m.get("georeference") or {}).get("uuid") == georeference_uuid), None)
-        bounds = ((match or {}).get("georeference") or {}).get("bounds") or []
-        if match is None or len(bounds) != 4:
+        chosen = _chosen_georeference(request, _owner_location(owner), georeference_uuid)
+        if isinstance(chosen, str):
+            return _render_overlay_list(request, owner, qs, error=chosen)
+        georeference, name = chosen
+        bounds = georeference.get("bounds") or []
+        if len(bounds) != 4:
             return _render_overlay_list(request, owner, qs, error="That historical map doesn't cover this location.")
-
-        sheet = match.get("sheet") or {}
         min_lon, min_lat, max_lon, max_lat = bounds
 
         tile_template = historical_tile_template(georeference_uuid)
-        name_parts = [part for part in (sheet.get("title"), sheet.get("date_text")) if part]
         try:
             create_overlay(
                 owner,
                 profile=profile,
                 corners=[[max_lat, min_lon], [max_lat, max_lon], [min_lat, max_lon], [min_lat, min_lon]],
                 tile_url_template=tile_template,
-                name=" - ".join(name_parts),
+                name=name,
                 opacity=_clamped_opacity(request.POST.get("opacity"), 70),
                 # Pre-placed by its georeference: the corner handles don't apply, so it is born locked.
                 locked=True,

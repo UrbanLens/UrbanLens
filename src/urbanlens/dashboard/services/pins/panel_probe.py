@@ -76,7 +76,9 @@ def _gallery_is_empty(source: GalleryMediaSource, pin: Pin, applies: bool | None
         return True
     if entry is None or not source.media_is_ready(entry.data or {}):
         return fetch_blocked(source, pin)
-    return not source.media_items(entry.data or {})
+    if pin.location is None:
+        return True
+    return not source.media_items(source.for_viewer(entry.data or {}, pin.profile, pin.location))
 
 
 def _guarded(key: str, pin: Pin, decide: Callable[[], bool]) -> bool:

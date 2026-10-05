@@ -335,6 +335,31 @@
   font-size: .78rem;
 }
 
+.map-overlay-historical-subheading {
+  color: var(--ul-grey-6);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  margin: .5rem 0 0;
+  text-transform: uppercase;
+}
+
+.map-overlay-volume {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+// A volume's placed sheets sit under it, indented past its thumbnail.
+.map-overlay-volume-sheets {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 3.1rem;
+}
+
 .map-overlay-add-form.htmx-request #map-overlay-add-submit {
   opacity: .7;
 }

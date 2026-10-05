@@ -96,13 +96,15 @@ class _SourcesTestBase(TestCase):
         LocationCache.set(location or self.location, "cris_building_usn", payload, query_key="q")
 
     def answer_commons(self) -> None:
-        """Commons has searched every name the pin reads and found nothing, so only CRIS is pending or listed.
+        """Commons and REData's nearby Wikipedia/Wikidata found nothing, so only CRIS is pending or listed.
 
-        CRIS and Commons are the document sources Sources fetches itself. The REData archives are document sources too,
-        but list only what their gallery cached, so with no archive row here nothing waits for them (P260).
+        CRIS, Commons and the nearby Wikipedia/Wikidata listing are the document sources Sources fetches itself. The
+        REData archives are document sources too, but list only what their gallery cached, so with no archive row here
+        nothing waits for them (P260).
         """
         for scope in search_names(self.pin).scopes:
             LocationCache.set(self.location, "wikimedia", {"items": []}, query_key="q", audience=scope.audience)
+        LocationCache.set(self.location, "redata_reference_near", {"documents": []}, query_key="q")
 
     def forget_commons(self) -> None:
         LocationCache.objects.filter(location=self.location, source="wikimedia").delete()

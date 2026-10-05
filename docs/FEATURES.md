@@ -209,7 +209,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   (`controllers.article_sources`, `services.pins.source_documents`). A source whose document has
   its own archive page sets `SourceDocument.page_url` and links there instead of proxying
   (`DocumentMediaPanelSource`, used by Commons, whose scans run to tens of megabytes, and the five
-  REData archives). The tab fetches CRIS and Commons itself; a source built with
+  REData archives). Wikipedia articles and Wikidata entities near the pin (REData's near-point
+  `/reference-documents/`) are listed too, each judged by the relevance rule, without the article
+  the Wikipedia panel already shows (`plugins.builtin.redata_nearby_documents`). The tab fetches
+  CRIS, Commons and the Wikipedia/Wikidata list itself; a source built with
   `fetched_for_sources=False` (the archives) lists only what its Media gallery already cached, so
   opening Sources costs no archive searches
 - Pin sharing — share a single pin with one friend, including re-share chains; every share
@@ -410,14 +413,22 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   never cached) so REData's API key stays server-side. An imported tile overlay naming such a sheet
   (another deployment's route, REData's own tile URL) is rebuilt onto this route; one naming any
   other host is drawn through this site and each tile kept once fetched
-  (`services/map/remote_tiles.py`, `controllers/remote_tiles.py`)
+  (`services/map/remote_tiles.py`, `controllers/remote_tiles.py`). Below the covering sheets the
+  dialog lists the catalogued map volumes of the place (REData `/maps/volumes/`: a town's
+  fire-insurance atlas, a county atlas, found by catalogue place rather than georeference) with
+  years, sheet and placed counts and a link to the institution's scans; a volume's placed sheets
+  nearest the spot that the list above doesn't already offer can be added the same way. Asked only
+  when the dialog opens, cached a day per point unless REData is still listing a volume's sheets
 - **OpenHistoricalMap time slider** (beta) — a compact time slider below the map on Private Pin and
   wiki pages lets a beta user scrub through years and see OpenHistoricalMap's dated vector data
   (roads, buildings, land-use tagged with `start_date`/`end_date`) overlaid on the live map, for
   locations where OHM has nearby dated coverage. Gated by `SiteFeature.BETA_FEATURES`; the slider
   is hidden entirely, not shown disabled, when there's no coverage or the viewer lacks beta access
   - a deliberate stopgap ahead of REData's own future temporal-imagery endpoints (see
-  `plugins.builtin.satellite_imagery`'s module docstring for the pattern this follows). See
+  `plugins.builtin.satellite_imagery`'s module docstring for the pattern this follows). With REData
+  configured the slider reads REData's `/historical-features/` instead of OHM: one answer per point,
+  shared with the Historical Features panel, and each year is a local filter over it
+  (`services.locations.temporal_imagery`). Without REData, see
   `services/apis/locations/open_historical_map.py`
 
 
@@ -576,6 +587,24 @@ direct-only because REData's contract can't reproduce what they show:
   no page reaches UrbanLens with text that could name the place (P216)
 - **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
   index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
+- **Nearby Media** — a Media-gallery tab of everything else REData's pooled media index holds near
+  the pin (Commons, Flickr, YouTube, NPS media, ...), judged by the media relevance rule; images
+  REData has mirrored are served from REData's copy through this site's proxy (`pin.redata.media`).
+  It shares one REData read per point with the Aerial tab - `/locations/context/` when REData has
+  the point cached, else `/media/lookup/` (`plugins.builtin.redata_nearby_media`,
+  `services.locations.redata_point_data`)
+- **Street-level** — a Media-gallery tab of dated street-level captures near the pin (Mapillary,
+  KartaView, Panoramax via REData `/street-view/` and its timeline), one per network and date,
+  each opened from REData's archived copy through this site's proxy (`pin.redata.street_view`).
+  The satellite carousel's street-view slides read the same shared timeline
+  (`plugins.builtin.redata_street_level`)
+- **Nearby Photos** — a Media-gallery tab of this site's own photos that REData's photo relevance
+  index places near the pin or on its parcel (`/photos/lookup/`, `/parcels/{uuid}/photos/`), ranked
+  by REData's score. Only the photo ids are cached; each viewer sees only the ones they could
+  already see elsewhere - their own, or ones shared to a wiki they can reach - never a photo shown
+  to them only through a message or check-in, and never one of this pin's own place. Its tiles offer
+  no save, send-to-wiki or relevance copy - a member's photo stays where they shared it
+  (`plugins.builtin.redata_photo_pool`, `GalleryMediaSource.for_viewer`, `shows_members_media`)
 - **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only
 - **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
   PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as
@@ -592,7 +621,10 @@ direct-only because REData's contract can't reproduce what they show:
   identifying power alone (`plugins.builtin.searxng_images`). The public Flickr search and the
   general web-search panel apply the same parent-name qualifier for child pins
   (`services.apis.flickr.search`, `Pin.get_unique_search_name`)
-- **National Park Service** (USA) — nearest park info, via REData
+- **National Park Service** (USA) — nearest park info, via REData; for a pin inside the park (or a
+  `SiteFeature.PLACES` viewer) also its alerts, visitor centers, campgrounds, the park's places
+  nearest the pin and links to its webcams. Each park facet is asked once per park and shared by
+  every pin near it (`plugins.builtin.nps`)
 - **Yelp** — nearby business details, via REData
 - **LoopNet** (USA) — commercial real-estate listings
 - **Property Records** (USA, the card's Parcel tab) — county parcel ownership/tax/sale-history lookup, retrieved from

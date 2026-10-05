@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.apis.locations.redata_media_gateway import (
     RedataMediaGateway,
 )
 from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
@@ -103,8 +104,14 @@ def _timeline(dates: list[dict]) -> dict:
     return {"dates": dates, "years": [], "earliest": None, "latest": None, "providers_timeline": [], "providers": []}
 
 
-def _date_entry(captured_on: str, **representative: object) -> dict:
-    return {"captured_on": captured_on, "count": 3, "is_panoramic": False, "representative": representative}
+def _date_entry(captured_on: str, provider: str = "", **representative: object) -> dict:
+    return {
+        "captured_on": captured_on,
+        "provider": provider,
+        "count": 3,
+        "is_panoramic": False,
+        "representative": representative,
+    }
 
 
 class _ProviderSlideMappingMixin(_MixinBase):
@@ -116,16 +123,30 @@ class _ProviderSlideMappingMixin(_MixinBase):
     display_name: str
 
     def _slides(self, dates: list[dict]) -> tuple[list[StreetViewSlide], mock.Mock]:
+        dates = [{**entry, "provider": entry["provider"] or self.redata_provider} for entry in dates]
         with (
+            # Keeps the context read out of it: its own tests cover asking the cache first.
+            mock.patch.object(settings, "redata_api_url", None),
             mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
             mock.patch.object(RedataStreetViewGateway, "get_timeline", return_value=_timeline(dates)) as mock_timeline,
         ):
             slides = list(self.provider_cls()._generate_street_view_slides(38.456, -77.123, radius=50))
         return slides, mock_timeline
 
-    def test_requests_its_own_provider_tag(self) -> None:
+    def test_asks_once_for_every_network(self) -> None:
+        """The three networks share one timeline for the point instead of each spending a lookup on its own."""
         _slides, mock_timeline = self._slides([])
-        mock_timeline.assert_called_once_with(38.456, -77.123, provider=self.redata_provider)
+        mock_timeline.assert_called_once_with(38.456, -77.123)
+
+    def test_keeps_only_its_own_networks_dates(self) -> None:
+        others = [
+            _date_entry(f"2021-0{index}-01", provider=network, image_url=f"https://example.test/{network}.jpg")
+            for index, network in enumerate(("mapillary", "kartaview", "panoramax"), start=1)
+            if network != self.redata_provider
+        ]
+        own = _date_entry("2020-01-01", provider=self.redata_provider, image_url="https://example.test/own.jpg")
+        slides, _ = self._slides([*others, own])
+        self.assertEqual([slide.img_src for slide in slides], ["https://example.test/own.jpg"])
 
     def test_maps_representative_url_heading_coordinates_and_date(self) -> None:
         dates = [
@@ -177,6 +198,7 @@ class _ProviderSlideMappingMixin(_MixinBase):
         provider raising (see ``collect_street_view_slides``) - this provider
         must not duplicate that handling by swallowing the error itself."""
         with (
+            mock.patch.object(settings, "redata_api_url", None),
             mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
             mock.patch.object(
                 RedataStreetViewGateway,

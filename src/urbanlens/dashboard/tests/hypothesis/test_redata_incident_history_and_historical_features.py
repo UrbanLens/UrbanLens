@@ -225,9 +225,13 @@ class HistoricalFeaturesPanelTests(TestCase):
                 {"kind": "building", "name": "Odd Fellows Hall", "geometry": {"type": "Point", "coordinates": [0, 0]}}
             ],
         )
-        with mock.patch(
-            "urbanlens.dashboard.services.apis.locations.redata_historical_features_gateway.RedataHistoricalFeaturesGateway"
-        ) as gateway_cls:
+        with (
+            # Keeps the context read out of it: redata_point_data's own tests cover asking the cache first.
+            mock.patch("urbanlens.dashboard.services.locations.redata_point_data.settled_domain", return_value=None),
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.redata_historical_features_gateway.RedataHistoricalFeaturesGateway"
+            ) as gateway_cls,
+        ):
             gateway_cls.return_value.get_historical_features.return_value = envelope
             self.source.fetch(self.pin)
 

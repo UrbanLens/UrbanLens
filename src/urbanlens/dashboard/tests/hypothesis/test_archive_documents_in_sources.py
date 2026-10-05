@@ -98,8 +98,9 @@ class _ArchiveSourcesCase(TestCase):
         self.answer_every_fetched_source()
 
     def answer_every_fetched_source(self) -> None:
-        """CRIS and Commons, the sources Sources fetches itself, have answered with nothing."""
+        """CRIS, Commons and the nearby Wikipedia/Wikidata listing, the sources Sources fetches itself, found nothing."""
         LocationCache.set(self.location, "cris_building_usn", {}, query_key="q")
+        LocationCache.set(self.location, "redata_reference_near", {"documents": []}, query_key="q")
         for scope in search_names(self.pin).scopes:
             LocationCache.set(self.location, "wikimedia", {"items": []}, query_key="q", audience=scope.audience)
 

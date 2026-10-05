@@ -66,19 +66,18 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             return self._pending(request, location, profile, source, panel)
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-        from urbanlens.dashboard.services.media.previews import gallery_urls
         from urbanlens.dashboard.services.media.subject_relevance import subject_for_location
 
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).votes().values_list("item_key", "is_relevant"))
         # The community's net vote keeps an item the automatic judgement would drop.
         kept = {key for key, score in scores.items() if score > 0}
-        items = panel.gallery_items(cached.data or {}, subject_for_location(location), kept=kept)
+        items = panel.gallery_items(panel.for_viewer(cached.data or {}, profile, location), subject_for_location(location), kept=kept)
         # Prefer an already-materialized local copy over hot-linking the provider - see the matching comment in
         # controllers.pin. Voting is wiki-side too, so this is the same lookup either flow benefits from.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = []
-        for item, picture in zip(items, gallery_urls(items, provider=source), strict=True):
+        for item, picture in zip(items, panel.pictures(items), strict=True):
             key = media_item_key(item.url)
             local_image = local_images.get(item.url)
             rendered_items.append(
@@ -103,7 +102,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                 },
             )
 
-        return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": source, "wiki_mode": True})
+        return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": source, "wiki_mode": True, "members_media": panel.members_media})
 
     def _photos(self, request: HttpRequest, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
         """Render photos intentionally shared to this wiki as votable Media tiles."""
@@ -229,6 +228,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
             MediaRelevance.objects.for_gallery(profile, location, source).votes().filter(item_key=item_key).delete()
         elif is_relevant and source != "photos" and url:
             # An explicit click overrides any prior vote.
+            from urbanlens.dashboard.services.pins.external_data import shows_members_media
+
             result = record_relevant_and_cache(
                 location=location,
                 profile=profile,
@@ -238,6 +239,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 caption=caption,
                 wiki=wiki,
                 item_key=item_key,
+                # A member's photo stays where they shared it: an up-vote here is a vote, not a copy into this wiki.
+                materialize=not shows_members_media(source),
             )
             if result.error:
                 response["materialize_error"] = result.error

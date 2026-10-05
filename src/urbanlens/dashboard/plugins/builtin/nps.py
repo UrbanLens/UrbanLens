@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
@@ -14,6 +15,8 @@ from urbanlens.dashboard.services.locations.name_resolution import LocationCache
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
@@ -21,6 +24,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
     from urbanlens.dashboard.services.pins.external_data import PanelSource
+
+logger = logging.getLogger(__name__)
 
 #: How many of a park's activity tags become chips.
 #: NPS lists dozens for a big unit ("Hiking", "Wildlife Watching", "Astronomy", ...); past the first
@@ -36,6 +41,12 @@ _MAX_ALERT_FACTS = 8
 #: collapsing the rest into "+N more" - same reasoning as :data:`_MAX_ACTIVITY_CHIPS`: past a
 #: handful, names stop being useful and just take up card space.
 _MAX_FACILITY_NAMES = 5
+
+#: The park's places nearest the pin that are cached; the card names the first few.
+_MAX_PLACES_CACHED = 10
+_MAX_PLACE_NAMES = 4
+#: Webcams cached and linked from the card.
+_MAX_WEBCAMS = 3
 
 
 #: NPS's ``standardHours`` keys, in the order a week is read. Lowercase because
@@ -180,13 +191,80 @@ def _facility_summary(rows: Any) -> str:
     return f"{len(rows)} ({shown})" if shown else str(len(rows))
 
 
-def park_facts(data: dict[str, Any], *, show_facility_facets: bool) -> list[dict[str, str]]:
+def _coordinate(value: Any) -> float | None:
+    return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def nearest_places(places: Any, latitude: float, longitude: float) -> list[dict[str, Any]]:
+    """A park's points of interest nearest a spot, trimmed to what the card shows.
+
+    Args:
+        places: :meth:`RedataNationalParksGateway.get_places` rows.
+        latitude: The spot's latitude.
+        longitude: The spot's longitude.
+
+    Returns:
+        ``{name, category, url, distance_meters}`` rows, nearest first, at most :data:`_MAX_PLACES_CACHED`; a place
+        with no name or no position is left out, since it cannot be placed relative to the pin.
+    """
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    rows: list[dict[str, Any]] = []
+    for place in places if isinstance(places, list) else []:
+        if not isinstance(place, dict):
+            continue
+        name = str(place.get("name") or "").strip()
+        place_latitude, place_longitude = _coordinate(place.get("latitude")), _coordinate(place.get("longitude"))
+        if not name or place_latitude is None or place_longitude is None:
+            continue
+        rows.append(
+            {
+                "name": name,
+                "category": str(place.get("category") or "").strip(),
+                "url": str(place.get("url") or "").strip(),
+                "distance_meters": round(haversine_meters(latitude, longitude, place_latitude, place_longitude)),
+            }
+        )
+    return sorted(rows, key=lambda row: row["distance_meters"])[:_MAX_PLACES_CACHED]
+
+
+def webcam_rows(webcams: Any) -> list[dict[str, Any]]:
+    """A park's webcams as links to NPS's own viewer pages; an embeddable feed is not shown in the card.
+
+    Args:
+        webcams: :meth:`RedataNationalParksGateway.get_webcams` rows.
+
+    Returns:
+        ``{title, url, is_live}`` rows, at most :data:`_MAX_WEBCAMS`.
+    """
+    rows = [
+        {"title": str(webcam.get("title") or "").strip() or "Park webcam", "url": url, "is_live": bool(webcam.get("is_live"))}
+        for webcam in (webcams if isinstance(webcams, list) else [])
+        if isinstance(webcam, dict) and (url := str(webcam.get("url") or "").strip())
+    ]
+    return rows[:_MAX_WEBCAMS]
+
+
+def _places_summary(places: Any, units: str) -> str:
+    """The nearest few places as ``"Old Mill Ruins (0.1 km), Overlook (0.4 km), +3 more"``."""
+    from urbanlens.dashboard.services.core.units import format_distance
+
+    if not isinstance(places, list):
+        return ""
+    named = [f"{place['name']} ({format_distance(place['distance_meters'] / 1000, units)})" for place in places if isinstance(place, dict) and place.get("name") and isinstance(place.get("distance_meters"), int | float)]
+    shown = ", ".join(named[:_MAX_PLACE_NAMES])
+    remainder = len(named) - _MAX_PLACE_NAMES
+    return f"{shown}, +{remainder} more" if remainder > 0 else shown
+
+
+def park_facts(data: dict[str, Any], *, show_facility_facets: bool, units: str = "km") -> list[dict[str, str]]:
     """The park facts worth showing beside its name, as ``{label, value, href}`` rows.
     Alerts are deliberately *not* here - they are safety-critical and go through :func:`alert_facts` into the card's icon-led ``facts`` instead, so they render ahead of this whole section rather than mixed into a label/value grid.
 
     Args:
         data: The cached park payload.
         show_facility_facets: See :func:`facility_facets_visible`.
+        units: The viewer's distance unit, for how far the park's places are.
 
     Returns:
         Display rows, omitting anything the park does not publish."""
@@ -202,6 +280,14 @@ def park_facts(data: dict[str, Any], *, show_facility_facets: bool) -> list[dict
         rows.append({"label": "Visitor Centers", "value": visitor_centers})
     if show_facility_facets and (campgrounds := _facility_summary(data.get("campgrounds"))):
         rows.append({"label": "Campgrounds", "value": campgrounds})
+    if show_facility_facets and (places := _places_summary(data.get("places"), units)):
+        rows.append({"label": "Nearest Places", "value": places})
+    if show_facility_facets:
+        rows.extend(
+            {"label": "Webcam", "value": f"{webcam['title']} (live)" if webcam.get("is_live") else webcam["title"], "href": webcam["url"]}
+            for webcam in data.get("webcams") or []
+            if isinstance(webcam, dict) and webcam.get("url") and webcam.get("title")
+        )
     if directions := str(data.get("directions_url") or "").strip():
         rows.append({"label": "Directions", "value": "Getting there", "href": directions})
     # Last: it is a cross-reference ("HUTR"), not something a reader wants
@@ -232,7 +318,7 @@ def _is_park_containing_location(location: Location, park_code: str) -> bool:
 
 
 def _park_with_facets(gateway: RedataNationalParksGateway, park: dict[str, Any] | None, location: Location) -> dict[str, Any]:
-    """Attach a park's alerts/visitor-centers/campgrounds/containment to its nearby-search row.
+    """Attach a park's alerts, visitor centers, campgrounds, places, webcams and containment to its nearby-search row.
     Shared by :meth:`NpsPanelSource.fetch` and :meth:`NpsEnrichmentSource.fetch` so the two cache the same shape.
 
     Args:
@@ -241,18 +327,35 @@ def _park_with_facets(gateway: RedataNationalParksGateway, park: dict[str, Any] 
         location: The pin's location, to resolve ``is_contained`` against.
 
     Returns:
-        A copy of ``park`` (``{}`` when None) with ``alerts``, ``visitor_centers``, ``campgrounds`` and ``is_contained`` keys added."""
+        A copy of ``park`` (``{}`` when None) with ``alerts``, ``visitor_centers``, ``campgrounds``, ``places`` (nearest
+        the location first), ``webcams`` and ``is_contained`` keys added."""
     data = dict(park) if park else {}
     if park_code := data.get("park_code"):
         data["alerts"] = gateway.get_alerts(park_code)
         data["visitor_centers"] = gateway.get_visitor_centers(park_code)
         data["campgrounds"] = gateway.get_campgrounds(park_code)
+        data["places"] = nearest_places(_optional_facet(gateway.get_places, park_code), float(location.latitude or 0), float(location.longitude or 0))
+        data["webcams"] = webcam_rows(_optional_facet(gateway.get_webcams, park_code))
         data["is_contained"] = _is_park_containing_location(location, park_code)
     return data
 
 
+def _optional_facet(fetch: Callable[[str], list[dict[str, Any]]], park_code: str) -> list[dict[str, Any]]:
+    """A facet the card can do without: REData refusing to answer it leaves it empty rather than the card unshown.
+
+    An outage still raises, as the other facets' do, so the card is fetched again rather than cached without it.
+    """
+    try:
+        return fetch(park_code)
+    except LocationContextUnavailableError as exc:
+        if exc.is_outage:
+            raise
+        logger.info("NPS %s facet refused for %s: %s", getattr(fetch, "__name__", "park"), park_code, exc)
+        return []
+
+
 def facility_facets_visible(data: dict[str, Any], pin: Pin) -> bool:
-    """Whether alerts/visitor-centers/campgrounds may be shown to this pin's owner.
+    """Whether alerts, visitor centers, campgrounds, places and webcams may be shown to this pin's owner.
     Free when the pin's own location is genuinely inside the park (``is_contained``, cached at fetch time by :func:`_park_with_facets`) - that is data about the pin's own place, not somewhere else.
 
     Args:
@@ -328,7 +431,7 @@ class NpsPanelSource(LocationCachePanelSource):
                 # `meta`, so a closure or hazard reaches a client before routine facts like hours -
                 # never buried behind them.
                 facts=alert_facts(data, show_facility_facets=show_facility_facets),
-                meta=park_facts(data, show_facility_facets=show_facility_facets),
+                meta=park_facts(data, show_facility_facets=show_facility_facets, units=pin.profile.effective_distance_units),
                 header_link={"url": park_url, "label": "View on NPS.gov"} if park_url else None,
                 footer_link={"url": park_url, "label": "View on NPS.gov"} if park_url else None,
                 image_url=first_image.get("url") if isinstance(first_image, dict) else None,

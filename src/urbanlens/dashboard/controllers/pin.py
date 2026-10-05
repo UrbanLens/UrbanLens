@@ -555,7 +555,6 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_media(request, pin, source)
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
-        from urbanlens.dashboard.services.media.previews import gallery_urls
         from urbanlens.dashboard.services.media.subject_relevance import subject_for_pin
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -563,10 +562,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
         kept = {key for key, is_relevant in relevance.items() if is_relevant}
-        items = panel.gallery_items(cached.data or {}, subject_for_pin(pin), kept=kept)
+        items = panel.gallery_items(panel.for_viewer(cached.data or {}, profile, location), subject_for_pin(pin), kept=kept)
         # The remote page_url stays the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
-        pictures = gallery_urls(items, provider=source)
+        pictures = panel.pictures(items)
         rendered_items = [
             {
                 "item": item,
@@ -587,6 +586,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "rendered_items": rendered_items,
             "source_key": source,
+            "members_media": panel.members_media,
             "debug": self._debug_entry(request, source, cached.query_key, from_cache=True, count=len(items)),
         }
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
@@ -724,6 +724,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         response: dict = {"is_relevant": bool(is_relevant)}
         if is_relevant:
             # An explicit click overrides any prior vote for this profile.
+            from urbanlens.dashboard.services.pins.external_data import shows_members_media
+
             result = record_relevant_and_cache(
                 location=pin.location,
                 profile=profile,
@@ -733,6 +735,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 caption=caption,
                 pin=pin,
                 item_key=item_key,
+                # A member's photo stays theirs: marking it relevant here is a vote, not a copy into this pin.
+                materialize=not shows_members_media(source),
             )
             if result.error:
                 response["materialize_error"] = result.error
@@ -769,6 +773,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.wiki.model import Wiki
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.pins.external_data import shows_members_media
         from urbanlens.dashboard.tasks import cache_media_item_into_wiki
 
         try:
@@ -803,6 +808,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             except (KeyError, TypeError, ValueError):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
                 errors.append("Could not save this photo.")
+                continue
+            if shows_members_media(source):
+                errors.append("Nearby Photos are shared from their own pin, not sent from here.")
                 continue
             safely_enqueue_task(cache_media_item_into_wiki, wiki.pk, profile.pk, source, url, page_url, caption)
             queued += 1
@@ -1347,7 +1355,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context = {
             "park": data,
             "alerts": alert_facts(data, show_facility_facets=show_facility_facets),
-            "facts": park_facts(data, show_facility_facets=show_facility_facets),
+            "facts": park_facts(data, show_facility_facets=show_facility_facets, units=pin.profile.effective_distance_units),
             "debug": self._debug_entry(request, "nps", cached.query_key, from_cache=True, count=1),
         }
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
@@ -2227,4 +2235,44 @@ class PinPlaceCidMediaView(RedataMediaProxyMixin, View):
             f"ul_place_cid_media_{cid}_{media_id}",
             lambda: RedataCidGateway().download_media(cid, media_id),
             unavailable_errors=(GatewayRequestError, ValueError),
+        )
+
+
+class PinRedataMediaView(RedataMediaProxyMixin, View):
+    """GET pin/redata/media/<media_uuid>/ - proxies REData's mirrored copy of one nearby media item.
+
+    Same reasoning and the same "no login required" call as ``PinPlaceCidMediaView``: the key stays server-side, the
+    items are public photographs (Commons, Flickr, NPS galleries), and ``materialize_media_item`` re-downloads this
+    URL without a session. REData never fetches a missing mirror on demand, so its ``media_not_cached`` is a 404.
+    """
+
+    def get(self, request: HttpRequest, media_uuid: UUID) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
+
+        return self.serve_media(
+            request,
+            f"ul_redata_media_{media_uuid}",
+            lambda: RedataMediaGateway().download(str(media_uuid)),
+            unavailable_errors=(LocationContextUnavailableError, ValueError),
+        )
+
+
+class PinRedataStreetViewView(RedataMediaProxyMixin, View):
+    """GET pin/redata/street-view/<capture_uuid>/ - proxies REData's permanent archive of one street-level capture.
+
+    The archive is what still shows a frame after its contributor deleted the sequence upstream. Same "no login
+    required" call as ``PinRedataMediaView``. REData fetches the frame from its network on the first request, so the
+    lightbox asks for it only when opened; gallery tiles show the network's own thumbnail.
+    """
+
+    def get(self, request: HttpRequest, capture_uuid: UUID) -> HttpResponse:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+        from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+
+        return self.serve_media(
+            request,
+            f"ul_redata_street_view_{capture_uuid}",
+            lambda: RedataStreetViewGateway().download_capture(str(capture_uuid)),
+            unavailable_errors=(LocationContextUnavailableError, ValueError),
         )

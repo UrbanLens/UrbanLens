@@ -1,10 +1,11 @@
-"""Gateway for REData's photo-relevance-scoring endpoints (``/photos/...``)."""
+"""Gateway for REData's photo-relevance-scoring endpoints (``/photos/...``, and a parcel's photos)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
 from typing import Any, ClassVar
+from urllib.parse import quote
 
 from urbanlens.dashboard.services.apis.redata_json_gateway import RedataJsonGateway
 from urbanlens.dashboard.services.core.environment import skip_upstream_contribution
@@ -29,6 +30,12 @@ def _empty_submit_result() -> dict[str, Any]:
 def _empty_vote_result(votes: list[dict[str, Any]]) -> dict[str, Any]:
     """A "no votes recorded" result reporting every supplied vote's photo as unknown."""
     return {"recorded": 0, "unknown_photo_ids": [str(vote["photo_id"]) for vote in votes if vote.get("photo_id") is not None], "updated_photos": 0}
+
+
+def _photo_rows(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """The ``results`` of a photo collection body, keeping only rows that name a photo."""
+    results = body.get("results")
+    return [row for row in results if isinstance(row, dict) and row.get("photo_id")] if isinstance(results, list) else []
 
 
 #: Read inline in the site-admin page render, so it is bounded well below
@@ -99,6 +106,48 @@ class RedataPhotosGateway(RedataJsonGateway):
         if skip_upstream_contribution("REData photo relevance votes (POST /photos/votes/)", detail=f"{len(votes)} vote(s)"):
             return _empty_vote_result(votes)
         return self._post_json("/api/v1/photos/votes/", {"votes": votes})
+
+    def lookup_near(self, latitude: float, longitude: float, *, radius_meters: float | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+        """Every photo this site submitted for a place near a coordinate, matched on the place rather than the camera.
+
+        A local read on REData's side - it never answers 503 - that scores any photo with no current score first.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: How far from the point a photo's place may be; REData defaults to 150 m and caps at 5 km.
+            limit: Most photos to return; REData defaults to 100.
+
+        Returns:
+            ``PhotoSerializer`` rows (``photo_id`` - this site's own image uuid - ``confidence``, ``scorer``,
+            ``location_latitude``/``location_longitude``, ``parcel_uuid``, ``taken_at``, ...).
+
+        Raises:
+            GatewayRequestError: The request failed, or REData answered with a non-2xx status.
+        """
+        params: dict[str, Any] = {"lat": latitude, "lng": longitude}
+        if radius_meters is not None:
+            params["radius_meters"] = radius_meters
+        if limit is not None:
+            params["limit"] = limit
+        return _photo_rows(self._get_json("/api/v1/photos/lookup/", params))
+
+    def photos_for_parcel(self, parcel_uuid: str, *, limit: int | None = None) -> list[dict[str, Any]]:
+        """Every photo whose place REData resolved to a parcel, best-scoring first.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+            limit: Most photos to return; REData defaults to 100.
+
+        Returns:
+            ``PhotoSerializer`` rows, as :meth:`lookup_near`.
+
+        Raises:
+            GatewayRequestError: The request failed, or REData answered with a non-2xx status - including a ``404``
+                for a parcel it does not hold.
+        """
+        params = {"limit": limit} if limit is not None else None
+        return _photo_rows(self._get_json(f"/api/v1/parcels/{quote(parcel_uuid, safe='')}/photos/", params))
 
     def get_confidence_batch(self, photo_ids: list[str]) -> dict[str, Any]:
         """Look up cached confidence scores for many photos at once.

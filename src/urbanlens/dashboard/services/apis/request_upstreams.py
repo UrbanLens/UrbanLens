@@ -74,6 +74,14 @@ class HistoricalMapsBrowseUpstream(RequestUpstream):
     rate = Rate(limit=30, window_seconds=60)
 
 
+class HistoricalMapVolumesUpstream(RequestUpstream):
+    """The catalogued map volumes of the place a pin or wiki is in, listed beside the covering sheets."""
+
+    name = "historical_maps.volumes"
+    deadline = 10.0
+    rate = Rate(limit=30, window_seconds=60)
+
+
 class RedataMediaUpstream(RequestUpstream):
     """One file proxied from REData. Throttled on its routes rather than here, since they are anonymous."""
 

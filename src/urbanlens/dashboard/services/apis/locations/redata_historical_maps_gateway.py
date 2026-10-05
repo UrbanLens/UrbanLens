@@ -9,6 +9,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import R
 from urbanlens.dashboard.services.core.gateway import read_capped
 
 _MAPS_PATH = "/api/v1/maps/"
+_VOLUMES_PATH = "/api/v1/maps/volumes/"
 
 #: Georeference authors accurate enough to list. ``derived_bounds`` is approximate, and it is
 #: also how Library of Congress Sanborn sheets are placed - LoC publishes no control points.
@@ -68,6 +69,36 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
             params["limit"] = limit
         body = self.get_json(_MAPS_PATH, params)
         return list(body.get("results") or [])
+
+    def get_volumes_near(self, latitude: float, longitude: float, *, radius_meters: float | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+        """Fetch the catalogued volumes of scanned maps - a town's fire-insurance atlas, a county atlas - of the place a point is in or near.
+
+        Found by where each volume's catalogue says it depicts rather than by any sheet's georeference, so it answers
+        for the many scans nobody has placed on the map yet. A volume whose sheets REData has not listed yet comes back
+        with ``sheets_status`` ``"pending"`` and no sheets; asking asks REData to list them, so a later query carries them.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            radius_meters: How far from the point a catalogued town or county may be (REData default 1000, max 50000).
+            limit: Maximum volumes (REData default 10, max 50); each carries every sheet REData has listed for it.
+
+        Returns:
+            ``VolumeMatchSerializer`` rows - ``volume``, ``place``, ``match`` (``near`` or ``same_county``),
+            ``distance_meters`` and ``sheets``, each sheet with the ``georeference`` to draw it by when it has one -
+            most specific place first, then nearest, then newest.
+
+        Raises:
+            LocationContextUnavailableError: The request failed or REData rejected a parameter.
+        """
+        params: dict[str, Any] = {"lat": latitude, "lng": longitude}
+        if radius_meters is not None:
+            params["radius_meters"] = radius_meters
+        if limit is not None:
+            params["limit"] = limit
+        body = self.get_json(_VOLUMES_PATH, params)
+        results = body.get("results") if isinstance(body, dict) else None
+        return [row for row in results if isinstance(row, dict) and isinstance(row.get("volume"), dict)] if isinstance(results, list) else []
 
     def download_tile(self, georeference_uuid: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
         """Fetch one warped overlay tile from REData.

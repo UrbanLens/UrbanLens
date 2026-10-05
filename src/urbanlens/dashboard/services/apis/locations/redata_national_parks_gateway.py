@@ -13,6 +13,8 @@ _PATH = "/api/v1/parks/nearby/"
 _ALERTS_PATH = "/api/v1/parks/{park_code}/alerts/"
 _VISITOR_CENTERS_PATH = "/api/v1/parks/{park_code}/visitor-centers/"
 _CAMPGROUNDS_PATH = "/api/v1/parks/{park_code}/campgrounds/"
+_PLACES_PATH = "/api/v1/parks/{park_code}/places/"
+_WEBCAMS_PATH = "/api/v1/parks/{park_code}/webcams/"
 
 #: REData's own default radius for this endpoint (see api-reference.md) -
 #: passed explicitly rather than omitted so callers can see the value in one
@@ -24,6 +26,8 @@ DEFAULT_RADIUS_METERS = 100_000.0
 _SHARED_CELL_DECIMALS = 2
 #: The NPS catalog changes on REData's schedule, not per request.
 _SHARED_SECONDS = 6 * 60 * 60
+#: A unit's alerts (closures, hazards) are refreshed by REData within hours; every pin near the park shares one ask.
+_ALERTS_SHARED_SECONDS = 60 * 60
 
 
 def _as_dict_list(body: Any) -> list[dict[str, Any]]:
@@ -39,9 +43,17 @@ def _as_dict_list(body: Any) -> list[dict[str, Any]]:
     return [entry for entry in body if isinstance(entry, dict)]
 
 
+def _park_path(template: str, park_code: str) -> str:
+    return template.format(park_code=quote(park_code, safe=""))
+
+
 @dataclass(slots=True, kw_only=True)
 class RedataNationalParksGateway(RedataLocationContextGateway):
-    """REST client for REData's ``/parks/nearby/`` local NPS catalog lookup."""
+    """REST client for REData's local NPS catalog: units near a point, and each unit's facets.
+
+    A unit's facets answer the same for every pin near it, so each is asked once per unit and shared - alerts for an
+    hour, the rest for :data:`_SHARED_SECONDS` - rather than once per pin.
+    """
 
     service_key: ClassVar[str] = "redata_national_parks"
 
@@ -103,7 +115,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: The request failed outright, including a 404 - REData should already know ``park_code`` from the nearby lookup that produced it, so a 404 here means something unexpected happened, not "no alerts".
         """
-        return _as_dict_list(self.get_json(_ALERTS_PATH.format(park_code=quote(park_code, safe=""))))
+        path = _park_path(_ALERTS_PATH, park_code)
+        return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_ALERTS_SHARED_SECONDS)
 
     def get_visitor_centers(self, park_code: str) -> list[dict[str, Any]]:
         """Fetch visitor centers for one NPS park unit.
@@ -117,7 +130,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: The request failed outright, including an unexpected 404 - see :meth:`get_alerts`.
         """
-        return _as_dict_list(self.get_json(_VISITOR_CENTERS_PATH.format(park_code=quote(park_code, safe=""))))
+        path = _park_path(_VISITOR_CENTERS_PATH, park_code)
+        return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
 
     def get_campgrounds(self, park_code: str) -> list[dict[str, Any]]:
         """Fetch campgrounds for one NPS park unit.
@@ -131,4 +145,38 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         Raises:
             LocationContextUnavailableError: The request failed outright, including an unexpected 404 - see :meth:`get_alerts`.
         """
-        return _as_dict_list(self.get_json(_CAMPGROUNDS_PATH.format(park_code=quote(park_code, safe=""))))
+        path = _park_path(_CAMPGROUNDS_PATH, park_code)
+        return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
+
+    def get_places(self, park_code: str) -> list[dict[str, Any]]:
+        """Fetch one NPS park unit's points of interest - trailheads, overlooks, ruins, wayside exhibits.
+
+        Args:
+            park_code: The unit's NPS park code - see :meth:`get_alerts`.
+
+        Returns:
+            ``PointOfInterestSerializer``-shaped dicts (``uuid``, ``provider``, ``external_id``, ``name``, ``category``,
+            ``description``, ``url``, ``latitude``, ``longitude``, ``attributes``, ...) - empty when none are published.
+
+        Raises:
+            LocationContextUnavailableError: The request failed outright, including REData's 503 when NPS itself is
+                rate-limited or down, or an unexpected 404 - see :meth:`get_alerts`.
+        """
+        path = _park_path(_PLACES_PATH, park_code)
+        return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
+
+    def get_webcams(self, park_code: str) -> list[dict[str, Any]]:
+        """Fetch one NPS park unit's webcams.
+
+        Args:
+            park_code: The unit's NPS park code - see :meth:`get_alerts`.
+
+        Returns:
+            ``MediaItemSerializer``-shaped dicts of ``kind`` ``webcam`` (``title``, ``url`` - NPS's viewer page -
+            ``is_live``, ``embed_url``, ``embed_kind``, ``thumbnail_url``, ...) - empty when none are published.
+
+        Raises:
+            LocationContextUnavailableError: As :meth:`get_places`.
+        """
+        path = _park_path(_WEBCAMS_PATH, park_code)
+        return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
