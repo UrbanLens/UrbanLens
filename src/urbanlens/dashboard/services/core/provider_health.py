@@ -80,8 +80,9 @@ _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 SHORT_WINDOW = timedelta(hours=1)
 #: The window for a provider called too rarely to judge on :data:`SHORT_WINDOW`.
 LONG_WINDOW = timedelta(hours=24)
-#: Granularity of the counts the evaluator reads. A window starts on a bucket boundary.
-BUCKET_SECONDS = 600
+#: Granularity of the counts the evaluator reads. A window starts on a bucket boundary, and a bucket that straddles a
+#: window's start is left out, so this is how much of a window's first minute can go uncounted - probes included.
+BUCKET_SECONDS = 60
 #: Fewest calls a window must hold before anything is concluded from it.
 MIN_SAMPLE = 10
 #: Fewest refusals that back a provider off, however small the window.
@@ -403,8 +404,12 @@ class _Step:
     """What happened to one provider in one run."""
 
     transition: str = ""
-    recovered_after: timedelta | None = None
+    #: The digest's line for a provider a person was told about and that is now healthy.
+    recovered: str = ""
+    #: Called in the last hour, or backed off or probing because it was failing.
     active_in_hour: bool = False
+    #: Backed off or probing because it was failing, or at least :data:`MIN_SAMPLE` calls in the last hour that mostly
+    #: went unanswered other than by a refusal. A dead network times out; it does not answer 429.
     failing_in_hour: bool = False
 
 
@@ -441,6 +446,9 @@ def _record_window(row: ProviderHealth, tally: Tally, minutes: int) -> None:
 
 
 def _trip(row: ProviderHealth, cause: str, reason: str, now: datetime) -> str:
+    if row.state == ProviderState.DEGRADED:
+        # Worse than what a person was told about: tell them again rather than wait a day.
+        row.alerted_at = None
     row.level = min(row.level + 1, _MAX_LEVEL)
     duration = backoff_duration(row.level)
     row.state = ProviderState.BACKED_OFF
@@ -453,9 +461,10 @@ def _trip(row: ProviderHealth, cause: str, reason: str, now: datetime) -> str:
     return f"{row.provider}: backed off for {_span(duration)}"
 
 
-def _recover(row: ProviderHealth, reason: str, now: datetime, step: _Step) -> str:
+def _recover(row: ProviderHealth, reason: str, now: datetime, step: _Step, *, quiet: bool = False) -> str:
     if row.episode_started_at is not None and row.alerted_at is not None and row.alerted_at >= row.episode_started_at:
-        step.recovered_after = now - row.episode_started_at
+        span = _span(now - row.episode_started_at)
+        step.recovered = f"- {row.provider} cleared after {span}: called too rarely to judge any more." if quiet else f"- {row.provider} recovered after {span}."
     row.counted_from = row.state_since if row.state == ProviderState.PROBING else now
     row.state = ProviderState.HEALTHY
     row.cause = BackoffCause.NONE
@@ -463,8 +472,8 @@ def _recover(row: ProviderHealth, reason: str, now: datetime, step: _Step) -> st
     row.state_since = now
     row.backed_off_until = None
     row.episode_started_at = None
-    logger.warning("provider_health: %s recovered: %s", row.provider, reason)
-    return f"{row.provider}: recovered"
+    logger.warning("provider_health: %s %s: %s", row.provider, "cleared" if quiet else "recovered", reason)
+    return f"{row.provider}: {'cleared' if quiet else 'recovered'}"
 
 
 def _cause_of(tally: Tally) -> str:
@@ -480,17 +489,27 @@ def _note_activity(row: ProviderHealth, counts: list[_Count]) -> None:
         row.last_ok_at = max(filter(None, (row.last_ok_at, max(answered))))
 
 
+def _note_failing(row: ProviderHealth, hour: Tally, step: _Step) -> None:
+    """What the network-down and REData-down subjects read about this provider, after its step."""
+    held_for_failing = row.state in (ProviderState.BACKED_OFF, ProviderState.PROBING) and row.cause == BackoffCause.FAILING
+    step.active_in_hour = hour.attempts > 0 or held_for_failing
+    step.failing_in_hour = held_for_failing or (hour.attempts >= MIN_SAMPLE and hour.answered <= ANSWERED_FLOOR * hour.attempts and hour.refused < REFUSAL_SHARE * hour.attempts)
+
+
 def _step(row: ProviderHealth, counts: list[_Count], now: datetime) -> _Step:
-    """Move one provider through its states on this run's counts."""
+    """Move one provider through its states on this run's counts.
+
+    An unhealthy provider that stops being called is cleared once there is too little left to judge it on - a day of
+    probing without :data:`PROBE_SAMPLE` calls, or a degraded one with under :data:`MIN_SAMPLE` calls in the day - so a
+    retired source is not reminded about forever. Calls that come back are judged afresh.
+    """
     step = _Step()
-    step.active_in_hour = _tally(counts, since=now - SHORT_WINDOW).attempts > 0
     _note_activity(row, counts)
 
     if row.state == ProviderState.HEALTHY and row.level and row.state_since <= now - LEVEL_RESET_AFTER:
         row.level = 0
 
     if row.state == ProviderState.BACKED_OFF:
-        step.failing_in_hour = step.active_in_hour
         if row.backed_off_until is None or now >= row.backed_off_until:
             row.state = ProviderState.PROBING
             row.state_since = now
@@ -505,8 +524,9 @@ def _step(row: ProviderHealth, counts: list[_Count], now: datetime) -> _Step:
             if probe.refused == 0 and probe.answered >= PROBE_PASS_SHARE * probe.attempts:
                 step.transition = _recover(row, f"Probe answered: {describe(probe, 'since probing began')}", now, step)
             else:
-                step.failing_in_hour = True
                 step.transition = _trip(row, _cause_of(probe), f"Probe failed: {describe(probe, 'since probing began')}", now)
+        elif now - row.state_since >= LONG_WINDOW:
+            step.transition = _recover(row, f"Not called enough to probe in the {_span(now - row.state_since)} since probing began ({probe.attempts} calls).", now, step, quiet=True)
         return step
 
     floor = row.counted_from
@@ -517,11 +537,12 @@ def _step(row: ProviderHealth, counts: list[_Count], now: datetime) -> _Step:
         window, minutes, label = _tally(counts, since=max(filter(None, (now - LONG_WINDOW, floor)))), 1440, "in the last 24 hours"
     verdict = judge(window, _baseline_of(row))
     if verdict is None:
+        if row.state == ProviderState.DEGRADED:
+            step.transition = _recover(row, f"Too few calls in the last 24 hours to judge ({window.attempts}).", now, step, quiet=True)
         return step
     _record_window(row, window, minutes)
     reason = describe(window, label, baseline=_baseline_of(row) if verdict.cause == BackoffCause.BELOW_BASELINE else None)
     if verdict.state == ProviderState.BACKED_OFF:
-        step.failing_in_hour = step.active_in_hour
         step.transition = _trip(row, verdict.cause, reason, now)
     elif verdict.state == ProviderState.DEGRADED:
         row.reason = reason
@@ -566,7 +587,9 @@ def evaluate_provider_health(*, now: datetime | None = None) -> EvaluationReport
 
         steps: dict[str, _Step] = {}
         for provider, row in sorted(rows.items()):
-            steps[provider] = _step(row, grouped.get(provider, []), now)
+            counts = grouped.get(provider, [])
+            steps[provider] = _step(row, counts, now)
+            _note_failing(row, _tally(counts, since=now - SHORT_WINDOW), steps[provider])
             row.last_evaluated_at = now
             row.save()
             if steps[provider].transition:
@@ -606,7 +629,7 @@ def _alert_line(row: ProviderHealth, now: datetime) -> str:
     return f"- {row.provider} - {row.get_state_display().lower()} ({row.get_cause_display().lower()}) for {since}, {last_ok}. {row.reason} {_paused_line(row)}"
 
 
-def _title(due: list[ProviderHealth], recovered: list[tuple[str, timedelta]], steps: dict[str, _Step]) -> str:
+def _title(due: list[ProviderHealth], recovered: list[str], steps: dict[str, _Step]) -> str:
     """The digest's subject: the likeliest single cause when the failures share one, else a count."""
     others = [step for provider, step in steps.items() if step.active_in_hour and not provider.startswith(REDATA_PREFIX)]
     failing_others = [step for step in others if step.failing_in_hour]
@@ -627,12 +650,12 @@ def _alert(rows: dict[str, ProviderHealth], steps: dict[str, _Step], now: dateti
         for row in rows.values()
         if row.state != ProviderState.HEALTHY and row.episode_started_at is not None and now - row.episode_started_at >= ALERT_AFTER and (row.alerted_at is None or row.alerted_at < row.episode_started_at or now - row.alerted_at >= ALERT_REMIND_AFTER)
     ]
-    recovered = [(provider, after) for provider, step in steps.items() if (after := step.recovered_after) is not None]
+    recovered = [steps[provider].recovered for provider in sorted(steps) if steps[provider].recovered]
     if not due and not recovered:
         return
 
     lines = [_alert_line(row, now) for row in sorted(due, key=lambda row: row.provider)]
-    lines += [f"- {provider} recovered after {_span(after)}." for provider, after in recovered]
+    lines += recovered
     lines.append("Details: Site admin > API Rate Limits > Provider health.")
     title = _title(due, recovered, steps)
     message = "\n".join(lines)
@@ -643,7 +666,7 @@ def _alert(rows: dict[str, ProviderHealth], steps: dict[str, _Step], now: dateti
         row.alerted_at = now
         row.save(update_fields=["alerted_at", "updated"])
         report.alerted.append(row.provider)
-    report.recovered.extend(provider for provider, _ in recovered)
+    report.recovered.extend(provider for provider in sorted(steps) if steps[provider].recovered)
 
 
 def deliver_alert(title: str, message: str) -> None:

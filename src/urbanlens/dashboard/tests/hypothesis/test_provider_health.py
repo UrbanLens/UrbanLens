@@ -242,6 +242,52 @@ class EvaluationTests(_GateTestCase):
         row.refresh_from_db()
         self.assertEqual(row.state, ProviderState.HEALTHY)
 
+    def test_probes_in_the_minutes_after_probing_began_count(self) -> None:
+        now = timezone.now()
+        ProviderHealth.objects.create(
+            provider=_SERVICE,
+            state=ProviderState.PROBING,
+            cause=BackoffCause.FAILING,
+            level=1,
+            state_since=now - timedelta(minutes=5),
+        )
+        _calls(_SERVICE, 3, status=200, at=now - timedelta(minutes=3))
+
+        evaluate_provider_health(now=now)
+
+        self.assertEqual(ProviderHealth.objects.get(provider=_SERVICE).state, ProviderState.HEALTHY)
+
+    def test_a_probing_provider_nothing_calls_for_a_day_is_cleared(self) -> None:
+        now = timezone.now()
+        ProviderHealth.objects.create(
+            provider=_SERVICE,
+            state=ProviderState.PROBING,
+            cause=BackoffCause.FAILING,
+            level=3,
+            state_since=now - timedelta(hours=25),
+            episode_started_at=now - timedelta(days=2),
+        )
+
+        evaluate_provider_health(now=now)
+
+        row = ProviderHealth.objects.get(provider=_SERVICE)
+        self.assertEqual((row.state, row.level), (ProviderState.HEALTHY, 3))
+        self.assertIn("Not called enough to probe", row.reason)
+
+    def test_a_degraded_provider_nothing_calls_any_more_is_cleared(self) -> None:
+        now = timezone.now()
+        ProviderHealth.objects.create(
+            provider=_SERVICE,
+            state=ProviderState.DEGRADED,
+            cause=BackoffCause.BELOW_BASELINE,
+            state_since=now - timedelta(days=9),
+            episode_started_at=now - timedelta(days=9),
+        )
+
+        evaluate_provider_health(now=now)
+
+        self.assertEqual(ProviderHealth.objects.get(provider=_SERVICE).state, ProviderState.HEALTHY)
+
     def test_the_evaluation_publishes_the_backoff_to_the_gate(self) -> None:
         now = timezone.now()
         _calls(_SERVICE, 20, status=503, at=now - timedelta(minutes=5))
@@ -308,6 +354,59 @@ class AlertTests(_GateTestCase):
 
         self.assertEqual(self.notify.call_count, 2)
         self.assertIn("recovered", self.notify.call_args.args[1])
+
+    def test_a_degraded_provider_that_then_backs_off_is_reported_again(self) -> None:
+        now = timezone.now()
+        ProviderHealth.objects.create(
+            provider=_SERVICE,
+            state=ProviderState.DEGRADED,
+            cause=BackoffCause.BELOW_BASELINE,
+            state_since=now - timedelta(hours=2),
+            episode_started_at=now - timedelta(hours=2),
+            alerted_at=now - timedelta(hours=1),
+        )
+        _calls(_SERVICE, 20, status=503, at=now - timedelta(minutes=5))
+
+        evaluate_provider_health(now=now)
+
+        self.assertEqual(ProviderHealth.objects.get(provider=_SERVICE).state, ProviderState.BACKED_OFF)
+        self.notify.assert_called_once()
+
+    def test_a_few_lone_failed_calls_are_not_a_network_outage(self) -> None:
+        now = timezone.now()
+        for service in ("nominatim", "overpass", "wikidata"):
+            _calls(service, 1, status=500, at=now - timedelta(minutes=5))
+        for service in ("open_meteo", "usgs_earthquakes"):
+            _calls(service, 3, status=200, at=now - timedelta(minutes=5))
+        ProviderHealth.objects.create(
+            provider=_SERVICE,
+            state=ProviderState.BACKED_OFF,
+            cause=BackoffCause.FAILING,
+            backed_off_until=now + timedelta(hours=5),
+            episode_started_at=now - timedelta(days=2),
+            alerted_at=now - timedelta(hours=25),
+        )
+
+        evaluate_provider_health(now=now)
+
+        self.assertNotIn("network may be down", self.notify.call_args.args[1])
+
+    def test_a_cleared_provider_is_reported_as_too_rarely_called(self) -> None:
+        now = timezone.now()
+        ProviderHealth.objects.create(
+            provider=_SERVICE,
+            state=ProviderState.PROBING,
+            level=2,
+            state_since=now - timedelta(hours=25),
+            episode_started_at=now - timedelta(days=2),
+            alerted_at=now - timedelta(hours=20),
+        )
+
+        evaluate_provider_health(now=now)
+
+        self.assertIn(
+            f"{_SERVICE} cleared after 2 days: called too rarely to judge any more.", self.notify.call_args.args[2]
+        )
 
     def test_redata_down_is_named_rather_than_counted(self) -> None:
         start = timezone.now() - timedelta(hours=2)
