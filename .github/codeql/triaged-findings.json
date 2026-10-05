@@ -287,18 +287,11 @@
     "reason": "A data-navigate select's value is followed only when it resolves to this origin (isSameOrigin), so no javascript: or off-site address runs; the options are {% url %} values."
   },
   {
-    "rule": "py/url-redirection",
-    "path": "src/urbanlens/dashboard/controllers/location_wiki.py",
-    "fingerprint": "50b13957d32432c5:1",
-    "language": "python",
-    "reason": "The target's path comes from reverse() and always starts with /location/; only the query string is the request's, and a query string cannot change the host."
-  },
-  {
     "rule": "js/xss-through-dom",
     "path": "src/urbanlens/dashboard/frontend/ts/shared/map-arrival.ts",
-    "fingerprint": "5205e718185145e2:1",
+    "fingerprint": "bdce8bab967c689f:1",
     "language": "javascript",
-    "reason": "suggestionsUrl is a reverse()d URL the server writes into the page's json_script config, not text a user controls."
+    "reason": "suggestionsUrl is a reverse()d URL the server writes into the page's json_script config, not text a user controls, and it is followed only when it resolves to this origin."
   },
   {
     "rule": "py/stack-trace-exposure",
@@ -308,17 +301,10 @@
     "reason": "Returns CriteriaShapeError's message, written for the API client (\"name must be text.\", \"custom_fields must be a list.\"); no trace and no stored data."
   },
   {
-    "rule": "js/incomplete-multi-character-sanitization",
-    "path": "bin/report_unused_scss.ts",
-    "fingerprint": "6b4e391138617e6e:1",
-    "language": "javascript",
-    "reason": "A developer script that strips tags from this site's own rendered pages to build fragments for the unused-SCSS report; its output is never served."
-  },
-  {
-    "rule": "js/bad-tag-filter",
-    "path": "bin/report_unused_scss.ts",
-    "fingerprint": "211a8bff87fcea0b:1",
-    "language": "javascript",
-    "reason": "Same developer script: removing this site's own script tags from a rendered page before measuring which selectors match; not a sanitizer."
+    "rule": "py/weak-sensitive-data-hashing",
+    "path": "src/urbanlens/dashboard/services/core/upstream_breaker.py",
+    "fingerprint": "78b85823bd726836:1",
+    "language": "python",
+    "reason": "A 12-character SHA-256 fingerprint of the configured REData API key, a high-entropy secret, scoping a cache key so a new key is asked at once. Not password storage."
   }
 ]
