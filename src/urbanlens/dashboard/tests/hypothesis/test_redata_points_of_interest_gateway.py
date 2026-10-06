@@ -9,6 +9,7 @@ import pytest
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 from urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway import RedataPointsOfInterestGateway
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 
 def _response(status_code: int, body: object) -> mock.Mock:
@@ -71,11 +72,13 @@ class FindNearTests(SimpleTestCase):
 
     def test_a_provider_scoped_rate_limit_raises(self) -> None:
         """Restricting to one provider still surfaces that provider's own rate limit as a failure."""
-        session = mock.Mock()
-        session.get.return_value = _response(503, {"error": "rate_limited", "message": "back off"})
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                session = mock.Mock()
+                session.get.return_value = _response(503, {"error": error, "message": "back off"})
 
-        with pytest.raises(LocationContextUnavailableError):
-            _gateway(session).find_near(40.0, -74.0, provider="epa_echo")
+                with pytest.raises(LocationContextUnavailableError):
+                    _gateway(session).find_near(40.0, -74.0, provider="epa_echo")
 
     def test_empty_results_is_a_real_answer_not_an_error(self) -> None:
         session = mock.Mock()

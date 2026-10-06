@@ -9,6 +9,12 @@ from urbanlens.UrbanLens.settings.app import settings as app_settings
 REDATA_TEST_URL = "https://redata.test"
 REDATA_TEST_KEY = "test-key"  # nosec B105 - a fixture value, not a credential
 
+#: What REData answers for a call it did not make because a budget said no: its own (``rate_limited``), or the share
+#: of it the requesting key's environment may spend (``key_budget_exhausted``). UrbanLens treats the two alike - the
+#: question went unanswered, nothing is cached as an answer, and the source is backed off - so a test of one
+#: answer loops over both, and the two cannot drift apart.
+BUDGET_REFUSALS = ("rate_limited", "key_budget_exhausted")
+
 
 class RedataConfiguredMixin:
     """Makes ``redata_configured()`` report True for the duration of each test."""

@@ -4,6 +4,8 @@ REData answers ``parcels/lookup`` with a 404 for a permanent reason and a 503 fo
 ``cultural-resources/lookup`` with a 503 ``all_providers_unavailable`` or ``rate_limited`` when no register could be
 asked. A ``LocationCache`` row marks a source fetched for the whole cache window, so storing either as "no record"
 turns a passing state into a week-long blank card.
+
+The same holds when the budget that said no was the requesting key's share of REData's: ``key_budget_exhausted``.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     RedataGateway,
 )
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, RedataConfiguredMixin
 
 
 def _response(status_code: int, body: object, *, headers: dict | None = None) -> MagicMock:
@@ -55,9 +57,29 @@ class CulturalResourceBlackoutTests(SimpleTestCase):
         self.assertTrue(is_source_outage(error))
 
     def test_every_register_out_of_budget_is_an_outage(self) -> None:
-        error = self._lookup(_response(503, {"error": "rate_limited", "message": "", "providers": []}))
+        for refusal in BUDGET_REFUSALS:
+            with self.subTest(refusal):
+                error = self._lookup(_response(503, {"error": refusal, "message": "", "providers": []}))
 
-        self.assertTrue(error.is_outage)
+                self.assertTrue(error.is_outage)
+                self.assertTrue(is_source_outage(error))
+
+    def test_an_empty_answer_with_a_register_out_of_budget_is_an_outage(self) -> None:
+        for status in BUDGET_REFUSALS:
+            with self.subTest(status):
+                error = self._lookup(
+                    _response(
+                        200,
+                        {
+                            "count": 0,
+                            "complete": False,
+                            "results": [],
+                            "providers": [{"provider": "ny_cris", "status": status, "count": 0}],
+                        },
+                    )
+                )
+
+                self.assertTrue(error.is_outage)
 
     def test_an_empty_answer_with_a_register_unasked_is_an_outage(self) -> None:
         """REData's envelope says ``complete: false`` when a register covering the point did not answer."""
@@ -95,7 +117,14 @@ class ParcelLookupRetryLaterTests(SimpleTestCase):
         self.assertFalse(self._lookup(session).is_outage)
 
     def test_a_503_is_never_settled_whatever_its_reason(self) -> None:
-        reasons = ("no_data_found", "search_key_unavailable", "derived_address_unconfirmed", "a_reason_added_later")
+        reasons = (
+            "no_data_found",
+            "search_key_unavailable",
+            "derived_address_unconfirmed",
+            "a_reason_added_later",
+            "source_rate_limited",
+            *BUDGET_REFUSALS,
+        )
         for offset, reason in enumerate(reasons):
             with self.subTest(reason=reason):
                 session = MagicMock()
@@ -110,15 +139,33 @@ class ParcelLookupRetryLaterTests(SimpleTestCase):
                 self.assertTrue(error.is_outage)
 
     def test_a_named_wait_is_honoured(self) -> None:
-        session = MagicMock()
-        session.get.return_value = _response(
-            503, {"error": "source_rate_limited", "message": ""}, headers={"Retry-After": "120"}
-        )
+        for reason in ("source_rate_limited", *BUDGET_REFUSALS):
+            with self.subTest(reason):
+                session = MagicMock()
+                session.get.return_value = _response(
+                    503, {"error": reason, "message": ""}, headers={"Retry-After": "120"}
+                )
 
-        error = self._lookup(session)
+                error = self._lookup(session)
 
-        self.assertIsInstance(error, PropertyRecordsBusyError)
-        self.assertEqual(error.retry_after, 120)
+                self.assertIsInstance(error, PropertyRecordsBusyError)
+                self.assertEqual(error.retry_after, 120)
+
+    def test_a_spent_budget_is_asked_about_again_rather_than_deferred_for_hours(self) -> None:
+        """An unsettled question waits hours; a spent budget frees on its own schedule, so the next call asks REData."""
+        for offset, reason in enumerate(("source_rate_limited", *BUDGET_REFUSALS)):
+            with self.subTest(reason):
+                session = MagicMock()
+                session.get.return_value = _response(503, {"error": reason, "message": ""})
+
+                with self.assertRaises(PropertyRecordsUnavailableError):
+                    _gateway(session).lookup_parcel(43.65 + offset, -73.75)
+                with self.assertRaises(PropertyRecordsUnavailableError) as again:
+                    _gateway(session).lookup_parcel(43.65 + offset, -73.75)
+
+                self.assertEqual(session.get.call_count, 2)
+                self.assertEqual(again.exception.reason, reason)
+                self.assertTrue(again.exception.is_outage)
 
     def test_nothing_learned_waits_hours_rather_than_minutes(self) -> None:
         """No county source found the parcel; asking again in five minutes re-runs REData's whole tier pipeline."""
@@ -182,6 +229,19 @@ class RetryLaterIsNotCachedTests(RedataConfiguredMixin, TestCase):
             PropertyRecordsPanelSource().fetch(self.pin)
 
         self.assertEqual(self._rows("property_records"), 0)
+
+    def test_the_parcel_card_caches_nothing_for_a_spent_budget(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsPanelSource
+
+        for reason in ("source_rate_limited", *BUDGET_REFUSALS):
+            for headers in ({}, {"Retry-After": "120"}):
+                with self.subTest(reason, headers=headers):
+                    session = MagicMock()
+                    session.get.return_value = _response(503, {"error": reason, "message": ""}, headers=headers)
+                    with _redata_answering(session), self.assertRaises(PropertyRecordsUnavailableError):
+                        PropertyRecordsPanelSource().fetch(self.pin)
+
+                    self.assertEqual(self._rows("property_records"), 0)
 
     def test_the_parcel_card_still_caches_a_permanent_answer(self) -> None:
         from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsPanelSource

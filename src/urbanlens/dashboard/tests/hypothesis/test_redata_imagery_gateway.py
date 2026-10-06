@@ -12,6 +12,7 @@ from urllib3 import HTTPResponse
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 from urbanlens.dashboard.services.apis.locations.redata_imagery_gateway import RedataImageryGateway
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 
 def _response(status_code: int, body: object = None, content: bytes = b"") -> mock.Mock:
@@ -218,12 +219,15 @@ class CaptureTimeSeriesTests(SimpleTestCase):
         self.assertIsNone(result)
 
     def test_503_rate_limited_raises_with_reason(self) -> None:
-        session = mock.Mock()
-        session.post.return_value = _response(503, {"error": "rate_limited", "message": "back off"})
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                session = mock.Mock()
+                session.post.return_value = _response(503, {"error": error, "message": "back off"})
 
-        with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
-        self.assertEqual(ctx.value.reason, "rate_limited")
+                with pytest.raises(LocationContextUnavailableError) as ctx:
+                    _gateway(session).capture_time_series("parent-uuid", datetime.date(2005, 6, 15))
+                self.assertEqual(ctx.value.reason, error)
+                self.assertTrue(ctx.value.is_outage)
 
     def test_503_imagery_unavailable_raises_with_reason(self) -> None:
         session = mock.Mock()

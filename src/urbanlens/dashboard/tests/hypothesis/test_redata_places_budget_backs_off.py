@@ -3,6 +3,9 @@
 REData's whole Google Places budget is 160 uncached calls a UTC day, shared by every key and its own CID resolution,
 and it asks each client to honour ``Retry-After`` on ``503 rate_limited``. The gateway raised that answer without
 the wait, so a panel that met it came back after the five-minute failure window whatever REData had said.
+
+A key's environment has a share of that budget, and REData answers ``503 key_budget_exhausted`` when the share is
+spent. It is left alone for as long, and kept as little, as ``rate_limited``: every test below runs for both.
 """
 
 from __future__ import annotations
@@ -26,9 +29,11 @@ from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway im
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import UpstreamThrottledError
 from urbanlens.dashboard.services.pins.external_data import get_panel_source, run_panel_fetch
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, RedataConfiguredMixin
 
-_RATE_LIMITED = {"error": "rate_limited", "message": "Places API (New) request budget is exhausted right now."}
+_BUDGET_REFUSED = tuple(
+    {"error": error, "message": "Places API (New) request budget is exhausted right now."} for error in BUDGET_REFUSALS
+)
 _WAIT = 600
 
 
@@ -44,40 +49,72 @@ class PlacesBudgetBacksOffTests(RedataConfiguredMixin, TestCase):
     """REData is answered below the rate-limited session, so its breaker sees every response."""
 
     def test_the_next_search_waits_out_the_wait_redata_named(self) -> None:
-        gateway = RedataPlacesGateway()
-        answers = [
-            _response(503, _RATE_LIMITED, {"Retry-After": str(_WAIT)}),
-            _response(200, {"count": 0, "results": []}),
-        ]
-        with mock.patch.object(requests.Session, "request", side_effect=answers) as sent:
-            with pytest.raises(UpstreamBusyError) as first:
-                gateway.search_nearby(41.73, -73.92)
-            with pytest.raises(UpstreamThrottledError) as held:
-                gateway.search_nearby(42.10, -74.20)
-            self.assertEqual(sent.call_count, 1)
-            with mock.patch(
-                "urbanlens.dashboard.services.core.upstream_breaker.time.time", return_value=time.time() + _WAIT + 1
-            ):
-                self.assertEqual(gateway.search_nearby(42.10, -74.20), [])
+        for body in _BUDGET_REFUSED:
+            with self.subTest(body["error"]):
+                cache.clear()
+                gateway = RedataPlacesGateway()
+                answers = [
+                    _response(503, body, {"Retry-After": str(_WAIT)}),
+                    _response(200, {"count": 0, "results": []}),
+                ]
+                with mock.patch.object(requests.Session, "request", side_effect=answers) as sent:
+                    with pytest.raises(UpstreamBusyError) as first:
+                        gateway.search_nearby(41.73, -73.92)
+                    with pytest.raises(UpstreamThrottledError) as held:
+                        gateway.search_nearby(42.10, -74.20)
+                    self.assertEqual(sent.call_count, 1)
+                    # Once the wait has passed REData is asked again: the refusal was not kept as an answer.
+                    with mock.patch(
+                        "urbanlens.dashboard.services.core.upstream_breaker.time.time",
+                        return_value=time.time() + _WAIT + 1,
+                    ):
+                        self.assertEqual(gateway.search_nearby(42.10, -74.20), [])
 
-        self.assertEqual(first.value.retry_after, _WAIT)
-        self.assertGreaterEqual(held.value.retry_after, _WAIT - 1)
-        self.assertEqual(sent.call_count, 2)
+                self.assertEqual(first.value.retry_after, _WAIT)
+                self.assertGreaterEqual(held.value.retry_after, _WAIT - 1)
+                self.assertEqual(sent.call_count, 2)
+
+    def test_the_same_search_goes_back_to_redata_rather_than_to_a_stored_answer(self) -> None:
+        """Nothing about the refused search is remembered but the wait: asked the same again, REData is asked."""
+        for body in _BUDGET_REFUSED:
+            with self.subTest(body["error"]):
+                cache.clear()
+                gateway = RedataPlacesGateway()
+                answers = [
+                    _response(503, body, {"Retry-After": str(_WAIT)}),
+                    _response(200, {"count": 1, "results": [{"place_id": "p1"}]}),
+                ]
+                with mock.patch.object(requests.Session, "request", side_effect=answers) as sent:
+                    with pytest.raises(UpstreamBusyError):
+                        gateway.search_nearby(41.73, -73.92)
+                    with mock.patch(
+                        "urbanlens.dashboard.services.core.upstream_breaker.time.time",
+                        return_value=time.time() + _WAIT + 1,
+                    ):
+                        found = gateway.search_nearby(41.73, -73.92)
+
+                self.assertEqual(found, [{"place_id": "p1"}])
+                self.assertEqual(sent.call_count, 2)
 
     def test_the_photos_panel_waits_as_long_and_keeps_nothing(self) -> None:
-        pin = baker.make(
-            Pin,
-            profile=Profile.objects.get(user=baker.make("auth.User")),
-            location=baker.make(Location, latitude=41.73, longitude=-73.92),
-        )
-        source = get_panel_source("google_maps")
-        assert isinstance(source, GoogleMapsPhotosPanelSource)
-        busy = _response(503, _RATE_LIMITED, {"Retry-After": str(_WAIT)})
-        with (
-            mock.patch.object(requests.Session, "request", return_value=busy),
-            mock.patch("urbanlens.dashboard.services.pins.external_data.cache.set", wraps=cache.set) as setter,
-        ):
-            run_panel_fetch(source.key, pin, None)
+        for offset, body in enumerate(_BUDGET_REFUSED):
+            with self.subTest(body["error"]):
+                cache.clear()
+                pin = baker.make(
+                    Pin,
+                    profile=Profile.objects.get(user=baker.make("auth.User")),
+                    location=baker.make(Location, latitude=41.73 + offset, longitude=-73.92),
+                )
+                source = get_panel_source("google_maps")
+                assert isinstance(source, GoogleMapsPhotosPanelSource)
+                busy = _response(503, body, {"Retry-After": str(_WAIT)})
+                with (
+                    mock.patch.object(requests.Session, "request", return_value=busy),
+                    mock.patch("urbanlens.dashboard.services.pins.external_data.cache.set", wraps=cache.set) as setter,
+                ):
+                    run_panel_fetch(source.key, pin, None)
 
-        setter.assert_any_call(source.skip_key(pin), 1, _WAIT)
-        self.assertFalse(LocationCache.objects.filter(location=pin.location, source=source.cache_source).exists())
+                setter.assert_any_call(source.skip_key(pin), 1, _WAIT)
+                self.assertFalse(
+                    LocationCache.objects.filter(location=pin.location, source=source.cache_source).exists()
+                )

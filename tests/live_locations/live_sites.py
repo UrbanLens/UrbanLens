@@ -37,11 +37,11 @@ _INSTITUTION_WORDS = frozenset(
 #: REData error codes and provider statuses that mean "not established", never "nothing there".
 _RETRYABLE_ERRORS = frozenset(
     {
-        "rate_limited", "search_unavailable", "all_providers_unavailable", "upstream_unavailable",
+        "rate_limited", "key_budget_exhausted", "search_unavailable", "all_providers_unavailable", "upstream_unavailable",
         "source_rate_limited", "source_error",
     }
 )  # fmt: skip
-_UNANSWERED_STATUSES = frozenset({"rate_limited", "unavailable", "not_cached"})
+_UNANSWERED_STATUSES = frozenset({"rate_limited", "key_budget_exhausted", "unavailable", "not_cached"})
 
 
 @dataclass(frozen=True, slots=True)

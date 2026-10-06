@@ -12,6 +12,7 @@ from urbanlens.dashboard.services.apis.locations.redata_search_gateway import (
     RedataNewsSearchGateway,
     RedataSearchGateway,
 )
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 
 def _response(status_code: int, body: object) -> mock.Mock:
@@ -161,12 +162,14 @@ class SearchNewsTests(SimpleTestCase):
         self.assertEqual(results[0]["date"], "20240105T120000Z")
 
     def test_503_raises_location_context_unavailable(self) -> None:
-        session = mock.Mock()
-        session.get.return_value = _response(503, {"error": "rate_limited", "message": "back off"})
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                session = mock.Mock()
+                session.get.return_value = _response(503, {"error": error, "message": "back off"})
 
-        with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).search_news("query")
-        self.assertEqual(ctx.value.reason, "rate_limited")
+                with pytest.raises(LocationContextUnavailableError) as ctx:
+                    _gateway(session).search_news("query")
+                self.assertEqual(ctx.value.reason, error)
 
     def test_news_gateway_hits_same_endpoint(self) -> None:
         session = mock.Mock()
