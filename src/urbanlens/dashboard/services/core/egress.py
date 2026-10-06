@@ -79,9 +79,9 @@ UNLEDGERED_SERVICES: Mapping[str, Unledgered] = {
     "ai_inference": Unledgered(EgressCategory.INTERNAL, "the sandboxed transport; the provider call behind it is held by the feature's api_call_slot"),
 }
 
-#: Service keys that reach REData or our own hosts but carry no ``ServiceDefaults`` of their own: gateways whose
-#: limits come from the generic fallback, labels on REData-backed providers, and keys the policy asks about
-#: before a call made on another key's session.
+#: Service keys that carry no ``ServiceDefaults`` of their own: gateways whose limits come from the generic
+#: fallback, labels on REData-backed providers, keys the policy asks about before a call made on another key's
+#: session, and the keys an AI call is logged under when it names no feature.
 UNREGISTERED_SERVICES: Mapping[str, EgressCategory] = {
     "redata_boundary": EgressCategory.REDATA,
     "redata_place_details": EgressCategory.REDATA,
@@ -101,6 +101,10 @@ UNREGISTERED_SERVICES: Mapping[str, EgressCategory] = {
     "overpass_public_mirror": EgressCategory.QUOTA,
     # Save Page Now: a write to the Internet Archive, made on the ``wayback_machine`` session.
     "wayback_save": EgressCategory.PUBLIC_WRITE,
+    # ``LLMGateway.service_key`` for a gateway built without a feature.
+    "ai_openai": EgressCategory.AI,
+    "ai_cloudflare": EgressCategory.AI,
+    "ai_anthropic": EgressCategory.AI,
 }
 
 

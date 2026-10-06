@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 import tiktoken
 
-from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceRequest, Message, ToolSpec
+from urbanlens.dashboard.services.ai.call_log import AiCall, ai_endpoint, failure_status, recorded_ai_call
+from urbanlens.dashboard.services.ai.inference_client import InferenceError, InferenceInputRefusedError, InferenceRequest, Message, ToolSpec
 from urbanlens.dashboard.services.ai.message import MessageQueue
 from urbanlens.dashboard.services.ai.meta import (
     FORMATTING,
@@ -18,6 +19,7 @@ from urbanlens.dashboard.services.ai.meta import (
     PROJECT_DESCRIPTION,
     SHORTEST_MESSAGE,
 )
+from urbanlens.dashboard.services.core.rate_limiter import valid_token_count
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.ai.inference_client import InferenceClient, InferenceResponse, Provider
@@ -34,6 +36,8 @@ class LLMGateway(ABC):
     PROVIDER: ClassVar[Provider]
 
     _model: str | None
+    #: The feature this gateway serves; its calls are logged under it (``ApiCallLog.service``).
+    feature: str | None
     extend: bool
     _token_count: dict[str, int]
     formatting: str
@@ -56,9 +60,11 @@ class LLMGateway(ABC):
         formatting: str = FORMATTING,
         instructions: str = INSTRUCTIONS,
         project_description: str = PROJECT_DESCRIPTION,
+        feature: str | None = None,
         **kwargs,
     ):
         self._token_count = {"sent": 0, "received": 0}
+        self.feature = feature
         self.formatting = formatting
         self.instructions = instructions
         self.project_description = project_description
@@ -78,6 +84,16 @@ class LLMGateway(ABC):
     @model.setter
     def model(self, value: str | None):
         self._model = self._lookup_model(value)
+
+    @property
+    def service_key(self) -> str:
+        """The ``ApiCallLog.service`` this gateway's calls are logged under: its feature, else its provider."""
+        return self.feature or f"ai_{self.PROVIDER}"
+
+    @property
+    def endpoint(self) -> str:
+        """How this gateway's calls name what they called in ``ApiCallLog.endpoint``: ``provider:model``."""
+        return ai_endpoint(self.PROVIDER, self.model)
 
     @property
     def sent_tokens(self) -> int:
@@ -125,11 +141,39 @@ class LLMGateway(ABC):
         if costs is None:
             logger.warning("Model not recognized (%s). Using default costs.", self.model)
             costs = self.DEFAULT_COST_PER_THOUSAND
-        cost_per_thousand_sent, cost_per_thousand_received = costs
+        return self._price(costs, self.sent_tokens, self.received_tokens)
 
-        sent_cost = self.sent_tokens * cost_per_thousand_sent / 1000
-        received_cost = self.received_tokens * cost_per_thousand_received / 1000
-        return round(sent_cost + received_cost, 2)
+    @staticmethod
+    def _price(costs: tuple[Decimal, Decimal], sent: int, received: int) -> Decimal:
+        """Price ``sent`` and ``received`` tokens at ``costs`` per thousand, to the ledger's six places.
+
+        Args:
+            costs: Cost per thousand (sent, received) tokens.
+            sent: Tokens sent.
+            received: Tokens received.
+
+        Returns:
+            The cost in USD. Fewer places lose it: a call to a cheap model is a fraction of a cent.
+        """
+        cost_per_thousand_sent, cost_per_thousand_received = costs
+        return round(sent * cost_per_thousand_sent / 1000 + received * cost_per_thousand_received / 1000, 6)
+
+    def _call_cost(self, message_queue: MessageQueue, response: InferenceResponse) -> Decimal | None:
+        """The cost of one call: the provider's reported tokens, else an estimate of both sides.
+
+        Args:
+            message_queue: What was sent.
+            response: What came back.
+
+        Returns:
+            The cost in USD, or None when this model has no price on file.
+        """
+        costs = self.MODEL_COSTS.get(self.model)
+        if costs is None:
+            return None
+        sent = valid_token_count(response.usage.input_tokens)
+        received = valid_token_count(response.usage.output_tokens)
+        return self._price(costs, self.calculate_combined_tokens(message_queue) if sent is None else sent, self.calculate_tokens(response.text) if received is None else received)
 
     @singledispatchmethod
     def send_tokens(self, count: Any):
@@ -357,11 +401,32 @@ class LLMGateway(ABC):
 
         request = InferenceRequest(provider=self.PROVIDER, model=self.model, system=system_prompt, messages=messages, tools=tools or [], max_tokens=self.max_tokens, timeout_seconds=timeout)
 
+        with recorded_ai_call(service=self.service_key, provider=self.PROVIDER, model=self.model) as call:
+            try:
+                response = self._inference_client.send(request)
+            except InferenceError as exc:
+                # A provider that answers and refuses the input is answering, not failing (see vision.py).
+                call.success = isinstance(exc, InferenceInputRefusedError)
+                call.status_code = failure_status(exc)
+                logger.exception("Inference call failed for provider %s model %s", self.PROVIDER, self.model)
+                return None
+            self._report(call, message_queue, response)
+            return response
+
+    def _report(self, call: AiCall, message_queue: MessageQueue, response: InferenceResponse) -> None:
+        """Fill an AI call's report from its response; a failure here leaves the report short, never the call failed.
+
+        Args:
+            call: The report for this call.
+            message_queue: What was sent.
+            response: What came back.
+        """
+        call.success = True
+        call.input_tokens, call.output_tokens = response.usage.input_tokens, response.usage.output_tokens
         try:
-            return self._inference_client.send(request)
-        except InferenceError:
-            logger.exception("Inference call failed for provider %s model %s", self.PROVIDER, self.model)
-            return None
+            call.cost_estimate = self._call_cost(message_queue, response)
+        except Exception:
+            logger.debug("Could not price a call to %s", self.model, exc_info=True)
 
     def _record_received_tokens(self, response: InferenceResponse) -> None:
         """Prefer the provider's own reported usage; fall back to a tiktoken estimate.

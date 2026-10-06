@@ -717,6 +717,9 @@ def log_api_call(
     cost_estimate: Decimal | None = None,
     status_code: int | None = None,
     was_rejected_input: bool = False,
+    model: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
 ) -> None:
     """Record one API call in the ``ApiCallLog`` table.
     Failures are swallowed so that logging problems never break callers.
@@ -730,7 +733,10 @@ def log_api_call(
         was_geo_filtered: True if the call was skipped due to geo filtering.
         cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
         status_code: The upstream's HTTP status, when the caller holds the response.
-        was_rejected_input: True if the call was refused before it was made because its input could not return data."""
+        was_rejected_input: True if the call was refused before it was made because its input could not return data.
+        model: The AI model that answered, for an AI call.
+        input_tokens: Prompt tokens the provider reported, for an AI call.
+        output_tokens: Completion tokens the provider reported, for an AI call."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
     try:
@@ -746,6 +752,9 @@ def log_api_call(
             cost_estimate=cost_estimate,
             status_code=status_code,
             was_rejected_input=was_rejected_input,
+            model=model,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
         )
     except Exception:
         logger.exception("Failed to log API call for service %s", service)
@@ -826,7 +835,18 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     return entry_pk
 
 
-def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = None, cost_estimate: Decimal | None = None, status_code: int | None = None) -> None:
+def _finalize_call(
+    entry_pk: int,
+    *,
+    success: bool,
+    response_ms: int | None = None,
+    cost_estimate: Decimal | None = None,
+    status_code: int | None = None,
+    endpoint: str | None = None,
+    model: str | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> None:
     """Update a reservation row created by ``_reserve_call`` with the request's outcome.
     Updates the existing row in place rather than inserting a new one, so a reserved-but-not-yet-finalized call still counts toward ``check_rate_limit``'s window queries (which count rows regardless of ``success``) without double-counting once finalized.
 
@@ -835,11 +855,18 @@ def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = No
         success: Whether the call succeeded (HTTP 2xx, no exception).
         response_ms: Round-trip time in milliseconds.
         cost_estimate: Estimated USD cost of this call, if known - see ``ServiceDefaults.cost_per_call``.
-        status_code: The upstream's HTTP status; None when no response arrived."""
+        status_code: The upstream's HTTP status; None when no response arrived.
+        endpoint: Replaces the reserved endpoint when given - an AI call knows its provider and model only once it is made.
+        model: The AI model that answered, for an AI call.
+        input_tokens: Prompt tokens the provider reported, for an AI call.
+        output_tokens: Completion tokens the provider reported, for an AI call."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
 
+    outcome: dict[str, Any] = {"success": success, "response_ms": response_ms, "cost_estimate": cost_estimate, "status_code": status_code, "model": model, "input_tokens": input_tokens, "output_tokens": output_tokens}
+    if endpoint is not None:
+        outcome["endpoint"] = endpoint[:500]
     try:
-        ApiCallLog.objects.filter(pk=entry_pk).update(success=success, response_ms=response_ms, cost_estimate=cost_estimate, status_code=status_code)
+        ApiCallLog.objects.filter(pk=entry_pk).update(**outcome)
     except Exception:
         logger.exception("Failed to finalize API call log entry %s", entry_pk)
 
@@ -849,14 +876,37 @@ class ApiCallSlot:
     """One reserved call, filled in by the caller and recorded when the slot closes.
 
     Attributes:
+        service: The service key the slot reserved.
         success: Whether the call succeeded; left False, a call that raised is recorded as failed.
         cost_estimate: Estimated USD cost, when known.
         status_code: The upstream's HTTP status, when there was one.
+        endpoint: What was called, when that is only known once it is made; replaces the reserved endpoint.
+        model: The AI model that answered, for an AI call (``services.ai.call_log`` fills it).
+        input_tokens: Prompt tokens the provider reported, for an AI call.
+        output_tokens: Completion tokens the provider reported, for an AI call.
     """
 
+    service: str = ""
     success: bool = False
     cost_estimate: Decimal | None = None
     status_code: int | None = None
+    endpoint: str | None = None
+    model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+#: The slot the running code is inside, so an AI call made within one fills in its row instead of writing a second.
+_CURRENT_SLOT: ContextVar[ApiCallSlot | None] = ContextVar("api_call_slot", default=None)
+
+
+def current_call_slot() -> ApiCallSlot | None:
+    """The :func:`api_call_slot` the caller is running inside, if any.
+
+    Returns:
+        The open slot, or None.
+    """
+    return _CURRENT_SLOT.get()
 
 
 @contextmanager
@@ -885,15 +935,101 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
     require_egress(service)
     provider_health.check_admission(service, endpoint=endpoint)
     entry_pk = _reserve_call(service, endpoint=endpoint)
-    slot = ApiCallSlot()
+    slot = ApiCallSlot(service=service)
     started = time.monotonic()
+    token = _CURRENT_SLOT.set(slot)
     try:
         yield slot
     finally:
-        _finalize_call(entry_pk, success=slot.success, response_ms=int((time.monotonic() - started) * 1000), cost_estimate=slot.cost_estimate, status_code=slot.status_code)
+        _CURRENT_SLOT.reset(token)
+        _finalize_call(
+            entry_pk,
+            success=slot.success,
+            response_ms=int((time.monotonic() - started) * 1000),
+            cost_estimate=slot.cost_estimate,
+            status_code=slot.status_code,
+            endpoint=slot.endpoint,
+            model=slot.model,
+            input_tokens=slot.input_tokens,
+            output_tokens=slot.output_tokens,
+        )
 
 
 # Session wrapper
+
+
+@dataclass(frozen=True, slots=True)
+class CallNotes:
+    """What a gateway knows about its own request that the session cannot see.
+
+    Attributes:
+        model: The AI model the request asks, recorded on the row.
+        usage: Reads ``(input_tokens, output_tokens)`` from the response.
+    """
+
+    model: str | None = None
+    usage: Callable[[Any], tuple[int | None, int | None]] | None = None
+
+
+_CALL_NOTES: ContextVar[CallNotes | None] = ContextVar("api_call_notes", default=None)
+
+
+@contextmanager
+def annotate_calls(*, model: str | None = None, usage: Callable[[Any], tuple[int | None, int | None]] | None = None) -> Iterator[None]:
+    """Have the rate-limited session record an AI model and token counts on the rows of the requests made inside.
+
+    Args:
+        model: The AI model the requests ask.
+        usage: Reads ``(input_tokens, output_tokens)`` from a response; a reader that fails records none.
+
+    Yields:
+        None.
+    """
+    token = _CALL_NOTES.set(CallNotes(model=model, usage=usage))
+    try:
+        yield
+    finally:
+        _CALL_NOTES.reset(token)
+
+
+#: The largest value ``ApiCallLog.input_tokens`` and ``output_tokens`` hold.
+_MAX_TOKEN_COUNT = 2**31 - 1
+
+
+def valid_token_count(value: object) -> int | None:
+    """A token count a provider reported, or None when it is not one the ledger can hold.
+
+    A value the column rejects would lose the whole row, so a garbled count is left out instead.
+
+    Args:
+        value: What the provider sent.
+
+    Returns:
+        The count, or None for anything but an integer from 0 to 2**31 - 1.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _MAX_TOKEN_COUNT:
+        return None
+    return value
+
+
+def _reported_usage(reader: Callable[[Any], tuple[int | None, int | None]] | None, response: Any) -> tuple[int | None, int | None]:
+    """The ``(input, output)`` token counts a gateway reads from a response, or ``(None, None)``.
+
+    Args:
+        reader: The gateway's reader, or None when it passed none.
+        response: The upstream's response.
+
+    Returns:
+        Whatever the reader found; a reader that fails or answers in the wrong shape leaves the counts unrecorded, never the call failed.
+    """
+    if reader is None:
+        return None, None
+    try:
+        input_tokens, output_tokens = reader(response)
+    except Exception:
+        logger.debug("Could not read token usage from a response", exc_info=True)
+        return None, None
+    return valid_token_count(input_tokens), valid_token_count(output_tokens)
 
 
 class _RateLimitedSession:
@@ -950,6 +1086,9 @@ class _RateLimitedSession:
             raise ExternalCallForbiddenError(f"{self._service_key}: {method}")
         # First: a refusal by environment is neither a rejected input, a throttle nor a provider's ill health.
         require_egress(self._service_key)
+        notes = _CALL_NOTES.get()
+        log_model = notes.model if notes else None
+        log_usage = notes.usage if notes else None
         # Before the breaker and the reservation: an input no API can answer is "no data" whatever else is true.
         check_request_parameters(self._service_key, params=kwargs.get("params"), json=kwargs.get("json"))
         check_task_deadline()
@@ -983,7 +1122,8 @@ class _RateLimitedSession:
             # necessarily charged either way, so estimating a cost for it would overstate real
             # spend.
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
-            _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code)
+            input_tokens, output_tokens = _reported_usage(log_usage, resp)
+            _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code, model=log_model, input_tokens=input_tokens, output_tokens=output_tokens)
             if breaker is not None:
                 breaker.observe(str(url), kwargs.get("params"), resp)
             if is_unanswered_status(resp.status_code):
@@ -991,7 +1131,7 @@ class _RateLimitedSession:
             return resp
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
-            _finalize_call(entry_pk, success=False, response_ms=elapsed_ms)
+            _finalize_call(entry_pk, success=False, response_ms=elapsed_ms, model=log_model)
             record_unanswered(self._service_key)
             raise
 

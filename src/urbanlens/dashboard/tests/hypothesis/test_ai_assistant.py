@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from unittest import mock
 from unittest.mock import patch
 
@@ -50,7 +49,6 @@ class _StubGateway:
         self.prompts: list[str] = []
         self.timeouts: list[float | None] = []
         self.model = "gpt-5-nano"
-        self.cost = Decimal("0.01")
 
     def send_with_tools(self, prompt: str, tools: list, *, timeout: float | None = None) -> InferenceResponse | None:
         self.prompts.append(prompt)

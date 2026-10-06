@@ -73,8 +73,52 @@ Not held here:
 - OpenWeatherMap's `data/2.5` plan refuses past its limit rather than billing.
 - The browser's Mapbox token spends map loads directly, and nothing server-side can count them.
 - The AI providers (OpenAI, Anthropic, Cloudflare Workers AI) have no free tier to hold them to.
-  Every AI feature reserves an `api_call_slot` under its own name, so each provider call is one
-  `ApiCallLog` row (the assistant one per round); none of them is capped (D26).
+  They are logged, not held: see "AI calls" below.
+
+### AI calls
+
+AI runs on Cloudflare Workers Paid through a very cheap model, and about $10 a month is accepted. So
+no spend ceiling holds an AI call, and nothing here adds one: a call is logged, never refused for spend.
+That is Jess's decision; spend is read from the log, not enforced. Every environment may call AI (D26).
+Each feature reserves an `api_call_slot` under its own name, so its `ApiRateLimit` switch can turn it
+off; the six rows added for D26 carry only a per-minute guard against a runaway loop.
+
+Every AI call writes one `ApiCallLog` row through `rate_limiter.log_api_call`, or fills in the
+reserved row where the caller already holds an `api_call_slot` (so there is never a second one):
+
+| Column | Holds |
+|---|---|
+| `service` | The feature, as in the table below; `ai_<provider>` for a gateway built without one |
+| `model` | The model id the provider names, e.g. `@cf/meta/llama-3.1-8b-instruct` |
+| `endpoint` | `provider:model`, so the provider reads off the row |
+| `created`, `response_ms` | When the call was made, and how long it took |
+| `success`, `status_code` | Whether the provider answered; 502 when `ai-inference` reports the provider call failed, otherwise empty |
+| `input_tokens`, `output_tokens` | What the provider reported; empty when it reports none (a classifier, some Cloudflare models) |
+| `cost_estimate` | This call's tokens at the model's price in `MODEL_COSTS`; empty for a model with no price on file |
+
+No row holds a prompt, an image or an answer. A call refused before it was made for an input that
+could not return data keeps its `was_rejected_input` row, and a call the gateway never sent (a prompt
+over the token limit) writes none.
+
+| Feature | `service` | Row written by |
+|---|---|---|
+| Assistant, one row per provider round | `assistant` | the reserved row (D26), filled in by `LLMGateway` |
+| Link extraction | `link_extraction` | the reserved row (D26), filled in by `LLMGateway` |
+| Document pin import | `document_pin_import` | the reserved row (D26), filled in by `LLMGateway` |
+| Category suggestions | `category_suggestions` | the reserved row (D26), filled in by `LLMGateway` |
+| Label style suggestions | `label_style_suggestions` | the reserved row (D26), filled in by `LLMGateway` |
+| Trip suggestions | `trip_suggestions` | the reserved row (D26), filled in by `LLMGateway` |
+| Trivia generation | `trivia_generation` | the reserved row (D26), filled in by `LLMGateway` |
+| Trivia moderation, answer check and wiki incorporation; article expansion and safety | the feature's own name | the reserved row, filled in by `LLMGateway`; each is also held by its `ApiRateLimit` |
+| Photo keywords (vision) | `ai_photo_keywords` | the reserved row, filled in by `vision.py` |
+| Photo classifier | `cloudflare_image_classifier` | the reserved row, filled in by `vision.py` |
+| Ollama photo keywords (self-hosted) | `ollama` | the gateway session, with `rate_limiter.annotate_calls` |
+
+`LLMGateway` writes the row in `_get_response`, so a provider added to it is logged without further
+code. `ai-inference` has no database and writes its own request line to stdout only. Not measured:
+what a month of these rows adds up to.
+
+VirusTotal's public API bars commercial use. UrbanLens is noncommercial, so its terms are met.
 
 ### Changing it
 

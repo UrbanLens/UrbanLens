@@ -17,7 +17,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.core.egress import GATED_BACKGROUND_TASKS, UNLEDGERED_SERVICES, explicit_category
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY, all_service_defaults
-from urbanlens.UrbanLens.egress import BEAT_EGRESS, BeatEgress
+from urbanlens.UrbanLens.egress import BEAT_EGRESS, BeatEgress, EgressCategory
 
 _SRC = pathlib.Path(__file__).resolve().parents[3]
 
@@ -109,6 +109,22 @@ class EveryServiceIsClassifiedTests(SimpleTestCase):
         self.assertIn("trivia_generation", keys)
         missing = sorted(f"{key} at {where}" for key, where in keys.items() if explicit_category(key) is None)
         self.assertEqual(missing, [])
+
+    def test_every_ai_provider_s_fallback_key_is_classified(self) -> None:
+        """An ``LLMGateway`` built without a feature logs its calls as ``ai_<provider>``."""
+        from urbanlens.dashboard.services.ai.gateway import LLMGateway
+
+        _import_everything_under("urbanlens.dashboard.services.ai")
+        pending, providers = list(LLMGateway.__subclasses__()), set()
+        while pending:
+            cls = pending.pop()
+            pending.extend(cls.__subclasses__())
+            if "PROVIDER" in vars(cls):
+                providers.add(cls.PROVIDER)
+        self.assertGreaterEqual(providers, {"openai", "cloudflare", "anthropic"})
+        for provider in providers:
+            with self.subTest(provider=provider):
+                self.assertIs(explicit_category(f"ai_{provider}"), EgressCategory.AI)
 
     def test_every_path_that_bypasses_the_session_says_how_it_is_held(self) -> None:
         for service, entry in UNLEDGERED_SERVICES.items():

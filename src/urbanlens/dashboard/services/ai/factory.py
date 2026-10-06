@@ -32,7 +32,7 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, prov
     Reads provider, model, and feature-flag state from SiteSettings so the site admin can control AI behaviour without a code deploy.
 
     Args:
-        feature: Optional feature key (see ``_FEATURE_FIELDS``).
+        feature: Optional feature key (see ``_FEATURE_FIELDS``). The gateway's calls are logged under it.
         profile: Optional profile the call is being made on behalf of.
         provider: Optional provider override (``"openai"``, ``"cloudflare"``, or ``"anthropic"``).
         **kwargs: Extra keyword arguments forwarded to the gateway constructor (e.g. ``instructions``, ``formatting``).
@@ -69,19 +69,19 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, prov
     if provider == "openai":
         from urbanlens.dashboard.services.ai.openai import OpenAIGateway
 
-        return OpenAIGateway(model=site.openai_model or None, **kwargs)
+        return OpenAIGateway(model=site.openai_model or None, feature=feature, **kwargs)
 
     if provider == "cloudflare":
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
 
-        return CloudflareGateway(model=site.cloudflare_model or None, **kwargs)
+        return CloudflareGateway(model=site.cloudflare_model or None, feature=feature, **kwargs)
 
     if provider == "anthropic":
         from urbanlens.dashboard.services.ai.anthropic import AnthropicGateway
 
-        return AnthropicGateway(model=site.anthropic_model or None, **kwargs)
+        return AnthropicGateway(model=site.anthropic_model or None, feature=feature, **kwargs)
 
     logger.warning("Unknown AI provider '%s'; falling back to Cloudflare", provider)
     from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
 
-    return CloudflareGateway(**kwargs)
+    return CloudflareGateway(feature=feature, **kwargs)
