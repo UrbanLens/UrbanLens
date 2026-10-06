@@ -23750,10 +23750,9 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
   `maps._CsvRecordBudget`) was added on 2026-10-05 in `b7775f3bf` and `ac5de4eff`, after the ruling and against it. It
   is removed. `test_import_streaming_parsers.py::ALargeCsvRecordIsReadTests` reads a 1.2 MB row, a 2 MB header and a
   1.5 MB record quoted across 300,000 lines, each previewing its pin without failing the file, and
-  `LinesTests::test_a_line_has_no_length_bound` reads a 3 MiB line whole. The one per-cell limit left is `csv`'s own
-  128 KiB field limit, which was never raised: a cell past it still raises `csv.Error` and fails only its own file
-  (`AnOversizedCsvCellFailsOnlyItsFileTests`, P282). It is the standard library's default, not a bound this code
-  sets; whether to raise it is not decided here.
+  `LinesTests::test_a_line_has_no_length_bound` reads a 3 MiB line whole. `csv`'s own 128 KiB field limit was
+  a per-cell cap too, so `DashboardConfig.ready` lifts it process-wide to 2**31 - 1
+  (`ACsvCellPastTheStdlibLimitIsReadTests`); a `csv.Error` from any other cause still fails only its own file (P282).
 - **History grows with the file, by design.** Location History's visits and routes and GPX's routes
   are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
   16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates

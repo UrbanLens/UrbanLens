@@ -14,6 +14,7 @@ than read as ``nan``.
 
 from __future__ import annotations
 
+import csv
 import datetime
 import io
 import itertools
@@ -471,18 +472,36 @@ class LocationHistoryAgreesWithJsonLoadsTests(SimpleTestCase):
         self.assertEqual(parse.history.counts()["visits"], 0)
 
 
-class AnOversizedCsvCellFailsOnlyItsFileTests(SimpleTestCase):
-    """csv refuses a cell over its 128 KiB field limit with ``csv.Error``, which no per-file handler named."""
+class ACsvCellPastTheStdlibLimitIsReadTests(SimpleTestCase):
+    """``csv`` refuses a cell over 128 KiB by default - a per-element cap of its own, which Jess's P95 ruling (no
+    element is capped) rules out. The limit is lifted at startup; a ``csv.Error`` still fails only its own file."""
 
-    def test_the_other_files_in_the_upload_still_preview(self) -> None:
+    _KML = (
+        b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        b"<Placemark><name>Dam</name><Point><coordinates>-74.1,40.1</coordinates></Point></Placemark>"
+        b"</Document></kml>"
+    )
+
+    def test_a_cell_over_128_kib_previews(self) -> None:
         oversized = b'name,latitude,longitude,description\n"Mill",40.5,-74.5,"' + b"long " * 40_000 + b'"\n'
-        kml = (
-            b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
-            b"<Placemark><name>Dam</name><Point><coordinates>-74.1,40.1</coordinates></Point></Placemark>"
-            b"</Document></kml>"
+
+        parse = GoogleMapsGateway(api_key="").parse_for_preview(
+            [("notes.csv", oversized), ("dam.kml", self._KML)], Profile()
         )
 
-        parse = GoogleMapsGateway(api_key="").parse_for_preview([("notes.csv", oversized), ("dam.kml", kml)], Profile())
+        self.assertGreater(len(oversized), 128 * 1024)
+        self.assertEqual(parse.failed_formats, [])
+        self.assertEqual(sorted(pin["name"] for listed in parse.lists for pin in listed["pins"]), ["Dam", "Mill"])
+
+    def test_a_csv_error_still_fails_only_its_file(self) -> None:
+        notes = b"name,latitude,longitude\nMill,40.5,-74.5\n"
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.maps.csv.DictReader", side_effect=csv.Error("refused")
+        ):
+            parse = GoogleMapsGateway(api_key="").parse_for_preview(
+                [("notes.csv", notes), ("dam.kml", self._KML)], Profile()
+            )
 
         self.assertEqual(parse.failed_formats, ["csv"])
         self.assertEqual([pin["name"] for listed in parse.lists for pin in listed["pins"]], ["Dam"])
