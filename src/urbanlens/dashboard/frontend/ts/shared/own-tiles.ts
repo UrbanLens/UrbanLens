@@ -22,7 +22,7 @@ import type { FetchInit } from "./site-runtime";
  * Requests for this deployment's own tiles in flight at once, across every map on the page.
  *
  * Kept under the site's upstream budget, which is `min(basemap_tile_upstream_concurrency, gunicorn
- * --threads)` x `WEB_CONCURRENCY` - 4 x 2 on k3s-staging, 4 x 3 on the compose default. Six fits
+ * --threads)` x `WEB_CONCURRENCY` - 4 x 2 on staging, 4 x 3 on the compose default. Six fits
  * inside the smallest of those, which is the point: a page that asks for more slots than exist gets
  * a 503 and draws a grey square, and the retry costs more than the request would have.
  * One page is not entitled to the whole budget, but it is the only number here worth spending, and

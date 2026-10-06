@@ -1,6 +1,6 @@
 """A provider that refused for now is not a provider that found nothing.
 
-Reproduces the HRSH courtyard pin on k3s-staging (41.73266, -73.92736): REData's Dutchess budget was
+Reproduces the HRSH courtyard pin on staging (41.73266, -73.92736): REData's Dutchess budget was
 spent, the parcel lookup was refused, and the miss was stamped as "no parcel here" for the whole
 boundary cache window. The same point sits inside the campus tax parcel.
 """

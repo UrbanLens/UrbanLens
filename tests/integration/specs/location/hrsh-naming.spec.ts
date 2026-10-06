@@ -1,5 +1,5 @@
 /**
- * The same property from two points: the requirement pin and the courtyard point Jess pinned on k3s-staging.
+ * The same property from two points: the requirement pin and the courtyard point Jess pinned on staging.
  *
  * Staging drew a circle at the courtyard, titled its wiki "Courtyard Drive" (a service road), aliased the parcel with
  * the nearest CRIS building's name, found no Wikipedia article, and showed a single building in the CRIS panel. Every

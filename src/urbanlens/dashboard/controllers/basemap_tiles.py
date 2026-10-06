@@ -21,7 +21,7 @@ Caching follows the upstream's status contract rather than treating every respon
 The concurrency bound is not incidental. A viewport is ~30 tiles and the browser asks for all of
 them at once, so on a cold cache the proxy can hold every request thread in the process at once,
 for as long as the upstream takes per tile. Unbounded, one map load stalls the whole site. What
-that costs now depends on which upstream the layer takes: measured on ``k3s-staging`` in September
+that costs now depends on which upstream the layer takes: measured on staging in September
 2026, Esri answers a satellite tile in 0.09s where REData took 0.36-0.56s for the same tile.
 """
 

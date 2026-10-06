@@ -1,6 +1,6 @@
 """An article whose coordinates are on the pin's parcel is that parcel's article.
 
-Reproduces the HRSH courtyard pin on k3s-staging: the lookup ran with the name hint "Courtyard Drive" and the
+Reproduces the HRSH courtyard pin on staging: the lookup ran with the name hint "Courtyard Drive" and the
 locality "Fairview" (OSM's census-designated place), the article's lead names neither, and the match was cached
 as a miss, though Wikipedia places Hudson River State Hospital at 41.73306, -73.92833 - on the campus parcel.
 """

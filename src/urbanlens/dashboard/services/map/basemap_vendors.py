@@ -2,7 +2,7 @@
 
 REData publishes the basemap catalogue and serves the tiles, but none of the raster layers it
 offers needs its API key - every one of them is a public, keyless vendor endpoint that REData is
-itself fetching. Measured from a ``k3s-staging`` pod in September 2026 over 8 cold coordinates a
+itself fetching. Measured from a staging pod in September 2026 over 8 cold coordinates a
 side, a satellite tile cost 0.490s through REData against 0.238s from Esri. Against a viewport of
 ~30 tiles and a handful of upstream slots, halving the per-tile cost is the difference between
 filling and timing out.

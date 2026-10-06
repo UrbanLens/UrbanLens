@@ -1,6 +1,6 @@
 """The ranked metric for a place's automatic name, and the alias rules that go with it (D20).
 
-Reproduces the HRSH courtyard pin on k3s-staging (41.73266, -73.92736): the wiki was titled "Courtyard Drive"
+Reproduces the HRSH courtyard pin on staging (41.73266, -73.92736): the wiki was titled "Courtyard Drive"
 (Nominatim's reverse geocode, a private service road) while the National Register listing containing the point
 was "Hudson River State Hospital, Main Building", and the parcel carried a CRIS building's name found by radius.
 """
@@ -244,7 +244,7 @@ class TitleTests(_Fixture):
         self.assertEqual(self.wiki.name, _NRHP)
 
     def _road_named_as_on_staging(self) -> None:
-        """The state k3s-staging reached: the wiki and the Location both named after the service road."""
+        """The state staging reached: the wiki and the Location both named after the service road."""
         from urbanlens.dashboard.services.wiki.wiki_naming import adopt_public_name
 
         adopt_public_name(self.wiki, _ROAD, source="nominatim")

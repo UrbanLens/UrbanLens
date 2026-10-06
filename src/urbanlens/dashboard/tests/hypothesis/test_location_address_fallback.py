@@ -1,6 +1,6 @@
 """A Location Google cannot address still gets its municipality, county, state and country from OpenStreetMap.
 
-k3s-staging's HRSH courtyard Location had no city, state or country, so its searches and its Wikipedia match
+staging's HRSH courtyard Location had no city, state or country, so its searches and its Wikipedia match
 had no locality to lean on.
 """
 

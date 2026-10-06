@@ -52,7 +52,7 @@ building's name comes back if its parcel turns out to hold only that building.
 
 ## Rationale
 
-On k3s-staging the HRSH courtyard pin (41.73266, -73.92736, P145) was titled **"Courtyard Drive"**. That
+On staging the HRSH courtyard pin (41.73266, -73.92736, P145) was titled **"Courtyard Drive"**. That
 was Nominatim's reverse geocode: the smallest OSM object under the point, a private service road
 (way/352353227). It won because `nominatim` is first in the default priority and nothing distinguished a
 road from a place. The same name was the Location's `official_name`, which `Pin.get_unique_search_name`
