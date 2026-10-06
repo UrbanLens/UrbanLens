@@ -58,6 +58,11 @@ REASON_SOURCE_RATE_LIMITED = "source_rate_limited"
 #: single-source endpoints (demographics, the places family, cultural-resource
 #: detail) rather than the tiered parcel pipeline.
 REASON_RATE_LIMITED = "rate_limited"
+#: What refused the call was the share of REData's budget the requesting key's environment may spend, not REData's
+#: whole budget. REData answers it where it would otherwise answer ``REASON_SOURCE_RATE_LIMITED`` (the parcel lookup)
+#: or ``REASON_RATE_LIMITED`` (the single-source endpoints): nothing was asked of the source, so it is just as
+#: transient and never an answer about the place.
+REASON_KEY_BUDGET_EXHAUSTED = "key_budget_exhausted"
 #: REData refused the key for the endpoint (a scope it lacks). Says nothing about the place asked about.
 REASON_FORBIDDEN = "forbidden"
 #: No source behind a near-point endpoint answered (cultural resources' 503).
@@ -73,7 +78,7 @@ REASON_ATTACHMENT_UNAVAILABLE = "attachment_unavailable"
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
 #: stores a payload for one of these turns a passing outage into a blank card for the whole
 #: ``external_data_cache_days`` window.
-TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED, REASON_ALL_PROVIDERS_UNAVAILABLE})
+TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED, REASON_KEY_BUDGET_EXHAUSTED, REASON_ALL_PROVIDERS_UNAVAILABLE})
 _SETTLED_EXTRACTION_REFUSALS: frozenset[str] = frozenset({REASON_NOT_EXTRACTABLE, REASON_EXTRACTION_UNAVAILABLE, REASON_ATTACHMENT_UNAVAILABLE})
 
 

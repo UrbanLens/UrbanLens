@@ -16,19 +16,21 @@ from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
-#: REData's own error code for "Places API (New) request budget is exhausted right now" - a known,
+#: REData's error codes for "Places API (New) request budget is exhausted right now" - a known,
 #: expected, self-clearing condition (REData enforces its own budget against Google, independent of
-#: anything in this codebase's rate_limiter), not a bug worth a traceback.
+#: anything in this codebase's rate_limiter), not a bug worth a traceback. ``rate_limited`` is REData's
+#: whole budget spent; ``key_budget_exhausted`` is the share of it this key's environment may spend. The
+#: place was not asked about either way, and the remedy for both is to wait.
 #: Always paired with a 503.
-_RATE_LIMITED_ERROR = "rate_limited"
+_BUDGET_REFUSED_ERRORS = frozenset({"rate_limited", "key_budget_exhausted"})
 
 
-def _is_rate_limited_body(body: Any) -> bool:
-    return isinstance(body, dict) and body.get("error") == _RATE_LIMITED_ERROR
+def _is_budget_refusal_body(body: Any) -> bool:
+    return isinstance(body, dict) and body.get("error") in _BUDGET_REFUSED_ERRORS
 
 
 class PlacesRateLimitedError(GatewayRateLimitedError, UpstreamBusyError):
-    """REData's Places budget is spent for now; a caller may retry after ``retry_after`` seconds."""
+    """REData's Places budget, or this key's share of it, is spent for now; a caller may retry after ``retry_after`` seconds."""
 
 
 def _rows(body: Any) -> list[dict[str, Any]]:
@@ -111,7 +113,7 @@ class RedataPlacesGateway(Gateway):
             message: The exception message.
 
         Returns:
-            A :class:`PlacesRateLimitedError` carrying REData's ``Retry-After`` when REData's body identifies its own exhausted request budget, an ``UpstreamBusyError`` held for as long as the breaker holds the endpoint when REData refused the key, else the plain, less specific ``GatewayRequestError``.
+            A :class:`PlacesRateLimitedError` carrying REData's ``Retry-After`` when REData's body identifies an exhausted request budget (its own, or this key's share of it), an ``UpstreamBusyError`` held for as long as the breaker holds the endpoint when REData refused the key, else the plain, less specific ``GatewayRequestError``.
         """
         if response.status_code in RedataBreaker.REFUSED_STATUSES:
             return UpstreamBusyError(f"{message} REData refused this key; it may lack the endpoint's scope.", retry_after=RedataBreaker.REFUSED_SECONDS)
@@ -119,7 +121,7 @@ class RedataPlacesGateway(Gateway):
             body = response.json()
         except ValueError:
             body = None
-        if _is_rate_limited_body(body):
+        if _is_budget_refusal_body(body):
             # Without a Retry-After, as long as the breaker holds a busy source.
             wait = upstream_retry_after(response, default=RedataBreaker.SOURCE_BUSY_SECONDS) or RedataBreaker.SOURCE_BUSY_SECONDS
             return PlacesRateLimitedError(message, retry_after=wait)

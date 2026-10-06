@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import math
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from celery.exceptions import SoftTimeLimitExceeded
 from django.db.models import Q
@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.geo.geo_boundary import USA
@@ -36,6 +37,7 @@ from urbanlens.dashboard.services.locations.enrichment import (
     self_reported_skip,
     stagger_seconds,
 )
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
@@ -504,6 +506,29 @@ class RunEnrichmentCycleTests(TestCase):
         self.assertEqual(len(source.enriched_pks), 1)
         self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
         self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
+
+    def test_redata_refusing_for_either_budget_stops_source_gracefully(self) -> None:
+        """REData's ``rate_limited`` (its own budget) and ``key_budget_exhausted`` (this key's share of it) both end the run."""
+        for index in range(3):
+            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                refused = Mock(status_code=503, headers={}, text="")
+                refused.json.return_value = {"error": error, "message": "spent"}
+                session = Mock()
+                session.get.return_value = refused
+                gateway = RedataPlacesGateway(
+                    base_url="https://redata.example.test", api_key="test-key", session=session
+                )
+                with self.assertRaises(GatewayRateLimitedError) as raised:
+                    gateway.get_place("p1")
+
+                source = _RecordingSource(fail_after=1, fail_with=raised.exception)
+                summary = self._run(source)
+
+                self.assertEqual(len(source.enriched_pks), 1)
+                self.assertEqual(summary["sources"]["recording"]["skipped"], "rate_limited")
+                self.assertEqual(summary["sources"]["recording"]["enriched"], 1)
 
     def test_service_disabled_on_api_limits_page_skips_source(self) -> None:
         baker.make(Pin, profile=_make_profile(), location=_make_location())

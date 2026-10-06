@@ -498,7 +498,8 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
                     break
                 except GatewayRateLimitedError as exc:
                     # The upstream service reported its own request budget is exhausted (e.g.
-                    # REData's Google Places budget) - expected and self-clearing, not a bug.
+                    # REData's Google Places budget, or this key's share of it) - expected and
+                    # self-clearing, not a bug.
                     logger.info("Enrichment source %s stopped early: %s", source.key, exc)
                     entry["skipped"] = "rate_limited"
                     break

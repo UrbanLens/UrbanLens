@@ -14,11 +14,14 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-_RATE_LIMITED = {"error": "rate_limited", "message": "Places API (New) request budget is exhausted right now."}
+_BUDGET_REFUSED = tuple(
+    {"error": error, "message": "Places API (New) request budget is exhausted right now."} for error in BUDGET_REFUSALS
+)
 
 
 def _response(status_code: int, body: object, headers: dict[str, str] | None = None) -> mock.Mock:
@@ -183,7 +186,10 @@ def _every_call(gateway: RedataPlacesGateway) -> dict[str, Callable[[], Any]]:
 
 
 class RateLimitedTests(SimpleTestCase):
-    """REData's ``503 rate_limited`` is its Places budget spent; the caller is told how long to leave it."""
+    """REData's ``503 rate_limited`` is its Places budget spent, and ``503 key_budget_exhausted`` this key's share of it.
+
+    The caller is told how long to leave either, and neither is an answer about the place.
+    """
 
     def _raised(self, call: str, response: mock.Mock) -> GatewayRequestError:
         session = mock.Mock()
@@ -193,23 +199,27 @@ class RateLimitedTests(SimpleTestCase):
         return caught.value
 
     def test_the_wait_redata_named_is_passed_on(self) -> None:
-        for call in _every_call(_gateway(mock.Mock())):
-            with self.subTest(call):
-                raised = self._raised(call, _response(503, _RATE_LIMITED, {"Retry-After": "120"}))
+        for body in _BUDGET_REFUSED:
+            for call in _every_call(_gateway(mock.Mock())):
+                with self.subTest(call, error=body["error"]):
+                    raised = self._raised(call, _response(503, body, {"Retry-After": "120"}))
 
-                assert isinstance(raised, UpstreamBusyError)
-                self.assertEqual(raised.retry_after, 120)
-                self.assertIsInstance(raised, GatewayRateLimitedError, "an enrichment run still stops at it")
+                    assert isinstance(raised, UpstreamBusyError)
+                    self.assertEqual(raised.retry_after, 120)
+                    self.assertIsInstance(raised, GatewayRateLimitedError, "an enrichment run still stops at it")
 
     def test_without_a_wait_it_holds_off_as_long_as_the_breaker_does(self) -> None:
-        for call in _every_call(_gateway(mock.Mock())):
-            with self.subTest(call):
-                raised = self._raised(call, _response(503, _RATE_LIMITED))
+        for body in _BUDGET_REFUSED:
+            for call in _every_call(_gateway(mock.Mock())):
+                with self.subTest(call, error=body["error"]):
+                    raised = self._raised(call, _response(503, body))
 
-                self.assertIsInstance(raised, GatewayRateLimitedError)
-                assert isinstance(raised, UpstreamBusyError)
-                self.assertEqual(raised.retry_after, RedataBreaker.SOURCE_BUSY_SECONDS)
-                self.assertTrue(raised.is_outage, "a spent budget says nothing about the place, so nothing is cached")
+                    self.assertIsInstance(raised, GatewayRateLimitedError)
+                    assert isinstance(raised, UpstreamBusyError)
+                    self.assertEqual(raised.retry_after, RedataBreaker.SOURCE_BUSY_SECONDS)
+                    self.assertTrue(
+                        raised.is_outage, "a spent budget says nothing about the place, so nothing is cached"
+                    )
 
     def test_other_failures_are_unchanged(self) -> None:
         failures = (

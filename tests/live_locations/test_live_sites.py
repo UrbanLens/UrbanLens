@@ -124,6 +124,8 @@ class TestLiveRedataGet:
         ("body", "headers"),
         [
             ({"error": "source_rate_limited", "message": "busy"}, {}),
+            ({"error": "rate_limited", "message": "busy"}, {}),
+            ({"error": "key_budget_exhausted", "message": "this key's share is spent"}, {}),
             ({"error": "source_error", "message": "upstream timed out"}, {}),
             ({"error": "anything"}, {"Retry-After": "2"}),
         ],
@@ -134,6 +136,16 @@ class TestLiveRedataGet:
         get.side_effect = [_response(503, body, headers), _response(200, {"results": []})]
 
         assert client.get("parcels/").status == 200
+
+    @pytest.mark.parametrize("error", ["rate_limited", "key_budget_exhausted"])
+    def test_a_spent_budget_whichever_it_was_is_inconclusive_not_an_answer(
+        self, client: LiveRedata, get: mock.Mock, error: str
+    ) -> None:
+        client.max_wait_seconds = 0
+        get.return_value = _response(503, {"error": error})
+
+        with pytest.raises(InconclusiveError):
+            client.get("places/")
 
     def test_still_busy_when_the_wait_runs_out_is_inconclusive(self, client: LiveRedata, get: mock.Mock) -> None:
         client.max_wait_seconds = 0
@@ -179,3 +191,18 @@ class TestSettledReport:
         }
 
         assert settled(results)["athens"]["pipeline"]["outcome"] == "passed"
+
+
+class TestUnansweredProviders:
+    @pytest.mark.parametrize("status", ["rate_limited", "key_budget_exhausted", "unavailable", "not_cached"])
+    def test_a_provider_that_was_not_heard_from_is_named(self, status: str) -> None:
+        providers = [{"provider": "heard", "status": "ok"}, {"provider": "silent", "status": status}]
+
+        answer = Answer(200, {"complete": False, "results": [], "providers": providers}, 0.1)
+
+        assert answer.unanswered_providers == ["silent"]
+
+    def test_a_provider_that_answered_is_not(self) -> None:
+        answer = Answer(200, {"results": [], "providers": [{"provider": "heard", "status": "ok"}]}, 0.1)
+
+        assert answer.unanswered_providers == []

@@ -159,7 +159,7 @@ class RedataImageryGateway(RedataLocationContextGateway):
             The materialized result row (same shape as a ``GET /imagery/`` result - pass its ``uuid`` to :meth:`download_archived_copy` to fetch the bytes), or ``None`` when REData reports there is no image for this exact date - either because it falls...
 
         Raises:
-            LocationContextUnavailableError: The request failed outright, or REData reports a transient outage (``imagery_unavailable``/ ``rate_limited``) - retryable, but not by this call.
+            LocationContextUnavailableError: The request failed outright, or REData reports a transient outage (``imagery_unavailable``/ ``rate_limited``/ ``key_budget_exhausted``) - retryable, but not by this call.
         """
         base_url = self.base_url
         if base_url is None:

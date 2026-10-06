@@ -34,8 +34,10 @@ REASON_ALL_PROVIDERS_UNAVAILABLE = "all_providers_unavailable"
 REASON_SOURCE_ERROR = "source_error"
 #: REData refused the key for the endpoint (401/403): a scope it lacks, not anything about the place asked about.
 REASON_FORBIDDEN = "forbidden"
-#: A provider status in REData's envelope meaning the provider was not heard from, so the answer is a floor.
-_UNANSWERED_STATUSES = frozenset({"unavailable", "rate_limited", "not_cached"})
+#: A provider status in REData's envelope meaning the provider was not heard from, so the answer is a floor. ``rate_limited``
+#: is REData's own budget saying no; ``key_budget_exhausted`` is the share of it this key's environment may spend. Neither
+#: asked the source, and the remedy for both is to wait, so they are one case.
+_UNANSWERED_STATUSES = frozenset({"unavailable", "rate_limited", "key_budget_exhausted", "not_cached"})
 #: The largest near-point ``limit`` REData accepts; it answers 400 for more.
 MAX_NEAR_POINT_LIMIT = 200
 
@@ -129,7 +131,7 @@ class LocationContextEnvelope:
 
     Attributes:
         count: Number of entries in ``results``.
-        complete: False when any source covering the coordinate failed to answer (``unavailable``/``rate_limited`` in ``providers``) - the results are a floor, not a total.
+        complete: False when any source covering the coordinate failed to answer (``unavailable``/``rate_limited``/``key_budget_exhausted`` in ``providers``) - the results are a floor, not a total.
         results: The provider-tagged result dicts - shape is endpoint-specific, see each domain gateway's own accessor.
         providers: Per-provider status entries (``provider``, ``status``, ``count``, ``message``, ``radius_meters``) - empty for the few endpoints with no provider registry behind them."""
 

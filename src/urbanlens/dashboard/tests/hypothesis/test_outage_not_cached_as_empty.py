@@ -16,7 +16,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, RedataConfiguredMixin
 
 
 class SearxngImageOutageTests(RedataConfiguredMixin, TestCase):
@@ -634,6 +634,8 @@ class SourceOutageClassificationTests(SimpleTestCase):
             LocationContextUnavailableError("source_error", "503"),
             PropertyRecordsUnavailableError("source_error", "refused"),
             PropertyRecordsUnavailableError("source_rate_limited", ""),
+            *(PropertyRecordsUnavailableError(error, "") for error in BUDGET_REFUSALS),
+            *(LocationContextUnavailableError(error, "") for error in BUDGET_REFUSALS),
         ):
             with self.subTest(exc=repr(exc)):
                 self.assertTrue(is_source_outage(exc))

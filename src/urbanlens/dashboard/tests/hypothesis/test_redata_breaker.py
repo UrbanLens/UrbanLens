@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import Pr
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import UpstreamThrottledError, _RateLimitedSession
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 _BASE = "https://redata.example.test/api/v1/"
 _NEARBY = f"{_BASE}places/search/nearby/"
@@ -145,38 +146,64 @@ class ThrottlePoolsTests(TestCase):
 
 
 class BusySourceTests(TestCase):
-    """A 503 ``rate_limited`` is one of REData's own sources out of budget, not the key."""
+    """A 503 ``rate_limited`` is one of REData's own sources out of budget, not the key.
+
+    A 503 ``key_budget_exhausted`` is the key's environment's share of that budget spent. It backs the source off
+    in exactly the same way, so each test below runs for both.
+    """
 
     def test_it_stops_calls_to_that_endpoint(self) -> None:
-        busy = {"error": "rate_limited", "message": "Places API (New) request budget is exhausted right now."}
-        _session("redata_places", _response(503, busy)).get(_NEARBY)
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                cache.clear()
+                busy = {"error": error, "message": "Places API (New) request budget is exhausted right now."}
+                _session("redata_places", _response(503, busy)).get(_NEARBY)
 
-        with pytest.raises(UpstreamThrottledError) as caught:
-            _session("redata_places").get(_NEARBY)
+                with pytest.raises(UpstreamThrottledError) as caught:
+                    _session("redata_places").get(_NEARBY)
 
-        self.assertGreaterEqual(caught.value.retry_after, 59)
+                self.assertGreaterEqual(caught.value.retry_after, 59)
+
+    def test_a_wait_redata_named_is_honoured(self) -> None:
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                cache.clear()
+                busy = {"error": error, "message": "This API key's share is spent today (UTC)."}
+                _session("redata_places", _response(503, busy, {"Retry-After": "7200"})).get(_NEARBY)
+
+                with pytest.raises(UpstreamThrottledError) as caught:
+                    _session("redata_places").get(_NEARBY)
+
+                # Longer than the minute a refusal naming no wait is held, up to the breaker's own ceiling.
+                self.assertGreaterEqual(caught.value.retry_after, 3599)
 
     def test_it_leaves_other_endpoints_callable(self) -> None:
-        busy = {"error": "rate_limited", "message": "Places API (New) request budget is exhausted right now."}
-        _session("redata_places", _response(503, busy)).get(_NEARBY)
-        parcels = _session("redata_api", _response(200, {}))
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                cache.clear()
+                busy = {"error": error, "message": "Places API (New) request budget is exhausted right now."}
+                _session("redata_places", _response(503, busy)).get(_NEARBY)
+                parcels = _session("redata_api", _response(200, {}))
 
-        parcels.get(_PARCEL)
+                parcels.get(_PARCEL)
 
-        parcels._session.request.assert_called_once()
+                parcels._session.request.assert_called_once()
 
     def test_one_providers_budget_leaves_its_siblings_callable(self) -> None:
         """Street view is asked once per provider; KartaView out of budget says nothing about Panoramax."""
-        busy = {"error": "rate_limited", "message": "kartaview: kartaview request budget is exhausted right now."}
-        timeline = f"{_BASE}street-view/timeline/"
-        _session("redata_street_view", _response(503, busy)).get(timeline, params={"provider": "kartaview"})
-        panoramax = _session("redata_street_view", _response(200, {}))
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                cache.clear()
+                busy = {"error": error, "message": "kartaview: kartaview request budget is exhausted right now."}
+                timeline = f"{_BASE}street-view/timeline/"
+                _session("redata_street_view", _response(503, busy)).get(timeline, params={"provider": "kartaview"})
+                panoramax = _session("redata_street_view", _response(200, {}))
 
-        panoramax.get(timeline, params={"provider": "panoramax"})
+                panoramax.get(timeline, params={"provider": "panoramax"})
 
-        panoramax._session.request.assert_called_once()
-        with pytest.raises(UpstreamThrottledError):
-            _session("redata_street_view").get(timeline, params={"provider": "kartaview"})
+                panoramax._session.request.assert_called_once()
+                with pytest.raises(UpstreamThrottledError):
+                    _session("redata_street_view").get(timeline, params={"provider": "kartaview"})
 
     def test_a_provider_refusing_redata_stops_calls_to_that_endpoint(self) -> None:
         """REData answers so when Google or GDELT throttles it, without a wait; on dev, 53 such calls in two days."""
@@ -221,7 +248,7 @@ class BusySourceTests(TestCase):
     def test_a_named_provider_redata_could_not_reach_stops_calls_to_it(self) -> None:
         """REData waited 20 s on Chronicling America for every pin page; the other archives answered."""
         search = f"{_BASE}reference-documents/search/"
-        for status in ("unavailable", "rate_limited"):
+        for status in ("unavailable", *BUDGET_REFUSALS):
             with self.subTest(status):
                 cache.clear()
                 unanswered = {
@@ -266,15 +293,18 @@ class BusySourceTests(TestCase):
         again.get(hazards, params=params)
 
         again._session.request.assert_called_once()
-        neither = {
-            "providers": [
-                {"provider": "nifc_wildfires", "status": "unavailable"},
-                {"provider": "fema_disasters", "status": "rate_limited"},
-            ]
-        }
-        _session("redata_hazards", _response(503, neither)).get(hazards, params=params)
-        with pytest.raises(UpstreamThrottledError):
-            _session("redata_hazards").get(hazards, params=params)
+        for status in BUDGET_REFUSALS:
+            with self.subTest(status):
+                cache.clear()
+                neither = {
+                    "providers": [
+                        {"provider": "nifc_wildfires", "status": "unavailable"},
+                        {"provider": "fema_disasters", "status": status},
+                    ]
+                }
+                _session("redata_hazards", _response(503, neither)).get(hazards, params=params)
+                with pytest.raises(UpstreamThrottledError):
+                    _session("redata_hazards").get(hazards, params=params)
 
     def test_a_provider_the_request_did_not_name_trips_nothing(self) -> None:
         """REData picks a county's provider by the point, so the next point may be another county's."""
@@ -298,6 +328,20 @@ class BusySourceTests(TestCase):
         again.get(_PARCEL)
 
         again._session.request.assert_called_once()
+
+    def test_a_parcel_lookup_refused_for_the_keys_share_waits_as_long_as_redata_said(self) -> None:
+        """``/parcels/lookup/`` names when the spent window frees; a county's answer for one point trips nothing without it."""
+        for error in ("source_rate_limited", "key_budget_exhausted"):
+            with self.subTest(error):
+                cache.clear()
+                _session(
+                    "redata_api", _response(503, {"error": error, "message": "spent"}, {"Retry-After": "900"})
+                ).get(_PARCEL)
+
+                with pytest.raises(UpstreamThrottledError) as caught:
+                    _session("redata_api").get(_PARCEL)
+
+                self.assertGreaterEqual(caught.value.retry_after, 899)
 
 
 class OtherServicesTests(TestCase):

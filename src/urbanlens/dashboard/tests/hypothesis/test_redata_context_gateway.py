@@ -8,15 +8,18 @@ from django.test import override_settings
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
     REASON_ALL_PROVIDERS_UNAVAILABLE,
     REASON_RATE_LIMITED,
     REASON_SOURCE_ERROR,
+    LocationContextEnvelope,
     LocationContextUnavailableError,
     RedataLocationContextGateway,
     redata_configured,
 )
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 
 def _response(status_code: int, body: object) -> mock.Mock:
@@ -212,12 +215,33 @@ class NearPointTests(SimpleTestCase):
         self.assertEqual(ctx.value.reason, REASON_ALL_PROVIDERS_UNAVAILABLE)
 
     def test_503_rate_limited_carries_reason(self) -> None:
-        session = mock.Mock()
-        session.get.return_value = _response(503, {"error": REASON_RATE_LIMITED, "message": "back off"})
+        self.assertEqual(REASON_RATE_LIMITED, "rate_limited")
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                session = mock.Mock()
+                session.get.return_value = _response(503, {"error": error, "message": "back off"})
 
-        with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)
-        self.assertEqual(ctx.value.reason, REASON_RATE_LIMITED)
+                with pytest.raises(LocationContextUnavailableError) as ctx:
+                    _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)
+                self.assertEqual(ctx.value.reason, error)
+                self.assertTrue(
+                    ctx.value.is_outage, "a spent budget says nothing about the place, so nothing is cached"
+                )
+
+    def test_an_empty_answer_whose_missing_source_was_refused_for_budget_raises(self) -> None:
+        """Whichever budget it was, the source was not asked, and returning nothing would let a caller cache "nothing here"."""
+        for status in BUDGET_REFUSALS:
+            with self.subTest(status):
+                session = mock.Mock()
+                session.get.return_value = _response(
+                    200,
+                    {"count": 0, "complete": False, "results": [], "providers": [{"provider": "a", "status": status}]},
+                )
+
+                with pytest.raises(LocationContextUnavailableError) as raised:
+                    _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)
+
+                self.assertTrue(raised.value.is_outage)
 
     def test_400_carries_redata_error_code(self) -> None:
         session = mock.Mock()
@@ -249,6 +273,37 @@ class NearPointTests(SimpleTestCase):
 
         with pytest.raises(GatewayRequestError):
             _gateway(session).near_point("/api/v1/hazards/", 1.0, 2.0)
+
+
+class UnansweredSourcesTests(SimpleTestCase):
+    """The providers a partial answer is missing, named so its payload is cached only briefly."""
+
+    @staticmethod
+    def _partial(status: str) -> LocationContextEnvelope:
+        providers = [{"provider": "heard", "status": "ok"}, {"provider": "silent", "status": status}]
+        return LocationContextEnvelope(count=1, complete=False, results=[{"provider": "heard"}], providers=providers)
+
+    def test_every_status_that_means_the_provider_was_not_heard_from_names_it(self) -> None:
+        for status in ("unavailable", "not_cached", *BUDGET_REFUSALS):
+            with self.subTest(status):
+                self.assertEqual(self._partial(status).unanswered_sources, ["silent"])
+
+    def test_a_provider_that_answered_or_was_not_asked_is_not_named_as_silent(self) -> None:
+        for status in ("ok", "not_applicable", "skipped"):
+            with self.subTest(status):
+                self.assertEqual(self._partial(status).unanswered_sources, ["unknown"])
+
+    def test_a_complete_answer_names_none(self) -> None:
+        complete = LocationContextEnvelope(count=0, complete=True, providers=[{"provider": "a", "status": "ok"}])
+
+        self.assertEqual(complete.unanswered_sources, [])
+
+    def test_a_payload_from_a_partial_answer_is_marked_for_every_budget_refusal(self) -> None:
+        for status in BUDGET_REFUSALS:
+            with self.subTest(status):
+                marked = self._partial(status).marked({"rows": [1]})
+
+                self.assertEqual(marked, {"rows": [1], UNANSWERED_SOURCES_KEY: ["silent"]})
 
 
 class GetJsonTests(SimpleTestCase):
@@ -290,12 +345,14 @@ class PostJsonTests(SimpleTestCase):
         self.assertEqual(session.post.call_args.kwargs["headers"]["Authorization"], "Bearer test-key")
 
     def test_non_200_raises(self) -> None:
-        session = mock.Mock()
-        session.post.return_value = _response(503, {"error": REASON_RATE_LIMITED})
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                session = mock.Mock()
+                session.post.return_value = _response(503, {"error": error})
 
-        with pytest.raises(LocationContextUnavailableError) as ctx:
-            _gateway(session).post_json("/api/v1/routes/", {"waypoints": []})
-        self.assertEqual(ctx.value.reason, REASON_RATE_LIMITED)
+                with pytest.raises(LocationContextUnavailableError) as ctx:
+                    _gateway(session).post_json("/api/v1/routes/", {"waypoints": []})
+                self.assertEqual(ctx.value.reason, error)
 
     def test_network_error_raises_source_error(self) -> None:
         session = mock.Mock()

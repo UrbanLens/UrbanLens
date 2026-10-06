@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsUnavailableError,
     RedataGateway,
 )
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
 
 
 def _response(
@@ -576,6 +577,25 @@ class ExtractCulturalResourceAttachmentTests(SimpleTestCase):
         self.assertEqual(ctx.exception.reason, "attachment_unavailable")
         self.assertEqual(session.post.call_count, 1)
 
+    def test_a_spent_budget_is_an_outage_and_is_asked_again(self) -> None:
+        """Unlike a settled refusal, a budget refusal says nothing about the document, so the next ask goes back to REData."""
+        from django.core.cache import cache
+
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                cache.clear()
+                session = MagicMock()
+                session.post.return_value = _response(503, json_body={"error": error})
+                gateway = _gateway(session)
+
+                for _ in range(2):
+                    with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                        gateway.extract_cultural_resource_attachment("r1", 32)
+                    self.assertEqual(ctx.exception.reason, error)
+                    self.assertTrue(ctx.exception.is_outage)
+
+                self.assertEqual(session.post.call_count, 2)
+
     def test_a_settled_refusal_is_not_asked_again_for_a_while(self) -> None:
         """REData re-runs OCR and an AI model on every ask; dev asked one empty form twelve times."""
         from django.core.cache import cache
@@ -713,12 +733,17 @@ class LookupDemographicsTests(SimpleTestCase):
         self.assertIsNone(kwargs.get("params"))
 
     def test_503_rate_limited_raises_unavailable(self) -> None:
-        session = MagicMock()
-        session.get.return_value = _response(503, json_body={"error": "rate_limited"})
-        gateway = _gateway(session)
-        with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
-            gateway.lookup_demographics("parcel-uuid")
-        self.assertEqual(ctx.exception.reason, "rate_limited")
+        for error in BUDGET_REFUSALS:
+            with self.subTest(error):
+                session = MagicMock()
+                session.get.return_value = _response(503, json_body={"error": error})
+                gateway = _gateway(session)
+                with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                    gateway.lookup_demographics("parcel-uuid")
+                self.assertEqual(ctx.exception.reason, error)
+                self.assertTrue(
+                    ctx.exception.is_outage, "a spent budget says nothing about the parcel, so nothing is cached"
+                )
 
     def test_503_census_data_api_unavailable_raises_unavailable(self) -> None:
         session = MagicMock()
