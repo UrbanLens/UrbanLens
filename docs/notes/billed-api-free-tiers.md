@@ -55,10 +55,16 @@ the admin-editable `ApiRateLimit` row says. The pieces are:
 
 | Service | Billed as | Free a month | Allotment | Production / staging / dev |
 |---|---|---|---|---|
-| `google_geocoding` | Geocoding, plus Place Details Essentials for the legacy `cid:` lookup | 10,000 | 0.4 | 3,600 / 200 / 0 |
+| `google_geocoding` | Geocoding, plus the legacy Place Details `cid:` lookup, which Google bills as Places Details (Pro, 5,000 free) | 10,000 (Geocoding's) | 0.4 | 3,600 / 200 / 0 |
 | `google_places` | Nearby Search (Enterprise fields), legacy Place Details, Place Photos, legacy Autocomplete; held to the smallest free SKU | 1,000 | 0.4 | 360 / 20 / 0 |
 | `google_maps` | Static Maps and Street View Static (REData calls neither) | 10,000 | 0.9 | 8,100 / 450 / 0 |
 | `azure_maps` | Search | 5,000 | 0.4 | 1,800 / 100 / 0 |
+
+The `cid:` lookup's own SKU has only 5,000 free, and `google_geocoding`'s ceiling is Geocoding's 10,000. It
+still stays free: with every deployment's share summing to at most 1, `google_geocoding` (0.4 × 10,000) plus
+`google_places`' legacy Details (0.4 × 1,000) is at most 4,400 of the 5,000, and REData sends no legacy Place
+Details request (REData's `docs/BILLED_APIS.md`). That holds by arithmetic, not by design: moving the lookup to
+a key of its own, or holding `google_geocoding` to 5,000, would make it hold by design.
 
 Off production, a REData failure never falls through to direct Google (D26): the place-name chain stops after
 REData, so the 441 background Google Geocoding calls a week development made when production REData answered
