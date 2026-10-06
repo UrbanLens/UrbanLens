@@ -24325,3 +24325,58 @@ reason and not the account id; a 5007 "No such model" and a non-JSON 502 stay fa
 502; both clients map 422; a refusal is logged answered with no labels; a failure or a limiter refusal is None; an
 unanswered classifier keeps a photo's keywords, and a refusal clears them. Three existing tests asserted `[]` for a
 failure and now assert None.
+
+## RESOLVED 2026-10-06: An Ollama outage deleted a photo's Ollama keywords, and an unreadable analysis copy deleted every image provider's
+
+`id: P322` · `status: fixed` · `resolved: 2026-10-06` · `found by: an audit of the keyword providers after P320, whose "Not fixed" named Ollama`
+
+**What was wrong.** `generate_keywords_for_image` stores whatever list a provider returns as the photo's answer from
+that source: it deletes the source's `ImageKeyword` rows and stores the new ones. P320 made the two hosted providers
+raise `KeywordSourceUnavailableError` when no answer came, so their keywords stand. Ollama was left as it was.
+`OllamaGateway.describe_photo_keywords` returned `[]` with no server configured and for every `requests` failure: a
+refused connection, a timeout, a 4xx or 5xx from `raise_for_status`, a body that was not JSON. It also read
+`body.get("response") or ""` from any body, so an `{"error": ...}` body was taken as an answer with no keywords. Ollama
+sends that body with a 4xx or 5xx, or, once a response has started, with the 200 it already sent. So an Ollama outage
+emptied the Ollama keywords of every photo it re-keyworded.
+
+The three providers that read the analysis copy (AI vision, the classifier and Ollama) also returned `[]` when
+`analysis_jpeg_bytes` gave them nothing, so they cleared their keywords as well. That happens when the copy has not
+been written yet, or when reading it from storage raises `OSError` or `ValueError`. Photos are re-keyworded: Celery
+redelivers a lost task, the upload-recovery sweeps re-run `process_image_upload`, and the analysis-copy backfill
+enqueues keywording again. A storage outage during any of those emptied all three sources for the photo.
+
+The embedded-metadata provider was checked and is not affected. It runs only when `Image.embedded_keywords` holds a
+keyword, and an undecryptable value reads as an empty `UndecryptableJSON`, which skips the provider.
+
+**Fix.**
+- `describe_photo_keywords` returns `list[str] | None`. It returns None when nothing was learned:
+  - no server is configured;
+  - the session refused the call before sending it (a rate limit, a provider-health backoff, or a disabled service);
+  - the call failed;
+  - the body is not a finished generation (not an object, an `error` key, a `response` that is not a string,
+    `done: false`, a `done_reason` that is not a string or is `load` or `unload`, or `length` with no text: the
+    output budget ran out before the model said anything).
+
+  A generation the model finished with an empty `response`, or one that names no keyword, is an answer and returns
+  `[]`.
+- `OllamaVisionKeywordProvider` raises `KeywordSourceUnavailableError` on None.
+- The three image providers call `require_analysis_jpeg_bytes`, which raises `AnalysisCopyUnavailableError` (a
+  `KeywordSourceUnavailableError`) where they used to return `[]`. `analysis_jpeg_bytes` still only reads bytes and
+  returns None.
+
+**Not fixed.**
+- A 200 that carries `{"error": ...}` is recorded by the session as a successful `ollama` call before the body is
+  read, so provider health counts it as answered. This can only happen mid-stream. UrbanLens sends `stream: false`,
+  and Ollama answers those errors with a 4xx or 5xx.
+- Nothing asks again about a photo whose source did not answer.
+
+**Tests.** `test_photo_keyword_outages.py` has 30 tests, and 23 of them fail against the code before the fix:
+- Each kind of Ollama failure is no answer, including a call refused before it was sent.
+- A finished empty generation is `[]`.
+- The provider raises on no answer, and asks nothing for a photo with no analysis copy.
+- All three image providers raise for a missing or unreadable copy.
+- Run end to end, an Ollama outage keeps the stored keywords, an answer replaces them, and an empty answer clears them.
+- A storage failure on a re-run keeps both hosted providers' keywords and sends nothing.
+
+Two tests in `test_photo_keyword_sandboxing.py` asserted `[]` for a photo with no analysis copy and now assert the
+raise. Two tests in `test_cloudflare_input_refusal.py` and `test_ai_refused_in_development.py` patched the old import.
