@@ -377,6 +377,34 @@ describe("registerRedataLayers", () => {
 
             expect(vectorStyleFor("street")).toBeNull();
         });
+
+        test("an overlay or an unknown key is not answered with the street style", async () => {
+            stubFetch({ body: { layers: [] } });
+            await registerRedataLayers();
+
+            // The attribution line asks after "borders" for its own credit; Positron's would replace Esri's.
+            for (const kind of ["borders", "weather", "foo", "", "toString", "constructor"]) {
+                expect(vectorStyleFor(kind)).toBeNull();
+            }
+        });
+
+        test("a key in another case, or a legacy alias, names its own style", async () => {
+            stubFetch({ body: { layers: [] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("Dark")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/dark");
+            expect(vectorStyleFor("DARK")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/dark");
+            expect(vectorStyleFor("Standard")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/positron");
+        });
+
+        test("nor is an unknown key answered with the catalogue's street style", async () => {
+            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "Attr" }] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("borders")).toBeNull();
+            expect(vectorStyleFor("osm")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+            expect(vectorStyleFor("Street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+        });
     });
 
     test("resolves a vector entry through the same legacy aliases as a raster one", async () => {
@@ -1905,6 +1933,36 @@ describe("the attribution line", () => {
 
         expect(seen.at(-1)).toBe("Powered by Esri · Earthstar Geographics · Leaflet");
         resetEsriAttributionForTests();
+    });
+
+    test("credits the borders overlay to Esri over a vector street base drawn from OpenFreeMap", () => {
+        resetEsriAttributionForTests();
+        const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
+        const realWebGLSupport = window.WebGLSupport;
+        stubLeafletForMapLayers();
+        Object.assign((globalThis as Record<string, unknown>).L as object, {
+            maplibreGL: () => ({ options: {}, addTo(map: FakeMap) {
+                map.addLayer(this);
+                return this;
+            } }),
+        });
+        (globalThis as Record<string, unknown>).maplibregl = {};
+        window.WebGLSupport = { supportsWebGL2: () => true };
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
+        try {
+            const map = new FakeMap();
+            const seen: string[] = [];
+            createMapLayers(map as unknown as L.Map, { defaultBase: "street", initialOverlays: ["borders"], contextMenu: false, onAttribution: (text) => seen.push(text) });
+            map.fire("layeradd");
+            const text = seen.at(-1)!;
+
+            expect(text).toContain("OpenFreeMap");
+            expect(text).toContain("Esri");
+            expect(text.match(/OpenFreeMap/g)).toHaveLength(1);
+        } finally {
+            (globalThis as Record<string, unknown>).maplibregl = realMaplibregl;
+            window.WebGLSupport = realWebGLSupport;
+        }
     });
 
     test("credits the borders overlay on a satellite base too, with Esri's own line once", () => {

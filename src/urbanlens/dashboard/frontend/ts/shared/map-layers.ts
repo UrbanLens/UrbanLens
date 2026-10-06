@@ -189,15 +189,29 @@ const BUILT_IN_VECTOR_STYLE_DEFS: Record<string, VectorStyleDef> = {
  * Drawn by `maplibre-layers.ts`, and by the Leaflet bridge on pages that load it (`baseLayer()`);
  * every other Leaflet map draws `TILE_DEFS` for the same key, so the engines diverge on bytes while
  * agreeing on which layer is showing.
+ *
+ * Resolved by the key itself, in any case, or by a legacy alias, and never by `normalizeBase`'s "street" fallback:
+ * an overlay asking after its own credit ("borders") must not be answered with the street style's, nor "Dark" with
+ * the light one.
  * @param kind - Canonical or legacy source key.
  */
 export function vectorStyleFor(kind: string): VectorStyleDef | null {
     applyEmbeddedCatalogue();
-    const registered = VECTOR_STYLE_DEFS[kind] ?? VECTOR_STYLE_DEFS[normalizeBase(kind)];
+    const key = vectorStyleKey(kind);
+    if (!key) return null;
+    const registered = VECTOR_STYLE_DEFS[key];
     if (registered) return registered;
     // The catalogue replacing the raster def is the catalogue saying something about this layer.
-    const key = kind in BUILT_IN_VECTOR_STYLE_DEFS ? kind : normalizeBase(kind);
     return TILE_DEFS[key] === BUILT_IN_TILE_DEFS[key] ? (BUILT_IN_VECTOR_STYLE_DEFS[key] ?? null) : null;
+}
+
+/** The `VECTOR_STYLE_DEFS`/`TILE_DEFS` key `kind` names, or null for an identifier that names none of them. */
+function vectorStyleKey(kind: string): string | null {
+    const names = (key: string): boolean => Object.hasOwn(VECTOR_STYLE_DEFS, key) || Object.hasOwn(TILE_DEFS, key);
+    if (names(kind)) return kind;
+    const lowered = (kind || "").toLowerCase();
+    if (names(lowered)) return lowered;
+    return Object.hasOwn(BASE_ALIASES, lowered) ? BASE_ALIASES[lowered]! : null;
 }
 
 /**
