@@ -25,8 +25,8 @@ class _BulkFixture(TestCase):
         self.profile = self.user.profile
         self.other_user = baker.make(User)
         self.other = self.other_user.profile
-        _key, self.raw_key = generate_api_key(self.user, "bulk client")
-        ApiKey.objects.filter(user=self.user).update(
+        api_key, self.raw_key = generate_api_key(self.user, "bulk client")
+        ApiKey.objects.filter(pk=api_key.pk).update(
             scopes=[ApiKeyScope.PINS_WRITE.value, ApiKeyScope.LABELS_WRITE.value]
         )
 
