@@ -27,6 +27,10 @@ import type { FetchInit } from "./site-runtime";
  * a 503 and draws a grey square, and the retry costs more than the request would have.
  * One page is not entitled to the whole budget, but it is the only number here worth spending, and
  * a page that asks for less than it can use is slower for no one else's benefit.
+ *
+ * Wider is not faster until the server's slots are. With a miss down to the vendor's own time,
+ * `test_basemap_tile_miss_cost.py` replays a cold 30-tile viewport against 6 slots: 1.05s at 6 wide,
+ * 4.6s at 12 wide, which spends its time on 48 refusals and their retries.
  */
 const OWN_TILE_CONCURRENCY = 6;
 
@@ -34,8 +38,8 @@ const OWN_TILE_CONCURRENCY = 6;
  * Backoff before each retry, in milliseconds - jittered, so a viewport's worth of tiles refused in
  * the same instant does not rebuild that instant a second later.
  *
- * Nothing here is shorter than the `Retry-After: 1` the proxy sends: an upstream fetch takes ~1.5s
- * (`P131`), so a retry inside that window is refused for certain and costs one of only four
+ * Nothing here is shorter than the `Retry-After: 1` the proxy sends: a slot is held for as long as the
+ * upstream takes, so a retry inside that window is likely refused again and costs one of only four
  * attempts. Queueing means these are rarely reached at all.
  */
 const OWN_TILE_RETRY_DELAYS_MS = [1000, 2500, 5000, 9000];
