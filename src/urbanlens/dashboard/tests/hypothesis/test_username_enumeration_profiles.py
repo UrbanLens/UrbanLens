@@ -179,7 +179,17 @@ class WebSocketSendHidesProfilesTests(_HiddenProfilesTestCase):
     def _refusal(self, slug: str) -> type[Exception] | None:
         create = DirectMessageConsumer.__dict__["_create_message"].func
         try:
-            create(SimpleNamespace(profile_id=self.viewer.pk), slug, "hi", "", "", 0, [], None, None)
+            create(
+                SimpleNamespace(profile_id=self.viewer.pk),
+                slug,
+                "hi",
+                ciphertext="",
+                nonce="",
+                key_version=0,
+                image_ids=[],
+                markup_map_uuid=None,
+                reply_to_id=None,
+            )
         except Exception as exc:  # noqa: BLE001  # the type is what is compared
             return type(exc)
         return None

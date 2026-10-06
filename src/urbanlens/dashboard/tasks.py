@@ -475,7 +475,7 @@ def requeue_pending_calendar_pushes() -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
-def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
+def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     """Build a user's data export archive outside the web request."""
     from urbanlens.dashboard.services.import_export.export import run_export
 
@@ -2640,7 +2640,7 @@ def _resolve_image_location(image: Image, coords: tuple[float, float] | None) ->
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
-def import_immich_photos(
+def import_immich_photos(  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     self,
     pin_id: int,
     profile_id: int,
@@ -3015,7 +3015,7 @@ def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[di
 
 
 @shared_task(bind=True, max_retries=None, queue=Queue.BULK)
-def resolve_deferred_pin_locations(
+def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     self,
     profile_id: int,
     deferred_lists: list[dict],
@@ -3273,7 +3273,7 @@ def import_calendar_events(self, profile_id: int, selections: list[dict[str, Any
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
-def import_flickr_album_photos(
+def import_flickr_album_photos(  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     self,
     target_kind: str,
     target_id: int,
@@ -3331,7 +3331,7 @@ def import_flickr_album_photos(
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
-def import_google_photos(
+def import_google_photos(  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     self,
     pin_id: int,
     profile_id: int,

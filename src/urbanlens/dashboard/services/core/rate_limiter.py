@@ -581,14 +581,19 @@ def _is_billable(service: str) -> bool:
     return defaults is None or defaults.billable
 
 
-def _refuse_if_billable(service: str, what: str) -> bool:
+def _refuse_if_billable(service: str, what: str, error: BaseException) -> bool:
     """The answer to "may this call go ahead" when *what* could not be read.
 
     Refused for anything that can cost money: this limiter is the only cap on spend at paid
     third-party APIs, and the database being unreadable is exactly when nobody is watching it.
+
+    Args:
+        service: The service key.
+        what: What could not be read, for the log line.
+        error: The failure, logged with its traceback.
     """
     billable = _is_billable(service)
-    logger.exception("Failed to read %s for %s - %s the call (billable=%s)", what, service, "refusing" if billable else "allowing", billable)
+    logger.error("Failed to read %s for %s - %s the call (billable=%s)", what, service, "refusing" if billable else "allowing", billable, exc_info=error)
     return not billable
 
 
@@ -693,8 +698,8 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
     if config is None:
         try:
             config = get_limit_config(service)
-        except DatabaseError:
-            return _refuse_if_billable(service, "the rate limit config")
+        except DatabaseError as exc:
+            return _refuse_if_billable(service, "the rate limit config", exc)
 
     share = _service_share(service)
     per_minute = scaled_limit(config.calls_per_minute, share)
@@ -740,8 +745,8 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
             if this_month >= free_tier:
                 logger.warning("Free-tier ceiling reached for %s: %d/%d calls this calendar month - refusing to spend past it", service, this_month, free_tier)
                 return False
-    except DatabaseError:
-        return _refuse_if_billable(service, "the rate limit counts")
+    except DatabaseError as exc:
+        return _refuse_if_billable(service, "the rate limit counts", exc)
 
     return True
 

@@ -90,7 +90,7 @@ class PinAlbumGridPagingTests(_AlbumPagingTestCase):
         self.assertEqual(slugs, [album.slug for album in sorted(self.albums, key=lambda album: album.name)])
 
     def test_a_paged_card_is_the_same_card_the_first_page_renders(self) -> None:
-        last = sorted(self.albums, key=lambda album: album.name)[-1]
+        last = max(self.albums, key=lambda album: album.name)
         response = self.client.get(self.url, {"albums": "1", "offset": str(len(self.albums) - 1)})
 
         [item] = response.json()["items"]
@@ -108,7 +108,7 @@ class PinAlbumGridPagingTests(_AlbumPagingTestCase):
         self.assertIn("data-picker-url", body)
 
     def test_the_picker_can_find_an_album_beyond_the_first_page(self) -> None:
-        last = sorted(self.albums, key=lambda album: album.name)[-1]
+        last = max(self.albums, key=lambda album: album.name)
 
         response = self.client.get(self.url, {"picker": "1", "q": last.name})
 

@@ -26,7 +26,7 @@ _EXPIRED_REPLY = "This request took too long to start and was dropped. Please tr
 
 
 @shared_task(bind=True, queue=_AI_QUEUE, acks_late=False, soft_time_limit=90, time_limit=120)
-def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]], user_message: str, lock_token: str, page: dict[str, Any] | None = None, dismissals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]], user_message: str, lock_token: str, page: dict[str, Any] | None = None, dismissals: list[dict[str, Any]] | None = None) -> dict[str, Any]:  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     """Run one assistant turn on ``ai-worker`` and release its single-flight lock.
     ``acks_late=False`` overrides the project default (``CELERY_TASK_ACKS_LATE = True``) deliberately: a turn that dies mid-loop must not be redelivered and re-spend a provider call for a bubble the caller has already timed out on.
 
