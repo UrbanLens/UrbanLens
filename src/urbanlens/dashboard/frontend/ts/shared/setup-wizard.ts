@@ -5,7 +5,7 @@
 
 import { getCsrfToken } from "./csrf";
 import { fetchJson, HttpError } from "./fetch-json";
-import { saveAvatar, saveProfileField, showAvatar, USERNAME_PATTERN, USERNAME_RULE, usernameAvailability, avatarSavedText, type AvatarChoice } from "./profile-field";
+import { saveAvatar, saveProfileField, showSavedAvatar, USERNAME_PATTERN, USERNAME_RULE, usernameAvailability, avatarSavedText, type AvatarChoice } from "./profile-field";
 
 const TOTAL_STEPS = 5;
 /** The step whose title must be valid before the wizard moves past it. */
@@ -89,8 +89,9 @@ export class SetupWizard {
             title.focus();
             return;
         }
-        if (target?.closest("#setup-avatar-gravatar-btn")) {
-            void this.chooseAvatar({ kind: "gravatar" });
+        const gravatar = target?.closest<HTMLElement>("#setup-avatar-gravatar-btn");
+        if (gravatar) {
+            void this.chooseAvatar({ kind: "gravatar", previewUrl: gravatar.dataset.gravatarUrl });
             return;
         }
         const emoji = target?.closest<HTMLElement>(".setup-avatar-emoji-btn");
@@ -233,6 +234,8 @@ export class SetupWizard {
             return;
         }
         this.avatarStatus(avatarSavedText(result), COLOR_OK);
-        if (result.avatar_url) showAvatar(byId("setup-avatar-preview"), result.avatar_url, "setup-avatar-preview");
+        const outcome = await showSavedAvatar(this.cfg.profileUrl ?? "", choice, result);
+        if (outcome === "published") this.avatarStatus("✓ Saved", COLOR_OK);
+        if (outcome === "unchanged") this.avatarStatus("✗ That image couldn't be processed.", COLOR_BAD);
     }
 }

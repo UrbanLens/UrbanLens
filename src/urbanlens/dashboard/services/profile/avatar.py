@@ -151,6 +151,7 @@ class AvatarService:
     @classmethod
     def generate_emoji_svg(cls, emoji: str, color: str) -> str:
         """Return an SVG string: a filled circle with a centered emoji.
+        The emoji carries a faint drop shadow so one the colour of its circle still shows. The shadow is a fixed dark tone because a file served as an image cannot read the page's theme.
 
         Args:
             emoji: The Unicode emoji character to render.
@@ -161,8 +162,11 @@ class AvatarService:
         """
         return (
             '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">'
+            '<defs><filter id="glyph-shadow" x="-20%" y="-20%" width="140%" height="140%">'
+            '<feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.45"/>'
+            "</filter></defs>"
             f'<circle cx="100" cy="100" r="100" fill="{color}"/>'
-            '<text x="100" y="140" text-anchor="middle" font-size="110" '
+            '<text x="100" y="140" text-anchor="middle" font-size="110" filter="url(#glyph-shadow)" '
             'font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif">'
             f"{emoji}</text>"
             "</svg>"

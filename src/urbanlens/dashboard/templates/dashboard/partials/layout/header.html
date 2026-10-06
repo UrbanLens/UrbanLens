@@ -87,9 +87,9 @@
                         aria-haspopup="menu" aria-expanded="false" aria-controls="nav-dropdown">
                     <div class="nav-avatar">
                         {% if user.profile.avatar %}
-                        <img src="{{ user.profile.avatar.url }}" alt="" class="nav-avatar-img">
+                        <img src="{{ user.profile.avatar.url }}" alt="" class="nav-avatar-img" data-user-avatar="nav-avatar-img" data-avatar-alt="">
                         {% else %}
-                        <span class="nav-avatar-initial">{{ user.username|first|upper }}</span>
+                        <span class="nav-avatar-initial" data-user-avatar="nav-avatar-img" data-avatar-alt="">{{ user.username|first|upper }}</span>
                         {% endif %}
                     </div>
                     <span class="nav-user-name">{{ user.username }}</span>
@@ -102,9 +102,9 @@
                     <div class="nav-dropdown-identity">
                         <div class="nav-dropdown-avatar">
                             {% if user.profile.avatar %}
-                            <img src="{{ user.profile.avatar.url }}" alt="" class="nav-avatar-img">
+                            <img src="{{ user.profile.avatar.url }}" alt="" class="nav-avatar-img" data-user-avatar="nav-avatar-img" data-avatar-alt="">
                             {% else %}
-                            <span class="nav-avatar-initial nav-avatar-initial--lg">{{ user.username|first|upper }}</span>
+                            <span class="nav-avatar-initial nav-avatar-initial--lg" data-user-avatar="nav-avatar-img" data-avatar-alt="">{{ user.username|first|upper }}</span>
                             {% endif %}
                         </div>
                         <div class="nav-dropdown-user-text">

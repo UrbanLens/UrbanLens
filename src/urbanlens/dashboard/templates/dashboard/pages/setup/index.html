@@ -126,9 +126,9 @@
                     <div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap;">
                         <div style="flex-shrink:0;">
                             {% if current_avatar_url %}
-                            <img src="{{ current_avatar_url }}" id="setup-avatar-preview" class="setup-avatar-preview" alt="Avatar">
+                            <img src="{{ current_avatar_url }}" id="setup-avatar-preview" class="setup-avatar-preview" data-user-avatar="setup-avatar-preview" alt="Avatar">
                             {% else %}
-                            <div id="setup-avatar-preview"
+                            <div id="setup-avatar-preview" data-user-avatar="setup-avatar-preview"
                                  style="width:72px;height:72px;border-radius:50%;background:var(--ul-grey-1,#f3f4f6);border:2px solid var(--ul-border,#e0e0e0);display:flex;align-items:center;justify-content:center;">
                                 <i class="material-icons" style="font-size:2rem;color:#9aa0a6;">person</i>
                             </div>
@@ -154,7 +154,7 @@
                                     data-animal="{{ opt.animal }}" data-color="{{ opt.color }}"
                                     style="display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:8px;border-radius:10px;border:1.5px solid var(--ul-border,#e0e0e0);background:none;font-size:.75rem;color:#5f6368;min-width:64px;"
                                     title="{{ opt.animal|title }} emoji avatar">
-                                <div style="width:52px;height:52px;border-radius:50%;background:{{ opt.color }};display:flex;align-items:center;justify-content:center;font-size:28px;line-height:1;">{{ opt.emoji }}</div>
+                                <div style="width:52px;height:52px;border-radius:50%;background:{{ opt.color }};display:flex;align-items:center;justify-content:center;font-size:28px;line-height:1;"><span class="ul-glyph">{{ opt.emoji }}</span></div>
                                 <span>{{ opt.animal|title }}</span>
                             </button>
                             {% endfor %}

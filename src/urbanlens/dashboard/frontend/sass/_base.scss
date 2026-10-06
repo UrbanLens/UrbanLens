@@ -271,3 +271,10 @@ input[type=range] {
 select {
     display: block;
 }
+
+// Chromium paints popup rows on the option's background, else the select's, else white; inputs here are translucent, so
+// the options carry the theme's own opaque colours in both themes (the tokens invert under [data-theme="dark"]).
+option, optgroup {
+    background-color: var(--ul-grey-0);
+    color: var(--ul-grey-8);
+}

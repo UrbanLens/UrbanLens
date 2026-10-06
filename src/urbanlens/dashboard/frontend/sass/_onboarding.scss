@@ -52,45 +52,93 @@ $onboarding-card-accents: (
     margin: 0 0 .85rem;
 
     &:last-of-type {
-        margin-bottom: 1.1rem;
+        margin-bottom: 0;
     }
 }
 
-.onboarding-customize-toggle {
-    display: flex;
-    align-items: center;
-    gap: .65rem;
-    cursor: pointer;
-    width: fit-content;
+// "I want to disable some features": a native <details>, so it works from the keyboard without script. The hidden
+// customize_features checkbox inside it mirrors its state for the form post (declarative-actions.ts, data-mirrors-open).
+.onboarding-accordion {
+    margin-bottom: 1.75rem;
+
+    .onboarding-accordion-state {
+        display: none;
+    }
+
+    // The accordion's own margin spaces what follows it.
+    .onboarding-cards {
+        margin-bottom: 0;
+    }
+
+    // Grows and shrinks the revealed cards where the browser can animate it; elsewhere they simply appear.
+    @media (prefers-reduced-motion: no-preference) {
+        interpolate-size: allow-keywords;
+
+        // The side padding keeps the cards' hover shadow and focus ring inside the clip, and the matching negative margin keeps the cards level with the summary.
+        &::details-content {
+            block-size: 0;
+            overflow: clip;
+            margin-inline: -.5rem;
+            padding-inline: .5rem;
+            transition: block-size .3s ease, content-visibility .3s ease allow-discrete;
+        }
+
+        &[open]::details-content {
+            block-size: auto;
+        }
+    }
 }
 
-.onboarding-customize-label {
+.onboarding-accordion-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    padding: .85rem 1.25rem;
+    @include surface;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    transition: box-shadow .15s;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &:hover {
+        box-shadow: var(--ul-shadow-md);
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+    }
+}
+
+.onboarding-accordion-label {
     font-size: .95rem;
     font-weight: 600;
     color: var(--ul-grey-9);
 }
 
-.onboarding-feature-cards-wrap {
-    display: grid;
-    grid-template-rows: 0fr;
-    transition: grid-template-rows .3s ease;
-
-    > .onboarding-feature-cards-inner {
-        overflow: hidden;
-        min-height: 0;
-        // Collapsed cards are out of the tab order too, once the collapse has finished.
-        visibility: hidden;
-        transition: visibility 0s .3s;
-    }
+.onboarding-accordion-chevron {
+    font-size: 1.5rem;
+    color: var(--ul-grey-6);
+    transition: transform .2s ease;
 }
 
-.onboarding-section:has(.onboarding-customize-switch input:checked) .onboarding-feature-cards-wrap {
-    grid-template-rows: 1fr;
+.onboarding-accordion[open] .onboarding-accordion-chevron {
+    transform: rotate(180deg);
+}
 
-    > .onboarding-feature-cards-inner {
-        visibility: visible;
-        transition-delay: 0s;
-    }
+// Room below the cards for their hover shadow and focus ring, which the animated clip above would otherwise cut off; the
+// open accordion's smaller margin keeps what follows where it was.
+.onboarding-feature-cards-inner {
+    padding: 1.25rem 0 1rem;
+}
+
+.onboarding-accordion[open] {
+    margin-bottom: .75rem;
 }
 
 .onboarding-cards {
