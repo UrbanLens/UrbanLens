@@ -446,7 +446,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     # AI features: an AI call is logged, never refused for spend (R31), so these carry no daily or monthly cap,
     # only a per-minute guard against a runaway loop. The row exists so each call is reserved and recorded, and
-    # so the API-limits page can switch one off.
+    # so the API-limits page can switch one off. Development and local refuse every one of them (D26).
     "link_extraction": ServiceDefaults(
         display_name="Link Extraction (AI)",
         category=EgressCategory.AI,
@@ -649,7 +649,8 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
     Only the windows that are actually configured are counted - a service with no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
     Each window holds this deployment's share of the configured limit (``services.core.egress.service_share``): all of
-    it for REData, our own hosts and AI, ``UL_ENVIRONMENT_SHARE`` of it for a ``quota`` or ``billed`` service.
+    it for REData, our own hosts and AI (where AI is called at all), ``UL_ENVIRONMENT_SHARE`` of it for a ``quota`` or
+    ``billed`` service.
 
     Args:
         service: The service key.
@@ -881,6 +882,20 @@ def _finalize_call(
         logger.exception("Failed to finalize API call log entry %s", entry_pk)
 
 
+def _release_call(entry_pk: int) -> None:
+    """Drop a reservation row for a call the environment refused after it was reserved: a refusal leaves no row (D26).
+
+    Args:
+        entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
+    """
+    from urbanlens.dashboard.models.api_call_log import ApiCallLog
+
+    try:
+        ApiCallLog.objects.filter(pk=entry_pk).delete()
+    except Exception:
+        logger.exception("Failed to release API call log entry %s", entry_pk)
+
+
 @dataclass(slots=True)
 class ApiCallSlot:
     """One reserved call, filled in by the caller and recorded when the slot closes.
@@ -894,6 +909,8 @@ class ApiCallSlot:
         model: The AI model that answered, for an AI call (``services.ai.call_log`` fills it).
         input_tokens: Prompt tokens the provider reported, for an AI call.
         output_tokens: Completion tokens the provider reported, for an AI call.
+        refused: The environment refused the call after the slot opened (the provider behind an AI feature, D26), so
+            nothing was sent and the reservation is released instead of recorded.
     """
 
     service: str = ""
@@ -904,6 +921,7 @@ class ApiCallSlot:
     model: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    refused: bool = False
 
 
 #: The slot the running code is inside, so an AI call made within one fills in its row instead of writing a second.
@@ -952,17 +970,20 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
         yield slot
     finally:
         _CURRENT_SLOT.reset(token)
-        _finalize_call(
-            entry_pk,
-            success=slot.success,
-            response_ms=int((time.monotonic() - started) * 1000),
-            cost_estimate=slot.cost_estimate,
-            status_code=slot.status_code,
-            endpoint=slot.endpoint,
-            model=slot.model,
-            input_tokens=slot.input_tokens,
-            output_tokens=slot.output_tokens,
-        )
+        if slot.refused:
+            _release_call(entry_pk)
+        else:
+            _finalize_call(
+                entry_pk,
+                success=slot.success,
+                response_ms=int((time.monotonic() - started) * 1000),
+                cost_estimate=slot.cost_estimate,
+                status_code=slot.status_code,
+                endpoint=slot.endpoint,
+                model=slot.model,
+                input_tokens=slot.input_tokens,
+                output_tokens=slot.output_tokens,
+            )
 
 
 # Session wrapper

@@ -77,7 +77,10 @@ UNLEDGERED_SERVICES: Mapping[str, Unledgered] = {
     "git_fetch": Unledgered(EgressCategory.QUOTA, "not held: the site-admin update check"),
     "gotify": Unledgered(EgressCategory.INTERNAL, "self-hosted"),
     "clamd": Unledgered(EgressCategory.INTERNAL, "self-hosted"),
-    "ai_inference": Unledgered(EgressCategory.INTERNAL, "the sandboxed transport; the provider call behind it is held by the feature's api_call_slot"),
+    "ai_inference": Unledgered(
+        EgressCategory.INTERNAL,
+        "the sandboxed transport; the provider call behind it is held by the feature's api_call_slot, and by the inference client asking for the provider's own key (ai_<provider>) before anything is sent",
+    ),
 }
 
 #: Service keys that carry no ``ServiceDefaults`` of their own: gateways whose limits come from the generic
@@ -100,11 +103,31 @@ UNREGISTERED_SERVICES: Mapping[str, EgressCategory] = {
     "twilio": EgressCategory.MESSAGING,
     # Save Page Now: a write to the Internet Archive, made on the ``wayback_machine`` session.
     "wayback_save": EgressCategory.PUBLIC_WRITE,
-    # ``LLMGateway.service_key`` for a gateway built without a feature.
+    # The hosted providers: ``LLMGateway.service_key`` for a gateway built without a feature, and the key the inference
+    # client asks about before it sends a request (``require_ai_provider``, ``HOSTED_AI_PROVIDERS``).
     "ai_openai": EgressCategory.AI,
     "ai_cloudflare": EgressCategory.AI,
     "ai_anthropic": EgressCategory.AI,
 }
+
+
+#: The hosted providers a call can be sent to through the inference client (``urbanlens_ai.schema.Provider``; a test
+#: keeps the two in step). Each has the key :func:`ai_provider_service` names, classified ``ai`` above. A local or
+#: self-hosted model is not listed: it is classified ``internal`` under a key of its own, and development keeps it.
+HOSTED_AI_PROVIDERS: tuple[str, ...] = ("anthropic", "cloudflare", "openai")
+_AI_PROVIDER_SERVICES = frozenset(f"ai_{provider}" for provider in HOSTED_AI_PROVIDERS)
+
+
+def ai_provider_service(provider: str) -> str:
+    """The service key a hosted AI provider is classified, overridden and logged under.
+
+    Args:
+        provider: A provider name, e.g. ``"cloudflare"``.
+
+    Returns:
+        ``ai_<provider>``, the key ``LLMGateway.service_key`` falls back to for a gateway built without a feature.
+    """
+    return f"ai_{provider}"
 
 
 def current_environment() -> str:
@@ -193,9 +216,29 @@ def service_category(service: str) -> EgressCategory:
     return UNCLASSIFIED_CATEGORY
 
 
+def _provider_override_share() -> float:
+    """The largest share any hosted AI provider has been given by ``UL_ENVIRONMENT_SHARE_OVERRIDES``, else 0."""
+    overrides = share_overrides()
+    return max((overrides.get(ai_provider_service(provider), 0.0) for provider in HOSTED_AI_PROVIDERS), default=0.0)
+
+
 def egress_decision(service: str) -> EgressDecision:
-    """This deployment's terms for ``service``."""
-    return decide(service, service_category(service), current_environment(), environment_share=environment_share(), overrides=share_overrides())
+    """This deployment's terms for ``service``.
+
+    Where hosted AI is refused (development, local), an AI *feature* nobody named is still let start when a provider
+    has been opted in: which provider a feature calls is the site's setting, known only when it calls, so the
+    inference client asks for the provider itself (:func:`require_ai_provider`) and has the last word.
+    """
+    category = service_category(service)
+    environment = current_environment()
+    overrides = share_overrides()
+    decision = decide(service, category, environment, environment_share=environment_share(), overrides=overrides)
+    if decision.allowed or category is not EgressCategory.AI or service in overrides or service in _AI_PROVIDER_SERVICES:
+        return decision
+    provider_share = _provider_override_share()
+    if provider_share > 0.0:
+        return EgressDecision(service, category, environment, provider_share, overridden=True)
+    return decision
 
 
 def egress_permitted(service: str) -> bool:
@@ -299,6 +342,41 @@ def require_egress(service: str) -> EgressDecision:
         ", from UL_ENVIRONMENT_SHARE_OVERRIDES" if decision.overridden else "",
     )
     raise EnvironmentRefusedError(service, category=decision.category, environment=decision.environment)
+
+
+def require_ai_provider(provider: str) -> EgressDecision:
+    """Refuse a request this environment may not send to a hosted AI provider, before anything leaves the process.
+
+    The last gate on an AI call: every feature's slot has asked for the feature already, but a feature runs on
+    whichever provider the site's AI settings pick, and a call that goes through no slot reaches the provider all the
+    same. In development a provider is called only when it was opted in by name (``ai_cloudflare=1``), or when the
+    call is made inside the slot of a feature that was (``trivia_generation=1``).
+
+    Args:
+        provider: The provider the request is for, e.g. ``"cloudflare"``.
+
+    Returns:
+        The decision, when the request may go ahead.
+
+    Raises:
+        EnvironmentRefusedError: The environment does not call this provider for this feature.
+    """
+    from urbanlens.dashboard.services.core.rate_limiter import current_call_slot
+
+    key = ai_provider_service(provider)
+    decision = egress_decision(key)
+    if decision.allowed:
+        return decision
+    slot = current_call_slot()
+    if slot is not None and slot.service != key:
+        # Only a feature named in the overrides carries its provider along; one let start by a provider alone does not.
+        named = share_overrides().get(slot.service, 0.0)
+        if named > 0.0 and service_category(slot.service) is EgressCategory.AI:
+            return EgressDecision(slot.service, decision.category, decision.environment, named, overridden=True)
+    if slot is not None:
+        # The slot reserved a row for a call that is not going to be made.
+        slot.refused = True
+    return require_egress(key)
 
 
 def background_tasks_allowlist() -> frozenset[str]:

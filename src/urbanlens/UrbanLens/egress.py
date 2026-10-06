@@ -9,16 +9,18 @@ production is meant to spend most of it. Each external service is classified as 
 Category                      production       staging          development, local
 ============================  ===============  ===============  =========================
 ``redata``, ``internal``      allowed          allowed          allowed
-``ai``                        allowed          allowed          allowed
+``ai`` (hosted providers)     allowed          allowed          refused
 ``quota``, ``billed``         budget x share   budget x share   budget x share (share 0)
 ``messaging``                 allowed          refused          refused
 ``public_write``              allowed          refused          refused
 ============================  ===============  ===============  =========================
 
 The share is ``UL_ENVIRONMENT_SHARE``, else :data:`ENVIRONMENT_SHARE_DEFAULTS`. One service can be
-given its own with ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``nominatim=0.02,sms=1``); for ``messaging``
-and ``public_write`` an override above 0 opts the service in, and 0 turns it off. The test suite
-takes the whole of every budget, as production would, because it mocks the network.
+given its own with ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``nominatim=0.02,sms=1``); for ``messaging``,
+``public_write`` and ``ai`` an override above 0 opts the service in, and 0 turns it off. An ``ai``
+service is an AI feature (``trivia_generation``) or a hosted provider (``ai_cloudflare``). A local or
+self-hosted model (Ollama) is ``internal``, so development keeps it. The test suite takes the whole
+of every budget, as production would, because it mocks the network.
 
 Nothing here imports Django apps, so settings modules can use it at import time. The service layer
 that reads these settings and refuses calls is ``dashboard.services.core.egress``.
@@ -46,7 +48,8 @@ class EgressCategory(StrEnum):
     QUOTA = "quota"
     #: A price per call, or a paid key.
     BILLED = "billed"
-    #: LLM and vision providers.
+    #: Hosted LLM and vision providers (Cloudflare Workers AI, OpenAI, Anthropic), and the features that call
+    #: them. A local or self-hosted model is ``INTERNAL``.
     AI = "ai"
     #: Email, SMS and WhatsApp to real people.
     MESSAGING = "messaging"
@@ -55,11 +58,15 @@ class EgressCategory(StrEnum):
 
 
 #: Called from every environment, budgets unscaled.
-UNRESTRICTED_CATEGORIES = frozenset({EgressCategory.REDATA, EgressCategory.INTERNAL, EgressCategory.AI})
+UNRESTRICTED_CATEGORIES = frozenset({EgressCategory.REDATA, EgressCategory.INTERNAL})
 #: Budgets multiplied by the environment's share.
 SHARED_BUDGET_CATEGORIES = frozenset({EgressCategory.QUOTA, EgressCategory.BILLED})
 #: Production only, unless an override opts a service in.
 PRODUCTION_ONLY_CATEGORIES = frozenset({EgressCategory.MESSAGING, EgressCategory.PUBLIC_WRITE})
+#: Where a hosted AI provider may be called: production and staging, whose AI the audit measured and logged, and the
+#: test suite, which mocks the network. Development, local and an unknown environment make no hosted AI call (Jess,
+#: 2026-10-06), unless an override opts one in.
+HOSTED_AI_ENVIRONMENTS = frozenset({EnvironmentTypes.PRODUCTION, EnvironmentTypes.STAGING, EnvironmentTypes.TESTING})
 
 #: How a service no one has classified is treated: as a shared budget, so refused by default off production.
 UNCLASSIFIED_CATEGORY = EgressCategory.BILLED
@@ -105,6 +112,18 @@ def full_egress(environment: str) -> bool:
         True for production and testing.
     """
     return environment in _FULL_EGRESS_ENVIRONMENTS
+
+
+def hosted_ai_permitted(environment: str) -> bool:
+    """Whether ``environment`` may call a hosted AI provider when nothing overrides it.
+
+    Args:
+        environment: A :func:`policy_environment` value.
+
+    Returns:
+        True for production, staging and testing; False for development, local and anything unknown.
+    """
+    return environment in HOSTED_AI_ENVIRONMENTS
 
 
 def default_environment_share(environment: str) -> float:
@@ -209,6 +228,8 @@ def decide(service: str, category: EgressCategory, environment: str, *, environm
         return EgressDecision(service, category, environment, override, overridden=True)
     if category in SHARED_BUDGET_CATEGORIES:
         return EgressDecision(service, category, environment, environment_share)
+    if category is EgressCategory.AI:
+        return EgressDecision(service, category, environment, 1.0 if hosted_ai_permitted(environment) else 0.0)
     return EgressDecision(service, category, environment, 1.0 if full_egress(environment) else 0.0)
 
 
