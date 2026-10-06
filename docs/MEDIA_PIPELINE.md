@@ -389,6 +389,11 @@ pipeline exists to deny.
 
 So the decode moved here, and the consumer
 (`services.photos.photo_keywords.analysis_jpeg_bytes`) now only *reads* bytes.
+The classifier reads one thing more from them, the copy's width and height,
+from its JPEG frame header (`services/media/jpeg_header.py`), to skip a copy
+too small for ResNet-50 without asking (P324). That is a bounds-checked walk
+over the header segments in pure Python that stops before the image data:
+no decoder, no native code, and only ever over bytes the sandbox wrote.
 A photo with no analysis copy is **skipped**, never decoded on demand - the
 fallback would silently reintroduce the hole. `backfill_image_analysis_thumbnails`
 writes the missing copy in the sandbox and re-enqueues keywording, which is
