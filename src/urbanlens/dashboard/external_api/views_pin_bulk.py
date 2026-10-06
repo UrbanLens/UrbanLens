@@ -154,7 +154,7 @@ class PinBulkEditView(ExternalApiView):
             if len(to_remove) != len(set(remove_uuids)):
                 return Response({"error": "One or more remove_label_uuids do not name a label you can use."}, status=400)
 
-        parent: Pin | None | Literal[Unset.UNSET] = UNSET
+        parent: Pin | Literal[Unset.UNSET] | None = UNSET
         if "parent_uuid" in data:
             parent = None
             if data["parent_uuid"] is not None:

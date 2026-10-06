@@ -235,7 +235,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
 
         # 0 clears every selected pin's review; absent or out of range leaves ratings alone.
         rating_raw = data.get("rating")
-        rating: int | None | Literal[Unset.UNSET] = UNSET
+        rating: int | Literal[Unset.UNSET] | None = UNSET
         if rating_raw is not None and str(rating_raw).strip():
             parsed_rating = safe_int_or_none(rating_raw)
             if parsed_rating is not None and 1 <= parsed_rating <= 5:

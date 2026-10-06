@@ -375,8 +375,10 @@ class NationalRegisterNoteTests(SimpleTestCase):
         self.assertEqual(
             notes,
             [
-                "Listed on the National Register of Historic Places as “Hudson River State Hospital, Main Building”, "
-                "with 1 other listing nearby"
+                (
+                    "Listed on the National Register of Historic Places as “Hudson River State Hospital, Main Building”, "
+                    "with 1 other listing nearby"
+                ),
             ],
         )
 

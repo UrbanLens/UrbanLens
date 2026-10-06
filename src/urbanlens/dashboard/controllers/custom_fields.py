@@ -517,7 +517,7 @@ class ProfileCustomFieldValueView(LoginRequiredMixin, View):
 # -- Lightbox strips (photos and markup maps) ------------------------------------
 
 
-def _render_strip(request: HttpRequest, profile: Profile, entity_type: str, target: Any, url_name: str, target_arg: Any, error: str | None = None) -> HttpResponse:
+def _render_strip(request: HttpRequest, profile: Profile, entity_type: str, target: Any, url_name: str, target_arg: Any, *, error: str | None = None) -> HttpResponse:
     """Render the compact custom-fields strip shown under lightboxes.
 
     Returns 204 (so the strip stays hidden) when the user has no fields for

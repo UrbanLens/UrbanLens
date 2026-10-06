@@ -108,12 +108,12 @@ class BulkPinEdit:
         parent: New parent pin; ``None`` detaches to top level.
     """
 
-    description: str | None | Literal[Unset.UNSET] = UNSET
+    description: str | Literal[Unset.UNSET] | None = UNSET
     style: Mapping[str, str | int | None] = field(default_factory=dict)
-    rating: int | None | Literal[Unset.UNSET] = UNSET
+    rating: int | Literal[Unset.UNSET] | None = UNSET
     add_labels: Sequence[Label] = ()
     remove_labels: Sequence[Label] = ()
-    parent: Pin | None | Literal[Unset.UNSET] = UNSET
+    parent: Pin | Literal[Unset.UNSET] | None = UNSET
 
 
 @dataclass(frozen=True, slots=True)

@@ -344,7 +344,7 @@ dev = [
     # Postgres has been observed to fall over under exactly this load. Use it in
     # the container, via `bin/run_tests.sh --parallel`.
     "pytest-xdist~=3.8.0",
-    "ruff>=0.15.20,<0.17.0",
+    "ruff>=0.16.10,<0.17.0",
     # Property-based conformance testing against the published OpenAPI document.
     # The schema is a deployed artefact with generated clients depending on it,
     # and nothing else checks that a response matches what it advertises.

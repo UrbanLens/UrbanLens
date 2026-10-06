@@ -345,7 +345,7 @@ def viewer_default_base(context: Any, offered: list[MapLayerSpec]) -> str:
 
 
 @register.inclusion_tag("dashboard/partials/map/_layers_panel.html", takes_context=True)
-def map_layers_panel(
+def map_layers_panel(  # noqa: PLR0917 - an inclusion tag: the template engine passes {% map_layers_panel %}'s arguments positionally
     context: Any,
     layers: str = "street,terrain,satellite,weather,dark,borders",
     variant: str = "panel",

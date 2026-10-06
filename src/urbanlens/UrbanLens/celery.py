@@ -29,7 +29,7 @@ def redact_worker_log_handlers(**_extra) -> None:
 
 
 @task_failure.connect
-def log_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **_extra) -> None:
+def log_task_failure(sender=None, task_id=None, exception=None, args=None, kwargs=None, traceback=None, einfo=None, **_extra) -> None:  # noqa: PLR0917 - a signal receiver: its parameters are the documented task_failure signal arguments, which Celery passes by keyword
     """Log Celery task failures, with the task's arguments redacted."""
     from urbanlens.dashboard.services.security.redact import redact_call_arguments
 

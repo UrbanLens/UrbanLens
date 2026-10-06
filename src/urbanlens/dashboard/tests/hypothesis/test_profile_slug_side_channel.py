@@ -221,7 +221,17 @@ class DirectMessageSocketSideChannelTests(_HiddenAccountFixture):
         Friendship.objects.create(from_profile=self.profile, to_profile=self.friend, status=FriendshipStatus.ACCEPTED)
 
     def _send(self, slug: str) -> None:
-        DirectMessageConsumer.__dict__["_create_message"].func(self.socket, slug, "hi", "", "", 0, [], None, None)
+        DirectMessageConsumer.__dict__["_create_message"].func(
+            self.socket,
+            slug,
+            "hi",
+            ciphertext="",
+            nonce="",
+            key_version=0,
+            image_ids=[],
+            markup_map_uuid=None,
+            reply_to_id=None,
+        )
 
     def _open(self, slug: str) -> None:
         DirectMessageConsumer.__dict__["_mark_thread_open"].func(self.socket, slug)

@@ -723,7 +723,16 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         from urbanlens.dashboard.services.messaging.direct_messages import DirectMessageValidationError, RecipientNotAcceptingMessagesError
 
         try:
-            await self._create_message(recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id)
+            await self._create_message(
+                recipient_slug,
+                body,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                key_version=key_version,
+                image_ids=image_ids,
+                markup_map_uuid=markup_map_uuid,
+                reply_to_id=reply_to_id,
+            )
         except MessageRateLimitedError as exc:
             logger.info("Direct message rate-limited for profile %s: %s", self.profile_id, exc)
             await self._report_limit(_RATE_LIMITED_DETAIL)
@@ -826,7 +835,7 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         return profile.pk
 
     @database_sync_to_async
-    def _create_message(self, recipient_slug, body, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id):
+    def _create_message(self, recipient_slug, body, *, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id):
         """Resolve the recipient and create the message through the shared service.
 
         Args:
