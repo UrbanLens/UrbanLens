@@ -58,7 +58,7 @@ from typing import TYPE_CHECKING, Any
 from django.conf import settings as django_settings
 from django.core.cache import cache
 from django.db import DatabaseError
-from django.db.models import Case, CharField, Count, DateTimeField, F, Func, Max, Q, Value, When
+from django.db.models import Case, CharField, DateTimeField, F, Func, Max, Q, Sum, Value, When
 from django.utils import timezone
 
 from urbanlens.core.cache_keys import make_cache_key
@@ -372,7 +372,8 @@ def _read_counts(since: datetime, until: datetime | None = None, *, bucketed: bo
     if bucketed:
         annotated = annotated.annotate(bucket=_bucket_expression())
         fields.append("bucket")
-    return [_Count(row["service"], row.get("bucket"), row["derived"], row["status_code"], row["n"]) for row in annotated.values(*fields).annotate(n=Count("id")).order_by()]
+    # Calls rather than rows: a tallied service's row stands for a minute of them.
+    return [_Count(row["service"], row.get("bucket"), row["derived"], row["status_code"], row["n"]) for row in annotated.values(*fields).annotate(n=Sum("calls")).order_by()]
 
 
 def _tally(counts: Iterable[_Count], *, since: datetime | None = None) -> Tally:

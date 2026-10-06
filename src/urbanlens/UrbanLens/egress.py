@@ -351,6 +351,7 @@ BEAT_EGRESS: Mapping[str, BeatEgress] = {
     "image-marker-thumbnail-backfill": BeatEgress.INTERNAL,
     "image-analysis-thumbnail-backfill": BeatEgress.INTERNAL,
     "pin-tombstone-pruning": BeatEgress.INTERNAL,
+    "api-call-tally-rollup": BeatEgress.INTERNAL,
     "api-call-log-pruning": BeatEgress.INTERNAL,
     "provider-health-evaluation": BeatEgress.INTERNAL,
     "session-pruning": BeatEgress.INTERNAL,

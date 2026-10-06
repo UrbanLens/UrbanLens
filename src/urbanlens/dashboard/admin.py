@@ -61,10 +61,10 @@ class ApiRateLimitAdmin(admin.ModelAdmin):
 class ApiCallLogAdmin(admin.ModelAdmin):
     """Admin for ApiCallLog - read-only view of API call history."""
 
-    list_display = ["service", "model", "created", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "cost_estimate", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    list_display = ["service", "model", "created", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "cost_estimate", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     list_filter = ["service", "model", "success", "status_code", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     search_fields = ["service", "endpoint", "model"]
-    readonly_fields = ["service", "endpoint", "model", "created", "updated", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "cost_estimate", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
+    readonly_fields = ["service", "endpoint", "model", "created", "updated", "calls", "success", "status_code", "response_ms", "input_tokens", "output_tokens", "cost_estimate", "was_rate_limited", "was_geo_filtered", "was_rejected_input"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:

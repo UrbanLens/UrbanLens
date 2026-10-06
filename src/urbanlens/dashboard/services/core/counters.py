@@ -31,6 +31,8 @@ from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 from urbanlens.core.cache_backend import AtomicCacheOps, CacheUnavailableError, next_arrival
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from django.core.cache.backends.base import BaseCache
 
 logger = logging.getLogger(__name__)
@@ -61,8 +63,9 @@ class CounterUnavailableError(RuntimeError):
 class _GenericOps:
     """:class:`AtomicCacheOps` over any Django cache, for backends that lack them.
 
-    Increments stay atomic (``add`` then ``incr``); the compare-and-delete does not,
-    which is why the configured backends implement the protocol themselves.
+    Increments stay atomic (``add`` then ``incr``); the compare-and-delete and the
+    tallies do not, which is why the configured backends implement the protocol
+    themselves.
     """
 
     def __init__(self, backend: BaseCache) -> None:
@@ -108,6 +111,17 @@ class _GenericOps:
             self._backend.delete(key)
         else:
             self._backend.set(key, arrival, timeout=(arrival - now_us) / 1_000_000)
+
+    def add_to_tally(self, key: str, increments: Mapping[str, int], ttl: int) -> None:
+        tally = dict(self._backend.get(key) or {})
+        for field, count in increments.items():
+            tally[field] = tally.get(field, 0) + int(count)
+        self._backend.set(key, tally, timeout=ttl)
+
+    def take_tally(self, key: str) -> dict[str, int]:
+        tally = dict(self._backend.get(key) or {})
+        self._backend.delete(key)
+        return tally
 
 
 class _LocalWindows:
@@ -308,6 +322,46 @@ def clear(key: str) -> None:
         caches[DEFAULT_CACHE_ALIAS].delete(key)
     except _UNAVAILABLE:
         logger.debug("Counter %s could not be cleared from the store", key)
+
+
+def add_to_tally(key: str, increments: Mapping[str, int], ttl: int) -> None:
+    """Add to several named counts kept together under one key, which expires *ttl* seconds after the last addition.
+
+    No local fallback: a tally is a record for someone to read later, and one kept in this process
+    would be read by nobody.
+
+    Args:
+        key: The tally's key.
+        increments: Field to amount.
+        ttl: Seconds the tally outlives its last addition.
+
+    Raises:
+        CounterUnavailableError: The store could not be written.
+    """
+    try:
+        _ops().add_to_tally(key, increments, ttl)
+    except _UNAVAILABLE as exc:
+        _warn_outage("add_to_tally", key, Outage.REFUSE)
+        raise CounterUnavailableError(key) from exc
+
+
+def take_tally(key: str) -> dict[str, int]:
+    """Remove a tally and return what it held, atomically on the configured backends.
+
+    Args:
+        key: The tally's key.
+
+    Returns:
+        Field to count; empty when there is none.
+
+    Raises:
+        CounterUnavailableError: The store could not be read.
+    """
+    try:
+        return _ops().take_tally(key)
+    except _UNAVAILABLE as exc:
+        _warn_outage("take_tally", key, Outage.REFUSE)
+        raise CounterUnavailableError(key) from exc
 
 
 def delete_if_value(key: str, value: str) -> bool:

@@ -52,7 +52,7 @@ from django.core.cache.backends.redis import RedisCache, RedisSerializer
 
 if TYPE_CHECKING:
     from collections import OrderedDict
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Mapping
     from threading import Lock
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,11 @@ _DEGRADES: tuple[type[BaseException], ...] = (*_UNREACHABLE, *_REFUSED)
 
 #: What :meth:`AtomicLocMemCache._live_value` answers for a key that holds nothing.
 _ABSENT = object()
+
+
+def _text(value: bytes | str) -> str:
+    """A field name as the store returned it, which is bytes from redis-py."""
+    return value.decode() if isinstance(value, bytes) else value
 
 
 def next_arrival(stored_us: int, now_us: int, interval_us: int, burst: int) -> int | None:
@@ -180,6 +185,25 @@ class AtomicCacheOps(Protocol):
         """
         ...
 
+    def add_to_tally(self, key: str, increments: Mapping[str, int], ttl: int) -> None:
+        """Add each increment to its field of the tally at *key*, and restart the tally's *ttl*-second expiry.
+
+        Raises:
+            CacheUnavailableError: The store could not be reached.
+        """
+        ...
+
+    def take_tally(self, key: str) -> dict[str, int]:
+        """Remove the tally at *key* and return its fields, in one step, so no increment is read twice or lost.
+
+        Returns:
+            Field to count; empty when there is no tally.
+
+        Raises:
+            CacheUnavailableError: The store could not be reached.
+        """
+        ...
+
 
 # KEYS[1] counter; ARGV[1] ttl seconds; ARGV[2] "1" to slide the expiry. A key with no
 # expiry at all is given one, so a counter written by anything else cannot live forever.
@@ -228,6 +252,21 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
     return redis.call('DEL', KEYS[1])
 end
 return 0
+"""
+
+# KEYS[1] tally (a hash); ARGV[1] ttl seconds; ARGV[2..] field, increment pairs.
+_ADD_TO_TALLY_LUA = """
+for i = 2, #ARGV, 2 do
+    redis.call('HINCRBY', KEYS[1], ARGV[i], ARGV[i + 1])
+end
+redis.call('EXPIRE', KEYS[1], ARGV[1])
+return 1
+"""
+
+_TAKE_TALLY_LUA = """
+local fields = redis.call('HGETALL', KEYS[1])
+redis.call('DEL', KEYS[1])
+return fields
 """
 
 
@@ -400,6 +439,15 @@ class ResilientRedisCache(RedisCache):
     def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
         self._eval("return_token", _RETURN_TO_BUCKET_LUA, key, now_us, interval_us)
 
+    def add_to_tally(self, key: str, increments: Mapping[str, int], ttl: int) -> None:
+        pairs = [part for field, count in increments.items() for part in (field, int(count))]
+        if pairs:
+            self._eval("add_to_tally", _ADD_TO_TALLY_LUA, key, int(ttl), *pairs)
+
+    def take_tally(self, key: str) -> dict[str, int]:
+        flat = self._eval("take_tally", _TAKE_TALLY_LUA, key) or []
+        return {_text(field): int(count) for field, count in zip(flat[::2], flat[1::2], strict=True)}
+
 
 class AtomicLocMemCache(LocMemCache):
     """``LocMemCache`` with :class:`AtomicCacheOps`, each operation under the backend's own lock.
@@ -489,3 +537,23 @@ class AtomicLocMemCache(LocMemCache):
                 self._expire_info.pop(full_key, None)
                 return
             self._store(full_key, arrival)
+
+    def add_to_tally(self, key: str, increments: Mapping[str, int], ttl: int) -> None:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            current = self._live_value(full_key)
+            if current is _ABSENT:
+                self._make_room()
+            tally = {} if current is _ABSENT else dict(current)
+            for field, count in increments.items():
+                tally[field] = tally.get(field, 0) + int(count)
+            self._store(full_key, tally)
+            self._expire_info[full_key] = self.get_backend_timeout(ttl)
+
+    def take_tally(self, key: str) -> dict[str, int]:
+        full_key = self.make_and_validate_key(key)
+        with self._lock:
+            current = self._live_value(full_key)
+            self._cache.pop(full_key, None)
+            self._expire_info.pop(full_key, None)
+            return {} if current is _ABSENT else dict(current)

@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveSmallIntegerField, TextField
+from django.db.models import SET_NULL, BooleanField, CharField, DecimalField, ForeignKey, Index, IntegerField, PositiveIntegerField, PositiveSmallIntegerField, TextField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
 
 
 class ApiCallLog(abstract.DashboardModel):
-    """Log entry for one external API call. The ``created`` timestamp (from the base model) is the call time."""
+    """Log entry for one external API call, or for a minute of a tallied service's calls.
+
+    The ``created`` timestamp (from the base model) is the call time; for a rolled-up row, the start of the minute
+    its ``calls`` were made in (``services.core.call_tally``).
+    """
 
     service = CharField(
         max_length=50,
@@ -76,6 +80,11 @@ class ApiCallLog(abstract.DashboardModel):
         default=False,
         db_default=False,
         help_text="True if this entry records a call refused before it was made because its input could not return data (services.core.input_validation).",
+    )
+    calls = PositiveIntegerField(
+        default=1,
+        db_default=1,
+        help_text="How many calls this row stands for: 1, except for a service whose calls are tallied and rolled up once a minute (services.core.call_tally), where it is every call that minute with the same outcome. Its response_ms is their mean and its cost_estimate their total.",
     )
     cost_estimate = DecimalField(
         max_digits=10,

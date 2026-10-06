@@ -37,6 +37,8 @@ def store_down() -> Iterator[None]:
             "delete_if_value",
             "take_token",
             "return_token",
+            "add_to_tally",
+            "take_tally",
         ):
             stack.enter_context(mock.patch.object(AtomicLocMemCache, name, side_effect=down))
         stack.enter_context(mock.patch.object(AtomicLocMemCache, "incr", side_effect=down))
@@ -204,6 +206,55 @@ class TheRedisBackendDistinguishesAnOutageTests(SimpleTestCase):
 
     def test_incr_still_raises_a_value_error_for_old_callers(self) -> None:
         self.assertTrue(issubclass(CacheUnavailableError, ValueError))
+
+
+class TalliesTests(SimpleTestCase):
+    """Named counts kept together under one key, for a record someone reads later (``services.core.call_tally``)."""
+
+    def test_additions_accumulate_and_a_take_empties_the_tally(self) -> None:
+        counters.add_to_tally("ul:test:tally", {"a": 1, "b": 2}, 60)
+        counters.add_to_tally("ul:test:tally", {"a": 3}, 60)
+
+        self.assertEqual(counters.take_tally("ul:test:tally"), {"a": 4, "b": 2})
+        self.assertEqual(counters.take_tally("ul:test:tally"), {})
+
+    def test_parallel_additions_lose_nothing(self) -> None:
+        def add() -> None:
+            for _ in range(50):
+                counters.add_to_tally("ul:test:tally", {"a": 1}, 60)
+
+        threads = [threading.Thread(target=add) for _ in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(counters.take_tally("ul:test:tally"), {"a": 400})
+
+    def test_an_outage_is_raised_rather_than_kept_in_this_process(self) -> None:
+        """Kept locally, the tally would be read by nobody; the caller writes the record another way."""
+        with store_down():
+            with self.assertRaises(CounterUnavailableError):
+                counters.add_to_tally("ul:test:tally", {"a": 1}, 60)
+            with self.assertRaises(CounterUnavailableError):
+                counters.take_tally("ul:test:tally")
+
+    def test_the_redis_backend_adds_in_one_script(self) -> None:
+        backend = ResilientRedisCache("redis://127.0.0.1:6379/0", {"OPTIONS": {}})
+        client = mock.Mock()
+        with mock.patch.object(RedisCacheClient, "get_client", return_value=client):
+            backend.add_to_tally("k", {"a": 1, "b": 2}, 60)
+        script, numkeys, key, ttl, *pairs = client.eval.call_args.args
+        self.assertIn("HINCRBY", script)
+        self.assertEqual((numkeys, key, ttl, pairs), (1, backend.make_and_validate_key("k"), 60, ["a", 1, "b", 2]))
+
+    def test_the_redis_backend_takes_in_one_script(self) -> None:
+        backend = ResilientRedisCache("redis://127.0.0.1:6379/0", {"OPTIONS": {}})
+        client = mock.Mock()
+        client.eval.return_value = [b"a", b"4", b"b", b"2"]
+        with mock.patch.object(RedisCacheClient, "get_client", return_value=client):
+            self.assertEqual(backend.take_tally("k"), {"a": 4, "b": 2})
+        self.assertIn("DEL", client.eval.call_args.args[0])
 
 
 class LockReleaseIsCompareAndDeleteTests(SimpleTestCase):

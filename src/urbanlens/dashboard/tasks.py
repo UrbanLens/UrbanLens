@@ -3999,6 +3999,18 @@ def prune_api_call_logs() -> int:
 _API_CALL_LOG_RETENTION_DAYS = 400
 
 
+@shared_task(queue=Queue.MAINTENANCE, soft_time_limit=50, time_limit=55)
+def roll_up_api_call_tallies() -> int:
+    """Write tallied services' calls into ``ApiCallLog`` (``services.core.call_tally``).
+
+    Returns:
+        Rows written.
+    """
+    from urbanlens.dashboard.services.core.call_tally import roll_up
+
+    return roll_up()
+
+
 @shared_task(queue=Queue.MAINTENANCE)
 def evaluate_provider_health_task() -> dict[str, int]:
     """Judge every external provider on its recent calls, back off the ones refusing or failing, and alert.

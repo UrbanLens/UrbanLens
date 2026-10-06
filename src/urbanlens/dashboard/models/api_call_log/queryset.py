@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Self
 
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -87,8 +87,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         Returns:
             ``(profile_id, calls)`` pairs, heaviest first, ties by profile id.
         """
-        rows = self.since(window).exclude(profile__isnull=True).values("profile_id").annotate(calls=Count("id")).order_by("-calls", "profile_id")
-        return [(row["profile_id"], row["calls"]) for row in rows]
+        rows = self.since(window).exclude(profile__isnull=True).values("profile_id").annotate(spent=Sum("calls")).order_by("-spent", "profile_id")
+        return [(row["profile_id"], row["spent"]) for row in rows]
 
     def active_consumers(self, window: timedelta) -> int:
         """How many distinct people used this queryset's service over ``window``.
@@ -105,21 +105,32 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return self.since(window).exclude(profile__isnull=True).values("profile_id").distinct().count()
 
     def summary_by_service(self) -> list[Mapping[str, Any]]:
-        """Return per-service usage summary for the last 30 days."""
-        return list(
+        """Return per-service usage summary for the last 30 days.
+
+        Counted in calls rather than rows, since a tallied service's row stands for a minute of them, and the mean
+        response time is weighted the same way.
+        """
+        timed = Q(response_ms__isnull=False)
+        rows = (
             self.this_month()
             .values("service")
             .annotate(
-                total=Count("id"),
-                blocked=Count("id", filter=Q(was_rate_limited=True)),
-                geo_skipped=Count("id", filter=Q(was_geo_filtered=True)),
-                rejected_inputs=Count("id", filter=Q(was_rejected_input=True)),
-                errors=Count("id", filter=Q(success=False, was_rate_limited=False, was_geo_filtered=False, was_service_disabled=False, was_rejected_input=False)),
-                avg_response_ms=Avg("response_ms"),
+                total=Sum("calls"),
+                blocked=Sum("calls", filter=Q(was_rate_limited=True), default=0),
+                geo_skipped=Sum("calls", filter=Q(was_geo_filtered=True), default=0),
+                rejected_inputs=Sum("calls", filter=Q(was_rejected_input=True), default=0),
+                errors=Sum("calls", filter=Q(success=False, was_rate_limited=False, was_geo_filtered=False, was_service_disabled=False, was_rejected_input=False), default=0),
+                timed_ms_total=Sum(F("response_ms") * F("calls"), filter=timed),
+                timed_calls=Sum("calls", filter=timed),
                 total_cost=Sum("cost_estimate"),
             )
-            .order_by("service"),
+            .order_by("service")
         )
+        summaries: list[Mapping[str, Any]] = []
+        for row in rows:
+            timed_ms, timed_calls = row.pop("timed_ms_total"), row.pop("timed_calls")
+            summaries.append({**row, "avg_response_ms": timed_ms / timed_calls if timed_calls else None})
+        return summaries
 
 
 _ApiCallLogManagerBase = abstract.DashboardManager.from_queryset(ApiCallLogQuerySet)
