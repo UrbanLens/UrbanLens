@@ -129,6 +129,10 @@ def cache_directives(response: HttpResponseBase) -> str:
     return response.headers.get("Cache-Control", "")
 
 
+# Production keeps sessions in Dragonfly (`cached_db`), but settings only pick that engine when a
+# Dragonfly URL is configured - which a worktree with no `.env` is not - and on plain `db` every
+# request pays a `django_session` read. Pinned so the budget is measured on the deployed engine.
+@override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cached_db")
 class BasemapTileCostTests(TestCase):
     """The per-tile budget, measured on a warm cache - the path that carries every map after the first."""
 
@@ -272,7 +276,6 @@ class BasemapTileCostTests(TestCase):
         ):
             return self.client.get(self._url(x=x))
 
-    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cached_db")
     def test_an_uncached_tile_asks_the_database_nothing(self) -> None:
         """The miss path, through the real rate-limited session to a stubbed vendor: the budget is checked on the
         cache's counters, the outcome is tallied there, and the ledger is written by the roll-up a minute later.
@@ -422,6 +425,10 @@ class BasemapTileCostTests(TestCase):
         self.assertLessEqual(len(refused.captured_queries), len(served.captured_queries))
 
 
+# Production keeps sessions in Dragonfly (`cached_db`), but settings only pick that engine when a
+# Dragonfly URL is configured - which a worktree with no `.env` is not - and on plain `db` every
+# request pays a `django_session` read. Pinned so the budget is measured on the deployed engine.
+@override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cached_db")
 class BasemapViewportCostTests(TestCase):
     """What a whole viewport costs - the unit a user actually experiences, and the site pays for."""
 
