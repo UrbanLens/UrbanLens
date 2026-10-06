@@ -1,37 +1,32 @@
 version: 2
-updates:
-  - package-ecosystem: github-actions
-    directory: /
+
+# Every version update, across every ecosystem, arrives as one pull request a week, so a
+# Monday brings one Dependabot notification instead of one per package.
+multi-ecosystem-groups:
+  all-dependencies:
     schedule:
       interval: weekly
       day: monday
       time: "09:00"
-    open-pull-requests-limit: 5
-    labels: [dependencies, ci]
+    labels: [dependencies]
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
 
   - package-ecosystem: pip
     directory: /
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:15"
-    open-pull-requests-limit: 10
-    labels: [dependencies, python]
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
 
   - package-ecosystem: npm
     directory: /
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:30"
-    open-pull-requests-limit: 10
-    labels: [dependencies, frontend]
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
 
   - package-ecosystem: docker
     directory: /
-    schedule:
-      interval: weekly
-      day: monday
-      time: "09:45"
-    open-pull-requests-limit: 5
-    labels: [dependencies, docker]
+    patterns: ["*"]
+    multi-ecosystem-group: all-dependencies
