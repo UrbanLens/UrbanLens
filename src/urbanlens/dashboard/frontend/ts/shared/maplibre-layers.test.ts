@@ -12,6 +12,25 @@ import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import { parseContributors, resetEsriAttributionForTests, seedEsriCoveragesForTests } from "./esri-attribution";
 import type { Map as MaplibreMap } from "maplibre-gl";
 
+/**
+ * With no catalogue embedded, street and dark resolve to OpenFreeMap's public styles and the engine fetches them.
+ * A test that has not stubbed `fetch` itself must not reach the internet for them, so it is answered with what an
+ * unreachable host answers: a rejected promise, which the engine treats as a style it cannot draw.
+ */
+const fetchOutsideTests = globalThis.fetch;
+const unstubbedFetches: string[] = [];
+beforeEach(() => {
+    unstubbedFetches.length = 0;
+    globalThis.fetch = ((url: string) => {
+        unstubbedFetches.push(String(url));
+        return Promise.reject(new TypeError(`unstubbed fetch in a test: ${String(url)}`));
+    }) as unknown as typeof fetch;
+});
+afterEach(() => {
+    globalThis.fetch = fetchOutsideTests;
+    if (process.env.UL_REPORT_UNSTUBBED_FETCH && unstubbedFetches.length) console.warn(`unstubbed: ${unstubbedFetches.join(", ")}`);
+});
+
 interface FakeLayer {
     id: string;
     source: string;
