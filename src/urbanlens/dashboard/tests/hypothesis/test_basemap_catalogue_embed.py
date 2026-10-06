@@ -90,6 +90,16 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
         )
         self.assertEqual(layers[1]["style_url"], "https://tiles.example/terrain/style.json")
 
+    def test_an_esri_layer_names_its_service_for_the_credits_lookup(self) -> None:
+        """The proxied URL no longer says which Esri basemap it is, and the browser needs that to ask Esri who to credit for the area on screen."""
+        _warm([_RASTER, _VECTOR, {**_RASTER, "id": "hillshade"}])
+
+        layers = _embedded(_render(self.user))
+
+        self.assertEqual(layers[0]["esri_service"], "World_Street_Map")
+        self.assertEqual(layers[1]["esri_service"], "World_Topo_Map", "a vector entry's raster half is Esri's too")
+        self.assertNotIn("esri_service", layers[2], "REData fetches this one, so there is no Esri service to name")
+
     def test_a_signed_out_viewer_is_offered_no_raster_layer(self) -> None:
         """The raster proxy is login-required, so offering one here would swap a working vendor layer for a grid of 404s on exactly the pages a signed-out visitor sees - a public share."""
         _warm([_RASTER, _VECTOR])

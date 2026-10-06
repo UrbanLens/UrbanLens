@@ -4,6 +4,8 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BASE_ERROR_TILE_COLOR, baseLayer, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
+import albanyFixture from "../testing/esri-attribution-albany.json";
+import { parseContributors, resetEsriAttributionForTests, seedEsriCoveragesForTests } from "./esri-attribution";
 
 describe("normalizeBase", () => {
     test("passes canonical keys through unchanged", () => {
@@ -1679,6 +1681,128 @@ describe("the attribution line", () => {
         expect(text).toContain("OpenStreetMap");
         expect(text).toContain("CARTO");
         expect(text).toContain("Leaflet");
+    });
+
+    /** A FakeMap looking at Albany, NY at zoom 15 - the view these expectations were taken from. */
+    function albanyMap(): FakeMap {
+        const map = new FakeMap();
+        Object.assign(map, {
+            getBounds: () => ({ getSouth: () => 42.6434, getWest: () => -73.7737, getNorth: () => 42.6618, getEast: () => -73.7387 }),
+            getZoom: () => 15,
+        });
+        return map;
+    }
+
+    function seedAlbany(): void {
+        seedEsriCoveragesForTests("World_Imagery", parseContributors(albanyFixture.World_Imagery));
+        seedEsriCoveragesForTests("World_Topo_Map", parseContributors(albanyFixture.World_Topo_Map));
+    }
+
+    function creditsOn(map: FakeMap, options: Parameters<typeof createMapLayers>[1]): { seen: string[]; layers: ReturnType<typeof createMapLayers> } {
+        stubLeafletForMapLayers();
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
+        const seen: string[] = [];
+        const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false, ...options, onAttribution: (text) => seen.push(text) });
+        map.fire("layeradd");
+        return { seen, layers };
+    }
+
+    test("an Esri base says Powered by Esri, then its static credit until the providers for the view are known", () => {
+        resetEsriAttributionForTests();
+        const text = creditFor({ defaultBase: "satellite" });
+
+        expect(text.startsWith("Powered by Esri · ")).toBe(true);
+        expect(text).toContain("GeoEye");
+        expect(text.endsWith(" · Leaflet")).toBe(true);
+    });
+
+    test("satellite over Albany at zoom 15 credits only that view's providers", () => {
+        seedAlbany();
+        const { seen } = creditsOn(albanyMap(), { defaultBase: "satellite" });
+
+        expect(seen.at(-1)).toBe("Powered by Esri · New York State, Vantor · Leaflet");
+        resetEsriAttributionForTests();
+    });
+
+    test("topographic over Albany at zoom 15 credits only that view's providers", () => {
+        seedAlbany();
+        const { seen } = creditsOn(albanyMap(), { defaultBase: "topographic" });
+
+        expect(seen.at(-1)).toBe("Powered by Esri · Esri Canada, Esri, HERE, Garmin, INCREMENT P, USGS, METI/NASA, EPA, USDA · Leaflet");
+        resetEsriAttributionForTests();
+    });
+
+    test("the satellite credit is never the topographic map's, nor both", () => {
+        seedAlbany();
+        const map = albanyMap();
+        const { seen, layers } = creditsOn(map, { defaultBase: "topographic" });
+        layers.setBase("satellite");
+        map.fire("layerremove");
+
+        const text = seen.at(-1)!;
+        expect(text).not.toContain("Garmin");
+        expect(text).not.toContain("INCREMENT P");
+        resetEsriAttributionForTests();
+    });
+
+    test("moving the view re-credits it", () => {
+        seedAlbany();
+        const map = albanyMap();
+        const { seen } = creditsOn(map, { defaultBase: "satellite" });
+        Object.assign(map, { getZoom: () => 10 });
+
+        map.fire("moveend");
+
+        expect(seen.at(-1)).toBe("Powered by Esri · Earthstar Geographics · Leaflet");
+        resetEsriAttributionForTests();
+    });
+
+    test("credits the borders overlay on a satellite base too, with Esri's own line once", () => {
+        resetEsriAttributionForTests();
+        const text = creditFor({ defaultBase: "satellite", initialOverlays: ["borders"] });
+
+        expect(text).toContain("GeoEye");
+        expect(text).toContain("Boundaries");
+        expect(text.match(/Powered by Esri/g)).toHaveLength(1);
+    });
+
+    test("a proxied layer is credited by the Esri service the catalogue says it is", async () => {
+        resetRedataLayersCacheForTests();
+        globalThis.fetch = (() =>
+            Promise.resolve({
+                ok: true,
+                json: () =>
+                    Promise.resolve({
+                        layers: [{ id: "satellite", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/satellite/{z}/{x}/{y}/", attribution: "Esri, Maxar, Earthstar Geographics, and the GIS User Community", esri_service: "World_Imagery" }],
+                    }),
+            } as Response)) as unknown as typeof fetch;
+        await registerRedataLayers();
+        seedAlbany();
+
+        const { seen } = creditsOn(albanyMap(), { defaultBase: "satellite" });
+
+        expect(seen.at(-1)).toBe("Powered by Esri · New York State, Vantor · Leaflet");
+        resetEsriAttributionForTests();
+    });
+
+    test("a catalogue service name that is not one is not used to build a request", async () => {
+        resetRedataLayersCacheForTests();
+        globalThis.fetch = (() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ layers: [{ id: "satellite", source_type: "raster", url_template: "/x/{z}/{x}/{y}/", attribution: "Somebody", esri_service: "../../x" }] }),
+            } as Response)) as unknown as typeof fetch;
+        await registerRedataLayers();
+
+        expect(creditFor({ defaultBase: "satellite" })).toBe("Somebody · Leaflet");
+    });
+
+    test("the instance answers the credit for an exported image without the renderer", () => {
+        seedAlbany();
+        const { layers } = creditsOn(albanyMap(), { defaultBase: "satellite" });
+
+        expect(layers.attribution(false)).toBe("Powered by Esri · New York State, Vantor");
+        resetEsriAttributionForTests();
     });
 });
 

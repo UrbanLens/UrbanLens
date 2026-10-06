@@ -1,0 +1,332 @@
+{
+ "_comment": "Every coverage area within 0.02 degrees of Albany, NY, cut from static.arcgis.com/attribution/<service> on 2026-10-06.",
+ "World_Imagery": {
+  "contributors": [
+   {
+    "attribution": "Earthstar Geographics",
+    "coverageAreas": [
+     {
+      "zoomMax": 13,
+      "zoomMin": 0,
+      "score": 50,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "Microsoft",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 18,
+      "score": 80,
+      "bbox": [
+       34.02,
+       -125.94,
+       49.36,
+       -66.32
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "New York State",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 12,
+      "score": 100,
+      "bbox": [
+       41.99,
+       -79.77,
+       45.04,
+       -73.32
+      ]
+     },
+     {
+      "zoomMax": 23,
+      "zoomMin": 12,
+      "score": 100,
+      "bbox": [
+       41.99,
+       -74.65,
+       43.8,
+       -73.26
+      ]
+     },
+     {
+      "zoomMax": 23,
+      "zoomMin": 20,
+      "score": 100,
+      "bbox": [
+       42.44,
+       -74.11,
+       42.83,
+       -73.67
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "Vantor",
+    "coverageAreas": [
+     {
+      "zoomMax": 17,
+      "zoomMin": 14,
+      "score": 80,
+      "bbox": [
+       42.07,
+       -179.06,
+       75.82,
+       -50.64
+      ]
+     },
+     {
+      "zoomMax": 23,
+      "zoomMin": 18,
+      "score": 80,
+      "bbox": [
+       42.07,
+       -128.1,
+       50.06,
+       -65.52
+      ]
+     }
+    ]
+   }
+  ]
+ },
+ "World_Topo_Map": {
+  "contributors": [
+   {
+    "attribution": "Garmin",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 3,
+      "score": 40,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "EPA",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 3,
+      "score": 10,
+      "bbox": [
+       18.53,
+       -175.17,
+       71.28,
+       -66.48
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "Esri",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 0,
+      "score": 50,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "FAO",
+    "coverageAreas": [
+     {
+      "zoomMax": 9,
+      "zoomMin": 0,
+      "score": 20,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "HERE",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 2,
+      "score": 45,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "INCREMENT P",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 13,
+      "score": 30,
+      "bbox": [
+       16.49,
+       -123.47,
+       53.83,
+       -62.93
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "NOAA",
+    "coverageAreas": [
+     {
+      "zoomMax": 7,
+      "zoomMin": 0,
+      "score": 20,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "USDA",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 10,
+      "score": 10,
+      "bbox": [
+       18.53,
+       -175.17,
+       71.28,
+       -66.48
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "USGS",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 4,
+      "score": 20,
+      "bbox": [
+       -84.94,
+       -179.66,
+       84.94,
+       179.66
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "Esri Canada",
+    "coverageAreas": [
+     {
+      "zoomMax": 23,
+      "zoomMin": 10,
+      "score": 55,
+      "bbox": [
+       41.68,
+       -135.27,
+       60.85,
+       -68.33
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "Intermap",
+    "coverageAreas": [
+     {
+      "zoomMax": 16,
+      "zoomMin": 16,
+      "score": 30,
+      "bbox": [
+       18.73,
+       -174.17,
+       57.95,
+       20.5
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "METI/NASA",
+    "coverageAreas": [
+     {
+      "zoomMax": 16,
+      "zoomMin": 13,
+      "score": 20,
+      "bbox": [
+       -57.33,
+       -180,
+       83.36,
+       180
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "NGA",
+    "coverageAreas": [
+     {
+      "zoomMax": 13,
+      "zoomMin": 9,
+      "score": 20,
+      "bbox": [
+       -89,
+       -180,
+       85.05,
+       180
+      ]
+     }
+    ]
+   },
+   {
+    "attribution": "NPS",
+    "coverageAreas": [
+     {
+      "zoomMax": 12,
+      "zoomMin": 6,
+      "score": 10,
+      "bbox": [
+       21.94,
+       -168.75,
+       70.61,
+       -67.5
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

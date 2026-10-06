@@ -9,6 +9,7 @@ declare const L: typeof import("leaflet");
 import type { Map as MaplibreMap } from "maplibre-gl";
 
 import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
+import { composeAttribution, esriServiceForUrl, isEsriServiceName, type AttributionView, type CreditSource } from "./esri-attribution";
 import { createLayersPanel } from "./map-layers-panel";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { RasterSourceInput } from "./maplibre-raster-style";
@@ -27,6 +28,11 @@ export const DEFAULT_BASE_LAYER: BaseLayerKey = "satellite";
 interface TileDef {
     url: string;
     options: L.TileLayerOptions;
+    /**
+     * The Esri service the tiles come from, where `url` no longer says so - a template this
+     * deployment proxies. A vendor URL names its own (`esriServiceForUrl`).
+     */
+    esriService?: string;
 }
 
 /**
@@ -634,6 +640,23 @@ export function attributionAsText(html: string): string {
 }
 
 /**
+ * How one drawn raster source is credited: by the providers of the area shown where it is an Esri
+ * basemap, else by the def's own text.
+ * @param kind - Canonical or legacy source key.
+ * @param fallback - Shown when the def carries no attribution at all.
+ */
+export function rasterCreditFor(kind: string, fallback: string): CreditSource {
+    applyEmbeddedCatalogue();
+    const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)];
+    const text = typeof def?.options.attribution === "string" ? attributionAsText(def.options.attribution) : "";
+    const service = def ? (def.esriService ?? esriServiceForUrl(def.url)) : null;
+    if (def && service) {
+        return { kind: "esri", service, fallback: text || "Esri", maxNativeZoom: typeof def.options.maxNativeZoom === "number" ? def.options.maxNativeZoom : undefined };
+    }
+    return { kind: "text", text: text || fallback };
+}
+
+/**
  * Resolves one of the canonical sources to the shape `buildRasterStyle` (`maplibre-raster-style.ts`)
  * needs - the MapLibre-side counterpart to `tileLayer()` above. Same resolution order (`kind` as
  * given, then its normalized base key, then `street`), so a MapLibre and a Leaflet map built from the
@@ -645,6 +668,7 @@ export function rasterSourceFor(kind: string): RasterSourceInput {
     return {
         url: def.url,
         attribution: typeof def.options.attribution === "string" ? def.options.attribution : undefined,
+        esriService: def.esriService ?? esriServiceForUrl(def.url) ?? undefined,
         // Only a REData-registered entry currently carries a minZoom; dropping it would let a
         // MapLibre map request tiles below the depth the catalogue says that layer serves.
         minZoom: def.options.minZoom,
@@ -765,6 +789,7 @@ function registerCatalogue(layers: RedataLayer[]): string[] {
         if (layer.url_template) {
             TILE_DEFS[key] = {
                 url: layer.url_template,
+                ...(isEsriServiceName(layer.esri_service) ? { esriService: layer.esri_service } : {}),
                 options: {
                     // The catalogue says where a layer's tiles come from, not how this site draws it.
                     // `borders` is an overlay - its pane, its 0.6 opacity and its *transparent* error
@@ -852,6 +877,8 @@ interface RedataLayer {
     fallback_attribution?: string;
     fallback_min_zoom?: number | null;
     fallback_max_zoom?: number | null;
+    /** The Esri service `url_template` proxies, so its credit can follow the view. Absent for any other vendor. */
+    esri_service?: string;
 }
 
 /** Creates the geopolitical borders overlay (same tiles on every map). */
@@ -919,8 +946,14 @@ export interface MapLayersOptions {
     loadingTarget?: HTMLElement | null;
     /** Element that gets data-map-style="dark|light" (default: the map container). */
     styleTarget?: HTMLElement | null;
-    /** Receives the combined attribution line whenever active layers change. */
+    /** Receives the combined attribution line whenever active layers change, and as the view moves. */
     onAttribution?: ((text: string) => void) | null;
+    /**
+     * Draw raster bases even where a vector style is offered. For a map that turns (leaflet-rotate
+     * turns its panes, and the vector bridge's canvas does not follow) and one whose export should
+     * match the screen, since an export is always drawn from raster tiles.
+     */
+    rasterOnly?: boolean;
     /** Fired after any base/overlay/dark change with the full current state. */
     onStateChange?: ((state: MapLayersState) => void) | null;
     /** Fired when the user toggles dark mode (persist server-side here). */
@@ -959,6 +992,11 @@ export interface MapLayersInstance {
     getState: () => MapLayersState;
     /** Currently selected base layer key. */
     baseKey: () => BaseLayerKey;
+    /**
+     * The credit line for what is drawn now, for this view.
+     * @param includeEngine - Whether to end it with the renderer's name; false for an exported image.
+     */
+    attribution: (includeEngine?: boolean) => string;
     /** Releases every listener this instance registered outside the map itself (document, matchMedia, context menu) - call when tearing down a per-dialog/per-panel map that outlives a single page load. */
     destroy: () => void;
 }
@@ -999,8 +1037,8 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     // -- Layers ------------------------------------------------------------------
-    const streetLayer = baseLayer("street");
-    const darkLayer = baseLayer("dark");
+    const streetLayer = opts.rasterOnly ? tileLayer("street") : baseLayer("street");
+    const darkLayer = opts.rasterOnly ? tileLayer("dark") : baseLayer("dark");
     const topographicLayer = tileLayer("topographic", topoPaneName ? { pane: topoPaneName } : undefined);
     const satelliteLayer = tileLayer("satellite");
     const bordersLayer = bordersOverlay();
@@ -1134,46 +1172,64 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
 
     // -- Attribution ---------------------------------------------------------------
     // Replaces Leaflet's on-map control on pages that render attribution elsewhere (e.g. the main map's footer).
-    function attributionText(): string {
-        const parts: string[] = [];
+    function currentView(): AttributionView | null {
+        try {
+            const bounds = map.getBounds();
+            return { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast(), zoom: map.getZoom() };
+        } catch {
+            // A map with no view yet has no bounds; Leaflet throws rather than answering.
+            return null;
+        }
+    }
+
+    function attributionText(includeEngine = true): string {
+        const sources: CreditSource[] = [];
         // Read off the def actually drawn rather than named here, because the catalogue replaces
         // these defs at runtime and a self-hosted layer's raster half is a different dataset from
         // the vendor default it displaces. A hardcoded credit would keep naming the old one.
-        const creditFor = (key: string, fallback: string): string => {
+        const creditFor = (key: string, fallback: string): CreditSource => {
             // Mirrors `baseLayer()`'s own choice, so the credit names the dataset actually drawn:
             // a vector base and the raster it displaces are different datasets from different vendors.
-            const vector = canDrawVectorBase() ? vectorStyleFor(key) : null;
-            const credit = vector?.attribution ?? (TILE_DEFS[key]?.options?.attribution as string | undefined);
-            return credit ? attributionAsText(credit) : fallback;
+            const vector = !opts.rasterOnly && canDrawVectorBase() ? vectorStyleFor(key) : null;
+            return vector ? { kind: "text", text: attributionAsText(vector.attribution) } : rasterCreditFor(key, fallback);
         };
         if (map.hasLayer(satelliteLayer)) {
-            parts.push(creditFor("satellite", "© Esri"));
+            sources.push(creditFor("satellite", "© Esri"));
         } else if (map.hasLayer(topographicLayer)) {
-            parts.push(creditFor("topographic", "© Esri"));
+            sources.push(creditFor("topographic", "© Esri"));
         } else {
-            parts.push(creditFor(isDarkActive() ? "dark" : "street", "© OpenStreetMap"));
+            sources.push(creditFor(isDarkActive() ? "dark" : "street", "© OpenStreetMap"));
         }
         if (weather && (map.hasLayer(weather.rain) || map.hasLayer(weather.clouds))) {
-            parts.push("© OpenWeatherMap");
+            sources.push({ kind: "text", text: "© OpenWeatherMap" });
         }
-        if (map.hasLayer(bordersLayer) && !map.hasLayer(satelliteLayer)) {
-            parts.push("© Esri");
-        }
-        parts.push("Leaflet");
-        return parts.join(" · ");
+        // Its own providers on every base: the boundaries and place names are not the imagery's.
+        if (map.hasLayer(bordersLayer)) sources.push(creditFor("borders", "© Esri"));
+        return composeAttribution(sources, currentView(), includeEngine ? "Leaflet" : "", onAttributionLayerChange);
     }
 
     // A vector overlay can add/remove thousands of paths in one turn.
     let attributionFrame: number | null = null;
-    const onAttributionLayerChange = (): void => {
-        if (attributionFrame !== null) return;
-        attributionFrame = window.requestAnimationFrame(() => {
+    let attributionPending = false;
+    let lastAttribution: string | null = null;
+    function onAttributionLayerChange(): void {
+        if (!opts.onAttribution || attributionPending) return;
+        attributionPending = true;
+        const frame = window.requestAnimationFrame(() => {
+            attributionPending = false;
             attributionFrame = null;
-            opts.onAttribution!(attributionText());
+            const text = attributionText();
+            // A pan that keeps the same providers on screen says nothing new.
+            if (text === lastAttribution) return;
+            lastAttribution = text;
+            opts.onAttribution!(text);
         });
-    };
+        // Only kept while it is still to run: a frame that ran during the call has nothing to cancel.
+        if (attributionPending) attributionFrame = frame;
+    }
     if (opts.onAttribution) {
-        map.on("layeradd layerremove", onAttributionLayerChange);
+        // Which providers to credit follows the area and zoom on screen, not only the layers.
+        map.on("layeradd layerremove moveend", onAttributionLayerChange);
     }
 
     // -- Tile loading visual feedback -------------------------------------------------
@@ -1355,13 +1411,15 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         syncButtons,
         getState,
         baseKey,
+        attribution: (includeEngine = true) => attributionText(includeEngine),
         destroy: () => {
             map.off("layeradd layerremove", onTopoLayerChange);
-            if (opts.onAttribution) map.off("layeradd layerremove", onAttributionLayerChange);
+            if (opts.onAttribution) map.off("layeradd layerremove moveend", onAttributionLayerChange);
             if (attributionFrame !== null) {
                 window.cancelAnimationFrame(attributionFrame);
                 attributionFrame = null;
             }
+            attributionPending = false;
             if (colorSchemeQuery && onColorSchemeChange) colorSchemeQuery.removeEventListener("change", onColorSchemeChange);
             panel.destroy();
             unbindContextMenu?.();

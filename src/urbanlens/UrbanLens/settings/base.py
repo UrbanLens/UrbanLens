@@ -850,6 +850,9 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
+        # Esri's per-area credits for its basemaps (frontend/ts/shared/esri-attribution.ts). A static file per service, so
+        # the request says which basemap is on screen and nothing about where.
+        "https://static.arcgis.com",
         # Leaflet's source map, fetched when devtools is open against the unpkg build.
         "https://unpkg.com",
     ],

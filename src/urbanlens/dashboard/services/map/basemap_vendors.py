@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
+import re
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -60,6 +61,21 @@ class VendorTiles:
         """
         return sha256(self.url_template.encode()).hexdigest()[:8]
 
+    @property
+    def esri_service(self) -> str | None:
+        """The ArcGIS Online service these tiles come from, when they are Esri's.
+
+        Esri credits each basemap's data providers by area and zoom, and publishes which ones apply
+        where at ``static.arcgis.com/attribution/<service>``. The browser asks that for the view it
+        is showing, so it needs the service's name - which a proxied tile URL no longer carries.
+
+        Returns:
+            A service path such as ``World_Imagery`` or ``Reference/World_Boundaries_and_Places``,
+            or None for a vendor that is not Esri.
+        """
+        match = _ESRI_SERVICE.match(self.url_template)
+        return match.group(1) if match else None
+
     def url_for(self, z: int, x: int, y: int) -> str:
         """Fill this template in for one tile.
 
@@ -80,6 +96,9 @@ class VendorTiles:
 
 
 _ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services"
+
+#: The service path inside an ArcGIS Online tile URL - ``Canvas/World_Dark_Gray_Base`` keeps its folder.
+_ESRI_SERVICE = re.compile(r"^https://(?:server|services)\.arcgisonline\.com/ArcGIS/rest/services/(.+?)/MapServer/", re.IGNORECASE)
 
 #: REData layer id -> the endpoint REData would have fetched on our behalf. Mirrors its
 #: ``TILE_PROVIDERS``; a layer absent here still goes through REData.
