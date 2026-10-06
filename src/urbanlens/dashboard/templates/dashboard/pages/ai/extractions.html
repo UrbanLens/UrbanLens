@@ -11,6 +11,8 @@
 
     {% if feature_available %}
     <p class="ai-extractions-limit">You can analyze {{ remaining_today }} more link{{ remaining_today|pluralize }} today.</p>
+    {% elif unavailable_here %}
+    <p class="ai-extractions-limit">AI link processing is not available in this environment.</p>
     {% else %}
     <p class="ai-extractions-limit">AI link processing isn't currently available on your account.</p>
     {% endif %}

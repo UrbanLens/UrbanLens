@@ -59,7 +59,7 @@ def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None
     Args:
         wiki: The wiki to mine for trivia questions.
         gateway: The trivia-generation gateway, when the caller already has one.
-        raise_refusal: Let a call refused before it was made raise, so a sweep can tell it from an answer.
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell it from an answer. Covers the moderation of each question as well as the generation.
 
     Returns:
         Every newly-created (APPROVED) question - empty if the wiki was skipped (no substantial content, already generated, AI unavailable or refused) or nothing survived classification.
@@ -106,7 +106,7 @@ def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None
         if not question_text or not answer_text:
             continue
 
-        verdict = classify_trivia_question(question_text, answer_text, wiki.location)
+        verdict = classify_trivia_question(question_text, answer_text, wiki.location, raise_refusal=raise_refusal)
         if not verdict.approved:
             logger.info("AI-generated trivia question rejected (%s): %r", verdict.reason, question_text)
             continue

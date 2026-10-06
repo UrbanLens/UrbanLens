@@ -63,7 +63,7 @@ def _build_prompt(prompt: str, answer: str, location: Location) -> str:
     return f"Location: {location_name}\nQuestion: {wrap_user_data(prompt)}\nAccepted answer: {wrap_user_data(answer)}"
 
 
-def classify_trivia_question(prompt: str, answer: str, location: Location, *, profile: Profile | None = None) -> ClassifierVerdict:
+def classify_trivia_question(prompt: str, answer: str, location: Location, *, profile: Profile | None = None, raise_refusal: bool = False) -> ClassifierVerdict:
     """Judge whether a trivia question is safe to add to the public rotation.
 
     Args:
@@ -71,9 +71,14 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
         answer: The canonical accepted answer.
         location: The location the question is about.
         profile: The submitting profile, if user-submitted (used only for the AI-availability gate - AI generation has no submitting profile and passes None).
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell "not asked" from a verdict.
 
     Returns:
-        APPROVE, or REJECT with a reason - AI unavailable, an unparseable response, ``empty`` for a blank question or answer, or one of the classifier's own reject categories."""
+        APPROVE, or REJECT with a reason - AI unavailable, an unparseable response, ``empty`` for a blank question or answer, or one of the classifier's own reject categories.
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made - over its
+            limit, switched off, or not made in this environment (D26)."""
     gateway = get_gateway("trivia_moderation", profile=profile, instructions=_INSTRUCTIONS)
     if gateway is None:
         logger.info("Trivia classifier unavailable (AI disabled); rejecting fail-closed")
@@ -100,7 +105,9 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
                 return ClassifierVerdict(approved=False, reason="ai_unavailable")
             slot.success, slot.cost_estimate = raw is not None, gateway.cost
     except RequestCancelledError:
-        logger.info("trivia_moderation refused by its rate limit or switch")
+        if raise_refusal:
+            raise
+        logger.info("trivia_moderation refused by its rate limit, switch or environment")
         return ClassifierVerdict(approved=False, reason="ai_unavailable")
 
     if raw is None:

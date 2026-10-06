@@ -60,16 +60,21 @@ class ArticleSafetyVerdict:
     reason: str | None = None
 
 
-def classify_article_text(text: str, *, place_name: str, profile: Profile | None = None) -> ArticleSafetyVerdict:
+def classify_article_text(text: str, *, place_name: str, profile: Profile | None = None, raise_refusal: bool = False) -> ArticleSafetyVerdict:
     """Judge whether drafted article text is safe to append.
 
     Args:
         text: Sanitized plain-text paragraphs proposed for the article.
         place_name: The place the article is about (for prompt context only).
         profile: The requesting profile, used only for the AI-availability gate.
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell "not reviewed" from a rejection.
 
     Returns:
-        APPROVE, or REJECT with a reason."""
+        APPROVE, or REJECT with a reason.
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made - over its
+            limit, switched off, or not made in this environment (D26)."""
     from urbanlens.dashboard.services.ai.factory import get_gateway
 
     gateway = get_gateway("article_safety", profile=profile, instructions=_INSTRUCTIONS)
@@ -93,7 +98,9 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
                 return ArticleSafetyVerdict(approved=False, reason="ai_unavailable")
             slot.success, slot.cost_estimate = raw is not None, gateway.cost
     except RequestCancelledError:
-        logger.info("article_safety refused by its rate limit or switch")
+        if raise_refusal:
+            raise
+        logger.info("article_safety refused by its rate limit, switch or environment")
         return ArticleSafetyVerdict(approved=False, reason="ai_unavailable")
 
     if raw is None:

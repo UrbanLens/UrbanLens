@@ -60,8 +60,11 @@ def _slice_existing(content: str) -> str:
     return content[:MAX_EXISTING_ARTICLE_CHARS] + "\n…"
 
 
-def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_article: str) -> str | None:
-    """Call the writing gateway; return the raw answer text, ``""`` for a blank question or answer, or None on failure/unavailability."""
+def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_article: str, raise_refusal: bool = False) -> str | None:
+    """Call the writing gateway; return the raw answer text, ``""`` for a blank question or answer, or None on failure/unavailability.
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made."""
     gateway = get_gateway("trivia_wiki_incorporation", instructions=_WRITING_INSTRUCTIONS)
     if gateway is None:
         return None
@@ -93,7 +96,9 @@ def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_arti
                 return None
             slot.success, slot.cost_estimate = answer_text is not None, gateway.cost
     except RequestCancelledError:
-        logger.info("trivia_wiki_incorporation refused by its rate limit or switch")
+        if raise_refusal:
+            raise
+        logger.info("trivia_wiki_incorporation refused by its rate limit, switch or environment")
         return None
     return answer_text
 
@@ -104,15 +109,21 @@ def _mark_processed(question: TriviaQuestion) -> None:
     question.save(update_fields=["wiki_incorporated_at", "updated"])
 
 
-def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
+def incorporate_question_into_wiki(question: TriviaQuestion, *, raise_refusal: bool = False) -> bool:
     """Draft, sanitize, safety-check, and append one well-upvoted question's fact to its wiki.
     Skipped without any AI call when the question is already processed, isn't a still-approved ``USER_SUBMITTED`` question, has no location wiki, or hasn't crossed :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`.
 
     Args:
         question: The candidate question.
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell "not asked" from "asked and
+            turned down". Covers the safety review as well as the draft; a refused review is never a rejection.
 
     Returns:
-        True only when new text was actually appended to the wiki article."""
+        True only when new text was actually appended to the wiki article.
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when a call was refused before it was made - over its limit,
+            switched off, or not made in this environment (D26). Nothing is marked processed."""
     try:
         if question.wiki_incorporated_at is not None:
             return False
@@ -128,7 +139,7 @@ def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
         article = get_article(wiki=wiki)
         existing = article.content if article else ""
 
-        raw = _draft_paragraph(place_name=place_name, prompt=question.prompt, answer=question.answer, existing_article=existing)
+        raw = _draft_paragraph(place_name=place_name, prompt=question.prompt, answer=question.answer, existing_article=existing, raise_refusal=raise_refusal)
         if raw is None:
             # AI unavailable - leave wiki_incorporated_at unset so a later
             # sweep retries, rather than silently losing this question.
@@ -139,7 +150,7 @@ def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
             _mark_processed(question)
             return False
 
-        verdict = classify_article_text(new_text, place_name=place_name)
+        verdict = classify_article_text(new_text, place_name=place_name, raise_refusal=raise_refusal)
         if not verdict.approved:
             _mark_processed(question)
             return False
@@ -153,13 +164,18 @@ def incorporate_question_into_wiki(question: TriviaQuestion) -> bool:
         )
         _mark_processed(question)
         return applied
-    except Exception:
+    except Exception as exc:
+        if raise_refusal and isinstance(exc, RequestCancelledError):
+            raise
         logger.exception("Trivia wiki incorporation failed unexpectedly for question %s", question.pk)
         return False
 
 
 def sweep_questions_for_wiki_incorporation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
     """Consider a bounded batch of not-yet-processed, well-upvoted questions for wiki incorporation.
+
+    Nothing is marked processed for a call refused before it was made (over its limit, switched off, or not made in
+    this environment), and the sweep stops at the first such refusal: the remaining questions wait for the next run.
 
     Args:
         batch_size: Maximum number of candidate questions to consider in this run.
@@ -182,7 +198,12 @@ def sweep_questions_for_wiki_incorporation(*, batch_size: int = DEFAULT_SWEEP_BA
     questions_considered = 0
     questions_incorporated = 0
     for question in candidates:
+        try:
+            incorporated = incorporate_question_into_wiki(question, raise_refusal=True)
+        except RequestCancelledError as exc:
+            logger.info("Trivia wiki incorporation sweep stopped after %d questions: %s", questions_considered, exc)
+            break
         questions_considered += 1
-        if incorporate_question_into_wiki(question):
+        if incorporated:
             questions_incorporated += 1
     return {"questions_considered": questions_considered, "questions_incorporated": questions_incorporated}
