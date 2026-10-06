@@ -6,6 +6,7 @@
       "package-name": "UrbanLens",
       "component": "UrbanLens",
       "include-component-in-tag": false,
+      "bump-minor-pre-major": true,
       "changelog-path": "CHANGELOG.md",
       "prerelease": true,
       "prerelease-type": "beta",

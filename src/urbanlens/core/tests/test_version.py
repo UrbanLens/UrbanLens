@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError
+import json
 from pathlib import Path
 import subprocess
 import tomllib
@@ -334,3 +335,35 @@ class GitRevisionHelperTests(SimpleTestCase):
     def test_upstream_commit_missing_returns_none(self) -> None:
         with mock.patch("urbanlens.core.version.subprocess.run", side_effect=OSError("no upstream")):
             self.assertIsNone(get_upstream_git_commit())
+
+
+class PreOneReleaseTests(SimpleTestCase):
+    """UrbanLens stays on 0.x releases until the maintainer explicitly decides otherwise.
+
+    A 1.0.0 commits the project to semver's stability promise, and UrbanLens is still in
+    beta. release-please would otherwise turn one breaking-change commit into a 1.0.0
+    release PR, so the config must keep a breaking change on the minor version. Changing
+    these assertions is that explicit decision, not a test fix.
+    """
+
+    repo_root = PYPROJECT_PATH.parent
+
+    def test_release_please_keeps_breaking_changes_below_1_0(self) -> None:
+        config = json.loads((self.repo_root / "release-please-config.json").read_text())
+        for path, package in config["packages"].items():
+            with self.subTest(package=path):
+                self.assertIs(package.get("bump-minor-pre-major", config.get("bump-minor-pre-major")), True)
+
+    def test_every_recorded_version_is_0_x(self) -> None:
+        with PYPROJECT_PATH.open("rb") as pyproject_file:
+            pyproject_version = tomllib.load(pyproject_file)["project"]["version"]
+        manifest = json.loads((self.repo_root / ".release-please-manifest.json").read_text())
+        package_json = json.loads((self.repo_root / "package.json").read_text())
+        recorded = {
+            "pyproject.toml": pyproject_version,
+            "package.json": package_json["version"],
+            **{f".release-please-manifest.json[{path}]": version for path, version in manifest.items()},
+        }
+        for source, version in recorded.items():
+            with self.subTest(source=source):
+                self.assertTrue(str(version).startswith("0."), msg=f"{source} records {version}")
