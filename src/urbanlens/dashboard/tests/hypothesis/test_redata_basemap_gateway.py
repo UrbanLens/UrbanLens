@@ -7,6 +7,7 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _ROW = {"id": "osm", "url_template": "https://x/{z}/{x}/{y}.png", "name": "OSM"}
 _OTHER = {"id": "sat", "url_template": "https://y/{z}/{x}/{y}.png", "name": "Satellite"}
@@ -18,7 +19,7 @@ def _sources(body: Any) -> list[dict[str, Any]]:
         return RedataBasemapTilesGateway().list_sources()
 
 
-class ListSourcesEnvelopeTests(SimpleTestCase):
+class ListSourcesEnvelopeTests(RedataConfiguredMixin, SimpleTestCase):
     """The three body shapes the gateway accepts, and the order it prefers them."""
 
     def test_a_bare_list_is_returned_as_is(self) -> None:
@@ -39,7 +40,7 @@ class ListSourcesEnvelopeTests(SimpleTestCase):
         self.assertEqual(_sources({"sources": [], "results": [_OTHER]}), [_OTHER])
 
 
-class ListSourcesRowFilterTests(SimpleTestCase):
+class ListSourcesRowFilterTests(RedataConfiguredMixin, SimpleTestCase):
     """A row without an `id` cannot be requested, so it must not be offered."""
 
     def test_a_row_with_no_id_is_dropped(self) -> None:
@@ -56,7 +57,7 @@ class ListSourcesRowFilterTests(SimpleTestCase):
         self.assertEqual(_sources([_ROW, _OTHER]), [_ROW, _OTHER])
 
 
-class ListSourcesEmptyAnswerTests(SimpleTestCase):
+class ListSourcesEmptyAnswerTests(RedataConfiguredMixin, SimpleTestCase):
     """Nothing usable answers as no layers, rather than raising."""
 
     def test_an_unconfigured_or_empty_answer_is_no_layers(self) -> None:

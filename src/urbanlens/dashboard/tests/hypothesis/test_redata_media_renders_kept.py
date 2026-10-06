@@ -19,6 +19,7 @@ from PIL import Image as PILImage
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 from urbanlens.dashboard.services.media.previews import gallery_urls
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 _ROUTE = ("pin.cris.attachment", ("res-1", 5))
 
@@ -50,7 +51,7 @@ def _run_enqueued(task, *args, **_enqueue_options):
     return mock.Mock()
 
 
-class _Base(TestCase):
+class _Base(RedataConfiguredMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         for store in (cache, caches[settings.PROXIED_BYTES_CACHE]):
