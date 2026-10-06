@@ -13,7 +13,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt, TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot, service_is_enabled
 from urbanlens.dashboard.services.trivia.classifier import classify_trivia_question
 
 if TYPE_CHECKING:
@@ -132,7 +132,8 @@ def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) ->
 
     Each wiki mined is recorded whether or not a question survived, and is not mined again for
     ``RETRY_AFTER``, so wikis that yield nothing cannot hold the batch and re-spend tokens every run. Nothing
-    is recorded while AI is unavailable, and the sweep stops at the first call refused before it was made.
+    is recorded while AI is unavailable, and the sweep stops at the first call refused before it was made. It does
+    not start while the moderation every generated question needs is switched off or not called here.
 
     Args:
         batch_size: Maximum number of wikis to consider in this run.
@@ -140,6 +141,13 @@ def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) ->
     Returns:
         ``{"wikis_considered": int, "questions_created": int}``."""
     from urbanlens.dashboard.models.wiki.model import Wiki
+
+    summary = {"wikis_considered": 0, "questions_created": 0}
+    if not service_is_enabled("trivia_moderation"):
+        # Every question generated would be refused moderation (switched off, or not called in this environment), so
+        # a hosted call spent on one would be thrown away. Nothing is generated, and nothing is marked tried.
+        logger.info("Trivia generation sweep skipped: trivia_moderation is not available")
+        return summary
 
     already_generated_location_ids = TriviaQuestion.objects.filter(source=TriviaQuestionSource.AI_GENERATED).values_list("location_id", flat=True)
     candidates = list(
@@ -151,7 +159,6 @@ def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) ->
         .select_related("location")
         .order_by(F("trivia_generation_attempt__attempted_at").asc(nulls_first=True), "pk")[:batch_size],
     )
-    summary = {"wikis_considered": 0, "questions_created": 0}
     if not candidates:
         return summary
     gateway = _gateway()

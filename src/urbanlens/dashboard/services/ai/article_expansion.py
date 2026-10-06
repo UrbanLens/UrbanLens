@@ -260,6 +260,9 @@ def _draft_new_paragraphs(
         with api_call_slot("article_expansion", endpoint=gateway.model) as slot:
             try:
                 answer = gateway.send_prompt(prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 logger.exception("Article expansion writing call failed")
                 return None

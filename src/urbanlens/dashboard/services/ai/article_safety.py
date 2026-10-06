@@ -93,6 +93,9 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
         with api_call_slot("article_safety", endpoint=gateway.model) as slot:
             try:
                 raw = gateway.send_prompt(user_prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 logger.exception("Article safety classifier call failed unexpectedly; rejecting fail-closed")
                 return ArticleSafetyVerdict(approved=False, reason="ai_unavailable")

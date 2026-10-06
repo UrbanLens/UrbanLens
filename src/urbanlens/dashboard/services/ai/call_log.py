@@ -17,7 +17,7 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.core.rate_limiter import current_call_slot, log_api_call, valid_token_count
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, current_call_slot, log_api_call, valid_token_count
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -84,7 +84,8 @@ def recorded_ai_call(*, service: str, provider: str, model: str) -> Iterator[AiC
     """Time one AI call and record it, however it ends.
 
     A failure to record is logged and swallowed: it never fails the call, and a call that raised is
-    recorded as failed before the exception goes on.
+    recorded as failed before the exception goes on. A call the environment refused (D26) was never made, so
+    it is not recorded at all.
 
     Args:
         service: The service key the row is written under (the AI feature).
@@ -96,10 +97,15 @@ def recorded_ai_call(*, service: str, provider: str, model: str) -> Iterator[AiC
     """
     call = AiCall()
     started = time.monotonic()
+    refused = False
     try:
         yield call
+    except EnvironmentRefusedError:
+        refused = True
+        raise
     finally:
-        _record(service, provider, model, call, int((time.monotonic() - started) * 1000))
+        if not refused:
+            _record(service, provider, model, call, int((time.monotonic() - started) * 1000))
 
 
 def _record(service: str, provider: str, model: str, call: AiCall, response_ms: int) -> None:

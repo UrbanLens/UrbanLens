@@ -122,8 +122,12 @@ production are unchanged, and the test suite still runs the features against its
   outside any slot, and a provider added later.
 - **The overrides.** `UL_ENVIRONMENT_SHARE_OVERRIDES=trivia_generation=1` lets that feature call whichever provider
   the site's AI settings pick. `ai_cloudflare=1` lets any feature start and sends its calls to Cloudflare only: a
-  feature on another provider is refused at the inference client, with the slot's reservation released, so the
-  refusal still writes no row. A feature named with 0 stays off whatever the providers say.
+  feature on another provider is refused at the inference client, with the slot's reservation released (and no row
+  written when the call is made outside a slot, `call_log.recorded_ai_call`), so the refusal still writes no row.
+  Callers that wrap the call in `except Exception` re-raise a refusal first, so it degrades the same way rather than
+  logging a failed call. The one visible difference is a link extraction under such a mismatch: it has already been
+  started and its page read, so it fails with "not available in this environment" and has spent one of the day's
+  runs. A feature named with 0 stays off whatever the providers say.
 - **A new provider** must be added to `egress.HOSTED_AI_PROVIDERS` (a test compares it with
   `urbanlens_ai.schema.Provider`). A local model is given an `internal` service key instead.
 - **What each feature does.** None errors, none caches the refusal, and none marks work tried.
@@ -139,7 +143,9 @@ production are unchanged, and the test suite still runs the features against its
 | Category and label-style suggestions | No labels matched and no style, no call |
 
 - **The sweeps.** `sweep_wikis_for_generation` and `sweep_questions_for_wiki_incorporation` stop at the first call
-  refused before it was made, and record nothing for it. That includes the second call each one makes: a refused
+  refused before it was made, and record nothing for it. Before they start, each asks whether the service of the call
+  that follows its own (moderation; the safety review) is switched on and called here, and does nothing if not, so a
+  hosted draft is never paid for and thrown away. That includes the second call each one makes: a refused
   moderation of a generated question no longer marks the wiki tried for 30 days, and a refused safety review no
   longer marks the question processed for good. Both pass `raise_refusal` down (as #215 did for the generation call).
   A review that ran and rejected the text is an answer and still marks it. A safety review unavailable for another

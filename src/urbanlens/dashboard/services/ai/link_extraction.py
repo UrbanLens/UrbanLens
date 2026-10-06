@@ -668,6 +668,9 @@ def run_extraction(extraction: LinkExtraction) -> None:
             cost_before = gateway.cost
             try:
                 answer = gateway.send_prompt(prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 logger.exception("Link extraction AI call failed for extraction %s", extraction.pk)
                 answer = None

@@ -97,6 +97,9 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
         with api_call_slot("trivia_moderation", endpoint=gateway.model) as slot:
             try:
                 raw = gateway.send_prompt(user_prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 # A transport-level failure (provider outage, DNS, an unrecognized model tripping the
                 # token-counting library, etc.) must never bubble up and 500 the submitter's request - it's

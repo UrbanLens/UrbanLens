@@ -213,8 +213,8 @@ class TriviaTests(_AiTestCase):
         self.assertFalse(TriviaGenerationAttempt.objects.exists())
         self.assertNothingWasAsked(gateway)
 
-    def test_a_refused_moderation_does_not_mark_the_wiki_tried(self) -> None:
-        """Generation was opted in and moderation was not: the questions are not lost for the 30-day retry."""
+    def test_a_sweep_that_cannot_moderate_does_not_spend_a_hosted_call_to_throw_the_answer_away(self) -> None:
+        """Generation was opted in and moderation was not: nothing is generated, so nothing is wasted or marked tried."""
         from urbanlens.dashboard.services.trivia import classifier, generation
 
         wikis = [self._wiki() for _ in range(2)]
@@ -229,8 +229,21 @@ class TriviaTests(_AiTestCase):
         self.assertEqual(summary, {"wikis_considered": 0, "questions_created": 0})
         self.assertFalse(TriviaGenerationAttempt.objects.exists())
         self.assertFalse(TriviaQuestion.objects.filter(location__in=[wiki.location for wiki in wikis]).exists())
-        self.assertEqual(moderator.calls, 0)
-        self.assertEqual(generator.calls, 1, "the sweep went on after its first refusal")
+        self.assertEqual((generator.calls, moderator.calls), (0, 0))
+
+    def test_a_refused_moderation_stops_generation_and_marks_nothing(self) -> None:
+        """The check up front cannot see a refusal that arrives mid-run (a provider opted out, a limit reached)."""
+        from urbanlens.dashboard.services.trivia import classifier, generation
+
+        wiki = self._wiki()
+        generator = _Gateway(answers=["When was it built?|||1937"])
+        with (
+            deployment(DEVELOPMENT, overrides={"trivia_generation": 1.0}),
+            mock.patch.object(classifier, "get_gateway", return_value=_Gateway("APPROVE")),
+            self.assertRaises(EnvironmentRefusedError),
+        ):
+            generation.generate_questions_for_wiki(wiki, gateway=generator, raise_refusal=True)
+        self.assertFalse(TriviaQuestion.objects.filter(location=wiki.location).exists())
 
     def test_the_moderation_refusal_is_still_an_ordinary_verdict_for_a_direct_caller(self) -> None:
         from urbanlens.dashboard.services.trivia import classifier
@@ -273,8 +286,8 @@ class TriviaTests(_AiTestCase):
             question.refresh_from_db()
             self.assertIsNone(question.wiki_incorporated_at)
 
-    def test_a_refused_safety_review_does_not_mark_the_question_processed(self) -> None:
-        """The paragraph was drafted and could not be reviewed here: it waits, rather than being refused for good."""
+    def test_a_sweep_that_cannot_review_does_not_draft(self) -> None:
+        """The writer was opted in and the safety review was not: nothing is drafted, and no question is marked processed."""
         from urbanlens.dashboard.services.trivia import wiki_incorporation
 
         questions = [self._upvoted_question() for _ in range(2)]
@@ -287,11 +300,41 @@ class TriviaTests(_AiTestCase):
         ):
             summary = wiki_incorporation.sweep_questions_for_wiki_incorporation(batch_size=5)
         self.assertEqual(summary, {"questions_considered": 0, "questions_incorporated": 0})
-        self.assertEqual(reviewer.calls, 0)
-        self.assertEqual(writer.calls, 1, "the sweep went on after its first refusal")
+        self.assertEqual((writer.calls, reviewer.calls), (0, 0))
         for question in questions:
             question.refresh_from_db()
             self.assertIsNone(question.wiki_incorporated_at)
+
+    def test_in_production_too_a_review_switched_off_keeps_the_questions_waiting(self) -> None:
+        """Before, each was drafted and then marked processed on the strength of a review that never ran."""
+        from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
+        from urbanlens.dashboard.services.trivia import wiki_incorporation
+
+        ApiRateLimit.objects.update_or_create(
+            service="article_safety", defaults={"display_name": "s", "enabled": False}
+        )
+        questions = [self._upvoted_question() for _ in range(2)]
+        writer = _Gateway("The mill opened in 1937.")
+        with deployment("production"), mock.patch.object(wiki_incorporation, "get_gateway", return_value=writer):
+            wiki_incorporation.sweep_questions_for_wiki_incorporation(batch_size=5)
+        self.assertEqual(writer.calls, 0)
+        for question in questions:
+            question.refresh_from_db()
+            self.assertIsNone(question.wiki_incorporated_at)
+
+    def test_a_review_refused_mid_run_leaves_the_question_unprocessed(self) -> None:
+        from urbanlens.dashboard.services.trivia import wiki_incorporation
+
+        question = self._upvoted_question()
+        with (
+            deployment(DEVELOPMENT, overrides={"trivia_wiki_incorporation": 1.0}),
+            mock.patch.object(wiki_incorporation, "get_gateway", return_value=_Gateway("The mill opened in 1937.")),
+            mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=_Gateway("APPROVE")),
+            self.assertRaises(EnvironmentRefusedError),
+        ):
+            wiki_incorporation.incorporate_question_into_wiki(question, raise_refusal=True)
+        question.refresh_from_db()
+        self.assertIsNone(question.wiki_incorporated_at)
 
     def test_a_safety_review_that_ran_and_refused_the_text_still_marks_it_processed(self) -> None:
         """Only a refusal before the call is "not tried"; a verdict of REJECT is an answer."""
@@ -635,3 +678,123 @@ class OverridesLetTheWorkBeDoneTests(_AiTestCase):
             self.assertTrue(answer_check.is_answer_equivalent("nineteen thirty seven", "1937", profile=self.profile))
         self.assertEqual(gateway.calls, 1)
         self.assertEqual(ApiCallLog.objects.filter(service="trivia_answer_check").count(), 1)
+
+
+class _TransportRefuses(_Gateway):
+    """A gateway whose provider is refused at the inference client, after its feature's slot opened."""
+
+    def _refuse(self):
+        from urbanlens.dashboard.services.ai.inference_client import require_provider_egress
+
+        self.calls += 1
+        require_provider_egress("cloudflare")
+        raise AssertionError("the provider was not refused: the deployment opts only OpenAI in")
+
+    def send_prompt(self, prompt: str, **kwargs):
+        self._refuse()
+
+    def send_prompt_list(self, prompt: str, **kwargs):
+        self._refuse()
+
+
+class ARefusalTheSlotDidNotSeeTests(_AiTestCase):
+    """Let start by an OpenAI override, the provider the site picked (Cloudflare) is refused inside the slot, and several callers
+    wrap the call in ``except Exception``. It is still "not available here", not an error, and still no row."""
+
+    def test_a_refusal_outside_any_slot_writes_no_row(self) -> None:
+        from urbanlens.dashboard.services.ai.call_log import recorded_ai_call
+        from urbanlens.dashboard.services.ai.inference_client import require_provider_egress
+
+        with (
+            deployment(DEVELOPMENT),
+            self.assertRaises(EnvironmentRefusedError),
+            recorded_ai_call(service="trivia_generation", provider="cloudflare", model="m"),
+        ):
+            require_provider_egress("cloudflare")
+        self.assertFalse(ApiCallLog.objects.exists())
+
+    def test_a_real_gateway_refused_by_the_client_writes_no_row(self) -> None:
+        from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
+        from urbanlens.dashboard.services.ai.inference_client import RemoteInferenceClient
+
+        gateway = CloudflareGateway(feature="trivia_generation")
+        gateway._inference_client = RemoteInferenceClient("http://ai-inference", "token", timeout_seconds=5.0)
+        with (
+            deployment(DEVELOPMENT),
+            mock.patch("urbanlens.dashboard.services.ai.inference_client.requests.post") as post,
+            self.assertRaises(EnvironmentRefusedError),
+        ):
+            gateway._get_response(gateway.construct_messages("hello"))
+        post.assert_not_called()
+        self.assertFalse(ApiCallLog.objects.exists())
+
+    def test_a_call_that_failed_for_another_reason_is_still_recorded_as_failed(self) -> None:
+        from urbanlens.dashboard.services.ai.call_log import recorded_ai_call
+
+        with (
+            self.assertRaises(RuntimeError),
+            recorded_ai_call(service="trivia_generation", provider="cloudflare", model="m"),
+        ):
+            raise RuntimeError("the provider fell over")
+        self.assertEqual(list(ApiCallLog.objects.values_list("service", "success")), [("trivia_generation", False)])
+
+    def test_link_extraction_says_so_rather_than_logging_a_failed_call(self) -> None:
+        from urbanlens.dashboard.services.ai import link_extraction
+
+        pin = baker.make(Pin, profile=self.profile, name="Old Mill", name_is_user_provided=True)
+        extraction = LinkExtraction.objects.create(profile=self.profile, pin=pin, url="https://example.com/a")
+        gateway = _TransportRefuses()
+        with (
+            deployment(DEVELOPMENT, overrides={"ai_openai": 1.0}),
+            mock.patch.object(link_extraction, "fetch_page_text", return_value="page"),
+            mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway),
+            self.assertNoLogs(link_extraction.logger, "ERROR"),
+        ):
+            link_extraction.run_extraction(extraction)
+        extraction.refresh_from_db()
+        self.assertEqual(extraction.status, LinkExtractionStatus.FAILED)
+        self.assertIn(HERE, extraction.error.lower())
+        self.assertFalse(ApiCallLog.objects.exists())
+
+    def test_the_trivia_moderation_and_safety_review_pass_it_on_to_a_sweep(self) -> None:
+        from urbanlens.dashboard.services.ai import article_safety
+        from urbanlens.dashboard.services.trivia import classifier
+
+        location = baker.make(Location)
+        with (
+            deployment(DEVELOPMENT, overrides={"ai_openai": 1.0}),
+            mock.patch.object(classifier, "get_gateway", return_value=_TransportRefuses()),
+            mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=_TransportRefuses()),
+            self.assertNoLogs(classifier.logger, "ERROR"),
+            self.assertNoLogs(article_safety.logger, "ERROR"),
+        ):
+            with self.assertRaises(EnvironmentRefusedError):
+                classifier.classify_trivia_question("When?", "1937", location, raise_refusal=True)
+            with self.assertRaises(EnvironmentRefusedError):
+                article_safety.classify_article_text("The mill opened in 1937.", place_name="Mill", raise_refusal=True)
+            # A direct caller still gets the fail-closed verdict, and nothing is reported as an unexpected failure.
+            self.assertEqual(classifier.classify_trivia_question("When?", "1937", location).reason, "ai_unavailable")
+            self.assertEqual(article_safety.classify_article_text("Text.", place_name="Mill").reason, "ai_unavailable")
+
+    def test_the_wiki_draft_passes_it_on_to_the_sweep(self) -> None:
+        from urbanlens.dashboard.services.trivia import wiki_incorporation
+
+        with (
+            deployment(DEVELOPMENT, overrides={"ai_openai": 1.0}),
+            mock.patch.object(wiki_incorporation, "get_gateway", return_value=_TransportRefuses()),
+            self.assertNoLogs(wiki_incorporation.logger, "ERROR"),
+            self.assertRaises(EnvironmentRefusedError),
+        ):
+            wiki_incorporation._draft_paragraph(
+                place_name="Mill", prompt="When?", answer="1937", existing_article="", raise_refusal=True
+            )
+
+    def test_an_answer_check_is_a_no_match_without_an_error(self) -> None:
+        from urbanlens.dashboard.services.trivia import answer_check
+
+        with (
+            deployment(DEVELOPMENT, overrides={"ai_openai": 1.0}),
+            mock.patch.object(answer_check, "get_gateway", return_value=_TransportRefuses()),
+            self.assertNoLogs(answer_check.logger, "ERROR"),
+        ):
+            self.assertFalse(answer_check.is_answer_equivalent("nineteen thirty seven", "1937", profile=self.profile))

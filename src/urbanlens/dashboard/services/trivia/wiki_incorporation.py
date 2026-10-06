@@ -13,7 +13,7 @@ from urbanlens.dashboard.services.ai.article_safety import classify_article_text
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot, service_is_enabled
 from urbanlens.dashboard.services.trivia.voting import effective_score, score_expression
 from urbanlens.dashboard.services.wiki.articles import get_article
 
@@ -91,6 +91,9 @@ def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_arti
         with api_call_slot("trivia_wiki_incorporation", endpoint=gateway.model) as slot:
             try:
                 answer_text = gateway.send_prompt(full_prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 logger.exception("Trivia wiki-incorporation writing call failed")
                 return None
@@ -176,12 +179,19 @@ def sweep_questions_for_wiki_incorporation(*, batch_size: int = DEFAULT_SWEEP_BA
 
     Nothing is marked processed for a call refused before it was made (over its limit, switched off, or not made in
     this environment), and the sweep stops at the first such refusal: the remaining questions wait for the next run.
+    It does not start while the safety review every draft needs is switched off or not called here.
 
     Args:
         batch_size: Maximum number of candidate questions to consider in this run.
 
     Returns:
         ``{"questions_considered": int, "questions_incorporated": int}``."""
+    if not service_is_enabled("article_safety"):
+        # Every paragraph drafted would go unreviewed (switched off, or not called in this environment), so a hosted
+        # call spent on a draft would be thrown away. Nothing is drafted, and no question is marked processed.
+        logger.info("Trivia wiki incorporation sweep skipped: article_safety is not available")
+        return {"questions_considered": 0, "questions_incorporated": 0}
+
     candidates = (
         TriviaQuestion.objects.filter(
             source=TriviaQuestionSource.USER_SUBMITTED,
