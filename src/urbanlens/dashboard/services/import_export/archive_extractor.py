@@ -397,6 +397,9 @@ class _DirectoryReadBound:
     ``zipfile`` reads the central directory in one read of the size the end record gives, and parses entries until
     that many bytes are used, whatever count the record claims. Refusing that read refuses the directory before any
     of it is held. Every other read it makes while opening is a few bytes, or the end record's last 64 KiB.
+
+    Each read asks the file for no more than it holds past its position. A buffered ``read(n)`` allocates ``n`` bytes
+    before it reads, so the read-to-end ``zipfile`` makes for the end record cost a whole limit's worth (P316).
     """
 
     def __init__(self, raw: IO[bytes], limit: int) -> None:
@@ -408,10 +411,19 @@ class _DirectoryReadBound:
             return self._raw.read(-1 if size is None else size)
         if size is not None and size > self.limit:
             raise ZipDirectoryTooLargeError(f"the central directory is {size} bytes, over {self.limit}")
-        data = self._raw.read(self.limit + 1 if size is None or size < 0 else size)
-        if len(data) > self.limit:
-            raise ZipDirectoryTooLargeError(f"a read while opening the archive was over {self.limit} bytes")
-        return data
+        remaining = self._remaining()
+        if size is None or size < 0:
+            if remaining > self.limit:
+                raise ZipDirectoryTooLargeError(f"a read while opening the archive was over {self.limit} bytes")
+            size = remaining
+        return self._raw.read(min(size, remaining))
+
+    def _remaining(self) -> int:
+        """How many bytes the file holds past its position, which is left where it was."""
+        position = self._raw.tell()
+        end = self._raw.seek(0, os.SEEK_END)
+        self._raw.seek(position)
+        return max(end - position, 0)
 
     def seek(self, offset: int, whence: int = os.SEEK_SET, /) -> int:
         return self._raw.seek(offset, whence)

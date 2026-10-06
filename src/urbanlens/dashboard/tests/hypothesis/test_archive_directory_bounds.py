@@ -101,6 +101,26 @@ class ZipDirectoryTests(SimpleTestCase):
 
         self.assertLess(peak, archive_extractor.MAX_ZIP_DIRECTORY_BYTES + 4 * 1024 * 1024)
 
+    def test_opening_a_small_zip_holds_about_what_it_reads(self) -> None:
+        """P316: zipfile reads the end record to the file's end, and that read asked a real file for the whole bound.
+
+        A buffered ``read(n)`` allocates ``n`` bytes before reading, so every ZIP cost 8 MiB to open whatever its
+        size. A ``BytesIO`` slices instead, which is why this opens a file on disk.
+        """
+        with tempfile.TemporaryFile() as handle:
+            handle.write(_zip_of(0, _CSV))
+            handle.seek(0)
+            tracemalloc.start()
+            try:
+                with archive_extractor.open_zip(handle) as archive:
+                    names = archive.namelist()
+                _current, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+
+        self.assertEqual(names, ["places.csv"])
+        self.assertLess(peak, 1024 * 1024, f"opening a one-entry ZIP peaked at {peak:,} bytes")
+
 
 class TarMemberTests(SimpleTestCase):
     def test_members_past_the_bound_are_refused_supported_or_not(self) -> None:
