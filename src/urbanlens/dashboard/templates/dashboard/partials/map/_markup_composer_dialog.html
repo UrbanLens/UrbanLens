@@ -13,15 +13,16 @@
     <button type="button" class="cmc-tab" id="cmc-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
   </div>
   <div class="comment-map-composer-body" id="cmc-tab-panel-draw">
-    <div class="comment-map-composer-controls">
-      <label class="cmcc-label">Go to</label>
+    {# One grid for both fields, so the labels share a column and the fields a left edge and a width. #}
+    <div class="comment-map-composer-fields">
+      <label class="cmcc-label" for="cmcc-search-input">Go to</label>
       {# Shared jump-to search component - same multi-source search as the main map. #}
       {% map_search_bar prefix="cmcc" show_history=False extra_class="addr-search-bar--composer" %}
-    </div>
-    {# Title field - only shown in standalone mode (the "take a screenshot" buttons), where the map isn't attached to a comment/visit/trip. #}
-    <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
-      <label class="cmcc-label" for="cmc-title-input">Title</label>
-      <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200">
+      {# Title field - only shown in standalone mode (the "take a screenshot" buttons), where the map isn't attached to a comment/visit/trip. Its two cells sit in the grid above. #}
+      <div class="cmcc-title-row" id="cmc-title-row" hidden>
+        <label class="cmcc-label" for="cmc-title-input">Title</label>
+        <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200">
+      </div>
     </div>
     <div class="cmc-workspace">
       <div id="comment-map-composer-map" class="comment-map-composer-map"></div>

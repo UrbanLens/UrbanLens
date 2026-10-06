@@ -14,8 +14,9 @@ import { join } from "node:path";
 
 import { type Browser, type BrowserContext, type Page, chromium } from "playwright";
 
-// See floorplan-editor.test.ts: the happy-dom preload is wrong for a file that drives a real browser.
-GlobalRegistrator.unregister();
+// See floorplan-editor.test.ts: the happy-dom preload is wrong for a file that drives a real browser. `test:browser` runs
+// that file in this same process first, and it has already unregistered; a second unregister rejects.
+if (GlobalRegistrator.isRegistered) await GlobalRegistrator.unregister();
 
 const ROOT = join(import.meta.dir, "../../../../..");
 const STATIC_DIR = join(ROOT, "src/urbanlens/dashboard/frontend/static");
@@ -640,6 +641,58 @@ describe.skipIf(!BUILT)("the map composer in a browser", () => {
         await page.keyboard.press("Backspace");
         expect(await layerNames(page)).toEqual([]);
         expect(errors).toEqual([]);
+        await context.close();
+    });
+
+    test("Go to and Title are one grid: shared label column, field edges, height, surface, and a transparent text box inside the bar", async () => {
+        for (const theme of ["light", "dark"]) {
+            const { context, page, errors } = await openComposer({ query: `?theme=${theme}` });
+            const probe = await page.evaluate(() => {
+                const rect = (el: Element) => {
+                    const r = el.getBoundingClientRect();
+                    return { left: r.left, right: r.right, width: r.width, height: r.height };
+                };
+                const style = (el: Element) => {
+                    const cs = getComputedStyle(el);
+                    return { background: cs.backgroundColor, borderWidth: cs.borderTopWidth, borderColor: cs.borderTopColor, radius: cs.borderTopLeftRadius, paddingLeft: cs.paddingLeft, color: cs.color };
+                };
+                const bar = document.getElementById("cmcc-search-bar")!;
+                const input = document.getElementById("cmcc-search-input")!;
+                const title = document.getElementById("cmc-title-input")!;
+                const labels = [...document.querySelectorAll("#comment-map-composer .cmcc-label")];
+                return {
+                    labels: labels.map((label) => ({ text: label.textContent, ...rect(label) })),
+                    bar: { ...rect(bar), ...style(bar) },
+                    title: { ...rect(title), ...style(title) },
+                    input: style(input),
+                };
+            });
+            const where = `in the ${theme} theme`;
+            expect(probe.labels.map((label) => label.text)).toEqual(["Go to", "Title"]);
+            expect(probe.labels[0]!.left).toBe(probe.labels[1]!.left);
+            expect(probe.labels[0]!.width).toBe(probe.labels[1]!.width);
+            // The same box and the same surface, whichever theme.
+            expect([where, probe.bar.left, probe.bar.width, probe.bar.height]).toEqual([where, probe.title.left, probe.title.width, probe.title.height]);
+            expect([where, probe.bar.background, probe.bar.borderWidth, probe.bar.borderColor, probe.bar.radius]).toEqual([where, probe.title.background, probe.title.borderWidth, probe.title.borderColor, probe.title.radius]);
+            expect(probe.title.paddingLeft).toBe(probe.bar.paddingLeft);
+            expect(parseFloat(probe.title.radius)).toBeGreaterThan(0);
+            expect(parseFloat(probe.title.paddingLeft)).toBeGreaterThanOrEqual(8);
+            // The bar's own surface shows through its text box, which has no border of its own and the same ink as the Title.
+            expect([where, probe.input.background, probe.input.borderWidth]).toEqual([where, "rgba(0, 0, 0, 0)", "0px"]);
+            expect(probe.input.color).toBe(probe.title.color);
+            expect(errors).toEqual([]);
+            await context.close();
+        }
+    });
+
+    test("the Title row's cells are the grid's own, and the row drops out entirely while hidden", async () => {
+        const { context, page } = await openComposer();
+        const display = () => page.evaluate(() => getComputedStyle(document.getElementById("cmc-title-row")!).display);
+        expect(await display()).toBe("contents");
+        await page.evaluate(() => {
+            document.getElementById("cmc-title-row")!.hidden = true;
+        });
+        expect(await display()).toBe("none");
         await context.close();
     });
 
