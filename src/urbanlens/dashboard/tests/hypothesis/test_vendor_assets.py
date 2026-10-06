@@ -271,18 +271,49 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
         self.assertIsInstance(_CSP_DIRECTIVES.get("connect-src"), list)
         self.assertIsInstance(_CSP_DIRECTIVES.get("img-src"), list)
 
-    def test_buying_the_hosted_basemap_admits_its_glyph_host(self) -> None:
-        """The proxied style still names protomaps.github.io for glyphs and sprites; unadmitted, the map has no labels."""
-        from urbanlens.UrbanLens.settings.base import allow_hosted_basemap_assets
+    def test_handing_out_the_hosted_basemap_key_admits_its_tile_host_to_connect_src(self) -> None:
+        """MapLibre fetches the hosted tiles from its worker, which runs under this policy; refused, every tile falls back."""
+        from urbanlens.UrbanLens.settings.base import allow_hosted_basemap_tiles
 
-        directives: dict[str, list[str]] = {"connect-src": ["'self'"], "script-src": ["'self'"]}
+        directives: dict[str, list[str]] = {"connect-src": ["'self'"], "img-src": ["'self'"], "script-src": ["'self'"]}
 
-        self.assertEqual(allow_hosted_basemap_assets(directives, ""), [])
+        self.assertEqual(allow_hosted_basemap_tiles(directives, ""), [])
         self.assertEqual(directives["connect-src"], ["'self'"])
 
-        allow_hosted_basemap_assets(directives, "pk_test")
-        self.assertEqual(directives["connect-src"], ["'self'", "https://protomaps.github.io"])
+        self.assertEqual(allow_hosted_basemap_tiles(directives, "pk_test"), ["https://api.protomaps.com"])
+        allow_hosted_basemap_tiles(directives, "pk_test")
+        self.assertEqual(directives["connect-src"], ["'self'", "https://api.protomaps.com"])
+        # Only the tiles: the style, glyphs and sprites stay on the mirror, so nothing else widens.
+        self.assertEqual(directives["img-src"], ["'self'"])
         self.assertEqual(directives["script-src"], ["'self'"])
+
+    def test_the_tile_host_is_admitted_where_the_key_is_handed_out_and_nowhere_else(self) -> None:
+        from urbanlens.UrbanLens.egress import hosted_basemap_key
+        from urbanlens.UrbanLens.settings.base import allow_hosted_basemap_tiles
+
+        for environment, admitted in (
+            ("production", True),
+            ("staging", True),
+            ("development", False),
+            ("local", False),
+        ):
+            with self.subTest(environment=environment):
+                directives: dict[str, list[str]] = {"connect-src": ["'self'"]}
+                allow_hosted_basemap_tiles(directives, hosted_basemap_key(environment, "pk_test"))
+                expected = ["'self'", "https://api.protomaps.com"] if admitted else ["'self'"]
+                self.assertEqual(directives["connect-src"], expected)
+
+    def test_the_live_policy_admits_the_tile_host_exactly_when_this_deployment_hands_out_the_key(self) -> None:
+        from django.conf import settings
+
+        from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        # Read at settings import, from the same gate the page embed uses.
+        admitted = _CSP_DIRECTIVES["connect-src"].count("https://api.protomaps.com")
+        self.assertEqual(admitted, 1 if hosted_basemap_api_key() else 0)
+        policy = getattr(settings, "CONTENT_SECURITY_POLICY", None) or settings.CONTENT_SECURITY_POLICY_REPORT_ONLY
+        self.assertIs(policy["DIRECTIVES"], _CSP_DIRECTIVES)
 
     def test_no_style_origin_configured_changes_nothing(self) -> None:
         """The default for every deployment today, hosted and self-hosted: REData offers only raster."""

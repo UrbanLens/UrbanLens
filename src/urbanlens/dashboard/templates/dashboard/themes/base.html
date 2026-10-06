@@ -22,6 +22,7 @@
     {% load static map_components %}
     {# Before core.js: a map must know which tiles this deployment serves before it requests the first one. #}
     {% basemap_tile_catalogue %}
+    {% hosted_basemap_tiles %}
     {% leaflet_marker_artwork %}
     {# Before core.js, which puts it on window.csrftoken for every later script. #}
     <meta name="csrf-token" content="{{ csrf_token }}">

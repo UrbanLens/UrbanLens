@@ -27,7 +27,7 @@ than merely convenient:
 - The cache key is layer + z/x/y only — `basemap_tile_cache_key()` in
   `src/urbanlens/dashboard/services/map/tile_cache_keys.py:17` takes no viewer identity.
 - `catalogue_for_viewer()` in
-  `src/urbanlens/dashboard/services/map/basemap_catalogue.py:314` distinguishes only
+  `src/urbanlens/dashboard/services/map/basemap_catalogue.py:277` distinguishes only
   `authenticated: bool` — signed-in vs. signed-out — so every signed-in viewer is served the same
   tile catalogue and, in turn, identical tile bytes for a given coordinate.
 

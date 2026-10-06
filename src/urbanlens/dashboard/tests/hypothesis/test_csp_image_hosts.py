@@ -125,6 +125,29 @@ class EveryImageHostTheCodeConfiguresIsAdmittedTests(SimpleTestCase):
                 f"{name} draws tiles from {urlparse(url).hostname}, refused by connect-src under MapLibre",
             )
 
+    def test_every_built_in_vector_style_is_admitted(self) -> None:
+        """MapLibre fetches a style, its TileJSON, tiles, glyphs and sprite with ``fetch``, and can draw the sprite as ``<img>``."""
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        text = (_FRONTEND / "ts" / "shared" / "map-layers.ts").read_text(encoding="utf-8")
+        styles = re.findall(r"""styleUrl: "(https://[^"]+)\"""", text)
+        self.assertGreaterEqual(len(styles), 2, "the scan no longer finds the built-in street and dark styles")
+        for url in styles:
+            with self.subTest(url=url):
+                self.assertTrue(_admits(_CSP_DIRECTIVES["connect-src"], url), f"{url} refused by connect-src")
+                self.assertTrue(_admits(_img_src(), url), f"{url}'s sprite refused by img-src")
+
+    def test_no_page_or_policy_names_carto_whose_tiles_now_want_a_key(self) -> None:
+        """CARTO's light_all and dark_all answer every tile with a 200 "API KEY REQUIRED" picture (2026-10-06)."""
+        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
+
+        for path, text in _page_code().items():
+            with self.subTest(path=path.name):
+                self.assertNotIn("cartocdn", text)
+        for directive, sources in _CSP_DIRECTIVES.items():
+            with self.subTest(directive=directive):
+                self.assertFalse([source for source in sources if "cartocdn" in source])
+
     def test_the_maps_javascript_api_imagery_is_admitted_where_a_page_loads_it(self) -> None:
         loaders = [path for path, text in _page_code().items() if "maps.googleapis.com/maps/api/js" in text]
         self.assertTrue(loaders, "nothing loads the Maps JavaScript API any more; its img-src hosts can go")

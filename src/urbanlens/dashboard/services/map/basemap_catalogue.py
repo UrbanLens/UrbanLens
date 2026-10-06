@@ -14,6 +14,7 @@ import logging
 import re
 import time
 from typing import Any
+from urllib.parse import quote
 
 from django.core.cache import cache
 
@@ -101,67 +102,29 @@ def _await_catalogue() -> list[dict[str, Any]]:
     return []
 
 
-#: REData layer id -> theme in Protomaps' hosted style set. Only the two layers their basemap
-#: covers; relief shading has no hosted vector equivalent, so terrain stays raster on both engines.
-_PROTOMAPS_THEMES = {"street": "light", "dark": "dark"}
+def hosted_basemap_tiles() -> str | None:
+    """The tile template this deployment's browsers fetch the street and dark basemaps' tiles from, when not our own.
 
+    Protomaps' hosted API, fetched by the browser directly - the key travels in the URL, which is how a Protomaps key
+    is meant to be used: its dashboard restricts the origins it answers. Only the tiles move. The style, glyphs and
+    sprites stay the ones REData publishes on this project's own mirror, so the map looks the same either way: both
+    serve the Protomaps v4 schema (compared tile by tile on 2026-10-06). The client falls back to the style's own tiles
+    when these fail (``frontend/ts/shared/hosted-basemap.ts``).
 
-def protomaps_theme_for(source_id: str) -> str | None:
-    """Which hosted theme draws ``source_id``, when this deployment is configured to buy it.
-
-    Chosen here rather than in REData so one catalogue serves both a deployment that self-hosts
-    this basemap and one that pays Protomaps to host it: REData says which layers exist and what
-    they may be credited as, this says where *this* deployment's browsers fetch the style from.
-    Self-hosting stays the default - the key being unset, or this not being production, selects it.
-
-    Args:
-        source_id: The REData layer id.
+    Deliberately not part of the cached catalogue: a key rotated or removed takes effect on the next page, not a day
+    later.
 
     Returns:
-        The theme name, or None to keep whatever REData published.
+        A template with literal ``{z}``/``{x}``/``{y}`` placeholders, or None where this environment draws our own
+        tiles (development, local, or no ``UL_PROTOMAPS_API_KEY``).
     """
     from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
+    from urbanlens.UrbanLens.egress import PROTOMAPS_API_ORIGIN
 
-    theme = _PROTOMAPS_THEMES.get(source_id)
-    return theme if theme and hosted_basemap_api_key() else None
-
-
-def vector_style_url(source_id: str) -> str | None:
-    """This origin's address for the hosted style that draws ``source_id``.
-
-    The browser is pointed here rather than at ``api.protomaps.com`` so the tiles the style names
-    are bought once for the whole site instead of once per viewer per draw - see
-    ``services.apis.locations.protomaps_basemap_gateway`` for what the upstream's own cache headers
-    do. It also keeps the key server-side, which matters more than the API's documentation implies:
-    measured 2026-09-22, the key is accepted from any ``Origin`` at all.
-
-    Args:
-        source_id: The REData layer id.
-
-    Returns:
-        The style URL, or None to keep whatever REData published.
-    """
-    from django.urls import reverse
-
-    theme = protomaps_theme_for(source_id)
-    return None if theme is None else reverse("map.basemap_vector_style", kwargs={"theme": theme})
-
-
-def vector_tile_url_template() -> str:
-    """Leaflet/MapLibre-style template for the proxied vector pyramid.
-
-    Returns:
-        A URL with literal ``{z}``/``{x}``/``{y}`` placeholders.
-    """
-    from django.urls import reverse
-
-    # Sentinels rather than braces, for the reason `tile_url_template` uses them: reverse() would
-    # percent-encode a brace and hand the client a template it cannot fill in.
-    concrete = reverse("map.basemap_vector_tiles", kwargs={"z": 900001, "x": 900002, "y": 900003})
-    for sentinel, placeholder in (("900001", "{z}"), ("900002", "{x}"), ("900003", "{y}")):
-        head, _, tail = concrete.rpartition(sentinel)
-        concrete = f"{head}{placeholder}{tail}"
-    return concrete
+    key = hosted_basemap_api_key()
+    if not key:
+        return None
+    return f"{PROTOMAPS_API_ORIGIN}/tiles/v4/{{z}}/{{x}}/{{y}}.mvt?key={quote(key, safe='')}"
 
 
 def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
@@ -233,7 +196,7 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 entry["attribution"] = overridden
             entry["max_zoom"] = _depth_of_the_bytes(entry["max_zoom"], vendor_depth)
         if is_vector:
-            entry["style_url"] = vector_style_url(source_id) or source["style_url"]
+            entry["style_url"] = source["style_url"]
             # The two halves of a vector entry are different datasets (Protomaps' basemap and a
             # vendor's raster), so each carries its own credit and depth - showing one's attribution
             # over the other's bytes is a licence error, and publishing one's ceiling lets a client

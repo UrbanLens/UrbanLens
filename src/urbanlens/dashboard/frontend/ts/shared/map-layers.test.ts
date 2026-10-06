@@ -1,7 +1,8 @@
 /**
  * normalizeBase() mirrors LEGACY_LAYER_MODE_ALIASES in dashboard/models/markup/meta.py.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { resetHostedBasemapForTests } from "./hosted-basemap";
 import { BASE_ERROR_TILE_COLOR, baseLayer, createMapLayers, normalizeBase, rasterSourceFor, registerRedataLayers, resetRedataLayersCacheForTests, resetWorldMosaicsForTests, templateTileLayer, tileLayer, vectorStyleFor, worldMosaicTiles } from "./map-layers";
 import { acquireOwnTileSlot, ownTileRetriesAreSuspended, recordOwnTileOutcome, resetOwnTileGateForTests } from "./own-tiles";
 import albanyFixture from "../testing/esri-attribution-albany.json";
@@ -105,7 +106,7 @@ afterEach(() => {
  * rendered "Access blocked" warning tile, at a 200 status, so it isn't caught
  * by errorTileUrl below (that only fires on an actual load failure). Every
  * built-in base layer must instead go through a vendor whose terms permit
- * this, the way "dark" already uses CARTO instead of OSM's own servers.
+ * this: Esri's street and dark canvas maps, rather than OSM's own servers.
  */
 describe("built-in tile sources do not hotlink OSM's own policy-enforced servers", () => {
     test.each(["street", "dark", "topographic", "satellite"])("%s does not point at tile.openstreetmap.org", (kind) => {
@@ -284,7 +285,7 @@ describe("registerRedataLayers", () => {
         // An unknown key falls back to street, so the registered entry is really gone.
         const state = stubLeaflet();
         tileLayer("custom");
-        expect(state.calls[0]?.url).toContain("cartocdn.com");
+        expect(state.calls[0]?.url).toContain("World_Street_Map");
     });
 
     test("registers a vector entry as a style document, leaving the raster source for Leaflet", async () => {
@@ -300,7 +301,7 @@ describe("registerRedataLayers", () => {
         // rather than silently producing a map with no tiles at all.
         const state = stubLeaflet();
         tileLayer("street");
-        expect(state.calls[0]?.url).toContain("cartocdn.com");
+        expect(state.calls[0]?.url).toContain("World_Street_Map");
     });
 
     /** MapLibre throws from its constructor without WebGL2, and the bridge calls it from `onAdd`, which would leave no base at all. */
@@ -339,7 +340,70 @@ describe("registerRedataLayers", () => {
         test("without WebGL2, the raster source is drawn instead", async () => {
             const { bridged, raster } = await streetBase(false);
             expect(bridged).toEqual([]);
-            expect(raster.calls[0]?.url).toContain("cartocdn.com");
+            expect(raster.calls[0]?.url).toContain("World_Street_Map");
+        });
+    });
+
+    /**
+     * The street and dark vector chain's last tier: an installation with neither Protomaps' hosted tiles nor a basemap
+     * of its own draws OpenFreeMap's keyless public styles - never CARTO, whose tiles now want a key.
+     */
+    describe("the keyless public vector tier", () => {
+        test("street and dark draw OpenFreeMap's styles where the catalogue offers nothing", async () => {
+            stubFetch({ body: { layers: [] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("street")).toMatchObject({ styleUrl: "https://tiles.openfreemap.org/styles/positron", builtIn: true });
+            expect(vectorStyleFor("dark")).toMatchObject({ styleUrl: "https://tiles.openfreemap.org/styles/dark", builtIn: true });
+            expect(vectorStyleFor("street")?.attribution).toContain("OpenFreeMap");
+            expect(vectorStyleFor("street")?.attribution).toContain("OpenMapTiles");
+            expect(vectorStyleFor("street")?.attribution).toContain("OpenStreetMap");
+            // Terrain and satellite have no public vector equivalent here.
+            expect(vectorStyleFor("topographic")).toBeNull();
+            expect(vectorStyleFor("satellite")).toBeNull();
+        });
+
+        test("this deployment's own style wins over it", async () => {
+            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "Attr" }] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+            expect(vectorStyleFor("street")?.builtIn).toBeUndefined();
+        });
+
+        test("so does a raster layer this deployment serves itself", async () => {
+            stubFetch({ body: { layers: [{ id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("street")).toBeNull();
+        });
+
+        test("an overlay or an unknown key is not answered with the street style", async () => {
+            stubFetch({ body: { layers: [] } });
+            await registerRedataLayers();
+
+            // The attribution line asks after "borders" for its own credit; Positron's would replace Esri's.
+            for (const kind of ["borders", "weather", "foo", "", "toString", "constructor"]) {
+                expect(vectorStyleFor(kind)).toBeNull();
+            }
+        });
+
+        test("a key in another case, or a legacy alias, names its own style", async () => {
+            stubFetch({ body: { layers: [] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("Dark")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/dark");
+            expect(vectorStyleFor("DARK")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/dark");
+            expect(vectorStyleFor("Standard")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/positron");
+        });
+
+        test("nor is an unknown key answered with the catalogue's street style", async () => {
+            stubFetch({ body: { layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: "Attr" }] } });
+            await registerRedataLayers();
+
+            expect(vectorStyleFor("borders")).toBeNull();
+            expect(vectorStyleFor("osm")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
+            expect(vectorStyleFor("Street")?.styleUrl).toBe("https://tiles.urbanlens.org/styles/street.json");
         });
     });
 
@@ -354,7 +418,8 @@ describe("registerRedataLayers", () => {
     test("skips a vector entry with no style_url", async () => {
         stubFetch({ body: { layers: [{ id: "street", source_type: "vector", attribution: "Attr" }] } });
         expect(await registerRedataLayers()).toEqual([]);
-        expect(vectorStyleFor("street")).toBeNull();
+        // The catalogue said nothing usable about street, so the keyless public built-in stands.
+        expect(vectorStyleFor("street")?.builtIn).toBe(true);
     });
 
     test("resetting drops a registered vector source", async () => {
@@ -365,7 +430,7 @@ describe("registerRedataLayers", () => {
 
         resetRedataLayersCacheForTests();
 
-        expect(vectorStyleFor("street")).toBeNull();
+        expect(vectorStyleFor("street")?.styleUrl).toBe("https://tiles.openfreemap.org/styles/positron");
     });
 
     test("registers both shapes of a D15 entry, so Leaflet stops falling back to a vendor CDN", async () => {
@@ -467,11 +532,10 @@ describe("registerRedataLayers", () => {
 
         // A layer REData publishes as vector has no proxied raster left to fall back to, so Leaflet
         // keeps the built-in vendor template: a direct browser-to-vendor fetch rather than this
-        // deployment's proxy. `street` is the default base layer, so that is what every Leaflet map
-        // draws by default - which is the whole of the main map until it is ported.
+        // deployment's proxy - Esri's, the same bytes the proxy would have fetched.
         const base = stubLeaflet();
         tileLayer("street");
-        expect(base.calls[0]?.url).toContain("cartocdn.com");
+        expect(base.calls[0]?.url).toContain("World_Street_Map");
 
         // A layer REData still serves as raster does go through the proxy, so the fallback above is
         // the vector entries' doing rather than the catalogue failing to register at all.
@@ -872,7 +936,7 @@ describe("registerRedataLayers", () => {
             const state = stubLeaflet();
             tileLayer("street");
 
-            expect(state.calls[0]?.url).toContain("cartocdn.com");
+            expect(state.calls[0]?.url).toContain("server.arcgisonline.com");
             expect(state.createTile).toBeNull();
         });
     });
@@ -919,7 +983,7 @@ describe("registerRedataLayers", () => {
             expect(fetched.calls).toEqual([]);
             const state = stubLeaflet();
             tileLayer("street");
-            expect(state.calls[0]?.url).toContain("cartocdn.com");
+            expect(state.calls[0]?.url).toContain("World_Street_Map");
         });
 
         test("falls back to the fetch when the page carried no embed at all", async () => {
@@ -953,8 +1017,8 @@ describe("registerRedataLayers", () => {
      * answers `{"layers": []}` for an unconfigured deployment (see `test_unconfigured_redata_yields_no_layers`
      * in `test_basemap_tile_proxy.py`) - the same shape as a configured-but-empty catalogue - so
      * this is the one client-side test standing for every self-hosted deployment: every built-in
-     * base layer and the borders overlay must keep resolving to their free, keyless vendor (CARTO,
-     * OpenTopoMap, Esri) exactly as before REData existed, not silently break or go blank.
+     * base layer and the borders overlay must keep resolving to their free, keyless vendor (Esri)
+     * exactly as before REData existed, not silently break or go blank.
      */
     test("every built-in layer still resolves to its free vendor when REData is unconfigured (self-hosting)", async () => {
         stubFetch({ body: { layers: [] } });
@@ -980,7 +1044,7 @@ describe("registerRedataLayers", () => {
 
         const state = stubLeaflet();
         tileLayer("street");
-        expect(state.calls[0]?.url).toContain("cartocdn.com");
+        expect(state.calls[0]?.url).toContain("World_Street_Map");
     });
 
     test("returns [] when the response is not ok", async () => {
@@ -1272,8 +1336,8 @@ describe("createMapLayers draws an underlay behind the base", () => {
     test("it is cut from the base's own tiles, so a gap holds that base's colours", () => {
         /** A world picture from somewhere else would be a different cartographer's palette showing
          * through every gap - which is the correction this design exists to answer. */
-        expect(worldMosaicTiles("street")[0]!.url).toContain("cartocdn.com/light_all");
-        expect(worldMosaicTiles("dark")[0]!.url).toContain("cartocdn.com/dark_all");
+        expect(worldMosaicTiles("street")[0]!.url).toContain("World_Street_Map");
+        expect(worldMosaicTiles("dark")[0]!.url).toContain("World_Dark_Gray_Base");
         expect(worldMosaicTiles("satellite")[0]!.url).toContain("World_Imagery");
         expect(worldMosaicTiles("topographic")[0]!.url).toContain("World_Topo_Map");
     });
@@ -1447,14 +1511,14 @@ describe("createMapLayers hides the base an opaque layer covers", () => {
         const map = mapOpenedOn(base);
 
         expect(map.isDrawing(drawn)).toBe(true);
-        expect(map.isDrawing("light_all")).toBe(false);
-        expect(map.isDrawing("dark_all")).toBe(false);
+        expect(map.isDrawing("World_Street_Map")).toBe(false);
+        expect(map.isDrawing("World_Dark_Gray_Base")).toBe(false);
     });
 
     test("a map opened on street does draw one", () => {
         const map = mapOpenedOn("street");
 
-        expect(map.isDrawing("light_all") || map.isDrawing("dark_all")).toBe(true);
+        expect(map.isDrawing("World_Street_Map") || map.isDrawing("World_Dark_Gray_Base")).toBe(true);
     });
 });
 
@@ -1493,7 +1557,7 @@ describe("createMapLayers opens on the base the viewer asked for", () => {
         const map = openedWith(panelRoot(ALL));
 
         expect(map.isDrawing("World_Imagery")).toBe(true);
-        expect(map.isDrawing("light_all")).toBe(false);
+        expect(map.isDrawing("World_Street_Map")).toBe(false);
     });
 
     test.each([
@@ -1516,7 +1580,7 @@ describe("createMapLayers opens on the base the viewer asked for", () => {
         const map = openedWith(panelRoot(ALL), "remember", "ul-test-empty-storage");
 
         expect(map.isDrawing("World_Imagery")).toBe(true);
-        expect(map.isDrawing("light_all")).toBe(false);
+        expect(map.isDrawing("World_Street_Map")).toBe(false);
     });
 
     /**
@@ -1545,7 +1609,7 @@ describe("createMapLayers opens on the base the viewer asked for", () => {
         const map = openedWith(panelRoot(ALL), "dark");
 
         expect(map.isDrawing("World_Imagery")).toBe(false);
-        expect(map.isDrawing("light_all") || map.isDrawing("dark_all")).toBe(true);
+        expect(map.isDrawing("World_Street_Map") || map.isDrawing("World_Dark_Gray_Base")).toBe(true);
     });
 });
 
@@ -1651,15 +1715,15 @@ describe("createMapLayers destroy()", () => {
         const map = new FakeMap();
         const layers = createMapLayers(map as unknown as L.Map, { contextMenu: false, defaultBase: "street" });
 
-        expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
+        expect(map.isDrawing("World_Street_Map")).toBe(true);
 
         layers.setBase("satellite");
         expect(map.isDrawing("World_Imagery")).toBe(true);
-        expect(map.isDrawing("cartocdn.com/light_all")).toBe(false);
+        expect(map.isDrawing("World_Street_Map")).toBe(false);
 
         // And comes back, or leaving satellite would leave the map with no base at all.
         layers.setBase("street");
-        expect(map.isDrawing("cartocdn.com/light_all")).toBe(true);
+        expect(map.isDrawing("World_Street_Map")).toBe(true);
     });
 
     /**
@@ -1675,7 +1739,7 @@ describe("createMapLayers destroy()", () => {
         layers.setBase("topographic");
 
         expect(map.isDrawing("World_Topo_Map")).toBe(true);
-        expect(map.isDrawing("cartocdn.com/light_all")).toBe(false);
+        expect(map.isDrawing("World_Street_Map")).toBe(false);
     });
 
     test("credits the layer actually drawn, not the vendor the built-in def happened to name", async () => {
@@ -1780,7 +1844,8 @@ describe("the attribution line", () => {
         const text = creditFor();
 
         expect(text).toContain("OpenStreetMap");
-        expect(text).toContain("CARTO");
+        expect(text).toContain("Esri");
+        expect(text).not.toContain("CARTO");
         expect(text).toContain("Leaflet");
     });
 
@@ -1868,6 +1933,36 @@ describe("the attribution line", () => {
 
         expect(seen.at(-1)).toBe("Powered by Esri · Earthstar Geographics · Leaflet");
         resetEsriAttributionForTests();
+    });
+
+    test("credits the borders overlay to Esri over a vector street base drawn from OpenFreeMap", () => {
+        resetEsriAttributionForTests();
+        const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
+        const realWebGLSupport = window.WebGLSupport;
+        stubLeafletForMapLayers();
+        Object.assign((globalThis as Record<string, unknown>).L as object, {
+            maplibreGL: () => ({ options: {}, addTo(map: FakeMap) {
+                map.addLayer(this);
+                return this;
+            } }),
+        });
+        (globalThis as Record<string, unknown>).maplibregl = {};
+        window.WebGLSupport = { supportsWebGL2: () => true };
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => (cb(0), 1);
+        try {
+            const map = new FakeMap();
+            const seen: string[] = [];
+            createMapLayers(map as unknown as L.Map, { defaultBase: "street", initialOverlays: ["borders"], contextMenu: false, onAttribution: (text) => seen.push(text) });
+            map.fire("layeradd");
+            const text = seen.at(-1)!;
+
+            expect(text).toContain("OpenFreeMap");
+            expect(text).toContain("Esri");
+            expect(text.match(/OpenFreeMap/g)).toHaveLength(1);
+        } finally {
+            (globalThis as Record<string, unknown>).maplibregl = realMaplibregl;
+            window.WebGLSupport = realWebGLSupport;
+        }
     });
 
     test("credits the borders overlay on a satellite base too, with Esri's own line once", () => {
@@ -1966,5 +2061,124 @@ describe("the default marker's artwork", () => {
 
         expect(Default.imagePath).toBeUndefined();
         expect(Default.merged).toEqual([]);
+    });
+});
+
+/**
+ * Leaflet pages draw the vector base through the MapLibre bridge, which builds a MapLibre map of its own each time
+ * the layer is added. Where the page carries `{% hosted_basemap_tiles %}`, that map's basemap source is pointed at
+ * Protomaps' hosted tiles as its style loads, and back at the style's own when they fail - and the footer's credit
+ * follows the bytes.
+ */
+describe("the Leaflet bridge and Protomaps' hosted tiles", () => {
+    const HOSTED = "https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=pk_test";
+    const OWN = "https://tiles.urbanlens.org/basemap/{z}/{x}/{y}";
+    const OWN_CREDIT = "© OpenStreetMap contributors © Protomaps";
+    const realFetch = globalThis.fetch;
+    const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
+    const realWebGLSupport = window.WebGLSupport;
+
+    /** The bridge's own MapLibre map: one basemap source, `style.load`, and `error`. */
+    function fakeGlMap() {
+        const handlers = new Map<string, Array<(event: unknown) => void>>();
+        const source = { type: "vector", tiles: [OWN] as string[] };
+        return {
+            source,
+            on: (event: string, fn: (event: unknown) => void) => void handlers.set(event, [...(handlers.get(event) ?? []), fn]),
+            once: (event: string, fn: (event: unknown) => void) => void handlers.set(event, [...(handlers.get(event) ?? []), fn]),
+            off: (event: string, fn: (event: unknown) => void) => void handlers.set(event, (handlers.get(event) ?? []).filter((h) => h !== fn)),
+            fire: (event: string, data: unknown = {}) => {
+                for (const fn of handlers.get(event) ?? []) fn(data);
+            },
+            getStyle: () => ({ sources: { protomaps: { ...source } } }),
+            getSource: (id: string) => (id === "protomaps" ? { setTiles: (tiles: string[]) => void (source.tiles = tiles) } : undefined),
+        };
+    }
+
+    beforeEach(() => {
+        resetRedataLayersCacheForTests();
+        resetHostedBasemapForTests();
+        const el = document.createElement("script");
+        el.type = "application/json";
+        el.id = "ul-hosted-basemap";
+        el.textContent = JSON.stringify({ tiles: HOSTED });
+        document.body.appendChild(el);
+    });
+
+    afterEach(() => {
+        globalThis.fetch = realFetch;
+        (globalThis as Record<string, unknown>).L = realL;
+        (globalThis as Record<string, unknown>).maplibregl = realMaplibregl;
+        window.WebGLSupport = realWebGLSupport;
+        window.requestAnimationFrame = realRAF;
+        document.body.innerHTML = "";
+        sessionStorage.clear();
+        resetRedataLayersCacheForTests();
+        resetHostedBasemapForTests();
+    });
+
+    test("draws the hosted tiles, credits Protomaps, and falls back to our own tiles and credit on a refusal", async () => {
+        globalThis.fetch = (() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ layers: [{ id: "street", source_type: "vector", style_url: "https://tiles.urbanlens.org/styles/street.json", attribution: OWN_CREDIT }] }),
+            } as Response)) as unknown as typeof fetch;
+        await registerRedataLayers();
+
+        stubLeafletForMapLayers();
+        const glMaps: Array<ReturnType<typeof fakeGlMap>> = [];
+        Object.assign((globalThis as Record<string, unknown>).L as object, {
+            maplibreGL: (options: { style: string }) => {
+                const added: Array<() => void> = [];
+                const layer = {
+                    url: options.style,
+                    options: {},
+                    glMap: null as ReturnType<typeof fakeGlMap> | null,
+                    on: (event: string, fn: () => void) => {
+                        if (event === "add") added.push(fn);
+                        return layer;
+                    },
+                    getMaplibreMap: () => layer.glMap,
+                    addTo: (map: FakeMap) => {
+                        // What the bridge's onAdd does: a fresh MapLibre map, then Leaflet's `add` event.
+                        layer.glMap = fakeGlMap();
+                        glMaps.push(layer.glMap);
+                        map.addLayer(layer);
+                        for (const fn of added) fn();
+                        return layer;
+                    },
+                };
+                return layer;
+            },
+        });
+        (globalThis as Record<string, unknown>).maplibregl = {};
+        window.WebGLSupport = { supportsWebGL2: () => true };
+        // Queued and run by hand: the credit is scheduled a frame at a time.
+        const frames: FrameRequestCallback[] = [];
+        (globalThis as Record<string, unknown>).requestAnimationFrame = (cb: FrameRequestCallback) => frames.push(cb);
+        const runFrames = (): void => {
+            while (frames.length) frames.shift()!(0);
+        };
+        const warn = spyOn(console, "warn").mockImplementation(() => {});
+
+        const map = new FakeMap();
+        const credits: string[] = [];
+        createMapLayers(map as unknown as L.Map, { contextMenu: false, defaultBase: "street", onAttribution: (text) => credits.push(text) });
+        const glMap = glMaps[0]!;
+        glMap.fire("style.load");
+        map.fire("layeradd");
+        runFrames();
+
+        expect(glMap.source.tiles).toEqual([HOSTED]);
+        expect(credits.at(-1)).toContain("Protomaps © OpenStreetMap");
+
+        glMap.fire("error", { error: Object.assign(new Error("AJAXError"), { status: 403 }), sourceId: "protomaps" });
+        runFrames();
+
+        expect(glMap.source.tiles).toEqual([OWN]);
+        expect(credits.at(-1)).toContain(OWN_CREDIT);
+        expect(credits.at(-1)).not.toContain("Protomaps © OpenStreetMap");
+        expect(warn).toHaveBeenCalledTimes(1);
+        warn.mockRestore();
     });
 });

@@ -18,6 +18,7 @@
  */
 
 import { composeAttribution, type CreditSource } from "./esri-attribution";
+import { BASEMAP_SOURCE_ID, onHostedBasemapFallback, useHostedTiles, vectorBaseCredit, watchHostedTiles } from "./hosted-basemap";
 import { showMapContextMenu } from "./map-context-menu";
 import { createLayersPanel } from "./map-layers-panel";
 import {
@@ -135,6 +136,8 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     /** What the current base *wants*, which lags `vectorKind` while a style document is in flight. */
     let wantedVectorKind: string | null = null;
     let vectorRequest: AbortController | null = null;
+    /** Stops watching the vector base's hosted tiles (`hosted-basemap.ts`), while they are being drawn. */
+    let stopHostedTiles: (() => void) | null = null;
     /**
      * Styles that could not be fetched or parsed, so a deployment whose style URL is broken draws
      * its raster fallback once rather than re-asking on every layer toggle.
@@ -298,6 +301,8 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         const style = vectorStyle;
         vectorStyle = null;
         vectorKind = null;
+        stopHostedTiles?.();
+        stopHostedTiles = null;
         if (!style) return;
         for (const layer of style.layers) {
             if (map.getLayer(layer.id)) map.removeLayer(layer.id);
@@ -344,7 +349,12 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
             applyVisibility();
             return;
         }
+        // Only the basemap's tile source moves to Protomaps' hosted API, where this page draws from it; the style,
+        // glyphs and sprites stay our own, and the style's own tiles are what a failure falls back to.
+        const hostedSourceId = `${vectorPrefixFor(wanted)}${BASEMAP_SOURCE_ID}`;
+        const ownTiles = useHostedTiles(style.sources, hostedSourceId, wanted);
         addVectorStyle(style);
+        if (ownTiles) stopHostedTiles = watchHostedTiles(map, hostedSourceId, ownTiles);
         vectorStyle = style;
         vectorKind = wanted;
         applyVisibility();
@@ -394,10 +404,11 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         const vectorDef = vectorKind ? vectorStyleFor(vectorKind) : null;
         // A vendor literal is only the fallback: where the REData catalogue registered the layer,
         // what drew the bytes is this deployment's own source and that is what has to be credited.
-        if (vectorDef) sources.push({ kind: "text", text: attributionAsText(vectorDef.attribution) });
+        if (vectorDef) sources.push({ kind: "text", text: attributionAsText(vectorBaseCredit(vectorKind!, vectorDef)) });
         else if (base === "satellite") sources.push(rasterCreditFor("satellite", "© Esri"));
         else if (base === "topographic") sources.push(rasterCreditFor("topographic", "© Esri"));
-        else sources.push(rasterCreditFor(effectiveBaseKind(), "© OSM · CARTO"));
+        // Street and dark draw Esri's street and dark canvas maps where no catalogue replaced them (see TILE_DEFS).
+        else sources.push(rasterCreditFor(effectiveBaseKind(), "© Esri · © OpenStreetMap"));
         if (weatherKey && weatherOn) sources.push({ kind: "text", text: "© OpenWeatherMap" });
         // Its own providers on every base: the boundaries and place names are not the imagery's.
         if (bordersOn) sources.push(rasterCreditFor("borders", "© Esri"));
@@ -576,6 +587,8 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     reportAttribution();
     // Which providers to credit follows the area and zoom on screen, not only the layers.
     if (opts.onAttribution) map.on("moveend", reportAttribution);
+    // Falling back from the hosted basemap tiles changes whose bytes the vector base is drawing, and so its credit.
+    const stopHostedFallbackCredit = onHostedBasemapFallback(reportAttribution);
 
     return {
         setBase,
@@ -601,6 +614,9 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
             map.off("moveend", reportAttribution);
             vectorRequest?.abort();
             vectorRequest = null;
+            stopHostedTiles?.();
+            stopHostedTiles = null;
+            stopHostedFallbackCredit();
             map.off("load", onStyleReady);
             if (onDataLoading) map.off("dataloading", onDataLoading);
             if (onIdle) map.off("idle", onIdle);

@@ -762,3 +762,22 @@ def basemap_tile_catalogue(context: template.Context) -> SafeString:
         # which is what a page rendered outside this base template gets. See map-layers.ts.
         return mark_safe("")
     return json_script(layers, "ul-basemap-tiles")
+
+
+@register.simple_tag
+def hosted_basemap_tiles() -> SafeString:
+    """Embed where this deployment's browsers fetch the street and dark basemaps' tiles, when not from our own mirror.
+
+    Read by ``frontend/ts/shared/hosted-basemap.ts`` before the first tile request, like the catalogue above. The key
+    is in the template on purpose: the browser fetches Protomaps directly, and the key's allowed origins are what
+    restrict it. Absent - development, local, or no key - and the style's own tiles are drawn.
+
+    Returns:
+        A ``<script type="application/json">`` block, or empty.
+    """
+    from urbanlens.dashboard.services.map.basemap_catalogue import hosted_basemap_tiles as tiles_template
+
+    template_url = tiles_template()
+    if not template_url:
+        return mark_safe("")
+    return json_script({"tiles": template_url}, "ul-hosted-basemap")

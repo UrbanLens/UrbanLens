@@ -74,8 +74,14 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
 - **Mail** goes to Django's console backend off production, whatever `UL_EMAIL_BACKEND` says, unless
   `UL_EMAIL_SEND_OUTSIDE_PRODUCTION=true`. Sign-up codes, verification and magic links are then read from the
   web and worker logs.
-- **The hosted Protomaps basemap** is production's: elsewhere `UL_PROTOMAPS_API_KEY` is ignored and the street
-  and dark layers stay on the self-hosted mirror (and the CSP does not admit the hosted glyph host).
+- **The hosted Protomaps basemap** is production's and staging's (Jess, 2026-10-06). It is browser-side: the page
+  carries a tile template with `UL_PROTOMAPS_API_KEY` in it, the browser fetches `api.protomaps.com` directly, and
+  the CSP admits that host to `connect-src`. Only the tile source moves: the style, glyphs and sprites stay on our
+  mirror (`tiles.urbanlens.org`), and the client falls back to the mirror's tiles for the session when the hosted
+  ones fail (`frontend/ts/shared/hosted-basemap.ts`). Nothing server-side can budget a browser's fetch, so no share
+  applies: it is free for noncommercial use, and `hosted_basemap_key` decides by environment
+  (`HOSTED_BASEMAP_ENVIRONMENTS`). Development and local ignore the key and draw the mirror's tiles, which are
+  internal and free, in keeping with their share of 0.
 - **Retired:** `UL_ALLOW_OUTBOUND_APIS`, `UL_BILLED_API_SHARE`, and `UL_DEMO_MODE`'s REData-only exemption. Demo
   mode keeps its login endpoint and banner; a demo deployment that should call only REData sets
   `UL_ENVIRONMENT_SHARE=0` (AI follows the environment: allowed under `staging`, refused under `development`; the share does not touch it). The share does not hold `messaging` or `public_write`, so a demo
@@ -93,8 +99,8 @@ service is treated as `billed`.
 |---|---|
 | `redata` | every `redata_*` key (37 registered, plus `redata_boundary`, `redata_json`, `redata_location_context`, `redata_place_details`); `digital_commonwealth` and the street-level and archive labels `mapillary`, `kartaview`, `panoramax`, `smithsonian`, `library_of_congress`, `internet_archive`, `chronicling_america`, whose calls REData makes |
 | `internal` | `overpass` (the self-hosted primary), `ollama` (a local model), `immich`, `ai_inference` (the transport only: the provider behind it is `ai`), `gotify`, `clamd` |
-| `quota` | `nominatim`, `wikipedia`, `wikipedia_media`, `wikimedia`, `wayback_machine` (reads), `overture_maps`, `google_open_buildings`, `microsoft_building_footprints`, `overpass_public_mirror` (the public fallbacks, on a session of their own), `open_historical_map`, `open_meteo`, `openweathermap`, `osrm`, `census_tigerweb`, `usgs`, `esri`, `basemap_vendor_tiles`, `flickr`, `hibp`, `virustotal`, `google_photos`, `google_street_view_metadata`; unledgered `google_oauth_refresh`, `google_oauth_connect`, `social_sign_in`, `flickr_oauth`, `user_url_fetch`, `github_contributors`, `git_fetch` |
-| `billed` | `google_geocoding`, `google_places`, `google_maps`, `azure_maps`, `apple_maps`, `google_earth`, `protomaps_basemap` |
+| `quota` | `nominatim`, `wikipedia`, `wikipedia_media`, `wikimedia`, `wayback_machine` (reads), `overture_maps`, `google_open_buildings`, `microsoft_building_footprints`, `overpass_public_mirror` (the public fallbacks, on a session of their own), `open_historical_map`, `open_meteo`, `openweathermap`, `osrm`, `census_tigerweb`, `usgs`, `esri`, `basemap_vendor_tiles`, `flickr`, `hibp`, `virustotal`, `google_photos`, `google_street_view_metadata`; unledgered `google_oauth_refresh`, `google_oauth_connect`, `social_sign_in`, `flickr_oauth`, `user_url_fetch`, `github_contributors`, `git_fetch`; browser-side `protomaps_basemap` (unledgered, gated by environment rather than share) |
+| `billed` | `google_geocoding`, `google_places`, `google_maps`, `azure_maps`, `apple_maps`, `google_earth` |
 | `ai` | the features `trivia_generation`, `trivia_moderation`, `trivia_answer_check`, `trivia_wiki_incorporation`, `article_expansion`, `article_safety`, `link_extraction`, `document_pin_import`, `trip_suggestions`, `label_style_suggestions`, `category_suggestions`, `assistant`, `ai_photo_keywords`, `cloudflare_image_classifier`; and the hosted providers `ai_anthropic`, `ai_cloudflare`, `ai_openai` |
 | `messaging` | `email`, `sms`, `whatsapp` (and their base `twilio`), `unified_push` |
 | `public_write` | `wayback_save` (Save Page Now), `google_calendar` (event writes; its imports are refused with it), `stripe` |
@@ -187,13 +193,14 @@ production, and every provider call they make is held by the call-level policy.
 
 **Development** (share 0): REData, the self-hosted Overpass primary, the tile cache, Ollama and `ai_inference`
 (whose hosted providers are refused). Nothing in `quota` or `billed`: no Nominatim, Wikipedia, Wayback, Overture, Open
-Buildings, Esri tiles, Google, Azure or Protomaps. No hosted AI: no Cloudflare Workers AI, OpenAI or Anthropic. No mail (console), texts, push, Calendar writes, Stripe or Save Page Now.
+Buildings, Esri tiles, Google, Azure or Protomaps (the street and dark basemaps draw our mirror's tiles). No hosted AI: no Cloudflare Workers AI, OpenAI or Anthropic. No mail (console), texts, push, Calendar writes, Stripe or Save Page Now.
 Of beat, only internal maintenance. Visible consequences: the Esri satellite basemap layer and other vendor raster
 layers are grey; panels from direct third parties say "Not available in this environment"; the Settings geocode
 answers 503; the AI features say the same (see "Hosted AI"); the assistant's weather and routing tools, which call
 OpenWeatherMap and OSRM directly, report unavailable. `UL_ENVIRONMENT_SHARE_OVERRIDES` opts a provider back in for a session's work.
 
-**Staging** (share 0.05): REData, our own hosts and hosted AI (logged); a twentieth of every `quota` and `billed`
+**Staging** (share 0.05): REData, our own hosts, hosted AI (logged) and the hosted Protomaps basemap tiles, which
+its browsers fetch themselves; a twentieth of every `quota` and `billed`
 window (Nominatim's 500 a day becomes 25; Google Geocoding's free-tier share 200 a month), but never as a
 fallthrough from a failed REData call. No mail, texts, push, Calendar, Stripe or Save Page Now. Of beat, only
 internal maintenance. k3s staging's Celery runs (beat, worker and panels worker at 1/1/1, read from the cluster
@@ -208,7 +215,9 @@ key from production's.
 ## Not covered
 
 - Calls the browser makes from the user's own address: map search through Nominatim (D25), OpenWeatherMap tile
-  overlays, Esri and USGS export slides.
+  overlays, Esri and USGS export slides, the hosted Protomaps basemap tiles (whose environments are decided above,
+  but whose volume nothing here counts), and OpenFreeMap's keyless styles where an installation has no basemap of
+  its own.
 - What REData spends upstream on our behalf (above).
 - The unheld paths in the table above.
 - Weather and routing (`weather_resolution`, `routing_resolution`) still fall through from a failed REData call

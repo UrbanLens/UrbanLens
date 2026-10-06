@@ -75,6 +75,12 @@ UNLEDGERED_SERVICES: Mapping[str, Unledgered] = {
     ),
     "github_contributors": Unledgered(EgressCategory.QUOTA, "not held: the thanks page, cached"),
     "git_fetch": Unledgered(EgressCategory.QUOTA, "not held: the site-admin update check"),
+    "protomaps_basemap": Unledgered(
+        EgressCategory.QUOTA,
+        "not held: browser-side. The browser fetches the street and dark tiles from api.protomaps.com itself (free, "
+        "noncommercial), so nothing server-side spends or counts them; hosted_basemap_api_key decides which environments "
+        "are handed the key (production and staging)",
+    ),
     "gotify": Unledgered(EgressCategory.INTERNAL, "self-hosted"),
     "clamd": Unledgered(EgressCategory.INTERNAL, "self-hosted"),
     "ai_inference": Unledgered(
@@ -261,11 +267,14 @@ def direct_fallback_permitted() -> bool:
 
 
 def hosted_basemap_api_key() -> str:
-    """The Protomaps key this deployment buys its hosted basemap with: production's alone (D26).
+    """The Protomaps key this deployment's browsers fetch the street and dark tiles with: production's and staging's (D26).
+
+    The key reaches the page, which is how Protomaps keys are meant to be used: their dashboard restricts the origins
+    it answers. It is still never logged here.
 
     Returns:
-        ``UL_PROTOMAPS_API_KEY`` on production and in tests; elsewhere an empty string, which keeps the street and
-        dark layers on the self-hosted mirror.
+        ``UL_PROTOMAPS_API_KEY`` on production, staging and in tests; elsewhere an empty string, which keeps the street
+        and dark layers on the self-hosted mirror.
     """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 

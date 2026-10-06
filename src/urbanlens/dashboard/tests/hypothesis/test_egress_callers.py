@@ -636,16 +636,19 @@ class WaybackSaveTests(SimpleTestCase):
 
 
 class HostedBasemapTests(SimpleTestCase):
-    def test_the_key_is_read_on_production_only(self) -> None:
+    def test_the_key_is_handed_out_on_production_and_staging_only(self) -> None:
         from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
-        from urbanlens.dashboard.services.map.basemap_catalogue import protomaps_theme_for
+        from urbanlens.dashboard.services.map.basemap_catalogue import hosted_basemap_tiles
 
         with mock.patch("urbanlens.UrbanLens.settings.app.settings.protomaps_api_key", "key"):
-            with deployment("staging"):
-                self.assertEqual(hosted_basemap_api_key(), "")
-                self.assertIsNone(protomaps_theme_for("street"))
-            with deployment("production"):
-                self.assertEqual(hosted_basemap_api_key(), "key")
+            for environment in ("production", "staging"):
+                with self.subTest(environment=environment), deployment(environment):
+                    self.assertEqual(hosted_basemap_api_key(), "key")
+                    self.assertIn("key=key", hosted_basemap_tiles() or "")
+            for environment in ("development", "local"):
+                with self.subTest(environment=environment), deployment(environment):
+                    self.assertEqual(hosted_basemap_api_key(), "")
+                    self.assertIsNone(hosted_basemap_tiles())
 
 
 class BackgroundTaskGateTests(SimpleTestCase):

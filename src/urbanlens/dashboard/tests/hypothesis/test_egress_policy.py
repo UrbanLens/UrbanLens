@@ -236,11 +236,22 @@ class EmailBackendTests(SimpleTestCase):
 
 
 class HostedBasemapTests(SimpleTestCase):
-    def test_only_production_buys_the_hosted_basemap(self) -> None:
-        self.assertEqual(hosted_basemap_key(PRODUCTION, "key"), "key")
-        for environment in (STAGING, DEVELOPMENT, LOCAL):
+    def test_production_and_staging_hand_out_the_key(self) -> None:
+        """Browser-side and free for noncommercial use, so staging draws what production draws (Jess, 2026-10-06)."""
+        for environment in (PRODUCTION, STAGING, TESTING):
+            with self.subTest(environment=environment):
+                self.assertEqual(hosted_basemap_key(environment, "key"), "key")
+
+    def test_development_and_local_draw_our_own_tiles(self) -> None:
+        """Our own tiles are internal and free, matching development's share of 0."""
+        for environment in (DEVELOPMENT, LOCAL, "", "shadow-site-a"):
             with self.subTest(environment=environment):
                 self.assertEqual(hosted_basemap_key(environment, "key"), "")
+
+    def test_no_key_is_no_key_anywhere(self) -> None:
+        for environment in (PRODUCTION, STAGING, TESTING, DEVELOPMENT):
+            with self.subTest(environment=environment):
+                self.assertEqual(hosted_basemap_key(environment, ""), "")
 
 
 class BeatScheduleTests(SimpleTestCase):

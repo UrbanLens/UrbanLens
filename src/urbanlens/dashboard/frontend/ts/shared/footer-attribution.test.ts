@@ -41,9 +41,9 @@ describe("setAttribution", () => {
     test("credits the tiles in the footer", () => {
         const slot = makeFooterSlot();
 
-        setAttribution("© OSM · CARTO · Leaflet");
+        setAttribution("© Esri · © OpenStreetMap · Leaflet");
 
-        expect(slot.textContent).toBe("© OSM · CARTO · Leaflet");
+        expect(slot.textContent).toBe("© Esri · © OpenStreetMap · Leaflet");
     });
 
     /**
@@ -64,7 +64,7 @@ describe("setAttribution", () => {
     test("shows the layer that ended up drawn, not the one asked for first", () => {
         setReadyState("loading");
 
-        setAttribution("© OSM · CARTO");
+        setAttribution("© Esri · © OpenStreetMap");
         setAttribution("© Esri");
         const slot = makeFooterSlot();
         document.dispatchEvent(new Event("DOMContentLoaded"));

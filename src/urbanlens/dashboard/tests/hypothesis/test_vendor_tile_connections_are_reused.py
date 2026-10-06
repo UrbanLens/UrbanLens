@@ -100,7 +100,7 @@ class PooledSessionTests(SimpleTestCase):
         self.assertIsNot(pooled_session("some_other_service"), pooled_session("basemap_vendor_tiles"))
 
     def test_only_a_gateway_that_asks_shares_one(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import ProtomapsBasemapGateway
+        from urbanlens.dashboard.services.apis.locations.usgs import UsgsGateway
 
         self.assertIs(BasemapVendorTilesGateway().session._session, BasemapVendorTilesGateway().session._session)
-        self.assertIsNot(ProtomapsBasemapGateway().session._session, ProtomapsBasemapGateway().session._session)
+        self.assertIsNot(UsgsGateway().session._session, UsgsGateway().session._session)
