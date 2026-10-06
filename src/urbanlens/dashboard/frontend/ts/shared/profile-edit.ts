@@ -138,7 +138,7 @@ export class ProfileEditForm {
             return;
         }
         this.setStatus("avatar", "saved", avatarSavedText(result));
-        const outcome = await showSavedAvatar(this.saveUrl, choice, result);
+        const outcome = await showSavedAvatar(this.saveUrl, choice, result, { mediaOrigin: this.root.dataset.mediaOrigin });
         if (outcome === "published") this.setStatus("avatar", "saved", "✓ Saved");
         if (outcome === "unchanged") {
             this.setStatus("avatar", "error", "✗");

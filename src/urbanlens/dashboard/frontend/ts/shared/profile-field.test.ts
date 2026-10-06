@@ -143,6 +143,55 @@ describe("avatarSrc", () => {
         }
     });
 
+    describe("on a site that serves uploads from their own origin", () => {
+        const MEDIA = "https://media.example.org";
+
+        test("lets through that origin, in full, and this page's origin still as a path", () => {
+            expect(avatarSrc("https://media.example.org/media/avatars/a.webp", MEDIA)).toBe("https://media.example.org/media/avatars/a.webp");
+            expect(avatarSrc("https://media.example.org/media/a.png?sig=abc&v=1#x", MEDIA)).toBe("https://media.example.org/media/a.png?sig=abc&v=1#x");
+            expect(avatarSrc("/media/avatars/a.webp", MEDIA)).toBe("/media/avatars/a.webp");
+            // The attribute is read as an origin: a trailing slash or a path on it does not narrow or widen it.
+            expect(avatarSrc("https://media.example.org/a.png", "https://media.example.org/")).toBe("https://media.example.org/a.png");
+            expect(avatarSrc("https://media.example.org/a.png", "https://media.example.org/media/")).toBe("https://media.example.org/a.png");
+            // Nothing in front of the host comes along.
+            expect(avatarSrc("https://user:secret@media.example.org/a.png", MEDIA)).toBe("https://media.example.org/a.png");
+        });
+
+        test("is that origin exactly: no other origin, subdomain, lookalike, scheme or port, and no wildcard", () => {
+            for (const address of [
+                "https://evil.example/media/a.png",
+                "https://media.example.org.evil.example/a.png",
+                "https://evil.media.example.org/a.png",
+                "https://example.org/a.png",
+                "https://media.example.org@evil.example/a.png",
+                "//evil.example/a.png",
+                "http://media.example.org/a.png",
+                "https://media.example.org:8443/a.png",
+            ]) {
+                expect(avatarSrc(address, MEDIA)).toBeNull();
+            }
+            for (const wildcard of ["*", "https://*.example.org", "https://*", ".example.org", "example.org"]) {
+                expect(avatarSrc("https://media.example.org/a.png", wildcard)).toBeNull();
+                expect(avatarSrc("https://evil.example/a.png", wildcard)).toBeNull();
+            }
+        });
+
+        test("still refuses every scheme but http and https, and a blob: nobody here made", () => {
+            for (const address of ["javascript:alert(1)", "data:image/png;base64,AAAA", "file:///etc/passwd", "ftp://media.example.org/a.png", "blob:https://media.example.org/1234"]) {
+                expect(avatarSrc(address, MEDIA)).toBeNull();
+            }
+        });
+
+        test("is ignored when it is empty, is not an address, or is not an http(s) one: only this page's origin is let through", () => {
+            for (const media of ["", "not an address", "javascript:alert(1)", "data:text/plain,x", "null", "ftp://media.example.org"]) {
+                expect(avatarSrc("https://media.example.org/a.png", media)).toBeNull();
+                expect(avatarSrc("javascript:alert(1)", media)).toBeNull();
+                expect(avatarSrc("/media/a.png", media)).toBe("/media/a.png");
+            }
+            expect(avatarSrc("https://media.example.org/a.png")).toBeNull();
+        });
+    });
+
     test("refuses a blob: address this page did not make, and an address that is not one", () => {
         expect(avatarSrc("blob:https://urbanlens.test/1234")).toBeNull();
         expect(avatarSrc("blob:https://evil.example/1234")).toBeNull();
@@ -170,6 +219,18 @@ describe("showAvatar refusing an address", () => {
         expect(document.getElementById("av")).toBe(img);
         expect(img?.getAttribute("src")).toBe("/media/old.png");
         expect(warned).toBe(4);
+    });
+
+    test("draws from the media origin it was given, and still refuses another", () => {
+        document.body.innerHTML = `<div id="av" data-user-avatar="avatar">JM</div>`;
+        showUserAvatar("https://evil.example/a.png", "https://media.example.org");
+        expect(document.getElementById("av")?.tagName).toBe("DIV");
+        showUserAvatar("https://media.example.org/media/a.png", "https://media.example.org");
+        expect(document.getElementById("av")?.getAttribute("src")).toStartWith("https://media.example.org/media/a.png?v=");
+        const img = document.getElementById("av");
+        showAvatar(img, "https://media.example.org/media/b.png", "avatar", "Avatar", "https://media.example.org");
+        expect(img?.getAttribute("src")).toStartWith("https://media.example.org/media/b.png?v=");
+        expect(warned).toBe(1);
     });
 
     test("leaves a placeholder where it was", () => {
@@ -365,6 +426,28 @@ describe("showSavedAvatar", () => {
             expect(made).toBe(0);
             expect(revoked).toEqual([]);
         });
+    });
+
+    test("a stored picture on the media origin is drawn from the address the save answered with, and the stored copy found by the wait", async () => {
+        const MEDIA = "https://media.example.org";
+        placeholders();
+        expect(await showSavedAvatar("/f/", { kind: "emoji", animal: "owl", color: "teal" }, { ok: true, avatar_url: `${MEDIA}/media/new.svg` }, { sleep: now, mediaOrigin: MEDIA })).toBe("shown");
+        expect(srcs().every((src) => src?.startsWith(`${MEDIA}/media/new.svg?v=`))).toBe(true);
+
+        placeholders();
+        states = [state(`${MEDIA}/media/new.png`, false)];
+        const outcome = await showSavedAvatar("/f/", { kind: "gravatar", previewUrl: "/static/g.png" }, { ok: true, avatar_url: `${MEDIA}/media/old.png`, avatar_pending: true }, { sleep: now, mediaOrigin: MEDIA });
+        expect(outcome).toBe("published");
+        expect(srcs().every((src) => src?.startsWith(`${MEDIA}/media/new.png?v=`))).toBe(true);
+    });
+
+    test("a stored picture on another origin is not drawn when the page names no media origin", async () => {
+        placeholders();
+        const warn = console.warn;
+        console.warn = () => undefined;
+        expect(await showSavedAvatar("/f/", { kind: "emoji", animal: "owl", color: "teal" }, { ok: true, avatar_url: "https://media.example.org/media/new.svg" }, { sleep: now })).toBe("shown");
+        console.warn = warn;
+        expect(srcs()).toEqual(["DIV", "/media/old.png"]);
     });
 
     test("a Gravatar preview that is not an address this page may load is not drawn, and the stored copy still takes over", async () => {

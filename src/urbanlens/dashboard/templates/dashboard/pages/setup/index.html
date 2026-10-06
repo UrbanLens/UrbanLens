@@ -4,7 +4,7 @@
 {% block page_title %}Setup - {{ settings.app_title }}{% endblock %}
 
 {% block content %}
-<div class="setup-wizard" data-setup-url="{% url 'setup' %}" data-profile-url="{% url 'profile.field.update' %}"
+<div class="setup-wizard" data-setup-url="{% url 'setup' %}" data-profile-url="{% url 'profile.field.update' %}" data-media-origin="{{ media_origin }}"
      data-suggested-title="{{ suggested_app_title }}"{% if is_official_urbanlens_site %} data-official="true"{% else %} data-title-notice="{{ urbanlens_title_notice }}"{% endif %}>
     <div class="setup-wizard__layout">
 
