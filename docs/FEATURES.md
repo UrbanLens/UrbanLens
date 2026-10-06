@@ -834,6 +834,15 @@ category suggestions, and each assistant round) reserve their ledger row before 
 cannot read its counts refuses billable services. The six LLM features added to it on 2026-10-05
 carry no cap: AI is logged, not limited.
 
+A service declared `ledger=CallLedger.TALLIED` (`basemap_vendor_tiles`, one call per uncached raster
+tile) makes no query at all per call: it is checked against the same `ApiRateLimit` limits, share
+and switch on atomic fixed-window counters in the default cache, and each outcome is added to a
+per-service tally that the `api-call-tally-rollup` beat entry writes into `ApiCallLog` every minute
+as rows carrying `calls` (`services/core/call_tally.py`). The row's limits reach each process the
+same way, published to the cache by the roll-up and on every save of the row. The API-limits
+summary, the costs page and provider health count `calls`, not rows. A counter store that cannot
+answer refuses the call.
+
 **Per-environment egress policy (D26, `UrbanLens/egress.py`, `services/core/egress.py`).** Every
 external service is classified (`ServiceDefaults.category`: `redata`, `internal`, `quota`, `billed`,
 `ai`, `messaging`, `public_write`), and the same choke point applies one policy per `UL_ENVIRONMENT`:
@@ -1767,8 +1776,10 @@ Reuse these rather than hand-rolling a counter, a lock or a check-then-insert.
   locked step in tests (`AtomicLocMemCache`). The caller picks `Outage.REFUSE` (raise; for limits
   guarding an upstream's budget) or `Outage.LOCAL` (count in-process for the outage). The request
   throttle, login/2FA lockout and the WebSocket frame/fanout/message budgets all use it.
+- **Tallies** - `counters.add_to_tally(key, {field: n}, ttl)` and `take_tally(key)`: named counts
+  under one hash key, read and emptied in one step; no local fallback. The tallied call ledger uses it.
 - **Store operations that do not guess** - `core/cache_backend.py`: `AtomicCacheOps`
-  (`incr_window`, `peek_int`, `decr_if_positive`, `delete_if_value`) raise
+  (`incr_window`, `peek_int`, `decr_if_positive`, `delete_if_value`, `add_to_tally`, `take_tally`) raise
   `CacheUnavailableError` (a `ValueError`) instead of answering as an empty cache.
 - **Inbound throttle** - `services/security/throttle.py`: `throttled(scope, Rate(limit, window,
   on_outage=...), methods, identify=account_or_address)` wraps a URLconf entry; the wrapper exposes

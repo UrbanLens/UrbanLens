@@ -35,7 +35,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
 
-from urbanlens.dashboard.middleware import mark_shared_cacheable
+from urbanlens.dashboard.middleware import mark_viewer_independent
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
@@ -163,7 +163,7 @@ def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
 
 
 def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpResponse:
-    """Tell the browser it may keep this answer as long as this deployment does, and not guess at it.
+    """Tell the browser it may keep this answer, and nothing between it and this deployment may.
 
     A tile is immutable for a layer and coordinate, so a re-ask gets the answer the browser already
     has. Without this the proxy is asked again for every tile on every pan back over the same
@@ -178,17 +178,32 @@ def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpRespons
     Returns:
         The same response.
     """
-    # public, though the endpoint is behind a login: the gate is on who may spend this deployment's
-    # upstream quota, not on the bytes, which are the vendor's own basemap and the same for every
-    # viewer. `private` here bought nothing and cost everything - a CDN refuses to store it, so
-    # every tile of every viewport was answered by a request thread (see `mark_shared_cacheable`
-    # for why saying `public` is only half of it).
-    response.headers["Cache-Control"] = f"public, max-age={ttl}, immutable"
+    # private: the endpoint is behind a login, so a shared cache holding the answer would hand it to
+    # anyone - and a cache hit there says that somebody here has looked at that coordinate.
+    response.headers["Cache-Control"] = f"private, max-age={ttl}, immutable"
     # The type the upstream declared is allow-listed before it gets here; this is the other half,
     # for bytes that do not match the type they were allowed under. nginx sets it on the media
     # routes only, and this one is csp_exempt.
     response.headers["X-Content-Type-Options"] = "nosniff"
-    return mark_shared_cacheable(response)
+    return mark_viewer_independent(response)
+
+
+def _browser_ttl(layer: str, ttl: int) -> int:
+    """*ttl*, cut to what the layer's vendor lets a client keep its tiles for.
+
+    Args:
+        layer: Layer id from the catalogue.
+        ttl: How long this deployment would keep the answer.
+
+    Returns:
+        Seconds.
+    """
+    from urbanlens.dashboard.services.map.basemap_vendors import vendor_for
+
+    vendor = vendor_for(layer)
+    if vendor is None or vendor.browser_max_age is None:
+        return ttl
+    return min(ttl, vendor.browser_max_age)
 
 
 # A Content-Security-Policy governs what a *document* may load, so on a tile it is ~1.2kB of header
@@ -243,12 +258,12 @@ class BasemapTileView(AccessMixin, View):
         cached = found.get(cache_key)
         if cached is not None:
             if cached == _NO_TILE:
-                return _keep_for(HttpResponse(status=404), _ttl_for_absence(z))
+                return _keep_for(HttpResponse(status=404), _browser_ttl(layer, _ttl_for_absence(z)))
             # The vendor's own content type is cached with the bytes: these layers are not all PNG, and
             # mislabelling a JPEG or WebP on the cache-hit path but not the fresh one is the kind of difference
             # that shows up only once a layer is already in the cache.
             body, content_type = cached
-            return _keep_for(HttpResponse(body, content_type=content_type), _ttl_for(z))
+            return _keep_for(HttpResponse(body, content_type=content_type), _browser_ttl(layer, _ttl_for(z)))
 
         with UpstreamSlots.hold() as slot:
             if not slot:
@@ -289,7 +304,7 @@ class BasemapTileView(AccessMixin, View):
             # The helper also swallows a cache failure - a full or unreachable
             # Dragonfly is a degraded cache, not a broken map.
             bounded_cache.set_if_small(cache_key, body, resolved_type, _ttl_for(z), label=f"Basemap tile {layer} {z}/{x}/{y}")
-            return _keep_for(HttpResponse(body, content_type=resolved_type), _ttl_for(z))
+            return _keep_for(HttpResponse(body, content_type=resolved_type), _browser_ttl(layer, _ttl_for(z)))
         if status == 400 and _VECTOR_LAYER_REFUSAL in body:
             # Same reasoning as the disabled-service branch above: the catalogue is what named this
             # layer as raster, so it is the stale thing. Remembering the refusal per coordinate
@@ -303,7 +318,7 @@ class BasemapTileView(AccessMixin, View):
             # A definitive answer about the request: no such tile, unknown
             # layer, or coordinates out of range. Safe to remember.
             bounded_cache.set_or_skip(cache_key, _NO_TILE, _ttl_for_absence(z), label=f"Basemap tile {layer} {z}/{x}/{y} (absent)")
-            return _keep_for(HttpResponse(status=404), _ttl_for_absence(z))
+            return _keep_for(HttpResponse(status=404), _browser_ttl(layer, _ttl_for_absence(z)))
         logger.warning("Basemap tile upstream status %s for %s %s/%s/%s", status, layer, z, x, y)
         return HttpResponse(status=503)
 

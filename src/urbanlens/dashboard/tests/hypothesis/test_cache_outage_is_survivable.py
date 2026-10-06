@@ -102,6 +102,13 @@ class ADownCacheBehavesLikeAnEmptyOneTests(SimpleTestCase):
             self.assertEqual(cache.get("k"), "warm")
         store.assert_called_once()
 
+    def test_dragonflys_own_wording_of_a_full_store_degrades_the_write_too(self) -> None:
+        """Dragonfly answers ``Out of memory``, which redis-py raises as a plain `ResponseError`."""
+        cache = _cache()
+        with mock.patch.object(RedisCache, "set", side_effect=ResponseError("Out of memory")):
+            self.assertIsNone(cache.set("k", "v", 60))
+        self.assertFalse(cache.is_open, "a refused write is not the store going away")
+
     def test_get_is_a_miss(self) -> None:
         with self._down("get"):
             self.assertIsNone(self.cache.get("k"))

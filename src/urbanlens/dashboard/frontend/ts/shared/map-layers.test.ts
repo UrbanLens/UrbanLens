@@ -1324,6 +1324,107 @@ describe("createMapLayers draws an underlay behind the base", () => {
     });
 });
 
+/**
+ * The underlay is a raster world picture fetched through this deployment's tile proxy: sixteen tiles per base, all
+ * cold misses on a fresh cache. Under a vector base it is fetched and then painted over - the style draws its own
+ * background across the whole map, and overzooms its own tiles through a zoom - so it buys nothing there.
+ */
+describe("createMapLayers asks for no raster underlay under a vector base", () => {
+    const UNDERLAY_PANE = "ul-underlay";
+    const realMaplibregl = (globalThis as Record<string, unknown>).maplibregl;
+    const realWebGLSupport = window.WebGLSupport;
+    const realImage = (globalThis as Record<string, unknown>).Image;
+
+    afterEach(() => {
+        (globalThis as Record<string, unknown>).L = realL;
+        (globalThis as Record<string, unknown>).maplibregl = realMaplibregl;
+        (globalThis as Record<string, unknown>).Image = realImage;
+        window.WebGLSupport = realWebGLSupport;
+        delete (globalThis as Record<string, unknown>).matchMedia;
+        document.body.innerHTML = "";
+        resetWorldMosaicsForTests();
+        resetRedataLayersCacheForTests();
+    });
+
+    /** Opens a map whose street and dark bases are vector styles MapLibre can draw, recording every image asked for. */
+    function mapOpenedOnVector(
+        base: string,
+        darkMode: "light" | "dark" = "light",
+    ): { map: FakeMap; layers: ReturnType<typeof createMapLayers>; requested: string[]; vectorBases: { style: string }[] } {
+        resetRedataLayersCacheForTests();
+        const catalogue = document.createElement("script");
+        catalogue.type = "application/json";
+        catalogue.id = "ul-basemap-tiles";
+        catalogue.textContent = JSON.stringify([
+            { id: "street", source_type: "vector", style_url: "https://tiles.example/street.json", attribution: "OSM" },
+            { id: "dark", source_type: "vector", style_url: "https://tiles.example/dark.json", attribution: "OSM" },
+        ]);
+        document.body.appendChild(catalogue);
+
+        stubLeafletForMapLayers();
+        const vectorBases: { style: string }[] = [];
+        Object.assign((globalThis as Record<string, unknown>).L as object, {
+            maplibreGL: (options: { style: string }) => {
+                const layer = { style: options.style, options: {}, addTo: (map: FakeMap) => (map.addLayer(layer), layer) };
+                vectorBases.push(layer);
+                return layer;
+            },
+        });
+        (globalThis as Record<string, unknown>).maplibregl = {};
+        window.WebGLSupport = { supportsWebGL2: () => true };
+        stubMatchMedia();
+
+        const requested: string[] = [];
+        (globalThis as Record<string, unknown>).Image = class {
+            decoding = "";
+            addEventListener(): void {}
+            set src(value: string) {
+                requested.push(value);
+            }
+        };
+        const map = new FakeMap();
+        const layers = createMapLayers(map as unknown as L.Map, { root: makeToggleRoot(), contextMenu: false, defaultBase: base, darkMode });
+        return { map, layers, requested, vectorBases };
+    }
+
+    function cutOneTile(map: FakeMap): void {
+        for (const { layer } of map.layersInPane(UNDERLAY_PANE)) {
+            (layer as { createTile(c: { x: number; y: number; z: number }): HTMLCanvasElement }).createTile({ x: 0, y: 0, z: 3 });
+        }
+    }
+
+    test("a vector street map draws no underlay and asks for no world tiles", () => {
+        const { map, requested, vectorBases } = mapOpenedOnVector("street");
+        cutOneTile(map);
+
+        expect(vectorBases.filter((layer) => map.hasLayer(layer)).map((layer) => layer.style)).toEqual(["https://tiles.example/street.json"]);
+        expect(map.layersInPane(UNDERLAY_PANE)).toHaveLength(0);
+        expect(requested).toEqual([]);
+    });
+
+    test("nor does a vector dark map", () => {
+        const { map, requested, vectorBases } = mapOpenedOnVector("street", "dark");
+        cutOneTile(map);
+
+        expect(vectorBases.filter((layer) => map.hasLayer(layer)).map((layer) => layer.style)).toEqual(["https://tiles.example/dark.json"]);
+        expect(map.layersInPane(UNDERLAY_PANE)).toHaveLength(0);
+        expect(requested).toEqual([]);
+    });
+
+    test("a raster base on the same page still gets its own, and loses it again on the way back", () => {
+        const { map, layers, requested } = mapOpenedOnVector("street");
+
+        layers.setBase("satellite");
+        cutOneTile(map);
+        expect(map.layersInPane(UNDERLAY_PANE)).toHaveLength(1);
+        expect(requested).toHaveLength(16);
+        expect(requested.every((url) => url.includes("World_Imagery"))).toBe(true);
+
+        layers.setBase("street");
+        expect(map.layersInPane(UNDERLAY_PANE)).toHaveLength(0);
+    });
+});
+
 describe("createMapLayers hides the base an opaque layer covers", () => {
     afterEach(() => {
         (globalThis as Record<string, unknown>).L = realL;

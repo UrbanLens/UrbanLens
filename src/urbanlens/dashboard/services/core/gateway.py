@@ -5,7 +5,9 @@ from __future__ import annotations
 
 from abc import ABC, ABCMeta
 from dataclasses import dataclass, field
+from http.cookiejar import DefaultCookiePolicy
 import re
+import threading
 from typing import ClassVar
 
 import requests
@@ -50,6 +52,33 @@ class Service(ABC, metaclass=ServiceMeta):
     service_key: ClassVar[str | None] = None
 
 
+_pooled = threading.local()
+
+
+def pooled_session(key: str) -> requests.Session:
+    """This thread's long-lived session for *key*, so one call after another reuses its open connections.
+
+    One per thread rather than one per process: ``requests.Session`` is not documented as safe to share
+    between threads, and a request thread makes one call at a time anyway. It keeps no cookies, so the
+    only thing carried from one call to the next is the connection.
+
+    Args:
+        key: The service the session is for.
+
+    Returns:
+        The session.
+    """
+    sessions: dict[str, requests.Session] | None = getattr(_pooled, "sessions", None)
+    if sessions is None:
+        sessions = _pooled.sessions = {}
+    session = sessions.get(key)
+    if session is None:
+        session = requests.Session()
+        session.cookies.set_policy(DefaultCookiePolicy(allowed_domains=[]))
+        sessions[key] = session
+    return session
+
+
 @dataclass(slots=True, kw_only=True)
 class Gateway(Service, ABC):
     """A gateway to an external service.
@@ -57,6 +86,11 @@ class Gateway(Service, ABC):
     Attributes:
         session: The HTTP session used for all requests.
     """
+
+    #: Keep connections to the upstream open between calls, on :func:`pooled_session`, rather than open one per
+    #: gateway instance. Only for a gateway that sets nothing on its session - headers, auth, cookies - since the
+    #: session outlives the instance.
+    reuses_connections: ClassVar[bool] = False
 
     session: requests.Session = field(default_factory=requests.Session)
 
@@ -67,7 +101,8 @@ class Gateway(Service, ABC):
         if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.core.rate_limiter import _RateLimitedSession
 
-            object.__setattr__(self, "session", _RateLimitedSession(key, self.endpoint_for_log))
+            session = pooled_session(key) if type(self).reuses_connections else self.session
+            object.__setattr__(self, "session", _RateLimitedSession(key, self.endpoint_for_log, session=session))
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:

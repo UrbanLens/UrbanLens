@@ -603,6 +603,11 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
         "schedule": crontab(hour=5, minute=10),
     },
+    # Every minute: tallied services' calls into ApiCallLog; see services/core/call_tally.py.
+    "api-call-tally-rollup": {
+        "task": "urbanlens.dashboard.tasks.roll_up_api_call_tallies",
+        "schedule": 60,
+    },
     # Daily; retention follows the costs page's 12-month chart.
     "api-call-log-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",

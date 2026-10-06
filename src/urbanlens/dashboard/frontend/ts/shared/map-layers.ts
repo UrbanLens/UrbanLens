@@ -276,6 +276,9 @@ function canDrawVectorBase(): boolean {
     return typeof maplibregl !== "undefined" && typeof L.maplibreGL === "function" && window.WebGLSupport?.supportsWebGL2() === true;
 }
 
+/** Every base `baseLayer` handed to the vector bridge rather than drawing from raster tiles. */
+const vectorBases = new WeakSet<L.Layer>();
+
 /**
  * The base layer for one of the canonical sources, vector where this deployment offers one.
  *
@@ -289,7 +292,11 @@ function canDrawVectorBase(): boolean {
 export function baseLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Layer {
     applyMarkerArtwork();
     const def = vectorStyleFor(kind);
-    if (def && canDrawVectorBase()) return L.maplibreGL({ style: def.styleUrl, attribution: def.attribution });
+    if (def && canDrawVectorBase()) {
+        const layer = L.maplibreGL({ style: def.styleUrl, attribution: def.attribution });
+        vectorBases.add(layer);
+        return layer;
+    }
     return tileLayer(kind, extraOptions);
 }
 
@@ -1089,9 +1096,16 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
               : isDarkActive()
                 ? "dark"
                 : "street";
+        // None under a vector base. It overzooms its own tiles through a zoom rather than opening gaps, and once
+        // its style loads it paints its own background over the whole map; before then the container's own
+        // colour (`_map.scss`, set per theme) is what shows. The picture would be sixteen raster tiles through
+        // this deployment's proxy, fetched only to be painted over.
+        const base = key === "dark" ? darkLayer : key === "street" ? streetLayer : null;
+        const wanted = base && vectorBases.has(base) ? null : key;
         for (const [other, layer] of underlays) {
-            if (other !== key && map.hasLayer(layer)) map.removeLayer(layer);
+            if (other !== wanted && map.hasLayer(layer)) map.removeLayer(layer);
         }
+        if (wanted === null) return;
         let layer = underlays.get(key);
         if (!layer) {
             // Cut from the world picture for this base, which is already in memory - so the layer

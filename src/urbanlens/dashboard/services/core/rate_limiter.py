@@ -8,11 +8,14 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
+    import requests
+
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from enum import StrEnum
 import logging
 import math
 import time
@@ -56,6 +59,17 @@ def external_calls_forbidden() -> Iterator[None]:
 # instead; the merged view lives in ``all_service_defaults``.
 
 
+class CallLedger(StrEnum):
+    """How a service's calls are checked against its limits and recorded."""
+
+    #: One ``ApiCallLog`` row per call, reserved under a lock on the service's ``ApiRateLimit`` row, so the check
+    #: and the record are one step.
+    ROW_PER_CALL = "row_per_call"
+    #: Counted in the shared cache and rolled up into ``ApiCallLog`` every minute (``services.core.call_tally``), so
+    #: a call waits on no query and no lock. For a high-frequency service: its windows are fixed rather than rolling.
+    TALLIED = "tallied"
+
+
 @dataclass(frozen=True, slots=True)
 class ServiceDefaults:
     """Default rate-limit configuration for one external API service."""
@@ -93,6 +107,8 @@ class ServiceDefaults:
     #: its budget (``urbanlens.UrbanLens.egress``). None means unclassified, which the policy treats as
     #: billed and the completeness test refuses.
     category: EgressCategory | None = None
+    #: How its calls are counted and recorded.
+    ledger: CallLedger = CallLedger.ROW_PER_CALL
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
@@ -168,6 +184,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=600,
         calls_per_day=None,
         notes="Raster basemap tiles fetched straight from the vendor - see services.map.basemap_vendors.",
+        # One call per uncached tile, a viewport's worth at once: a locked row per tile queued them on the row lock.
+        ledger=CallLedger.TALLIED,
     ),
     "protomaps_basemap": ServiceDefaults(
         display_name="Protomaps Hosted Basemap",
@@ -540,6 +558,32 @@ def free_tier_ceiling(service: str) -> int | None:
     return math.floor(defaults.free_tier_per_calendar_month * defaults.free_tier_allotment * _service_share(service))
 
 
+def call_ledger(service: str) -> CallLedger:
+    """How *service*'s calls are counted and recorded.
+
+    Args:
+        service: The service key.
+
+    Returns:
+        Its declared ledger; one row per call for a service nothing declares, or whose defaults cannot be read.
+    """
+    try:
+        defaults = all_service_defaults().get(service)
+    except Exception:
+        logger.exception("Could not read plugin service defaults for %s; the core registry decides its ledger", service)
+        defaults = SERVICE_REGISTRY.get(service)
+    return defaults.ledger if defaults is not None else CallLedger.ROW_PER_CALL
+
+
+def _calls_in(rows: Any, service: str) -> int:
+    """How many calls *rows* stand for: one each, except a tallied service's rolled-up rows, which carry a count."""
+    if call_ledger(service) is CallLedger.TALLIED:
+        from django.db.models import Sum
+
+        return int(rows.aggregate(total=Sum("calls"))["total"] or 0)
+    return int(rows.count())
+
+
 def _is_billable(service: str) -> bool:
     """Whether a call to *service* can cost money; unknown services are assumed to."""
     defaults = SERVICE_REGISTRY.get(service)
@@ -672,7 +716,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
     per_30_days = scaled_limit(config.calls_per_30_days, share)
     try:
         if per_minute is not None:
-            recent_minute = ApiCallLog.objects.for_service(service).since(timedelta(minutes=1)).billable().count()
+            recent_minute = _calls_in(ApiCallLog.objects.for_service(service).since(timedelta(minutes=1)).billable(), service)
             if recent_minute >= per_minute:
                 logger.warning(
                     "Rate limit hit for %s: %d/%d calls in last minute",
@@ -683,7 +727,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
                 return False
 
         if per_day is not None:
-            today_count = ApiCallLog.objects.for_service(service).today().billable().count()
+            today_count = _calls_in(ApiCallLog.objects.for_service(service).today().billable(), service)
             if today_count >= per_day:
                 logger.warning(
                     "Daily rate limit hit for %s: %d/%d calls today",
@@ -694,7 +738,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
                 return False
 
         if per_30_days is not None:
-            recent_30_days = ApiCallLog.objects.for_service(service).since(timedelta(days=30)).billable().count()
+            recent_30_days = _calls_in(ApiCallLog.objects.for_service(service).since(timedelta(days=30)).billable(), service)
             if recent_30_days >= per_30_days:
                 logger.warning(
                     "30-day rate limit hit for %s: %d/%d calls in the last 30 days",
@@ -706,7 +750,7 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
 
         free_tier = free_tier_ceiling(service)
         if free_tier is not None:
-            this_month = ApiCallLog.objects.for_service(service).this_calendar_month().billable().count()
+            this_month = _calls_in(ApiCallLog.objects.for_service(service).this_calendar_month().billable(), service)
             if this_month >= free_tier:
                 logger.warning("Free-tier ceiling reached for %s: %d/%d calls this calendar month - refusing to spend past it", service, this_month, free_tier)
                 return False
@@ -749,6 +793,23 @@ def log_api_call(
         input_tokens: Prompt tokens the provider reported, for an AI call.
         output_tokens: Completion tokens the provider reported, for an AI call."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
+
+    if call_ledger(service) is CallLedger.TALLIED and cost_estimate is None and model is None and input_tokens is None and output_tokens is None:
+        from urbanlens.dashboard.services.core import call_tally
+
+        outcome = (
+            call_tally.Tallied.RATE_LIMITED
+            if was_rate_limited
+            else call_tally.Tallied.SERVICE_DISABLED
+            if was_service_disabled
+            else call_tally.Tallied.GEO_FILTERED
+            if was_geo_filtered
+            else call_tally.Tallied.REJECTED_INPUT
+            if was_rejected_input
+            else call_tally.Tallied.MADE
+        )
+        call_tally.record(service, outcome, endpoint=endpoint, success=success, status_code=status_code, response_ms=response_ms)
+        return
 
     try:
         ApiCallLog.objects.create(
@@ -957,12 +1018,14 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
             (:class:`EnvironmentRefusedError`), over a limit, disabled, the limiter could not be read,
             or the provider is backed off (``provider_health``).
     """
-    from urbanlens.dashboard.services.core import provider_health
+    from urbanlens.dashboard.services.core import call_tally, provider_health
     from urbanlens.dashboard.services.core.egress import require_egress
 
     require_egress(service)
     provider_health.check_admission(service, endpoint=endpoint)
-    entry_pk = _reserve_call(service, endpoint=endpoint)
+    tallied = call_ledger(service) is CallLedger.TALLIED
+    admission = call_tally.admit(service, endpoint=endpoint) if tallied else None
+    entry_pk = None if tallied else _reserve_call(service, endpoint=endpoint)
     slot = ApiCallSlot(service=service)
     started = time.monotonic()
     token = _CURRENT_SLOT.set(slot)
@@ -970,20 +1033,27 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
         yield slot
     finally:
         _CURRENT_SLOT.reset(token)
-        if slot.refused:
-            _release_call(entry_pk)
-        else:
-            _finalize_call(
-                entry_pk,
-                success=slot.success,
-                response_ms=int((time.monotonic() - started) * 1000),
-                cost_estimate=slot.cost_estimate,
-                status_code=slot.status_code,
-                endpoint=slot.endpoint,
-                model=slot.model,
-                input_tokens=slot.input_tokens,
-                output_tokens=slot.output_tokens,
-            )
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        if admission is not None:
+            if slot.refused:
+                admission.release()
+            else:
+                admission.record(success=slot.success, status_code=slot.status_code, response_ms=elapsed_ms)
+        elif entry_pk is not None:
+            if slot.refused:
+                _release_call(entry_pk)
+            else:
+                _finalize_call(
+                    entry_pk,
+                    success=slot.success,
+                    response_ms=elapsed_ms,
+                    cost_estimate=slot.cost_estimate,
+                    status_code=slot.status_code,
+                    endpoint=slot.endpoint,
+                    model=slot.model,
+                    input_tokens=slot.input_tokens,
+                    output_tokens=slot.output_tokens,
+                )
 
 
 # Session wrapper
@@ -1067,11 +1137,13 @@ class _RateLimitedSession:
     """Wraps ``requests.Session`` to enforce rate limits and log every call.
     This is NOT a subclass of ``requests.Session`` - it delegates all attribute access to a real session so that caller code using ``self.session.get(...)`` continues to work unchanged."""
 
-    def __init__(self, service_key: str, endpoint_for_log: Callable[[str], str] | None = None) -> None:
+    def __init__(self, service_key: str, endpoint_for_log: Callable[[str], str] | None = None, *, session: requests.Session | None = None) -> None:
         import requests
 
         self._service_key = service_key
-        self._session = requests.Session()
+        # A session the gateway already holds is used rather than a fresh one, so a gateway can keep its
+        # connections across instances (``Gateway.reuses_connections``).
+        self._session = session if session is not None else requests.Session()
         # How this service's URLs are described in ApiCallLog.
         # The default is the URL itself, which is right for the point lookups every other service
         # makes.
@@ -1105,9 +1177,10 @@ class _RateLimitedSession:
         return self._do_request(method, url, **kwargs)
 
     def _do_request(self, method: str, url: str, **kwargs):
-        """Reserve a rate-limit slot, make the request, finalize the logged result.
-        The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
-        from urbanlens.dashboard.services.core import provider_health
+        """Reserve a rate-limit slot, make the request, record the result.
+        The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through.
+        A tallied service is checked and counted in one atomic step on the shared counters instead, and its outcome added to a tally rolled up into the ledger every minute (``services.core.call_tally``)."""
+        from urbanlens.dashboard.services.core import call_tally, provider_health
         from urbanlens.dashboard.services.core.egress import require_egress
         from urbanlens.dashboard.services.core.input_validation import check_request_parameters
         from urbanlens.dashboard.services.core.task_limits import check_task_deadline, within_task_deadline
@@ -1130,8 +1203,13 @@ class _RateLimitedSession:
             record_unanswered(self._service_key)
             raise UpstreamThrottledError(self._service_key, retry_after=wait)
         provider_health.check_admission(self._service_key, endpoint=endpoint)
+        admission: call_tally.Admission | None = None
+        entry_pk: int | None = None
         try:
-            entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
+            if call_ledger(self._service_key) is CallLedger.TALLIED:
+                admission = call_tally.admit(self._service_key, endpoint=endpoint)
+            else:
+                entry_pk = _reserve_call(self._service_key, endpoint=endpoint)
         except RequestCancelledError as exc:
             if exc.transient:
                 record_unanswered(self._service_key)
@@ -1154,7 +1232,10 @@ class _RateLimitedSession:
             # spend.
             cost_estimate = all_service_defaults().get(self._service_key, ServiceDefaults(display_name="")).cost_per_call if resp.ok else None
             input_tokens, output_tokens = _reported_usage(log_usage, resp)
-            _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code, model=log_model, input_tokens=input_tokens, output_tokens=output_tokens)
+            if admission is not None:
+                admission.record(success=resp.ok, status_code=resp.status_code, response_ms=elapsed_ms)
+            elif entry_pk is not None:
+                _finalize_call(entry_pk, success=resp.ok, response_ms=elapsed_ms, cost_estimate=cost_estimate, status_code=resp.status_code, model=log_model, input_tokens=input_tokens, output_tokens=output_tokens)
             if breaker is not None:
                 breaker.observe(str(url), kwargs.get("params"), resp)
             if is_unanswered_status(resp.status_code):
@@ -1162,7 +1243,10 @@ class _RateLimitedSession:
             return resp
         except Exception:
             elapsed_ms = int((time.monotonic() - t0) * 1000)
-            _finalize_call(entry_pk, success=False, response_ms=elapsed_ms, model=log_model)
+            if admission is not None:
+                admission.record(success=False, status_code=None, response_ms=elapsed_ms)
+            elif entry_pk is not None:
+                _finalize_call(entry_pk, success=False, response_ms=elapsed_ms, model=log_model)
             record_unanswered(self._service_key)
             raise
 
