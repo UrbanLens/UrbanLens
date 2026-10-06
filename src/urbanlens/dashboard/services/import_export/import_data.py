@@ -17,7 +17,7 @@ import zipfile
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
-from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
+from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, degrees_or_none
 from urbanlens.dashboard.services.import_export.archive_extractor import ZipDirectoryTooLargeError, open_zip
 from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
 
@@ -2472,6 +2472,8 @@ class MapAnnotationsImport(ImportType):
             center_longitude=_float_or_none(row.get("center_longitude")),
             zoom=_float_or_none(row.get("zoom")),
             show_borders=bool(row.get("show_borders")),
+            # An archive written before maps could be turned has no bearing, which is north-up.
+            bearing=degrees_or_none(_float_or_none(row.get("bearing"))) or 0.0,
             pin_id=ctx.pin_uuid_map.get(_safe_uuid(row.get("pin_uuid")) or ""),
         )
         markup_map.layer_mode = _valid_layer_mode(row.get("layer_mode"))

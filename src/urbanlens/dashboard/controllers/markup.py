@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
-from urbanlens.dashboard.services.core.numbers import clamp_int
+from urbanlens.dashboard.services.core.numbers import clamp_int, degrees_or_none
 from urbanlens.dashboard.services.core.request_body import posted_fields, text_field, text_type_error
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.core.uuids import uuid_or_none
@@ -464,7 +464,7 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
         """Create a MarkupMap owned by the caller, optionally fully populated.
 
         Accepts optional JSON body fields ``center_lat``/``center_lng``/
-        ``zoom``/``layer_mode``/``show_borders``/``title`` for the initial viewport, plus
+        ``zoom``/``layer_mode``/``show_borders``/``bearing``/``title`` for the initial viewport, plus
         ``pin_slug``/``location_slug`` (used only to pick a sensible default title) and
         ``markup``/``shapes`` (a full snapshot's markup list, which switches this into the one-shot save
         mode).
@@ -515,6 +515,10 @@ def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
             updates.append(field)
     if markup_map.zoom is not None:
         markup_map.zoom = max(1.0, min(22.0, markup_map.zoom))
+    bearing = degrees_or_none(body.get("bearing"))
+    if bearing is not None:
+        markup_map.bearing = bearing
+        updates.append("bearing")
     # Accepts canonical values plus legacy aliases from older cached clients;
     # anything unrecognized is ignored rather than coerced.
     layer_mode = normalize_layer_mode(body.get("layer_mode"), default=None)

@@ -19,6 +19,8 @@ export interface ShapeSpec {
     border_opacity?: number;
     border_color?: string;
     label?: string;
+    /** Text only: degrees clockwise, relative to the screen - a label stays as turned when the map is. */
+    rotation?: number;
 }
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
@@ -70,24 +72,60 @@ export function arrowheadSize(zoom?: number | null): number {
     return 8;
 }
 
+/** A text label's turn in degrees, in (-180, 180]; 0 for anything unusable. */
+export function textRotation(s: Pick<ShapeSpec, "rotation">): number {
+    const raw = Number(s.rotation);
+    if (!Number.isFinite(raw)) return 0;
+    const wrapped = ((((raw + 180) % 360) + 360) % 360) - 180;
+    return wrapped === -180 ? 180 : wrapped;
+}
+
 export function textLabelHtml(s: ShapeSpec): string {
     const color = safeColor(s.color, "#e53e3e");
     const sz = safeNumber(s.stroke_width, 8, 96, 16);
     const bg = s.border_color;
     const bgVal = !bg || bg === "none" ? "rgba(255,255,255,0.92)" : safeColor(bg, "rgba(255,255,255,0.92)" as never);
     const lbl = escHtml(s.label);
+    const turn = textRotation(s);
+    // Turned about its own middle, so the corner it is anchored by stays where it was placed.
+    const transform = turn ? `;transform:rotate(${turn.toFixed(1)}deg);transform-origin:50% 50%` : "";
     return (
         `<span class="markup-text-label" style="color:${color}`
         + `;font-size:${sz}px;background:${bgVal}`
         + ";display:inline-block;padding:.15em .45em;border-radius:3px"
         + ";white-space:nowrap;line-height:1.3;font-weight:600"
-        + `;box-shadow:0 1px 3px rgba(0,0,0,.2)">${lbl || "&nbsp;"}</span>`
+        + `;box-shadow:0 1px 3px rgba(0,0,0,.2)${transform}">${lbl || "&nbsp;"}</span>`
     );
 }
 
-/** Renders a stored shape spec into a Leaflet layer group (comment-composer + detail/wiki views). */
-function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number): void {
-    if (typeof L === "undefined") return;
+/** How a shape is drawn where it can be picked and edited, rather than only looked at. */
+export interface RenderShapeOptions {
+    /** Paths and markers take pointer events; lines also get a wide invisible path to grab. */
+    interactive?: boolean;
+    /**
+     * The on-screen angle, in degrees clockwise from up, of the segment from `from` to `to` - for a
+     * map that is turned, where an arrowhead (a marker, which stays upright) has to follow the line
+     * (a path, which turns with the map). Defaults to the geographic `bearing`.
+     */
+    screenAngle?: (from: LatLngTuple, to: LatLngTuple) => number;
+}
+
+/** Width of the invisible path laid over a line so a finger can pick it. */
+const LINE_HIT_WEIGHT = 18;
+
+/**
+ * Renders a stored shape spec into a Leaflet layer group (comment-composer + detail/wiki views).
+ * @returns The layers added, so an editor can bind its own events to them.
+ */
+function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number, options: RenderShapeOptions = {}): L.Layer[] {
+    if (typeof L === "undefined") return [];
+    const interactive = !!options.interactive;
+    const added: L.Layer[] = [];
+    const add = <T extends L.Layer>(layer: T): T => {
+        layer.addTo(group);
+        added.push(layer);
+        return layer;
+    };
     const color = safeColor(s.color, "#e74c3c");
     const weight = safeNumber(s.stroke_width != null ? s.stroke_width : s.weight, 1, 50, 3);
     const fillOp = safeNumber(s.fill_opacity != null ? s.fill_opacity : 87, 0, 100, 87) / 100;
@@ -95,62 +133,79 @@ function renderShape(s: ShapeSpec, group: L.LayerGroup, zoom?: number): void {
     const bc = s.border_color && s.border_color !== "none" ? safeColor(s.border_color, color) : null;
     const hasBorder = !!bc;
     const strokeC = hasBorder ? bc! : color;
+    const angle = options.screenAngle ?? bearing;
 
     function shapeOpts(): L.PathOptions {
-        // Non-interactive: these shapes are purely visual (no popup/tooltip is
+        // Non-interactive outside an editor: these shapes are purely visual (no popup/tooltip is
         // ever bound to them), and an interactive vector layer intercepts its
         // own click events rather than letting them bubble to the surrounding
         // .comment-map-preview container - which otherwise breaks "click
         // anywhere on the preview to expand" whenever the click lands on a
         // rendered shape instead of empty map background.
-        return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp, interactive: false };
+        return { color: strokeC, weight: hasBorder ? weight : 2, fillColor: color, fillOpacity: fillOp, opacity: borderOp, interactive, bubblingMouseEvents: !interactive };
+    }
+
+    function lineHit(latlngs: LatLngTuple[]): void {
+        if (interactive) add(L.polyline(latlngs, { color, weight: Math.max(LINE_HIT_WEIGHT, weight + 12), opacity: 0, interactive, bubblingMouseEvents: false }));
     }
 
     switch (s.type) {
         case "line":
-            L.polyline(s.latlngs, { color, weight, opacity: fillOp }).addTo(group);
+            add(L.polyline(s.latlngs, { color, weight, opacity: fillOp, interactive, bubblingMouseEvents: !interactive }));
+            lineHit(s.latlngs);
             break;
         case "arrow": {
-            L.polyline(s.latlngs, { color, weight, opacity: fillOp }).addTo(group);
+            add(L.polyline(s.latlngs, { color, weight, opacity: fillOp, interactive, bubblingMouseEvents: !interactive }));
+            lineHit(s.latlngs);
             if (s.latlngs.length >= 2) {
                 const n = s.latlngs.length;
-                const deg = bearing(s.latlngs[n - 2]!, s.latlngs[n - 1]!);
+                const deg = angle(s.latlngs[n - 2]!, s.latlngs[n - 1]!);
                 const sz2 = arrowheadSize(zoom);
-                L.marker(L.latLng(s.latlngs[n - 1]![0], s.latlngs[n - 1]![1]), {
-                    icon: L.divIcon({ className: "", html: arrowheadSvg(color, deg, sz2, fillOp), iconSize: [sz2, sz2], iconAnchor: [sz2 / 2, sz2 / 2] }),
-                    interactive: false,
-                }).addTo(group);
+                add(
+                    L.marker(L.latLng(s.latlngs[n - 1]![0], s.latlngs[n - 1]![1]), {
+                        icon: L.divIcon({ className: "", html: arrowheadSvg(color, deg, sz2, fillOp), iconSize: [sz2, sz2], iconAnchor: [sz2 / 2, sz2 / 2] }),
+                        interactive,
+                        keyboard: false,
+                    }),
+                );
             }
             break;
         }
         case "circle": {
             const p1 = L.latLng(s.latlngs[0]!);
             const p2 = L.latLng(s.latlngs[1]!);
-            L.circle(p1, { ...shapeOpts(), radius: p1.distanceTo(p2) }).addTo(group);
+            add(L.circle(p1, { ...shapeOpts(), radius: p1.distanceTo(p2) }));
             break;
         }
         case "rect":
-            L.rectangle(L.latLngBounds(s.latlngs[0]!, s.latlngs[1]!), shapeOpts()).addTo(group);
+            add(L.rectangle(L.latLngBounds(s.latlngs[0]!, s.latlngs[1]!), shapeOpts()));
             break;
         case "polygon":
-            L.polygon(s.latlngs, shapeOpts()).addTo(group);
+            add(L.polygon(s.latlngs, shapeOpts()));
             break;
         case "text":
-            L.marker(L.latLng(s.latlngs[0]![0], s.latlngs[0]![1]), {
-                icon: L.divIcon({ className: "", html: textLabelHtml(s), iconSize: undefined, iconAnchor: [0, 0] }),
-                interactive: false,
-            }).addTo(group);
+            add(
+                L.marker(L.latLng(s.latlngs[0]![0], s.latlngs[0]![1]), {
+                    icon: L.divIcon({ className: "", html: textLabelHtml(s), iconSize: undefined, iconAnchor: [0, 0] }),
+                    interactive,
+                    keyboard: false,
+                }),
+            );
             break;
         case "pin": {
             const sz = 32;
             const html = `<span class="material-symbols-outlined" style="font-size:${sz}px;color:${color};text-shadow:0 1px 3px rgba(0,0,0,.4)">location_on</span>`;
-            L.marker(L.latLng(s.latlngs[0]![0], s.latlngs[0]![1]), {
-                icon: L.divIcon({ className: "", html, iconSize: [sz, sz], iconAnchor: [sz / 2, sz] }),
-                interactive: false,
-            }).addTo(group);
+            add(
+                L.marker(L.latLng(s.latlngs[0]![0], s.latlngs[0]![1]), {
+                    icon: L.divIcon({ className: "", html, iconSize: [sz, sz], iconAnchor: [sz / 2, sz] }),
+                    interactive,
+                    keyboard: false,
+                }),
+            );
             break;
         }
     }
+    return added;
 }
 
 export interface DrawSessionOpts {
@@ -633,6 +688,7 @@ export const MarkupEngine = {
     arrowheadSvg,
     arrowheadSize,
     textLabelHtml,
+    textRotation,
     renderShape,
     createDrawSession,
     markupTruncationNotice,

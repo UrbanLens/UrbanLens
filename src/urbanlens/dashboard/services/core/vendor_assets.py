@@ -174,6 +174,22 @@ def vendor_asset_url(key: str) -> str:
     return f"{root}/{quote(asset.path)}"
 
 
+def vendor_asset_source(key: str) -> dict[str, str]:
+    """Where a script loaded on demand comes from, for code that adds its ``<script>`` itself.
+
+    Args:
+        key: A key of :data:`VENDOR_ASSETS`.
+
+    Returns:
+        ``src``, and ``integrity`` - empty when loading from a mirror, which the hash does not cover.
+
+    Raises:
+        KeyError: If the key is not in the table."""
+    asset = VENDOR_ASSETS[key]
+    url = vendor_asset_url(key)
+    return {"src": url, "integrity": asset.integrity if url == asset.fallback else ""}
+
+
 def vendor_asset_tag(key: str) -> SafeString:
     """The ``<script>`` or ``<link>`` for a named asset.
 

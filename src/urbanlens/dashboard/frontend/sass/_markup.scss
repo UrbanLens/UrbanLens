@@ -41,3 +41,102 @@
   border: 2px solid currentColor;
   background: rgba(255, 255, 255, .6);
 }
+
+// -- Map composer editing (frontend/ts/shared/markup-editor.ts) ------------------
+
+// A shape the composer can pick: the hand says it can be grabbed once picked.
+.markup-editor-item--selected {
+  cursor: move;
+}
+
+// The picked shape's outline - drawn on screen, not part of the drawing.
+.markup-selection-outline {
+  stroke: var(--ul-accent-purple);
+  pointer-events: none;
+}
+
+// A handle: a point to drag, an edge or end to add one at, a corner to scale from, a stalk to turn by.
+.markup-handle {
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  margin-top: -7px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--ul-accent-purple);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  // A finger dragging a handle must not scroll the page.
+  touch-action: none;
+  cursor: grab;
+
+  .material-symbols-outlined {
+    font-size: 12px;
+    color: var(--ul-accent-purple);
+    pointer-events: none;
+  }
+
+  &:active { cursor: grabbing; }
+
+  &--vertex.is-active {
+    background: var(--ul-accent-purple);
+  }
+
+  &--insert,
+  &--extend {
+    width: 16px;
+    height: 16px;
+    margin-left: -8px;
+    margin-top: -8px;
+    opacity: .75;
+    border-style: dashed;
+
+    &:hover { opacity: 1; }
+  }
+
+  &--scale,
+  &--rotate {
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-top: -10px;
+    border-radius: 4px;
+  }
+
+  &--rotate { border-radius: 50%; }
+
+  &--scale { cursor: nwse-resize; }
+
+  // Twice the size under a finger.
+  @media (pointer: coarse) {
+    width: 24px;
+    height: 24px;
+    margin-left: -12px;
+    margin-top: -12px;
+
+    &--insert,
+    &--extend {
+      width: 24px;
+      height: 24px;
+      margin-left: -12px;
+      margin-top: -12px;
+    }
+
+    &--scale,
+    &--rotate {
+      width: 28px;
+      height: 28px;
+      margin-left: -14px;
+      margin-top: -14px;
+    }
+
+    .material-symbols-outlined { font-size: 16px; }
+  }
+}
+
+// A MapLibre marker's own element (maplibre-markup.ts), so the drawing inside keeps its turn.
+.ul-markup-marker {
+  display: flex;
+}

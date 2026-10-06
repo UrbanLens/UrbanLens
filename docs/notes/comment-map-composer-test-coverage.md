@@ -1,4 +1,4 @@
-# T3 — Nothing in the integration suite opens the comment-map composer; a page-error guard is the only thing standing behind it
+# T3 — Nothing in the integration suite opens the comment-map composer; only a browser harness with a stubbed server does
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -8,55 +8,53 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: T3` · `status: open` · `updated: 2026-09-16` · `source: grep of tests/integration/specs, 2026-09-16`
+`id: T3` · `status: open` · `updated: 2026-10-06` · `source: grep of tests/integration/specs and frontend/browser, 2026-10-06`
 
 ## The gap
 
 ```
 $ grep -rliE "commentmap|attachmap|composer" tests/integration/specs
-$ grep -rliE "commentmap|attachmap|composer" tests/integration/specs | wc -l
-0
+tests/integration/specs/ui/messages-photo-attachment.spec.ts
 ```
 
-No spec file references `CommentMap`, `markup`, `attachMap` or `composer`. Nothing in
-`tests/integration/` opens the comment-map/image-attachment composer, submits it, or checks that a
-map it saves round-trips.
+The one hit is the direct-message composer's photo chip, not the map composer. Nothing in
+`tests/integration/` opens the map composer (`#comment-map-composer`,
+`templates/dashboard/partials/map/_markup_composer_dialog.html`) against a real server, saves a
+map through it, or checks that the saved map round-trips into a comment or a message.
 
-## Why it matters more after X21
+## What does cover it now
 
-X21 (`docs/notes/inline-script-extraction-map-and-theme.md`) moved this composer's code out of
-`themes/base.html` and into `frontend/static/js/comment-map.js`, loaded by every page that extends
-the base theme - which is every page in the app. The only thing standing behind that file today is
-`tests/integration/specs/smoke/pages.spec.ts` plus the global page-error guard
-(`tests/integration/lib/page-guard.ts`, wired to `page.on("pageerror", ...)`): if the file throws
-on load, smoke fails the page. Nothing asserts the composer *works* - that it opens, that a user can
-draw or place a marker, that "save" persists anything, or that a saved map round-trips into a
-comment or a message.
+`src/urbanlens/dashboard/frontend/browser/markup-composer.test.ts` (`bun run test:browser`) drives
+the composer in Chromium: the built `core.js`, the real `comment-map.js`, and the real dialog
+partial spliced into a harness page (`composer-harness.html`). It draws, selects, deletes, edits
+geometry and style, uses the Layers list, turns the map, saves, reopens a legacy map, and checks the
+download's pixels and burned-in credit. It has no Django and no database: the save endpoints are
+answered by the test's own `Bun.serve`, which records the posted body, and tiles are solid-colour
+GIFs. So it establishes that the client builds the right snapshot, not that the server stores it.
 
-X21 also documents a defect this exact failure mode would have caught immediately had the spec
-existed: the `const CFG` collision between `map-page.js` and `comment-map.js` was found by the
-existing UI suite (`map.spec.ts`) failing on an unrelated assertion after the page's own script
-died, not by anything that opened the composer itself. A composer-specific spec would have named
-the actual break instead of a symptom of it.
+The server half is covered separately in pytest
+(`dashboard/tests/hypothesis/test_markup_map.py`, `test_markup_map_rotation.py`): the create,
+view-state and snapshot endpoints, sanitising, and the model round trip.
+
+`dashboard/frontend/ts/shared/markup-composer.test.ts` (happy-dom, `bun run test:ts`) checks that
+every element id `markup-composer.ts` and `comment-map.js` look up exists in the partial.
 
 ## What would close this
 
-A spec (`tests/integration/specs/ui/comment-map.spec.ts` or similar) that:
+A spec (`tests/integration/specs/ui/comment-map.spec.ts` or similar) against the integration
+stack that:
 
-- opens the composer from a surface that has one (a comment box or the messages composer - grep
-  `attachMap`/`CommentMap` call sites in `frontend/static/js/comment-map.js` and its remaining
-  template wiring for which surfaces those are, since neither is exercised by any existing spec);
-- places or draws something and saves it;
-- asserts the saved artifact appears where it should (rendered in the comment/message, or via the
-  API);
+- opens the composer from a surface that has one (a comment box, the messages composer, or the main
+  map's "take a screenshot" action);
+- draws something and saves it;
+- asserts the saved map appears where it should (rendered in the comment or message, or through
+  the API), including a turned map reopening turned;
 - runs signed in **and** signed out, per the theme's own signed-out handling
   (`test_the_config_survives_a_signed_out_request` in
-  `dashboard/tests/hypothesis/test_shared_theme_script_is_cacheable.py` covers the config-rendering
-  half of this in pytest; nothing covers the browser half).
+  `dashboard/tests/hypothesis/test_shared_theme_script_is_cacheable.py` covers the config half).
 
 ## What this does not establish
 
-Whether the composer currently works end to end in a browser - X21's commit message asserts the
-`CFG`-collision fix was "confirmed" by the browser suite, but that suite does not open the composer,
-so that confirmation is about the map page's own script, not this one. Not verified either way this
-session.
+That the composer works against the deployed CSP (`static.arcgis.com` in `connect-src`, unpkg for
+leaflet-rotate in `script-src`) or with real tiles from this deployment's proxy. The harness serves
+neither.

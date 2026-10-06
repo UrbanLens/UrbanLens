@@ -87,6 +87,8 @@ export interface RasterSourceInput {
     /** A Leaflet-style XYZ URL template - may use Leaflet's own `{s}`/`{r}` tokens; see `toMapLibreTileUrls`. */
     url: string;
     attribution?: string;
+    /** The Esri service the tiles come from, when they are Esri's - see `esri-attribution.ts`. */
+    esriService?: string;
     minZoom?: number;
     maxNativeZoom?: number;
     /**

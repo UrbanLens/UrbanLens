@@ -38,10 +38,11 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         var _composerLayers = null;       // shared MapLayers engine instance
         var _composerLayerMode = 'street';
         var _composerShowBorders = false;
-        var _composerMarkupLayer = null;  // L.LayerGroup of confirmed shapes
-        var _composerSession = null;      // MarkupEngine draw session
+        // The drawing, its tools, the Layers list and the map's turn (frontend/ts/shared/markup-composer.ts).
+        var _composer = null;
+        var _composerReady = null;        // resolves once the map above exists
+        var _composerOpenToken = 0;       // a reopen supersedes a seed still waiting on the map
         var _composerRefMarker = null;    // optional pin-location reference marker
-        var _composerShapes = [];         // raw shape descriptors [{type, latlngs, label, color}]
         var _originForm = null;           // the .comment-compose element that opened the dialog
         var _composerSearch = null;       // LocationSearchEngine instance (created lazily)
 
@@ -98,7 +99,6 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         }
 
         var _dialog = document.getElementById('comment-map-composer');
-        var _colorPicker = document.getElementById('cmc-color');
         var _saveBtn = document.getElementById('comment-map-composer-save');
         var _titleRow = document.getElementById('cmc-title-row');
         var _titleInput = document.getElementById('cmc-title-input');
@@ -216,100 +216,93 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             // showModal() sets [open] synchronously, but the browser hasn't run
             // style recalculation yet. Reading offsetHeight forces an immediate
             // synchronous reflow so Leaflet reads the correct container dimensions
-            // on the very next line - no setTimeout/rAF timing tricks needed.
+            // when the map is built - no setTimeout/rAF timing tricks needed.
             void _dialog.offsetHeight;
 
+            // The first open waits for leaflet-rotate, which the map has to be built with to turn.
+            // Saving waits with it: there is nothing to save until the map is there.
+            var token = ++_composerOpenToken;
+            _saveBtn.disabled = true;
+            _ensureComposerMap()
+                .then(function () {
+                    if (token !== _composerOpenToken || !_dialog.open) return;
+                    _seedComposer(existing, opts, form);
+                })
+                .catch(function (err) {
+                    console.error('Failed to build the map composer', err);
+                    if (window.toastr) toastr.error('The map could not be loaded. Please try again.');
+                })
+                .finally(function () {
+                    if (token === _composerOpenToken) _saveBtn.disabled = false;
+                });
+        };
+
+        // Builds the composer's map, its layers and its drawing tools, once per page.
+        function _ensureComposerMap() {
+            if (_composerReady) return _composerReady;
             var mapEl = document.getElementById('comment-map-composer-map');
-            if (!_composerMap) {
-                // attributionControl: false - the required attribution text is
-                // rendered in the dialog-footer (#cmc-attribution) instead of
-                // floating over the map, matching the main map's page-footer
-                // attribution rather than an on-map overlay.
-                _composerMap = L.map(mapEl, { zoomControl: true, attributionControl: false });
-                var cmcAttributionEl = document.getElementById('cmc-attribution');
-                // Shared layers engine bound to the strip rendered by
-                // {% map_layers_panel variant="strip" %} in this dialog.
-                _composerLayers = window.MapLayers.create(_composerMap, {
-                    root: document.getElementById('cmc-layers'),
-                    onStateChange: function (state) {
-                        _composerLayerMode = state.base;
-                        _composerShowBorders = state.borders;
-                    },
-                    onAttribution: function (text) {
-                        if (cmcAttributionEl) cmcAttributionEl.textContent = text;
-                    },
-                });
-                // onStateChange only fires on a change, so without this the mode saved with the map
-                // is the seed above rather than the base the composer actually opened on.
-                _composerLayerMode = _composerLayers.baseKey();
-                _composerMarkupLayer = L.layerGroup().addTo(_composerMap);
-                _composerSession = MarkupEngine.createDrawSession(_composerMap, {
-                    getColor: function () { return _colorPicker ? _colorPicker.value : '#e74c3c'; },
-                    getWidth: function () { return _composerWidth(); },
-                    getTextLabel: function () {
-                        var inp = document.getElementById('cmc-text-label');
-                        return inp ? inp.value.trim() : '';
-                    },
-                    onCommit: function (type, latlngs, extras) {
-                        var color = _colorPicker ? _colorPicker.value : '#e74c3c';
-                        var s = { type: type, latlngs: latlngs, color: color, stroke_width: _composerWidth() };
-                        if (type === 'text') {
-                            var label = extras.label || '';
-                            if (!label) {
-                                var hintEl = document.getElementById('cmc-hint');
-                                if (hintEl) hintEl.textContent = 'Enter a label first, then click the map';
-                                return;
-                            }
-                            s.label = label;
-                            s.stroke_width = extras.dragFontSize || 16;
-                        }
-                        _composerShapes.push(s);
-                        _redrawMarkup();
-                    },
-                    onHintChange: function (hint) {
-                        var el = document.getElementById('cmc-hint');
-                        if (el) el.textContent = hint;
-                    },
-                    onToolChange: function (tool) {
-                        document.querySelectorAll('.cmc-tool-btn').forEach(function (b) {
-                            b.classList.toggle('is-active', b.dataset.tool === tool);
-                        });
-                        var textInp = document.getElementById('cmc-text-label');
-                        var hintEl  = document.getElementById('cmc-hint');
-                        if (textInp) {
-                            textInp.hidden = (tool !== 'text');
-                            if (tool === 'text') { setTimeout(function () { textInp.focus(); }, 0); }
-                        }
-                        if (hintEl) hintEl.hidden = (tool === 'text');
-                        if (_composerMap) {
-                            if (tool) { _composerMap.dragging.disable(); }
-                            else      { _composerMap.dragging.enable(); }
-                        }
-                    },
-                });
-                // Intercept dialog ESC: let engine cancel the shape instead of closing dialog
-                _dialog.addEventListener('cancel', function (e) {
-                    if (_composerSession && _composerSession.getCurrentTool()) {
-                        e.preventDefault();
+            // attributionControl: false - the required attribution text is
+            // rendered in the dialog-footer (#cmc-attribution) instead of
+            // floating over the map, matching the main map's page-footer
+            // attribution rather than an on-map overlay.
+            _composerReady = window.MarkupComposer.createMap(mapEl, COMMENT_MAP_CFG.leafletRotate || null, { zoomControl: true, attributionControl: false })
+                .then(function (map) {
+                    _composerMap = map;
+                    var cmcAttributionEl = document.getElementById('cmc-attribution');
+                    // Shared layers engine bound to the strip rendered by
+                    // {% map_layers_panel variant="strip" %} in this dialog.
+                    _composerLayers = window.MapLayers.create(_composerMap, {
+                        root: document.getElementById('cmc-layers'),
+                        // Raster bases only: the vector bridge does not turn with the map, and the
+                        // download is drawn from raster tiles, so this is what it will contain.
+                        rasterOnly: true,
+                        onStateChange: function (state) {
+                            _composerLayerMode = state.base;
+                            _composerShowBorders = state.borders;
+                        },
+                        onAttribution: function (text) {
+                            if (cmcAttributionEl) cmcAttributionEl.textContent = text;
+                        },
+                    });
+                    // onStateChange only fires on a change, so without this the mode saved with the map
+                    // is the seed above rather than the base the composer actually opened on.
+                    _composerLayerMode = _composerLayers.baseKey();
+                    _composer = window.MarkupComposer.create(_composerMap, _dialog);
+                    // The bars under the map grow and shrink with what is selected, and the map with them.
+                    // Leaflet only notices a window resize, so without this it keeps drawing - and
+                    // working out its centre - for a size it no longer is. pan: false keeps the map
+                    // where it is on screen rather than re-centring it under the viewer's pointer.
+                    if (window.ResizeObserver) {
+                        new ResizeObserver(function () {
+                            if (_dialog.open) _composerMap.invalidateSize({ pan: false });
+                        }).observe(mapEl);
                     }
                 });
-            }
+            // A failed build is not kept: the next open tries again.
+            _composerReady.catch(function () { _composerReady = null; });
+            return _composerReady;
+        }
 
+        // Points the composer at what this open is for: a saved map, a page's view, or a default.
+        function _seedComposer(existing, opts, form) {
             if (existing) {
                 _composerMap.setView([existing.center_lat, existing.center_lng], existing.zoom || 14);
-                _composerShapes = existing.markup || [];
+                _composer.load(existing.markup || []);
                 _composerLayers.setBase(existing.layer_mode || 'street');
                 _composerLayers.setOverlay('borders', !!existing.show_borders);
+                _composer.setBearing(existing.bearing || 0);
             } else if (opts.initialView) {
                 _composerMap.setView([opts.initialView.lat, opts.initialView.lng], opts.initialView.zoom || 14);
-                _composerShapes = [];
+                _composer.load([]);
                 _composerLayers.setOverlay('borders', false);
+                _composer.setBearing(0);
             } else {
                 var defLat = (window._commentMapDefaultLat != null) ? window._commentMapDefaultLat : 40.7128;
                 var defLng = (window._commentMapDefaultLng != null) ? window._commentMapDefaultLng : -74.0060;
                 _composerMap.setView([defLat, defLng], 14);
-                _composerShapes = [];
+                _composer.load([]);
                 _composerLayers.setOverlay('borders', false);
+                _composer.setBearing(0);
             }
 
             // Show a reference marker at the pin's coordinates when the origin
@@ -326,9 +319,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             _composerMap.invalidateSize();
 
             _suggestTitle();
-            _redrawMarkup();
-            if (_composerSession) _composerSession.deactivate();
-        };
+        }
 
         // -- Shared top-right map toolbar -----------------------------------------
         // Every map on the site (main map, pin detail, wiki, safety check-ins,
@@ -357,25 +348,20 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             toggle.dataset.tooltip = collapsed ? 'Expand toolbar' : 'Collapse toolbar';
         });
 
-        // Current stroke-width slider value (also font-size fallback for text).
-        function _composerWidth() {
-            var el = document.getElementById('cmc-width');
-            var n = el ? parseInt(el.value, 10) : 3;
-            return isNaN(n) ? 3 : Math.max(1, Math.min(50, n));
-        }
-
         // -- Close / cancel ----------------------------------------------------
         document.getElementById('comment-map-composer-close').addEventListener('click', _closeComposer);
         document.getElementById('comment-map-composer-cancel').addEventListener('click', _closeComposer);
 
         function _closeComposer() {
-            if (_composerSession) _composerSession.deactivate();
+            if (_composer) _composer.deactivate();
             if (_dialog.open) _dialog.close();
         }
 
         // -- Save --------------------------------------------------------------
         _saveBtn.addEventListener('click', function () {
-            if (!_composerMap) return;
+            if (!_composerMap || !_composer) return;
+            // A label still being typed, or a slider still held, is part of what is saved.
+            _composer.document.commit();
             var center = _composerMap.getCenter();
             var snapshot = {
                 center_lat: center.lat,
@@ -383,7 +369,9 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 zoom: _composerMap.getZoom(),
                 layer_mode: _composerLayerMode,
                 show_borders: _composerShowBorders,
-                markup: _composerShapes.slice()
+                bearing: _composer.bearing(),
+                // Hidden shapes are left out: what is kept is what is on screen.
+                markup: _composer.shapes()
             };
 
             if (_standaloneMode) {
@@ -393,6 +381,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 if (_standaloneContext && _standaloneContext.locationSlug) snapshot.location_slug = _standaloneContext.locationSlug;
 
                 _saveBtn.disabled = true;
+                // A reopen after this save closes the dialog owns the button from then on.
+                var saveOpenToken = _composerOpenToken;
                 fetch(COMMENT_MAP_CFG.urls["markupMapCreate"], {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
@@ -415,7 +405,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                     })
                     .then(function (shouldDownload) {
                         // Awaited, not fired-and-forgotten: this was closing the
-                        // composer (tearing down _composerSession, which owns
+                        // composer (tearing down _composer, which draws on
                         // _composerMap) immediately after *starting* the download,
                         // not after it finished - the tile-fetch-and-draw below
                         // could still be reading from a map that had just been
@@ -425,13 +415,13 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                         if (!shouldDownload) return;
                         return window.MapExport.download(_composerMap, {
                             layers: _composerLayers,
-                            getShapes: function () { return _composerShapes; },
+                            getShapes: function () { return _composer.shapes(); },
                             filename: 'map-screenshot.jpg',
                         }).catch(function () { if (window.toastr) toastr.error('Map saved, but the JPEG download failed.'); });
                     })
                     .then(function () { _closeComposer(); })
                     .catch(function () { if (window.toastr) toastr.error('Failed to save map.'); })
-                    .finally(function () { _saveBtn.disabled = false; });
+                    .finally(function () { if (saveOpenToken === _composerOpenToken) _saveBtn.disabled = false; });
                 return;
             }
 
@@ -448,12 +438,12 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
 
         // -- Download current view as JPEG -------------------------------------
         document.getElementById('cmc-download').addEventListener('click', function () {
-            if (!_composerMap) return;
+            if (!_composerMap || !_composer) return;
             var btn = this;
             btn.disabled = true;
             window.MapExport.download(_composerMap, {
                 layers: _composerLayers,
-                getShapes: function () { return _composerShapes; },
+                getShapes: function () { return _composer.shapes(); },
                 filename: 'map-screenshot.jpg',
             })
                 .catch(function () { if (window.toastr) toastr.error('Failed to download the map image.'); })
@@ -519,57 +509,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             }
         });
 
-        // -- Tool selection ----------------------------------------------------
-        document.querySelectorAll('.cmc-tool-btn[data-tool]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                if (!_composerSession) return;
-                var tool = btn.dataset.tool;
-                if (_composerSession.getCurrentTool() === tool) { _composerSession.deactivate(); }
-                else { _composerSession.startTool(tool); }
-            });
-        });
-
-        // -- Pin my location: drop a marker instantly, no multi-click draw session needed --
-        document.getElementById('cmc-pin-location').addEventListener('click', function () {
-            if (!navigator.geolocation) {
-                if (window.toastr) toastr.warning('Geolocation is not available in this browser.');
-                return;
-            }
-            navigator.geolocation.getCurrentPosition(
-                function (pos) {
-                    _composerShapes.push({
-                        type: 'pin',
-                        latlngs: [[pos.coords.latitude, pos.coords.longitude]],
-                        color: _colorPicker ? _colorPicker.value : '#e74c3c',
-                    });
-                    _redrawMarkup();
-                    if (_composerMap) _composerMap.panTo([pos.coords.latitude, pos.coords.longitude]);
-                },
-                function () {
-                    if (window.toastr) toastr.warning("Couldn't get your location. Check your browser's location permission.");
-                },
-                { enableHighAccuracy: true, timeout: 10000 },
-            );
-        });
-
-        document.getElementById('cmc-undo').addEventListener('click', function () {
-            _composerShapes.pop();
-            _redrawMarkup();
-        });
-
-        document.getElementById('cmc-clear').addEventListener('click', function () {
-            _composerShapes = [];
-            _redrawMarkup();
-        });
-
-        // -- Redraw all confirmed shapes ---------------------------------------
-        function _redrawMarkup() {
-            if (!_composerMarkupLayer) return;
-            _composerMarkupLayer.clearLayers();
-            _composerShapes.forEach(function (s) {
-                MarkupEngine.renderShape(s, _composerMarkupLayer);
-            });
-        }
+        // Draw tools, Pin my location, Undo, Redo and Clear are wired by markup-composer.ts.
 
         // -- Jump-to search (shared window.LocationSearchEngine) ----------------
         // Same multi-source search as the main map and the safety destination
@@ -704,10 +644,11 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
         function _fitMaplibreToMarkup(mmap, data) {
             var lat = data.center_lat, lng = data.center_lng, zoom = data.zoom || 13;
             var markup = data.markup || [];
-            if (!markup.length) { mmap.jumpTo({ center: [lng, lat], zoom: zoom }); return; }
+            var bearing = +data.bearing || 0;
+            if (!markup.length) { mmap.jumpTo({ center: [lng, lat], zoom: zoom, bearing: bearing }); return; }
             var bounds = _computeMarkupLngLatBounds(markup);
-            if (!bounds) { mmap.jumpTo({ center: [lng, lat], zoom: zoom }); return; }
-            mmap.fitBounds(bounds, { padding: 20, animate: false });
+            if (!bounds) { mmap.jumpTo({ center: [lng, lat], zoom: zoom, bearing: bearing }); return; }
+            mmap.fitBounds(bounds, { padding: 20, animate: false, bearing: +data.bearing || 0 });
         }
 
         // Renders a thumbnail via MapLibre - PL8 item 2's WebGL2 path.
@@ -723,6 +664,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 style: style,
                 center: [data.center_lng, data.center_lat],
                 zoom: data.zoom || 13,
+                // Saved as a compass bearing, which is what MapLibre's means too.
+                bearing: +data.bearing || 0,
                 attributionControl: false,
                 interactive: false,
             });
@@ -823,9 +766,24 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             el.style.height = Math.round(window.innerHeight * 0.6) + 'px';
             el.style.minHeight = '300px';
 
+            // A map saved turned is shown turned, which needs leaflet-rotate first. One that is not
+            // is built at once, exactly as before.
+            var bearing = +data.bearing || 0;
+            if (bearing && window.MarkupComposer) {
+                window.MarkupComposer.ensureRotation(COMMENT_MAP_CFG.leafletRotate || null).then(function (canTurn) {
+                    if (dlg.open && !_viewerMaps[commentId]) _buildViewerMap(commentId, dlg, el, data, canTurn ? bearing : 0);
+                });
+            } else {
+                _buildViewerMap(commentId, dlg, el, data, 0);
+            }
+        };
+
+        function _buildViewerMap(commentId, dlg, el, data, bearing) {
             // attributionControl: false - shown in the dialog's own toolbar
             // (#comment-map-attribution-<id>) instead of floating over the map.
-            var viewMap = L.map(el, { attributionControl: false });
+            var mapOptions = { attributionControl: false };
+            if (bearing) Object.assign(mapOptions, window.MarkupComposer.rotateOptions(bearing));
+            var viewMap = L.map(el, mapOptions);
             // Tagged immediately - same reasoning as _renderMapThumb's own early
             // tag: MarkupEngine.renderShape below can throw on malformed markup,
             // and unlike _renderMapThumb this function has no try/catch around
@@ -839,6 +797,8 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 root: dlg.querySelector('.map-layers-strip'),
                 defaultBase: data.layer_mode || 'street',
                 initialOverlays: data.show_borders ? ['borders'] : [],
+                // A turned map draws raster bases, which turn with it; the vector bridge does not.
+                rasterOnly: !!bearing,
                 onAttribution: function (text) {
                     if (viewAttributionEl) viewAttributionEl.textContent = text;
                 },
@@ -846,7 +806,15 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             _fitMapToMarkup(viewMap, data);
 
             var markupGroup = L.layerGroup().addTo(viewMap);
-            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, markupGroup); });
+            var drawMarkup = function () {
+                markupGroup.clearLayers();
+                (data.markup || []).forEach(function (s) {
+                    MarkupEngine.renderShape(s, markupGroup, undefined, { screenAngle: _screenAngle(viewMap) });
+                });
+            };
+            drawMarkup();
+            // Arrowheads stay upright as the map turns, so they are drawn again to follow their lines.
+            if (bearing) viewMap.on('rotate', drawMarkup);
 
             var refLatLng = _readMarkerLatLng(el);
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(viewMap);
@@ -858,7 +826,18 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             dlg.addEventListener('transitionend', function () {
                 viewMap.invalidateSize();
             }, { once: true });
-        };
+        }
+
+        // The on-screen angle of a segment on `map`, for an arrowhead that has to point along its line
+        // on a turned map. On one that does not turn it is the geographic bearing, as it always was.
+        function _screenAngle(map) {
+            if (!map.options.rotate) return undefined;
+            return function (from, to) {
+                var a = map.latLngToContainerPoint(from);
+                var b = map.latLngToContainerPoint(to);
+                return Math.atan2(b.x - a.x, a.y - b.y) * 180 / Math.PI;
+            };
+        }
 
         // -- Render a small non-interactive Leaflet map into `el` -------------
         // Shared by the .comment-map-thumb renderer below and the DM
@@ -874,8 +853,15 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
                 return _renderMapThumbMaplibre(el, data, refLatLng);
             }
             if (typeof L === 'undefined') return null;
-            var tmap = L.map(el, { zoomControl: false, attributionControl: false, dragging: false,
-                                      scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false });
+            var thumbOptions = { zoomControl: false, attributionControl: false, dragging: false,
+                                 scrollWheelZoom: false, doubleClickZoom: false, touchZoom: false };
+            // Turned as saved where leaflet-rotate is already on the page; north-up otherwise, rather
+            // than loading it for a preview.
+            var thumbBearing = +data.bearing || 0;
+            if (thumbBearing && window.MarkupComposer) {
+                Object.assign(thumbOptions, window.MarkupComposer.rotateOptions(thumbBearing), { touchRotate: false, shiftKeyRotate: false });
+            }
+            var tmap = L.map(el, thumbOptions);
             // Tagged immediately, not after the calls below that can throw on
             // malformed data (_initThumbs's own caller already expects
             // MarkupEngine.renderShape to do exactly that on a bad shape, per its
@@ -890,7 +876,7 @@ const COMMENT_MAP_CFG = JSON.parse(document.getElementById('comment-map-config')
             _fitMapToMarkup(tmap, data);
             tmap.invalidateSize();
             var mg = L.layerGroup().addTo(tmap);
-            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg); });
+            (data.markup || []).forEach(function (s) { MarkupEngine.renderShape(s, mg, undefined, { screenAngle: _screenAngle(tmap) }); });
             if (refLatLng) _makeRefMarker(refLatLng[0], refLatLng[1]).addTo(tmap);
             return tmap;
         };

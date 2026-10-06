@@ -89,6 +89,36 @@ class ViewportBoundsTests(SimpleTestCase):
         self.assertLess(narrow.north - narrow.south, wide.north - wide.south)
         self.assertLess(narrow.east - narrow.west, wide.east - wide.west)
 
+    @given(lat_float, lon_float, st.floats(min_value=-720, max_value=720, allow_nan=False))
+    @settings(max_examples=100)
+    def test_a_turned_frame_covers_at_least_the_upright_one(self, lat: float, lon: float, bearing: float) -> None:
+        upright = viewport_bounds(lat, lon, 15)
+        turned = viewport_bounds(lat, lon, 15, bearing)
+        self.assertLessEqual(turned.south, upright.south + 1e-12)
+        self.assertGreaterEqual(turned.north, upright.north - 1e-12)
+        self.assertLessEqual(turned.west, upright.west + 1e-12)
+        self.assertGreaterEqual(turned.east, upright.east - 1e-12)
+
+    def test_a_quarter_turn_covers_the_turned_frames_height_and_keeps_the_upright_width(self) -> None:
+        upright = viewport_bounds(0.0, 0.0, 15)
+        turned = viewport_bounds(0.0, 0.0, 15, 90.0)
+        # Turned, the 1000px side runs north-south; the box keeps the upright 1000px east-west too.
+        self.assertAlmostEqual(turned.north - turned.south, (upright.east - upright.west), places=9)
+        self.assertAlmostEqual(turned.east - turned.west, (upright.east - upright.west), places=9)
+
+    def test_a_point_in_a_turned_frames_corner_is_inside_its_box(self) -> None:
+        """450px north of centre is off an upright 1000x700 frame and on one turned 45 degrees."""
+        from urbanlens.dashboard.services.geo.web_mercator import meters_per_pixel
+
+        north_450px = 40.0 + 450 * meters_per_pixel(40.0, 15) / 111_320.0
+        self.assertFalse(viewport_bounds(40.0, -74.0, 15).contains_point(north_450px, -74.0))
+        self.assertTrue(viewport_bounds(40.0, -74.0, 15, 45.0).contains_point(north_450px, -74.0))
+
+    def test_a_bearing_that_is_not_an_angle_is_upright(self) -> None:
+        upright = viewport_bounds(40.0, -74.0, 15)
+        for raw in (float("nan"), float("inf")):
+            self.assertEqual(viewport_bounds(40.0, -74.0, 15, raw), upright)
+
     def test_expanded_grows_symmetrically(self) -> None:
         bounds = viewport_bounds(40.0, -74.0, 14)
         expanded = bounds.expanded(5)

@@ -17,6 +17,7 @@
  *    the shape REData's own `LayerToggleControl` uses (PL8 item 10).
  */
 
+import { composeAttribution, type CreditSource } from "./esri-attribution";
 import { showMapContextMenu } from "./map-context-menu";
 import { createLayersPanel } from "./map-layers-panel";
 import {
@@ -24,6 +25,7 @@ import {
     BASE_ERROR_TILE_COLOR,
     DEFAULT_BASE_LAYER,
     normalizeBase,
+    rasterCreditFor,
     rasterSourceFor,
     resolveConfiguredBase,
     vectorStyleFor,
@@ -346,7 +348,7 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         vectorStyle = style;
         vectorKind = wanted;
         applyVisibility();
-        opts.onAttribution?.(attributionText());
+        reportAttribution();
     }
 
     /** The raster half of replaying this engine's state; a no-op until the style can accept layers. */
@@ -385,26 +387,41 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
      * The combined attribution line, replacing MapLibre's own control on pages that render it
      * elsewhere (the main map's footer, the comment-map dialog's toolbar).
      */
-    function attributionText(): string {
-        const parts: string[] = [];
+    function attributionText(includeEngine = true): string {
+        const sources: CreditSource[] = [];
         // What is drawing the ground is what has to be credited, and a vector style is served by
         // this deployment rather than by the vendor whose raster layer it replaced.
         const vectorDef = vectorKind ? vectorStyleFor(vectorKind) : null;
         // A vendor literal is only the fallback: where the REData catalogue registered the layer,
         // what drew the bytes is this deployment's own source and that is what has to be credited.
-        const creditFor = (kind: string, fallback: string): string => {
-            const credit = rasterSourceFor(kind).attribution;
-            return credit ? attributionAsText(credit) : fallback;
-        };
-        if (vectorDef) parts.push(attributionAsText(vectorDef.attribution));
-        else if (base === "satellite") parts.push(creditFor("satellite", "© Esri"));
-        else if (base === "topographic") parts.push(creditFor("topographic", "© Esri"));
-        // Both street and dark are CARTO-served (see TILE_DEFS) - same attribution either way.
-        else parts.push(creditFor(effectiveBaseKind(), "© OSM · CARTO"));
-        if (weatherKey && weatherOn) parts.push("© OpenWeatherMap");
-        if (bordersOn && base !== "satellite") parts.push(creditFor("borders", "© Esri"));
-        parts.push("MapLibre");
-        return parts.join(" · ");
+        if (vectorDef) sources.push({ kind: "text", text: attributionAsText(vectorDef.attribution) });
+        else if (base === "satellite") sources.push(rasterCreditFor("satellite", "© Esri"));
+        else if (base === "topographic") sources.push(rasterCreditFor("topographic", "© Esri"));
+        else sources.push(rasterCreditFor(effectiveBaseKind(), "© OSM · CARTO"));
+        if (weatherKey && weatherOn) sources.push({ kind: "text", text: "© OpenWeatherMap" });
+        // Its own providers on every base: the boundaries and place names are not the imagery's.
+        if (bordersOn) sources.push(rasterCreditFor("borders", "© Esri"));
+        return composeAttribution(sources, currentView(), includeEngine ? "MapLibre" : "", reportAttribution);
+    }
+
+    function currentView(): { south: number; west: number; north: number; east: number; zoom: number } | null {
+        try {
+            const bounds = map.getBounds();
+            // MapLibre's zoom counts 512px worlds and these rasters are 256px tiles, so the tiles on
+            // screen are one level deeper than the map's zoom says.
+            return { south: bounds.getSouth(), west: bounds.getWest(), north: bounds.getNorth(), east: bounds.getEast(), zoom: map.getZoom() + 1 };
+        } catch {
+            return null;
+        }
+    }
+
+    let lastAttribution: string | null = null;
+    function reportAttribution(): void {
+        if (destroyed || !opts.onAttribution) return;
+        const text = attributionText();
+        if (text === lastAttribution) return;
+        lastAttribution = text;
+        opts.onAttribution(text);
     }
 
     function persistState(): void {
@@ -426,7 +443,7 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     function commit(): void {
         applyToMap();
         syncButtons();
-        opts.onAttribution?.(attributionText());
+        reportAttribution();
         persistState();
     }
 
@@ -481,7 +498,7 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         darkMode = mode;
         applyToMap();
         syncButtons();
-        opts.onAttribution?.(attributionText());
+        reportAttribution();
     }
 
     function toggleDark(): void {
@@ -556,7 +573,9 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
     // container's dataset, and SCSS should not see an unstyled map while tiles are still loading.
     syncStyleAttribute();
     syncButtons();
-    opts.onAttribution?.(attributionText());
+    reportAttribution();
+    // Which providers to credit follows the area and zoom on screen, not only the layers.
+    if (opts.onAttribution) map.on("moveend", reportAttribution);
 
     return {
         setBase,
@@ -576,8 +595,10 @@ export function createMaplibreMapLayers(map: MaplibreMap, options: MapLayersOpti
         syncButtons,
         getState,
         baseKey,
+        attribution: (includeEngine = true) => attributionText(includeEngine),
         destroy: () => {
             destroyed = true;
+            map.off("moveend", reportAttribution);
             vectorRequest?.abort();
             vectorRequest = null;
             map.off("load", onStyleReady);

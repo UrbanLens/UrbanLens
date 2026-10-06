@@ -90,10 +90,17 @@ export interface ShapeGroupHandle {
     remove(): void;
 }
 
-function markerAt(latlng: LatLngTuple, html: string, anchor: "center" | "top-left" | "bottom"): InstanceType<typeof maplibregl.Marker> {
+/**
+ * A marker drawing `html`, wrapped in an element of its own: MapLibre positions a marker by writing
+ * its element's `transform`, which would wipe the turn an arrowhead or a turned label carries in its
+ * own.
+ * @param alignment - "map" for something that points along a line and must turn with the map.
+ */
+function markerAt(latlng: LatLngTuple, html: string, anchor: "center" | "top-left" | "bottom", alignment: "map" | "viewport" = "viewport"): InstanceType<typeof maplibregl.Marker> {
     const el = document.createElement("div");
+    el.className = "ul-markup-marker";
     el.innerHTML = html;
-    return new maplibregl.Marker({ element: el.firstElementChild as HTMLElement, anchor }).setLngLat([latlng[1], latlng[0]]);
+    return new maplibregl.Marker({ element: el, anchor, rotationAlignment: alignment }).setLngLat([latlng[1], latlng[0]]);
 }
 
 /**
@@ -148,7 +155,8 @@ export function renderShapeGroup(map: InstanceType<typeof maplibregl.Map>, shape
                     const n = s.latlngs.length;
                     const deg = bearing(s.latlngs[n - 2]!, s.latlngs[n - 1]!);
                     const sz = arrowheadSize(zoom);
-                    markers.push(markerAt(s.latlngs[n - 1]!, arrowheadSvg(color, deg, sz, fillOp), "center").addTo(map));
+                    // Pointed by its geographic bearing, so it turns with the map as its line does.
+                    markers.push(markerAt(s.latlngs[n - 1]!, arrowheadSvg(color, deg, sz, fillOp), "center", "map").addTo(map));
                 }
                 break;
             }

@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 #: The catalogue is documented as "called once per session"; a day keeps it
 #: fresh enough to pick up a new layer without asking on every map load.
 CATALOGUE_CACHE_TTL = 86400
-CATALOGUE_CACHE_KEY = "ul_redata_tile_sources"
+#: Versioned with the entry shape, so a deploy that adds a field is not served yesterday's entries
+#: for a day: v2 added ``esri_service``.
+CATALOGUE_CACHE_KEY = "ul_redata_tile_sources:v2"
 
 #: Held for the length of one refill. Its TTL only has to outlive a gateway call that has
 #: already spent the rate limiter's patience; the reservation is released on every exit.
@@ -220,6 +222,11 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # fallback, so it is `fallback_attribution` that describes those bytes, not `attribution`.
         vendor = vendor_for(source_id)
         overridden = vendor.attribution if vendor else None
+        # Names the Esri service behind the proxied raster, so the browser can credit the providers
+        # for the area it is showing rather than the whole world's list. Describes `url_template`'s
+        # bytes, which on a vector entry are the fallback half.
+        if vendor and vendor.esri_service:
+            entry["esri_service"] = vendor.esri_service
         vendor_depth = vendor.max_native_zoom if vendor else None
         if not is_vector:
             if overridden:

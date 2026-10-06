@@ -92,6 +92,31 @@ def coordinate_or_none(value: object, *, bound: float) -> float | None:
     return bounded_float_or_none(value, low=-bound, high=bound)
 
 
+def degrees_or_none(value: object) -> float | None:
+    """Return ``value`` as an angle in ``[0, 360)``, or ``None`` when it is not a finite number.
+
+    Wrapped rather than clamped: 370 and -350 are both a turn of ten degrees, and a client that spins a map past north
+    several times has still only turned it once.
+
+    Args:
+        value: A number from a parsed JSON body - a string is not one.
+
+    Returns:
+        The angle, or ``None`` for a bool, a non-number, an infinity or NaN.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    if not math.isfinite(number):
+        return None
+    wrapped = number % 360.0
+    # A negative angle too small to register (-1e-141) wraps to exactly 360.0 in floating point. That is north.
+    return 0.0 if wrapped >= 360.0 else wrapped
+
+
 def safe_int(value: object, default: int = 0) -> int:
     """Return ``value`` as an int, or ``default`` when it is not one.
 

@@ -8,6 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { BASE_ERROR_TILE_COLOR, createMapLayers, registerRedataLayers, resetRedataLayersCacheForTests } from "./map-layers";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
+import { parseContributors, resetEsriAttributionForTests, seedEsriCoveragesForTests } from "./esri-attribution";
 import type { Map as MaplibreMap } from "maplibre-gl";
 
 interface FakeLayer {
@@ -545,12 +546,30 @@ describe("attribution", () => {
         expect(seen.at(-1)).toContain("Esri");
     });
 
-    test("does not credit the borders overlay on top of a satellite base", () => {
+    test("credits the borders overlay on a satellite base too, and Esri itself once", () => {
         const text = attributionFor({ defaultBase: "satellite", initialOverlays: ["borders"] }).at(-1)!;
 
-        // Both are Esri's, so naming the boundaries set as well is noise the reader gains nothing from.
-        expect(text).not.toContain("Boundaries");
-        expect(text).toContain("Esri");
+        // Both are Esri's, but the boundaries and place names come from different providers than
+        // the imagery (HERE, Garmin), and each layer's providers are owed their credit.
+        expect(text).toContain("Boundaries");
+        expect(text).toContain("GeoEye");
+        expect(text.match(/Powered by Esri/g)).toHaveLength(1);
+    });
+
+    test("credits an Esri base by the providers of the area on screen once they are known", () => {
+        seedEsriCoveragesForTests(
+            "World_Imagery",
+            parseContributors({ contributors: [{ attribution: "Vantor", coverageAreas: [{ score: 80, zoomMin: 14, zoomMax: 17, bbox: [42.07, -179.06, 75.82, -50.64] }] }] }),
+        );
+        const map = makeMap();
+        map.finishStyleLoad();
+        // 14 here is 15 in the 256px tiles the raster draws.
+        Object.assign(map, { getBounds: () => ({ getSouth: () => 42.64, getWest: () => -73.77, getNorth: () => 42.66, getEast: () => -73.74 }), getZoom: () => 14 });
+        const seen: string[] = [];
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "satellite", contextMenu: false, onAttribution: (text) => seen.push(text) });
+
+        expect(seen.at(-1)).toBe("Powered by Esri · Vantor · MapLibre");
+        resetEsriAttributionForTests();
     });
 
     /**

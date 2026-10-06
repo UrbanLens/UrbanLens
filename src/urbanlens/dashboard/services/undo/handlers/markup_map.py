@@ -11,7 +11,7 @@ from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-_MAP_FIELDS = ("title", "center_latitude", "center_longitude", "zoom", "layer_mode", "show_borders")
+_MAP_FIELDS = ("title", "center_latitude", "center_longitude", "zoom", "layer_mode", "show_borders", "bearing")
 
 _ANNOTATION_FIELDS = (
     "markup_type",

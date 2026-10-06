@@ -12,6 +12,7 @@ from django.conf import settings
 from django.contrib.gis.geos import GEOSGeometry, Point
 
 from urbanlens.dashboard.models.markup.meta import MarkupType
+from urbanlens.dashboard.services.core.numbers import degrees_or_none
 from urbanlens.dashboard.services.geo.web_mercator import meters_per_pixel
 
 if TYPE_CHECKING:
@@ -106,20 +107,27 @@ def is_zoomed_in(zoom: float | None, *, threshold: float | None = None) -> bool:
     return zoom >= effective
 
 
-def viewport_bounds(center_lat: float, center_lng: float, zoom: float) -> MapBounds:
+def viewport_bounds(center_lat: float, center_lng: float, zoom: float, bearing: float = 0.0) -> MapBounds:
     """Approximate the visible lat/lng bounds for a saved MarkupMap viewport.
-    This is necessarily approximate: the real visible bounds depend on the client's actual container pixel size at save time, which ``MarkupMap`` never persists (only ``center_latitude``/``center_longitude``/``zoom`` are stored).
+    This is necessarily approximate: the real visible bounds depend on the client's actual container pixel size at save time, which ``MarkupMap`` never persists (only the centre, zoom and bearing are stored).
 
     Args:
         center_lat: Saved viewport center latitude.
         center_lng: Saved viewport center longitude.
         zoom: Saved viewport zoom level.
+        bearing: Saved rotation in degrees. A turned frame shows corners an upright one does not, so the box also covers
+            the one around the turned frame. It is never narrower than the upright box: the frame's size is a guess
+            either way, and a box that misses a corner misses a pin shown there.
 
     Returns:
         The approximated visible bounds."""
     meters_per_px = meters_per_pixel(center_lat, zoom)
-    half_width_m = (ASSUMED_VIEWPORT_WIDTH_PX / 2) * meters_per_px
-    half_height_m = (ASSUMED_VIEWPORT_HEIGHT_PX / 2) * meters_per_px
+    turn = math.radians(degrees_or_none(bearing) or 0.0)
+    cos_t, sin_t = abs(math.cos(turn)), abs(math.sin(turn))
+    width_px = max(ASSUMED_VIEWPORT_WIDTH_PX, ASSUMED_VIEWPORT_WIDTH_PX * cos_t + ASSUMED_VIEWPORT_HEIGHT_PX * sin_t)
+    height_px = max(ASSUMED_VIEWPORT_HEIGHT_PX, ASSUMED_VIEWPORT_WIDTH_PX * sin_t + ASSUMED_VIEWPORT_HEIGHT_PX * cos_t)
+    half_width_m = (width_px / 2) * meters_per_px
+    half_height_m = (height_px / 2) * meters_per_px
     dlat = half_height_m / _METERS_PER_DEGREE_LAT
     cos_lat = max(math.cos(math.radians(center_lat)), 1e-6)
     dlng = half_width_m / (_METERS_PER_DEGREE_LNG_AT_EQUATOR * cos_lat)
@@ -325,7 +333,7 @@ def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
     if markup_map.center_latitude is None or markup_map.center_longitude is None or markup_map.zoom is None:
         return []
 
-    bounds = viewport_bounds(markup_map.center_latitude, markup_map.center_longitude, markup_map.zoom)
+    bounds = viewport_bounds(markup_map.center_latitude, markup_map.center_longitude, markup_map.zoom, markup_map.bearing or 0.0)
     items = list(markup_map.items.all())
 
     if is_zoomed_in(markup_map.zoom):
