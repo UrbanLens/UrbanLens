@@ -145,7 +145,7 @@ tax parcel (3532 North Rd):
 | `campus` | `primary` | `HRSH_PIN` (41.73328, -73.92812) | "e2e private campus notes" |
 | `courtyard` | `secondary` | `COURTYARD_PIN` (41.73266, -73.92736) | "e2e private courtyard notes" |
 
-The courtyard is the point Jess pinned on k3s-staging, where it got a circle, a road for a title and one
+The courtyard is the point Jess pinned on staging, where it got a circle, a road for a title and one
 building in the CRIS card (P145). It needs a second account because an account holds one root pin per
 property; a second root pin on the parcel would be nested or refused. `hrsh-naming.spec.ts` runs every
 test at both points: the parcel polygon, one shared wiki, the exact National Register title (D20), the

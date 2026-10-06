@@ -81,7 +81,7 @@ export const BUILDING_COORDINATE: Coordinate = { label: "building with a known f
 export const HRSH_PIN: Coordinate = { label: "requirement pin", latitude: 41.73328, longitude: -73.92812 };
 
 /**
- * The point Jess pinned on k3s-staging, in the courtyard south-east of the Kirkbride.
+ * The point Jess pinned on staging, in the courtyard south-east of the Kirkbride.
  *
  * On the same county tax parcel as {@link HRSH_PIN} (3532 North Rd, 116.9 acres) and inside the same National
  * Register listing, but 90 m from the nearest CRIS building and 130 m or more from every edge of the OSM campus

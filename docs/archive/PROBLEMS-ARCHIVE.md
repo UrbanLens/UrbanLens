@@ -304,7 +304,7 @@ in the grid with its handlers clobbered and **no event fired at all** - neither 
 `tileunload`. Nothing about that tile is observable from the outside; whether the handlers are still
 the ones `createTile` installed is the only signal the two paths share.
 
-Measured on `k3s-staging` before the fix, five wheel notches 120ms apart:
+Measured on staging before the fix, five wheel notches 120ms apart:
 
 | | tiles | painted | src-less | requests made |
 | --- | --- | --- | --- | --- |
@@ -354,7 +354,7 @@ underneath stayed live and attached for the rest of the session, following every
 base button ran `setBase()` → `syncBaseLayer()` and fixed it - which is why it never showed up in
 testing that started by choosing a layer.
 
-Measured on `k3s-staging`, one session: page load on satellite, two zoom-outs, switch to terrain,
+Measured on staging, one session: page load on satellite, two zoom-outs, switch to terrain,
 two more zoom-outs, then street.
 
 | | before | after |
@@ -1131,7 +1131,7 @@ Previously titled "The site Content-Security-Policy has never been enforced: it 
 
 **The defect.** `AppSettings.csp_enforce` defaulted to `False`. No environment set `UL_CSP_ENFORCE`.
 A read-only check on 2026-09-23 found it unset in the `urbanlens_production_app` and
-`urbanlens_staging_app` containers on damballa and in the k3s staging `urbanlens-web` deployment. The
+`urbanlens_staging_app` containers on damballa and in the staging `urbanlens-web` deployment on k3s. The
 login pages on urbanlens.org and staging.urbanlens.org served only
 `Content-Security-Policy-Report-Only`. The policy had no `report-uri`. No violation was recorded
 anywhere, and none of those logs from the previous seven days mention CSP.

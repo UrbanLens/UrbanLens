@@ -811,7 +811,7 @@ describe("registerRedataLayers", () => {
          * pruned. Neither handler fires again, so an abandoned tile never reaches `finish()` and
          * the slot it holds is recovered only by the 30s watchdog. A fast zoom abandons a viewport
          * at a time, which is enough to hold every slot at once - and then the tiles the map does
-         * want are never requested at all. Measured on k3s-staging: five wheel notches 120ms apart
+         * want are never requested at all. Measured on staging: five wheel notches 120ms apart
          * left 24 tile elements with no `src`, and the next zoom made no requests whatsoever.
          */
         function abandonMidFlight(state: LeafletStub, tile: HTMLImageElement, event: string): void {
@@ -1218,7 +1218,7 @@ function stubAnimationFrame(): { pendingCount: () => number; cancelledIds: numbe
 /**
  * `street` and `dark` are drawn from a metered vector style where one is configured, so a base kept
  * underneath an opaque one is not merely wasted bandwidth - it spends quota on tiles nobody can see,
- * for every pan and zoom of the session. Measured on k3s-staging: a page opened on satellite fetched
+ * for every pan and zoom of the session. Measured on staging: a page opened on satellite fetched
  * 12 vector tiles before any gesture and 23 more over two zoom-outs.
  */
 /**

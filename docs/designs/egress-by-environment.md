@@ -46,7 +46,7 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
   (`environments/meta.py`), so every other deployment must set it: one that loses the variable spends
   production's share, sends real mail and schedules every beat entry, and says so only in its startup line.
   The share is per deployment: every deployment that says `staging` takes its own 5%, so with more than two
-  of them (the damballa staging stack, k3s staging, and the k3s sites while they run as staging before the
+  of them (the damballa staging stack, staging on k3s, and the k3s sites while they run as staging before the
   cutover) production's 0.9 and theirs together pass the whole budget. Give the extra ones
   `UL_ENVIRONMENT_SHARE=0`, or a smaller share.
 - **Trying a provider.** `UL_ENVIRONMENT_SHARE_OVERRIDES=nominatim=0.02,sms=1` gives one service its own share. For
@@ -203,7 +203,7 @@ OpenWeatherMap and OSRM directly, report unavailable. `UL_ENVIRONMENT_SHARE_OVER
 its browsers fetch themselves; a twentieth of every `quota` and `billed`
 window (Nominatim's 500 a day becomes 25; Google Geocoding's free-tier share 200 a month), but never as a
 fallthrough from a failed REData call. No mail, texts, push, Calendar, Stripe or Save Page Now. Of beat, only
-internal maintenance. k3s staging's Celery runs (beat, worker and panels worker at 1/1/1, read from the cluster
+internal maintenance. Staging's Celery runs (beat, worker and panels worker at 1/1/1, read from the cluster
 on 2026-10-05; the infrastructure repo's `docs/STATUS.md` says it is off), so this policy is what holds it.
 
 **Development's REData calls spend production REData's budget**: every deployment points `UL_REDATA_API_URL` at

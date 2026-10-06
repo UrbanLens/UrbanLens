@@ -1924,11 +1924,11 @@ takes its site's answer for site-level panels. None of that removes the need for
 a service tier: at the ~50 calls a building page view cost before the fix, 1,000 an
 hour was about 20 page views.
 
-## P145 — The HRSH courtyard pin on k3s-staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card
+## P145 — The HRSH courtyard pin on staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card
 
 `id: P145` · `status: open` · `updated: 2026-09-23` · `decision: D20` · `tests: tests/integration/specs/location/hrsh-naming.spec.ts`
 
-Jess pinned 41.73266, -73.92736, a courtyard on the Hudson River State Hospital campus, on k3s-staging
+Jess pinned 41.73266, -73.92736, a courtyard on the Hudson River State Hospital campus, on staging
 (Location 67). Traced read-only on staging, then reproduced and fixed on `development_main`. **Open until
 the fixes reach staging and its caches from before the fix refresh.**
 

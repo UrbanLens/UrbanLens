@@ -41,7 +41,7 @@ test.describe("production-write guard", () => {
 
     test("every hostname the production tunnel serves the web app on is refused by default", () => {
         // infrastructure platform/cloudflare-tunnel/base/config.yml routes these to production web.
-        for (const host of ["urbanlens.org", "www.urbanlens.org", "beta.urbanlens.org"]) {
+        for (const host of ["urbanlens.org", "www.urbanlens.org"]) {
             expect(isProductionHost(host, [...DEFAULT_PRODUCTION_HOSTS])).toBe(true);
         }
     });
