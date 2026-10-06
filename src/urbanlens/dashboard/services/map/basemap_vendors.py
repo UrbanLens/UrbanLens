@@ -115,9 +115,12 @@ VENDOR_TILES: dict[str, VendorTiles] = {
     # Esri's dark canvas rather than CARTO's dark_all, which was the last CARTO reference left and
     # was never a deliberate choice here. Only the fallback either way: `dark` draws as a Protomaps
     # vector style wherever WebGL2 is available.
+    # 16 rather than the 20 REData publishes for CARTO: measured real tiles through 16 and Esri's
+    # one "not yet available" JPEG from 17 down, as `map-layers.ts`'s raster table already says.
     "dark": VendorTiles(
         url_template=f"{_ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS User Community",
+        max_native_zoom=16,
         browser_max_age=_ESRI_MAX_AGE,
     ),
     # Esri's topographic map rather than OpenTopoMap, which measured 0.566s a tile against 0.25s
