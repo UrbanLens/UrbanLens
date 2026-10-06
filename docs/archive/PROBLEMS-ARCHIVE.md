@@ -66,8 +66,6 @@ trusted markup until that changes. REData's own dashboard still loads 5.24.0 fro
 does not cover it. Its attributions are constants (`OSM_TILE_ATTRIBUTION`), so no outside input reaches that
 sanitizer there.
 
-||||||| afd48d0d9
-
 ## RESOLVED 2026-10-05: A Places photo backfill that met a spent budget marked the location done, so its photos were never fetched
 
 `id: P317` · `status: fixed` · `resolved: 2026-10-05`
@@ -22116,8 +22114,6 @@ removes and restores them; adding an alias keeps them.
 
 The two identical child chips (`.comment-child-chip`, `.visit-child-chip`) became one `.child-chip` component in
 `_components.scss`, which this listing reuses.
-||||||| parent of 7df33582b (fix(P251): the beat-lock test reads a crontab's shortest gap between firings)
-
 
 ## RESOLVED 2026-10-04: The beat-lock test read any all-hours crontab as hourly, so a lock longer than a sub-hourly interval passed
 
