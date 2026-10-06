@@ -12,9 +12,8 @@ def _gateway(model: str | None) -> CloudflareGateway:
     return CloudflareGateway(model=model)
 
 
-#: cost is rounded to 2 decimal places (see LLMGateway.cost) - a 1000-token
-#: sample rounds to $0.00 for every model here, so these tests price out a
-#: million tokens each way instead, landing on a meaningfully non-zero amount.
+#: A million tokens each way lands on a round, meaningfully non-zero amount, so a typo'd digit in an
+#: entry changes the figure the tests pin.
 _SAMPLE_TOKENS = 1_000_000
 
 
@@ -45,12 +44,12 @@ class CloudflareModelCostsTests(SimpleTestCase):
         #: typo'd digit in an entry fails the test instead of surviving because the
         #: wrong number still happens to differ from the (much larger) generic one.
         expected_costs = {
-            "@cf/meta/llama-3.1-8b-instruct": Decimal("1.11"),
-            "@cf/meta/llama-3.2-1b-instruct": Decimal("0.23"),
-            "@cf/meta/llama-3.2-3b-instruct": Decimal("0.39"),
-            "@cf/meta/llama-3.3-70b-instruct-fp8-fast": Decimal("2.55"),
-            "@cf/google/gemma-3-12b-it": Decimal("0.90"),
-            "@cf/qwen/qwen3-30b-a3b-fp8": Decimal("0.39"),
+            "@cf/meta/llama-3.1-8b-instruct": Decimal("1.109"),
+            "@cf/meta/llama-3.2-1b-instruct": Decimal("0.228"),
+            "@cf/meta/llama-3.2-3b-instruct": Decimal("0.386"),
+            "@cf/meta/llama-3.3-70b-instruct-fp8-fast": Decimal("2.546"),
+            "@cf/google/gemma-3-12b-it": Decimal("0.901"),
+            "@cf/qwen/qwen3-30b-a3b-fp8": Decimal("0.386"),
         }
         for model, expected in expected_costs.items():
             with self.subTest(model=model):
@@ -66,7 +65,7 @@ class CloudflareModelCostsTests(SimpleTestCase):
         gw = _gateway("@cf/meta/llama-3.1-8b-instruct")
         gw.send_tokens(_SAMPLE_TOKENS)
         gw.receive_tokens(_SAMPLE_TOKENS)
-        self.assertEqual(gw.cost, Decimal("1.11"))
+        self.assertEqual(gw.cost, Decimal("1.109"))
 
     def test_unrecognized_model_still_falls_back_to_the_generic_estimate(self) -> None:
         gw = _gateway("@cf/some-vendor/a-brand-new-model-not-yet-catalogued")

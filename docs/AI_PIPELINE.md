@@ -368,6 +368,12 @@ Rate limiting, the service-key buckets and cost accounting stay in
 `vision.py`, on the app side, for the same reason `LLMGateway` keeps its
 own: `ai-inference` has no database and no idea what a service key is.
 
+Every call through the inference client leaves one `ApiCallLog` row carrying
+the provider, model, status, latency, tokens and cost, and no content:
+`LLMGateway._get_response` writes it, or fills in the row an
+`api_call_slot` already reserved, and `vision.py` fills in its own slot.
+`docs/notes/billed-api-free-tiers.md` (R31) lists each path.
+
 A provider that answers and refuses the input is answering, not failing.
 Cloudflare's ResNet-50 takes no image under 4x4 pixels: HTTP 400, code 3011,
 "image too small". The adapter raises `ProviderInputRefusedError` with

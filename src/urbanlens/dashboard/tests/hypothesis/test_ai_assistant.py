@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from decimal import Decimal
 from unittest import mock
 from unittest.mock import patch
 
@@ -50,7 +49,6 @@ class _StubGateway:
         self.prompts: list[str] = []
         self.timeouts: list[float | None] = []
         self.model = "gpt-5-nano"
-        self.cost = Decimal("0.01")
 
     def send_with_tools(self, prompt: str, tools: list, *, timeout: float | None = None) -> InferenceResponse | None:
         self.prompts.append(prompt)
@@ -81,7 +79,6 @@ class AssistantLoopTests(TestCase):
         clock = itertools.chain(readings[:-1], itertools.repeat(readings[-1]))
         with (
             patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.ai.assistant.log_api_call"),
             patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: next(clock)),
         ):
             return run_assistant_turn(self.profile, [], "hello")
@@ -204,28 +201,6 @@ class AssistantLoopTests(TestCase):
         # Only the first round's prompt was ever sent - the call the deadline
         # caught never executed, so there was nothing to feed a second round.
         self.assertEqual(len(gateway.prompts), 1)
-
-    def test_log_api_call_regression_exactly_one_row_with_cost(self) -> None:
-        """A multi-round-trip turn must log exactly once, with cost - not once per round."""
-        from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
-
-        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "Here are your trips."}])
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
-            run_assistant_turn(self.profile, [], "what are my trips?")
-        rows = list(ApiCallLog.objects.filter(service="assistant"))
-        self.assertEqual(len(rows), 1)
-        self.assertTrue(rows[0].success)
-        self.assertIsNotNone(rows[0].cost_estimate)
-
-    def test_log_api_call_records_failure_when_the_model_gives_up(self) -> None:
-        """A dead gateway (send_with_tools returns None) still logs one failed call, not zero."""
-        from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
-
-        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([])):
-            run_assistant_turn(self.profile, [], "hi")
-        rows = list(ApiCallLog.objects.filter(service="assistant"))
-        self.assertEqual(len(rows), 1)
-        self.assertFalse(rows[0].success)
 
     def test_dismissals_reach_the_recent_dismissals_tool(self) -> None:
         from urbanlens.dashboard.services.ai.dismissals import DismissalEntry
