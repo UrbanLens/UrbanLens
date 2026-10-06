@@ -43,6 +43,9 @@ export const REPROBE_AFTER_MS = 30 * 60 * 1000;
 export const ERROR_THRESHOLD = 3;
 export const ERROR_WINDOW_MS = 10_000;
 
+/** How long after a swap a failing tile is taken to be a hosted request that was already in flight. */
+export const LATE_FAILURE_WINDOW_MS = 30_000;
+
 /** The hosted template this page draws from, `null` for the style's own tiles, `undefined` until first asked. */
 let pageTemplate: string | null | undefined;
 /** When recent hosted tiles failed, oldest first, across every map on the page. */
@@ -166,6 +169,13 @@ function fallBack(reason: string): void {
     for (const listener of [...fallbackListeners]) listener();
 }
 
+/** The tile an error is about, as `refreshTiles` takes it, when MapLibre said. */
+function failedTile(event: unknown): { x: number; y: number; z: number } | null {
+    const canonical = (event as { tile?: { tileID?: { canonical?: { x?: unknown; y?: unknown; z?: unknown } } } }).tile?.tileID?.canonical;
+    const { x, y, z } = canonical ?? {};
+    return typeof x === "number" && typeof y === "number" && typeof z === "number" ? { x, y, z } : null;
+}
+
 /**
  * Watches one map's hosted basemap source, and swaps it to `ownTiles` when the hosted tiles fail.
  *
@@ -177,10 +187,24 @@ function fallBack(reason: string): void {
  * @returns Stops watching; call it when the source or the map goes away.
  */
 export function watchHostedTiles(map: MaplibreMap, sourceId: string, ownTiles: string[]): () => void {
-    const hostedOrigin = new URL(hostedTilesTemplate() ?? "https://invalid.invalid/").origin;
+    /** Tiles retried once after the swap, by `z/x/y`, so a tile of our own that keeps failing is not retried forever. */
+    const retried = new Set<string>();
+    /** Tiles whose hosted load failed before the swap, by `z/x/y`. */
+    const failedBeforeSwap = new Map<string, { x: number; y: number; z: number }>();
+    let swappedAt: number | null = null;
+    const refresh = (tiles: Array<{ x: number; y: number; z: number }>): void => {
+        if (tiles.length && typeof map.refreshTiles === "function") map.refreshTiles(sourceId, tiles);
+    };
     const swap = (): void => {
+        swappedAt = Date.now();
         const source = map.getSource(sourceId) as { setTiles?: (tiles: string[]) => unknown } | undefined;
         source?.setTiles?.(ownTiles);
+        // `setTiles` re-points the template at once but reloads a frame later, and that reload leaves a tile that had
+        // already failed waiting on a load that never comes (MapLibre 6.12, measured in a browser on 2026-10-06): the
+        // tiles that failed before the swap stayed blank. Asked for again now, they come from our own tiles.
+        for (const key of failedBeforeSwap.keys()) retried.add(key);
+        refresh([...failedBeforeSwap.values()]);
+        failedBeforeSwap.clear();
     };
     const onError = (event: ErrorEvent & { sourceId?: string }): void => {
         if (event.sourceId !== sourceId) {
@@ -188,12 +212,23 @@ export function watchHostedTiles(map: MaplibreMap, sourceId: string, ownTiles: s
             return;
         }
         if (pageTemplate === null) {
-            // Already on our own tiles. What still arrives from the hosted ones was in flight when the swap happened;
-            // anything else is a real failure of our own tiles and is printed as MapLibre would have.
-            const url = (event.error as { url?: unknown } | null)?.url;
-            if (!(typeof url === "string" && url.startsWith(`${hostedOrigin}/`))) console.error(event.error);
+            // Already on our own tiles. A hosted request still in flight at the swap fails after it, and MapLibre does
+            // not retry a tile whose load fails once its source has changed, so that tile would stay blank: it is asked
+            // for once more, now from our own tiles. Anything after that is a real failure of our own tiles, printed as
+            // MapLibre would have.
+            const tile = failedTile(event);
+            const key = tile ? `${tile.z}/${tile.x}/${tile.y}` : null;
+            const late = swappedAt !== null && Date.now() - swappedAt < LATE_FAILURE_WINDOW_MS;
+            if (tile && key && late && !retried.has(key) && typeof map.refreshTiles === "function") {
+                retried.add(key);
+                refresh([tile]);
+                return;
+            }
+            console.error(event.error);
             return;
         }
+        const failed = failedTile(event);
+        if (failed) failedBeforeSwap.set(`${failed.z}/${failed.x}/${failed.y}`, failed);
         const status = statusOf(event.error);
         if (status === 401 || status === 403) {
             fallBack(`a tile was refused with ${status}`);

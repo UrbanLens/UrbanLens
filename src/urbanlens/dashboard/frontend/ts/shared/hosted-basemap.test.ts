@@ -13,6 +13,7 @@ import {
     FALLBACK_STORAGE_KEY,
     HOSTED_BASEMAP_ATTRIBUTION,
     HOSTED_BASEMAP_EMBED_ID,
+    LATE_FAILURE_WINDOW_MS,
     REPROBE_AFTER_MS,
     hostedTilesFor,
     hostedTilesTemplate,
@@ -36,15 +37,16 @@ function embed(content: unknown): void {
 }
 
 /** A tile error as MapLibre fires it on the map: an `AJAXError` carries `status` and `url`; a network failure neither. */
-function tileError(sourceId: string, status?: number, url = "https://api.protomaps.com/tiles/v4/1/0/0.mvt?key=pk_test"): Record<string, unknown> {
+function tileError(sourceId: string, status?: number, url = "https://api.protomaps.com/tiles/v4/1/0/0.mvt?key=pk_test", tile = { x: 0, y: 0, z: 1 }): Record<string, unknown> {
     const error = status === undefined ? new TypeError("Failed to fetch") : Object.assign(new Error(`AJAXError (${status})`), { status, url });
-    return { type: "error", error, sourceId };
+    return { type: "error", error, sourceId, tile: { tileID: { canonical: tile } } };
 }
 
 /** Enough of a MapLibre map for the watcher: sources that can be re-pointed, and `error`/`style.load`/`remove` events. */
 class FakeGlMap {
     readonly sources = new Map<string, { type: string; tiles?: string[]; url?: string }>();
     readonly setTilesCalls: Array<{ id: string; tiles: string[] }> = [];
+    readonly refreshed: Array<{ id: string; tiles: Array<{ x: number; y: number; z: number }> }> = [];
     private readonly handlers = new Map<string, Set<(event: unknown) => void>>();
     private readonly onceHandlers = new Map<string, Set<(event: unknown) => void>>();
 
@@ -60,6 +62,9 @@ class FakeGlMap {
                 source.tiles = tiles;
             },
         };
+    }
+    refreshTiles(id: string, tiles: Array<{ x: number; y: number; z: number }>): void {
+        this.refreshed.push({ id, tiles });
     }
     getStyle(): { sources: Record<string, unknown> } {
         return { sources: Object.fromEntries([...this.sources].map(([id, source]) => [id, { ...source }])) };
@@ -212,6 +217,29 @@ describe("falling back to our own tiles", () => {
         expect(warn).toHaveBeenCalledTimes(1);
     });
 
+    test("the tiles that failed before the swap are asked for again from our own tiles", () => {
+        // `setTiles` reloads a frame later, and that reload leaves an already-failed tile waiting forever (MapLibre 6.12,
+        // seen in a browser): without this the tiles that tripped the fallback stay blank.
+        embed({ tiles: HOSTED });
+        const map = bridgeMap();
+        const failed = [
+            { x: 1, y: 2, z: 3 },
+            { x: 2, y: 2, z: 3 },
+            { x: 3, y: 2, z: 3 },
+        ];
+        for (const tile of failed) map.fire("error", tileError(BASEMAP_SOURCE_ID, undefined, undefined, tile));
+
+        expect(map.tilesOf(BASEMAP_SOURCE_ID)).toEqual([OWN]);
+        expect(map.refreshed).toEqual([{ id: BASEMAP_SOURCE_ID, tiles: failed }]);
+        // Asked for after the template moved, so they come from our own tiles.
+        expect(map.setTilesCalls.at(-1)).toEqual({ id: BASEMAP_SOURCE_ID, tiles: [OWN] });
+
+        // Each is retried once: failing again, it is a failure of our own tiles and is reported.
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/3/1/2", failed[0]));
+        expect(map.refreshed).toHaveLength(1);
+        expect(error).toHaveBeenCalledTimes(1);
+    });
+
     test("failures spread wider than the window are a flaky tile, not a failed source", () => {
         embed({ tiles: HOSTED });
         const map = bridgeMap();
@@ -247,8 +275,8 @@ describe("falling back to our own tiles", () => {
 
         first.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
         // Tiles that were in flight when it swapped still fail afterwards; they must not swap or warn again.
-        first.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
-        second.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
+        first.fire("error", tileError(BASEMAP_SOURCE_ID, 403, undefined, { x: 1, y: 1, z: 2 }));
+        second.fire("error", tileError(BASEMAP_SOURCE_ID, 403, undefined, { x: 2, y: 1, z: 2 }));
 
         expect(first.tilesOf(BASEMAP_SOURCE_ID)).toEqual([OWN]);
         expect(second.tilesOf(BASEMAP_SOURCE_ID)).toEqual([OWN]);
@@ -256,19 +284,53 @@ describe("falling back to our own tiles", () => {
         expect(second.setTilesCalls).toHaveLength(2);
         expect(warn).toHaveBeenCalledTimes(1);
         expect(told).toEqual(["fell back"]);
-        // The late hosted failures are swallowed; nothing is printed for them.
+        // The late hosted failures are retried rather than printed.
         expect(error).not.toHaveBeenCalled();
     });
 
-    test("after the fallback, a failure of our own tiles is reported as MapLibre would have", () => {
+    test("a tile whose hosted request was in flight at the swap is asked for again, from our own tiles", () => {
+        // MapLibre does not retry a tile whose load fails after its source changed: it would stay blank.
         embed({ tiles: HOSTED });
         const map = bridgeMap();
         map.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
 
-        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/1/0/0"));
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, undefined, undefined, { x: 4, y: 5, z: 3 }));
 
+        // The refused tile first, at the swap; then the one that was still in flight.
+        expect(map.refreshed).toEqual([
+            { id: BASEMAP_SOURCE_ID, tiles: [{ x: 0, y: 0, z: 1 }] },
+            { id: BASEMAP_SOURCE_ID, tiles: [{ x: 4, y: 5, z: 3 }] },
+        ]);
+        expect(error).not.toHaveBeenCalled();
+    });
+
+    test("after the fallback, a tile of our own that keeps failing is retried once and then reported", () => {
+        embed({ tiles: HOSTED });
+        const map = bridgeMap();
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
+
+        const own = { x: 7, y: 7, z: 4 };
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/4/7/7", own));
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/4/7/7", own));
+
+        expect(map.refreshed.map((call) => call.tiles)).toEqual([[{ x: 0, y: 0, z: 1 }], [own]]);
         expect(error).toHaveBeenCalledTimes(1);
         expect(map.tilesOf(BASEMAP_SOURCE_ID)).toEqual([OWN]);
+    });
+
+    test("long after the swap, a failing tile is our own and is reported, not retried", () => {
+        embed({ tiles: HOSTED });
+        let now = 2_000_000;
+        Date.now = () => now;
+        const map = bridgeMap();
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 403));
+
+        now += LATE_FAILURE_WINDOW_MS + 1;
+        map.fire("error", tileError(BASEMAP_SOURCE_ID, 500, "https://tiles.urbanlens.org/basemap/4/7/7", { x: 7, y: 7, z: 4 }));
+
+        // Only the refused tile, at the swap.
+        expect(map.refreshed.map((call) => call.tiles)).toEqual([[{ x: 0, y: 0, z: 1 }]]);
+        expect(error).toHaveBeenCalledTimes(1);
     });
 
     test("a map whose style arrives after the page fell back starts on our own tiles", () => {
