@@ -35,7 +35,7 @@
 </dialog>
 {% endwith %}
 
-<div class="edit-profile-page page-content" data-save-url="{% url 'profile.field.update' %}" data-map-url="{% url 'map.view' %}">
+<div class="edit-profile-page page-content" data-save-url="{% url 'profile.field.update' %}" data-map-url="{% url 'map.view' %}" data-media-origin="{{ media_origin }}">
 
     {# -- Setup / welcome banner (shown to all new users until they complete setup) -- #}
     {% if not form.instance.profile_setup_complete %}

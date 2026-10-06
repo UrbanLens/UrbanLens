@@ -155,6 +155,38 @@ describe("avatar and username", () => {
         expect(document.querySelector('[data-field-status="avatar"]')?.textContent).toBe("✓ Saved");
     });
 
+    test("a site that serves uploads from their own origin has its avatar drawn from there, and from no other", async () => {
+        const MEDIA = "https://media.example.org";
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: `${MEDIA}/media/avatars/owl.png` }), { status: 200 });
+        render();
+        document.querySelector(".edit-profile-page")?.setAttribute("data-media-origin", MEDIA);
+        document.querySelector<HTMLElement>(".edit-avatar-emoji-opt")?.click();
+        await settle();
+        expect(document.getElementById("profile-hero-avatar")?.getAttribute("src")).toStartWith(`${MEDIA}/media/avatars/owl.png?v=`);
+        expect(document.querySelector(".nav-avatar-img")?.getAttribute("src")).toStartWith(`${MEDIA}/media/avatars/owl.png?v=`);
+
+        // Another origin is not the configured one, whatever the attribute says.
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "https://evil.example/media/avatars/owl.png" }), { status: 200 });
+        const warn = console.warn;
+        console.warn = () => undefined;
+        document.querySelector<HTMLElement>(".edit-avatar-emoji-opt")?.click();
+        await settle();
+        console.warn = warn;
+        expect(document.getElementById("profile-hero-avatar")?.getAttribute("src")).toStartWith(`${MEDIA}/media/avatars/owl.png?v=`);
+    });
+
+    test("without a media origin on the page, an avatar on another origin is not drawn", async () => {
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "https://media.example.org/media/avatars/owl.png" }), { status: 200 });
+        render();
+        const warn = console.warn;
+        console.warn = () => undefined;
+        document.querySelector<HTMLElement>(".edit-avatar-emoji-opt")?.click();
+        await settle();
+        console.warn = warn;
+        expect(document.getElementById("profile-hero-avatar") instanceof HTMLImageElement).toBe(false);
+        expect(document.querySelector(".nav-avatar-img")?.getAttribute("src")).toBe("/media/avatars/old.png");
+    });
+
     test("an upload shows at once from the user's own file, though the server answers with the picture it replaces", async () => {
         respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "/media/avatars/old.png", avatar_pending: true }), { status: 200 });
         render();

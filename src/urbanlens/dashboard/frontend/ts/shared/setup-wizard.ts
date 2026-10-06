@@ -234,7 +234,7 @@ export class SetupWizard {
             return;
         }
         this.avatarStatus(avatarSavedText(result), COLOR_OK);
-        const outcome = await showSavedAvatar(this.cfg.profileUrl ?? "", choice, result);
+        const outcome = await showSavedAvatar(this.cfg.profileUrl ?? "", choice, result, { mediaOrigin: this.cfg.mediaOrigin });
         if (outcome === "published") this.avatarStatus("✓ Saved", COLOR_OK);
         if (outcome === "unchanged") this.avatarStatus("✗ That image couldn't be processed.", COLOR_BAD);
     }

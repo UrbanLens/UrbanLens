@@ -199,6 +199,37 @@ describe("profile", () => {
         expect(document.getElementById("setup-avatar-status")?.textContent).toBe("✓ Saved");
     });
 
+    test("a site that serves uploads from their own origin has its avatar drawn from there, and from no other", async () => {
+        const MEDIA = "https://media.example.org";
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: `${MEDIA}/media/avatars/owl.png` }), { status: 200 });
+        render();
+        document.querySelector(".setup-wizard")?.setAttribute("data-media-origin", MEDIA);
+        document.querySelector<HTMLElement>(".setup-avatar-emoji-btn")?.click();
+        await settle();
+        const preview = document.getElementById("setup-avatar-preview");
+        expect(preview instanceof HTMLImageElement).toBe(true);
+        expect(preview?.getAttribute("src")).toStartWith(`${MEDIA}/media/avatars/owl.png?v=`);
+
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "https://evil.example/media/avatars/owl.png" }), { status: 200 });
+        const warn = console.warn;
+        console.warn = () => undefined;
+        document.querySelector<HTMLElement>(".setup-avatar-emoji-btn")?.click();
+        await settle();
+        console.warn = warn;
+        expect(document.getElementById("setup-avatar-preview")?.getAttribute("src")).toStartWith(`${MEDIA}/media/avatars/owl.png?v=`);
+    });
+
+    test("without a media origin on the page, an avatar on another origin is not drawn", async () => {
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "https://media.example.org/media/avatars/owl.png" }), { status: 200 });
+        render();
+        const warn = console.warn;
+        console.warn = () => undefined;
+        document.querySelector<HTMLElement>(".setup-avatar-emoji-btn")?.click();
+        await settle();
+        console.warn = warn;
+        expect(document.getElementById("setup-avatar-preview") instanceof HTMLImageElement).toBe(false);
+    });
+
     test("a failed avatar save says why", async () => {
         respond = () => new Response(JSON.stringify({ error: "No Gravatar found for your email address." }), { status: 404 });
         render();

@@ -48,7 +48,7 @@ def deferred(*keys: str) -> Callable[[Callable[[HttpRequest], Mapping[str, objec
     return decorate
 
 
-@deferred("site_title", "app_version", "public_costs_page_enabled")
+@deferred("site_title", "app_version", "public_costs_page_enabled", "media_origin")
 def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     """Inject site-wide settings into template context.
 
@@ -56,8 +56,10 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title, app_version, public_costs_page_enabled.
+        dict with site_title, app_version, public_costs_page_enabled, and media_origin: the origin uploads are
+        served from when ``UL_MEDIA_BASE_URL`` sets one, else ``""`` (they come from the page's own origin).
     """
+    from urbanlens.dashboard.services.media.origin import media_origin
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     try:
@@ -74,6 +76,7 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
         "site_title": site_title,
         "app_version": app_settings.app_version,
         "public_costs_page_enabled": public_costs_page_enabled,
+        "media_origin": media_origin(),
     }
 
 

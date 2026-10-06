@@ -4,6 +4,7 @@
  *
  * An avatar is drawn in several places (the page hero, the form, the navbar). Each carries
  * ``data-user-avatar="<class>"`` - the class it has as an image - and :func:`showUserAvatar` redraws them all.
+ * An address only reaches an image's ``src`` through :func:`avatarSrc`.
  */
 
 import { getCsrfToken } from "./csrf";
@@ -76,16 +77,64 @@ export function withVersion(url: string, version: number = Date.now()): string {
     return parsed.origin === window.location.origin ? parsed.pathname + parsed.search + parsed.hash : parsed.toString();
 }
 
+/** The ``blob:`` addresses :func:`localPreview` has made and not yet let go of: the only ones an avatar may be drawn from. */
+const ownObjectUrls = new Set<string>();
+
+/** *address* as an ``http:`` or ``https:`` origin, or "" when it is empty, unparseable or another scheme. */
+function httpOrigin(address: string): string {
+    try {
+        const parsed = new URL(address);
+        return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.origin : "";
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * The address an avatar may be drawn from, or null when this page should not load it into an image.
+ *
+ * Allowed: a ``blob:`` address this module made from the user's own file, an ``http:`` or ``https:`` address on this
+ * page's origin (a stored avatar, this site's copy of a Gravatar), and one on *mediaOrigin* when the site serves uploads
+ * from their own (``UL_MEDIA_BASE_URL``). Refused: ``javascript:``, ``data:`` and every other scheme, any other origin (a
+ * protocol-relative ``//host/x`` included, and no wildcard on *mediaOrigin*: it is that origin exactly), and a ``blob:``
+ * address this module did not make.
+ * @param address - What the server, a ``data-*`` attribute or the user's file gave.
+ * @param mediaOrigin - The site's media origin as the server renders it, e.g. ``https://media.example.org``; "" when uploads are served from the page's own.
+ * @returns The ``blob:`` address as it was, a page-origin address as a path with its query and fragment kept, a media-origin address in full, or null.
+ */
+export function avatarSrc(address: string, mediaOrigin = ""): string | null {
+    if (ownObjectUrls.has(address)) return address;
+    let parsed: URL;
+    try {
+        parsed = new URL(address, window.location.origin);
+    } catch {
+        return null;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    if (parsed.origin === window.location.origin) return parsed.pathname + parsed.search + parsed.hash;
+    const media = httpOrigin(mediaOrigin);
+    // Rebuilt from its parts so that nothing in front of the host (a user name, a password) comes along.
+    if (media && parsed.origin === media) return parsed.origin + parsed.pathname + parsed.search + parsed.hash;
+    return null;
+}
+
 /**
  * Show a new avatar in *el*'s place: its ``src`` when it is an image, else an image replacing the placeholder.
+ * Nothing changes when :func:`avatarSrc` refuses the address.
  * @param el - The image, or the placeholder (initials, an icon) standing in for one.
  * @param url - The picture.
  * @param className - The class the replacing image takes; ``data-user-avatar`` and ``data-avatar-alt`` carry over.
  * @param alt - The replacing image's alternative text.
+ * @param mediaOrigin - The site's media origin, if it has one; see :func:`avatarSrc`.
  */
-export function showAvatar(el: Element | null, url: string, className: string, alt = "Avatar"): void {
+export function showAvatar(el: Element | null, url: string, className: string, alt = "Avatar", mediaOrigin = ""): void {
     if (!el) return;
-    const src = withVersion(url);
+    const allowed = avatarSrc(url, mediaOrigin);
+    if (allowed === null) {
+        console.warn("Avatar not drawn: its address is not one this page may load into an image.");
+        return;
+    }
+    const src = withVersion(allowed);
     if (el instanceof HTMLImageElement) {
         el.src = src;
         return;
@@ -108,9 +157,10 @@ const USER_AVATARS = "[data-user-avatar]";
 /**
  * Draw *url* as the signed-in user's avatar everywhere the page does: the hero, the form, the navbar.
  * @param url - The picture. A browser that cached the previous one at the same address is made to ask again.
+ * @param mediaOrigin - The site's media origin, if it has one; see :func:`avatarSrc`.
  */
-export function showUserAvatar(url: string): void {
-    for (const el of document.querySelectorAll<HTMLElement>(USER_AVATARS)) showAvatar(el, url, el.dataset.userAvatar ?? "", el.dataset.avatarAlt);
+export function showUserAvatar(url: string, mediaOrigin = ""): void {
+    for (const el of document.querySelectorAll<HTMLElement>(USER_AVATARS)) showAvatar(el, url, el.dataset.userAvatar ?? "", el.dataset.avatarAlt, mediaOrigin);
 }
 
 export type AvatarChoice = { kind: "upload"; file: File } | { kind: "gravatar"; previewUrl?: string } | { kind: "emoji"; animal: string; color: string };
@@ -162,7 +212,15 @@ interface AvatarState {
 
 /** The picture an upload or Gravatar choice shows before the server has processed it, or null when the browser cannot draw it. */
 function localPreview(choice: AvatarChoice): string | null {
-    if (choice.kind === "upload") return PREVIEWABLE_TYPES.has(choice.file.type) ? URL.createObjectURL(choice.file) : null;
+    if (choice.kind === "upload") {
+        const file = choice.file;
+        // An empty file has no picture to draw. It also tells CodeQL's js/xss-through-dom that this is a File and not
+        // the DOM text it takes ``input.files`` for, which it follows through createObjectURL to an image's ``src``.
+        if (!file.size || !PREVIEWABLE_TYPES.has(file.type)) return null;
+        const address = URL.createObjectURL(file);
+        ownObjectUrls.add(address);
+        return address;
+    }
     if (choice.kind === "gravatar") return choice.previewUrl || null;
     return null;
 }
@@ -199,25 +257,26 @@ async function storedAvatar(url: string): Promise<AvatarState | null> {
  * @param url - The profile field endpoint.
  * @param choice - What was chosen.
  * @param result - The endpoint's answer to saving it.
- * @param options - ``sleep`` and ``delaysMs`` stand in for the real wait, in tests.
+ * @param options - ``mediaOrigin`` is the site's media origin, if it has one (see :func:`avatarSrc`); ``sleep`` and ``delaysMs`` stand in for the real wait, in tests.
  * @returns How it ended up.
  */
 export async function showSavedAvatar(
     url: string,
     choice: AvatarChoice,
     result: FieldResult,
-    options: { sleep?: (ms: number) => Promise<void>; delaysMs?: readonly number[] } = {},
+    options: { mediaOrigin?: string; sleep?: (ms: number) => Promise<void>; delaysMs?: readonly number[] } = {},
 ): Promise<AvatarOutcome> {
     const mine = ++latestAvatarChoice;
+    const mediaOrigin = options.mediaOrigin ?? "";
     if (!result.avatar_pending) {
         baseline = null;
-        if (result.avatar_url) showUserAvatar(result.avatar_url);
+        if (result.avatar_url) showUserAvatar(result.avatar_url, mediaOrigin);
         return "shown";
     }
     const preview = localPreview(choice);
     // Only the first of a run of held choices: a later one would otherwise take an earlier one's preview for what the page showed.
     baseline ??= Array.from(document.querySelectorAll(USER_AVATARS), (el) => el.cloneNode(true));
-    if (preview) showUserAvatar(preview);
+    if (preview) showUserAvatar(preview, mediaOrigin);
     const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms)));
     let outcome: AvatarOutcome = "waiting";
     for (const delay of options.delaysMs ?? PUBLISH_POLL_DELAYS_MS) {
@@ -230,11 +289,11 @@ export async function showSavedAvatar(
         if (!stored || stored.avatar_pending) continue;
         // A published upload is stored under a new name; the same one as before means it was dropped.
         if (stored.avatar_url && !sameFile(stored.avatar_url, result.avatar_url)) {
-            showUserAvatar(stored.avatar_url);
+            showUserAvatar(stored.avatar_url, mediaOrigin);
             outcome = "published";
         } else {
             // What is stored is the truth, which an earlier choice of the run may have made differ from what the page began with.
-            if (stored.avatar_url) showUserAvatar(stored.avatar_url);
+            if (stored.avatar_url) showUserAvatar(stored.avatar_url, mediaOrigin);
             else restoreBaseline();
             outcome = "unchanged";
         }
@@ -242,6 +301,6 @@ export async function showSavedAvatar(
     }
     if (outcome === "published" || outcome === "unchanged") baseline = null;
     // Left on show while the wait goes on, so only a finished one lets go of the user's file.
-    if (preview?.startsWith("blob:") && outcome !== "waiting") URL.revokeObjectURL(preview);
+    if (preview && outcome !== "waiting" && ownObjectUrls.delete(preview)) URL.revokeObjectURL(preview);
     return outcome;
 }
