@@ -1186,6 +1186,7 @@ class MapAnnotationsExport(ExportType):
                     "zoom": markup_map.zoom,
                     "layer_mode": markup_map.layer_mode,
                     "show_borders": markup_map.show_borders,
+                    "bearing": markup_map.bearing,
                     "pin_uuid": str(markup_map.pin.uuid) if markup_map.pin else None,
                     "created": str(markup_map.created),
                     "items": [_markup_row(item) for item in markup_map.items.all()],

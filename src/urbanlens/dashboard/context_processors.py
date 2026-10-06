@@ -334,9 +334,13 @@ def add_comment_map_config(request: HttpRequest) -> dict[str, dict[str, Any]]:
             profile_uuid = str(request.user.profile.uuid)
         except (AttributeError, DatabaseError):
             profile_uuid = ""
+    from urbanlens.dashboard.services.core.vendor_assets import vendor_asset_source
+
     return {
         "comment_map_config": {
             "profileUuid": profile_uuid,
+            # Loaded only when a map that turns is opened: it patches Leaflet for every map built after it.
+            "leafletRotate": vendor_asset_source("leaflet_rotate_js"),
             "urls": {
                 "commentsImagePicker": reverse("comments.image_picker"),
                 "mapAutocompleteLocal": reverse("map.autocomplete.local"),

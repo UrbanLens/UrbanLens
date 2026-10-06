@@ -706,11 +706,275 @@
     max-width: 46rem;
 }
 
+// The map with the Layers list beside it; stacked under it on a narrow screen.
+.cmc-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+
+    @media (max-width: 720px) {
+        flex-direction: column;
+    }
+}
+
 .comment-map-composer-map {
     flex: 1;
+    min-width: 0;
     // min-height: 400px ensures this item contributes 400px to the flex container's
     // intrinsic size, so the dialog auto-sizes correctly even without explicit height.
     min-height: 400px;
+
+    @media (max-width: 720px) {
+        min-height: 300px;
+    }
+
+    // Picking is what a press does on a shape; the hand is for panning empty map.
+    &.is-drawing .markup-editor-item { cursor: crosshair; }
+}
+
+// -- Layers list -----------------------------------------------------------------
+.cmc-layers {
+    width: 17rem;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--ul-surface-border);
+    background: var(--ul-surface-raised);
+    overflow: hidden;
+
+    &:not([open]) {
+        width: auto;
+    }
+
+    @media (max-width: 720px) {
+        width: auto;
+        border-left: none;
+        border-top: 1px solid var(--ul-surface-border);
+        max-height: 30vh;
+    }
+}
+
+.cmc-layers-summary {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .45rem .7rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+
+    &::-webkit-details-marker { display: none; }
+
+    .material-symbols-outlined { font-size: 1.05rem; }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: -2px;
+    }
+}
+
+.cmc-layers-count {
+    margin-left: auto;
+    min-width: 1.3rem;
+    padding: 0 .35rem;
+    border-radius: 999px;
+    background: var(--ul-surface-border);
+    color: var(--ul-grey-7);
+    font-size: .7rem;
+    text-align: center;
+
+    &:empty { display: none; }
+}
+
+.cmc-layers-list {
+    list-style: none;
+    margin: 0;
+    padding: 0 .35rem .35rem;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.cmc-layers-note {
+    margin: .2rem .7rem .6rem;
+    font-size: .74rem;
+    color: var(--ul-grey-5);
+
+    &[hidden] { display: none; }
+}
+
+.cmc-layer-row {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border-radius: 6px;
+    padding: .1rem;
+    border-left: 3px solid transparent;
+
+    &:hover { background: var(--ul-hover-bg); }
+
+    &.is-selected {
+        background: var(--ul-hover-bg);
+        border-left-color: var(--ul-accent-purple);
+
+        .cmc-layer-name { font-weight: 600; }
+    }
+
+    &.is-hidden .cmc-layer-name { opacity: .5; }
+}
+
+.cmc-layer-name {
+    flex: 1;
+    min-width: 5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .3rem .35rem;
+    border: none;
+    background: none;
+    color: var(--ul-grey-8);
+    font-size: .8rem;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+
+    .material-symbols-outlined { font-size: 1.05rem; flex-shrink: 0; }
+
+    &:disabled { cursor: default; }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: -2px;
+    }
+}
+
+.cmc-layer-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cmc-layer-action {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.75rem;
+    border: none;
+    border-radius: 4px;
+    background: none;
+    color: var(--ul-grey-6);
+    cursor: pointer;
+
+    .material-symbols-outlined { font-size: 1rem; }
+
+    &:hover:not(:disabled) {
+        background: var(--ul-surface-border);
+        color: var(--ul-grey-9);
+    }
+
+    &:disabled {
+        opacity: .3;
+        cursor: default;
+    }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: -2px;
+    }
+
+    // A finger needs a bigger target than a pointer does.
+    @media (pointer: coarse) {
+        width: 2.25rem;
+        height: 2.25rem;
+    }
+}
+
+// -- Style bar: the selection's colour and size, or the next shape's ----------
+.cmc-style-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .45rem;
+    padding: .35rem .75rem;
+    border-top: 1px solid var(--ul-surface-border);
+    flex-shrink: 0;
+    min-height: 2.4rem;
+}
+
+.cmc-style-target {
+    font-size: .74rem;
+    font-weight: 600;
+    color: var(--ul-grey-6);
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    .has-markup-selection & {
+        color: var(--ul-accent-purple-fg);
+        background: var(--ul-accent-purple-bg);
+        border-radius: 4px;
+        padding: .1rem .4rem;
+    }
+}
+
+.cmc-rotation-value {
+    min-width: 2.4rem;
+    font-size: .74rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ul-grey-6);
+}
+
+.cmc-selection-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+
+    .material-symbols-outlined { font-size: 1rem; }
+
+    &[hidden] { display: none; }
+
+    &--danger { color: var(--ul-color-danger-text); }
+}
+
+// -- Turning the map: the composer's own control, under the zoom buttons ------
+.cmc-rotate-control {
+    display: flex;
+    flex-direction: column;
+}
+
+.cmc-rotate-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: none;
+    border-bottom: 1px solid var(--ul-grey-2);
+    background: var(--ul-surface-raised);
+    color: var(--ul-grey-8);
+    cursor: pointer;
+
+    &:last-child { border-bottom: none; }
+
+    &:hover { background: var(--ul-hover-bg); }
+
+    &:focus-visible {
+        outline: 2px solid var(--ul-color-accent-ring);
+        outline-offset: -2px;
+    }
+
+    .material-symbols-outlined {
+        font-size: 1.15rem;
+        transition: transform .15s ease;
+    }
+
+    &.cmc-rotate-compass.is-turned { color: var(--ul-accent-purple); }
 }
 
 .comment-map-composer-toolbar {
@@ -981,6 +1245,14 @@
         border-color: $color-indigo-400;
         color: var(--ul-accent-purple-fg);
     }
+
+    // Undo with nothing to undo, Clear with nothing to clear.
+    &:disabled {
+        opacity: .35;
+        cursor: not-allowed;
+
+        &:hover { background: none; }
+    }
 }
 
 // Layer toggles (unlike the one-shot tool/undo/download actions above) persist an
@@ -1026,6 +1298,12 @@
         cursor: pointer;
         accent-color: $color-indigo-500;
     }
+}
+
+// Both wraps set their own display, which beats the browser's [hidden] rule.
+.cmc-color-wrap[hidden],
+.cmc-width-wrap[hidden] {
+    display: none;
 }
 
 // Text label div-icon

@@ -1,0 +1,131 @@
+{% load map_components %}
+{# The shared map composer: static/js/comment-map.js opens it, frontend/ts/shared/markup-composer.ts runs its drawing tools. #}
+<dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog" aria-labelledby="comment-map-composer-title">
+  <div class="dialog-header">
+    <span id="comment-map-composer-title">Attach a Map</span>
+    <button type="button" class="dialog-close" id="comment-map-composer-close" aria-label="Close">
+      <i class="material-symbols-outlined">close</i>
+    </button>
+  </div>
+  {# Only shown when the caller passes opts.existingMapPicker (currently just the DM composer). #}
+  <div class="cmc-tabs" id="cmc-tabs" hidden role="tablist">
+    <button type="button" class="cmc-tab is-active" id="cmc-tab-btn-draw" data-tab="draw" role="tab" aria-selected="true">Draw New</button>
+    <button type="button" class="cmc-tab" id="cmc-tab-btn-existing" data-tab="existing" role="tab" aria-selected="false">Choose Existing</button>
+  </div>
+  <div class="comment-map-composer-body" id="cmc-tab-panel-draw">
+    <div class="comment-map-composer-controls">
+      <label class="cmcc-label">Go to</label>
+      {# Shared jump-to search component - same multi-source search as the main map. #}
+      {% map_search_bar prefix="cmcc" show_history=False extra_class="addr-search-bar--composer" %}
+    </div>
+    {# Title field - only shown in standalone mode (the "take a screenshot" buttons), where the map isn't attached to a comment/visit/trip. #}
+    <div class="comment-map-composer-controls cmcc-title-row" id="cmc-title-row" hidden>
+      <label class="cmcc-label" for="cmc-title-input">Title</label>
+      <input type="text" id="cmc-title-input" class="cmcc-title-input" maxlength="200">
+    </div>
+    <div class="cmc-workspace">
+      <div id="comment-map-composer-map" class="comment-map-composer-map"></div>
+      {# Every shape drawn, topmost first - rebuilt by markup-composer.ts as the drawing changes. #}
+      <details class="cmc-layers" id="cmc-layers-panel" open>
+        <summary class="cmc-layers-summary">
+          <i class="material-symbols-outlined" aria-hidden="true">layers</i>
+          <span>Layers</span>
+          <span class="cmc-layers-count" id="cmc-layers-count"></span>
+        </summary>
+        <ol class="cmc-layers-list" id="cmc-layers-list" aria-label="Shapes on this map, topmost first"></ol>
+        <p class="cmc-layers-note" id="cmc-layers-empty">Nothing drawn yet. Pick a tool below and draw on the map.</p>
+        <p class="cmc-layers-note" id="cmc-layers-hidden-note" hidden>Hidden shapes are left out when you save or download.</p>
+      </details>
+    </div>
+    <div class="comment-map-composer-toolbar">
+      <span class="cmc-toolbar-label">Map:</span>
+      {# Shared layers component (compact strip variant), driven by window.MapLayers. #}
+      {% map_layers_panel "street,satellite,terrain,borders" variant="strip" panel_id="cmc-layers" %}
+      <span class="cmc-toolbar-sep"></span>
+      <span class="cmc-toolbar-label">Draw:</span>
+      <button type="button" class="cmc-tool-btn" data-tool="arrow" aria-label="Arrow" title="Arrow">
+        <i class="material-symbols-outlined">arrow_forward</i>
+      </button>
+      <button type="button" class="cmc-tool-btn" data-tool="line" aria-label="Line" title="Line">
+        <i class="material-symbols-outlined">timeline</i>
+      </button>
+      <button type="button" class="cmc-tool-btn" data-tool="text" aria-label="Text label" title="Text label">
+        <i class="material-symbols-outlined">text_fields</i>
+      </button>
+      <button type="button" class="cmc-tool-btn" data-tool="circle" aria-label="Circle" title="Circle">
+        <i class="material-symbols-outlined">radio_button_unchecked</i>
+      </button>
+      <button type="button" class="cmc-tool-btn" data-tool="rect" aria-label="Rectangle" title="Rectangle">
+        <i class="material-symbols-outlined">crop_square</i>
+      </button>
+      <button type="button" class="cmc-tool-btn" data-tool="polygon" aria-label="Polygon" title="Polygon">
+        <i class="material-symbols-outlined">pentagon</i>
+      </button>
+      <button type="button" class="cmc-tool-btn cmc-locate-btn" id="cmc-pin-location" aria-label="Pin my location" title="Pin my location">
+        <i class="material-symbols-outlined">my_location</i>
+      </button>
+      <span class="cmc-toolbar-sep"></span>
+      <button type="button" class="cmc-undo-btn" id="cmc-undo" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>
+        <i class="material-symbols-outlined">undo</i>
+      </button>
+      <button type="button" class="cmc-undo-btn" id="cmc-redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>
+        <i class="material-symbols-outlined">redo</i>
+      </button>
+      <button type="button" class="cmc-clear-btn" id="cmc-clear" aria-label="Clear all markup" title="Clear all markup" disabled>
+        <i class="material-symbols-outlined">delete_sweep</i>
+      </button>
+      <button type="button" class="cmc-download-btn" id="cmc-download" aria-label="Download current view as JPEG" title="Download current view as JPEG">
+        <i class="material-symbols-outlined">download</i>
+      </button>
+    </div>
+    {# What the style controls change: the selected shape, or the next one drawn when nothing is selected. #}
+    <div class="cmc-style-bar" id="cmc-style-bar">
+      <span class="cmc-style-target" id="cmc-style-target" aria-live="polite">New shapes</span>
+      <label class="cmc-color-wrap" title="Colour">
+        <span>Colour</span>
+        <input type="color" id="cmc-color" value="#e74c3c">
+      </label>
+      <label class="cmc-width-wrap" title="Line width, or text size">
+        <span id="cmc-width-label">Width</span>
+        <input type="range" id="cmc-width" min="1" max="20" step="1" value="3">
+      </label>
+      <label class="cmc-width-wrap" id="cmc-fill-wrap" title="How solid the fill is" hidden>
+        <span>Fill</span>
+        <input type="range" id="cmc-fill" min="0" max="100" step="5" value="87">
+      </label>
+      {# The label for the text tool, and the selected label's words. #}
+      <input type="text" id="cmc-text-label" class="cmc-text-label-input" aria-label="Label text"
+             placeholder="Label text..." autocomplete="off" maxlength="100" hidden>
+      <label class="cmc-width-wrap" id="cmc-rotation-wrap" title="Turn the label" hidden>
+        <span>Turn</span>
+        <input type="range" id="cmc-rotation" min="-180" max="180" step="1" value="0">
+        <output id="cmc-rotation-value" for="cmc-rotation" class="cmc-rotation-value"></output>
+      </label>
+      <button type="button" class="btn btn--ghost btn--sm cmc-selection-btn" id="cmc-remove-point" hidden>
+        <i class="material-symbols-outlined" aria-hidden="true">remove_circle</i> Remove point
+      </button>
+      <button type="button" class="btn btn--ghost btn--sm cmc-selection-btn cmc-selection-btn--danger" id="cmc-delete-selected" hidden>
+        <i class="material-symbols-outlined" aria-hidden="true">delete</i> Delete
+      </button>
+      <button type="button" class="btn btn--ghost btn--sm cmc-selection-btn" id="cmc-deselect" hidden>
+        <i class="material-symbols-outlined" aria-hidden="true">check</i> Done
+      </button>
+      <span class="cmc-hint-text" id="cmc-hint" aria-live="polite"></span>
+    </div>
+  </div>
+
+  {# Existing-map picker tab - only populated/shown via opts.existingMapPicker. #}
+  <div class="cmc-existing-panel" id="cmc-tab-panel-existing" hidden>
+    <input type="search" id="cmc-existing-search" class="cmcc-title-input cmc-existing-search"
+           placeholder="Search your maps..." autocomplete="off">
+    <div id="cmc-existing-list" class="cmc-existing-list">
+      <p class="form-hint">Loading your maps&hellip;</p>
+    </div>
+  </div>
+
+  <div class="dialog-footer">
+    <span class="cmc-attribution" id="cmc-attribution" aria-live="polite"></span>
+    <button type="button" class="btn btn--ghost" id="comment-map-composer-cancel">Cancel</button>
+    <button type="button" class="btn btn--primary" id="comment-map-composer-save">Attach map</button>
+  </div>
+</dialog>

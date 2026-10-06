@@ -71,6 +71,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
         zoom: Saved viewport zoom level.
         layer_mode: Base tile layer (street / satellite / topographic / dark).
         show_borders: Whether the geopolitical-borders overlay is enabled.
+        bearing: Saved view rotation in degrees clockwise from north - the compass direction
+            that points up, as MapLibre's ``bearing`` means it. 0 is north-up.
         pin: Explicit, user-set link to the pin this map was created for, if any.
         inferred_pins: Pins this map's geometry is detected to reveal (may be
             several, or none, regardless of ``pin``).
@@ -82,6 +84,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
     zoom = FloatField(null=True, blank=True)
     layer_mode = CharField(max_length=20, choices=MapLayerMode.choices, default=MapLayerMode.STREET)
     show_borders = BooleanField(default=False)
+    bearing = FloatField(default=0.0, db_default=0.0)
 
     profile = ForeignKey(
         "dashboard.Profile",
@@ -240,7 +243,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     def to_snapshot(self) -> dict:
         """Serialize this map (viewport + items) into the client snapshot format.
-        The snapshot format is the JSON schema the shared frontend map composer/viewer speaks: ``{center_lat, center_lng, zoom, layer_mode, show_borders, markup: [shape, ...]}`` with shapes carrying ``latlngs`` as ``[lat, lng]`` pairs.
+        The snapshot format is the JSON schema the shared frontend map composer/viewer speaks: ``{center_lat, center_lng, zoom, layer_mode, show_borders, bearing, markup: [shape, ...]}`` with shapes carrying ``latlngs`` as ``[lat, lng]`` pairs.
         It is embedded into templates (via ``json_script``) for read-only rendering and prefilled into the composer when editing.
 
         Returns:
@@ -259,6 +262,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
             "zoom": self.zoom if self.zoom is not None else 13,
             "layer_mode": self.layer_mode,
             "show_borders": self.show_borders,
+            "bearing": self.bearing or 0.0,
             "markup": shapes,
         }
 
@@ -274,6 +278,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         self.zoom = snapshot.get("zoom")
         self.layer_mode = normalize_layer_mode(snapshot.get("layer_mode"))
         self.show_borders = bool(snapshot.get("show_borders"))
+        self.bearing = float(snapshot.get("bearing") or 0.0)
         self.save()
         self.items.all().delete()
         for shape in snapshot.get("markup") or []:
@@ -394,7 +399,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
         markup_type: One of line / arrow / text / square / circle / polygon.
         geometry: GeoJSON-style geometry dict.
             - LineString for line/arrow
-            - Point for text
+            - Point for text, with an optional ``box_corner`` and ``rotation`` (degrees clockwise,
+              relative to the screen rather than to north)
             - Polygon for square/polygon
             - {"type":"Circle","coordinates":[lng,lat],"radius":meters} for circle
         label: Display text; optional for all types.
@@ -537,6 +543,9 @@ class PinMarkup(abstract.FrontendDashboardModel):
                     latlngs.append([box_corner[1], box_corner[0]])
                 shape["latlngs"] = latlngs
                 shape["label"] = self.label or ""
+                rotation = geometry.get("rotation")
+                if isinstance(rotation, int | float) and not isinstance(rotation, bool) and rotation:
+                    shape["rotation"] = float(rotation)
             elif self.markup_type == MarkupType.CIRCLE:
                 from urbanlens.dashboard.models.boundary.queryset import meters_to_lng_degrees
 
@@ -591,6 +600,9 @@ class PinMarkup(abstract.FrontendDashboardModel):
             geometry = {"type": "Point", "coordinates": [latlngs[0][1], latlngs[0][0]]}
             if len(latlngs) > 1:
                 geometry["box_corner"] = [latlngs[1][1], latlngs[1][0]]
+            rotation = shape.get("rotation")
+            if isinstance(rotation, int | float) and not isinstance(rotation, bool) and rotation:
+                geometry["rotation"] = float(rotation)
         elif shape_type == "circle" and len(latlngs) >= 2:
             markup_type = MarkupType.CIRCLE
             (lat1, lng1), (lat2, lng2) = latlngs[0], latlngs[1]

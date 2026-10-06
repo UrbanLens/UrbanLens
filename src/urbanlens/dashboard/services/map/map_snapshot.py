@@ -11,6 +11,7 @@ from django.utils.dateformat import format as format_date
 
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
 from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color
+from urbanlens.dashboard.services.core.numbers import degrees_or_none
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 
 if TYPE_CHECKING:
@@ -56,6 +57,11 @@ def _sanitize_number(v: object, lo: float, hi: float, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return max(lo, min(hi, n))
+
+
+def _sanitize_degrees(v: object) -> float:
+    """Return ``v`` as an angle in ``[0, 360)``, or 0 when it is not a finite number (see ``degrees_or_none``)."""
+    return degrees_or_none(v) or 0.0
 
 
 def _sanitize_latlngs(raw: object) -> list[list[float]]:
@@ -116,6 +122,9 @@ def _sanitize_markup_shapes(shapes: object) -> list[dict]:
         if shape_type == "text":
             label = s.get("label", "")
             entry["label"] = str(label)[:500] if isinstance(label, str) else ""
+            rotation = _sanitize_degrees(s.get("rotation"))
+            if rotation:
+                entry["rotation"] = rotation
         clean.append(entry)
     return clean
 
@@ -140,6 +149,7 @@ def sanitize_map_data(data: object) -> dict | None:
         "zoom": _sanitize_number(data.get("zoom"), 1, 22, 13),
         "layer_mode": normalize_layer_mode(data.get("layer_mode")),
         "show_borders": bool(data.get("show_borders")),
+        "bearing": _sanitize_degrees(data.get("bearing")),
         "markup": _sanitize_markup_shapes(data.get("markup") or data.get("shapes")),
     }
 

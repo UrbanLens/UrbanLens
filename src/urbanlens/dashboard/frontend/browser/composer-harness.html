@@ -1,0 +1,31 @@
+<!doctype html>
+<html id="html-root" lang="en"__THEME__>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="harness-csrf-token">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<link rel="stylesheet" href="/dashboard/style.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+__CATALOGUE__
+<!-- The real dialog: markup-composer.test.ts splices in partials/map/_markup_composer_dialog.html. -->
+__DIALOG__
+<dialog id="confirm-dialog" class="confirm-dialog ul-dialog" aria-labelledby="confirm-dialog-title">
+    <div class="dialog-header"><span id="confirm-dialog-title">Are you sure?</span>
+        <button type="button" id="confirm-dialog-x" class="dialog-close" aria-label="Close"><i class="material-symbols-outlined">close</i></button></div>
+    <div class="confirm-dialog-body"><p id="confirm-dialog-message"></p></div>
+    <div class="confirm-dialog-footer">
+        <button type="button" id="confirm-dialog-cancel" class="btn btn--ghost">Cancel</button>
+        <button type="button" id="confirm-dialog-alt" class="btn btn--secondary" hidden>No</button>
+        <button type="button" id="confirm-dialog-ok" class="btn btn--danger-filled">Confirm</button>
+    </div>
+</dialog>
+<script id="comment-map-config" type="application/json">__CONFIG__</script>
+<script src="/dashboard/js/core.js"></script>
+<script src="/js/comment-map.js"></script>
+</body>
+</html>
