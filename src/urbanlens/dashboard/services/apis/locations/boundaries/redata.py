@@ -10,7 +10,7 @@ from django.contrib.gis.geos import MultiPoint, MultiPolygon, Point, Polygon
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, geojson_polygon_to_geos, polygon_from_wire
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway, unanswered_tiers
 from urbanlens.dashboard.services.geo.distance import haversine_meters
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,10 @@ def suggested_boundary(candidates: list[dict]) -> Polygon | MultiPolygon | None:
 #: How far from the queried coordinate a building may stand and still outline its parcel: a campus is about a
 #: kilometre across. REData links buildings a county away through a CRIS survey roster (P148).
 HULL_REACH_METERS = 1_000.0
+
+#: REData's tier that draws the parcel line: the county GIS layer. A record that lacks it has no ``parcel_geometry`` yet,
+#: which is not the same as a parcel with no line.
+_PARCEL_GEOMETRY_TIER = 1
 
 #: Match scopes that say nothing about this parcel: a CRIS consultation project's Area of Potential Effect, and
 #: an archaeological sensitivity zone.
@@ -100,6 +104,10 @@ class RedataBoundaryProvider(BoundaryProvider):
 
         Returns:
             ``{"property": ..., "building": ...}``, both possibly None.
+
+        Raises:
+            BoundaryProviderDeferredError: REData has no parcel geometry because its county GIS tier (Tier 1) could not
+                answer; an answer that is complete without one keeps the scored boundary and the hull.
         """
         if not redata_configured():
             return {}
@@ -113,6 +121,10 @@ class RedataBoundaryProvider(BoundaryProvider):
             return {"property": None, "building": None}
 
         property_polygon = polygon_from_wire(payload.get("parcel_geometry"))
+        if property_polygon is None and _PARCEL_GEOMETRY_TIER in unanswered_tiers(payload):
+            # The county layer that draws the line did not answer, and REData asks it again shortly. The scored
+            # boundary or the hull would be kept for ``boundary_cache_days`` as this parcel's line.
+            raise BoundaryProviderDeferredError(self.service_key or "redata_boundary")
         if property_polygon is None:
             property_polygon = self._scored_boundary(gateway, payload.get("uuid"))
         if property_polygon is None:

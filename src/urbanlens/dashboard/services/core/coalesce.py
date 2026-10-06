@@ -42,7 +42,7 @@ def _in_flight(key: str) -> bool:
         return False
 
 
-def coalesced[T](key: str, compute: Callable[[], T], *, ttl: int, wait_seconds: float = 20.0, poll_seconds: float = 0.25) -> T:
+def coalesced[T](key: str, compute: Callable[[], T], *, ttl: int | Callable[[T], int], wait_seconds: float = 20.0, poll_seconds: float = 0.25) -> T:
     """``compute()``'s answer, shared with every caller asking under ``key`` within ``ttl`` seconds.
 
     A failure is not shared: the next caller makes its own attempt. A caller that finds the question already in
@@ -51,7 +51,8 @@ def coalesced[T](key: str, compute: Callable[[], T], *, ttl: int, wait_seconds: 
     Args:
         key: Names the question, including every parameter that changes its answer.
         compute: Makes the upstream call.
-        ttl: Seconds the answer is shared for.
+        ttl: Seconds the answer is shared for, or a function of the answer for one that is worth sharing less long
+            when it is partial.
         wait_seconds: Longest wait for an answer another caller is fetching.
         poll_seconds: How often a waiting caller looks for it.
 
@@ -85,7 +86,7 @@ def coalesced[T](key: str, compute: Callable[[], T], *, ttl: int, wait_seconds: 
             return answer
         computed = compute()
         try:
-            cache.set(key, (computed,), ttl)
+            cache.set(key, (computed,), ttl(computed) if callable(ttl) else ttl)
         except _CACHE_ERRORS:
             logger.warning("Could not share the answer to %s", key, exc_info=True)
         return computed

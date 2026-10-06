@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 _REQUEST_TIMEOUT = 30
 #: Every panel that needs the parcel asks REData the same question as the page opens.
 _PARCEL_LOOKUP_SHARE_SECONDS = 3600
+#: How long a parcel lookup REData answered as partial (``complete: false``) is shared. REData holds such a record for
+#: at least five minutes before it asks the tier it lacks again, so a shorter share would only repeat the same partial
+#: answer, and an hour would keep the partial one from the retry that completes it.
+_PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS = 300
+#: The key REData's own ``record_payload`` lists its unanswered tiers under, read only when a body carries no
+#: top-level ``complete``/``sources``. It happens to equal :data:`~urbanlens.dashboard.models.cache.location_cache.UNANSWERED_SOURCES_KEY`.
+_RECORD_UNANSWERED_KEY = "unanswered_sources"
 #: Every building on a campus matches the same CRIS record, and extracting one of its documents is OCR on REData's side.
 _CULTURAL_RESOURCE_SHARE_SECONDS = 3600
 #: How long a refusal to extract a document is believed. REData's "found nothing" also covers an unreachable AI
@@ -190,6 +197,60 @@ def _named_wait(response: requests.Response) -> int | None:
         Seconds, bounded as every upstream wait is.
     """
     return upstream_retry_after(response) if str(response.headers.get("Retry-After", "")).strip() else None
+
+
+def parcel_unanswered_sources(body: Mapping[str, Any]) -> list[Any] | None:
+    """The tiers REData could not hear from for a parcel, as its lookup body says.
+
+    The top-level ``complete`` and ``sources`` (each entry ``{tier, status, host, http_status, message}``, as a failed
+    source in the lookup's 503) say it when present; ``record_payload.unanswered_sources`` is the fallback, for a REData
+    that does not answer them yet.
+
+    Args:
+        body: REData's parcel body, from ``/api/v1/parcels/lookup/``.
+
+    Returns:
+        The unanswered sources; ``["unknown"]`` for an incomplete body that names none; ``[]`` for a complete one; None
+        when the body says nothing either way (an older REData, or a malformed field).
+    """
+    record = body.get("record_payload")
+    own = record.get(_RECORD_UNANSWERED_KEY) if isinstance(record, dict) else None
+    fallback = list(own) if isinstance(own, list) else None
+    complete, sources = body.get("complete"), body.get("sources")
+    if not isinstance(complete, bool) and not isinstance(sources, list):
+        return fallback
+    if named := [source for source in sources if source] if isinstance(sources, list) else []:
+        return named
+    return (fallback or ["unknown"]) if complete is False else []
+
+
+def unanswered_tiers(payload: Mapping[str, Any]) -> frozenset[int]:
+    """The REData tier numbers (1 is the county GIS parcel layer) a parcel payload lacks.
+
+    Args:
+        payload: A :meth:`RedataGateway.lookup_parcel` payload.
+
+    Returns:
+        The tiers named under the payload's unanswered sources; empty for a complete answer, and for one that names
+        its missing sources without a tier.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
+    named = payload.get(UNANSWERED_SOURCES_KEY)
+    tiers: set[int] = set()
+    for source in named if isinstance(named, list) else []:
+        if not isinstance(source, dict):
+            continue
+        try:
+            tiers.add(int(source["tier"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return frozenset(tiers)
+
+
+def _parcel_lookup_share_seconds(body: Mapping[str, Any]) -> int:
+    """How long a parcel lookup's answer is shared: briefly when REData says it is partial, else :data:`_PARCEL_LOOKUP_SHARE_SECONDS`."""
+    return _PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS if parcel_unanswered_sources(body) else _PARCEL_LOOKUP_SHARE_SECONDS
 
 
 #: Names the sources REData asked and could not hear from, on an answer that is therefore partial.
@@ -359,7 +420,7 @@ class RedataGateway(Gateway):
         if isinstance(deferred, dict):
             raise PropertyRecordsBusyError(str(deferred.get("reason") or REASON_SOURCE_ERROR), str(deferred.get("message") or ""), retry_after=_UNSETTLED_PARCEL_RETRY_SECONDS)
         try:
-            return coalesced(f"redata:parcels-lookup:{question}", lambda: dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {}), ttl=_PARCEL_LOOKUP_SHARE_SECONDS)
+            return coalesced(f"redata:parcels-lookup:{question}", lambda: dict(self._get_json("/api/v1/parcels/lookup/", params=params) or {}), ttl=_parcel_lookup_share_seconds)
         except PropertyRecordsUnavailableError as exc:
             # A busy error already says when to ask again (Retry-After, a throttle, a refused key the breaker holds).
             if not exc.retry_later or exc.reason in TRANSIENT_REASONS or isinstance(exc, PropertyRecordsBusyError):
@@ -379,13 +440,20 @@ class RedataGateway(Gateway):
             apn: Already-known parcel/APN, passed through the same way.
 
         Returns:
-            The record payload dict - REData's own ``PropertyRecord.to_dict()`` shape (owner/tax/sale/assessment fields, ``source``, ``confidence``, ``field_sources``/``field_mismatches``, ...).
+            The record payload dict - REData's own ``PropertyRecord.to_dict()`` shape (owner/tax/sale/assessment fields, ``source``, ``confidence``, ``field_sources``/``field_mismatches``, ...). A partial record names the tiers REData could not hear from under ``unanswered_sources`` (:data:`UNANSWERED_SOURCES_KEY`), so the cache keeps it only briefly and a boundary can tell the line is not yet drawn.
 
         Raises:
             PropertyRecordsUnavailableError: No record is available (see the exception's own docstring for how to distinguish a permanent "nothing here" from a transient outage via ``reason``).
         """
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
         body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
         payload = dict(body.get("record_payload") or {})
+        # Taken from the top-level ``complete``/``sources`` when REData answers them, so this does not depend on the key
+        # REData happens to use inside its own record_payload; a body with neither is left as it came.
+        unanswered = parcel_unanswered_sources(body)
+        if unanswered is not None and (unanswered or UNANSWERED_SOURCES_KEY in payload):
+            payload[UNANSWERED_SOURCES_KEY] = unanswered
         # The Parcel publishes parcel_geometry as GeoJSON beside record_payload, whose own copy is the tier's
         # Esri-ring snapshot. A county building footprint reaches here only inside record_payload, still in Esri
         # rings - read it with services.apis.locations.base.polygon_from_wire, which takes either shape.
