@@ -24,8 +24,9 @@ STREET_LEVEL_PROVIDERS = frozenset({"mapillary", "kartaview", "panoramax"})
 #: networks. REData reads a repeated ``?provider=`` as the only sources to run - the rest are never called, which is what
 #: spares the networks' own request budgets - and has no form that excludes one, so this names the ones kept. A provider
 #: REData adds is therefore not shown until it is added here (and to ``PROVIDER_LABELS`` in
-#: ``plugins.builtin.redata_nearby_media``, which a test holds to this list); one it retires is refused as
-#: ``unknown_provider`` until it is removed.
+#: ``plugins.builtin.redata_nearby_media``, which a test holds to this list). One it renames or retires is refused as
+#: ``unknown_provider``; ``redata_point_data.media_near`` then asks once more with no filter and logs a warning naming
+#: the tag, so the tab keeps working until this list is corrected.
 NEARBY_MEDIA_PROVIDERS: tuple[str, ...] = (
     "nps_media",
     "wikimedia_commons",
