@@ -792,6 +792,22 @@ def suppressed_today(provider: str) -> int:
         return 0
 
 
+def backed_off(service: str) -> bool:
+    """Whether the gate refuses every background call to ``service`` until its backoff ends.
+
+    Takes no live or probe slot, unlike :func:`refusal_for`, so a sweep can ask before choosing work and leave the
+    probe for the call it then makes. Says False on any cache failure, as the gate admits then.
+
+    Args:
+        service: The rate-limiter service key.
+
+    Returns:
+        True while ``service`` is backed off and its backoff has not ended.
+    """
+    entry = _snapshot().get(service)
+    return entry is not None and entry.state == ProviderState.BACKED_OFF and entry.until is not None and time.time() < entry.until
+
+
 @dataclass(frozen=True, slots=True)
 class Refusal:
     """Why the gate said no."""
@@ -862,6 +878,7 @@ __all__ = [
     "Refusal",
     "Tally",
     "Verdict",
+    "backed_off",
     "backoff_duration",
     "check_admission",
     "describe",

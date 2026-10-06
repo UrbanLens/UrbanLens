@@ -180,7 +180,7 @@ production are unchanged, and the test suite still runs the features against its
 
 | | Entries |
 |---|---|
-| `external` (production only, gated in the task too) | `scheduled-location-enrichment`, `scheduled-trivia-generation`, `scheduled-trivia-wiki-incorporation`, `scheduled-redata-public-locations-sync`, `stripe-subscriptions-sync` (and its chained reconcile), `wayback-archive-sweep`, `calendar-push-sweep` |
+| `external` (production only, gated in the task too) | `scheduled-location-enrichment`, `scheduled-trivia-generation`, `scheduled-trivia-wiki-incorporation`, `scheduled-redata-public-locations-sync`, `stripe-subscriptions-sync` (and its chained reconcile), `wayback-archive-sweep`, `calendar-push-sweep`, `keyword-retry-sweep` (which also skips any keyword source this environment does not call, so an allow-listed development sweep still asks Ollama and no hosted provider) |
 | `internal` (every environment) | the other 39 |
 
 `external` means the task's job is to call out. A task whose job is this deployment's own state stays `internal`

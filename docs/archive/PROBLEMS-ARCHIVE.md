@@ -24380,3 +24380,102 @@ keyword, and an undecryptable value reads as an empty `UndecryptableJSON`, which
 
 Two tests in `test_photo_keyword_sandboxing.py` asserted `[]` for a photo with no analysis copy and now assert the
 raise. Two tests in `test_cloudflare_input_refusal.py` and `test_ai_refused_in_development.py` patched the old import.
+
+## RESOLVED 2026-10-06: A photo whose keyword source did not answer was never asked about again
+
+`id: P323` · `status: fixed` · `resolved: 2026-10-06` · `found by: an audit of the keyword providers after P320, whose "Not fixed" said a photo keyworded during an outage is not retried`
+
+**What was wrong.** P320 and P322 keep a photo's keywords when a source does not answer. Nothing recorded which
+source had not answered, though, so nothing asked again. A photo uploaded while Ollama, the classifier or the AI
+vision provider was down was left without that source's keywords. The same happened when the source was over its
+rate limit, backed off by provider health, or could not read the analysis copy. The photo stayed that way until
+something happened to re-run keywording: a lost Celery task redelivered, an upload-recovery sweep, or the
+analysis-copy backfill writing a missing copy. None of those is aimed at an outage.
+
+**Fix.**
+- `generate_keywords_for_image` runs each provider through `run_keyword_provider`, which returns a `KeywordOutcome`:
+  - answered;
+  - unanswered;
+  - busy (refused before sending, for now);
+  - off (switched off, or not called in this environment);
+  - no input (the analysis copy is missing or unreadable);
+  - not available for this photo.
+
+  An unanswered or busy source, or an analysis copy that exists but cannot be read, writes an `ImageKeywordRetry` row
+  (migration 0065) for the (photo, source), due in 30 minutes. A photo with no analysis copy at all writes none: the
+  analysis-copy backfill writes the copy and enqueues keywording itself. An answer from any path deletes the row. To tell busy from unanswered,
+  `describe_photo_keywords`, `classify_photo` and the Ollama gateway take `raise_refusal=True`, following the trivia
+  sweeps' pattern.
+- The `keyword-retry-sweep` beat entry runs every 15 minutes and is `external` (D26). It takes a lock and runs on the
+  maintenance queue as background work. It asks only the source that did not answer, never the photo's other sources.
+- Per run: at most 20 photos, and no call is started after 480 s. A soft time limit raised inside a provider call
+  (Celery's `SoftTimeLimitExceeded` is an `Exception`) stops the run instead of passing for the source failing, and
+  what the run saw is still recorded.
+- Per source, the sweep skips a source in four cases:
+  - this environment does not call it (`egress_permitted`; development makes no hosted AI call);
+  - its API-limits switch is off;
+  - provider health has it backed off (`provider_health.backed_off`, which takes no probe slot);
+  - the sweep's own backoff for it has not ended.
+
+  A refusal stops the source for the rest of the run, and so do two failures in a row: after one failure the run
+  asks about one more photo when one is due, so a photo the source cannot answer does not pass for an outage while
+  others wait. A run in which the
+  source failed and answered nothing doubles that backoff (`provider_health.backoff_duration`: 15 minutes up to a
+  day), and an answer from a sweep or an upload ends it. Every call still passes the rate limiter and the egress policy
+  at the call.
+- Per photo: a failure counts against the photo only when the same run got an answer from that source for another
+  photo. An outage therefore spends none of a photo's six attempts, and a refusal never spends one.
+  - Waits between attempts are 30 min, 2 h, 8 h, 1 d, 3 d and 7 d.
+  - After six failures of the photo's own, the row is given up (`retry_at` null) and never swept again.
+  - A photo that fails while nothing else waits on its source cannot be told from an outage, so a row still failing
+    30 days after its first failure (`first_failed_at`; a row only refused so far has none) is given up too.
+  - An unreadable analysis copy counts only when the same run read another photo's copy, so a storage outage spends
+    nothing.
+  - A row is dropped when the photo is gone, its uploader turned keywords off, the provider no longer runs for it, or
+    it has no analysis copy. Each run reads five due rows per photo it may ask about, so rows dropped on sight do not
+    hold back the ones behind them.
+  - Rows for a source no enabled plugin provides are left alone.
+
+**Review.** An adversarial review of the first version showed a photo that only ever fails, on a source with no
+other traffic, was never given up: the first version counted a failure while the source had not failed since it last
+answered, which that photo's own failures prevented forever. Each of its failures also doubled the whole source's
+backoff, holding back every other photo waiting on it. The rule above, the second photo per run, and the 30-day
+limit replaced it. A second review of that version showed five more defects, each fixed and tested:
+- The 30 days ran from the row's creation, which a refusal can set long before any failure, so such a row was given
+  up on its first failure. It now runs from `first_failed_at`.
+- A soft time limit inside a provider call was caught as the source failing.
+- A database error deleting an answered row left the source looking down.
+- Rows for photos with no analysis copy filled each run's window without spending a call, so the rows behind them
+  waited.
+- An unreadable copy counted even when no copy could be read.
+
+When a source's only due photo fails, the run still backs the source off: one failure with nothing else to ask cannot
+be told from an outage. An answer to any upload ends that backoff.
+
+**Not fixed.**
+- The sweep draws on each service's budget like any other call. Draining a large backlog can spend a hosted
+  provider's daily limit (AI vision: 500). Uploads' calls are then refused, recorded as busy and asked again later:
+  delayed, not lost.
+- Off production the sweep runs only if `UL_BACKGROUND_TASKS_ALLOWLIST` names `keyword-retry-sweep`. That includes
+  development's Ollama retries.
+- A photo that failed during an outage before this shipped has no row and is not swept.
+
+**Tests.** `test_photo_keyword_retry.py`, 49 tests. The module does not import against the code before the fix. They
+cover:
+- recording, forgetting and refusals; a photo with no analysis copy left to the backfill; an unreadable copy recorded;
+  a soft time limit propagating;
+- the sweep asks only the pending source, oldest first, within its batch, once per photo;
+- the source stops at two failures in a row, its backoff doubles, and an answer from a sweep or an upload ends it;
+- an outage spends no attempt; a failure before or after another photo's answer counts and does not back the source
+  off; a photo failing while others are answered is given up after six, one failing alone 30 days after its first
+  failure and not after a refusal; a given-up row is never swept;
+- a soft time limit stops the run and its failures are still recorded; a database error after an answer does not
+  back the source off;
+- missing copies are dropped without a call and do not hold back a healthy photo; an unreadable copy counts only when
+  another was read;
+- a backed-off, switched-off or rate-limited source is not asked, and nothing is held against its photos;
+- development asks no hosted source and the task is gated;
+- the overlap lock;
+- `raise_refusal` on all three calls.
+
+`test_beat_lock_intervals.py` names the new lock.

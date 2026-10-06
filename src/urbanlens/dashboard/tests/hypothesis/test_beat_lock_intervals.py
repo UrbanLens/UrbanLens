@@ -73,6 +73,7 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
     "public-pin-candidate-evaluation": tasks_module.PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS,
     "public-media-cache-sweep": tasks_module._PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS,
     "wayback-archive-sweep": tasks_module._WAYBACK_SWEEP_LOCK_SECONDS,
+    "keyword-retry-sweep": tasks_module._KEYWORD_RETRY_SWEEP_LOCK_SECONDS,
     # Taken inside services.core.provider_health, where the scan below cannot see it.
     "provider-health-evaluation": provider_health.EVALUATION_LOCK_SECONDS,
 }

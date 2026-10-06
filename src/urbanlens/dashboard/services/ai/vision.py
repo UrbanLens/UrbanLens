@@ -136,16 +136,21 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
     return response.text
 
 
-def describe_photo_keywords(image_bytes: bytes) -> list[str] | None:
+def describe_photo_keywords(image_bytes: bytes, *, raise_refusal: bool = False) -> list[str] | None:
     """Generate descriptive keywords for a (downscaled) photo via the site's AI provider.
     Caller is responsible for permission checks (site/profile AI toggles and the AI photo processing subscription feature); this function only handles the provider call, rate limiting, and cost logging.
 
     Args:
         image_bytes: JPEG bytes, already downscaled (never the full upload).
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell "not asked" from "no answer".
 
     Returns:
         Raw keyword strings, empty when the image is empty or the provider refused it; None when no answer came
-        (refused before sending, or the call failed), so nothing is known about the photo."""
+        (refused before sending, or the call failed), so nothing is known about the photo.
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made - over its limit,
+            switched off, backed off by provider health, or not called in this environment."""
     try:
         require_content(SERVICE_AI_PHOTO_KEYWORDS, "image", image_bytes)
     except ImpossibleInputError:
@@ -155,20 +160,26 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str] | None:
         with api_call_slot(SERVICE_AI_PHOTO_KEYWORDS, endpoint=f"{target[0]}:{target[1]}") as slot:
             answer = _describe(image_bytes, _KEYWORD_PROMPT, target=target, slot=slot, max_tokens=_KEYWORD_MAX_TOKENS)
     except RequestCancelledError:
+        if raise_refusal:
+            raise
         return None
     return None if answer is None else _parse_keyword_text(answer)
 
 
-def classify_photo(image_bytes: bytes) -> list[tuple[str, float]] | None:
+def classify_photo(image_bytes: bytes, *, raise_refusal: bool = False) -> list[tuple[str, float]] | None:
     """Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
     Unlike :func:`describe_photo_keywords` this is not a chat completion - no prompt, no tokens - so it takes the inference service's separate classify call.
 
     Args:
         image_bytes: JPEG bytes, already downscaled.
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell "not asked" from "no answer".
 
     Returns:
         (label, confidence) pairs, highest confidence first, empty when the image is empty or the classifier refused
-        it (one under 4x4 pixels); None when no answer came (refused before sending, or the call failed)."""
+        it (one under 4x4 pixels); None when no answer came (refused before sending, or the call failed).
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made."""
     from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, InferenceInputRefusedError, get_inference_client
 
     try:
@@ -197,5 +208,7 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]] | None:
                 return None
             slot.success = True
     except RequestCancelledError:
+        if raise_refusal:
+            raise
         return None
     return [(label.label, label.score) for label in response.labels]

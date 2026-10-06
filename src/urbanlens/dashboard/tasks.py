@@ -2295,6 +2295,34 @@ def generate_image_keywords(image_id: int) -> dict[str, int]:
     return generate_keywords_for_image(image_id)
 
 
+#: Longer than a sweep's soft limit, so a run that overruns still holds off the next.
+_KEYWORD_RETRY_SWEEP_LOCK_SECONDS = 660
+_KEYWORD_RETRY_SWEEP_LOCK_KEY = "urbanlens:keyword-retry:sweep-lock"
+
+
+@shared_task(soft_time_limit=600, time_limit=_KEYWORD_RETRY_SWEEP_LOCK_SECONDS, queue=Queue.MAINTENANCE)
+@external_background_task("keyword-retry-sweep")
+def sweep_keyword_retries(limit: int | None = None) -> dict[str, int]:
+    """Ask keyword sources again about the photos they did not answer for (P323).
+
+    Only the source that did not answer is asked, a capped batch per run, never a source this environment does not
+    call or one that is backing off; see ``services.photos.keyword_retry``.
+
+    Args:
+        limit: The most photos to ask about; the service's batch by default.
+
+    Returns:
+        How many retry rows came to each outcome.
+    """
+    from urbanlens.dashboard.services.core.locks import beat_lock
+    from urbanlens.dashboard.services.photos import keyword_retry
+
+    with beat_lock(_KEYWORD_RETRY_SWEEP_LOCK_KEY, _KEYWORD_RETRY_SWEEP_LOCK_SECONDS) as acquired:
+        if not acquired:
+            return {}
+        return {str(outcome): count for outcome, count in keyword_retry.sweep(limit or keyword_retry.SWEEP_BATCH).items()}
+
+
 @shared_task(queue=Queue.BULK)
 def submit_redata_photos(image_ids: list[int]) -> bool:
     """Submit photo observations to REData and cache the confidence scores it returns.

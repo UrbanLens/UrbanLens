@@ -396,6 +396,18 @@ that named nothing. A provider that cannot read the photo's analysis copy
 raises `AnalysisCopyUnavailableError` rather than answering for a photo it
 never saw (P322).
 
+A source that did not answer is asked again later. `generate_keywords_for_image`
+records an `ImageKeywordRetry` row per (photo, source), and the
+`keyword-retry-sweep` beat entry (`services/photos/keyword_retry.py`) asks only
+that source again once the row is due. Each run asks about at most 20
+photos. It skips any source this environment does not call, whose switch is
+off, or that provider health or the sweep's own doubling backoff has paused.
+It stops a source at a refusal or at two failures in a row. A failure counts
+against a photo only when the same run got an answer from that source for
+another photo. A photo is given up after six such failures, or when it is
+still failing 30 days after its first failure. A photo with no analysis copy
+is left to the analysis-copy backfill, which enqueues keywording itself (P323).
+
 ## Follow-ups (not yet done)
 
 - **Read-only Postgres role for `ai-worker`**: the only write the loop

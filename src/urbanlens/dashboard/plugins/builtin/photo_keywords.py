@@ -73,6 +73,8 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
 
     slug = "photo_keywords_ai_vision"
     label = "AI vision keywords"
+    #: ``services.ai.vision.SERVICE_AI_PHOTO_KEYWORDS``; a literal so discovering plugins imports no AI module.
+    service_key = "ai_photo_keywords"
 
     def is_available_for(self, image: Image) -> bool:
         """Gate on the AI photo processing subscription, every AI toggle, and this environment calling hosted AI.
@@ -108,11 +110,12 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
 
         Raises:
             KeywordSourceUnavailableError: The provider did not answer, or the photo's analysis copy could not be read.
+            RequestCancelledError: The call was refused before it was sent.
         """
         from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
 
         small = require_analysis_jpeg_bytes(image)
-        keywords = describe_photo_keywords(small)
+        keywords = describe_photo_keywords(small, raise_refusal=True)
         if keywords is None:
             raise KeywordSourceUnavailableError("the AI vision provider did not answer")
         return [KeywordResult(keyword=keyword) for keyword in keywords]
@@ -150,6 +153,8 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
 
     slug = "photo_keywords_classifier"
     label = "Content classifier keywords"
+    #: ``services.ai.vision.SERVICE_PHOTO_CLASSIFIER``.
+    service_key = "cloudflare_image_classifier"
 
     def is_available_for(self, image: Image) -> bool:
         """Requires configured Cloudflare credentials, the uploader's external-APIs toggle, and this environment calling Cloudflare.
@@ -182,11 +187,12 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
 
         Raises:
             KeywordSourceUnavailableError: The classifier did not answer, or the photo's analysis copy could not be read.
+            RequestCancelledError: The call was refused before it was sent.
         """
         from urbanlens.dashboard.services.ai.vision import classify_photo
 
         small = require_analysis_jpeg_bytes(image)
-        labels = classify_photo(small)
+        labels = classify_photo(small, raise_refusal=True)
         if labels is None:
             raise KeywordSourceUnavailableError("the image classifier did not answer")
         results: list[KeywordResult] = []
