@@ -2486,3 +2486,127 @@ only the local scratch subtrees, so the admin panel's media size reads near zero
 
 **Still open until 0.9.0 is deployed.** Production keeps failing these exports until an image built from
 `release/v_0_9_0` replaces `sha-d1fb1bf`. Close this entry when that happens.
+
+## P322 — `src/bin/app.py` runs `main()` twice on direct execution and writes corrupt pins for versioned requirements
+
+`id: P322` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A (infra scripts), verified by re-reading the file.
+
+Two independent bugs in the local bootstrap helper:
+
+1. `src/bin/app.py:198-202` has two consecutive `if __name__ == "__main__":` blocks, each calling `main()`. Running the file directly executes the whole initializer twice (double builds, double `runserver` attempts). The second block looks like a copy-paste leftover; the first even carries the docstring `"""Run when called directly."""`.
+2. `App.pip_install` accepts a versioned requirement (`src/bin/app.py:72` docstring example: `app.pip_install('requests==2.26.0')`), validates it via `Requirement(package_name)`, then writes `f"{package_name}>={version}\n"` (`src/bin/app.py:104`) — producing `requests==2.26.0>=2.26.0` in requirements.txt. The pin should use the parsed distribution name, not the raw input. A `TODO` at `src/bin/app.py:76` notes this method duplicates new djangofoundry functionality and should be removed on the 0.8 upgrade, which would moot both bugs.
+
+No duplicate in `docs/PROBLEMS.md` or the archive (searched `app.py`, `pip_install`, `requirements`).
+
+## P323 — `src/bin/db.py` hardcodes a `Z:` backup directory and `sanitize_path` keeps `/` and `.`, so traversal passes while legitimate paths are mangled
+
+`id: P323` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A, verified by re-reading the file.
+
+1. `src/bin/db.py:232`: `BACKUP_DIR = "Z:/DEV/backups/db/postgres"` breaks every non-Windows run and ignores the `UL_*` env conventions used elsewhere in the same file.
+2. `sanitize_path` (`src/bin/db.py:299-301`) strips characters with `re.sub(r"[^a-zA-Z0-9/_.-]", "", user_input_path)` — the allowlist keeps `/` and `.`, so `../../etc` passes through unscathed, while legitimate paths are silently mangled (`"My Documents"` becomes `"MyDocuments"`). It is applied to the `data_path`/`log_path` setters (`src/bin/db.py:58-83`) that feed `pg_ctl -D/-l`, so two distinct inputs can map to one path. Strip-don't-reject is the wrong shape: reject invalid paths instead of rewriting them.
+
+No duplicate in `docs/PROBLEMS.md` or the archive (prior backup-controller notes in `docs/audits/codebase-audit.md:429-435` concern an older revision of a different controller).
+
+## P324 — `src/bin/research.py` puts the API secret in the URL query string, parses blindly, and has no tests
+
+`id: P324` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A, verified by re-reading the file (`src/bin/research.py:1-30`, whole file).
+
+`fetch_urbex_posts` interpolates the token into the URL (`requests.get(f"{INSTAGRAM_GRAPH_URL}search?access_token={INSTAGRAM_ACCESS_TOKEN}&q={hashtag}")`, line 8) — query strings land in logs, proxies, and error reports — instead of an `Authorization` header. The hashtag is uninterpolated/unencoded, the response gets no status check before `.json()`, and `main()` indexes `post["image_url"]` (line 23) with no `try/except`, so one malformed item aborts the run. `main()` also hardcodes `hashtag = "urbex"`. Logic-bearing code with zero unit tests anywhere in the shard.
+
+No duplicate in `docs/PROBLEMS.md` or the archive.
+
+## P325 — `CoreConfig` names the app `"core"` while every import says `urbanlens.core`, and `ready()` does I/O with no return annotation
+
+`id: P325` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A, verified by reading `src/urbanlens/core/apps.py:1-18` (whole file).
+
+`name = "core"` resolves only if `src/` is on `sys.path` as a top-level `core` package, inconsistent with the `urbanlens.core.*` imports used everywhere else; app loading therefore depends on path setup rather than the package layout. `def ready(self):` has no return annotation (repo is MyPy-strict per `CLAUDE.md`), and its body constructs `DatabaseBackup()` — a constructor with an `auto_schedule` side effect that touches cache and enqueues work — plus `get_git_commit_at_start()` at app-registry time.
+
+No duplicate in `docs/PROBLEMS.md` or the archive.
+
+## P326 — `FriendInvitation.save()` and `TriviaQuestion.save()` ignore `update_fields`, so scoped saves go stale or write full rows
+
+`id: P326` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard B (models), verified by re-reading both methods. P5 class; these instances are new.
+
+1. `src/urbanlens/dashboard/models/friendship/invitation/model.py:66-72`: `save()` recomputes `email_normalized` then calls bare `super().save(*args, **kwargs)`. A caller passing `update_fields=["email", ...]` writes `email` without its normalized companion (match/dedup column goes stale); a caller excluding `email` still pays a full-row write. The correct pattern already exists in-repo at `src/urbanlens/dashboard/models/safety/model.py:452` (`if update_fields is not None and "email" in update_fields: kwargs["update_fields"] = {*update_fields, "email_normalized"}`).
+2. `src/urbanlens/dashboard/models/trivia/model.py:124-127`: `save()` unconditionally rewrites `answer_normalized` and calls bare `super().save()`, unlike `Pin.save`, `Location.save`, `AliasBase.save` which inspect `update_fields`. Any scoped caller touching an unrelated column rewrites both answer columns — the overwrite/`updated`-bump/noise shape P5 describes.
+
+P5 ("Dialog forms still post every field…", open) is the umbrella; these are two concrete model-layer instances not listed in its table. Cite both when touching either file — `see P5 and P326 in docs/PROBLEMS.md`.
+
+## P327 — `EpaFacility.record_search/detail_result` merges `data` with unlocked read-modify-write, so concurrent enrichments clobber each other's keys
+
+`id: P327` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard B, verified by reading `src/urbanlens/dashboard/models/epa_facility/model.py:80-125`.
+
+Both classmethods do `entry.data = {**entry.data, **data}` then `entry.save(update_fields=[...])` (lines 87-88, 118-120). `_get_or_create_row` hardens only the create race (line 135 `except IntegrityError`); the merge path has no `select_for_update`/retry, so two concurrent enrichments each merge against a stale dict and the second write silently drops the first's keys. Background-task concurrency makes this reachable, not theoretical.
+
+No `EpaFacility` hits in `docs/PROBLEMS.md` or the archive — appears new.
+
+## P328 — `SearchHistory` uniqueness is case-sensitive with no normalized column, so `Paris` and `paris` are two rows
+
+`id: P328` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard B, verified by reading `src/urbanlens/dashboard/models/search_history/model.py:15-45`.
+
+The constraint is `UniqueConstraint(fields=["profile", "query"], name="uniq_search_history_profile_query")` (line 39) on the raw `query` CharField (line 19). No `query_normalized` column or `Lower()` constraint, unlike `PinAlias` (`aliases/model.py:103`, `UniqueConstraint(Lower("name"), "pin", ...)`) and the `FriendInvitation.email_normalized` pattern. Case variants of one query accumulate as separate rows with separate `use_count` counters.
+
+No duplicate in `docs/PROBLEMS.md` or the archive (archive hits concern history *scoping*, not the dedup key).
+
+## P329 — `assistant/message` and the search hints/commit/history-delete endpoints have no throttle while their sibling routes do
+
+`id: P329` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard D (controllers), verified in `src/urbanlens/dashboard/urls.py:2030-2045` and `src/urbanlens/dashboard/controllers/assistant.py:220-234`.
+
+`search.panel` is wrapped in `throttled("search.panel", ...)` but the adjacent `hints/`, `commit/`, and `history/delete/` routes are bare. `_verified_hints` (`controllers/search.py:61-73`) runs a full `engine.search` per candidate until 4 verify — up to ~8 full ~11-provider fan-outs per request — so one hints request costs a multiple of one panel request, cached 15 min per profile. `assistant/message/` (`urls.py:177`) is likewise bare: `AssistantMessageView.post` does `get_or_create`, history load/save, and render on every POST. The single-flight turn lock bounds *AI spend* (a second POST while a turn is in flight is dropped with a toast), but nothing bounds request/DB/render volume over time on an chat surface.
+
+Related to the archived G5-3 throttled-routes list and H42/H49 (panel throttle + query cap), which never mention these endpoints — sibling-gap of a known fix, not a duplicate.
+
+## P330 — `RemoteImageCopyView` answers anonymously and `/metrics` serves with neither gate configured — both weaker than their siblings
+
+`id: P330` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard D, verified by reading the cited code. Two endpoints, one entry: each skips the gate its sibling paths enforce.
+
+1. `controllers/remote_copies.py:36-77`: `RemoteImageCopyView` is a plain `View` with no `LoginRequiredMixin`; route `media-copy/<str:digest>/` (`urls.py:400-403`) has no auth gate. Every sibling media path is default-deny (see P14). Mitigations that keep this low-medium rather than high: the digest is unguessable-ish, and misses are throttled (`COPY_THROTTLE_SCOPE`) — but a miss still lets an anonymous caller queue worker fetch work.
+2. `services/core/metrics_auth.py:24-26,43-45`: `token_ok` and `network_ok` each `return True` when unconfigured ("the gate is off"), the route registers on `metrics_enabled` alone (`UrbanLens/urls.py:127-131`), and `gates_configured()` is consumed only by a management-command warning (`management/commands/celery_metrics_exporter.py:61`), never by the view (`controllers/metrics.py:91-108`). Enabling metrics without either gate serves operational telemetry — including per-worker internals — to anyone.
+
+No `PROBLEMS.md`/archive entry mentions either endpoint's auth — appears new.
+
+## P331 — The OAuth authorize/introspect views have zero test references anywhere in the repo
+
+`id: P331` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard E (coverage mapping), verified: `rg -l "ConsentAuthorizationView|ActiveOwnerIntrospectTokenView" --glob '*.py' .` returns only `src/urbanlens/UrbanLens/urls.py` (wiring `oauth/authorize/`, `oauth/introspect/`) and the two controller files themselves (`controllers/oauth_authorize.py`, `controllers/oauth_introspect.py`). No test file — `dashboard/tests/`, `tests/`, contract or integration — imports or names them. Token-introspection logic that disagrees with its validator is security-adjacent; it currently ships with no regression pin at all. (Caveats checked: `child_buildings` and `e2ee_schema` also miss by name-string but are covered behaviorally via `test_child_building_details.py` and `test_external_api_schema_e2ee.py`; the two OAuth modules have neither.)
+
+No entry in `docs/PROBLEMS.md`, the archive, or the PL6 test-quality-audit manifest names these controllers — appears new.
+
+## P332 — Pin CSV exports write unsanitized user content, enabling spreadsheet formula injection
+
+`id: P332` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard C (services), verified by reading both writers.
+
+`services/import_export/export_formats.py:88-91` (`writer.writerow([pin.effective_name, ... pin.description or ""])`) and `services/import_export/export.py:708-716` write pin names/descriptions verbatim via `csv.writer`. A value beginning with `=`, `+`, `-`, `@` (e.g. `=HYPERLINK("https://evil/","label")`) survives CSV quoting and is evaluated by Excel/LibreOffice after parse. Names and descriptions arrive from user input and file imports, so attacker-influenced text reaches a victim's export (import a crafted file → export → open). KML/GPX/GeoJSON writers are unaffected (structured libraries/`json.dumps`). CWE-1236, low severity (requires the victim to open the export in a formula-evaluating app).
+
+Nearest neighbor is open P321 (same export feature, server-side `path()` crash on object storage — a different failure mode). Archive CSV entries are all import-side. Appears new.
+
+## P333 — `VersionedModel` provenance recording swallows all exceptions in production, leaving write-succeeded/provenance-missing gaps silent
+
+`id: P333` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard B, verified by reading `src/urbanlens/dashboard/models/abstract/versioned.py:240-254`.
+
+The revision `bulk_create` (in its own savepoint, with a comment explaining the aborted-transaction hazard) is wrapped in `except Exception: logger.exception(...)` with re-raise only `if django_settings.DEBUG or TESTING`. A failing revision write therefore leaves the data write succeeded but its field-provenance rows missing, visible only in logs — the exact substrate `resolve_fields` callers cannot detect. The "never break the write" tradeoff is deliberate; the silent-integrity gap is still worth recording before offline access and merging land (same reasoning as P5's provenance paragraph).
+
+No `PROBLEMS.md`/archive entry for `_record_fields` swallowing — appears new.

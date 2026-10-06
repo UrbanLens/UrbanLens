@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P322` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P334` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -221,3 +221,15 @@ still resolves after it is fixed, and the id is never handed out again.
 | N41 | current | 2026-10-06 | REData's news search accepted a `months` GDELT rejects (P235); clamped, with a SearXNG fallback, in REData v0.3.4, not re-checked on production | [`docs/handoffs/redata-gdelt-months-cap.md`](handoffs/redata-gdelt-months-cap.md) |
 | N42 | current | 2026-10-06 | A cultural-resource search's cached answer was the rows last found from its point, so a neighbouring search took HRSH's National Register listing away (P286); fixed in REData v0.3.4, not seen live | [`docs/handoffs/redata-cultural-resource-cache-keyed-by-last-search.md`](handoffs/redata-cultural-resource-cache-keyed-by-last-search.md) |
 | N43 | current | 2026-10-05 | REData's Google Open Buildings source reads a level-4 shard whole and the median one is 138 MiB (P319); sent, and latent while nothing names that source | [`docs/handoffs/redata-open-buildings-shards-read-whole.md`](handoffs/redata-open-buildings-shards-read-whole.md) |
+| P322 | open | 2026-10-06 | `src/bin/app.py` runs `main()` twice on direct execution and writes corrupt pins for versioned requirements | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P323 | open | 2026-10-06 | `src/bin/db.py` hardcodes a `Z:` backup directory and `sanitize_path` keeps `/` and `.`, so traversal passes while legitimate paths are mangled | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P324 | open | 2026-10-06 | `src/bin/research.py` puts the API secret in the URL query string, parses blindly, and has no tests | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P325 | open | 2026-10-06 | `CoreConfig` names the app `"core"` while every import says `urbanlens.core`, and `ready()` does I/O with no return annotation | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P326 | open | 2026-10-06 | `FriendInvitation.save()` and `TriviaQuestion.save()` ignore `update_fields`, so scoped saves go stale or write full rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P327 | open | 2026-10-06 | `EpaFacility.record_search/detail_result` merges `data` with unlocked read-modify-write, so concurrent enrichments clobber each other's keys | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P328 | open | 2026-10-06 | `SearchHistory` uniqueness is case-sensitive with no normalized column, so `Paris` and `paris` are two rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P329 | open | 2026-10-06 | `assistant/message` and the search hints/commit/history-delete endpoints have no throttle while their sibling routes do | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P330 | open | 2026-10-06 | `RemoteImageCopyView` answers anonymously and `/metrics` serves with neither gate configured — both weaker than their siblings | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P331 | open | 2026-10-06 | The OAuth authorize/introspect views have zero test references anywhere in the repo | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P332 | open | 2026-10-06 | Pin CSV exports write unsanitized user content, enabling spreadsheet formula injection | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P333 | open | 2026-10-06 | `VersionedModel` provenance recording swallows all exceptions in production, leaving write-succeeded/provenance-missing gaps silent | [`docs/PROBLEMS.md`](PROBLEMS.md) |
