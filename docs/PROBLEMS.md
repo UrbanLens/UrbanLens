@@ -2486,3 +2486,45 @@ only the local scratch subtrees, so the admin panel's media size reads near zero
 
 **Still open until 0.9.0 is deployed.** Production keeps failing these exports until an image built from
 `release/v_0_9_0` replaces `sha-d1fb1bf`. Close this entry when that happens.
+
+## P334 — A trip with 30 or more scheduled activities never finishes a Google Calendar export: every attempt re-sends the same 30 calls into a site-wide 30-a-minute budget
+
+`id: P334` · `status: open` · `updated: 2026-10-06`
+
+**What happens.** `export_trip_to_calendar` writes the trip's all-day event and then one event per scheduled
+activity (`services/trips/calendar_sync.py`, `_sync_activity_events`), each a separate request through the
+rate-limited session. `google_calendar` allows 30 calls a minute and 2,000 a day
+(`plugins/builtin/google_calendar.py`). Those budgets are site-wide: `rate_limiter.check_rate_limit` counts every
+account's `ApiCallLog` rows for the service. An export that needs more than 30 calls is refused mid-way with
+`RateLimitExceededError`. The next attempt starts again from the trip event and the first activity, updating the
+events the last attempt already wrote, and is refused at the same place.
+
+**Measured 2026-10-06** with the real limiter and the HTTP layer stubbed: a trip with 40 scheduled activities, four
+attempts, each with the previous attempts' calls aged out of the minute window. Every attempt sent 30 requests (the
+trip event and the first 29 activities in `TripActivity` order) and raised `RateLimitExceededError`. After four
+attempts, 120 requests had gone out, the trip still had 30 link rows, and the last 11 activities had never reached
+the calendar. `max_trip_activities` defaults to 100, so a trip can need 101 calls.
+
+**Who sees it.** The export button and the external API's `POST /trips/{trip_slug}/calendar/` report a failure
+every time. An auto-sync push counts a failed attempt; `requeue_pending_calendar_pushes` retries every 15 minutes
+and drops the request after `MAX_CALENDAR_PUSH_ATTEMPTS` (5), about 150 calls later. Each attempt also uses up the
+whole site's minute, so any other account's calendar call in that minute is refused too.
+
+**Batching does not fix it** (N30, Batch 26). Google counts each request inside a batch toward quota. The limiter
+reserves one slot per HTTP request (`_RateLimitedSession._do_request`), so a batch would either count 50 events as
+one call or need a multi-slot reservation the limiter does not have. Against 30 a minute, a batch of 31 or more
+could not be admitted at all, where today each attempt writes 29 activities. The gateway is plain `requests`, so a
+batch would mean building and parsing `multipart/mixed` by hand. A batch whose response is lost after Google ran it
+leaves every event in it without a link row, and the retry creates all of them again. Sequential requests lose at
+most one.
+
+**Options.**
+
+- Skip what is already current: during a push, an event whose link was written after the trip-level link's
+  `push_requested_at` already shows the change being pushed. Each attempt then resumes where the last stopped. The
+  export button still writes everything, so it would still fail past 30.
+- Give the calendar a budget that fits a trip. Google's own quota is per user (600 a minute by default), and a
+  `calls_per_minute` above `max_trip_activities + 1`, or per-account budgets, would let one export finish. Both are
+  policy values, so Jess's call (N31).
+- Client-assigned event ids (`events.insert` takes an `id`) make a create idempotent: a retry gets 409 rather
+  than a duplicate. That is what batching would need first.

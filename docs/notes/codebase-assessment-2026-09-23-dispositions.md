@@ -1,6 +1,6 @@
 # N30 — Where every verified N29 finding stands
 
-`id: N30` · `status: current` · `updated: 2026-09-29`
+`id: N30` · `status: current` · `updated: 2026-10-06`
 
 N29's 131 claims were re-verified into 103 real or partial findings (G1–G6; those verification reports lived in a
 session scratchpad and are not in the repo). On 2026-09-29 two independent passes checked every finding against
@@ -10,7 +10,8 @@ the rows marked *second pass*, which were fixed or filed the same day.
 
 A third pass on 2026-09-29 found that claim false again: the findings under *Unhandled* below had nothing fixing,
 filing or dispositioning them. The G1–G6 lists aren't in the repo, so some ids were rebuilt from commit messages
-and may be approximate. Everything under *Kept* is an agent's call made without Jess's input, waiting for her review.
+and may be approximate. Everything under *Kept* is an agent's call made without Jess's input, waiting for her review,
+except the rows that give her ruling.
 
 ## Fixed
 
@@ -25,6 +26,8 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 26: map centre recomputed on the request after seven days (*second pass*) | A page that finds an unfinished claim re-queues it after an hour and serves the cached centre | `test_map_center_signal.py::AStaleCentreIsServedWhileItRecomputesTests` |
 | Batch 12: encrypted connections deleted on `InvalidToken` (*second pass*), P169 | Reads keep an undecryptable row and report it absent; disconnect and reconnect remove it. The four managers are one `ProfileConnectionManager` | `test_undecryptable_connections.py` |
 | Batch 1 (third pass): the getaddrinfo pin isn't re-installed after a later monkey-patch | Reproduced: a resolver patched in after import rebound the validated host to loopback and the request was delivered before the peer check refused it. An IDN host was unpinned even without a patch, since urllib3 resolves the punycode spelling. The pin now lives in urllib3's `create_connection` hook, which dials the validated IP literal, keys pins by the host as urllib3 spells it, and is re-installed before every hop. The `socket.getaddrinfo` patch is gone | `test_ssrf_dns_rebind.py::PinSurvivesALaterResolverPatchTests`, `::PinnedConnectionTests` |
+| Batch 1 (third pass): the Wikipedia-cache first-title hook seeds one article per pin | Fixed 2026-10-01 by 40d418c1d (P181), two days after the third pass: the hook seeds the location's wiki only, and a pin takes the match from its owner's own activity (`seed_pin_from_cached_wikipedia`: the new pin's prefetch, its Wikipedia panel, its page), one pin per action. The hook makes no Wikipedia request; it reads the cached row, and its one outbound call is the lead image for a wiki's first article. A bulk import never runs the per-pin prefetch (`create_pin_for_profile` is not on that path), and the lookup that writes the row is per Location | `test_wikipedia_cache_hook_cost.py` (the same query count with 1 or 25 pins on the location), `test_cross_user_pin_isolation.py` |
+| Batch 1 (third pass): `resolve_deferred_pin_locations` has `max_retries=None` | `max_retries` is now `_DEFERRED_MAX_RETRIES`: the two-day deadline over the shortest gap between retries (Google's fixed 65 s), rounded up, which is 2,659. The deadline still ends a batch first. The bound ends one whose `started_at` the deadline cannot read, which it treated as never expiring. At the bound the task records `PinImportFailure` rows and tells the user, as at the deadline, rather than calling a `retry()` Celery would refuse. 159c1498a | `test_deferred_lookup_retry_window.py::DeferredLookupRetryBoundTests` |
 
 ## Reverted by Jess
 
@@ -38,11 +41,6 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Finding | Where |
 | --- | --- |
 | Batch 1: smart-list resync runs inline on the request below its ceiling | `models/pin_list/signals.py` |
-| Batch 1: the Wikipedia-cache first-title hook seeds one article per pin | `models/cache/signals.py` |
-| Batch 1: `resolve_deferred_pin_locations` has `max_retries=None` (bounded in practice by a 2-day deadline) | `tasks.py` |
-| Batch 30: `ReputationEvent` and `WikiEdit` rows are never deleted | no prune task; retention is Jess's call |
-| Batch 31: trivia questions are never deleted | no prune task; retention is Jess's call |
-| Batch 26: calendar export makes one Google request per activity (the lost-enqueue half is fixed) | `services/trips/` calendar export |
 
 ## Open, filed
 
@@ -54,6 +52,7 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 33: article revisions never deleted (*second pass*) | P170 |
 | Batch 33: album grid and membership unbounded (*second pass*; P166 had listed it as left open) | P171 |
 | Batch 35: organize screen materialises every label | P66, already open |
+| Batch 26 (third pass): calendar export makes one Google request per activity (the lost-enqueue half is fixed) | P334. Not batched: Google counts every request inside a batch, the limiter counts one per HTTP request, and a batch whose response is lost leaves every event in it unlinked, so the retry duplicates them all. Measuring it found that a trip with 30 or more scheduled activities can never finish an export under the site-wide 30-a-minute budget |
 
 ## Kept, with the reason
 
@@ -79,3 +78,5 @@ and may be approximate. Everything under *Kept* is an agent's call made without 
 | Batch 31: trivia generation sequential | A background task under its own lock, not a request |
 | Batch 34: safety overview unpaginated | Left by P69 deliberately, with the row cost pinned by `test_safety_home_render_scaling.py`. A null auto-delete window is the user's own choice of "never" |
 | Batch 28 (third pass): `pg_dump` gets the password through `PGPASSWORD` | Adds no exposure: the value is `UL_DB_PASS`, which compose and k3s put in the worker's own environment, so pg_dump inherits it under that name anyway. Only same-uid processes in the container can read a child's `/proc/<pid>/environ` (no `SYS_PTRACE`, no shared PID namespace), and every such process descends from the worker and carries `UL_DB_PASS` itself. Failures log only argv, and nothing captures frame locals. `bin/db.py` is the same case; `bin/restore_backup.sh` and `bin/verify_backup_restore.sh` run psql as root in the app container, where the app uid cannot read it. `test_backup_temp_purge.py::PgDumpCredentialTests` fails if the password stops coming from the environment |
+| Batch 30 (third pass): `ReputationEvent` and `WikiEdit` rows are never deleted | Jess, 2026-10-06: kept indefinitely; no prune task |
+| Batch 31 (third pass): trivia questions are never deleted | Jess, 2026-10-06: kept indefinitely; no prune task |
