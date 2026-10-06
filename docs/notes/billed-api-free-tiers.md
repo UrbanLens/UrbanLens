@@ -10,7 +10,7 @@
 
 ## R31 — Each billed API is held to a monthly ceiling at this deployment's share, so every deployment together stays inside the vendor's free tier
 
-`id: R31` · `status: current` · `updated: 2026-10-05`
+`id: R31` · `status: current` · `updated: 2026-10-06`
 
 The cross-repo table lives in REData's `docs/BILLED_APIS.md` (R20 there). It covers every billed
 API either repo calls, its free tier, which deployments hold a key, and the budgets before and
@@ -79,9 +79,16 @@ Not held here:
 
 AI runs on Cloudflare Workers Paid through a very cheap model, and about $10 a month is accepted. So
 no spend ceiling holds an AI call, and nothing here adds one: a call is logged, never refused for spend.
-That is Jess's decision; spend is read from the log, not enforced. Every environment may call AI (D26).
+That is Jess's decision; spend is read from the log, not enforced. Production and staging may call AI; development
+and local call no hosted provider at all (D26, amended 2026-10-06: "Dev should not call AI providers"), so the
+spend in question is theirs alone. Ollama, a local model, is not refused.
 Each feature reserves an `api_call_slot` under its own name, so its `ApiRateLimit` switch can turn it
 off; the six rows added for D26 carry only a per-minute guard against a runaway loop.
+
+A call development refuses writes no row: it is refused before the slot is reserved, or, when only a provider was
+opted in (`UL_ENVIRONMENT_SHARE_OVERRIDES=ai_cloudflare=1`) and the feature runs on another, the reservation is
+released when the inference client refuses it. The refusal is not a failed call and is not held against the provider's
+health. `ai_<provider>` rows, which log a gateway built without a feature, are the keys that opt a provider in.
 
 Every AI call writes one `ApiCallLog` row through `rate_limiter.log_api_call`, or fills in the
 reserved row where the caller already holds an `api_call_slot` (so there is never a second one):

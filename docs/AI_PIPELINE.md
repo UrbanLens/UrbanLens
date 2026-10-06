@@ -374,6 +374,11 @@ the provider, model, status, latency, tokens and cost, and no content:
 `api_call_slot` already reserved, and `vision.py` fills in its own slot.
 `docs/notes/billed-api-free-tiers.md` (R31) lists each path.
 
+Development and local send nothing to a hosted provider (D26, amended 2026-10-06). The feature's `api_call_slot`
+refuses by its own key, and both clients ask `egress.require_ai_provider` for `ai_<provider>` before a request leaves
+the process, for `send` and `classify`, so a call outside any slot is held too. The refusal is an
+`EnvironmentRefusedError`, not an `InferenceError`: nothing was sent and no row is written.
+
 A provider that answers and refuses the input is answering, not failing.
 Cloudflare's ResNet-50 takes no image under 4x4 pixels: HTTP 400, code 3011,
 "image too small". The adapter raises `ProviderInputRefusedError` with

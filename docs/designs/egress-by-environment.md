@@ -1,6 +1,6 @@
 # D26 — Production spends the shared external budgets; staging gets a sliver, development none
 
-`id: D26` · `status: accepted` · `updated: 2026-10-05` · `decided by: Jess, 2026-10-05`
+`id: D26` · `status: accepted` · `updated: 2026-10-06` · `decided by: Jess, 2026-10-05; amended 2026-10-06 (development calls no hosted AI)`
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -13,6 +13,9 @@
 > through other services, or not making requests at all. Staging can make some requests, but shouldn't be making
 > very many, and they should ideally be cached by production redata when possible... Production should consume
 > the bulk of any of our budgets, across the board for all services.
+
+On 2026-10-06 she added: **"Dev should not call AI providers."** The first version of this decision let development
+call AI, logged; that is withdrawn (see "Hosted AI").
 
 ## Why
 
@@ -32,7 +35,7 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
 |---|---|---|---|
 | `redata`, `internal` | allowed | allowed | allowed |
 | `quota`, `billed` | budget × `UL_ENVIRONMENT_SHARE` | budget × share | refused (share 0) |
-| `ai` | allowed, logged | allowed, logged | allowed, logged |
+| `ai` (hosted providers) | allowed, logged | allowed, logged | refused; an override opts one feature or provider in |
 | `messaging` | real | console / no-op | console / no-op |
 | `public_write` | allowed | refused | refused |
 
@@ -48,8 +51,9 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
   `UL_ENVIRONMENT_SHARE=0`, or a smaller share.
 - **Trying a provider.** `UL_ENVIRONMENT_SHARE_OVERRIDES=nominatim=0.02,sms=1` gives one service its own share. For
   `messaging` and `public_write` any share above 0 opts the service in, and 0 turns it off on production. The
-  overrides are logged at startup, with a warning for a name nothing classifies. REData, our own hosts and AI
-  ignore overrides; the admin switch on their `ApiRateLimit` row turns them off.
+  overrides are logged at startup, with a warning for a name nothing classifies. REData and our own hosts ignore
+  overrides; the admin switch on their `ApiRateLimit` row turns them off. Hosted AI takes them, by feature
+  (`trivia_generation=1`) or by provider (`ai_cloudflare=1`): see "Hosted AI".
 - **A refusal is not a failure and not a deferral.** It raises `EnvironmentRefusedError`, a non-transient
   `ServiceDisabledError`, so every caller that already degrades on a switched-off service keeps working. It writes
   no `ApiCallLog` row and logs once per service every ten minutes (as #209's refused inputs do). It is never
@@ -74,7 +78,7 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
   and dark layers stay on the self-hosted mirror (and the CSP does not admit the hosted glyph host).
 - **Retired:** `UL_ALLOW_OUTBOUND_APIS`, `UL_BILLED_API_SHARE`, and `UL_DEMO_MODE`'s REData-only exemption. Demo
   mode keeps its login endpoint and banner; a demo deployment that should call only REData sets
-  `UL_ENVIRONMENT_SHARE=0` (AI stays allowed). The share does not hold `messaging` or `public_write`, so a demo
+  `UL_ENVIRONMENT_SHARE=0` (AI follows the environment: allowed under `staging`, refused under `development`; the share does not touch it). The share does not hold `messaging` or `public_write`, so a demo
   runs under a non-production `UL_ENVIRONMENT` (`docs/DEMO.md`); on production they stay on. A set retired
   variable is warned about at startup.
 
@@ -88,19 +92,61 @@ service is treated as `billed`.
 | Category | Services |
 |---|---|
 | `redata` | every `redata_*` key (37 registered, plus `redata_boundary`, `redata_json`, `redata_location_context`, `redata_place_details`); `digital_commonwealth` and the street-level and archive labels `mapillary`, `kartaview`, `panoramax`, `smithsonian`, `library_of_congress`, `internet_archive`, `chronicling_america`, whose calls REData makes |
-| `internal` | `overpass` (the self-hosted primary), `ollama`, `immich`, `ai_inference`, `gotify`, `clamd` |
+| `internal` | `overpass` (the self-hosted primary), `ollama` (a local model), `immich`, `ai_inference` (the transport only: the provider behind it is `ai`), `gotify`, `clamd` |
 | `quota` | `nominatim`, `wikipedia`, `wikipedia_media`, `wikimedia`, `wayback_machine` (reads), `overture_maps`, `google_open_buildings`, `microsoft_building_footprints`, `overpass_public_mirror` (the public fallbacks, on a session of their own), `open_historical_map`, `open_meteo`, `openweathermap`, `osrm`, `census_tigerweb`, `usgs`, `esri`, `basemap_vendor_tiles`, `flickr`, `hibp`, `virustotal`, `google_photos`, `google_street_view_metadata`; unledgered `google_oauth_refresh`, `google_oauth_connect`, `social_sign_in`, `flickr_oauth`, `user_url_fetch`, `github_contributors`, `git_fetch` |
 | `billed` | `google_geocoding`, `google_places`, `google_maps`, `azure_maps`, `apple_maps`, `google_earth`, `protomaps_basemap` |
-| `ai` | `trivia_generation`, `trivia_moderation`, `trivia_answer_check`, `trivia_wiki_incorporation`, `article_expansion`, `article_safety`, `link_extraction`, `document_pin_import`, `trip_suggestions`, `label_style_suggestions`, `category_suggestions`, `assistant`, `ai_photo_keywords`, `cloudflare_image_classifier` |
+| `ai` | the features `trivia_generation`, `trivia_moderation`, `trivia_answer_check`, `trivia_wiki_incorporation`, `article_expansion`, `article_safety`, `link_extraction`, `document_pin_import`, `trip_suggestions`, `label_style_suggestions`, `category_suggestions`, `assistant`, `ai_photo_keywords`, `cloudflare_image_classifier`; and the hosted providers `ai_anthropic`, `ai_cloudflare`, `ai_openai` |
 | `messaging` | `email`, `sms`, `whatsapp` (and their base `twilio`), `unified_push` |
 | `public_write` | `wayback_save` (Save Page Now), `google_calendar` (event writes; its imports are refused with it), `stripe` |
 
 The seven AI features that called the provider with no gate now each reserve an `api_call_slot` under their
 feature name, one row per provider call (the assistant one per round), which the gateway fills in with model,
 tokens and cost (#214). The six rows added for them carry only a per-minute guard against a runaway loop: AI
-is logged, never refused for spend (R31). `trivia_generation` already had a row, 5 a minute and 200 a day,
+is logged, never refused for spend (R31); it is refused in development by environment. `trivia_generation` already had a row, 5 a minute and 200 a day,
 which its slot now enforces; the hourly sweep stops at the first refused call and marks no wiki tried, so the
 rest wait for the next run rather than for the 30-day retry.
+
+### Hosted AI
+
+Development and local call no hosted AI provider: Cloudflare Workers AI, OpenAI and Anthropic, whether the request
+goes through the `ai-inference` service or in-process. A local or self-hosted model is `internal` and stays: Ollama
+today. (There is no Hugging Face provider: `services/ai/huggingface.py` was removed on 2026-10-02, per `docs/PROBLEMS.md`, so there is nothing to refuse; a provider added later has to be classified, below.) Staging and
+production are unchanged, and the test suite still runs the features against its mocks.
+
+- **Where it is held.** The `ai` category is decided by `egress.decide`: allowed in production, staging and testing,
+  refused in development, local and any unknown environment, and `UL_ENVIRONMENT_SHARE_OVERRIDES` wins either way (an
+  entry above 0 opts in; 0 turns one off on production). Each feature's `api_call_slot` refuses by its own key, so
+  every feature that reserves a slot is held without a change of its own. The inference client then asks again for
+  the provider's key (`ai_cloudflare`, `ai_openai`, `ai_anthropic`) before a request leaves the process, in
+  `RemoteInferenceClient` and `LocalInferenceClient`, for `send` and `classify`: that is what holds a call made
+  outside any slot, and a provider added later.
+- **The overrides.** `UL_ENVIRONMENT_SHARE_OVERRIDES=trivia_generation=1` lets that feature call whichever provider
+  the site's AI settings pick. `ai_cloudflare=1` lets any feature start and sends its calls to Cloudflare only: a
+  feature on another provider is refused at the inference client, with the slot's reservation released, so the
+  refusal still writes no row. A feature named with 0 stays off whatever the providers say.
+- **A new provider** must be added to `egress.HOSTED_AI_PROVIDERS` (a test compares it with
+  `urbanlens_ai.schema.Provider`). A local model is given an `internal` service key instead.
+- **What each feature does.** None errors, none caches the refusal, and none marks work tried.
+
+| Feature | In development |
+|---|---|
+| Assistant | The global button is not rendered. `/assistant/` and the overlay say "not available in this environment" (no settings link: no setting changes it); a message posted anyway gets that reply and queues nothing, and so does a queued turn and the external API (503) |
+| Link extraction | The buttons are hidden (`link_extraction_available`), the review page says it is not available here, a start toasts that and creates no row (so no daily allowance is spent), and a run queued earlier fails with that message without reading the page. Article expansion and its safety review add one "not available in this environment" row when only the reading was opted in |
+| Document import | The AI half is skipped and the preview warns "AI document import is not available in this environment" rather than reporting no pins |
+| Trip suggestions | The panel says it is not available in this environment; nothing is cached and a refresh starts no cooldown |
+| Trivia | A submitted question stays pending review (the classifier's `ai_unavailable` is not a rejection), an answer is judged no match, and the two sweeps below mark nothing |
+| Photo keywords, content classifier | The two providers say they are unavailable for the upload, so its stored keywords stand; Ollama keywords still run |
+| Category and label-style suggestions | No labels matched and no style, no call |
+
+- **The sweeps.** `sweep_wikis_for_generation` and `sweep_questions_for_wiki_incorporation` stop at the first call
+  refused before it was made, and record nothing for it. That includes the second call each one makes: a refused
+  moderation of a generated question no longer marks the wiki tried for 30 days, and a refused safety review no
+  longer marks the question processed for good. Both pass `raise_refusal` down (as #215 did for the generation call).
+  A review that ran and rejected the text is an answer and still marks it. A safety review unavailable for another
+  reason (its site toggle off, a provider failure) still marks the question processed; that was not changed.
+- **Not covered.** What REData runs on its side for UrbanLens (it extracts text from scanned forms with a model of
+  its own) is REData's spend, not this policy's. `urbanlens_ai` is Django-free and has no policy of its own; it
+  refuses nothing that UrbanLens sends it, and UrbanLens sends it nothing in development.
 
 ### Paths outside the gateway session
 
@@ -115,7 +161,8 @@ rest wait for the next run rather than for the 30-day retry.
 | Wikipedia lead image as a pin cover | quota | `wiki_seed._store_cover_from_url` asks for `wikimedia` before downloading |
 | `manage.py diagnose_places_api` | billed | asks for `google_places` before its raw requests |
 | `github_contributors`, `git_fetch` | quota | **not held**: the thanks page (cached) and the site-admin update check |
-| `gotify`, `clamd`, `ai_inference` | internal | self-hosted |
+| `gotify`, `clamd` | internal | self-hosted |
+| `ai_inference` | internal | the transport only. The provider behind it is held by the feature's `api_call_slot` and by the inference client asking for `ai_<provider>` before it sends |
 
 ### Beat entries
 
@@ -132,15 +179,15 @@ production, and every provider call they make is held by the call-level policy.
 
 ## What development and staging call after this
 
-**Development** (share 0): REData, the self-hosted Overpass primary, the tile cache, Ollama, `ai_inference` and AI
-providers (logged). Nothing in `quota` or `billed`: no Nominatim, Wikipedia, Wayback, Overture, Open Buildings,
-Esri tiles, Google, Azure or Protomaps. No mail (console), texts, push, Calendar writes, Stripe or Save Page Now.
+**Development** (share 0): REData, the self-hosted Overpass primary, the tile cache, Ollama and `ai_inference`
+(whose hosted providers are refused). Nothing in `quota` or `billed`: no Nominatim, Wikipedia, Wayback, Overture, Open
+Buildings, Esri tiles, Google, Azure or Protomaps. No hosted AI: no Cloudflare Workers AI, OpenAI or Anthropic. No mail (console), texts, push, Calendar writes, Stripe or Save Page Now.
 Of beat, only internal maintenance. Visible consequences: the Esri satellite basemap layer and other vendor raster
 layers are grey; panels from direct third parties say "Not available in this environment"; the Settings geocode
-answers 503; the assistant's weather and routing tools, which call OpenWeatherMap and OSRM directly, report
-unavailable. `UL_ENVIRONMENT_SHARE_OVERRIDES` opts a provider back in for a session's work.
+answers 503; the AI features say the same (see "Hosted AI"); the assistant's weather and routing tools, which call
+OpenWeatherMap and OSRM directly, report unavailable. `UL_ENVIRONMENT_SHARE_OVERRIDES` opts a provider back in for a session's work.
 
-**Staging** (share 0.05): REData, our own hosts and AI as development; a twentieth of every `quota` and `billed`
+**Staging** (share 0.05): REData, our own hosts and hosted AI (logged); a twentieth of every `quota` and `billed`
 window (Nominatim's 500 a day becomes 25; Google Geocoding's free-tier share 200 a month), but never as a
 fallthrough from a failed REData call. No mail, texts, push, Calendar, Stripe or Save Page Now. Of beat, only
 internal maintenance. k3s staging's Celery runs (beat, worker and panels worker at 1/1/1, read from the cluster

@@ -149,7 +149,7 @@ Set on the **demo** instance:
 | Setting | Purpose |
 |---|---|
 | `UL_DEMO_MODE=true` | Marks this as the demo. Registers `/demo/start/` and shows the banner. It no longer decides what the instance calls (D26). |
-| `UL_ENVIRONMENT_SHARE=0` | Keeps the demo off every quota'd and billed provider; REData, our own hosts and AI stay on. |
+| `UL_ENVIRONMENT_SHARE=0` | Keeps the demo off every quota'd and billed provider; REData and our own hosts stay on. Hosted AI follows `UL_ENVIRONMENT` instead: on under `staging`, refused under `development`. |
 | `UL_DEMO_LOCATIONS_FILE` | Path to the seeding manifest written by `import_public_locations`. |
 | `UL_DEMO_REAL_SITE_URL` | The real site, for the banner's "create a real account" link. |
 
@@ -167,7 +167,7 @@ Since D26 the demo's egress follows the same per-environment policy as every oth
 (`urbanlens/UrbanLens/egress.py`): `UL_DEMO_MODE` used to allow only REData, and that exemption is gone.
 To keep a demo on REData alone, as before, set `UL_ENVIRONMENT_SHARE=0`: every `quota` and `billed`
 provider is then refused at the choke point every call passes through (`rate_limiter._reserve_call`).
-AI stays allowed, and the seeded profiles below keep it switched off. Run the demo as a non-production
+Hosted AI is called under `staging` and refused under `development` (D26), and the seeded profiles below keep it switched off either way. Run the demo as a non-production
 environment, so mail is printed rather than sent and nothing is written to a third party.
 
 Seeding additionally suppresses `safely_enqueue_task` and writes each profile with

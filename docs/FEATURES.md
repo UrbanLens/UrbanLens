@@ -823,9 +823,11 @@ carry no cap: AI is logged, not limited.
 **Per-environment egress policy (D26, `UrbanLens/egress.py`, `services/core/egress.py`).** Every
 external service is classified (`ServiceDefaults.category`: `redata`, `internal`, `quota`, `billed`,
 `ai`, `messaging`, `public_write`), and the same choke point applies one policy per `UL_ENVIRONMENT`:
-REData, our own hosts and AI everywhere; `quota` and `billed` budgets scaled by `UL_ENVIRONMENT_SHARE`
-(production 0.9, staging 0.05, development 0); messaging and writes to a third party (Save Page Now,
-Calendar, Stripe) production only. `UL_ENVIRONMENT_SHARE_OVERRIDES` opts one service in or out. A
+REData and our own hosts (Ollama included) everywhere; hosted AI (Cloudflare Workers AI, OpenAI, Anthropic) on
+production and staging, refused in development and local, where each AI feature says "not available in this
+environment"; `quota` and `billed` budgets scaled by `UL_ENVIRONMENT_SHARE` (production 0.9, staging 0.05,
+development 0); messaging and writes to a third party (Save Page Now, Calendar, Stripe) production only.
+`UL_ENVIRONMENT_SHARE_OVERRIDES` opts one service in or out, an AI feature or provider (`ai_cloudflare`) included. A
 refusal (`EnvironmentRefusedError`) writes no ledger row, logs once per service per ten minutes, is
 skipped by the boundary chain rather than deferred, shows as "Not available in this environment" on a
 panel without caching anything, and off production the name and geocode chains never fall through
