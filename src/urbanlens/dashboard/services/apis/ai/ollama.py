@@ -77,16 +77,21 @@ class OllamaGateway(Gateway):
     base_url: str | None = field(default_factory=lambda: settings.ollama_base_url)
     model: str = field(default_factory=lambda: settings.ollama_vision_model)
 
-    def describe_photo_keywords(self, image_bytes: bytes) -> list[str] | None:
+    def describe_photo_keywords(self, image_bytes: bytes, *, raise_refusal: bool = False) -> list[str] | None:
         """Ask the local Ollama vision model for photo keywords.
 
         Args:
             image_bytes: JPEG bytes, already downscaled (never the full upload).
+            raise_refusal: Let a call refused before it was sent raise, so a sweep can tell "not asked" from "no answer".
 
         Returns:
             Raw keyword strings, empty when the model answered with none; None when no answer came - no server is
             configured, the call was refused before it was sent, it failed, or the body was not a finished
             generation - so nothing is known about the photo (P322).
+
+        Raises:
+            RequestCancelledError: With ``raise_refusal``, when the session refused the call before sending it - over
+                its limit, switched off, or backed off by provider health.
         """
         if not self.base_url:
             return None
@@ -103,6 +108,8 @@ class OllamaGateway(Gateway):
             response.raise_for_status()
             body = response.json()
         except RequestCancelledError as exc:
+            if raise_refusal:
+                raise
             logger.info("Ollama vision keyword generation was not sent (model=%s): %s", self.model, exc)
             return None
         except requests.exceptions.RequestException:

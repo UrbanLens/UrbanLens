@@ -18,6 +18,8 @@ class OllamaVisionKeywordProvider(PhotoKeywordProvider):
 
     slug = "photo_keywords_ollama"
     label = "Photo keywords: Ollama (local vision)"
+    #: ``OllamaGateway.service_key``.
+    service_key = "ollama"
 
     def is_available_for(self, image: Image) -> bool:
         """Requires a configured Ollama server and the uploader's AI toggle.
@@ -47,11 +49,12 @@ class OllamaVisionKeywordProvider(PhotoKeywordProvider):
         Raises:
             KeywordSourceUnavailableError: The Ollama server did not answer, or the photo's analysis copy could not be
                 read, so the keywords the photo has stand (P322).
+            RequestCancelledError: The call was refused before it was sent.
         """
         from urbanlens.dashboard.services.apis.ai.ollama import OllamaGateway
 
         small = require_analysis_jpeg_bytes(image)
-        keywords = OllamaGateway().describe_photo_keywords(small)
+        keywords = OllamaGateway().describe_photo_keywords(small, raise_refusal=True)
         if keywords is None:
             raise KeywordSourceUnavailableError("the Ollama server did not answer")
         return [KeywordResult(keyword=keyword) for keyword in keywords]

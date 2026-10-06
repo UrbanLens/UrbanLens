@@ -598,6 +598,11 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.backfill_image_analysis_thumbnails",
         "schedule": crontab(minute=19),
     },
+    # Keyword sources asked again about the photos they did not answer for (P323); see services/photos/keyword_retry.py.
+    "keyword-retry-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_keyword_retries",
+        "schedule": crontab(minute="11-59/15"),
+    },
     # Daily; clients resync past any pruning gap via the 410 signal.
     "pin-tombstone-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",

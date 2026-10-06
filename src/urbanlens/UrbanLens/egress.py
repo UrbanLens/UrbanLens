@@ -376,6 +376,7 @@ BEAT_EGRESS: Mapping[str, BeatEgress] = {
     "sweep-unnamed-files": BeatEgress.INTERNAL,
     "image-marker-thumbnail-backfill": BeatEgress.INTERNAL,
     "image-analysis-thumbnail-backfill": BeatEgress.INTERNAL,
+    "keyword-retry-sweep": BeatEgress.EXTERNAL,
     "pin-tombstone-pruning": BeatEgress.INTERNAL,
     "api-call-tally-rollup": BeatEgress.INTERNAL,
     "api-call-log-pruning": BeatEgress.INTERNAL,
