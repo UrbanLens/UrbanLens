@@ -326,6 +326,16 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # Free per this entry's own notes; see `ServiceDefaults.billable`.
         billable=False,
     ),
+    "overpass_public_mirror": ServiceDefaults(
+        display_name="Overpass API public mirrors (overpass-api.de, maps.mail.ru)",
+        category=EgressCategory.QUOTA,
+        # Asked only when the self-hosted primary is down. The public instances allow a few concurrent slots and
+        # about 10,000 queries a day per address, and that address is the one production REData shares.
+        calls_per_minute=10,
+        calls_per_day=2_000,
+        notes="The public Overpass instances the self-hosted primary fails over to. Their limits are per address, shared by every deployment and REData.",
+        billable=False,
+    ),
     "digital_commonwealth": ServiceDefaults(
         display_name="Digital Commonwealth",
         category=EgressCategory.REDATA,

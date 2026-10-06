@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, ParamSpec, TypeVar
 from urbanlens.UrbanLens.egress import (
     BEAT_EGRESS,
     UNCLASSIFIED_CATEGORY,
+    UNRESTRICTED_CATEGORIES,
     BeatEgress,
     EgressCategory,
     EgressDecision,
@@ -97,8 +98,6 @@ UNREGISTERED_SERVICES: Mapping[str, EgressCategory] = {
     "chronicling_america": EgressCategory.REDATA,
     # Twilio's shared base; its channels are ``sms`` and ``whatsapp``.
     "twilio": EgressCategory.MESSAGING,
-    # The public Overpass mirrors the self-hosted primary falls back to; asked before each is tried.
-    "overpass_public_mirror": EgressCategory.QUOTA,
     # Save Page Now: a write to the Internet Archive, made on the ``wayback_machine`` session.
     "wayback_save": EgressCategory.PUBLIC_WRITE,
     # ``LLMGateway.service_key`` for a gateway built without a feature.
@@ -258,11 +257,15 @@ def collect_refusals() -> Iterator[list[str]]:
         The refused service keys, in order, filled in as the block runs.
     """
     refused: list[str] = []
+    outer = _REFUSALS.get()
     token = _REFUSALS.set(refused)
     try:
         yield refused
     finally:
         _REFUSALS.reset(token)
+        # A nested collector reports to the one around it too.
+        if outer is not None:
+            outer.extend(refused)
 
 
 def require_egress(service: str) -> EgressDecision:
@@ -363,8 +366,11 @@ def log_egress_policy() -> None:
             if os.environ.get(retired, "").strip():
                 logger.warning("%s is set but no longer read; the egress policy follows UL_ENVIRONMENT and %s (D26)", retired, replacement)
         for service in share_overrides():
-            if explicit_category(service) is None:
+            category = explicit_category(service)
+            if category is None:
                 logger.warning("UL_ENVIRONMENT_SHARE_OVERRIDES names %r, which is not a classified service", service)
+            elif category in UNRESTRICTED_CATEGORIES:
+                logger.warning("UL_ENVIRONMENT_SHARE_OVERRIDES names %r, a %s service no share applies to; its API-limits switch turns it off", service, category)
         unknown = sorted(background_tasks_allowlist() - set(BEAT_EGRESS))
         if unknown:
             logger.warning("UL_BACKGROUND_TASKS_ALLOWLIST names %s, which no beat entry is called", ", ".join(unknown))

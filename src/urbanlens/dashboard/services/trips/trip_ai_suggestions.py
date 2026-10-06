@@ -436,11 +436,13 @@ def generate_trip_suggestions(trip: Trip, requester: Profile) -> TripSuggestions
     context = build_trip_context(trip, requester)
     try:
         with api_call_slot("trip_suggestions", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
             answer = gateway.send_prompt(_format_prompt(context))
-            slot.success, slot.cost_estimate = bool(answer), gateway.cost
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
     except RequestCancelledError as exc:
+        # Switched off, over its limit or not called here (D26): unavailable, and nothing is cached.
         logger.info("Trip suggestions for trip %s were refused before the AI call: %s", trip.pk, exc)
-        answer = None
+        return _UNAVAILABLE
     if not answer:
         return TripSuggestions(summary="Couldn't reach the AI provider just now - try again shortly.")
 

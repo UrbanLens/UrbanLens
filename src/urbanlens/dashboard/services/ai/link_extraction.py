@@ -642,12 +642,13 @@ def run_extraction(extraction: LinkExtraction) -> None:
     answer: str | None = None
     try:
         with api_call_slot("link_extraction", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
             try:
                 answer = gateway.send_prompt(prompt)
             except Exception:
                 logger.exception("Link extraction AI call failed for extraction %s", extraction.pk)
                 answer = None
-            slot.success, slot.cost_estimate = bool(answer), gateway.cost
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
     except RequestCancelledError as exc:
         logger.info("Link extraction %s was refused before its AI call: %s", extraction.pk, exc)
     if not answer:

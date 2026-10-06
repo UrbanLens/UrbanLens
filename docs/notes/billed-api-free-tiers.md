@@ -97,8 +97,9 @@ reserved row where the caller already holds an `api_call_slot` (so there is neve
 | `cost_estimate` | This call's tokens at the model's price in `MODEL_COSTS`; empty for a model with no price on file |
 
 No row holds a prompt, an image or an answer. A call refused before it was made for an input that
-could not return data keeps its `was_rejected_input` row, and a call the gateway never sent (a prompt
-over the token limit) writes none.
+could not return data keeps its `was_rejected_input` row. A call the gateway never sent (a prompt over
+the token limit) writes none of its own; inside a reserved slot the reservation is still recorded, as a
+failed call.
 
 | Feature | `service` | Row written by |
 |---|---|---|

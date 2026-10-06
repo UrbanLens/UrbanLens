@@ -19,6 +19,7 @@ from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, override_settings
 from model_bakery import baker
+import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
@@ -36,6 +37,11 @@ from urbanlens.dashboard.services.pins.external_data import (
     schedule_panel_fetch,
     unavailable_here,
 )
+
+# Imported before any test patches ``ai.factory.get_gateway``: these bind it at import, and one first imported
+# under the patch would keep the mock for every later test in the process.
+import urbanlens.dashboard.services.trips.trip_ai_suggestions  # noqa: F401
+import urbanlens.dashboard.services.trivia  # noqa: F401
 
 _LAT, _LON = 41.73266, -73.92736
 
@@ -113,6 +119,44 @@ class OverpassMirrorTests(SimpleTestCase):
             self.assertGreater(len(gateway._endpoints()), 1)
 
 
+class OverpassMirrorLedgerTests(TestCase):
+    """A failover to a public mirror spends the mirrors' own ``quota`` budget, not the self-hosted primary's."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_a_failover_is_ledgered_under_the_mirror_service(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.boundaries import overpass
+
+        gateway = overpass.OverpassGateway(mirrors=("https://mirror.example/api/interpreter",))
+
+        def wire(method: str, url: str, *args, **kwargs) -> requests.Response:
+            if url == gateway.base_url:
+                raise requests.ConnectionError("primary down")
+            response = requests.Response()
+            response.status_code, response._content, response.url = 200, b'{"elements": []}', url
+            return response
+
+        with (
+            deployment("production"),
+            mock.patch.object(requests.Session, "request", side_effect=wire),
+            mock.patch.object(overpass.time, "sleep"),
+        ):
+            gateway.query("[out:json];node(1);out;")
+
+        self.assertEqual(ApiCallLog.objects.filter(service="overpass").count(), 1)
+        self.assertEqual(ApiCallLog.objects.filter(service="overpass_public_mirror").count(), 1)
+
+    def test_staging_holds_the_mirrors_to_its_share_and_the_primary_to_none(self) -> None:
+        from urbanlens.dashboard.services.core import rate_limiter
+
+        with deployment("staging"):
+            self.assertEqual(rate_limiter._service_share("overpass_public_mirror"), 0.05)
+            self.assertEqual(rate_limiter._service_share("overpass"), 1.0)
+
+
 class PanelUnavailableHereTests(TestCase):
     _SOURCE_KEY = "photon"
 
@@ -161,6 +205,58 @@ class PanelUnavailableHereTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Not available in this environment", response.content)
         self.assertNotIn(b"hx-get", response.content)
+
+
+class SlidesCarouselRefusalTests(TestCase):
+    """A carousel shows what the allowed providers found, and trusts that pass only briefly when one was refused."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        profile = Profile.objects.get(user=baker.make("auth.User"))
+        self.pin = baker.make(Pin, profile=profile, location=baker.make(Location, latitude=_LAT, longitude=_LON))
+        self.source = get_panel_source("satellite")
+
+    def _ready_ttl(self, *, refuse: bool) -> int:
+        from urbanlens.dashboard.services.core.egress import require_egress
+        from urbanlens.dashboard.services.pins import external_data
+
+        def collect(lat: float, lng: float) -> tuple[list, list]:
+            if refuse:
+                with contextlib.suppress(EnvironmentRefusedError):
+                    require_egress("esri")
+            return [], []
+
+        with (
+            deployment("development"),
+            mock.patch.object(type(self.source), "collect", side_effect=collect),
+            mock.patch.object(external_data, "cache") as stored,
+        ):
+            self.source.fetch(self.pin)
+        stored.set.assert_called_once()
+        return stored.set.call_args.args[2]
+
+    def test_a_refused_provider_keeps_the_pass_short_lived(self) -> None:
+        from urbanlens.dashboard.services.pins.external_data import UNAVAILABLE_HERE_TTL_SECONDS
+
+        self.assertEqual(self._ready_ttl(refuse=True), UNAVAILABLE_HERE_TTL_SECONDS)
+
+    def test_a_complete_pass_is_trusted_as_before(self) -> None:
+        from urbanlens.dashboard.services.pins.external_data import SLIDES_READY_TTL_SECONDS
+
+        self.assertEqual(self._ready_ttl(refuse=False), SLIDES_READY_TTL_SECONDS)
+
+    def test_a_nested_collector_reports_to_the_outer_one(self) -> None:
+        from urbanlens.dashboard.services.core.egress import collect_refusals, require_egress
+
+        with (
+            deployment("development"),
+            collect_refusals() as outer,
+            collect_refusals() as inner,
+            contextlib.suppress(EnvironmentRefusedError),
+        ):
+            require_egress("esri")
+        self.assertEqual(inner, ["esri"])
+        self.assertEqual(outer, ["esri"])
 
 
 class NameChainTests(SimpleTestCase):
@@ -390,6 +486,71 @@ class AiPathsAreReservedAndLoggedTests(TestCase):
                 self.assertIsNone(SERVICE_REGISTRY[feature].calls_per_30_days)
                 self.assertIsNotNone(SERVICE_REGISTRY[feature].calls_per_minute)
 
+    def test_an_answered_call_with_nothing_usable_in_it_is_a_success(self) -> None:
+        """Provider health reads a failed row as the provider failing; an empty answer is the provider answering."""
+        from urbanlens.dashboard.services.ai.call_log import recorded_ai_call
+
+        class _Answering(_FakeGateway):
+            def send_prompt_list(self, prompt: str, **kwargs) -> list[str]:
+                with recorded_ai_call(service="category_suggestions", provider="cloudflare", model="m") as call:
+                    call.success = True
+                return super().send_prompt_list(prompt, **kwargs)
+
+        gateway = _Answering(answers=[])
+        with mock.patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=gateway):
+            self._run_category_suggestions(gateway)
+        self.assertTrue(ApiCallLog.objects.get(service="category_suggestions").success)
+
+    def test_a_shared_gateway_records_each_call_s_own_cost(self) -> None:
+        """The trivia sweep reuses one gateway, whose ``cost`` is a running total."""
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.trivia.generation import MIN_DESCRIPTION_LENGTH, generate_questions_for_wiki
+
+        class _Billing(_FakeGateway):
+            def send_prompt_list(self, prompt: str, **kwargs) -> list[str]:
+                self.cost += Decimal("0.0010")
+                return super().send_prompt_list(prompt, **kwargs)
+
+        gateway = _Billing(answers=[])
+        for _ in range(3):
+            wiki = baker.make(Wiki, location=baker.make(Location), description="x" * MIN_DESCRIPTION_LENGTH)
+            generate_questions_for_wiki(wiki, gateway=gateway)
+        costs = list(ApiCallLog.objects.filter(service="trivia_generation").values_list("cost_estimate", flat=True))
+        self.assertEqual(costs, [Decimal("0.001")] * 3)
+
+    def test_a_refused_trivia_sweep_marks_no_wiki_tried(self) -> None:
+        """Nothing was asked, so the wikis wait for the next run, not for RETRY_AFTER."""
+        from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt
+        from urbanlens.dashboard.models.wiki.model import Wiki
+        from urbanlens.dashboard.services.trivia import generation
+
+        for _ in range(2):
+            baker.make(Wiki, location=baker.make(Location), description="x" * generation.MIN_DESCRIPTION_LENGTH)
+        ApiRateLimit.objects.update_or_create(
+            service="trivia_generation", defaults={"display_name": "t", "enabled": False}
+        )
+        gateway = _FakeGateway(answers=[])
+        with mock.patch.object(generation, "_gateway", return_value=gateway):
+            summary = generation.sweep_wikis_for_generation(batch_size=5)
+        self.assertEqual(gateway.calls, 0)
+        self.assertEqual(summary["wikis_considered"], 0)
+        self.assertFalse(TriviaGenerationAttempt.objects.exists())
+
+    def test_a_refused_trip_suggestion_is_unavailable_not_a_cached_apology(self) -> None:
+        ApiRateLimit.objects.update_or_create(
+            service="trip_suggestions", defaults={"display_name": "t", "enabled": False}
+        )
+        from urbanlens.dashboard.services.trips import trip_ai_suggestions
+
+        gateway = _FakeGateway(answer="{}")
+        with (
+            mock.patch.object(trip_ai_suggestions, "get_gateway", return_value=gateway),
+            mock.patch.object(trip_ai_suggestions, "build_trip_context"),
+        ):
+            result = trip_ai_suggestions.generate_trip_suggestions(mock.Mock(pk=1), self.profile)
+        self.assertEqual(gateway.calls, 0)
+        self.assertFalse(result.generated)
+
 
 class MessagingTests(TestCase):
     def test_a_text_off_production_is_a_no_op(self) -> None:
@@ -516,3 +677,29 @@ class BackgroundTaskGateTests(SimpleTestCase):
 
         with self.assertRaises(ValueError):
             external_background_task("task-outbox-drain")
+
+
+class OperatorPathsTests(SimpleTestCase):
+    """Paths outside the gateway session that ask the policy themselves."""
+
+    def test_the_places_diagnostic_refuses_off_production(self) -> None:
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        with (
+            deployment("development"),
+            mock.patch("urbanlens.UrbanLens.settings.app.settings.google_unrestricted_api_key", "k"),
+            mock.patch.object(requests.Session, "request") as wire,
+        ):
+            call_command("diagnose_places_api", stdout=out)
+        wire.assert_not_called()
+        self.assertIn("does not call google_places", out.getvalue())
+
+    def test_a_wikipedia_cover_is_not_downloaded_off_production(self) -> None:
+        from urbanlens.dashboard.services.wiki import wiki_seed
+
+        with deployment("development"), mock.patch.object(wiki_seed, "request_public_url") as fetch:
+            wiki_seed._store_cover_from_url("https://upload.wikimedia.org/a.jpg", pin=mock.Mock(), wiki=None)
+        fetch.assert_not_called()

@@ -39,7 +39,13 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
 - **The share.** `UL_ENVIRONMENT_SHARE` replaces `UL_BILLED_API_SHARE`. Defaults: production 0.9, staging 0.05,
   development and local 0, an unknown environment 0, the test suite 1.0. It scales every window (per minute, per
   day, per 30 days) of every `quota` and `billed` service, never below one call; a billed service's monthly
-  ceiling keeps #210's formula with this share (R31).
+  ceiling keeps #210's formula with this share (R31). An *unset* `UL_ENVIRONMENT` is production
+  (`environments/meta.py`), so every other deployment must set it: one that loses the variable spends
+  production's share, sends real mail and schedules every beat entry, and says so only in its startup line.
+  The share is per deployment: every deployment that says `staging` takes its own 5%, so with more than two
+  of them (the damballa staging stack, k3s staging, and the k3s sites while they run as staging before the
+  cutover) production's 0.9 and theirs together pass the whole budget. Give the extra ones
+  `UL_ENVIRONMENT_SHARE=0`, or a smaller share.
 - **Trying a provider.** `UL_ENVIRONMENT_SHARE_OVERRIDES=nominatim=0.02,sms=1` gives one service its own share. For
   `messaging` and `public_write` any share above 0 opts the service in, and 0 turns it off on production. The
   overrides are logged at startup, with a warning for a name nothing classifies. REData, our own hosts and AI
@@ -52,7 +58,9 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
   answer; a non-outage error there would be cached by, or re-raised from, the ~40 sites that branch on it.
   - The boundary chain skips the source; it does not defer and schedule a retry.
   - A panel says "Not available in this environment" and stores nothing (`external_data.unavailable_here`), even
-    when its source swallowed the refusal: `collect_refusals` sees it either way.
+    when its source swallowed the refusal: `collect_refusals` sees it either way. A slide carousel (satellite,
+    street level) shows what its allowed providers found, and trusts that pass for 30 minutes instead of 12
+    hours when one was refused, so an override takes effect.
   - Off production the name and forward-geocode chains never fall through from REData to a direct `quota` or
     `billed` provider (`egress.direct_fallback_permitted`). A REData 503 is reported as unavailable: no name for
     now, which is retried, or `AddressLookupUnavailableError` (503) for an address, never "no such place".
@@ -66,7 +74,9 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
   and dark layers stay on the self-hosted mirror (and the CSP does not admit the hosted glyph host).
 - **Retired:** `UL_ALLOW_OUTBOUND_APIS`, `UL_BILLED_API_SHARE`, and `UL_DEMO_MODE`'s REData-only exemption. Demo
   mode keeps its login endpoint and banner; a demo deployment that should call only REData sets
-  `UL_ENVIRONMENT_SHARE=0` (AI stays allowed). A set retired variable is warned about at startup.
+  `UL_ENVIRONMENT_SHARE=0` (AI stays allowed). The share does not hold `messaging` or `public_write`, so a demo
+  runs under a non-production `UL_ENVIRONMENT` (`docs/DEMO.md`); on production they stay on. A set retired
+  variable is warned about at startup.
 
 ## How the services are classified
 
@@ -79,15 +89,18 @@ service is treated as `billed`.
 |---|---|
 | `redata` | every `redata_*` key (37 registered, plus `redata_boundary`, `redata_json`, `redata_location_context`, `redata_place_details`); `digital_commonwealth` and the street-level and archive labels `mapillary`, `kartaview`, `panoramax`, `smithsonian`, `library_of_congress`, `internet_archive`, `chronicling_america`, whose calls REData makes |
 | `internal` | `overpass` (the self-hosted primary), `ollama`, `immich`, `ai_inference`, `gotify`, `clamd` |
-| `quota` | `nominatim`, `wikipedia`, `wikipedia_media`, `wikimedia`, `wayback_machine` (reads), `overture_maps`, `google_open_buildings`, `microsoft_building_footprints`, `overpass_public_mirror`, `open_historical_map`, `open_meteo`, `openweathermap`, `osrm`, `census_tigerweb`, `usgs`, `esri`, `basemap_vendor_tiles`, `flickr`, `hibp`, `virustotal`, `google_photos`, `google_street_view_metadata`; unledgered `google_oauth_refresh`, `google_oauth_connect`, `social_sign_in`, `flickr_oauth`, `user_url_fetch`, `github_contributors`, `git_fetch` |
+| `quota` | `nominatim`, `wikipedia`, `wikipedia_media`, `wikimedia`, `wayback_machine` (reads), `overture_maps`, `google_open_buildings`, `microsoft_building_footprints`, `overpass_public_mirror` (the public fallbacks, on a session of their own), `open_historical_map`, `open_meteo`, `openweathermap`, `osrm`, `census_tigerweb`, `usgs`, `esri`, `basemap_vendor_tiles`, `flickr`, `hibp`, `virustotal`, `google_photos`, `google_street_view_metadata`; unledgered `google_oauth_refresh`, `google_oauth_connect`, `social_sign_in`, `flickr_oauth`, `user_url_fetch`, `github_contributors`, `git_fetch` |
 | `billed` | `google_geocoding`, `google_places`, `google_maps`, `azure_maps`, `apple_maps`, `google_earth`, `protomaps_basemap` |
 | `ai` | `trivia_generation`, `trivia_moderation`, `trivia_answer_check`, `trivia_wiki_incorporation`, `article_expansion`, `article_safety`, `link_extraction`, `document_pin_import`, `trip_suggestions`, `label_style_suggestions`, `category_suggestions`, `assistant`, `ai_photo_keywords`, `cloudflare_image_classifier` |
 | `messaging` | `email`, `sms`, `whatsapp` (and their base `twilio`), `unified_push` |
 | `public_write` | `wayback_save` (Save Page Now), `google_calendar` (event writes; its imports are refused with it), `stripe` |
 
 The seven AI features that called the provider with no gate now each reserve an `api_call_slot` under their
-feature name, one row per provider call (the assistant one per round). Their rows carry no cap: AI is logged,
-never refused for spend (R31).
+feature name, one row per provider call (the assistant one per round), which the gateway fills in with model,
+tokens and cost (#214). The six rows added for them carry only a per-minute guard against a runaway loop: AI
+is logged, never refused for spend (R31). `trivia_generation` already had a row, 5 a minute and 200 a day,
+which its slot now enforces; the hourly sweep stops at the first refused call and marks no wiki tried, so the
+rest wait for the next run rather than for the 30-day retry.
 
 ### Paths outside the gateway session
 
@@ -99,6 +112,8 @@ never refused for spend (R31).
 | `google_oauth_refresh` | quota | the calendar and photos gateways ask for their own service before refreshing a token |
 | `google_oauth_connect`, `social_sign_in`, `flickr_oauth` | quota | **not held**: a person signing in or connecting their own account |
 | `user_url_fetch` | quota | **not held**: a URL a person supplied, fetched for them (link pages, gallery photos, remote tile templates, social-link checks, avatars) |
+| Wikipedia lead image as a pin cover | quota | `wiki_seed._store_cover_from_url` asks for `wikimedia` before downloading |
+| `manage.py diagnose_places_api` | billed | asks for `google_places` before its raw requests |
 | `github_contributors`, `git_fetch` | quota | **not held**: the thanks page (cached) and the site-admin update check |
 | `gotify`, `clamd`, `ai_inference` | internal | self-hosted |
 
@@ -143,4 +158,6 @@ key from production's.
   overlays, Esri and USGS export slides.
 - What REData spends upstream on our behalf (above).
 - The unheld paths in the table above.
+- Weather and routing (`weather_resolution`, `routing_resolution`) still fall through from a failed REData call
+  to OpenWeatherMap, Open-Meteo and OSRM. Development refuses those anyway; staging spends its 5% on them.
 - Measured volumes on staging and production; the audit read only development's call log.

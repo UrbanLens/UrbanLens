@@ -115,6 +115,9 @@ def _record(service: str, provider: str, model: str, call: AiCall, response_ms: 
             slot.input_tokens, slot.output_tokens = input_tokens, output_tokens
             if call.status_code is not None:
                 slot.status_code = call.status_code
+            # The provider answered: the caller may still find nothing usable in it, but the call succeeded.
+            if call.success:
+                slot.success = True
             return
         log_api_call(
             service,

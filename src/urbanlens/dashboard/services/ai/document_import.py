@@ -238,8 +238,9 @@ def extract_pins_from_text(filename: str, text: str, profile: Profile) -> tuple[
 
     try:
         with api_call_slot("document_pin_import", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
             answer = gateway.send_prompt(prompt)
-            slot.success, slot.cost_estimate = bool(answer), gateway.cost
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
     except RequestCancelledError as exc:
         logger.info("AI document pin extraction for '%s' was refused before its call: %s", filename, exc)
         return None, None

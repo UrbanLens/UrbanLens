@@ -228,9 +228,23 @@ class OverpassGateway(Gateway, BoundaryProvider):
     timeout: int = 30
     radius_meters: int = 100
 
+    #: The session the public mirrors are asked through, ledgered and limited as :data:`PUBLIC_MIRROR_SERVICE` so
+    #: they spend this environment's share of that ``quota`` budget, not the self-hosted primary's. Defaults to a
+    #: rate-limited session of its own, or to ``session`` when a caller supplied one (a test's mock).
+    mirror_session: Any = None
+
     def __post_init__(self) -> None:
+        own_session = type(self.session) is requests.Session
         Gateway.__post_init__(self)
         self.session.headers.update({"User-Agent": _USER_AGENT})
+        if self.mirror_session is None:
+            if own_session:
+                from urbanlens.dashboard.services.core.rate_limiter import _RateLimitedSession
+
+                self.mirror_session = _RateLimitedSession(PUBLIC_MIRROR_SERVICE, self.endpoint_for_log)
+                self.mirror_session.headers.update({"User-Agent": _USER_AGENT})
+            else:
+                self.mirror_session = self.session
 
     def _endpoints(self) -> list[str]:
         """Ordered, de-duplicated list of every Overpass endpoint this deployment may ask.
@@ -283,7 +297,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
             if attempt:
                 time.sleep(_RETRY_BACKOFF_SECONDS)
             try:
-                response = self.session.post(url, data={"data": query}, timeout=http_timeout)
+                session = self.session if url == self.base_url else self.mirror_session
+                response = session.post(url, data={"data": query}, timeout=http_timeout)
             except RateLimitExceededError:
                 raise
             except (requests.Timeout, requests.ConnectionError) as exc:

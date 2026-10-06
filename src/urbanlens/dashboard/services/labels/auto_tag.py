@@ -409,8 +409,10 @@ class AutoTagService:
 
         try:
             with api_call_slot("category_suggestions", endpoint=gateway.model) as slot:
+                cost_before = gateway.cost
                 names = gateway.send_prompt_list(prompt, max_results=self.max_labels)
-                slot.success, slot.cost_estimate = bool(names), gateway.cost
+                # The gateway marks an answered call itself; an answer with nothing usable in it is still an answer.
+                slot.success, slot.cost_estimate = slot.success or bool(names), gateway.cost - cost_before
         except RequestCancelledError as exc:
             logger.info("AI category suggestion was refused before its call: %s", exc)
             return []

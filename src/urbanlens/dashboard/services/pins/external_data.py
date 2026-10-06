@@ -1388,12 +1388,19 @@ class SlidesPanelSource(PanelSource, ABC):
 
     def fetch(self, pin: Pin) -> None:
         """Warm every provider's slide cache, then mark how far to trust the result.
-        Those retry on the ordinary failure cadence instead."""
+        Those retry on the ordinary failure cadence instead. A provider this environment refused (D26) answered
+        nothing, so the pass is trusted only as long as an unavailable panel is, and an override takes effect."""
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        _, results = self.collect(lat, lng)
-        complete = all(result.ok for result in results)
-        cache.set(self.ready_key(pin), 1, SLIDES_READY_TTL_SECONDS if complete else FAILURE_SKIP_TTL_SECONDS)
+        with collect_refusals() as refused:
+            _, results = self.collect(lat, lng)
+        if not all(result.ok for result in results):
+            ttl = FAILURE_SKIP_TTL_SECONDS
+        elif refused:
+            ttl = UNAVAILABLE_HERE_TTL_SECONDS
+        else:
+            ttl = SLIDES_READY_TTL_SECONDS
+        cache.set(self.ready_key(pin), 1, ttl)
 
 
 class SatellitePanelSource(SlidesPanelSource):

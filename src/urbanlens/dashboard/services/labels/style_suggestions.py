@@ -50,8 +50,10 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
 
     try:
         with api_call_slot("label_style_suggestions", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
             answers = gateway.send_prompt_list(prompt, max_results=2)
-            slot.success, slot.cost_estimate = bool(answers), gateway.cost
+            # The gateway marks an answered call itself; an answer with nothing usable in it is still an answer.
+            slot.success, slot.cost_estimate = slot.success or bool(answers), gateway.cost - cost_before
     except RequestCancelledError as exc:
         logger.info("AI label style suggestion for %r was refused before its call: %s", name, exc)
         return LabelStyleSuggestion()

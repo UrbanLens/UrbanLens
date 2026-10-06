@@ -264,11 +264,15 @@ def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: Wiki | None) -> No
     from django.core.files.uploadedfile import SimpleUploadedFile
 
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.core.egress import egress_permitted
     from urbanlens.dashboard.services.photos.photo_upload import upload_photo
 
     owner = pin.profile if pin is not None else None
     if owner is None:
         # TODO: a wiki cover has no owning profile for upload_photo; decide who owns it before fetching one.
+        return
+    # A fetch from upload.wikimedia.org outside the ledger; the policy decides whether this environment makes it (D26).
+    if not egress_permitted("wikimedia"):
         return
     response = request_public_url("GET", url, timeout=8, max_bytes=_COVER_MAX_BYTES)
     response.raise_for_status()

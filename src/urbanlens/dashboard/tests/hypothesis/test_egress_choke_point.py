@@ -245,7 +245,7 @@ class StartupLogTests(SimpleTestCase):
 
     def test_it_warns_about_retired_switches_and_unknown_names(self) -> None:
         with (
-            deployment("development", overrides={"no_such_service": 0.1}),
+            deployment("development", overrides={"no_such_service": 0.1, REDATA: 0.5}),
             mock.patch.dict("os.environ", {"UL_ALLOW_OUTBOUND_APIS": "true"}),
             mock.patch("urbanlens.UrbanLens.settings.app.settings.background_tasks_allowlist", ["no-such-entry"]),
             self.assertLogs(egress.logger, logging.INFO) as logs,
@@ -254,4 +254,5 @@ class StartupLogTests(SimpleTestCase):
         text = "\n".join(logs.output)
         self.assertIn("UL_ALLOW_OUTBOUND_APIS", text)
         self.assertIn("no_such_service", text)
+        self.assertIn(f"{REDATA!r}, a redata service", text)
         self.assertIn("no-such-entry", text)

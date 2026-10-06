@@ -52,16 +52,21 @@ Respond with each question/answer pair wrapped in its own ANSWER tag, with the q
 If the article doesn't contain enough concrete facts to write a good question, return no ANSWER tags at all."""
 
 
-def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None) -> list[TriviaQuestion]:
+def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None, raise_refusal: bool = False) -> list[TriviaQuestion]:
     """Generate, classify, and persist approved AI trivia questions from one wiki's article.
     Idempotent per location: a location that already has at least one AI_GENERATED question is skipped entirely, so this is safe to call repeatedly (e.g. from a periodic sweep) without regenerating or re-spending tokens on the same wiki.
 
     Args:
         wiki: The wiki to mine for trivia questions.
         gateway: The trivia-generation gateway, when the caller already has one.
+        raise_refusal: Let a call refused before it was made raise, so a sweep can tell it from an answer.
 
     Returns:
-        Every newly-created (APPROVED) question - empty if the wiki was skipped (no substantial content, already generated, AI unavailable) or nothing survived classification."""
+        Every newly-created (APPROVED) question - empty if the wiki was skipped (no substantial content, already generated, AI unavailable or refused) or nothing survived classification.
+
+    Raises:
+        RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made - over its
+            limit, switched off, or not made in this environment (D26)."""
     if TriviaQuestion.objects.filter(location=wiki.location, source=TriviaQuestionSource.AI_GENERATED).exists():
         return []
     if not wiki.description or len(wiki.description) < MIN_DESCRIPTION_LENGTH:
@@ -74,9 +79,14 @@ def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None
     prompt = wrap_user_data(wiki.description)
     try:
         with api_call_slot("trivia_generation", endpoint=gateway.model) as slot:
+            # The sweep shares one gateway across wikis, and its cost is a running total.
+            cost_before = gateway.cost
             raw_pairs = gateway.send_prompt_list(prompt, max_results=MAX_QUESTIONS_PER_WIKI)
-            slot.success, slot.cost_estimate = bool(raw_pairs), gateway.cost
+            # The gateway marks an answered call itself; an article with nothing to ask about is still an answer.
+            slot.success, slot.cost_estimate = slot.success or bool(raw_pairs), gateway.cost - cost_before
     except RequestCancelledError as exc:
+        if raise_refusal:
+            raise
         logger.info("Trivia generation for wiki %s was refused before its AI call: %s", wiki.pk, exc)
         return []
     except Exception:
@@ -122,7 +132,7 @@ def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) ->
 
     Each wiki mined is recorded whether or not a question survived, and is not mined again for
     ``RETRY_AFTER``, so wikis that yield nothing cannot hold the batch and re-spend tokens every run. Nothing
-    is recorded while AI is unavailable.
+    is recorded while AI is unavailable, and the sweep stops at the first call refused before it was made.
 
     Args:
         batch_size: Maximum number of wikis to consider in this run.
@@ -150,7 +160,12 @@ def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) ->
 
     for wiki in candidates:
         try:
-            created = generate_questions_for_wiki(wiki, gateway=gateway)
+            created = generate_questions_for_wiki(wiki, gateway=gateway, raise_refusal=True)
+        except RequestCancelledError as exc:
+            # Over its limit, switched off or not made here: nothing was asked, so nothing is recorded and the
+            # remaining wikis wait for the next run rather than for RETRY_AFTER.
+            logger.info("Trivia generation sweep stopped after %d wikis: %s", summary["wikis_considered"], exc)
+            break
         except Exception:
             logger.exception("Trivia generation failed for wiki %s; recorded as attempted", wiki.pk)
             created = []
