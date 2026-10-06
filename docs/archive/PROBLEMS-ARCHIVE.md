@@ -23537,7 +23537,7 @@ can be deleted at will. On dev, a second reverse geocode of a point and a second
 answered from another's row, a refusal is asked again, and a failed name lookup asks Google once (the first, third
 and fifth failed before the fix). `test_google_place.py`'s rate-limit test now goes through the real chain.
 
-## RESOLVED 2026-10-05: An import preview read files, archive entries and single elements whole; every format now reads in pieces and every element is bounded
+## RESOLVED 2026-10-05: An import preview read files, archive entries and single elements whole; every format now reads in pieces, and no element is capped
 
 `id: P95` · `status: fixed` · `resolved: 2026-10-05`
 
@@ -23560,8 +23560,8 @@ rather than every node, so it stops growing at about 135 MiB where it used to gr
 history formats hold what the confirmed import will save rather than the file (Location History
 1.26x, GPX 5.9x). What still grows with its input is a single element: one KML placemark, GeoJSON
 feature or OSM way is built whole, at 10-13x its size (RSS) - as, unmeasured, is one CSV row or text
-line - so an entry that is one 300 MB element would still exhaust `media-worker`. Capping an element is what is left, and where to
-cap it is a product call (below).
+line - so an entry that is one 300 MB element would still exhaust `media-worker`. Capping an element was what was left, and where to
+cap it was a product call; Jess ruled on 2026-10-02 that no element is capped (below).
 
 **Where the parse runs, re-checked 2026-09-14.** Not in a gunicorn worker any more.
 `services/pins/import_preview.py::start_import_preview` stores the upload and enqueues
@@ -23733,19 +23733,22 @@ OSM's batches cost passes: 48 MiB of vertices and ways took 28.6 s against 10.9 
     Shorter lines still go to GEOS, after P287's nesting check.
   - **CSV.** A cell past the csv module's 128 KiB field limit raises `csv.Error`. That was not in
     `IMPORT_PARSE_ERRORS`, so it failed the whole preview as unreadable, every other file in the upload with it. It
-    now fails only its own file (`AnOversizedCsvCellFailsOnlyItsFileTests`). A row of very many small cells is bounded below.
-- **A CSV record is bounded, 2026-10-05.** `csv` builds a whole record before anything sees it, a string per cell:
-  a 12 MB row of two-letter cells peaked at 263 MB (21.9x), and a 12.4 MB header at 526 MB (42.5x), so a zipped CSV
-  under the upload cap could exhaust `media-worker`. `maps.MAX_CSV_RECORD_CHARS` (1 MiB) bounds one record; the
-  header is a record of its own. `streams.iter_lines(max_line=...)` refuses a line once it passes the bound rather
-  than once it ends, and `maps._CsvRecordBudget` refuses a record quoted across many short lines. The file fails alone, as an oversized cell
-  does. A real row is far shorter: `csv`'s own field limit is 128 KiB, so the bound leaves room for eight cells at
-  that limit. `test_import_parse_memory.py::AWideCsvRecordIsRefusedTests` holds each shape under 3x the file (all
-  three failed before), and `test_import_streaming_parsers.py::ACsvRecordPastTheBoundFailsOnlyItsFileTests` checks
-  that only that file fails and that records within the bound still read. A hypothesis property in `LinesTests`
-  holds the bounded split to `str.splitlines`: the same lines, or a refusal exactly when a line is past the bound.
-  It was added after review found the first version let a line one character over through when `\n` ended it, and
-  charged the header to the first row.
+    now fails only its own file (`AnOversizedCsvCellFailsOnlyItsFileTests`). A row of very many small cells is read whole, as the next bullet says.
+- **No element is capped: Jess's ruling, 2026-10-02.** Asked "P95: do you want a size cap per element?", Jess
+  answered "no". An element is one placemark, feature, way, CSV record or line, and none has a length limit in this
+  code. A single huge element is bounded only by the worker's memory, the whole-upload budget (2 GB and 1000 files)
+  and the 1 GB entry cap. What the fixes above did is lower what an element costs, not refuse one that costs too much.
+  `csv` builds a whole record before anything sees it, a string per cell: a 12 MB row of two-letter cells peaked at
+  263 MB (21.9x), and a 12.4 MB header at 526 MB (42.5x). At those ratios a CSV that is one 140 MB row or one 70 MB
+  header would fill `media-worker`'s 3 GB (extrapolated from the two measurements, not run). That is accepted under the
+  ruling.
+  A 1 MiB bound on a CSV record (`maps.MAX_CSV_RECORD_CHARS`, with `streams.iter_lines(max_line=...)` and
+  `maps._CsvRecordBudget`) was added on 2026-10-05 in `b7775f3bf` and `ac5de4eff`, after the ruling and against it. It
+  is removed. `test_import_streaming_parsers.py::ALargeCsvRecordIsReadTests` reads a 1.2 MB row, a 2 MB header and a
+  1.5 MB record quoted across 300,000 lines, each previewing its pin without failing the file, and
+  `LinesTests::test_a_line_has_no_length_bound` reads a 3 MiB line whole. `csv`'s own 128 KiB field limit was
+  a per-cell cap too, so `DashboardConfig.ready` lifts it process-wide to 2**31 - 1
+  (`ACsvCellPastTheStdlibLimitIsReadTests`); a `csv.Error` from any other cause still fails only its own file (P282).
 - **History grows with the file, by design.** Location History's visits and routes and GPX's routes
   are what the confirmed import saves, so they are kept to the end of the file: 1.26x and 5.9x RSS at
   16 MiB. What bounds them now is the 110-second soft limit rather than memory: at the measured rates

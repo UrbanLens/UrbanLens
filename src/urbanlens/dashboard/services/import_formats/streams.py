@@ -56,48 +56,28 @@ def iter_decoded(stream: IO[bytes], encoding: str) -> Iterator[str]:
         yield tail
 
 
-class LineTooLongError(ValueError):
-    """A line ran past the length its reader allows."""
-
-
-def iter_lines(pieces: Iterable[str], *, max_line: int | None = None) -> Iterator[str]:
+def iter_lines(pieces: Iterable[str]) -> Iterator[str]:
     """The lines of a text that arrives in pieces, split exactly as ``str.splitlines`` splits.
 
     Only a line is held whole, never the text.
 
     Args:
         pieces: Successive pieces of the text.
-        max_line: The longest line to hold, in characters; None for no bound.
 
     Yields:
         Each line, without its line break.
-
-    Raises:
-        LineTooLongError: A line ran past ``max_line``, raised once it does rather than once it ends.
     """
     held: list[str] = []
-    arriving = 0  # The line still arriving, past any whole line held back in case a "\r" completes it.
     for piece in pieces:
         held.append(piece)
         if not _LINE_BREAK_RE.search(piece):
-            arriving += len(piece)
-            if max_line is not None and arriving > max_line:
-                raise LineTooLongError(f"a line is longer than {max_line:,} characters")
             continue
         lines = "".join(held).splitlines(keepends=True)
         # The last line may go on in the next piece, as may a "\r" that the next piece's "\n" completes.
         held = [lines.pop()]
-        arriving = 0 if _LINE_BREAK_RE.match(held[0][-1:]) else len(held[0])
         for line in lines:
-            yield _within(line.splitlines()[0], max_line)
-    for text in "".join(held).splitlines():
-        yield _within(text, max_line)
-
-
-def _within(line: str, max_line: int | None) -> str:
-    if max_line is not None and len(line) > max_line:
-        raise LineTooLongError(f"a line is longer than {max_line:,} characters")
-    return line
+            yield line.splitlines()[0]
+    yield from "".join(held).splitlines()
 
 
 def is_valid_text(stream: IO[bytes], encoding: str) -> bool:

@@ -1,6 +1,8 @@
 # Generic imports
 from __future__ import annotations
 
+import csv
+
 from django.apps import AppConfig
 from django.contrib.auth.signals import user_logged_out
 from django.core.signals import request_finished, request_started
@@ -14,6 +16,11 @@ class DashboardConfig(AppConfig):
 
     def ready(self):
         register_heif_opener()
+
+        # csv refuses a cell over 128 KiB by default, which is a per-element cap; Jess ruled an
+        # import has none (P95). Process-wide because csv keeps one limit; 2**31 - 1 is the largest
+        # a C long holds everywhere, and the 1 GB upload-entry cap binds long before it.
+        csv.field_size_limit(2**31 - 1)
 
         from urbanlens.core.integer_dumpers import install_checked_integer_dumpers
 

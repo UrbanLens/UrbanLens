@@ -14,6 +14,7 @@ than read as ``nan``.
 
 from __future__ import annotations
 
+import csv
 import datetime
 import io
 import itertools
@@ -38,7 +39,7 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import RouteSource
-from urbanlens.dashboard.services.apis.locations.google import maps as maps_module, my_activity
+from urbanlens.dashboard.services.apis.locations.google import my_activity
 from urbanlens.dashboard.services.apis.locations.google.location_history import (
     parse_semantic_visits,
     semantic_history_to_routes,
@@ -88,15 +89,12 @@ class LinesTests(SimpleTestCase):
     def test_lines_split_as_splitlines_wherever_the_text_is_cut(self, text: str, cuts: list[int]) -> None:
         self.assertEqual(list(streams.iter_lines(_cut(text, cuts))), text.splitlines())
 
-    @_hyp
-    @given(text=_LINE_TEXT, cuts=st.lists(st.integers(0, 60), max_size=8), max_line=st.integers(0, 12))
-    def test_a_bounded_read_splits_the_same_or_refuses_a_line_past_the_bound(
-        self, text: str, cuts: list[int], max_line: int
-    ) -> None:
-        lines = text.splitlines()
-        expected = streams.LineTooLongError if any(len(line) > max_line for line in lines) else lines
+    def test_a_line_has_no_length_bound(self) -> None:
+        long_line = "a" * (3 * 1024 * 1024)
 
-        self.assertEqual(_outcome(lambda: list(streams.iter_lines(_cut(text, cuts), max_line=max_line))), expected)
+        pieces = [long_line[start : start + 65_536] for start in range(0, len(long_line), 65_536)]
+
+        self.assertEqual(list(streams.iter_lines([*pieces, "\ntail"])), [long_line, "tail"])
 
     @_hyp
     @given(text=_LINE_TEXT)
@@ -474,51 +472,47 @@ class LocationHistoryAgreesWithJsonLoadsTests(SimpleTestCase):
         self.assertEqual(parse.history.counts()["visits"], 0)
 
 
-class AnOversizedCsvCellFailsOnlyItsFileTests(SimpleTestCase):
-    """csv refuses a cell over its 128 KiB field limit with ``csv.Error``, which no per-file handler named."""
+class ACsvCellPastTheStdlibLimitIsReadTests(SimpleTestCase):
+    """``csv`` refuses a cell over 128 KiB by default - a per-element cap of its own, which Jess's P95 ruling (no
+    element is capped) rules out. The limit is lifted at startup; a ``csv.Error`` still fails only its own file."""
 
-    def test_the_other_files_in_the_upload_still_preview(self) -> None:
+    _KML = (
+        b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+        b"<Placemark><name>Dam</name><Point><coordinates>-74.1,40.1</coordinates></Point></Placemark>"
+        b"</Document></kml>"
+    )
+
+    def test_a_cell_over_128_kib_previews(self) -> None:
         oversized = b'name,latitude,longitude,description\n"Mill",40.5,-74.5,"' + b"long " * 40_000 + b'"\n'
-        kml = (
-            b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
-            b"<Placemark><name>Dam</name><Point><coordinates>-74.1,40.1</coordinates></Point></Placemark>"
-            b"</Document></kml>"
+
+        parse = GoogleMapsGateway(api_key="").parse_for_preview(
+            [("notes.csv", oversized), ("dam.kml", self._KML)], Profile()
         )
 
-        parse = GoogleMapsGateway(api_key="").parse_for_preview([("notes.csv", oversized), ("dam.kml", kml)], Profile())
+        self.assertGreater(len(oversized), 128 * 1024)
+        self.assertEqual(parse.failed_formats, [])
+        self.assertEqual(sorted(pin["name"] for listed in parse.lists for pin in listed["pins"]), ["Dam", "Mill"])
+
+    def test_a_csv_error_still_fails_only_its_file(self) -> None:
+        notes = b"name,latitude,longitude\nMill,40.5,-74.5\n"
+
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.google.maps.csv.DictReader", side_effect=csv.Error("refused")
+        ):
+            parse = GoogleMapsGateway(api_key="").parse_for_preview(
+                [("notes.csv", notes), ("dam.kml", self._KML)], Profile()
+            )
 
         self.assertEqual(parse.failed_formats, ["csv"])
         self.assertEqual([pin["name"] for listed in parse.lists for pin in listed["pins"]], ["Dam"])
 
 
-class LineBoundTests(SimpleTestCase):
-    """``iter_lines(max_line=...)`` refuses a line one character past the bound, whatever ends it."""
+class ALargeCsvRecordIsReadTests(SimpleTestCase):
+    """P95, Jess's ruling of 2026-10-02: no element is capped, so one huge CSV record previews like a small one.
 
-    def test_the_bound_is_exact_for_every_line_break(self) -> None:
-        for ending in ("\n", "\r", "\r\n", "\u2028"):
-            with self.subTest(ending=repr(ending)):
-                within = "a" * 10 + ending + "tail"
-                self.assertEqual(list(streams.iter_lines([within], max_line=10)), ["a" * 10, "tail"])
-                with self.assertRaises(streams.LineTooLongError):
-                    list(streams.iter_lines(["a" * 11 + ending + "tail"], max_line=10))
-
-    def test_the_last_line_has_the_same_bound(self) -> None:
-        self.assertEqual(list(streams.iter_lines(["head\n", "a" * 10], max_line=10)), ["head", "a" * 10])
-        with self.assertRaises(streams.LineTooLongError):
-            list(streams.iter_lines(["head\n", "a" * 11], max_line=10))
-
-    def test_a_line_is_refused_while_it_is_still_arriving(self) -> None:
-        def pieces():
-            yield "a" * 6
-            yield "a" * 6
-            raise AssertionError("read past the bound")
-
-        with self.assertRaises(streams.LineTooLongError):
-            list(streams.iter_lines(pieces(), max_line=10))
-
-
-class ACsvRecordPastTheBoundFailsOnlyItsFileTests(SimpleTestCase):
-    """A record longer than ``MAX_CSV_RECORD_CHARS`` is refused before ``csv`` splits it into cells."""
+    Each shape is over 1 MiB, the bound an earlier change put on a record and then removed. ``csv`` builds a record
+    whole, so what holds a record is the worker's memory, the upload's budget and the 1 GB entry cap, not a limit here.
+    """
 
     _KML = (
         b'<?xml version="1.0"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
@@ -528,40 +522,25 @@ class ACsvRecordPastTheBoundFailsOnlyItsFileTests(SimpleTestCase):
 
     def _preview(self, csv_text: str) -> Any:
         upload = [("notes.csv", csv_text.encode()), ("dam.kml", self._KML)]
-        with mock.patch.object(maps_module, "MAX_CSV_RECORD_CHARS", 4096):
-            return GoogleMapsGateway(api_key="").parse_for_preview(upload, Profile())
+        return GoogleMapsGateway(api_key="").parse_for_preview(upload, Profile())
 
-    def test_a_long_line_a_long_header_and_a_record_over_many_lines_each_fail_only_their_file(self) -> None:
+    def test_a_long_row_a_wide_header_and_a_record_over_many_lines_are_each_read(self) -> None:
         records = {
-            "line": "name,latitude,longitude\nMill,40.5,-74.5" + ",ab" * 2_000 + "\n",
-            "header": "name,latitude,longitude" + ",c" * 2_100 + "\nMill,40.5,-74.5\n",
-            "lines": "name,latitude,longitude,notes\nMill,40.5,-74.5" + ',"a\n"' * 2_000 + "\n",
+            "row": "name,latitude,longitude\nMill,40.5,-74.5" + ",ab" * 400_000 + "\n",
+            "header": "name,latitude,longitude"
+            + "".join(f",c{index}" for index in range(250_000))
+            + "\nMill,40.5,-74.5\n",
+            "lines": "name,latitude,longitude,notes\nMill,40.5,-74.5" + ',"a\n"' * 300_000 + "\n",
         }
         for shape, csv_text in records.items():
             with self.subTest(shape):
                 parse = self._preview(csv_text)
 
-                self.assertEqual(parse.failed_formats, ["csv"])
-                self.assertEqual([pin["name"] for listed in parse.lists for pin in listed["pins"]], ["Dam"])
-
-    def test_a_header_and_a_first_row_each_within_the_bound_are_read(self) -> None:
-        """``csv.DictReader`` reads the header and the first row in one step; each is its own record."""
-        header = "name,latitude,longitude" + "".join(f",column{index}" for index in range(300))
-        row = "Mill,40.5,-74.5" + ",x" * 1_500
-
-        parse = self._preview(f"{header}\n{row}\n")
-
-        self.assertGreater(len(header) + len(row), 4096)
-        self.assertEqual(parse.failed_formats, [])
-        self.assertEqual(sum(len(listed["pins"]) for listed in parse.lists), 2)
-
-    def test_records_within_the_bound_are_read_however_many_there_are(self) -> None:
-        rows = "".join(f"Mill {index},40.5,-74.5,{'x' * 3_000}\n" for index in range(50))
-
-        parse = self._preview("name,latitude,longitude,notes\n" + rows)
-
-        self.assertEqual(parse.failed_formats, [])
-        self.assertEqual(sum(len(listed["pins"]) for listed in parse.lists), 51)
+                self.assertGreater(len(csv_text), 1024 * 1024)
+                self.assertEqual(parse.failed_formats, [])
+                self.assertEqual(
+                    sorted(pin["name"] for listed in parse.lists for pin in listed["pins"]), ["Dam", "Mill"]
+                )
 
 
 _CSV_CELL = st.text(alphabet=st.sampled_from(list('ab1. ,"\n\r\u2028\ufeffé')), max_size=8)

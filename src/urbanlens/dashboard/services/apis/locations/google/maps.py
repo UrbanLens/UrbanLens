@@ -90,10 +90,6 @@ _CID_RE = re.compile(r"!1s0x[0-9a-fA-F]+:0x([0-9a-fA-F]+)")
 #: location" - UL-203: every row in Parking.csv silently failed to import (no coordinate column
 _TAKEOUT_URL_COLUMN_KEYS: tuple[str, ...] = ("url", "parking location")
 
-#: The longest CSV record read, header included, in characters. ``csv`` builds a record whole, a string per cell, at
-#: up to 40 times its size; a real row, even with a 128 KiB WKT cell (``csv``'s own field limit), is far shorter.
-MAX_CSV_RECORD_CHARS = 1024 * 1024
-
 
 def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[str], profile: Profile) -> None:
     """Best-effort: attach a freshly-created pin's extracted image/link URLs.
@@ -688,12 +684,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             lines: Iterable[str] = file_contents.lstrip("\ufeff").splitlines()
         else:
             lines = _without_leading_boms(file_contents)
-        record = _CsvRecordBudget(lines)
-        reader = csv.DictReader(record)
-        _ = reader.fieldnames  # The header is read here, so it is a record of its own rather than part of the first row.
-        record.used = 0
+        reader = csv.DictReader(lines)
         for row in reader:
-            record.used = 0
             lowered_row = {normalize_header_key(k): v for k, v in row.items() if k is not None}
             url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
             if url:
@@ -871,8 +863,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     def _read_preview_csv(self, stream: IO[bytes], user_profile: Profile, read: _PreviewFile, *, room: int) -> None:
         """Take a CSV's pins until *room* is filled, setting aside the rows only a lookup can place."""
-        lines = iter_lines(iter_decoded(stream, "utf-8-sig"), max_line=MAX_CSV_RECORD_CHARS)
-        for row in self._csv_row_iter(lines, user_profile, offline=True):
+        for row in self._csv_row_iter(iter_lines(iter_decoded(stream, "utf-8-sig")), user_profile, offline=True):
             if len(read.pins) >= room:
                 return
             if row is None:
@@ -1339,28 +1330,6 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
 
 _KML_TOKEN = re.compile(r"\S+")
-
-
-class _CsvRecordBudget:
-    """Lines for ``csv``, refusing a record past ``MAX_CSV_RECORD_CHARS`` before ``csv`` builds its cells.
-
-    A quoted cell can hold line breaks, so one record can span many short lines. The reader's caller sets ``used``
-    back to 0 after each record.
-    """
-
-    def __init__(self, lines: Iterable[str]) -> None:
-        self._lines = iter(lines)
-        self.used = 0
-
-    def __iter__(self) -> _CsvRecordBudget:
-        return self
-
-    def __next__(self) -> str:
-        line = next(self._lines)
-        self.used += len(line)
-        if self.used > MAX_CSV_RECORD_CHARS:
-            raise csv.Error(f"a CSV record is longer than {MAX_CSV_RECORD_CHARS:,} characters")
-        return line
 
 
 def _without_leading_boms(lines: Iterable[str]) -> Iterator[str]:
