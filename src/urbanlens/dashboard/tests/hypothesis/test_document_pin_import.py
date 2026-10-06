@@ -340,7 +340,7 @@ def test_extract_pins_wraps_document_text_and_geocodes(monkeypatch: pytest.Monke
         lambda _user, feature: feature == SiteFeature.AI,
     )
 
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model")
     gateway.send_prompt.return_value = "name,description,address\nOld Mill,Abandoned mill,123 Mill Rd"
     gateway.tokens = 100
     gateway.cost = 0
@@ -390,7 +390,7 @@ def test_extract_pins_uses_explicit_coordinates_without_geocoding(monkeypatch: p
         lambda _user, feature: feature == SiteFeature.AI,
     )
 
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model")
     gateway.send_prompt.return_value = (
         "name,description,address,latitude,longitude\nOverlook,Seen from the ridge,,40.7128,-74.0060"
     )
@@ -424,7 +424,7 @@ def test_extract_pins_drops_ungeocodable_rows_and_warns(monkeypatch: pytest.Monk
         lambda _user, feature: feature == SiteFeature.AI,
     )
 
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model")
     gateway.send_prompt.return_value = "name,description,address\nNowhere Place,,Nonexistent Address"
     gateway.tokens = 10
     gateway.cost = 0
@@ -451,7 +451,7 @@ def test_extract_pins_warns_on_partial_geocode_failure(monkeypatch: pytest.Monke
         lambda _user, feature: feature == SiteFeature.AI,
     )
 
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model")
     gateway.send_prompt.return_value = (
         "name,description,address\nOld Mill,,123 Mill Rd\nNowhere Place,,Nonexistent Address"
     )
@@ -535,7 +535,7 @@ def test_extract_pins_allows_document_within_configured_char_limit(monkeypatch: 
     site.ai_document_import_max_chars = 100_000
     site.save(update_fields=["ai_document_import_max_chars"])
 
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model")
     gateway.send_prompt.return_value = "name,description,address\nOld Mill,,123 Mill Rd"
     gateway.tokens = 10
     gateway.cost = 0
