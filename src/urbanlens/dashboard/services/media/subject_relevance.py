@@ -2,7 +2,8 @@
 
 An item is about the place when it is geolocated inside the place's bounding box, or when it names the place: one of
 the place's names with a geographic indicator consistent with it, or a distinctive name alone when nothing geographic
-contradicts it. The rules, thresholds and their reasons are in ``docs/archive/PROBLEMS-ARCHIVE.md`` under P196.
+contradicts it. The rules, thresholds and their reasons are in ``docs/archive/PROBLEMS-ARCHIVE.md`` under P196. A
+newspaper page's dateline is not part of its text, and is not read (P216, in the same file).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import math
 import re
 from typing import TYPE_CHECKING
 import unicodedata
+from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.geo import gazetteer
 from urbanlens.dashboard.services.geo.distance import haversine_km
@@ -31,7 +33,8 @@ if TYPE_CHECKING:
 
 #: The version of the rules in this module. Bump it with any change to what they keep, so cached results already
 #: swept under the old rules are judged again (``services.media.public_media_sweep``).
-RULE_VERSION = 1
+#: 2: a newspaper page's dateline is no longer read (P216).
+RULE_VERSION = 2
 
 #: Words that say what sort of place something is rather than which one.
 GENERIC_WORDS: frozenset[str] = frozenset(
@@ -385,6 +388,11 @@ _APOSTROPHE = re.compile(r"['’ʼ`]")
 _WORD = re.compile(r"[^\W_]+")
 _BREAK = re.compile(r"[,;:()\[\]{}|/.!?\"]")
 _FILE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{2,4}$")
+#: The title the Library of Congress gives a newspaper page: "Image 7 of River Falls journal (River Falls, Pierce County,
+#: Wis.), July 30, 1908". It is the dateline of the paper that printed the page, so it says where the paper was
+#: published, not where any story on the page happened: in 1908 one syndicated article about the Hudson River State
+#: Hospital ran under Kansas, Minnesota, Michigan and Louisiana datelines (P216).
+_NEWSPAPER_DATELINE = re.compile(r"^\s*Image \d+ of .+\), (?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -669,6 +677,9 @@ class MediaSubject:
             return Judgement(relevant=located, reason="geolocated inside the place" if located else "geolocated somewhere else")
 
         texts = [_FILE_EXTENSION.sub("", item.title), item.caption, item.description]
+        if _from_the_library_of_congress(item):
+            # A newspaper page is judged by its own text: its dateline neither places it nor puts it elsewhere.
+            texts[:2] = [_NEWSPAPER_DATELINE.sub("", text, count=1) for text in texts[:2]]
         segments = [_tokens(text) for text in texts if text]
         tags = [_tokens(keyword) for keyword in item.keywords.split("|") if keyword.strip()]
         named = [name for name in self._names if _find_everywhere(name, segments, tags)]
@@ -806,6 +817,16 @@ class MediaSubject:
             if after.capitalized and not shouting and not _is_state_code(after):
                 return False
         return True
+
+
+def _from_the_library_of_congress(item: MediaItem) -> bool:
+    """Whether ``item``'s page is on loc.gov, whichever provider found it; only its titles can be a newspaper dateline."""
+    try:
+        host = (urlsplit(item.page_url or item.url).hostname or "").casefold()
+    except ValueError:
+        # A malformed URL ("https://[::1/x") is nobody's page; judging it must not raise.
+        return False
+    return host == "loc.gov" or host.endswith(".loc.gov")
 
 
 def _find_everywhere(name: _Name, segments: list[list[_Token]], tags: list[list[_Token]]) -> bool:

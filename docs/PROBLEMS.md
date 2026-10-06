@@ -2191,29 +2191,6 @@ The fix is a data migration rewriting `message` on `notification_type=PIN_SHARED
 built the way `create_pin_share` builds it now (sender name through `resolve_visible_identity`, then the child-pin and
 already-pinned suffixes). Not done: it rewrites stored rows users see, which wants Jess's say-so.
 
-## P216 — Historic Newspapers shows nothing, because no page reaches UrbanLens with its text
-
-`id: P216` · `status: open` · `updated: 2026-10-04` · `found by: P196, checking each provider's fields, 2026-10-03`
-
-REData's half is asked for in `docs/handoffs/redata-chronicling-america-description-dropped.md`.
-
-Since P196, a Media gallery item must name the place to be shown. A Chronicling America item has no text that could.
-LoC returns a page's OCR excerpt as a *list* of strings in `description`. REData's `ChroniclingAmericaGateway` passes it
-through `_strip_html`, which returns `""` for anything that is not a `str`, so the description is always empty. Its sibling
-`LibraryOfCongressGateway` joins the list. What remains is the title, which is the newspaper's own dateline: "Image 7 of
-River Falls journal (River Falls, Pierce County, Wis.), July 30, 1908". The Historic Newspapers tab is therefore empty
-for every place.
-
-Before P196 the tab showed everything LoC returned. On 2026-10-03 the live collection's 20 results for "Hudson River State
-Hospital" were 8 printings of one 1908 syndicated article naming the hospital, and 12 pages whose excerpt does not
-contain the name. LoC matches each word separately.
-
-To fix it, REData should join the list as its LoC gateway does. Then the dateline still names the paper's town and county,
-which reads as a conflict for any place elsewhere ("Pierce County" against Dutchess). Judge a newspaper page on its text
-alone, for example by keeping the dateline out of `title` and `caption`, or have the source tell the judge to skip them.
-Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03, and on
-2026-10-04 REData's search still ended in `chronicling_america could not be reached: ReadTimeout`.
-
 ## P240 — Inside the US, Overture data needs REData's index-backed lookups, which production now runs (v0.3.4); only the buildings route has been seen answering
 
 `id: P240` · `status: open` · `updated: 2026-10-06` · `follows: P110`
