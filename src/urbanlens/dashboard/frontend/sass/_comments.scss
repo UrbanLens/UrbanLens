@@ -659,16 +659,28 @@
     &[hidden] { display: none; }
 }
 
-.comment-map-composer-controls {
-    padding: .5rem 1rem;
-    border-bottom: 1px solid var(--ul-surface-border);
-    display: flex;
-    align-items: center;
-    gap: .75rem;
-    flex-shrink: 0;
+// "Go to" and, in standalone mode, "Title": one grid, so the labels share a column and the fields a left edge, a width and a height.
+$cmcc-label-width: 3.25rem;
+$cmcc-field-height: 2.5rem;
+$cmcc-field-max-width: 46rem;
 
-    // Same fix as.comment-map-composer-body above.
-    &[hidden] { display: none; }
+// 16px keeps iOS Safari from zooming on focus.
+@mixin cmcc-field-text {
+    font-size: 16px;
+
+    @include up($breakpoint-sm) {
+        font-size: .9rem;
+    }
+}
+
+.comment-map-composer-fields {
+    display: grid;
+    grid-template-columns: $cmcc-label-width minmax(0, $cmcc-field-max-width);
+    align-items: center;
+    gap: .5rem .75rem;
+    padding: .625rem 1rem;
+    border-bottom: 1px solid var(--ul-surface-border);
+    flex-shrink: 0;
 }
 
 .cmcc-label {
@@ -678,32 +690,71 @@
     white-space: nowrap;
 }
 
-// Standalone-mode title field (the "take a screenshot" flow) - hidden for
-// the form-bound comment/visit/trip-comment usage of this same dialog.
+// Only shown in standalone mode (the "take a screenshot" flow); its label and field are cells of the grid above.
 .cmcc-title-row {
-    border-bottom: none;
-    padding-top: 0;
+    display: contents;
+
+    // The class's own `display` above otherwise beats the browser's default `[hidden] { display: none }`.
+    &[hidden] { display: none; }
 }
 
-.cmcc-title-input {
-    flex: 1;
-    max-width: 46rem;
-    padding: .35rem .6rem;
-    border: 1px solid var(--ul-surface-raised-border);
-    border-radius: 6px;
-    background: var(--ul-surface-raised);
-    color: var(--ul-grey-8);
-    font-size: .85rem;
+// The Title, and the "Choose Existing" searches that share its class. Written as the global skin's own selector plus the
+// class, since a bare class loses to reset.scss's underline and dark.scss's flat fill.
+:is(input[type=text], input[type=search]):not(.browser-default).cmcc-title-input {
+    @include ul-input;
+    height: $cmcc-field-height;
+    margin: 0;
+    padding: 0 12px;
+    @include cmcc-field-text;
+
+    &::placeholder {
+        color: var(--ul-grey-7);
+    }
 }
 
-// Inline variant of the map pages' floating jump-to search bar.
+// Inline variant of the map pages' floating jump-to search bar: the same surface, border, radius and focus ring
+// as the Title, the text box transparent on the bar's own surface.
 .addr-search-bar--composer {
     position: relative;
     top: auto;
     left: auto;
     width: auto;
-    flex: 1;
-    max-width: 46rem;
+    height: $cmcc-field-height;
+    box-sizing: border-box;
+    padding: 0 12px;
+    gap: 8px;
+    border-radius: $radius-sm;
+    box-shadow: none;
+
+    &:focus-within {
+        @include focus-ring($alpha: .12);
+    }
+
+    input[type=text]:not(.browser-default).addr-search-input {
+        flex: 1;
+        min-width: 0;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: 0 none;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+        color: var(--ul-grey-8);
+        @include cmcc-field-text;
+
+        &::placeholder {
+            color: var(--ul-grey-7);
+        }
+
+        &:hover,
+        &:focus,
+        &:active {
+            border: 0 none;
+            background: transparent;
+            box-shadow: none;
+        }
+    }
 }
 
 // The map with the Layers list beside it; stacked under it on a narrow screen.

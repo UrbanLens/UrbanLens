@@ -5420,11 +5420,6 @@ div.container .addr-search-bar {
         }
     }
 
-    #cmcc-search-input {
-        background: transparent;
-        border: 0 none;
-    }
-
     .addr-search-bar {
         @include input-selectors {
             background-color: transparent;
