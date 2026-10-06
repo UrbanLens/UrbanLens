@@ -28,8 +28,12 @@
 
     {% if not suggestions.generated %}
     <div class="trip-ai-suggestions-empty">
+        {% if unavailable_here %}
+        <p>AI trip suggestions are not available in this environment.</p>
+        {% else %}
         <p>AI trip suggestions are turned off{% if not profile.ai_enabled or not profile.external_apis_enabled %} for your account{% endif %}.</p>
         <a class="btn btn--secondary btn--sm" href="{% url 'settings.view' %}#ai-settings-section">Open AI settings</a>
+        {% endif %}
     </div>
     {% elif suggestions.summary and not suggestions.pin_suggestions and not suggestions.schedule %}
     <p class="trip-ai-suggestions-summary">{{ suggestions.summary }}</p>

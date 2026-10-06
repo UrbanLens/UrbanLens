@@ -12,6 +12,7 @@ from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.models.article.model import ArticleRevision
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
@@ -334,6 +335,12 @@ class VoteThresholdPropertyTests(TestCase):
         tallies=st.lists(trivia_vote_tally, min_size=1, max_size=6), batch_size=st.integers(min_value=1, max_value=3)
     )
     def test_repeated_sweeps_reach_every_qualifying_question_whatever_precedes_it(self, tallies, batch_size) -> None:
+        # Every example in this method shares one transaction, so the writer's per-minute runaway guard would be spent
+        # by the first few and refuse the rest; the property is about which questions a sweep reaches, not about it.
+        ApiRateLimit.objects.update_or_create(
+            service="trivia_wiki_incorporation",
+            defaults={"display_name": "t", "calls_per_minute": None, "calls_per_day": None},
+        )
         questions = []
         for index, tally in enumerate(tallies):
             question = _make_question(self.location, prompt=f"Q{index}", answer=f"A{index}")

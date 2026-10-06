@@ -478,8 +478,8 @@ def get_trip_suggestions(trip: Trip, requester: Profile, *, force_refresh: bool 
         if cached is not None:
             return cached
 
+    cooldown_key = _cooldown_key(trip, requester)
     if force_refresh:
-        cooldown_key = _cooldown_key(trip, requester)
         if cache.get(cooldown_key):
             return cache.get(key) or _UNAVAILABLE
         cache.set(cooldown_key, 1, REFRESH_COOLDOWN_SECONDS)
@@ -487,4 +487,7 @@ def get_trip_suggestions(trip: Trip, requester: Profile, *, force_refresh: bool 
     result = generate_trip_suggestions(trip, requester)
     if result.generated:
         cache.set(key, result, CACHE_TTL_SECONDS)
+    elif force_refresh and result is _UNAVAILABLE:
+        # Nothing was asked (AI off, or not called in this environment, D26), so there is nothing to cool down from.
+        cache.delete(cooldown_key)
     return result

@@ -270,7 +270,8 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
         job_id: The preview :func:`parse_import_preview` handed off.
     """
     from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.services.ai.document_import import DocumentTooLargeError, ai_document_import_available, extract_pins_from_text
+    from urbanlens.dashboard.services.ai.access import ai_refused_here
+    from urbanlens.dashboard.services.ai.document_import import UNAVAILABLE_HERE_WARNING, DocumentTooLargeError, ai_document_import_available, extract_pins_from_text
     from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway, _notify_pin_import_parse_failure
     from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 
@@ -315,6 +316,9 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
                     warnings.append(warning)
                 if found:
                     lists.append(found)
+        elif any(document["text"] for document in parsed["documents"]) and ai_refused_here("document_pin_import"):
+            # Said once, rather than leaving the uploader to wonder why their documents produced no pins.
+            warnings.append(UNAVAILABLE_HERE_WARNING)
         _write_result(job_id, directory, lists, warnings, parsed.get("history") or {})
     except SOFT_TIME_LIMIT_ERRORS:
         status.write("error", 0, "Looking up these places took too long. Try a smaller upload.")

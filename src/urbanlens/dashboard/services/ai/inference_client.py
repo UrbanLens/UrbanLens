@@ -49,6 +49,7 @@ __all__ = [
     "ToolUseBlock",
     "Usage",
     "get_inference_client",
+    "require_provider_egress",
 ]
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,24 @@ _REFUSED_STATUS_CODE = 422
 
 #: How much longer than a request's own budget the HTTP hop to ai-inference waits, for the hop itself.
 HOP_ALLOWANCE_SECONDS = 5.0
+
+
+def require_provider_egress(provider: str) -> None:
+    """Refuse a request this environment may not send to a hosted provider, before it leaves the process (D26).
+
+    Development and local call no hosted AI provider, through ``ai-inference`` or in-process; ``UL_ENVIRONMENT_SHARE_OVERRIDES``
+    opts one provider (``ai_cloudflare=1``) or one feature (``trivia_generation=1``) in.
+
+    Args:
+        provider: The request's provider.
+
+    Raises:
+        EnvironmentRefusedError: The environment does not call this provider. Not an :class:`InferenceError`: nothing
+            was sent, so it is neither a failed call nor evidence against the provider.
+    """
+    from urbanlens.dashboard.services.core.egress import require_ai_provider
+
+    require_ai_provider(provider)
 
 
 class InferenceClient(Protocol):
@@ -121,12 +140,14 @@ class RemoteInferenceClient:
         return body
 
     def send(self, request: InferenceRequest) -> InferenceResponse:
+        require_provider_egress(request.provider)
         try:
             return InferenceResponse.model_validate(self._post("/v1/messages", request.model_dump(mode="json"), budget=request.timeout_seconds))
         except ValueError as exc:
             raise InferenceError(f"ai-inference returned an unparseable response: {exc}") from exc
 
     def classify(self, request: ClassifyRequest) -> ClassifyResponse:
+        require_provider_egress(request.provider)
         try:
             return ClassifyResponse.model_validate(self._post("/v1/classify", request.model_dump(mode="json")))
         except ValueError as exc:
@@ -140,6 +161,7 @@ class LocalInferenceClient:
     def send(self, request: InferenceRequest) -> InferenceResponse:
         from urbanlens.dashboard.services.sandbox.guard import check_direct_inference
 
+        require_provider_egress(request.provider)
         check_direct_inference()
 
         from urbanlens_ai.policy import PolicyError, validate_request
@@ -160,6 +182,7 @@ class LocalInferenceClient:
     def classify(self, request: ClassifyRequest) -> ClassifyResponse:
         from urbanlens.dashboard.services.sandbox.guard import check_direct_inference
 
+        require_provider_egress(request.provider)
         check_direct_inference()
 
         from urbanlens_ai.policy import PolicyError, validate_classify_request

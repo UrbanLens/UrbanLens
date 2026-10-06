@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Any
 import zipfile
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+from urbanlens.dashboard.services.ai.access import ai_refused_here
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
@@ -171,6 +172,10 @@ def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> 
     return extract_pins_from_text(filename, text, profile)
 
 
+#: Said in place of a document's pins where this environment calls no hosted AI (D26).
+UNAVAILABLE_HERE_WARNING = "AI document import is not available in this environment."
+
+
 def ai_document_import_available(profile: Profile) -> bool:
     """Whether AI document extraction may run for *profile*.
 
@@ -178,10 +183,10 @@ def ai_document_import_available(profile: Profile) -> bool:
         profile: Profile the import is being run for.
 
     Returns:
-        True when the site offers AI to this account and the profile has both AI and
-        external APIs switched on.
+        True when the site offers AI to this account, the profile has both AI and
+        external APIs switched on, and this environment calls hosted AI for it (development does not, D26).
     """
-    return bool(user_has_feature(profile.user, SiteFeature.AI) and profile.ai_enabled and profile.external_apis_enabled)
+    return bool(user_has_feature(profile.user, SiteFeature.AI) and profile.ai_enabled and profile.external_apis_enabled and not ai_refused_here("document_pin_import"))
 
 
 def read_document_text(filename: str, data: bytes) -> tuple[str | None, bool]:
@@ -241,6 +246,9 @@ def extract_pins_from_text(filename: str, text: str, profile: Profile) -> tuple[
             cost_before = gateway.cost
             answer = gateway.send_prompt(prompt)
             slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
+    except EnvironmentRefusedError as exc:
+        logger.info("AI document pin extraction for '%s' was not made in this environment: %s", filename, exc)
+        return None, f"'{filename}': {UNAVAILABLE_HERE_WARNING}"
     except RequestCancelledError as exc:
         logger.info("AI document pin extraction for '%s' was refused before its call: %s", filename, exc)
         return None, None

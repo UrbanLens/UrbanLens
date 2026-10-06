@@ -13,7 +13,7 @@ from django.shortcuts import render
 from django.views import View
 
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.ai.access import assistant_available
+from urbanlens.dashboard.services.ai.access import ASSISTANT_UNAVAILABLE_HERE_REPLY, ai_refused_here, assistant_available
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES, MAX_MESSAGE_CHARS
 from urbanlens.dashboard.services.ai.turns import (
     FAILED_TURN_RESULT,
@@ -179,6 +179,7 @@ class AssistantView(LoginRequiredMixin, View):
                 "page_name": "assistant",
                 "profile": profile,
                 "assistant_enabled": assistant_available(profile),
+                "assistant_unavailable_here": ai_refused_here("assistant"),
                 "max_message_chars": MAX_MESSAGE_CHARS,
                 **_messages_context(request),
             },
@@ -203,6 +204,7 @@ class AssistantOverlayBodyView(LoginRequiredMixin, View):
             {
                 "profile": profile,
                 "assistant_enabled": assistant_available(profile),
+                "assistant_unavailable_here": ai_refused_here("assistant"),
                 "max_message_chars": MAX_MESSAGE_CHARS,
                 **_messages_context(request),
             },
@@ -225,7 +227,7 @@ class AssistantMessageView(LoginRequiredMixin, View):
 
         if not assistant_available(profile):
             history.append({"role": "user", "content": message})
-            history.append({"role": "assistant", "content": _UNAVAILABLE_REPLY, "actions": []})
+            history.append({"role": "assistant", "content": ASSISTANT_UNAVAILABLE_HERE_REPLY if ai_refused_here("assistant") else _UNAVAILABLE_REPLY, "actions": []})
             _save_history(request, history)
             return render(request, _MESSAGES_PARTIAL, _messages_context(request))
 

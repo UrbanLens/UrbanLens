@@ -75,17 +75,21 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
     label = "AI vision keywords"
 
     def is_available_for(self, image: Image) -> bool:
-        """Gate on the AI photo processing subscription and every AI toggle.
+        """Gate on the AI photo processing subscription, every AI toggle, and this environment calling hosted AI.
 
         Args:
             image: The uploaded image.
 
         Returns:
-            True when the AI vision call is allowed for this uploader.
+            True when the AI vision call is allowed for this uploader (development makes none, D26).
         """
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+        from urbanlens.dashboard.services.ai.access import ai_refused_here
+        from urbanlens.dashboard.services.ai.vision import SERVICE_AI_PHOTO_KEYWORDS
 
+        if ai_refused_here(SERVICE_AI_PHOTO_KEYWORDS):
+            return False
         profile = image.profile
         if profile is None or not profile.ai_enabled or not profile.external_apis_enabled:
             return False
@@ -150,16 +154,20 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
     label = "Content classifier keywords"
 
     def is_available_for(self, image: Image) -> bool:
-        """Requires configured Cloudflare credentials and the uploader's external-APIs toggle.
+        """Requires configured Cloudflare credentials, the uploader's external-APIs toggle, and this environment calling Cloudflare.
 
         Args:
             image: The uploaded image.
 
         Returns:
-            True when the classifier call is allowed for this uploader.
+            True when the classifier call is allowed for this uploader (development makes none, D26).
         """
+        from urbanlens.dashboard.services.ai.access import ai_refused_here
+        from urbanlens.dashboard.services.ai.vision import SERVICE_PHOTO_CLASSIFIER
         from urbanlens.UrbanLens.settings.app import settings
 
+        if ai_refused_here(SERVICE_PHOTO_CLASSIFIER):
+            return False
         profile = image.profile
         if profile is None or not profile.external_apis_enabled:
             return False

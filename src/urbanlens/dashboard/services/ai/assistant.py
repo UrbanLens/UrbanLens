@@ -10,11 +10,12 @@ from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
+from urbanlens.dashboard.services.ai.access import ASSISTANT_UNAVAILABLE_HERE_REPLY
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.inference_client import ToolSpec as InferenceToolSpec, ToolUseBlock
 from urbanlens.dashboard.services.ai.tools import MAX_TOOL_CALLS, REGISTRY, ToolContext, available_tools, execute
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -147,6 +148,9 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
                 cost_before = gateway.cost
                 response = gateway.send_with_tools(prompt, wire_tools, timeout=max(MIN_CALL_SECONDS, deadline - time.monotonic()))
                 slot.success, slot.cost_estimate = response is not None, gateway.cost - cost_before
+        except EnvironmentRefusedError as exc:
+            logger.info("Assistant round not made in this environment: %s", exc)
+            return AssistantTurn(reply=ASSISTANT_UNAVAILABLE_HERE_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
         except RequestCancelledError as exc:
             logger.info("Assistant round refused before its AI call: %s", exc)
             return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)

@@ -14,7 +14,8 @@ from typing import TYPE_CHECKING, Any
 from django.utils import timezone
 
 from urbanlens.dashboard.models.link_extraction.model import MAX_EXTRACTION_URL_LENGTH, LinkExtraction, LinkExtractionStatus
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+from urbanlens.dashboard.services.ai.access import ai_refused_here
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
@@ -317,16 +318,12 @@ def _require(value: str, label: str) -> str:
 # Availability & limits
 
 
-def link_extraction_available(user, profile: Profile) -> bool:
-    """Whether the AI link-extraction buttons should exist for this user at all.
-    Per the feature request, users without access must not see the buttons - this is the single check templates and endpoints share.
+#: What an extraction says where this environment calls no hosted AI (D26).
+UNAVAILABLE_HERE_MESSAGE = "AI link reading is not available in this environment."
 
-    Args:
-        user: The authenticated user (subscription features hang off User).
-        profile: The user's profile (per-user AI preference).
 
-    Returns:
-        True when every gate is open."""
+def _account_may_extract(user, profile: Profile) -> bool:
+    """Whether the account and the site allow AI link extraction, whatever this environment calls (D26)."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 
@@ -336,6 +333,19 @@ def link_extraction_available(user, profile: Profile) -> bool:
         return False
     site = SiteSettings.get_current()
     return bool(site.ai_enabled and site.ai_link_extraction_enabled)
+
+
+def link_extraction_available(user, profile: Profile) -> bool:
+    """Whether the AI link-extraction buttons should exist for this user at all.
+    Per the feature request, users without access must not see the buttons - this is the single check templates and endpoints share.
+
+    Args:
+        user: The authenticated user (subscription features hang off User).
+        profile: The user's profile (per-user AI preference).
+
+    Returns:
+        True when every gate is open, and this environment calls hosted AI for it (development does not, D26)."""
+    return _account_may_extract(user, profile) and not ai_refused_here("link_extraction")
 
 
 def extractions_remaining_today(profile: Profile) -> int:
@@ -393,6 +403,10 @@ class LinkExtractionError(Exception):
     """User-facing failure starting an extraction (limit, bad url, gated off)."""
 
 
+class LinkExtractionUnavailableHereError(LinkExtractionError):
+    """This environment calls no hosted AI (D26): not the account's or the site's setting, and no run was started."""
+
+
 def _validate_extraction_url(url: str) -> str:
     """Validate a user-submitted extraction target url.
 
@@ -426,13 +440,16 @@ def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExt
         The created (pending) LinkExtraction row.
 
     Raises:
+        LinkExtractionUnavailableHereError: This environment calls no hosted AI; nothing was created or queued.
         LinkExtractionError: When the feature is unavailable, the daily limit is exhausted, or the url is rejected."""
     from django.db import transaction
 
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
-    if not link_extraction_available(user, profile):
+    if not _account_may_extract(user, profile):
         raise LinkExtractionError("AI link processing isn't available on your account.")
+    if ai_refused_here("link_extraction"):
+        raise LinkExtractionUnavailableHereError(UNAVAILABLE_HERE_MESSAGE)
     url = _validate_extraction_url(url)
 
     # Lock the profile row for the duration of the check-then-create so two
@@ -624,6 +641,12 @@ def run_extraction(extraction: LinkExtraction) -> None:
         extraction.error = message
         extraction.save(update_fields=["status", "error", "updated"])
 
+    if ai_refused_here("link_extraction"):
+        # Queued before this environment stopped calling hosted AI, or opted out since: nothing is read or asked.
+        _fail(UNAVAILABLE_HERE_MESSAGE)
+        _notify_extraction_complete(extraction)
+        return
+
     try:
         page_text = fetch_page_text(extraction.url)
     except LinkExtractionError as exc:
@@ -645,10 +668,18 @@ def run_extraction(extraction: LinkExtraction) -> None:
             cost_before = gateway.cost
             try:
                 answer = gateway.send_prompt(prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 logger.exception("Link extraction AI call failed for extraction %s", extraction.pk)
                 answer = None
             slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
+    except EnvironmentRefusedError as exc:
+        logger.info("Link extraction %s was not made in this environment: %s", extraction.pk, exc)
+        _fail(UNAVAILABLE_HERE_MESSAGE)
+        _notify_extraction_complete(extraction)
+        return
     except RequestCancelledError as exc:
         logger.info("Link extraction %s was refused before its AI call: %s", extraction.pk, exc)
     if not answer:

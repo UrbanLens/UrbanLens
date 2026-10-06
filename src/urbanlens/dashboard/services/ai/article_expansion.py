@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import nh3
 
+from urbanlens.dashboard.services.ai.access import ai_refused_here
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
@@ -259,6 +260,9 @@ def _draft_new_paragraphs(
         with api_call_slot("article_expansion", endpoint=gateway.model) as slot:
             try:
                 answer = gateway.send_prompt(prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 logger.exception("Article expansion writing call failed")
                 return None
@@ -286,6 +290,19 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
         site = SiteSettings.get_current()
         if not site.ai_article_expansion_enabled or not site.ai_article_safety_enabled:
             return []
+
+        # Writing and its safety review are two AI features; where this environment calls either of them (D26)
+        # neither runs, and the run says why instead of "unavailable".
+        if ai_refused_here("article_expansion") or ai_refused_here("article_safety"):
+            return [
+                _result_row(
+                    key="article_pin",
+                    label="Pin article",
+                    value="",
+                    applied=False,
+                    note="Article writing is not available in this environment",
+                )
+            ]
 
         # Probe both feature gates up front so a disabled safety toggle cannot
         # be bypassed by a writing-only path, and so we don't spend a write call

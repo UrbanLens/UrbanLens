@@ -14,8 +14,11 @@ from django.views import View
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.ai.access import ai_refused_here
 from urbanlens.dashboard.services.ai.link_extraction import (
+    UNAVAILABLE_HERE_MESSAGE,
     LinkExtractionError,
+    LinkExtractionUnavailableHereError,
     extractions_remaining_today,
     link_extraction_available,
     start_link_extraction,
@@ -45,6 +48,8 @@ class PinLinkExtractionView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile=profile)
         try:
             start_link_extraction(request.user, profile, pin, request.POST.get("url", ""))
+        except LinkExtractionUnavailableHereError:
+            return _toast(UNAVAILABLE_HERE_MESSAGE, "info", status=403)
         except LinkExtractionError as exc:
             logger.info("link extraction rejected for pin %s: %s", pin.slug, exc)
             return _toast("Couldn't start reading that link right now.", "warning", status=403)
@@ -64,6 +69,7 @@ class AIExtractionReviewView(LoginRequiredMixin, View):
                 "page_name": "ai-extractions",
                 "extractions": LinkExtraction.objects.for_profile(profile)[:_REVIEW_PAGE_LIMIT],
                 "feature_available": link_extraction_available(request.user, profile),
+                "unavailable_here": ai_refused_here("link_extraction"),
                 "remaining_today": extractions_remaining_today(profile),
             },
         )

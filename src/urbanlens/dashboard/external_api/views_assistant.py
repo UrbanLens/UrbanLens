@@ -22,7 +22,7 @@ from urbanlens.dashboard.external_api.serializers_assistant import (
 from urbanlens.dashboard.external_api.throttling import AssistantMessageThrottle, ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.ai.access import assistant_available
+from urbanlens.dashboard.services.ai.access import ai_refused_here, assistant_available
 from urbanlens.dashboard.services.ai.assistant import MAX_HISTORY_ENTRIES
 from urbanlens.dashboard.services.ai.turns import (
     FAILED_TURN_RESULT,
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 #: the turn record's own TTL (turns.py) so neither expires first.
 _CONTEXT_TTL_SECONDS = 15 * 60
 _UNAVAILABLE_ERROR = "AI features are currently turned off for your account or this site."
+_UNAVAILABLE_HERE_ERROR = "The assistant is not available in this environment."
 _QUEUE_FAILED_ERROR = "Couldn't reach the assistant just now. Please try again."
 _EXPIRED_REPLY = "This request expired before it finished. Please try again."
 _GAVE_UP_REPLY = "This is taking longer than expected. Please try again in a moment."
@@ -143,7 +144,7 @@ class AssistantMessageView(ExternalApiView):
         profile = request.user.profile
 
         if not assistant_available(profile):
-            return Response({"error": _UNAVAILABLE_ERROR}, status=503)
+            return Response({"error": _UNAVAILABLE_HERE_ERROR if ai_refused_here("assistant") else _UNAVAILABLE_ERROR}, status=503)
 
         lock_token = acquire_turn_lock(profile)
         if lock_token is None:

@@ -673,6 +673,7 @@ class TripAiSuggestionsView(LoginRequiredMixin, View):
         return self._respond(request, trip_slug, force_refresh=True)
 
     def _respond(self, request, trip_slug, *, force_refresh: bool):
+        from urbanlens.dashboard.services.ai.access import ai_refused_here
         from urbanlens.dashboard.services.trips.trip_ai_suggestions import get_trip_suggestions
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -688,7 +689,7 @@ class TripAiSuggestionsView(LoginRequiredMixin, View):
         return render(
             request,
             "dashboard/partials/trips/_trip_ai_suggestions_panel.html",
-            {"trip": trip, "profile": profile, "suggestions": suggestions},
+            {"trip": trip, "profile": profile, "suggestions": suggestions, "unavailable_here": ai_refused_here("trip_suggestions")},
         )
 
 

@@ -105,11 +105,22 @@ class ChokePointTests(TestCase):
         self.assertFalse(ApiCallLog.objects.exists())
         self.assertFalse(ApiRateLimit.objects.filter(service__in=(QUOTA, BILLED)).exists())
 
-    def test_development_still_calls_redata_and_ai(self) -> None:
+    def test_development_still_calls_redata_and_a_local_model(self) -> None:
         with deployment("development"):
             _reserve_call(REDATA, endpoint="x")
-            _reserve_call(AI, endpoint="x")
+            _reserve_call("ollama", endpoint="x")
         self.assertEqual(ApiCallLog.objects.count(), 2)
+
+    def test_development_refuses_hosted_ai_the_same_way(self) -> None:
+        """Jess, 2026-10-06; ``test_egress_hosted_ai`` covers every feature, provider and the transport."""
+        with deployment("development"), self.assertRaises(EnvironmentRefusedError):
+            _reserve_call(AI, endpoint="x")
+        self.assertFalse(ApiCallLog.objects.exists())
+
+    def test_staging_still_calls_hosted_ai(self) -> None:
+        with deployment("staging"):
+            _reserve_call(AI, endpoint="x")
+        self.assertEqual(ApiCallLog.objects.count(), 1)
 
     def test_staging_and_development_refuse_messaging_and_public_writes(self) -> None:
         for environment in ("staging", "development"):

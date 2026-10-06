@@ -8,7 +8,7 @@ from typing import Any
 
 from celery import shared_task
 
-from urbanlens.dashboard.services.ai.access import assistant_available
+from urbanlens.dashboard.services.ai.access import ASSISTANT_UNAVAILABLE_HERE_REPLY, ai_refused_here, assistant_available
 from urbanlens.dashboard.services.ai.assistant import AssistantUnavailableError, run_assistant_turn
 from urbanlens.dashboard.services.ai.turns import release_turn_lock, turn_lock_is_current
 from urbanlens.dashboard.services.core.celery import update_task_progress
@@ -55,7 +55,8 @@ def run_assistant_turn_task(self, profile_id: int, history: list[dict[str, Any]]
 
     try:
         if not assistant_available(profile):
-            return {"reply": _UNAVAILABLE_REPLY, "actions": [], "proposals": []}
+            reply = ASSISTANT_UNAVAILABLE_HERE_REPLY if ai_refused_here("assistant") else _UNAVAILABLE_REPLY
+            return {"reply": reply, "actions": [], "proposals": []}
 
         from urbanlens.dashboard.services.ai.dismissals import dismissals_from_list
         from urbanlens.dashboard.services.ai.page_context import page_object_from_dict, verify_page_object

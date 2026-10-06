@@ -2,8 +2,8 @@
 
 The boundary chain skips the source rather than deferring it; a panel says so rather than caching an empty
 answer or vanishing; the name and geocode chains never fall through from REData to a direct provider off
-production; the AI features are reserved and logged; messaging, Stripe, the hosted basemap and the public
-Overpass mirrors stay production's.
+production; the AI features are reserved and logged on production and staging and refused in development; messaging,
+Stripe, the hosted basemap and the public Overpass mirrors stay production's.
 """
 
 from __future__ import annotations
@@ -462,9 +462,22 @@ class AiPathsAreReservedAndLoggedTests(TestCase):
                 gateway = self._call(feature)
                 self.assertEqual(gateway.calls, 0)
 
-    def test_development_calls_ai(self) -> None:
-        """Jess accepted AI work in development; the policy allows it there, and logs it."""
-        with deployment("development"):
+    def test_development_refuses_every_ai_feature_and_records_nothing(self) -> None:
+        """Jess, 2026-10-06: dev should not call AI providers. The sweep is covered in ``test_ai_refused_in_development``."""
+        for feature in self.FEATURES:
+            with self.subTest(feature=feature), deployment("development"):
+                gateway = self._call(feature)
+                self.assertEqual(gateway.calls, 0)
+        self.assertFalse(ApiCallLog.objects.exists())
+
+    def test_staging_still_calls_ai_and_logs_it(self) -> None:
+        with deployment("staging"):
+            gateway = self._call("document_pin_import")
+        self.assertEqual(gateway.calls, 1)
+        self.assertEqual(ApiCallLog.objects.filter(service="document_pin_import").count(), 1)
+
+    def test_an_override_opts_one_feature_back_in_on_development(self) -> None:
+        with deployment("development", overrides={"document_pin_import": 1.0}):
             gateway = self._call("document_pin_import")
         self.assertEqual(gateway.calls, 1)
         self.assertEqual(ApiCallLog.objects.filter(service="document_pin_import").count(), 1)

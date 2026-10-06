@@ -1,6 +1,10 @@
-{% comment %}Shared "AI is off" state - the full /assistant/ page and the overlay body both render this when assistant_enabled is False.{% endcomment %}
+{% comment %}Shared "AI is off" state - the full /assistant/ page and the overlay body both render this when assistant_enabled is False. assistant_unavailable_here says why: this environment calls no hosted AI (D26), which no setting changes.{% endcomment %}
 <div class="assistant-disabled">
     <i class="material-symbols-outlined">smart_toy</i>
+    {% if assistant_unavailable_here %}
+    <p>The assistant is not available in this environment.</p>
+    {% else %}
     <p>AI features are turned off{% if not profile.ai_enabled %} for your account{% endif %}.</p>
     <a class="btn btn--secondary" href="{% url 'settings.view' %}#ai-settings-section">Open AI settings</a>
+    {% endif %}
 </div>

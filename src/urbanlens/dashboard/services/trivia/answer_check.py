@@ -53,6 +53,9 @@ def is_answer_equivalent(raw_answer: str, accepted_answer: str, *, profile: Prof
         with api_call_slot("trivia_answer_check", endpoint=gateway.model) as slot:
             try:
                 raw = gateway.send_prompt(prompt)
+            except RequestCancelledError:
+                # Refused behind the slot (the provider's own gate, D26), not a failure of the call.
+                raise
             except Exception:
                 # A transport-level failure (provider outage, DNS, an unrecognized model tripping the
                 # token-counting library, etc.) must never bubble up and 500 the player's answer submission

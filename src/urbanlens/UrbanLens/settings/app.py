@@ -660,9 +660,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "This deployment's share (0-1) of every quota'd and billed external service's budget: each such "
             "service's per-minute, per-day and 30-day limits, and its share of a vendor's free tier. Unset takes "
             "the UL_ENVIRONMENT default: production 0.9, staging 0.05, development and local 0, anything else 0. "
-            "0 keeps the deployment off every such service. REData, our own hosts and AI are not scaled; email, "
-            "SMS, push and writes to a third party are production's only. Every host shares one address, so keep "
-            "all deployments' shares at or below 1. See urbanlens.UrbanLens.egress (D26)."
+            "0 keeps the deployment off every such service. REData and our own hosts are not scaled; hosted AI "
+            "(Cloudflare Workers AI, OpenAI, Anthropic) is called from production and staging only, and local models "
+            "such as Ollama everywhere; email, SMS, push and writes to a third party are production's only. Every "
+            "host shares one address, so keep all deployments' shares at or below 1. See "
+            "urbanlens.UrbanLens.egress (D26)."
         ),
     )
     environment_share_overrides: Annotated[dict[str, float], NoDecode] = Field(
@@ -671,7 +673,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Per-service shares that replace UL_ENVIRONMENT_SHARE for the named services, as "
             "'nominatim=0.02,google_geocoding=0.01'. The way to try a provider from development or staging. For "
             "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, stripe) any "
-            "share above 0 opts the service in off production, and 0 turns it off on production. Logged at startup."
+            "share above 0 opts the service in off production, and 0 turns it off on production. The same for hosted "
+            "AI, which development and local refuse: name an AI feature (trivia_generation, assistant, link_extraction, "
+            "document_pin_import, ...) or a provider (ai_cloudflare, ai_openai, ai_anthropic) to try it there. Logged "
+            "at startup."
         ),
     )
     background_tasks_allowlist: Annotated[list[str], NoDecode] = Field(
