@@ -11,6 +11,7 @@ import requests
 
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection, reject, require_format
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,9 @@ class TwilioGateway(Gateway):
         try:
             response = self.session.post(url, data=data, auth=(account_sid, auth_token), timeout=30)
             response.raise_for_status()
+        except EnvironmentRefusedError:
+            # Texts are production's alone (D26); the refusal is logged where it was made.
+            return False
         except requests.RequestException:
             logger.exception("Failed to send %s message via Twilio", type(self).service_key)
             return False

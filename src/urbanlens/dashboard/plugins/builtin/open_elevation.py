@@ -8,6 +8,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelPlacement
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -106,6 +107,7 @@ class OpenElevationPlugin(UrbanLensPlugin):
         return {
             "redata_elevation": ServiceDefaults(
                 display_name="REData Elevation",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="Point elevation via GET /elevation/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_elevation_gateway.",

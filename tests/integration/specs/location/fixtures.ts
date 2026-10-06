@@ -327,7 +327,7 @@ function noParcelDiagnosis(pin: CampusPin, visit: TriggerVisit | null): string {
             : "null.") +
         ` ${describeVisit(visit)} Enrichment was started only by that visit, never by the external API's panels/boundary/ endpoint. Check, in order: ` +
         "that the page requested /boundary/ (controllers/boundary.py schedules the chain from it); the account's external_apis_enabled; " +
-        "UL_ALLOW_OUTBOUND_APIS and UL_REDATA_API_URL on the deployment; a Celery worker on the default queue; Location.place_id."
+        "REData configured (UL_REDATA_API_URL) on the deployment, whose environment allows it (D26); a Celery worker on the default queue; Location.place_id."
     );
 }
 

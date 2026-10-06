@@ -13,9 +13,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
+from urbanlens.dashboard.services.core.egress import collect_refusals
 from urbanlens.dashboard.services.core.gateway import UpstreamBusyError, is_source_outage
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.pins.search_names import SHARED_SCOPE, search_names
 
@@ -61,6 +62,9 @@ FAILURE_SKIP_TTL_SECONDS = 300
 DISABLED_SKIP_TTL_SECONDS = 1800
 #: How long a source with no store of its own stays suppressed after refusing a pin's input as one it can never answer.
 REFUSED_INPUT_SKIP_TTL_SECONDS = 86_400
+#: How long a panel whose source this environment does not call says so instead of fetching again (D26). Nothing is
+#: stored for the location, so a deployment that may call the source fetches it as soon as this lapses.
+UNAVAILABLE_HERE_TTL_SECONDS = 1800
 #: TTL for the satellite/street "caches are warm" marker. Deliberately shorter
 #: than the 24h per-provider slide caches it summarises, so the marker always
 #: expires (and re-warms via a task) before the underlying entries do.
@@ -264,6 +268,10 @@ class PanelSource(ABC):
     def skip_key(self, pin: Pin) -> str:
         """Suppression cache key set after a failed/disabled fetch."""
         return f"ulfetch:skip:{self.key}:{self.scope(pin)}"
+
+    def unavailable_key(self, pin: Pin) -> str:
+        """Cache key naming the service this environment refused the fetch, while the panel says so."""
+        return f"ulfetch:unavailable:{self.key}:{self.scope(pin)}"
 
     def gate(self, pin: Pin) -> bool:
         """Whether this source has enough information to fetch for ``pin``.
@@ -1832,6 +1840,30 @@ def _release_flight(source, pin: Pin, flight_token: str | None) -> None:
         release_lock(source.flight_key(pin), flight_token)
 
 
+def unavailable_here(source_key: str, pin: Pin) -> str | None:
+    """The service a panel's last fetch found this environment does not call, if that is why it has nothing.
+
+    Args:
+        source_key: A :func:`panel_sources` key.
+        pin: The pin whose panel is being rendered.
+
+    Returns:
+        The refused service key, or None.
+    """
+    source = get_panel_source(source_key)
+    if source is None:
+        return None
+    refused = cache.get(source.unavailable_key(pin))
+    return str(refused) if refused else None
+
+
+def _mark_unavailable_here(source: PanelSource, pin: Pin, service: str) -> None:
+    """Say "not available in this environment" for a while, without storing anything for the location."""
+    logger.debug("Panel fetch %s for pin %s: %s is not available in this environment", source.key, pin.pk, service)
+    cache.set(source.unavailable_key(pin), service, UNAVAILABLE_HERE_TTL_SECONDS)
+    cache.set(source.skip_key(pin), 1, UNAVAILABLE_HERE_TTL_SECONDS)
+
+
 def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) -> None:
     """Execute one panel fetch inside the Celery worker. Owns the failure policy so individual sources don't have to:
 
@@ -1850,9 +1882,15 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
 
     started = time.monotonic()
     logger.debug("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
+    # Every service the environment refuses on the way, including a refusal the source swallowed itself.
+    refused: list[str] = []
     try:
-        if not (isinstance(source, LocationCachePanelSource) and source.adopt_site_answer(pin)):
-            source.fetch(pin)
+        with collect_refusals() as refused:
+            if not (isinstance(source, LocationCachePanelSource) and source.adopt_site_answer(pin)):
+                source.fetch(pin)
+    except EnvironmentRefusedError as exc:
+        # Not a failure and not a deferral: the source is not available here. Nothing is cached for the location.
+        _mark_unavailable_here(source, pin, exc.service)
     except ImpossibleInputError as exc:
         # Nothing was sent: the pin's input can never return data here, so "nothing found" is the answer.
         logger.debug("Panel fetch %s for pin %s refused its input: %s", source_key, pin.pk, exc.detail)
@@ -1889,7 +1927,9 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
         cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     else:
         logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
-        if not source.has_landed(pin):
+        if not source.has_landed(pin) and refused:
+            _mark_unavailable_here(source, pin, refused[0])
+        elif not source.has_landed(pin):
             # A source that met an outage returns without writing it down as "nothing here"; left
             # unsuppressed, every poll of every open page would dispatch the same call again.
             logger.info("Panel fetch %s for pin %s landed nothing; suppressing for %ss", source_key, pin.pk, FAILURE_SKIP_TTL_SECONDS)

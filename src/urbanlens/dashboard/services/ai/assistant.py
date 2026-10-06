@@ -14,7 +14,7 @@ from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.inference_client import ToolSpec as InferenceToolSpec, ToolUseBlock
 from urbanlens.dashboard.services.ai.tools import MAX_TOOL_CALLS, REGISTRY, ToolContext, available_tools, execute
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
-from urbanlens.dashboard.services.core.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -113,7 +113,7 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     # native tool calling so far, and small/free models (e.g. the Cloudflare default) are unreliable
     # tool callers. formatting="" - send_with_tools ignores it regardless (see its own docstring),
     # but passing it here documents that this gateway never speaks the <ANSWER> text protocol.
-    gateway = get_gateway(profile=profile, provider="anthropic", instructions=_INSTRUCTIONS, formatting="")
+    gateway = get_gateway("assistant", profile=profile, provider="anthropic", instructions=_INSTRUCTIONS, formatting="")
     if gateway is None:
         raise AssistantUnavailableError("AI features are turned off.")
 
@@ -124,9 +124,7 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
         return AssistantTurn(reply=_EMPTY_MESSAGE_REPLY)
     transcript = _history_block(history)
     prompt = (f"{transcript}\n" if transcript else "") + f"USER: {user_message}"
-    started = time.monotonic()
-    deadline = started + TURN_DEADLINE_SECONDS
-    succeeded = True
+    deadline = time.monotonic() + TURN_DEADLINE_SECONDS
     context = ToolContext(profile=profile, now=timezone.now(), page=page, deadline=deadline, dismissals=dismissals)
     wire_tools = _wire_tools(context)
     tool_call_count = 0
@@ -134,53 +132,51 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     proposals: list[dict[str, Any]] = []
     client_actions: list[dict[str, Any]] = []
 
-    try:
-        for _round in range(MAX_ROUNDS):
+    for _round in range(MAX_ROUNDS):
+        if tool_call_count >= MAX_TOOL_CALLS:
+            # Reached exactly at the previous round's last call: stop here
+            # rather than spending one more provider call just to discard
+            # whatever it asks for next.
+            return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
+        if time.monotonic() > deadline:
+            return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
+
+        # One reserved, logged call per provider round (D26), so the switch and the ledger see each one.
+        try:
+            with api_call_slot("assistant", endpoint=gateway.model) as slot:
+                cost_before = gateway.cost
+                response = gateway.send_with_tools(prompt, wire_tools, timeout=max(MIN_CALL_SECONDS, deadline - time.monotonic()))
+                slot.success, slot.cost_estimate = response is not None, gateway.cost - cost_before
+        except RequestCancelledError as exc:
+            logger.info("Assistant round refused before its AI call: %s", exc)
+            return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
+        if response is None:
+            reply = _TIMEOUT_REPLY if time.monotonic() > deadline else _NO_RESPONSE_REPLY
+            return AssistantTurn(reply=reply, actions=actions, proposals=proposals, client_actions=client_actions)
+
+        tool_calls = [block for block in response.content if isinstance(block, ToolUseBlock)]
+        if not tool_calls:
+            reply = response.text.strip()
+            return AssistantTurn(reply=reply or "I'm not sure how to answer that.", actions=actions, proposals=proposals, client_actions=client_actions)
+
+        for block in tool_calls:
             if tool_call_count >= MAX_TOOL_CALLS:
-                # Reached exactly at the previous round's last call: stop here
-                # rather than spending one more provider call just to discard
-                # whatever it asks for next.
                 return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
             if time.monotonic() > deadline:
-                succeeded = False
                 return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
 
-            response = gateway.send_with_tools(prompt, wire_tools, timeout=max(MIN_CALL_SECONDS, deadline - time.monotonic()))
-            if response is None:
-                succeeded = False
-                reply = _TIMEOUT_REPLY if time.monotonic() > deadline else _NO_RESPONSE_REPLY
-                return AssistantTurn(reply=reply, actions=actions, proposals=proposals, client_actions=client_actions)
+            tool_call_count += 1
+            # confirmed=False unconditionally: a write tool never runs
+            # here regardless of role - see registry.execute()'s own
+            # docstring. A read-only tool ignores the flag entirely.
+            result = execute(block.name, block.input, context, confirmed=False)
+            if result.summary:
+                actions.append(result.summary)
+            if result.proposal:
+                proposals.append({"n": len(proposals), **result.proposal})
+            spec = REGISTRY.get(block.name)
+            if spec is not None and spec.client_action and "error" not in result.data:
+                client_actions.append({"action": spec.client_action, **result.data})
+            prompt += f"\nASSISTANT (tool call): {block.name}({json.dumps(block.input, default=str)})\nTOOL RESULT ({block.name}): {json.dumps(result.data, default=str)}"
 
-            tool_calls = [block for block in response.content if isinstance(block, ToolUseBlock)]
-            if not tool_calls:
-                reply = response.text.strip()
-                return AssistantTurn(reply=reply or "I'm not sure how to answer that.", actions=actions, proposals=proposals, client_actions=client_actions)
-
-            for block in tool_calls:
-                if tool_call_count >= MAX_TOOL_CALLS:
-                    return AssistantTurn(reply=_ACTION_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
-                if time.monotonic() > deadline:
-                    succeeded = False
-                    return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
-
-                tool_call_count += 1
-                # confirmed=False unconditionally: a write tool never runs
-                # here regardless of role - see registry.execute()'s own
-                # docstring. A read-only tool ignores the flag entirely.
-                result = execute(block.name, block.input, context, confirmed=False)
-                if result.summary:
-                    actions.append(result.summary)
-                if result.proposal:
-                    proposals.append({"n": len(proposals), **result.proposal})
-                spec = REGISTRY.get(block.name)
-                if spec is not None and spec.client_action and "error" not in result.data:
-                    client_actions.append({"action": spec.client_action, **result.data})
-                prompt += f"\nASSISTANT (tool call): {block.name}({json.dumps(block.input, default=str)})\nTOOL RESULT ({block.name}): {json.dumps(result.data, default=str)}"
-
-        return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
-    finally:
-        # One call covering the whole turn, not per gateway.send_with_tools(): the gateway
-        # accumulates sent/received tokens across every call made on this instance, so gateway.cost
-        # here already reflects every round trip the loop made, however many tool calls that took.
-        elapsed_ms = int((time.monotonic() - started) * 1000)
-        log_api_call("assistant", success=succeeded, response_ms=elapsed_ms, endpoint=gateway.model, cost_estimate=gateway.cost)
+    return AssistantTurn(reply=_ROUND_LIMIT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)

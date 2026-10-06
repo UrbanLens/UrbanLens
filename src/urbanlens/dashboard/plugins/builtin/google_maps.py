@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
@@ -28,6 +29,7 @@ class GoogleMapsPlugin(UrbanLensPlugin):
         return {
             "google_maps": ServiceDefaults(
                 display_name="Google Maps (Static/StreetView)",
+                category=EgressCategory.BILLED,
                 calls_per_minute=20,
                 calls_per_day=200,
                 # Static Maps and Street View Static are 10,000 a month free each; REData calls neither.
@@ -36,6 +38,7 @@ class GoogleMapsPlugin(UrbanLensPlugin):
             ),
             "google_street_view_metadata": ServiceDefaults(
                 display_name="Google Street View Metadata",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=60,
                 calls_per_day=5000,
                 notes='Map right-click coverage probe. Free: "Street View Static API metadata requests are available at no charge. No quota is consumed" (developers.google.com/maps/documentation/streetview/metadata).',

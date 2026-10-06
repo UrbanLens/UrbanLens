@@ -147,24 +147,25 @@ class AFailureIsNotReportedAsNoImageryTests(_StreetViewCheckCase):
 
 
 @contextlib.contextmanager
-def _development(*, allow: bool | None) -> Iterator[None]:
+def _development(*, overrides: dict[str, float] | None = None) -> Iterator[None]:
     with (
         override_settings(ENVIRONMENT_NAME=str(EnvironmentTypes.DEVELOPMENT), TESTING=False),
-        mock.patch("urbanlens.UrbanLens.settings.app.settings.allow_outbound_apis", allow),
+        mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_share", None),
+        mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_share_overrides", overrides or {}),
     ):
         yield
 
 
-class TheOutboundSwitchAppliesTests(_StreetViewCheckCase):
+class TheEgressPolicyAppliesTests(_StreetViewCheckCase):
     def test_a_development_box_does_not_call_google(self) -> None:
-        with _development(allow=None):
+        with _development():
             self.assertEqual(self.check(), {"available": False, "reason": "refused"})
 
         self.wire.assert_not_called()
         self.urlopen.assert_not_called()
 
-    def test_allow_outbound_apis_lets_it_through(self) -> None:
-        with _development(allow=True):
+    def test_an_override_lets_it_through(self) -> None:
+        with _development(overrides={"google_street_view_metadata": 0.05}):
             self.assertEqual(self.check(), {"available": True})
 
         self.assertEqual(self.wire.call_count, 1)

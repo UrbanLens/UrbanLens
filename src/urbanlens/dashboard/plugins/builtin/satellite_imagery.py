@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.apis.locations.redata_imagery_gateway import R
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.web_mercator import native_zoom
 from urbanlens.dashboard.services.security.redact import redact_coordinate
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -206,6 +207,7 @@ class EsriPlugin(UrbanLensPlugin):
         return {
             "esri": ServiceDefaults(
                 display_name="Esri ArcGIS REST",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=20,
                 calls_per_day=500,
                 notes="Public Esri basemap/wayback services. No key required.",
@@ -437,6 +439,7 @@ class RedataImageryPlugin(UrbanLensPlugin):
         return {
             "redata_imagery": ServiceDefaults(
                 display_name="REData Imagery",
+                category=EgressCategory.REDATA,
                 # geocode/weather/routing/etc. - see rate_limiter.SERVICE_REGISTRY's
                 # redata_geocode entry for why this side stays conservative anyway.
                 calls_per_minute=20,

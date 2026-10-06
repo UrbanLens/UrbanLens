@@ -12,6 +12,7 @@ from dotenv import find_dotenv, load_dotenv
 from oauth2_provider.utils import set_oauthlib_user_to_device_request_user
 
 from urbanlens.dashboard.services.auth.oauth_device import refuse_an_inactive_account
+from urbanlens.UrbanLens.egress import email_delivery_backend, hosted_basemap_key, policy_environment, scheduled_beat_entries
 from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, environment_from_env
 from urbanlens.UrbanLens.settings._env import (
     deployment_settings_required,
@@ -61,6 +62,8 @@ def _env_bool(name: str, default: bool) -> bool:
 
 # pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
 TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
+# The environment the egress policy applies (D26): the test suite takes production's terms, since it mocks the network.
+EGRESS_ENVIRONMENT = policy_environment(ENVIRONMENT_NAME, testing=TESTING)
 
 DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 if DEBUG and _deployment:
@@ -413,8 +416,9 @@ UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 # Leaflet zoom at/above which a MarkupMap viewport counts every visible pin as shared.
 UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
 
-# Hourly work is staggered so same-interval entries don't stampede one queue.
-CELERY_BEAT_SCHEDULE = {
+# Hourly work is staggered so same-interval entries don't stampede one queue. Every entry is classified in
+# urbanlens.UrbanLens.egress.BEAT_EGRESS; CELERY_BEAT_SCHEDULE below is what this environment runs.
+FULL_BEAT_SCHEDULE = {
     "scheduled-database-backup-check": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
         "schedule": crontab(minute=2),
@@ -628,6 +632,8 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="13,28,43,58"),
     },
 }
+# Off production, only work that stays inside this deployment, plus UL_BACKGROUND_TASKS_ALLOWLIST (D26).
+CELERY_BEAT_SCHEDULE = scheduled_beat_entries(FULL_BEAT_SCHEDULE, EGRESS_ENVIRONMENT, _app_settings.background_tasks_allowlist)
 
 
 # Password validation
@@ -975,7 +981,7 @@ def allow_hosted_basemap_assets(directives: dict[str, list[str]], protomaps_api_
 allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
-allow_hosted_basemap_assets(_CSP_DIRECTIVES, _app_settings.protomaps_api_key)
+allow_hosted_basemap_assets(_CSP_DIRECTIVES, hosted_basemap_key(EGRESS_ENVIRONMENT, _app_settings.protomaps_api_key))
 
 # Enforced unless UL_CSP_ENFORCE=false; docs/notes/csp-violations.md covers diagnosing a block.
 CSP_ENFORCE = _app_settings.csp_enforce
@@ -1161,10 +1167,13 @@ SOCIAL_AUTH_NEW_USER_REDIRECT_URL = "/accounts/post-login/"
 # Every message passes the recipient guard first, which refuses addresses no mailbox can exist at (reserved
 # domains, impossible Gmail names such as the integration suite's) and hands the rest to UL_EMAIL_BACKEND.
 EMAIL_BACKEND = "urbanlens.dashboard.services.security.mail_guard.RecipientGuardEmailBackend"
-# The console backend prints mail instead of sending it, so a deployment that forgot to configure mail would drop
-# safety alerts and password resets without an error. Deployments default to SMTP, which fails loudly.
-EMAIL_DELIVERY_BACKEND = os.getenv("UL_EMAIL_BACKEND") or (
-    "django.core.mail.backends.console.EmailBackend" if _is_ephemeral else "django.core.mail.backends.smtp.EmailBackend"
+# Production defaults to SMTP, which fails loudly when unconfigured rather than dropping safety alerts into a log.
+# Everywhere else prints mail to the log unless UL_EMAIL_SEND_OUTSIDE_PRODUCTION is set (D26): staging holds a
+# clone of real addresses, and development's relay bills per message.
+EMAIL_DELIVERY_BACKEND = email_delivery_backend(
+    EGRESS_ENVIRONMENT,
+    configured=os.getenv("UL_EMAIL_BACKEND"),
+    send_outside_production=_app_settings.email_send_outside_production,
 )
 EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))

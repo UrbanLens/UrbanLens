@@ -19,6 +19,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.overture import Over
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError
 from urbanlens.dashboard.services.core.task_limits import SOFT_TIME_LIMIT_ERRORS
 from urbanlens.dashboard.services.geo.area import area_sqm
 from urbanlens.dashboard.services.security.redact import redact_coordinate
@@ -130,6 +131,9 @@ class BoundaryProviderChain:
                 continue
             except ImpossibleInputError:
                 # Counted where it was refused; this provider has nothing to add for the point.
+                continue
+            except EnvironmentRefusedError:
+                # Not available in this environment (D26): skipped, never deferred, so no retry is scheduled for it.
                 continue
             except SOFT_TIME_LIMIT_ERRORS:
                 # The task is being asked to wind down (Celery soft time limit) - this is not a

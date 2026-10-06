@@ -13,6 +13,7 @@ from django.utils import timezone
 from urbanlens.dashboard.models.trivia.model import TriviaGenerationAttempt, TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.trivia.classifier import classify_trivia_question
 
 if TYPE_CHECKING:
@@ -72,7 +73,12 @@ def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None
 
     prompt = wrap_user_data(wiki.description)
     try:
-        raw_pairs = gateway.send_prompt_list(prompt, max_results=MAX_QUESTIONS_PER_WIKI)
+        with api_call_slot("trivia_generation", endpoint=gateway.model) as slot:
+            raw_pairs = gateway.send_prompt_list(prompt, max_results=MAX_QUESTIONS_PER_WIKI)
+            slot.success, slot.cost_estimate = bool(raw_pairs), gateway.cost
+    except RequestCancelledError as exc:
+        logger.info("Trivia generation for wiki %s was refused before its AI call: %s", wiki.pk, exc)
+        return []
     except Exception:
         # A transport-level failure must never bubble up out of a scheduled
         # sweep task and abort the whole batch - just skip this wiki, same

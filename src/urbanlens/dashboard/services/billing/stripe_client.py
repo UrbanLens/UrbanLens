@@ -29,11 +29,16 @@ class AlreadySubscribedError(Exception):
     """The user already holds a live paid subscription to this role."""
 
 
+#: The egress policy's key for every Stripe SDK call: billing writes are production's alone (``public_write``, D26).
+STRIPE_SERVICE = "stripe"
+
+
 def is_configured() -> bool:
-    """Whether a Stripe secret key is configured for this environment."""
+    """Whether a Stripe secret key is configured, and this environment calls Stripe."""
+    from urbanlens.dashboard.services.core.egress import egress_permitted
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
-    return bool(app_settings.stripe_secret_key)
+    return bool(app_settings.stripe_secret_key) and egress_permitted(STRIPE_SERVICE)
 
 
 def configure() -> None:
@@ -43,12 +48,19 @@ def configure() -> None:
     it has none.
 
     Raises:
-        ImproperlyConfigured: When ``stripe_secret_key`` isn't set.
+        ImproperlyConfigured: When ``stripe_secret_key`` isn't set, or this environment does not call Stripe (unless
+            ``UL_ENVIRONMENT_SHARE_OVERRIDES`` opts it in).
     """
+    from urbanlens.dashboard.services.core.egress import require_egress
+    from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
     if not app_settings.stripe_secret_key:
         raise ImproperlyConfigured("UL_STRIPE_SECRET_KEY is not set - paid subscriptions are unavailable.")
+    try:
+        require_egress(STRIPE_SERVICE)
+    except EnvironmentRefusedError as exc:
+        raise ImproperlyConfigured(f"Paid subscriptions are unavailable here: {exc}") from exc
     stripe.api_key = app_settings.stripe_secret_key
 
 

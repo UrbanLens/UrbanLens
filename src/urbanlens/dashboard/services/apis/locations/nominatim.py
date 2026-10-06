@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 from urbanlens.dashboard.services.core.input_validation import InputRejection, reject, require_coordinates, require_query
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RateLimitExceededError
 from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
@@ -95,7 +95,7 @@ class NominatimGateway(Gateway):
             resp = self.session.get(f"{self.base_url}/search", params=request_params, timeout=10)
             resp.raise_for_status()
             raw = resp.json()
-        except RateLimitExceededError:
+        except (RateLimitExceededError, EnvironmentRefusedError):
             # Propagated, not flattened to [], for the same reason ``reverse_geocode_admin``
             # propagates: a caller cannot otherwise tell "Nominatim knows of no such place" from "we
             # did not ask".

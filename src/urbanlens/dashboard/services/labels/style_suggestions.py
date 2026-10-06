@@ -46,8 +46,15 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
     if not gateway:
         return LabelStyleSuggestion()
 
+    from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+
     try:
-        answers = gateway.send_prompt_list(prompt, max_results=2)
+        with api_call_slot("label_style_suggestions", endpoint=gateway.model) as slot:
+            answers = gateway.send_prompt_list(prompt, max_results=2)
+            slot.success, slot.cost_estimate = bool(answers), gateway.cost
+    except RequestCancelledError as exc:
+        logger.info("AI label style suggestion for %r was refused before its call: %s", name, exc)
+        return LabelStyleSuggestion()
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning("AI label style suggestion failed for %r: %s", name, exc)
         return LabelStyleSuggestion()

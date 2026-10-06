@@ -41,7 +41,7 @@ function cardDiagnosis(pinSlug: string): string {
         "It is rendered by PinController.panel_info via pin.panel/property_records/, which self-polls client-side for up to " +
         "MAX_POLL_ATTEMPTS * POLL_INTERVAL_SECONDS (60s) per page load before going quiet - reloading the page restarts that budget, which is what this " +
         "wait does. Check, in order: LocationCache for this Location and cache_source='property_records'; a celery worker consuming the panel_fetch " +
-        "queue (celery-worker-panels); UL_ALLOW_OUTBOUND_APIS and REData configuration on this deployment."
+        "queue (celery-worker-panels); REData configuration on this deployment (D26 allows REData everywhere)."
     );
 }
 

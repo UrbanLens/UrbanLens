@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 
 class ReferenceDocumentsPlugin(UrbanLensPlugin):
@@ -23,6 +24,7 @@ class ReferenceDocumentsPlugin(UrbanLensPlugin):
         return {
             "redata_reference_documents": ServiceDefaults(
                 display_name="REData Reference Documents",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes=("Archival lookups by name via GET /reference-documents/search/, made by the Media gallery's archive providers. See services.apis.locations.redata_reference_documents_gateway."),

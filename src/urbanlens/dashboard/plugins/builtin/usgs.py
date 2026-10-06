@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -126,6 +127,7 @@ class UsgsPlugin(UrbanLensPlugin):
         return {
             "usgs": ServiceDefaults(
                 display_name="USGS EarthExplorer / TNM",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=10,
                 calls_per_day=500,
                 usa_only=True,

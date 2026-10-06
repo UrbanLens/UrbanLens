@@ -10,6 +10,7 @@ from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, OverviewSummary, PanelApiKind, info_card
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -239,6 +240,7 @@ class NominatimPlugin(UrbanLensPlugin):
         return {
             "nominatim": ServiceDefaults(
                 display_name="Nominatim (OpenStreetMap)",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=1,
                 calls_per_day=500,
                 notes="Free API. Hard limit: 1 req/second per OSM ToS.",

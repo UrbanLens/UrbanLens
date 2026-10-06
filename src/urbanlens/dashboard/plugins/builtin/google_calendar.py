@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 
 class GoogleCalendarPlugin(UrbanLensPlugin):
@@ -27,6 +28,7 @@ class GoogleCalendarPlugin(UrbanLensPlugin):
         return {
             "google_calendar": ServiceDefaults(
                 display_name="Google Calendar API",
+                category=EgressCategory.PUBLIC_WRITE,
                 calls_per_minute=30,
                 calls_per_day=2000,
                 notes="Free API; Google quota is per-user (default 600 queries/min/user across the project).",

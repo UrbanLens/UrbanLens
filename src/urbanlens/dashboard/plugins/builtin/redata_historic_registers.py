@@ -10,6 +10,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import OverviewSummary, PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -398,6 +399,7 @@ class HistoricRegistersPlugin(UrbanLensPlugin):
         return {
             "redata_cultural_resources": ServiceDefaults(
                 display_name="REData Historic Registers",
+                category=EgressCategory.REDATA,
                 # Shares REData's single lookup pool with geocode/weather/etc.
                 calls_per_minute=20,
                 calls_per_day=None,

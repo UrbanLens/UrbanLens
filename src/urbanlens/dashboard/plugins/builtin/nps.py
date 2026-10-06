@@ -13,6 +13,7 @@ from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -488,6 +489,7 @@ class NpsPlugin(UrbanLensPlugin):
         return {
             "redata_national_parks": ServiceDefaults(
                 display_name="REData (national park catalog)",
+                category=EgressCategory.REDATA,
                 calls_per_minute=120,
                 calls_per_day=10000,
                 usa_only=True,

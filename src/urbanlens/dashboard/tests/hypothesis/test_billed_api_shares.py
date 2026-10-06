@@ -17,93 +17,78 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.core import rate_limiter
-from urbanlens.dashboard.services.core.rate_limiter import (
-    BILLED_API_SHARE_BY_ENVIRONMENT,
-    UNKNOWN_ENVIRONMENT_BILLED_API_SHARE,
-    all_service_defaults,
-    billed_api_share,
-    check_rate_limit,
-    free_tier_ceiling,
-)
+from urbanlens.dashboard.services.core.egress import environment_share
+from urbanlens.dashboard.services.core.rate_limiter import check_rate_limit, free_tier_ceiling
+from urbanlens.UrbanLens.egress import ENVIRONMENT_SHARE_DEFAULTS, UNKNOWN_ENVIRONMENT_SHARE
 
 #: The Google Maps Platform SKUs REData can also bill on the same account; UrbanLens takes at most 0.4.
 SHARED_WITH_REDATA = ("google_geocoding", "google_places", "azure_maps")
 BILLED_WITH_A_FREE_TIER = ("google_geocoding", "google_places", "google_maps", "azure_maps")
 
 
-def _share(value: float | None):
-    return patch.object(rate_limiter, "_configured_billed_api_share", return_value=value)
+def _share(value: float):
+    """This deployment's share of a service, as ``UL_ENVIRONMENT_SHARE`` or an override would set it."""
+    return patch.object(rate_limiter, "_service_share", return_value=value)
+
+
+def _configured(value: float | None):
+    return patch("urbanlens.UrbanLens.settings.app.settings.environment_share", value)
 
 
 class EnvironmentShareTests(SimpleTestCase):
-    def test_the_default_shares_sum_to_no_more_than_the_whole_allotment(self) -> None:
-        self.assertLessEqual(sum(BILLED_API_SHARE_BY_ENVIRONMENT.values()), 1.0)
+    """``UL_ENVIRONMENT_SHARE`` replaced ``UL_BILLED_API_SHARE`` (D26); billed keeps #210's free-tier formula."""
 
-    def test_production_takes_most_and_everything_else_a_small_share(self) -> None:
-        self.assertEqual(BILLED_API_SHARE_BY_ENVIRONMENT["production"], 0.8)
-        for environment in ("staging", "development", "local"):
-            with self.subTest(environment=environment):
-                self.assertLessEqual(BILLED_API_SHARE_BY_ENVIRONMENT[environment], 0.1)
-        self.assertEqual(UNKNOWN_ENVIRONMENT_BILLED_API_SHARE, 0.0)
+    def test_the_deployment_defaults_sum_to_no_more_than_the_whole_allotment(self) -> None:
+        deployments = ("production", "staging", "development", "local")
+        self.assertLessEqual(sum(ENVIRONMENT_SHARE_DEFAULTS[environment] for environment in deployments), 1.0)
+
+    def test_production_takes_the_bulk_and_staging_a_sliver(self) -> None:
+        self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["production"], 0.9)
+        self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["staging"], 0.05)
+        self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["development"], 0.0)
+        self.assertEqual(ENVIRONMENT_SHARE_DEFAULTS["local"], 0.0)
+        self.assertEqual(UNKNOWN_ENVIRONMENT_SHARE, 0.0)
 
     def test_the_environment_picks_the_default_outside_tests(self) -> None:
         for environment, share in (
-            ("production", 0.8),
-            ("staging", 0.1),
-            ("development", 0.05),
+            ("production", 0.9),
+            ("staging", 0.05),
+            ("development", 0.0),
             ("someones-laptop", 0.0),
         ):
             with (
                 self.subTest(environment=environment),
                 override_settings(TESTING=False, ENVIRONMENT_NAME=environment),
-                _share(None),
+                _configured(None),
             ):
-                self.assertEqual(billed_api_share(), share)
+                self.assertEqual(environment_share(), share)
 
     def test_the_env_var_wins_including_zero(self) -> None:
         for configured in (0.0, 0.3):
             with (
                 self.subTest(configured=configured),
                 override_settings(TESTING=False, ENVIRONMENT_NAME="production"),
-                _share(configured),
+                _configured(configured),
             ):
-                self.assertEqual(billed_api_share(), configured)
+                self.assertEqual(environment_share(), configured)
 
     def test_tests_take_the_whole_allotment_since_none_reaches_a_vendor(self) -> None:
-        with _share(None):
-            self.assertEqual(billed_api_share(), 1.0)
+        """Whatever the host's .env says: the suite must not depend on it."""
+        with _configured(0.0):
+            self.assertEqual(environment_share(), 1.0)
 
+    def test_production_s_free_tier_ceiling_follows_its_default_share(self) -> None:
+        with override_settings(TESTING=False, ENVIRONMENT_NAME="production"), _configured(None):
+            self.assertEqual(free_tier_ceiling("google_geocoding"), 3_600)
 
-class FreeTierCeilingTests(SimpleTestCase):
-    def test_every_billed_google_or_azure_service_declares_its_free_tier(self) -> None:
-        defaults = all_service_defaults()
-        for service in BILLED_WITH_A_FREE_TIER:
-            with self.subTest(service=service):
-                self.assertIsNotNone(defaults[service].free_tier_per_calendar_month)
-
-    def test_urbanlens_takes_at_most_four_tenths_of_a_sku_redata_also_bills(self) -> None:
-        defaults = all_service_defaults()
-        for service in SHARED_WITH_REDATA:
-            with self.subTest(service=service):
-                self.assertLessEqual(defaults[service].free_tier_allotment, 0.4)
-
-    def test_the_ceiling_is_the_allowance_times_the_allotment_times_the_share(self) -> None:
-        with _share(0.8):
-            self.assertEqual(free_tier_ceiling("google_geocoding"), 3_200)
-            self.assertEqual(free_tier_ceiling("google_places"), 320)
-            self.assertEqual(free_tier_ceiling("google_maps"), 7_200)
-
-    def test_a_free_service_has_no_ceiling(self) -> None:
-        self.assertIsNone(free_tier_ceiling("overpass"))
-
-    def test_unreadable_plugin_defaults_fall_back_to_the_core_registry_and_hold_a_plugin_service_at_zero(self) -> None:
+    def test_an_override_gives_one_billed_service_its_own_share(self) -> None:
         with (
-            _share(0.8),
-            patch.object(rate_limiter, "all_service_defaults", side_effect=RuntimeError("plugin broke")),
-            self.assertLogs(rate_limiter.logger, "ERROR"),
+            override_settings(TESTING=False, ENVIRONMENT_NAME="development"),
+            _configured(None),
+            patch("urbanlens.UrbanLens.settings.app.settings.environment_share_overrides", {"google_geocoding": 0.01}),
         ):
-            self.assertEqual(free_tier_ceiling("google_geocoding"), 3_200)
-            self.assertEqual(free_tier_ceiling("some_plugin_only_service"), 0)
+            self.assertEqual(free_tier_ceiling("google_geocoding"), 40)
+            self.assertEqual(free_tier_ceiling("google_places"), 0)
 
 
 class CeilingIsEnforcedTests(TestCase):

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.temporal_imagery import OhmTemporalCoveragePanelSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.pins.external_data import PanelSource
@@ -25,6 +26,7 @@ class OpenHistoricalMapPlugin(UrbanLensPlugin):
         return {
             "open_historical_map": ServiceDefaults(
                 display_name="OpenHistoricalMap Overpass API",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=10,
                 calls_per_day=300,
                 min_interval_seconds=1.5,

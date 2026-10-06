@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import DocumentMediaPanelSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.pins.external_data import PanelSource
@@ -42,6 +43,7 @@ class WikimediaPlugin(UrbanLensPlugin):
         return {
             "wikimedia": ServiceDefaults(
                 display_name="Wikimedia Commons",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=30,
                 calls_per_day=1000,
                 notes="Free API.",

@@ -47,6 +47,10 @@ def is_own_site_url(url: str) -> bool:
     return any(hostname == domain or hostname.endswith(f".{domain}") for domain in excluded_domains)
 
 
+#: The egress policy's key for Save Page Now, a write to a third party (``public_write``).
+SAVE_SERVICE = "wayback_save"
+
+
 @dataclass(slots=True, kw_only=True)
 class WaybackMachineGateway(Gateway):
     """Gateway for Internet Archive Wayback Machine APIs."""
@@ -118,8 +122,13 @@ class WaybackMachineGateway(Gateway):
             Dict with ``"archived_url"`` (the saved copy's URL) and ``"status_code"`` (HTTP status of the final response).
 
         Raises:
+            EnvironmentRefusedError: This environment does not write to the archive (``wayback_save``, D26).
             requests.RequestException: The save failed, outlasted its deadline, or redirected off archive.org.
         """
+        from urbanlens.dashboard.services.core.egress import require_egress
+
+        # A write to a public archive is its own service: reads stay on this gateway's budget, saves are production's.
+        require_egress(SAVE_SERVICE)
         try:
             with open_public_url(
                 "GET",

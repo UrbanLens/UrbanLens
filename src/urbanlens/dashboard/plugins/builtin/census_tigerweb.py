@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -76,6 +77,7 @@ class CensusTigerwebPlugin(UrbanLensPlugin):
         return {
             "census_tigerweb": ServiceDefaults(
                 display_name="US Census TIGERweb",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=30,
                 calls_per_day=2000,
                 usa_only=True,

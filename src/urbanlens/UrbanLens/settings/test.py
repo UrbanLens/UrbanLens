@@ -5,12 +5,19 @@ import tempfile
 
 from pydantic_core import Url
 
+from urbanlens.UrbanLens.egress import email_delivery_backend
 from urbanlens.UrbanLens.settings import _metrics
 from urbanlens.UrbanLens.settings._gdal_local import local_gdal_overrides
 from urbanlens.UrbanLens.settings.app import settings as _app_settings
 from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
+
+# xdist workers hide pytest from argv, so base may have derived these for the container's UL_ENVIRONMENT. The egress
+# policy gives the suite production's terms (D26): the whole beat schedule, and mail that never defaults to SMTP.
+EGRESS_ENVIRONMENT = "testing"
+CELERY_BEAT_SCHEDULE = FULL_BEAT_SCHEDULE  # noqa: F405
+EMAIL_DELIVERY_BACKEND = email_delivery_backend(EGRESS_ENVIRONMENT, configured=os.getenv("UL_EMAIL_BACKEND"), send_outside_production=False)
 
 # A `test` module is under test by definition; xdist workers hide pytest from argv, so fix storage here.
 STORAGES = {**STORAGES, "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}  # noqa: F405

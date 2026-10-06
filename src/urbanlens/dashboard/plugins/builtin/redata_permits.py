@@ -9,6 +9,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.redata_panel import RedataInfoPanelSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -91,6 +92,7 @@ class BuildingPermitsPlugin(UrbanLensPlugin):
         return {
             "redata_permits": ServiceDefaults(
                 display_name="REData Building Permits",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="Permit, violation and site-plan filings via GET /permits/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_permits_gateway.",

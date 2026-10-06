@@ -169,7 +169,12 @@ class GoogleCalendarGateway(Gateway):
             Headers dict with a valid bearer token.
 
         Raises:
+            EnvironmentRefusedError: This environment does not call the service; asked before the token refresh, which
+                would otherwise reach Google for a call that is then refused (D26).
             GatewayRequestError: When the token cannot be refreshed."""
+        from urbanlens.dashboard.services.core.egress import require_egress
+
+        require_egress(type(self).service_key)
         if self.account.is_token_expired:
             self._refresh_token()
         return {"Authorization": f"Bearer {self.account.access_token}"}

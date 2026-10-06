@@ -148,7 +148,9 @@ class PinSuggestionsViewTests(TestCase):
         self.assertFalse(PinSuggestion.objects.exists())
 
     def test_address_only_geocodes_through_the_shared_helper(self) -> None:
-        with mock.patch("urbanlens.dashboard.external_api.views.get_pin_by_address", return_value=(42.6, -73.6)):
+        with mock.patch(
+            "urbanlens.dashboard.services.pins.pin_creation.get_pin_by_address", return_value=(42.6, -73.6)
+        ):
             response = self._post({"name": "Geocoded Spot", "address": "1 Main St"})
         self.assertEqual(response.status_code, 201, response.content)
         suggestion = PinSuggestion.objects.get(pk=response.json()["suggestion_id"])

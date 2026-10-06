@@ -81,7 +81,6 @@ class AssistantLoopTests(TestCase):
         clock = itertools.chain(readings[:-1], itertools.repeat(readings[-1]))
         with (
             patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.ai.assistant.log_api_call"),
             patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: next(clock)),
         ):
             return run_assistant_turn(self.profile, [], "hello")
@@ -205,17 +204,27 @@ class AssistantLoopTests(TestCase):
         # caught never executed, so there was nothing to feed a second round.
         self.assertEqual(len(gateway.prompts), 1)
 
-    def test_log_api_call_regression_exactly_one_row_with_cost(self) -> None:
-        """A multi-round-trip turn must log exactly once, with cost - not once per round."""
+    def test_each_provider_round_is_one_reserved_row_with_its_cost(self) -> None:
+        """Every round goes through the egress policy and the ledger (D26), not one summary row per turn."""
         from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 
         gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "Here are your trips."}])
         with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
             run_assistant_turn(self.profile, [], "what are my trips?")
         rows = list(ApiCallLog.objects.filter(service="assistant"))
-        self.assertEqual(len(rows), 1)
-        self.assertTrue(rows[0].success)
-        self.assertIsNotNone(rows[0].cost_estimate)
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row.success for row in rows))
+        self.assertTrue(all(row.cost_estimate is not None for row in rows))
+
+    def test_a_switched_off_assistant_makes_no_provider_call(self) -> None:
+        from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
+
+        ApiRateLimit.objects.create(service="assistant", display_name="Assistant (AI)", enabled=False)
+        gateway = _StubGateway([{"reply": "never"}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            turn = run_assistant_turn(self.profile, [], "hi")
+        self.assertEqual(gateway.prompts, [])
+        self.assertEqual(turn.reply, _NO_RESPONSE_REPLY)
 
     def test_log_api_call_records_failure_when_the_model_gives_up(self) -> None:
         """A dead gateway (send_with_tools returns None) still logs one failed call, not zero."""

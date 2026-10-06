@@ -813,10 +813,26 @@ services with a known published rate - `null` means "not priced," not "confirmed
 most services don't have a rate configured yet. Aggregated into a per-service 30-day cost
 breakdown on the site-admin API usage report; the public `/costs/` transparency page (below) shows
 a coarser blended figure instead, not a per-service breakdown. Calls that bypass a gateway session
-(vision, and the budgeted LLM features: article expansion/safety, trivia moderation, answer check
-and wiki incorporation) reserve their ledger row before calling through
+(vision, and every LLM feature: article expansion/safety, trivia generation, moderation, answer check
+and wiki incorporation, link extraction, document pin import, trip suggestions, label style and
+category suggestions, and each assistant round) reserve their ledger row before calling through
 `rate_limiter.api_call_slot()`, so their admin limits and enable switches apply, and a limiter that
-cannot read its counts refuses billable services.
+cannot read its counts refuses billable services. The six LLM features added to it on 2026-10-05
+carry no cap: AI is logged, not limited.
+
+**Per-environment egress policy (D26, `UrbanLens/egress.py`, `services/core/egress.py`).** Every
+external service is classified (`ServiceDefaults.category`: `redata`, `internal`, `quota`, `billed`,
+`ai`, `messaging`, `public_write`), and the same choke point applies one policy per `UL_ENVIRONMENT`:
+REData, our own hosts and AI everywhere; `quota` and `billed` budgets scaled by `UL_ENVIRONMENT_SHARE`
+(production 0.9, staging 0.05, development 0); messaging and writes to a third party (Save Page Now,
+Calendar, Stripe) production only. `UL_ENVIRONMENT_SHARE_OVERRIDES` opts one service in or out. A
+refusal (`EnvironmentRefusedError`) writes no ledger row, logs once per service per ten minutes, is
+skipped by the boundary chain rather than deferred, shows as "Not available in this environment" on a
+panel without caching anything, and off production the name and geocode chains never fall through
+from REData to a direct provider. Beat schedules only internal entries off production (plus
+`UL_BACKGROUND_TASKS_ALLOWLIST`), and each external task checks for itself. The hosted Protomaps
+basemap is production's; elsewhere the self-hosted mirror serves it. The startup log names the
+environment, share, overrides and allow-listed tasks.
 
 A request no provider could answer is refused before it spends anything: no rate-limit slot, no
 quota, no network. `services/core/input_validation.py` raises `ImpossibleInputError`, a "no data,
@@ -1291,6 +1307,8 @@ fields, pin/wiki links, the archive importer, and the three external-API seriali
   passes `RecipientGuardEmailBackend`, which drops recipients no mailbox can exist at - reserved
   domains, and Gmail names holding characters Gmail never issues - and hands the rest to
   `UL_EMAIL_BACKEND`. A message left with nobody raises `SMTPRecipientsRefused`, as a relay would.
+  Off production the delivering backend is Django's console one, so codes and magic links are read
+  from the logs, unless `UL_EMAIL_SEND_OUTSIDE_PRODUCTION=true` (D26).
 - **Enforced Content-Security-Policy** (`settings/base.py` `_CSP_DIRECTIVES`; `UL_CSP_ENFORCE=false`
   is an escape hatch to report-only). Violations are logged through `report-uri /csp-report/`.
   htmx features that need `'unsafe-eval'` are replaced by declarative request actions

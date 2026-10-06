@@ -21,7 +21,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pins.pin_creation import AddressResolutionError, NoLocationProvidedError, PinCreationError, PinCreationForbiddenError
+from urbanlens.dashboard.services.pins.pin_creation import AddressLookupUnavailableError, AddressResolutionError, NoLocationProvidedError, PinCreationError, PinCreationForbiddenError
 from urbanlens.dashboard.services.pins.pin_import_failures import dismiss_pin_import_failure, resolve_pin_import_failure
 
 if TYPE_CHECKING:
@@ -203,6 +203,9 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
         except NoLocationProvidedError as exc:
             logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
             message = "An address or coordinates are required."
+        except AddressLookupUnavailableError as exc:
+            logger.info("pin import failure %s resolve deferred: %s", failure.pk, exc)
+            message = "Address lookup isn't available right now. Enter coordinates instead."
         except AddressResolutionError as exc:
             logger.info("pin import failure %s resolve rejected: %s", failure.pk, exc)
             message = "That address couldn't be converted to coordinates."

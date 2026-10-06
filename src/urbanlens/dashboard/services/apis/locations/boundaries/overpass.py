@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 # It is the primary; the public instances below are ordered fallbacks, not equal peers
 # (`_available_endpoints` keeps the primary first and only shuffles the fallbacks).
 _API_URL = "https://overpass.osm.urbanlens.org/api/interpreter"
+#: The egress policy's key for the public fallbacks below, which spend the shared address's per-IP slots.
+PUBLIC_MIRROR_SERVICE = "overpass_public_mirror"
 # Public fallbacks, used when the primary is down or overloaded.
 # Every instance runs the same OSM3S/Overpass API software, so an identical query works against any
 # of them.
@@ -231,9 +233,16 @@ class OverpassGateway(Gateway, BoundaryProvider):
         self.session.headers.update({"User-Agent": _USER_AGENT})
 
     def _endpoints(self) -> list[str]:
-        """Ordered, de-duplicated list of every configured Overpass endpoint."""
+        """Ordered, de-duplicated list of every Overpass endpoint this deployment may ask.
+
+        The public mirrors are their own ``quota`` service, :data:`PUBLIC_MIRROR_SERVICE`: where the environment
+        does not call it (off production by default, D26) only the self-hosted primary is asked.
+        """
+        from urbanlens.dashboard.services.core.egress import egress_permitted
+
+        configured = (self.base_url, *self.mirrors) if egress_permitted(PUBLIC_MIRROR_SERVICE) else (self.base_url,)
         endpoints: list[str] = []
-        for url in (self.base_url, *self.mirrors):
+        for url in configured:
             if url not in endpoints:
                 endpoints.append(url)
         return endpoints

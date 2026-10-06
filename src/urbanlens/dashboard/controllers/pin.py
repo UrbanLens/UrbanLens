@@ -406,17 +406,46 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             in_tab: Whether the placeholder fills a tab body - see :meth:`_pending_placeholder`.
 
         Returns:
-            The placeholder fragment, or 204 when suppressed or exhausted.
+            The placeholder fragment; a note when this environment does not call the panel's source; else 204 when
+            suppressed or exhausted.
         """
-        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, get_panel_source, schedule_panel_fetch, unavailable_here
 
+        source = get_panel_source(source_key)
+        if source is not None and unavailable_here(source_key, pin):
+            return self._unavailable_here(request, source, section_id=section_id or source.section_id, in_tab=in_tab)
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
             return HttpResponse(status=204)
-        source = get_panel_source(source_key)
         if source is None:
             return HttpResponse(status=204)
         return self._pending_placeholder(request, source, section_id=section_id or source.section_id, in_tab=in_tab, hide_tab_id=hide_tab_id)
+
+    @staticmethod
+    def _unavailable_here(request: HttpRequest, source: PanelSource, *, section_id: str, in_tab: bool) -> HttpResponse:
+        """Say a panel's source is not called from this environment (D26), rather than showing it empty or hiding it.
+
+        Args:
+            request: The current request.
+            source: The panel whose source was refused.
+            section_id: The fragment's DOM id.
+            in_tab: Whether it fills a tab body.
+
+        Returns:
+            The note fragment. Never polls: nothing is in flight.
+        """
+        return render(
+            request,
+            "dashboard/partials/pins/panel_unavailable_here.html",
+            {
+                "section_id": section_id,
+                "outer_class": source.outer_class,
+                "outer_is_card": source.outer_is_card,
+                "icon": source.icon,
+                "title": source.title,
+                "in_tab": in_tab,
+            },
+        )
 
     def _pending_placeholder(self, request: HttpRequest, source: PanelSource, *, section_id: str, in_tab: bool, title: str | None = None, hide_tab_id: str | None = None) -> HttpResponse:
         """The self-polling placeholder for a panel whose fetch is in flight.

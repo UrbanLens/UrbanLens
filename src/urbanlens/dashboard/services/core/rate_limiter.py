@@ -25,7 +25,7 @@ from urbanlens.dashboard.exceptions import DashboardError
 from urbanlens.dashboard.models.abstract.versioning import current_write_actor
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
 from urbanlens.dashboard.services.core.outages import is_unanswered_status, record_unanswered
-from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+from urbanlens.UrbanLens.egress import EgressCategory, scaled_limit
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +89,16 @@ class ServiceDefaults:
     #: 0.4 of a Google Maps Platform SKU REData can also bill (REData takes 0.5), never above 0.9,
     #: so the hours between a UTC month turning and Google's Pacific one fall in headroom.
     free_tier_allotment: float = 0.9
+    #: What kind of service this is, which decides which environments may call it and on what share of
+    #: its budget (``urbanlens.UrbanLens.egress``). None means unclassified, which the policy treats as
+    #: billed and the completeness test refuses.
+    category: EgressCategory | None = None
 
 
 SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     "google_geocoding": ServiceDefaults(
         display_name="Google Geocoding API",
+        category=EgressCategory.BILLED,
         calls_per_minute=20,
         calls_per_day=500,
         calls_per_30_days=9999,
@@ -106,6 +111,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_cid_lookup": ServiceDefaults(
         display_name="REData CID Resolution",
+        category=EgressCategory.REDATA,
         calls_per_minute=10,
         calls_per_day=None,
         calls_per_30_days=None,
@@ -117,6 +123,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_places": ServiceDefaults(
         display_name="REData Places",
+        category=EgressCategory.REDATA,
         # Deliberately conservative since this rate limiter has no cross-service shared-budget
         # concept and redata_api already draws from the same pool.
         calls_per_minute=20,
@@ -127,12 +134,14 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_photos": ServiceDefaults(
         display_name="REData Photo Relevance",
+        category=EgressCategory.REDATA,
         calls_per_minute=30,
         calls_per_day=None,
         notes="Photo submission/voting/confidence via POST /photos/, /photos/votes/, /photos/confidence/.",
     ),
     "redata_labels": ServiceDefaults(
         display_name="REData Label Suggestions",
+        category=EgressCategory.REDATA,
         # limits) and only fire on actual writes; suggestion lookups are one call per dialog open.
         # Generous but still bounded, matching redata_photos.
         calls_per_minute=30,
@@ -141,6 +150,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_basemap_tiles": ServiceDefaults(
         display_name="REData Basemap Tiles",
+        category=EgressCategory.REDATA,
         # Deliberately far above the shared "lookup" budget below: a tile request is one per pan,
         # not one per user action, and REData applies its own tile throttle that *replaces* rather
         # than stacks with the per-key budget (see its api-reference.md).
@@ -151,6 +161,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "basemap_vendor_tiles": ServiceDefaults(
         display_name="Basemap Vendor Tiles",
+        category=EgressCategory.QUOTA,
         # One per pan rather than one per user action, so sized like the REData tile budget above
         # rather than the lookup one. These vendors are free and keyless, so the budget is
         # politeness rather than a billing guard.
@@ -160,6 +171,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "protomaps_basemap": ServiceDefaults(
         display_name="Protomaps Hosted Basemap",
+        category=EgressCategory.BILLED,
         # One per *uncached* tile rather than one per tile drawn: this is the fetch behind
         # controllers.basemap_tiles.VectorBasemapTileView, whose week-long cache is what every
         # viewer after the first is answered from. A cold viewport is still ~30 at once.
@@ -173,18 +185,21 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_geocode": ServiceDefaults(
         display_name="REData Geocoding",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="Forward/reverse geocoding via GET /geocode/, /geocode/reverse/. See services.apis.locations.geocode_resolution.",
     ),
     "redata_weather": ServiceDefaults(
         display_name="REData Weather",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="Current conditions/forecast/sun times via GET /weather/ - every registered provider (Open-Meteo, OpenWeatherMap) in one call. See services.apis.locations.weather_resolution.",
     ),
     "redata_public_locations": ServiceDefaults(
         display_name="REData Public Locations",
+        category=EgressCategory.REDATA,
         # Costs REData no upstream call either - its own local catalog, no
         # per-source attribution - and is only ever called by demo-instance
         # seeding, never a real user's request.
@@ -194,6 +209,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_capabilities": ServiceDefaults(
         display_name="REData Capability Index",
+        category=EgressCategory.REDATA,
         # Costs REData no external call - it is a bounds test over its own registries - so this
         # budget bounds our own round trips, not a source's.
         # Read on the pin-detail path now (services.apis.locations.
@@ -204,6 +220,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_prewarm": ServiceDefaults(
         display_name="REData Prewarm",
+        category=EgressCategory.REDATA,
         # One per new root pin's location (services.pins.bootstrap). Not in REData's lookup pool: REData
         # bills it to its all-endpoint budget and its own prewarm throttle.
         calls_per_minute=20,
@@ -212,42 +229,49 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "redata_weather_history": ServiceDefaults(
         display_name="REData Historical Weather",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="What the weather actually was, per day, via GET /weather/history/ (Open-Meteo ERA5 reanalysis, back to 1940). Separate from redata_weather because a past day is an immutable record, not a forecast. See services.locations.visit_weather.",
     ),
     "redata_routing": ServiceDefaults(
         display_name="REData Routing",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="Route/drive-time legs via POST /routes/ (as_given capability only). See services.apis.locations.routing_resolution.",
     ),
     "redata_search_web": ServiceDefaults(
         display_name="REData Web Search",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="Web and image search via GET /search/web/, for the Google Images and SearXNG image panels and services.search. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_search_gateway.",
     ),
     "redata_street_view": ServiceDefaults(
         display_name="REData Street View",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="Street-level capture timelines via /street-view/timeline/, spent by the Mapillary, KartaView and Panoramax providers. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_street_view_gateway.",
     ),
     "redata_locations_context": ServiceDefaults(
         display_name="REData Location Context",
+        category=EgressCategory.REDATA,
         calls_per_minute=60,
         calls_per_day=None,
         notes="Cache-only reads of several near-point domains at once via GET /locations/context/, asked before each domain's own endpoint by services.locations.redata_point_data. Charged to REData's 2,000/hour default pool, not the 1,000/hour lookup pool.",
     ),
     "redata_buildings": ServiceDefaults(
         display_name="REData Buildings",
+        category=EgressCategory.REDATA,
         calls_per_minute=20,
         calls_per_day=None,
         notes="Overture building footprints near a point via GET /buildings/, from REData's own Overture mirror, where its synced US shards cover the point. Read by the boundary chain and the Building Characteristics panel. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.boundaries.overture.",
     ),
     "redata_historical_maps": ServiceDefaults(
         display_name="REData Historical Maps",
+        category=EgressCategory.REDATA,
         # One call per uncached overlay tile, so a daily cap blanks overlays for the rest of the day.
         calls_per_minute=300,
         calls_per_day=None,
@@ -255,18 +279,21 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "google_open_buildings": ServiceDefaults(
         display_name="Google Open Buildings",
+        category=EgressCategory.QUOTA,
         calls_per_minute=20,
         calls_per_day=500,
         notes="Downloads level-6 gzip CSV shards of Google's public Open Buildings v3 dataset during boundary lookups, only for cells it covers (none in the US), skipping any past MAX_SHARD_BYTES and remembering missing ones. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.google_open_buildings.",
     ),
     "microsoft_building_footprints": ServiceDefaults(
         display_name="Microsoft Building Footprints",
+        category=EgressCategory.QUOTA,
         calls_per_minute=20,
         calls_per_day=500,
         notes="Downloads whole gzip shards of Microsoft's public building footprint dataset during boundary lookups. The dataset has no quota, so this bounds our own bandwidth; the values are the generic fallback's, not tuned. See services.apis.locations.boundaries.microsoft_buildings.",
     ),
     "overture_maps": ServiceDefaults(
         display_name="Overture Maps",
+        category=EgressCategory.QUOTA,
         # Unlike its open-building-footprint siblings above, Overture's own STAC index has been
         # observed to answer with `HTTP Error 429: Too Many Requests` under enough concurrent
         # lookups - the values here are a real budget, not just bandwidth hygiene. Still the
@@ -279,6 +306,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "openweathermap": ServiceDefaults(
         display_name="OpenWeatherMap",
+        category=EgressCategory.QUOTA,
         calls_per_minute=20,
         calls_per_day=500,
         notes="Free tier: 1,000 calls/day.",
@@ -287,6 +315,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "overpass": ServiceDefaults(
         display_name="Overpass API (OpenStreetMap)",
+        category=EgressCategory.INTERNAL,
         # OverpassGateway spreads every call across a pool of public instances and drops any that
         # error out of rotation until the next day, so this limit governs our total load, not the
         # load on any single instance.
@@ -299,6 +328,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "digital_commonwealth": ServiceDefaults(
         display_name="Digital Commonwealth",
+        category=EgressCategory.REDATA,
         calls_per_minute=10,
         calls_per_day=200,
         usa_only=True,
@@ -308,18 +338,21 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "apple_maps": ServiceDefaults(
         display_name="Apple Maps Server API",
+        category=EgressCategory.BILLED,
         calls_per_minute=50,
         calls_per_day=2500,
         notes="Requires a JWT generated from Apple Developer credentials. Geocoding/search is billable.",
     ),
     "google_earth": ServiceDefaults(
         display_name="Google Earth Engine",
+        category=EgressCategory.BILLED,
         calls_per_minute=10,
         calls_per_day=200,
         notes="Requires OAuth2. Free for non-commercial use via Earth Engine sign-up.",
     ),
     "wayback_machine": ServiceDefaults(
         display_name="Internet Archive Wayback Machine",
+        category=EgressCategory.QUOTA,
         calls_per_minute=10,
         calls_per_day=500,
         notes="Free, no key required. Be polite - the Archive is a public resource.",
@@ -328,6 +361,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "hibp": ServiceDefaults(
         display_name="Have I Been Pwned (Pwned Passwords)",
+        category=EgressCategory.QUOTA,
         calls_per_minute=60,
         calls_per_day=5000,
         notes="Free k-anonymity range API. Used when users set or change passwords.",
@@ -336,6 +370,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "virustotal": ServiceDefaults(
         display_name="VirusTotal",
+        category=EgressCategory.QUOTA,
         # Both capped below that (not merely at it) on purpose: check_rate_limit's rolling window is
         # ours, not VirusTotal's, so a call that lands right at our own ceiling isn't guaranteed to
         # land inside VirusTotal's - clock skew or window-boundary misalignment could still trip
@@ -345,51 +380,104 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
     ),
     "sms": ServiceDefaults(
         display_name="Twilio SMS",
+        category=EgressCategory.MESSAGING,
         calls_per_minute=10,
         calls_per_day=200,
         notes="Billed per message sent - keep this conservative.",
     ),
     "whatsapp": ServiceDefaults(
         display_name="Twilio WhatsApp",
+        category=EgressCategory.MESSAGING,
         calls_per_minute=10,
         calls_per_day=200,
         notes="Billed per message sent - keep this conservative.",
     ),
     "article_expansion": ServiceDefaults(
         display_name="Article Expansion Writing (AI)",
+        category=EgressCategory.AI,
         calls_per_minute=10,
         calls_per_day=500,
         notes="Drafts plain-text paragraphs for pin/wiki articles from a linked page during AI link extraction. Cost varies by provider/model - see ApiCallLog.cost_estimate for actuals.",
     ),
     "article_safety": ServiceDefaults(
         display_name="Article Expansion Safety (AI)",
+        category=EgressCategory.AI,
         calls_per_minute=20,
         calls_per_day=1000,
         notes="Judges AI-drafted article text for appropriateness and safety-related implications before it is appended. Fail-closed when unavailable.",
     ),
     "trivia_moderation": ServiceDefaults(
         display_name="Trivia Question Moderation (AI)",
+        category=EgressCategory.AI,
         calls_per_minute=20,
         calls_per_day=1000,
         notes="Classifies user-submitted and AI-generated Trivia questions before they enter rotation. Cost varies by provider/model - see ApiCallLog.cost_estimate for actuals.",
     ),
     "trivia_generation": ServiceDefaults(
         display_name="Trivia Question Generation (AI)",
+        category=EgressCategory.AI,
         calls_per_minute=5,
         calls_per_day=200,
         notes="Generates candidate Trivia questions from wiki article content. Runs from a scheduled background sweep, not per-request.",
     ),
     "trivia_answer_check": ServiceDefaults(
         display_name="Trivia Answer Checking (AI)",
+        category=EgressCategory.AI,
         calls_per_minute=30,
         calls_per_day=2000,
         notes="Judges a non-exact-match Trivia answer as possibly correct but differently phrased. Only called on a normalized-string mismatch.",
     ),
     "trivia_wiki_incorporation": ServiceDefaults(
         display_name="Trivia Wiki Incorporation (AI)",
+        category=EgressCategory.AI,
         calls_per_minute=5,
         calls_per_day=200,
         notes="Drafts a plain-text paragraph folding a well-upvoted user-submitted Trivia question into its location's wiki article. Runs from a scheduled background sweep, not per-request.",
+    ),
+    # AI features: an AI call is logged, never refused for spend (R31), so these carry no daily or monthly cap,
+    # only a per-minute guard against a runaway loop. The row exists so each call is reserved and recorded, and
+    # so the API-limits page can switch one off.
+    "link_extraction": ServiceDefaults(
+        display_name="Link Extraction (AI)",
+        category=EgressCategory.AI,
+        calls_per_minute=30,
+        calls_per_day=None,
+        notes="Extracts pin facts from a linked page the user asked to read. One call per extraction; the user's daily allowance is enforced by the feature itself.",
+    ),
+    "document_pin_import": ServiceDefaults(
+        display_name="Document Pin Import (AI)",
+        category=EgressCategory.AI,
+        calls_per_minute=30,
+        calls_per_day=None,
+        notes="Reads pins out of an uploaded document's text.",
+    ),
+    "trip_suggestions": ServiceDefaults(
+        display_name="Trip Suggestions (AI)",
+        category=EgressCategory.AI,
+        calls_per_minute=30,
+        calls_per_day=None,
+        notes="Suggests pins and a schedule for a trip, on request; cached and cooled down per trip and requester.",
+    ),
+    "label_style_suggestions": ServiceDefaults(
+        display_name="Label Style Suggestions (AI)",
+        category=EgressCategory.AI,
+        calls_per_minute=120,
+        calls_per_day=None,
+        notes="Suggests an icon and colour for a label created off the request path.",
+    ),
+    "category_suggestions": ServiceDefaults(
+        display_name="Category Suggestions (AI)",
+        category=EgressCategory.AI,
+        calls_per_minute=120,
+        calls_per_day=None,
+        notes="Picks labels for a pin or location from the eligible list when keywords did not match.",
+    ),
+    "assistant": ServiceDefaults(
+        display_name="Assistant (AI)",
+        category=EgressCategory.AI,
+        calls_per_minute=60,
+        calls_per_day=None,
+        notes="One row per provider round of an assistant turn; the assistant is pinned to Anthropic.",
     ),
 }
 
@@ -410,42 +498,11 @@ def all_service_defaults() -> dict[str, ServiceDefaults]:
 # Public API
 
 
-#: What share of each billed service's allotment a deployment spends, by ``UL_ENVIRONMENT``, when
-#: ``UL_BILLED_API_SHARE`` does not say. They sum to 1.0, so every UrbanLens deployment at once
-#: still fits inside UrbanLens's allotment.
-BILLED_API_SHARE_BY_ENVIRONMENT: dict[str, float] = {
-    EnvironmentTypes.PRODUCTION: 0.8,
-    EnvironmentTypes.STAGING: 0.1,
-    EnvironmentTypes.DEVELOPMENT: 0.05,
-    EnvironmentTypes.LOCAL: 0.05,
-}
-#: The share of an environment the table does not name: a new one starts at nothing.
-UNKNOWN_ENVIRONMENT_BILLED_API_SHARE = 0.0
+def _service_share(service: str) -> float:
+    """This deployment's share of *service*'s budgets (``services.core.egress.service_share``)."""
+    from urbanlens.dashboard.services.core.egress import service_share
 
-
-def _configured_billed_api_share() -> float | None:
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    return app_settings.billed_api_share
-
-
-def billed_api_share() -> float:
-    """This deployment's share of UrbanLens's allotment of every billed service's free tier.
-
-    Returns:
-        ``UL_BILLED_API_SHARE`` when set (``0`` keeps the deployment off every billed API), else
-        the default for ``UL_ENVIRONMENT``. The test suite takes the whole allotment; it mocks
-        the network.
-    """
-    from django.conf import settings as django_settings
-
-    configured = _configured_billed_api_share()
-    if configured is not None:
-        return configured
-    if getattr(django_settings, "TESTING", False):
-        return 1.0
-    environment = str(getattr(django_settings, "ENVIRONMENT_NAME", "")).lower()
-    return BILLED_API_SHARE_BY_ENVIRONMENT.get(environment, UNKNOWN_ENVIRONMENT_BILLED_API_SHARE)
+    return service_share(service)
 
 
 def free_tier_ceiling(service: str) -> int | None:
@@ -455,8 +512,9 @@ def free_tier_ceiling(service: str) -> int | None:
         service: The service key.
 
     Returns:
-        The vendor's free allowance, times UrbanLens's allotment, times :func:`billed_api_share`,
-        rounded down; None for a service with no declared free tier.
+        The vendor's free allowance, times UrbanLens's allotment, times this deployment's share of
+        the service (``UL_ENVIRONMENT_SHARE`` or its override), rounded down; None for a service
+        with no declared free tier.
     """
     try:
         # Plugin defaults win, as all_service_defaults documents.
@@ -469,7 +527,7 @@ def free_tier_ceiling(service: str) -> int | None:
             return 0
     if defaults is None or defaults.free_tier_per_calendar_month is None:
         return None
-    return math.floor(defaults.free_tier_per_calendar_month * defaults.free_tier_allotment * billed_api_share())
+    return math.floor(defaults.free_tier_per_calendar_month * defaults.free_tier_allotment * _service_share(service))
 
 
 def _is_billable(service: str) -> bool:
@@ -548,43 +606,6 @@ def service_is_permitted(service: str) -> bool:
     return service_is_enabled(service) and check_rate_limit(service)
 
 
-#: Environments whose calls are nobody's budget to spend.
-#: A developer working on an integration sets ``UL_ALLOW_OUTBOUND_APIS=true``; everyone else, and
-#: every background task on their machine, stays off the wire.
-_UNBUDGETED_ENVIRONMENTS = frozenset({EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL})
-
-
-def outbound_calls_permitted(service: str) -> bool:
-    """Whether this deployment may call ``service`` at all.
-    REData is exempt there because it is this project's own service - the demo is the thing it exists to show off, and calling our own instance costs nothing but our own capacity.
-
-    Args:
-        service: The service key.
-
-    Returns:
-        True when the call is allowed."""
-    from django.conf import settings as django_settings
-
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-    if app_settings.demo_mode:
-        return service.startswith("redata")
-    # The suite runs with UL_ENVIRONMENT inherited from whatever container it is in, which is a
-    # development one - so without this every gateway in every test would be disabled, and thousands
-    # of tests would be asserting against a refusal rather than against the code they name.
-    # Tests keep themselves off the network by mocking the session, which is a separate property
-    if getattr(django_settings, "TESTING", False):
-        return True
-    # An explicit answer wins over the environment's default, in both directions.
-    # The direction that matters is `false` on a deployment the environment would otherwise trust:
-    # `dev_env.py --environment staging` sets UL_ENVIRONMENT=staging purely to get gunicorn, and the
-    # application branches on that one variable, so a throwaway environment is otherwise
-    explicit = app_settings.allow_outbound_apis
-    if explicit is not None:
-        return bool(explicit)
-    return str(getattr(django_settings, "ENVIRONMENT_NAME", "")).lower() not in _UNBUDGETED_ENVIRONMENTS
-
-
 def service_is_enabled(service: str, config: Any = None) -> bool:
     """Check if the service is enabled.
 
@@ -595,10 +616,11 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
     Returns:
         ``True`` if the service is enabled, ``False`` otherwise."""
     # Checked before the config, and before the cached-config fast path, so it cannot be skipped by
-    # a caller that already holds a row.
-    # This is the one place every outbound call passes through (``_reserve_call``), which is why the
-    # deployment spend guards live here rather than in each of 58 gateways.
-    if not outbound_calls_permitted(service):
+    # a caller that already holds a row. ``_reserve_call`` raises the environment's refusal before it
+    # gets here; this answers the callers that ask ahead of time (D26).
+    from urbanlens.dashboard.services.core.egress import egress_permitted
+
+    if not egress_permitted(service):
         return False
     if config is not None:
         return bool(config.enabled)
@@ -616,6 +638,8 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
 def check_rate_limit(service: str, config: Any = None) -> bool:
     """Return ``True`` if a call to ``service`` is currently permitted.
     Only the windows that are actually configured are counted - a service with no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
+    Each window holds this deployment's share of the configured limit (``services.core.egress.service_share``): all of
+    it for REData, our own hosts and AI, ``UL_ENVIRONMENT_SHARE`` of it for a ``quota`` or ``billed`` service.
 
     Args:
         service: The service key.
@@ -631,37 +655,41 @@ def check_rate_limit(service: str, config: Any = None) -> bool:
         except DatabaseError:
             return _refuse_if_billable(service, "the rate limit config")
 
+    share = _service_share(service)
+    per_minute = scaled_limit(config.calls_per_minute, share)
+    per_day = scaled_limit(config.calls_per_day, share)
+    per_30_days = scaled_limit(config.calls_per_30_days, share)
     try:
-        if config.calls_per_minute is not None:
+        if per_minute is not None:
             recent_minute = ApiCallLog.objects.for_service(service).since(timedelta(minutes=1)).billable().count()
-            if recent_minute >= config.calls_per_minute:
+            if recent_minute >= per_minute:
                 logger.warning(
                     "Rate limit hit for %s: %d/%d calls in last minute",
                     service,
                     recent_minute,
-                    config.calls_per_minute,
+                    per_minute,
                 )
                 return False
 
-        if config.calls_per_day is not None:
+        if per_day is not None:
             today_count = ApiCallLog.objects.for_service(service).today().billable().count()
-            if today_count >= config.calls_per_day:
+            if today_count >= per_day:
                 logger.warning(
                     "Daily rate limit hit for %s: %d/%d calls today",
                     service,
                     today_count,
-                    config.calls_per_day,
+                    per_day,
                 )
                 return False
 
-        if config.calls_per_30_days is not None:
+        if per_30_days is not None:
             recent_30_days = ApiCallLog.objects.for_service(service).since(timedelta(days=30)).billable().count()
-            if recent_30_days >= config.calls_per_30_days:
+            if recent_30_days >= per_30_days:
                 logger.warning(
                     "30-day rate limit hit for %s: %d/%d calls in the last 30 days",
                     service,
                     recent_30_days,
-                    config.calls_per_30_days,
+                    per_30_days,
                 )
                 return False
 
@@ -734,12 +762,16 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
         The pk of the reserved ``ApiCallLog`` row.
 
     Raises:
+        EnvironmentRefusedError: If this environment does not call the service; nothing is recorded.
         RateLimitExceededError: If the call would exceed the configured rate limit, or land sooner than ``min_interval_seconds`` after the last one.
         ServiceDisabledError: If the service is administratively disabled.
         RateLimiterUnavailableError: If the limit cannot be read or the call cannot be recorded."""
     from urbanlens.dashboard.models.api_call_log import ApiCallLog
     from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+    from urbanlens.dashboard.services.core.egress import require_egress
 
+    # Before the transaction: a call this environment never makes is not a call, and leaves no row.
+    require_egress(service)
     truncated_endpoint = endpoint[:500] if endpoint else ""
     # Read once, outside the lock: who this call is being made for. Bound by
     # WriteSourceMiddleware for a request and left unset for the site's own
@@ -843,11 +875,14 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
         The slot; set its fields before the block ends.
 
     Raises:
-        RequestCancelledError: Refused before the block ran - over a limit, disabled, the
-            limiter could not be read, or the provider is backed off (``provider_health``).
+        RequestCancelledError: Refused before the block ran - not available in this environment
+            (:class:`EnvironmentRefusedError`), over a limit, disabled, the limiter could not be read,
+            or the provider is backed off (``provider_health``).
     """
     from urbanlens.dashboard.services.core import provider_health
+    from urbanlens.dashboard.services.core.egress import require_egress
 
+    require_egress(service)
     provider_health.check_admission(service, endpoint=endpoint)
     entry_pk = _reserve_call(service, endpoint=endpoint)
     slot = ApiCallSlot()
@@ -906,12 +941,15 @@ class _RateLimitedSession:
         """Reserve a rate-limit slot, make the request, finalize the logged result.
         The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through."""
         from urbanlens.dashboard.services.core import provider_health
+        from urbanlens.dashboard.services.core.egress import require_egress
         from urbanlens.dashboard.services.core.input_validation import check_request_parameters
         from urbanlens.dashboard.services.core.task_limits import check_task_deadline, within_task_deadline
         from urbanlens.dashboard.services.core.upstream_breaker import breaker_for
 
         if _EXTERNAL_CALLS_FORBIDDEN.get():
             raise ExternalCallForbiddenError(f"{self._service_key}: {method}")
+        # First: a refusal by environment is neither a rejected input, a throttle nor a provider's ill health.
+        require_egress(self._service_key)
         # Before the breaker and the reservation: an input no API can answer is "no data" whatever else is true.
         check_request_parameters(self._service_key, params=kwargs.get("params"), json=kwargs.get("json"))
         check_task_deadline()
@@ -1015,6 +1053,28 @@ class ServiceDisabledError(RequestCancelledError):
 
     def __init__(self, service: str) -> None:
         super().__init__(service, f"Service '{service}' is disabled")
+
+
+class EnvironmentRefusedError(ServiceDisabledError):
+    """This environment does not call the service at all (D26): not a failure, and not worth retrying here.
+
+    A :class:`ServiceDisabledError`, so every caller that already degrades on a switched-off service keeps
+    working. Not transient, so it is never recorded as an unanswered call or held against the provider's
+    health. Its ``is_outage`` stays True in the sense that property is documented for - nothing was learned
+    about what was asked - so no caller stores the refusal as an empty answer. A provider chain skips the
+    source rather than deferring it (``services.locations.boundaries``), and a panel says it is not available
+    in this environment (``services.pins.external_data``).
+
+    Attributes:
+        service: The service key.
+        category: How the service is classified.
+        environment: The environment that refused it.
+    """
+
+    def __init__(self, service: str, *, category: str, environment: str) -> None:
+        RequestCancelledError.__init__(self, service, f"'{service}' ({category}) is not available in the {environment or 'unknown'} environment")
+        self.category = category
+        self.environment = environment
 
 
 class RateLimiterUnavailableError(RequestCancelledError):
