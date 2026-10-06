@@ -242,7 +242,7 @@ class KeywordOutageTests(TestCase):
         user: User = baker.make(User)
         self.image: Image = baker.make(Image, profile=user.profile, _create_files=True)
         patcher = mock.patch(
-            "urbanlens.dashboard.plugins.builtin.photo_keywords.analysis_jpeg_bytes", return_value=_JPEG
+            "urbanlens.dashboard.plugins.builtin.photo_keywords.require_analysis_jpeg_bytes", return_value=_JPEG
         )
         patcher.start()
         self.addCleanup(patcher.stop)

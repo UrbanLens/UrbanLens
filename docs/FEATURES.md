@@ -625,16 +625,19 @@ direct-only because REData's contract can't reproduce what they show:
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData;
   a PDF or DjVu among the results is listed under Article > Sources rather than the gallery, as for every REData archive
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
-  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). Empty since P196:
-  no page reaches UrbanLens with text that could name the place (P216)
+  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). A page is shown when
+  its OCR text names the place; its paper's dateline is not read (P216)
 - **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
   index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
 - **Nearby Media** — a Media-gallery tab of everything else REData's pooled media index holds near
   the pin (Commons, Flickr, YouTube, NPS media, ...), judged by the media relevance rule; images
   REData has mirrored are served from REData's copy through this site's proxy (`pin.redata.media`).
   It shares one REData read per point with the Aerial tab - `/locations/context/` when REData has
-  the point cached, else `/media/lookup/` (`plugins.builtin.redata_nearby_media`,
-  `services.locations.redata_point_data`)
+  the point cached, else `/media/lookup/` asked only of the providers these two tabs render - never
+  the street-level networks, which the Street-level tab reads from `/street-view/` (a provider REData
+  refuses as `unknown_provider` is retried once unfiltered, with a logged warning)
+  (`services.apis.locations.redata_media_gateway.NEARBY_MEDIA_PROVIDERS`,
+  `plugins.builtin.redata_nearby_media`, `services.locations.redata_point_data`)
 - **Street-level** — a Media-gallery tab of dated street-level captures near the pin (Mapillary,
   KartaView, Panoramax via REData `/street-view/` and its timeline), one per network and date,
   each opened from REData's archived copy through this site's proxy (`pin.redata.street_view`).

@@ -389,7 +389,12 @@ unknown model or a payload a model stopped accepting still counts against
 the provider in provider health (PL10). When no answer came at all,
 `classify_photo` and `describe_photo_keywords` return None, and the keyword
 providers raise `KeywordSourceUnavailableError`, so a photo keeps the
-keywords it had (P320).
+keywords it had (P320). The self-hosted Ollama provider does the same: its
+gateway returns None for a failed call or a body that is not a finished
+generation (an `error` key, `done: false`), and `[]` only for a generation
+that named nothing. A provider that cannot read the photo's analysis copy
+raises `AnalysisCopyUnavailableError` rather than answering for a photo it
+never saw (P322).
 
 The classifier is not asked about an image it is known to refuse. Before
 reserving a call, `classify_photo` reads the analysis copy's width and

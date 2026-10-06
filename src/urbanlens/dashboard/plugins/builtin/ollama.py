@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, analysis_jpeg_bytes
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, KeywordSourceUnavailableError, PhotoKeywordProvider, require_analysis_jpeg_bytes
 from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
@@ -42,14 +42,19 @@ class OllamaVisionKeywordProvider(PhotoKeywordProvider):
             image: The uploaded image.
 
         Returns:
-            Described keywords; empty when the call fails (errors logged).
+            Described keywords; empty when the model answered with none.
+
+        Raises:
+            KeywordSourceUnavailableError: The Ollama server did not answer, or the photo's analysis copy could not be
+                read, so the keywords the photo has stand (P322).
         """
         from urbanlens.dashboard.services.apis.ai.ollama import OllamaGateway
 
-        small = analysis_jpeg_bytes(image)
-        if small is None:
-            return []
-        return [KeywordResult(keyword=keyword) for keyword in OllamaGateway().describe_photo_keywords(small)]
+        small = require_analysis_jpeg_bytes(image)
+        keywords = OllamaGateway().describe_photo_keywords(small)
+        if keywords is None:
+            raise KeywordSourceUnavailableError("the Ollama server did not answer")
+        return [KeywordResult(keyword=keyword) for keyword in keywords]
 
 
 class OllamaPlugin(UrbanLensPlugin):

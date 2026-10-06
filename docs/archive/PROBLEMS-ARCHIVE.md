@@ -11,6 +11,55 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-10-06: Historic Newspapers showed nothing, because a page was judged by its paper's dateline
+
+`id: P216` · `status: fixed` · `resolved: 2026-10-06` · `found by: P196, checking each provider's fields, 2026-10-03`
+
+Previously titled "Historic Newspapers shows nothing, because no page reaches UrbanLens with its text". It had two
+causes, one in each repository.
+
+**REData's half: no text.** LoC returns a page's OCR excerpt in `description` as a list of strings. REData's
+`ChroniclingAmericaGateway` passed that list through `_strip_html`, which returned `""` for anything but a `str`, so no
+page could name the place. REData's `_strip_html` now joins a list, and REData 0.3.4, which production runs, carries the
+fix. The ask was
+[`handoffs/redata-chronicling-america-description-dropped.md`](../handoffs/redata-chronicling-america-description-dropped.md).
+
+**UrbanLens's half: the dateline vetoed the text.** LoC titles each page with its paper's dateline: "Image 2 of
+Western Kansas world (WaKeeney, Kan.), August 8, 1908". That says where the paper was printed, not where any story on
+the page happened. The rule scanned it like any caption, so "Kan." conflicted with New York. On 2026-10-06 the live
+collection's 20 results for "Hudson River State Hospital" were:
+
+- Six pages whose OCR excerpt names the hospital: four printings of one syndicated 1908 article, in Kansas,
+  Minnesota, Michigan and Louisiana papers; an 1875 New-York Tribune page; and a 1921 New York Herald page.
+- Fourteen pages whose excerpt does not name it. LoC matches each word separately.
+
+The rule kept two of the six: the Minnesota printing, whose OCR kept "NEW YORK" intact, and an 1875 New-York Tribune
+page.
+
+**Fixed:** `MediaSubject.judge` (`services/media/subject_relevance.py`) removes the dateline
+(`_NEWSPAPER_DATELINE`) from the title and caption of an item whose page is on loc.gov, whichever provider found it.
+A page is judged by its own text, so the dateline neither vetoes a story nor vouches for one.
+
+- On the same 20 results, five of the six naming pages are kept. The 1921 Herald page is still dropped: its text names
+  White Plains, and its OCR spells Poughkeepsie "Poughkeepsle". The fourteen are still dropped.
+- The protections hold on the text alone:
+  - A story naming the place in another city is dropped, even from the place's own town paper.
+  - A generic name is no longer placed by the paper's town; the story itself has to place it.
+- A caption from anywhere else that happens to read like a dateline is still read.
+- **The trade:** a page that names the place by a distinctive name, and has no geography of its own, is kept from any
+  paper. That is how the Kansas and Michigan printings pass, since their OCR mangles "Poughkeepsie" and "New York".
+  The cost is that a distinctive name several towns share ("Mount Hope Cemetery") is kept from another town's paper
+  too, as it already was from every other provider whose text has no geography. The dateline cannot veto that case
+  without vetoing those printings. A viewer can mark such a page not relevant.
+- `RULE_VERSION` is 2, so rows already swept under rule 1 are judged again (`public_media_sweep`). A page rule 1
+  removed from a cached row comes back only when that row is refetched.
+
+Tests: `test_newspaper_page_relevance.py`. Its rows are REData `/reference-documents/search/` results built from the live
+collection's titles, URLs and OCR, run through `ChroniclingAmericaMediaProvider` and `LibraryOfCongressMediaProvider`.
+Seven failed before the fix; `DistinctiveNameAloneTests` pins the trade above.
+
+**Not verified:** a Historic Newspapers tab on a deployment with this change. Check one at HRSH once 0.9.0 is on staging.
+
 ## RESOLVED 2026-10-06: Production REData 404ed `/api/v1/public-locations/`, so a fresh dev environment seeded no catalog pins
 
 `id: P6` · `status: fixed` · `resolved: 2026-10-06` · `found by: a fresh dev environment's seed (a962bf8), 2026-08-21`
@@ -21018,7 +21067,8 @@ images are deduplicated only against Commons items the Commons tab shows.
   their items match.
 - Outside the US only cities and countries are checked: GeoNames' extract has no names for other countries'
   regions, so "Beelitz-Heilstätten, Bayern" matches a subject in Brandenburg.
-- Historic Newspapers now shows nothing: REData drops each page's text, leaving only the newspaper's dateline (P216).
+- Historic Newspapers showed nothing: REData dropped each page's text, and the newspaper's dateline vetoed the rest.
+  Both fixed by 2026-10-06 (P216).
 - On the two HRSH queries of 2026-10-03, Commons returned 29 distinct files and four are kept: the HRPC front view, a
   scanned 1940 census district description naming the hospital, and two copies of a patient's memoir whose subject
   heading is "Hudson River State Hospital (Poughkeepsie, N.Y.)", which go to Sources. The other 25 were OCR matches in
@@ -24319,3 +24369,58 @@ bytes whose size cannot be read are sent; the vision description is not held to 
 through the sandbox writer's 512x3 copy and the keyword pipeline, stores no classifier keywords and makes no call.
 `test_input_validation.py` `RequireJpegSizeTests`, 3 tests. Four of the seven classifier tests fail against the code
 before the fix; with no-op stand-ins for the reader and the helper, 11 of the 29 fail.
+
+## RESOLVED 2026-10-06: An Ollama outage deleted a photo's Ollama keywords, and an unreadable analysis copy deleted every image provider's
+
+`id: P322` · `status: fixed` · `resolved: 2026-10-06` · `found by: an audit of the keyword providers after P320, whose "Not fixed" named Ollama`
+
+**What was wrong.** `generate_keywords_for_image` stores whatever list a provider returns as the photo's answer from
+that source: it deletes the source's `ImageKeyword` rows and stores the new ones. P320 made the two hosted providers
+raise `KeywordSourceUnavailableError` when no answer came, so their keywords stand. Ollama was left as it was.
+`OllamaGateway.describe_photo_keywords` returned `[]` with no server configured and for every `requests` failure: a
+refused connection, a timeout, a 4xx or 5xx from `raise_for_status`, a body that was not JSON. It also read
+`body.get("response") or ""` from any body, so an `{"error": ...}` body was taken as an answer with no keywords. Ollama
+sends that body with a 4xx or 5xx, or, once a response has started, with the 200 it already sent. So an Ollama outage
+emptied the Ollama keywords of every photo it re-keyworded.
+
+The three providers that read the analysis copy (AI vision, the classifier and Ollama) also returned `[]` when
+`analysis_jpeg_bytes` gave them nothing, so they cleared their keywords as well. That happens when the copy has not
+been written yet, or when reading it from storage raises `OSError` or `ValueError`. Photos are re-keyworded: Celery
+redelivers a lost task, the upload-recovery sweeps re-run `process_image_upload`, and the analysis-copy backfill
+enqueues keywording again. A storage outage during any of those emptied all three sources for the photo.
+
+The embedded-metadata provider was checked and is not affected. It runs only when `Image.embedded_keywords` holds a
+keyword, and an undecryptable value reads as an empty `UndecryptableJSON`, which skips the provider.
+
+**Fix.**
+- `describe_photo_keywords` returns `list[str] | None`. It returns None when nothing was learned:
+  - no server is configured;
+  - the session refused the call before sending it (a rate limit, a provider-health backoff, or a disabled service);
+  - the call failed;
+  - the body is not a finished generation (not an object, an `error` key, a `response` that is not a string,
+    `done: false`, a `done_reason` that is not a string or is `load` or `unload`, or `length` with no text: the
+    output budget ran out before the model said anything).
+
+  A generation the model finished with an empty `response`, or one that names no keyword, is an answer and returns
+  `[]`.
+- `OllamaVisionKeywordProvider` raises `KeywordSourceUnavailableError` on None.
+- The three image providers call `require_analysis_jpeg_bytes`, which raises `AnalysisCopyUnavailableError` (a
+  `KeywordSourceUnavailableError`) where they used to return `[]`. `analysis_jpeg_bytes` still only reads bytes and
+  returns None.
+
+**Not fixed.**
+- A 200 that carries `{"error": ...}` is recorded by the session as a successful `ollama` call before the body is
+  read, so provider health counts it as answered. This can only happen mid-stream. UrbanLens sends `stream: false`,
+  and Ollama answers those errors with a 4xx or 5xx.
+- Nothing asks again about a photo whose source did not answer.
+
+**Tests.** `test_photo_keyword_outages.py` has 30 tests, and 23 of them fail against the code before the fix:
+- Each kind of Ollama failure is no answer, including a call refused before it was sent.
+- A finished empty generation is `[]`.
+- The provider raises on no answer, and asks nothing for a photo with no analysis copy.
+- All three image providers raise for a missing or unreadable copy.
+- Run end to end, an Ollama outage keeps the stored keywords, an answer replaces them, and an empty answer clears them.
+- A storage failure on a re-run keeps both hosted providers' keywords and sends nothing.
+
+Two tests in `test_photo_keyword_sandboxing.py` asserted `[]` for a photo with no analysis copy and now assert the
+raise. Two tests in `test_cloudflare_input_refusal.py` and `test_ai_refused_in_development.py` patched the old import.

@@ -654,7 +654,9 @@ class PhotoKeywordTests(_AiTestCase):
                 "urbanlens.dashboard.plugins.registry.plugin_registry.photo_keyword_providers",
                 return_value=[AiVisionKeywordProvider()],
             ),
-            mock.patch("urbanlens.dashboard.plugins.builtin.photo_keywords.analysis_jpeg_bytes", return_value=b"jpeg"),
+            mock.patch(
+                "urbanlens.dashboard.plugins.builtin.photo_keywords.require_analysis_jpeg_bytes", return_value=b"jpeg"
+            ),
             mock.patch("urbanlens.dashboard.services.ai.vision._vision_target", return_value=("openai", "gpt")),
             mock.patch("urbanlens.dashboard.services.ai.inference_client.get_inference_client", return_value=remote),
             mock.patch("urbanlens.dashboard.services.ai.inference_client.requests.post") as post,

@@ -12,13 +12,17 @@ it cannot answer in full - a provider REData has not asked about this point yet 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.core.coalesce import coalesced
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 
 logger = logging.getLogger(__name__)
@@ -28,6 +32,13 @@ CONTEXT_DOMAINS: tuple[str, ...] = ("media", "street_view", "reference_documents
 
 #: How long one answer is shared. The panels of one page all ask within it; the panels' own caches keep it after.
 SHARE_SECONDS = 600
+
+#: REData's error code for a ``?provider=`` tag it does not register, answered ``400``.
+REASON_UNKNOWN_PROVIDER = "unknown_provider"
+#: How REData's refusal lists the tags, ahead of the valid ones: ``Unknown provider(s): a, b. Valid: ...``.
+_UNKNOWN_PROVIDERS = re.compile(r"Unknown provider\(s\):\s*([^.]*)\.")
+#: Most rejected tags a warning names, which bounds the length of a log line built from REData's message.
+_MAX_LOGGED_TAGS = 20
 
 
 def point_key(latitude: float, longitude: float) -> str:
@@ -64,8 +75,40 @@ def _settled_domains(latitude: float, longitude: float) -> dict[str, LocationCon
     return {domain: envelope for domain in CONTEXT_DOMAINS if (envelope := context.settled(domain)) is not None}
 
 
+def media_key(latitude: float, longitude: float, providers: Collection[str] | None) -> str:
+    """The shared-answer key for a point's media, which names the provider set the answer was asked of.
+
+    Args:
+        latitude: WGS-84 latitude.
+        longitude: WGS-84 longitude.
+        providers: The providers asked, or None for every one REData registers.
+
+    Returns:
+        A key an answer shared for one provider set is never read back under for another.
+    """
+    asked = hashlib.sha256(",".join(sorted(providers)).encode()).hexdigest()[:12] if providers else "all"
+    return f"redata:media:{point_key(latitude, longitude)}:{asked}"
+
+
+def _rejected_providers(error: LocationContextUnavailableError, asked: Collection[str]) -> list[str]:
+    """The tags REData's ``unknown_provider`` refusal names, or every tag asked when its message names none."""
+    named = _UNKNOWN_PROVIDERS.search(str(error))
+    tags = [tag for tag in re.split(r"[\s,]+", named.group(1)) if tag] if named else []
+    return tags[:_MAX_LOGGED_TAGS] or list(asked)
+
+
 def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
-    """Every media item REData has near a point (``MediaItemSerializer`` rows).
+    """The media items REData has near a point that the Nearby Media and Aerial tabs can show (``MediaItemSerializer`` rows).
+
+    The street-level networks are not asked for: their captures are the Street-level tab's, read by date through
+    :func:`street_view_dates`, and a row from them here would be dropped unseen after costing REData a search of the
+    network. The context read cannot be narrowed, so a settled answer from it may still hold their rows; the tabs drop
+    those.
+
+    A provider REData has renamed or retired is refused as ``unknown_provider``, which would blank both tabs. That one
+    refusal is retried once with no filter, and logged naming the tag; the unfiltered answer holds every row the filtered
+    one would, so it is shared under the unfiltered key and under the filtered one too, which spares each reader another
+    refusal. Any other refusal or failure is raised, as it always was.
 
     Args:
         latitude: WGS-84 latitude.
@@ -77,16 +120,26 @@ def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
     Raises:
         LocationContextUnavailableError: No provider answered.
     """
+    from urbanlens.dashboard.services.apis.locations.redata_media_gateway import NEARBY_MEDIA_PROVIDERS, RedataMediaGateway
+
+    providers = list(NEARBY_MEDIA_PROVIDERS)
 
     def ask() -> LocationContextEnvelope:
         envelope = settled_domain(latitude, longitude, "media")
         if envelope is not None:
             return envelope
-        from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
+        try:
+            return RedataMediaGateway().lookup_envelope(latitude, longitude, provider=providers)
+        except LocationContextUnavailableError as exc:
+            if not exc.rejected or exc.reason != REASON_UNKNOWN_PROVIDER:
+                raise
+            logger.warning(
+                "REData's media lookup does not know provider(s) %s, so it is asked again with no provider filter. NEARBY_MEDIA_PROVIDERS in services.apis.locations.redata_media_gateway has drifted from REData's media providers.",
+                _rejected_providers(exc, providers),
+            )
+        return coalesced(media_key(latitude, longitude, None), lambda: RedataMediaGateway().lookup_envelope(latitude, longitude), ttl=SHARE_SECONDS)
 
-        return RedataMediaGateway().lookup_envelope(latitude, longitude)
-
-    return coalesced(f"redata:media:{point_key(latitude, longitude)}", ask, ttl=SHARE_SECONDS)
+    return coalesced(media_key(latitude, longitude, providers), ask, ttl=SHARE_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)

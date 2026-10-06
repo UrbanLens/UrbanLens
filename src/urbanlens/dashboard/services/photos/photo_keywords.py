@@ -23,6 +23,10 @@ class KeywordSourceUnavailableError(RuntimeError):
     """A provider's source did not answer for this photo, so the keywords it stored before stand."""
 
 
+class AnalysisCopyUnavailableError(KeywordSourceUnavailableError):
+    """The photo's analysis copy is missing or unreadable, so no source was asked and its keywords stand."""
+
+
 @dataclass(frozen=True, slots=True)
 class KeywordResult:
     """One keyword produced by a provider.
@@ -88,6 +92,26 @@ def analysis_jpeg_bytes(image: Image) -> bytes | None:
         logger.warning("Could not read the analysis copy for image %s: %s", image.pk, exc)
         return None
     return data or None
+
+
+def require_analysis_jpeg_bytes(image: Image) -> bytes:
+    """The analysis copy's bytes, for a provider that must not answer for a photo it could not see.
+
+    Args:
+        image: The Image row whose analysis copy to read.
+
+    Returns:
+        JPEG bytes.
+
+    Raises:
+        AnalysisCopyUnavailableError: The row has no analysis copy yet, or it could not be read. Returning no
+            keywords instead would replace the ones the photo has with none (P322); the backfill that writes a
+            missing copy enqueues keywording again.
+    """
+    data = analysis_jpeg_bytes(image)
+    if data is None:
+        raise AnalysisCopyUnavailableError(f"image {image.pk} has no readable analysis copy")
+    return data
 
 
 def normalize_keywords(candidates: list[KeywordResult]) -> list[KeywordResult]:

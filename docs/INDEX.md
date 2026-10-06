@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P325` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P326` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -202,7 +202,6 @@ still resolves after it is fixed, and the id is never handed out again.
 | N32 | current | 2026-10-02 | Reply to infrastructure's 0.8.0 deploy findings: `:main` moves only after CI passes on that commit, P181's re-resolve ships as migration 0034 (407 to no place is intended), and releases get version tags from the same CI-gated publish | [`docs/handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md`](handoffs/infrastructure-app-0.8.0-deploy-findings-reply.md) |
 | N33 | current | 2026-10-02 | Ask: run `localize_article_images` and `sweep_unnamed_pin_images --delete` on staging and production now, per Jess; restore tooling is infrastructure's | [`docs/handoffs/infrastructure-jess-decisions-2026-10-02.md`](handoffs/infrastructure-jess-decisions-2026-10-02.md) |
 | P210 | open | 2026-10-02 | Pin-share notifications stored before 2026-10-02 still name the sender's own pin | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P216 | open | 2026-10-03 | Historic Newspapers shows nothing, because no page reaches UrbanLens with its text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P240 | open | 2026-10-06 | Inside the US, Overture data needs REData's index-backed lookups, which production now runs (v0.3.4); only the buildings route has been seen answering | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P242 | open | 2026-10-03 | Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P277 | open | 2026-10-04 | A first visit to a place still waits on every panel whose answer is not stored, so its tail is unchanged | [`docs/PROBLEMS.md`](PROBLEMS.md) |
@@ -216,9 +215,9 @@ still resolves after it is fixed, and the id is never handed out again.
 | N35 | current | 2026-10-06 | Two REData production failures from 2026-10-01, some CRIS attachment downloads 500 with an HTML page and nearby Places answers 503 on a Google 429; REData's T10 answered, and the Places budget is Jess's call | [`docs/handoffs/redata-cris-attachment-500-and-places-429.md`](handoffs/redata-cris-attachment-500-and-places-429.md) |
 | N36 | current | 2026-10-05 | REData's building lookup marked every building on any survey naming one HRSH building as on the property; deployed in REData 5aabe887 | [`docs/handoffs/redata-survey-roster-marks-other-surveys-on-property.md`](handoffs/redata-survey-roster-marks-other-surveys-on-property.md) |
 | N37 | current | 2026-10-05 | REData's building lookup returned Kirkbride, an OSM multipolygon relation, as its centre point, so its place had no outline (P182); deployed in REData 5aabe887 | [`docs/handoffs/redata-osm-relation-building-returned-as-point.md`](handoffs/redata-osm-relation-building-returned-as-point.md) |
-| N38 | current | 2026-10-06 | REData's Chronicling America search dropped every page's text (P216); fixed in REData v0.3.4, in production, and not seen live | [`docs/handoffs/redata-chronicling-america-description-dropped.md`](handoffs/redata-chronicling-america-description-dropped.md) |
+| N38 | current | 2026-10-06 | REData's Chronicling America search dropped every page's text (P216); fixed in REData v0.3.4, in production, and not seen live; UrbanLens's half, the dateline, fixed on release/v_0_9_0 | [`docs/handoffs/redata-chronicling-america-description-dropped.md`](handoffs/redata-chronicling-america-description-dropped.md) |
 | N39 | current | 2026-10-06 | REData composed Sentinel-2 cloudless at a street zoom and kept the blur forever (P232); fixed in REData v0.3.4, not re-checked on production | [`docs/handoffs/redata-imagery-composed-past-native-resolution.md`](handoffs/redata-imagery-composed-past-native-resolution.md) |
 | N40 | current | 2026-10-06 | REData's Overture near-point lookups timed out, and UrbanLens reads Overture from them inside the US (P110, P240); fixed in REData v0.3.4, buildings route seen live, places route not | [`docs/handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md) |
 | N41 | current | 2026-10-06 | REData's news search accepted a `months` GDELT rejects (P235); clamped, with a SearXNG fallback, in REData v0.3.4, not re-checked on production | [`docs/handoffs/redata-gdelt-months-cap.md`](handoffs/redata-gdelt-months-cap.md) |
 | N42 | current | 2026-10-06 | A cultural-resource search's cached answer was the rows last found from its point, so a neighbouring search took HRSH's National Register listing away (P286); fixed in REData v0.3.4, not seen live | [`docs/handoffs/redata-cultural-resource-cache-keyed-by-last-search.md`](handoffs/redata-cultural-resource-cache-keyed-by-last-search.md) |
-| N43 | current | 2026-10-05 | REData's Google Open Buildings source reads a level-4 shard whole and the median one is 138 MiB (P319); sent, and latent while nothing names that source | [`docs/handoffs/redata-open-buildings-shards-read-whole.md`](handoffs/redata-open-buildings-shards-read-whole.md) |
+| N43 | answered | 2026-10-05 | REData's Google Open Buildings source read a level-4 shard whole (P319); answered by REData v0.3.5 (#129 64 MiB cap on level-6 shards, #132 256 MiB on Microsoft), in production 2026-10-06 | [`docs/handoffs/redata-open-buildings-shards-read-whole.md`](handoffs/redata-open-buildings-shards-read-whole.md) |
