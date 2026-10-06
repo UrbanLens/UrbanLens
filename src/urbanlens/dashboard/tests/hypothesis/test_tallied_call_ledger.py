@@ -151,6 +151,20 @@ class TheCountersHoldTheLimitTests(_TalliedTestCase):
 
         self.assertEqual(wire.call_count, 1)
 
+    def test_refusals_do_not_use_up_room_an_admin_adds_partway_through_the_minute(self) -> None:
+        self.limits(calls_per_minute=1)
+
+        with clock(_NOW), vendor_wire():
+            self.fetch(x=0)
+            for x in (1, 2, 3):
+                with self.assertRaises(RateLimitExceededError):
+                    self.fetch(x=x)
+        self.limits(calls_per_minute=2)
+        with clock(_NOW), vendor_wire() as wire:
+            self.assertEqual(self.fetch(x=4)[0], 200)
+
+        self.assertEqual(wire.call_count, 1)
+
     def test_the_minimum_interval_holds(self) -> None:
         self.limits(min_interval_seconds=30.0)
 
@@ -428,6 +442,32 @@ class TheRollUpKeepsSpendVisibleTests(_TalliedTestCase):
         call_tally.roll_up()
 
         self.assertEqual(ApiCallLog.objects.filter(service=_SERVICE).aggregate(total=Sum("calls"))["total"], 6)
+
+    def test_a_tally_whose_rows_cannot_be_built_is_put_back(self) -> None:
+        """The tally is out of the store before its rows exist, so building them has to be covered too.
+
+        Raised as an error the task does not expect, so it still fails loudly; nothing is lost either way.
+        """
+        self._make_a_mixed_minute()
+
+        with (
+            mock.patch.object(call_tally, "_cost", side_effect=RuntimeError("defaults moved")),
+            self.assertRaises(RuntimeError),
+        ):
+            call_tally.roll_up()
+        call_tally.roll_up()
+
+        self.assertEqual(ApiCallLog.objects.filter(service=_SERVICE).aggregate(total=Sum("calls"))["total"], 6)
+
+    def test_a_field_dated_to_no_possible_minute_is_dropped_not_put_back_forever(self) -> None:
+        self._make_a_mixed_minute()
+        unreadable = call_tally._field("n", 10**15, call_tally.Tallied.MADE, 200, True, "/tile")
+        counters.add_to_tally(call_tally.tally_key(_SERVICE), {unreadable: 1}, 60)
+
+        call_tally.roll_up()
+
+        self.assertEqual(ApiCallLog.objects.filter(service=_SERVICE).aggregate(total=Sum("calls"))["total"], 6)
+        self.assertEqual(counters.take_tally(call_tally.tally_key(_SERVICE)), {})
 
     def test_the_api_limits_page_counts_calls_not_rows(self) -> None:
         self._make_a_mixed_minute()

@@ -71,11 +71,16 @@ _UNREACHABLE: tuple[type[BaseException], ...] = (OSError,)
 #: without holding reads off - reads are still perfectly able to answer.
 _REFUSED: tuple[type[BaseException], ...] = ()
 
+#: Any error reply. Only the ones :func:`_refused_for_memory` recognises are
+#: caught; the rest are real protocol errors and are re-raised.
+_ERROR_REPLY: tuple[type[BaseException], ...] = ()
+
 try:  # pragma: no cover - redis is a hard dependency of the backend this extends
-    from redis.exceptions import ConnectionError as RedisConnectionError, OutOfMemoryError, TimeoutError as RedisTimeoutError
+    from redis.exceptions import ConnectionError as RedisConnectionError, OutOfMemoryError, ResponseError, TimeoutError as RedisTimeoutError
 
     _UNREACHABLE = (*_UNREACHABLE, RedisConnectionError, RedisTimeoutError)
     _REFUSED = (OutOfMemoryError,)
+    _ERROR_REPLY = (ResponseError,)
 except ImportError:
     pass
 
@@ -83,6 +88,26 @@ except ImportError:
 #: which `incr` raises for an absent key - a fact about the data, not the
 #: connection - and `ResponseError` generally, which is a real protocol error.
 _DEGRADES: tuple[type[BaseException], ...] = (*_UNREACHABLE, *_REFUSED)
+
+#: What `_guard` and `_strict` catch, before :func:`_degrades` sorts out which to answer.
+_CAUGHT: tuple[type[BaseException], ...] = (*_DEGRADES, *_ERROR_REPLY)
+
+
+def _refused_for_memory(exc: BaseException) -> bool:
+    """Whether *exc* is a full store turning a write away, however the store worded it.
+
+    redis-py only raises `OutOfMemoryError` for a reply that starts with
+    ``OOM``. Dragonfly words it ``Out of memory``, and inside a Lua script it
+    wraps that as ``Error running script ...: -ERR Out of memory``. Both reach
+    the client as a plain `ResponseError`. Measured against Dragonfly v1.40.2
+    filled to its `maxmemory`.
+    """
+    return isinstance(exc, _REFUSED) or (isinstance(exc, _ERROR_REPLY) and "out of memory" in str(exc).lower())
+
+
+def _degrades(exc: BaseException) -> bool:
+    """Whether *exc* is answered as an empty store rather than raised as a bug."""
+    return isinstance(exc, _UNREACHABLE) or _refused_for_memory(exc)
 
 
 #: What :meth:`AtomicLocMemCache._live_value` answers for a key that holds nothing.
@@ -337,7 +362,9 @@ class ResilientRedisCache(RedisCache):
             return fallback
         try:
             return call()
-        except _DEGRADES as exc:
+        except _CAUGHT as exc:
+            if not _degrades(exc):
+                raise
             if isinstance(exc, _UNREACHABLE):
                 self._trip(operation, exc)
             else:
@@ -404,7 +431,9 @@ class ResilientRedisCache(RedisCache):
             raise CacheUnavailableError(f"Cache unreachable; {operation} not attempted")
         try:
             return call()
-        except _DEGRADES as exc:
+        except _CAUGHT as exc:
+            if not _degrades(exc):
+                raise
             if isinstance(exc, _UNREACHABLE):
                 self._trip(operation, exc)
             raise CacheUnavailableError(f"Cache unreachable; {operation} failed") from exc

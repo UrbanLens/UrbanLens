@@ -266,10 +266,13 @@ def _take(service: str, limits: Limits, windows: tuple[tuple[str, int | None, in
     for key, limit, ttl in windows:
         if limit is None:
             continue
-        if counters.hit(key, ttl, on_outage=Outage.REFUSE) > limit:
+        count = counters.hit(key, ttl, on_outage=Outage.REFUSE)
+        # Noted before the check, so a refusal gives back its own count too: kept, refusals would push the window
+        # past its limit and use up room an admin edit adds partway through it.
+        admission.counted.append(key)
+        if count > limit:
             admission.release()
             return False
-        admission.counted.append(key)
     return True
 
 
@@ -417,7 +420,9 @@ def _groups(service: str, fields: Mapping[str, int]) -> dict[tuple[int, Tallied,
         try:
             kind, minute, outcome, status_code, success, endpoint = json.loads(name)
             key = (int(minute), Tallied(outcome), None if status_code is None else int(status_code), bool(success), str(endpoint))
-        except (TypeError, ValueError):
+            # A minute no row can be dated to would fail every roll-up after it, each putting it back.
+            datetime.fromtimestamp(key[0] * _MINUTE, tz=UTC)
+        except (TypeError, ValueError, OverflowError, OSError):
             logger.warning("Dropping an unreadable field from %s's call tally: %r", service, name)
             continue
         group = groups.setdefault(key, _Group())
@@ -482,8 +487,11 @@ def roll_up() -> int:
             continue
         if not fields:
             continue
-        rows = _rows(service, fields)
+        rows: list[tuple[Any, datetime]] = []
         try:
+            # Inside the handler: the tally is already out of the store, so building its rows is as much a part of
+            # writing it as the insert is.
+            rows = _rows(service, fields)
             with transaction.atomic():
                 saved = ApiCallLog.objects.bulk_create([row for row, _ in rows])
                 by_instant: dict[datetime, list[int]] = {}

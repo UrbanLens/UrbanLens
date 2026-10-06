@@ -11,7 +11,7 @@ from django.core.cache import cache
 from django.core.cache.backends.redis import RedisCacheClient
 from django.test import RequestFactory
 from django.urls import resolve, reverse
-from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ConnectionError as RedisConnectionError, ResponseError
 
 from urbanlens.core.cache_backend import AtomicLocMemCache, CacheUnavailableError, ResilientRedisCache
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -177,6 +177,40 @@ class TheRedisBackendDistinguishesAnOutageTests(SimpleTestCase):
         self.assertTrue(backend.is_open)
         with self.assertRaises(CacheUnavailableError):
             backend.peek_int("k")
+
+    def test_a_full_dragonfly_refuses_a_script_without_a_bare_protocol_error(self) -> None:
+        """Dragonfly turns a script's write away as a generic script error, not an ``OOM`` reply.
+
+        The wording is Dragonfly v1.40.2's, filled to its ``maxmemory``. redis-py
+        raises it as a plain `ResponseError`, which escaped every caller of the
+        counters and turned a full store into a 500 on each tile miss.
+        """
+        full = ResponseError(
+            "Error running script (call to f4e568423024668fc8f4fea50c1454e465cf6dcc): @user_script:3: -ERR Out of memory"
+        )
+        operations = {
+            "incr_window": lambda backend: backend.incr_window("k", 60),
+            "add_to_tally": lambda backend: backend.add_to_tally("k", {"a": 1}, 60),
+            "take_token": lambda backend: backend.take_token("k", now_us=1, interval_us=1, burst=1),
+        }
+        for name, operation in operations.items():
+            backend = self._cache()
+            client = mock.Mock()
+            client.eval.side_effect = full
+            with (
+                self.subTest(operation=name),
+                mock.patch.object(RedisCacheClient, "get_client", return_value=client),
+                self.assertRaises(CacheUnavailableError),
+            ):
+                operation(backend)
+            self.assertFalse(backend.is_open, "a full store still answers reads, so it must not trip the breaker")
+
+    def test_a_script_error_that_is_not_about_memory_still_raises(self) -> None:
+        backend = self._cache()
+        client = mock.Mock()
+        client.eval.side_effect = ResponseError("Error running script: @user_script:1: WRONGTYPE")
+        with mock.patch.object(RedisCacheClient, "get_client", return_value=client), self.assertRaises(ResponseError):
+            backend.incr_window("k", 60)
 
     def test_a_missing_key_peeks_as_zero(self) -> None:
         backend = self._cache()
