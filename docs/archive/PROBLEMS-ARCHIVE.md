@@ -24400,3 +24400,102 @@ next-nearest frame stands in; on the timeline path a gone representative's date 
 before the fix, with only `mirror_gone` added so the module imports, 13 fail; the 9 that pass are the helper's own
 tests and three controls (an answer with nothing gone, an unmarked or malformed representative, the shared envelope
 left intact). `test_redata_consumer_contract.py` checks the new contract rows against REData's vendored schema.
+
+## RESOLVED 2026-10-06: The classifier was still asked about images it always refuses; the analysis copy's JPEG header now gives the size, and those are refused before the call
+
+`id: P324` · `status: fixed` · `resolved: 2026-10-06` · `found by: P320's "Not fixed"`
+
+**What was wrong.** Cloudflare's ResNet-50 refuses an image under 4x4 pixels (HTTP 400, code 3011, "image too small,
+expected image at least 4x4"). P320 made that refusal an answer, logged answered and clearing the photo's classifier
+keywords, but `classify_photo` still made the request, once per such photo and again on every keyword re-run. The
+analysis copy is downscaled to fit 512 px, so it is under 4 px on a side whenever the original is and whenever the
+original is about 150 or more times wider than tall (Pillow turns 2000x10 into 512x3). P320 left it because the app
+tier never decodes the copy, so it did not know the size. It needs no decode: the size is in the copy's JPEG frame
+header. Nothing stored would have done instead. `Image` keeps no width or height, and `exif_data` describes the
+original, is encrypted, and is absent for most small files.
+
+**Fix.**
+- `services/media/jpeg_header.py` `jpeg_dimensions` walks the marker segments from SOI, stepping over fill bytes and
+  the standalone TEM and RST markers, to the first start-of-frame header (any SOFn, not DHT, JPG or DAC), and returns
+  its width and height. Pure Python, bounded by the buffer, never raises. It returns None for anything else: not a
+  JPEG, cut short, malformed, or a height of 0 left to a DNL marker. It stops before the image data, so keywording
+  still never decodes (`test_photo_keyword_sandboxing.py`, `docs/MEDIA_PIPELINE.md`).
+- `input_validation.require_jpeg_size(service, name, content, *, minimum_side)` refuses a JPEG whose header declares
+  either side under `minimum_side` as `InputRejection.OUT_OF_RANGE`: one `ApiCallLog` row flagged
+  `was_rejected_input` (`endpoint="rejected:out_of_range"`), which no budget and not provider health counts. The
+  message names the size only. A size the header does not give is left to the provider.
+- `vision.classify_photo` calls it with `CLASSIFIER_MIN_SIDE_PIXELS = 4` before `api_call_slot`, and returns `[]`,
+  which is what Cloudflare's refusal already returned, so the photo's classifier keywords are cleared the same way
+  without the request.
+
+**Not fixed.** `describe_photo_keywords` (LLaVA on Workers AI, or OpenAI) and Ollama still send a tiny copy. Nothing
+found shows any of them refusing one: Cloudflare's model docs give LLaVA no minimum input size, and nothing in this
+repo records a refusal from them. If LLaVA does refuse with "image too small", the adapter already logs it answered
+(P320). A copy whose header cannot be read is still sent, and Cloudflare's refusal stays the backstop.
+
+**Tests.** `test_jpeg_header.py`, 19 tests: the reader imports nothing; the size read is the one Pillow decodes,
+across sizes up to 2048 px, baseline and progressive, RGB, L and CMYK, any quality, subsampling, comment, EXIF and
+restart markers (a hypothesis property); a copy cut short reads as None or its true size; every SOFn is read and DHT,
+JPG and DAC are not; fill bytes, TEM and RST before the frame are stepped over; a frame cut anywhere, a height of 0, a
+width of 0, a short frame header, a scan or EOI before the frame, and PNG, WebP, GIF and garbage are None; arbitrary
+bytes and a corrupted JPEG never raise. `test_classifier_skips_too_small_images.py`, 7 tests: a 512x3, 3x512 or 1x1
+copy returns `[]` without reaching the inference client and writes exactly one rejected-input row; a 4x4 copy and
+bytes whose size cannot be read are sent; the vision description is not held to the minimum; a 2000x10 panorama,
+through the sandbox writer's 512x3 copy and the keyword pipeline, stores no classifier keywords and makes no call.
+`test_input_validation.py` `RequireJpegSizeTests`, 3 tests. Four of the seven classifier tests fail against the code
+before the fix; with no-op stand-ins for the reader and the helper, 11 of the 29 fail.
+
+## RESOLVED 2026-10-06: An Ollama outage deleted a photo's Ollama keywords, and an unreadable analysis copy deleted every image provider's
+
+`id: P322` · `status: fixed` · `resolved: 2026-10-06` · `found by: an audit of the keyword providers after P320, whose "Not fixed" named Ollama`
+
+**What was wrong.** `generate_keywords_for_image` stores whatever list a provider returns as the photo's answer from
+that source: it deletes the source's `ImageKeyword` rows and stores the new ones. P320 made the two hosted providers
+raise `KeywordSourceUnavailableError` when no answer came, so their keywords stand. Ollama was left as it was.
+`OllamaGateway.describe_photo_keywords` returned `[]` with no server configured and for every `requests` failure: a
+refused connection, a timeout, a 4xx or 5xx from `raise_for_status`, a body that was not JSON. It also read
+`body.get("response") or ""` from any body, so an `{"error": ...}` body was taken as an answer with no keywords. Ollama
+sends that body with a 4xx or 5xx, or, once a response has started, with the 200 it already sent. So an Ollama outage
+emptied the Ollama keywords of every photo it re-keyworded.
+
+The three providers that read the analysis copy (AI vision, the classifier and Ollama) also returned `[]` when
+`analysis_jpeg_bytes` gave them nothing, so they cleared their keywords as well. That happens when the copy has not
+been written yet, or when reading it from storage raises `OSError` or `ValueError`. Photos are re-keyworded: Celery
+redelivers a lost task, the upload-recovery sweeps re-run `process_image_upload`, and the analysis-copy backfill
+enqueues keywording again. A storage outage during any of those emptied all three sources for the photo.
+
+The embedded-metadata provider was checked and is not affected. It runs only when `Image.embedded_keywords` holds a
+keyword, and an undecryptable value reads as an empty `UndecryptableJSON`, which skips the provider.
+
+**Fix.**
+- `describe_photo_keywords` returns `list[str] | None`. It returns None when nothing was learned:
+  - no server is configured;
+  - the session refused the call before sending it (a rate limit, a provider-health backoff, or a disabled service);
+  - the call failed;
+  - the body is not a finished generation (not an object, an `error` key, a `response` that is not a string,
+    `done: false`, a `done_reason` that is not a string or is `load` or `unload`, or `length` with no text: the
+    output budget ran out before the model said anything).
+
+  A generation the model finished with an empty `response`, or one that names no keyword, is an answer and returns
+  `[]`.
+- `OllamaVisionKeywordProvider` raises `KeywordSourceUnavailableError` on None.
+- The three image providers call `require_analysis_jpeg_bytes`, which raises `AnalysisCopyUnavailableError` (a
+  `KeywordSourceUnavailableError`) where they used to return `[]`. `analysis_jpeg_bytes` still only reads bytes and
+  returns None.
+
+**Not fixed.**
+- A 200 that carries `{"error": ...}` is recorded by the session as a successful `ollama` call before the body is
+  read, so provider health counts it as answered. This can only happen mid-stream. UrbanLens sends `stream: false`,
+  and Ollama answers those errors with a 4xx or 5xx.
+- Nothing asks again about a photo whose source did not answer.
+
+**Tests.** `test_photo_keyword_outages.py` has 30 tests, and 23 of them fail against the code before the fix:
+- Each kind of Ollama failure is no answer, including a call refused before it was sent.
+- A finished empty generation is `[]`.
+- The provider raises on no answer, and asks nothing for a photo with no analysis copy.
+- All three image providers raise for a missing or unreadable copy.
+- Run end to end, an Ollama outage keeps the stored keywords, an answer replaces them, and an empty answer clears them.
+- A storage failure on a re-run keeps both hosted providers' keywords and sends nothing.
+
+Two tests in `test_photo_keyword_sandboxing.py` asserted `[]` for a photo with no analysis copy and now assert the
+raise. Two tests in `test_cloudflare_input_refusal.py` and `test_ai_refused_in_development.py` patched the old import.
