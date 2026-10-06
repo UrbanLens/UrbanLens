@@ -391,6 +391,21 @@ the provider in provider health (PL10). When no answer came at all,
 providers raise `KeywordSourceUnavailableError`, so a photo keeps the
 keywords it had (P320).
 
+The classifier is not asked about an image it is known to refuse. Before
+reserving a call, `classify_photo` reads the analysis copy's width and
+height from its JPEG frame header (`services/media/jpeg_header.py`: pure
+Python, stops before the image data, never decodes) through
+`input_validation.require_jpeg_size`, and refuses a copy under
+`CLASSIFIER_MIN_SIDE_PIXELS` (4) on either side as an `out_of_range` input:
+one `ApiCallLog` row flagged `was_rejected_input`, which no budget and not
+provider health counts, and no labels, as Cloudflare's own refusal would
+give, without the request (P324). The copy is under 4 pixels whenever the
+original is, and whenever the original is about 150 or more times wider
+than tall (2000x10 becomes 512x3). A copy whose header does not read is
+sent, and Cloudflare's refusal stays the backstop. `describe_photo_keywords`
+and Ollama are not held to this minimum: nothing found shows LLaVA, OpenAI
+or Ollama refusing a small image.
+
 ## Follow-ups (not yet done)
 
 - **Read-only Postgres role for `ai-worker`**: the only write the loop

@@ -24275,3 +24275,47 @@ reason and not the account id; a 5007 "No such model" and a non-JSON 502 stay fa
 502; both clients map 422; a refusal is logged answered with no labels; a failure or a limiter refusal is None; an
 unanswered classifier keeps a photo's keywords, and a refusal clears them. Three existing tests asserted `[]` for a
 failure and now assert None.
+
+## RESOLVED 2026-10-06: The classifier was still asked about images it always refuses; the analysis copy's JPEG header now gives the size, and those are refused before the call
+
+`id: P324` · `status: fixed` · `resolved: 2026-10-06` · `found by: P320's "Not fixed"`
+
+**What was wrong.** Cloudflare's ResNet-50 refuses an image under 4x4 pixels (HTTP 400, code 3011, "image too small,
+expected image at least 4x4"). P320 made that refusal an answer, logged answered and clearing the photo's classifier
+keywords, but `classify_photo` still made the request, once per such photo and again on every keyword re-run. The
+analysis copy is downscaled to fit 512 px, so it is under 4 px on a side whenever the original is and whenever the
+original is about 150 or more times wider than tall (Pillow turns 2000x10 into 512x3). P320 left it because the app
+tier never decodes the copy, so it did not know the size. It needs no decode: the size is in the copy's JPEG frame
+header. Nothing stored would have done instead. `Image` keeps no width or height, and `exif_data` describes the
+original, is encrypted, and is absent for most small files.
+
+**Fix.**
+- `services/media/jpeg_header.py` `jpeg_dimensions` walks the marker segments from SOI, stepping over fill bytes and
+  the standalone TEM and RST markers, to the first start-of-frame header (any SOFn, not DHT, JPG or DAC), and returns
+  its width and height. Pure Python, bounded by the buffer, never raises. It returns None for anything else: not a
+  JPEG, cut short, malformed, or a height of 0 left to a DNL marker. It stops before the image data, so keywording
+  still never decodes (`test_photo_keyword_sandboxing.py`, `docs/MEDIA_PIPELINE.md`).
+- `input_validation.require_jpeg_size(service, name, content, *, minimum_side)` refuses a JPEG whose header declares
+  either side under `minimum_side` as `InputRejection.OUT_OF_RANGE`: one `ApiCallLog` row flagged
+  `was_rejected_input` (`endpoint="rejected:out_of_range"`), which no budget and not provider health counts. The
+  message names the size only. A size the header does not give is left to the provider.
+- `vision.classify_photo` calls it with `CLASSIFIER_MIN_SIDE_PIXELS = 4` before `api_call_slot`, and returns `[]`,
+  which is what Cloudflare's refusal already returned, so the photo's classifier keywords are cleared the same way
+  without the request.
+
+**Not fixed.** `describe_photo_keywords` (LLaVA on Workers AI, or OpenAI) and Ollama still send a tiny copy. Nothing
+found shows any of them refusing one: Cloudflare's model docs give LLaVA no minimum input size, and nothing in this
+repo records a refusal from them. If LLaVA does refuse with "image too small", the adapter already logs it answered
+(P320). A copy whose header cannot be read is still sent, and Cloudflare's refusal stays the backstop.
+
+**Tests.** `test_jpeg_header.py`, 19 tests: the reader imports nothing; the size read is the one Pillow decodes,
+across sizes up to 2048 px, baseline and progressive, RGB, L and CMYK, any quality, subsampling, comment, EXIF and
+restart markers (a hypothesis property); a copy cut short reads as None or its true size; every SOFn is read and DHT,
+JPG and DAC are not; fill bytes, TEM and RST before the frame are stepped over; a frame cut anywhere, a height of 0, a
+width of 0, a short frame header, a scan or EOI before the frame, and PNG, WebP, GIF and garbage are None; arbitrary
+bytes and a corrupted JPEG never raise. `test_classifier_skips_too_small_images.py`, 7 tests: a 512x3, 3x512 or 1x1
+copy returns `[]` without reaching the inference client and writes exactly one rejected-input row; a 4x4 copy and
+bytes whose size cannot be read are sent; the vision description is not held to the minimum; a 2000x10 panorama,
+through the sandbox writer's 512x3 copy and the keyword pipeline, stores no classifier keywords and makes no call.
+`test_input_validation.py` `RequireJpegSizeTests`, 3 tests. Four of the seven classifier tests fail against the code
+before the fix; with no-op stand-ins for the reader and the helper, 11 of the 29 fail.

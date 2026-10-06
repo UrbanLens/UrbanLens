@@ -10,7 +10,7 @@ import time
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.call_log import failure_status
-from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_content
+from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_content, require_jpeg_size
 from urbanlens.dashboard.services.core.rate_limiter import ApiCallSlot, RequestCancelledError, api_call_slot, valid_token_count
 
 if TYPE_CHECKING:
@@ -25,6 +25,10 @@ SERVICE_PHOTO_CLASSIFIER = "cloudflare_image_classifier"
 #: Cloudflare Workers AI models used here.
 _CF_VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf"
 _CF_CLASSIFIER_MODEL = "@cf/microsoft/resnet-50"
+
+#: The fewest pixels the classifier takes along either side: Workers AI answers a smaller image with HTTP 400, code
+#: 3011, "image too small, expected image at least 4x4" (P320), and that request is still made.
+CLASSIFIER_MIN_SIDE_PIXELS = 4
 
 #: Response budget for a keyword list - a couple of dozen short phrases.
 _KEYWORD_MAX_TOKENS = 300
@@ -167,12 +171,14 @@ def classify_photo(image_bytes: bytes) -> list[tuple[str, float]] | None:
         image_bytes: JPEG bytes, already downscaled.
 
     Returns:
-        (label, confidence) pairs, highest confidence first, empty when the image is empty or the classifier refused
-        it (one under 4x4 pixels); None when no answer came (refused before sending, or the call failed)."""
+        (label, confidence) pairs, highest confidence first, empty when the image is empty or too small to classify
+        (under ``CLASSIFIER_MIN_SIDE_PIXELS`` on a side, by its JPEG header before sending or by the classifier's
+        refusal); None when no answer came (the call was not admitted, or it failed)."""
     from urbanlens.dashboard.services.ai.inference_client import ClassifyRequest, ImagePart, InferenceError, InferenceInputRefusedError, get_inference_client
 
     try:
         require_content(SERVICE_PHOTO_CLASSIFIER, "image", image_bytes)
+        require_jpeg_size(SERVICE_PHOTO_CLASSIFIER, "image", image_bytes, minimum_side=CLASSIFIER_MIN_SIDE_PIXELS)
     except ImpossibleInputError:
         return []
     request = ClassifyRequest(

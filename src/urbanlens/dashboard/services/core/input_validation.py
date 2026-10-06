@@ -13,8 +13,9 @@ caller may keep the empty answer.
 - :func:`check_request_parameters` runs inside every ``_RateLimitedSession`` request, for what no
   API can answer: a non-finite number, or a named latitude/longitude off the globe.
 - The ``require_*`` functions are for what a gateway knows and the session cannot: an id's format,
-  a radius or page size the provider caps, a date before its archive starts, and whether ``(0, 0)``
-  - the placeholder a missing coordinate becomes - can mean anything to that source.
+  a radius or page size the provider caps, an image smaller than a model takes, a date before its
+  archive starts, and whether ``(0, 0)`` - the placeholder a missing coordinate becomes - can mean
+  anything to that source.
 
 Only what is provably unanswerable is refused; a value these checks cannot parse is left for the
 provider to judge. Every refusal writes one ``ApiCallLog`` row flagged ``was_rejected_input``,
@@ -35,6 +36,7 @@ import time
 from typing import Any, NoReturn
 
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.media.jpeg_header import jpeg_dimensions
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +225,32 @@ def require_content(service: str, name: str, content: bytes) -> bytes:
     """
     if not content:
         reject(service, InputRejection.EMPTY_QUERY, f"{name} is empty")
+    return content
+
+
+def require_jpeg_size(service: str, name: str, content: bytes, *, minimum_side: int) -> bytes:
+    """A JPEG at least ``minimum_side`` pixels along each side, returned unchanged.
+
+    The size is read from the frame header (:func:`~urbanlens.dashboard.services.media.jpeg_header.jpeg_dimensions`);
+    the image is never decoded. Bytes whose header gives no size - another format, a JPEG cut short or malformed - are
+    returned for the provider to judge.
+
+    Args:
+        service: The service key the call is for.
+        name: What the content is, for the message.
+        content: The image's bytes.
+        minimum_side: The fewest pixels the provider takes along either side.
+
+    Returns:
+        ``content``.
+
+    Raises:
+        ImpossibleInputError: The header declares a width or height under ``minimum_side``.
+    """
+    size = jpeg_dimensions(content)
+    if size is not None and min(size) < minimum_side:
+        width, height = size
+        reject(service, InputRejection.OUT_OF_RANGE, f"{name} is {width}x{height} pixels; the provider takes at least {minimum_side}x{minimum_side}")
     return content
 
 
