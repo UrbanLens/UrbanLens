@@ -24325,3 +24325,78 @@ reason and not the account id; a 5007 "No such model" and a non-JSON 502 stay fa
 502; both clients map 422; a refusal is logged answered with no labels; a failure or a limiter refusal is None; an
 unanswered classifier keeps a photo's keywords, and a refusal clears them. Three existing tests asserted `[]` for a
 failure and now assert None.
+
+## RESOLVED 2026-10-06: Media and street-view frames REData marks as gone at their source were still shown, copied and proxied
+
+`id: P325` · `status: fixed` · `resolved: 2026-10-06` · `found by: a cross-repo check of REData's attributes.mirror_gone against UrbanLens's REData readers, which had no reference to it`
+
+**What was wrong.** REData marks a media row or street-view capture `attributes.mirror_gone`
+(`{"status", "reason", "at"}`, REData `parcels/services/mirror_state.py`) once every image URL its source published
+answered that the image does not exist (404 or 410, `reason: "missing"`), or KartaView's storage said the blob is
+archived where nobody can read it (`"archived"`). Such a row's `thumbnail_url` does not load, REData never mirrors it
+(`cached_url` stays empty and `/media/{uuid}/download/` answers 404 `media_not_cached`), and its street-view download
+404s. REData publishes the mark on `MediaItemSerializer` and `StreetViewCaptureSerializer` rows alike. On staging on
+2026-10-05 REData found about 600 of its 1,300 KartaView captures in this state.
+
+UrbanLens never read it:
+- The Nearby Media and Aerial tabs cached a gone row like any other. With no `cached_url` its tile fell back to
+  `thumbnail_url`, which the gallery turns into a `RemoteImageCopy` (`services.media.remote_copies`): a server-side
+  download on first view, asked again after an hour, doubling to seven days, whenever a page still links it. Saving it
+  to a pin, album or wiki (`materialize_media_item`) downloaded the dead URL and failed.
+- REData's street-view timeline picks each date's representative by distance alone, gone or not, and UrbanLens's own
+  grouping of the context read's captures (`dates_from_captures`) did the same. So a Street-level tile or carousel
+  slide could be a frame that will not load while other frames of that date would, and the tile's lightbox opened
+  `pin.redata.street_view`, whose download 404s.
+
+Keywording was never reached: it reads a stored `Image.analysis_thumbnail`, which a failed materialization never makes.
+
+**Fix.** In `services.locations.redata_point_data`, the one way every REData media row and capture reaches UrbanLens:
+- `mirror_gone(row)` is true only for a mapping whose `attributes` is a mapping holding a truthy `mirror_gone`
+  (REData's dict, or `True`). Missing or malformed `attributes`, or a null, false or empty mark, is not gone, and it
+  never raises.
+- `media_near` drops gone rows from the `/locations/context/` envelope and the `/media/lookup/` one alike
+  (`without_gone_media`), inside what `coalesced` shares, and lowers the envelope's `count` to match. That includes
+  the unfiltered lookup it retries after an `unknown_provider` refusal, which is shared under its own key as well.
+  `providers[].count` keeps each source's own figure: UrbanLens reads `providers` only for which sources answered. The
+  context envelope the other domains share is copied, never edited.
+- `dates_from_captures` leaves gone captures out before grouping, so a date's picture is its nearest frame still there
+  and its `count` counts only those; a date with none is left out.
+- On the `/street-view/timeline/` path, `live_timeline_date` drops a date whose representative is gone. When REData
+  names the date's frames (`captures`, sent only for `include_captures=true`), the nearest one still there stands in
+  and `count`, `is_panoramic` and `captures` are recomputed from what is left.
+- UrbanLens derives nothing from the timeline's `earliest`, `latest`, `years` or `providers_timeline`
+  (`StreetViewDates` carries only `dates` and `complete`), so no summary can disagree with the dates kept.
+
+Every reader is downstream of those two functions: `NearbyMediaSource`, `AerialMediaSource`,
+`StreetLevelPhotosSource` and the Mapillary, KartaView and Panoramax carousel providers
+(`redata_media_gateway._RedataStreetViewProvider`), and through their cached rows the gallery's copies, the Photos tab
+and materialization. Nothing else asks `/media/lookup/`, `/street-view/timeline/` or `/locations/context/` for media;
+`RedataMediaGateway.lookup` has no caller outside tests. `redata_contract.READS` now lists `redata_point_data.py`'s
+reads of `attributes` on both endpoints. No background job keeps asking for a gone URL: `fetch_remote_image_copy` is
+queued only by a request for the copy (`controllers/remote_copies.py`) and by its own wait for a download slot, and
+`public-media-cache-sweep` edits cached rows without fetching anything.
+
+**Not fixed.**
+- Rows cached before this keep their gone items until they refresh, since they drop `attributes` and cannot be
+  filtered on read: `LocationCache` rows for `redata_media`, `redata_aerial` and `redata_street_level`
+  (`external_data_cache_days`, 7 by default), the carousel's cached slides, and the 10-minute shared answers.
+  `RemoteImageCopy` rows already made for gone URLs stay, asked for again only by a page that still links them.
+- UrbanLens does not ask the timeline for `include_captures=true`, which REData leaves off because a busy corner holds
+  hundreds of frames. So on the timeline path a date whose representative is gone is dropped even when its other
+  frames are fine; only the context read picks the next frame. The fix belongs in REData: its
+  `street_view/timeline._representative` choosing among frames not marked gone
+  ([`handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md`](../handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md)).
+  A kept date's `count` on that path still counts gone frames; nothing displays it.
+- `pin.redata.media` and `pin.redata.street_view` still ask REData for any uuid they are given, and do not remember a
+  404.
+
+**Tests.** `test_redata_mirror_gone.py`, 22 tests: the mark is read in REData's forms and every malformed shape is not
+gone, with three Hypothesis properties over arbitrary JSON; gone media rows are dropped on the context and lookup
+paths with `count` lowered and `complete` kept, the shared answer is cached already filtered, as is the unfiltered
+retry after an `unknown_provider` refusal under both keys it is shared under, and the context envelope
+other domains share is left as it was; on the context path gone captures are left out before grouping and the
+next-nearest frame stands in; on the timeline path a gone representative's date is dropped, or replaced from
+`captures`; the Nearby Media, Aerial and Street-level tabs and both carousel paths show no gone item. Against the code
+before the fix, with only `mirror_gone` added so the module imports, 13 fail; the 9 that pass are the helper's own
+tests and three controls (an answer with nothing gone, an unmarked or malformed representative, the shared envelope
+left intact). `test_redata_consumer_contract.py` checks the new contract rows against REData's vendored schema.
