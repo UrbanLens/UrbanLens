@@ -3,6 +3,7 @@
 - **Status: SENT 2026-10-05.** Found while fixing UrbanLens's P319. Read from REData `origin/main` and
   `origin/release/0.3.2` on 2026-10-05; nothing here was run against a REData deployment.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
+- `id: N43` · `status: current`
 
 ## What REData does
 

@@ -1,8 +1,9 @@
 # REData composes Sentinel-2 cloudless at a street zoom, and keeps the blur forever
 
-- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`95753ecb`) and deployed to its staging. Production REData is still 5aabe887.** Found through UrbanLens's P232 (Jess, on production v0.8.0: the Sentinel-2
+- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`95753ecb`) and deployed to its staging. Updated 2026-10-06: `95753ecb` is in REData v0.3.4, in production since 2026-10-06 15:21Z; not re-checked against production.** Found through UrbanLens's P232 (Jess, on production v0.8.0: the Sentinel-2
   slides are blurry). The REData code cited is `main` as of 2026-10-03.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
+- `id: N39` · `status: current`
 
 ## What happens
 

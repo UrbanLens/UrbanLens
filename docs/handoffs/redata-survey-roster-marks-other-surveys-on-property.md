@@ -4,6 +4,7 @@
   (`v080e2e`). The figures below are from the `parcel_buildings` cache that environment wrote from production REData
   (`https://redata.urbanlens.org`) at 2026-10-01 03:22 UTC.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
+- `id: N36` · `status: current`
 
 ## What UrbanLens received
 
