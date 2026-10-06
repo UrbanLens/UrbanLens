@@ -17,6 +17,8 @@ class BasemapVendorTilesGateway(Gateway):
     """Fetches one raster tile straight from the vendor that publishes it."""
 
     service_key: ClassVar[str] = "basemap_vendor_tiles"
+    #: A new TLS connection per tile is a handshake per tile: the gateway is built once per uncached tile.
+    reuses_connections: ClassVar[bool] = True
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
