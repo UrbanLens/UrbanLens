@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
-from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, KeywordSourceUnavailableError, PhotoKeywordProvider, analysis_jpeg_bytes
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, KeywordSourceUnavailableError, PhotoKeywordProvider, require_analysis_jpeg_bytes
 from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
@@ -107,13 +107,11 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
             AI-described keywords; empty when the provider refused the image.
 
         Raises:
-            KeywordSourceUnavailableError: The provider did not answer.
+            KeywordSourceUnavailableError: The provider did not answer, or the photo's analysis copy could not be read.
         """
         from urbanlens.dashboard.services.ai.vision import describe_photo_keywords
 
-        small = analysis_jpeg_bytes(image)
-        if small is None:
-            return []
+        small = require_analysis_jpeg_bytes(image)
         keywords = describe_photo_keywords(small)
         if keywords is None:
             raise KeywordSourceUnavailableError("the AI vision provider did not answer")
@@ -183,13 +181,11 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
             Scored keywords above ``CLASSIFIER_MIN_CONFIDENCE``.
 
         Raises:
-            KeywordSourceUnavailableError: The classifier did not answer.
+            KeywordSourceUnavailableError: The classifier did not answer, or the photo's analysis copy could not be read.
         """
         from urbanlens.dashboard.services.ai.vision import classify_photo
 
-        small = analysis_jpeg_bytes(image)
-        if small is None:
-            return []
+        small = require_analysis_jpeg_bytes(image)
         labels = classify_photo(small)
         if labels is None:
             raise KeywordSourceUnavailableError("the image classifier did not answer")

@@ -165,19 +165,26 @@ class MissingAnalysisCopyTests(TestCase):
         self.assertFalse(image.analysis_thumbnail)
         self.assertIsNone(photo_keywords.analysis_jpeg_bytes(image))
 
-    def test_the_ai_plugin_returns_nothing_rather_than_decoding(self) -> None:
+    def test_the_ai_plugin_skips_rather_than_decoding(self) -> None:
+        # Skipped by raising, not by answering []: an empty answer would clear the keywords the photo has (P322).
         from urbanlens.dashboard.plugins.builtin.photo_keywords import AiVisionKeywordProvider
 
         image = _photo()
-        with mock.patch.object(PILImage, "open", side_effect=AssertionError("must not decode")):
-            self.assertEqual(AiVisionKeywordProvider().generate(image), [])
+        with (
+            mock.patch.object(PILImage, "open", side_effect=AssertionError("must not decode")),
+            self.assertRaises(photo_keywords.AnalysisCopyUnavailableError),
+        ):
+            AiVisionKeywordProvider().generate(image)
 
-    def test_the_classifier_plugin_returns_nothing_rather_than_decoding(self) -> None:
+    def test_the_classifier_plugin_skips_rather_than_decoding(self) -> None:
         from urbanlens.dashboard.plugins.builtin.photo_keywords import ClassifierKeywordProvider
 
         image = _photo()
-        with mock.patch.object(PILImage, "open", side_effect=AssertionError("must not decode")):
-            self.assertEqual(ClassifierKeywordProvider().generate(image), [])
+        with (
+            mock.patch.object(PILImage, "open", side_effect=AssertionError("must not decode")),
+            self.assertRaises(photo_keywords.AnalysisCopyUnavailableError),
+        ):
+            ClassifierKeywordProvider().generate(image)
 
     def test_the_backfill_writes_the_copy_and_re_enqueues_keywording(self) -> None:
         # Without the re-enqueue, a photo whose analysis write failed during
