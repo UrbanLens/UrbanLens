@@ -2,7 +2,10 @@
 
 One ``media/lookup`` answer per point feeds this tab and the Aerial & Drone tab (``redata_aerial_media``), which takes
 the aerial rows this one leaves out; the street-level networks' rows belong to the Street-level tab
-(``redata_street_level``), which shows every dated capture rather than the newest.
+(``redata_street_level``), which shows every dated capture rather than the newest. That answer is asked of the other
+providers only (``redata_media_gateway.NEARBY_MEDIA_PROVIDERS``), so the networks are not searched for rows this tab
+would drop; a settled ``/locations/context/`` answer cannot be narrowed, and its street-level rows are dropped in
+:meth:`NearbyMediaSource.fetch`.
 """
 
 from __future__ import annotations
@@ -13,14 +16,12 @@ import uuid
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
+from urbanlens.dashboard.services.apis.locations.redata_media_gateway import STREET_LEVEL_PROVIDERS
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.external_data import PanelSource
-
-#: Street-level networks, whose captures the Street-level tab shows by date.
-STREET_LEVEL_PROVIDERS = frozenset({"mapillary", "kartaview", "panoramax"})
 
 #: Display names for REData's media provider tags; an unlisted tag is titled from itself.
 PROVIDER_LABELS: dict[str, str] = {

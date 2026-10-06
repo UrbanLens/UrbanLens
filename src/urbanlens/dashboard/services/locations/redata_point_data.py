@@ -12,6 +12,7 @@ it cannot answer in full - a provider REData has not asked about this point yet 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -65,7 +66,12 @@ def _settled_domains(latitude: float, longitude: float) -> dict[str, LocationCon
 
 
 def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
-    """Every media item REData has near a point (``MediaItemSerializer`` rows).
+    """The media items REData has near a point that the Nearby Media and Aerial tabs can show (``MediaItemSerializer`` rows).
+
+    The street-level networks are not asked for: their captures are the Street-level tab's, read by date through
+    :func:`street_view_dates`, and a row from them here would be dropped unseen after costing REData a search of the
+    network. The context read cannot be narrowed, so a settled answer from it may still hold their rows; the tabs drop
+    those.
 
     Args:
         latitude: WGS-84 latitude.
@@ -77,16 +83,19 @@ def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
     Raises:
         LocationContextUnavailableError: No provider answered.
     """
+    from urbanlens.dashboard.services.apis.locations.redata_media_gateway import NEARBY_MEDIA_PROVIDERS, RedataMediaGateway
+
+    providers = list(NEARBY_MEDIA_PROVIDERS)
 
     def ask() -> LocationContextEnvelope:
         envelope = settled_domain(latitude, longitude, "media")
         if envelope is not None:
             return envelope
-        from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
+        return RedataMediaGateway().lookup_envelope(latitude, longitude, provider=providers)
 
-        return RedataMediaGateway().lookup_envelope(latitude, longitude)
-
-    return coalesced(f"redata:media:{point_key(latitude, longitude)}", ask, ttl=SHARE_SECONDS)
+    # The provider set is part of the question, so an answer shared for one set is never handed to a reader of another.
+    asked = hashlib.sha256(",".join(sorted(providers)).encode()).hexdigest()[:12]
+    return coalesced(f"redata:media:{point_key(latitude, longitude)}:{asked}", ask, ttl=SHARE_SECONDS)
 
 
 @dataclass(frozen=True, slots=True)
