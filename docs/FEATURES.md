@@ -625,8 +625,8 @@ direct-only because REData's contract can't reproduce what they show:
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData;
   a PDF or DjVu among the results is listed under Article > Sources rather than the gallery, as for every REData archive
 - **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
-  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). Empty since P196:
-  no page reaches UrbanLens with text that could name the place (P216)
+  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`). A page is shown when
+  its OCR text names the place; its paper's dateline is not read (P216)
 - **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
   index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
 - **Nearby Media** — a Media-gallery tab of everything else REData's pooled media index holds near
