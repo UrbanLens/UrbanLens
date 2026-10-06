@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest import mock
 from unittest.mock import patch
 
@@ -49,6 +50,7 @@ class _StubGateway:
         self.prompts: list[str] = []
         self.timeouts: list[float | None] = []
         self.model = "gpt-5-nano"
+        self.cost = Decimal("0.01")
 
     def send_with_tools(self, prompt: str, tools: list, *, timeout: float | None = None) -> InferenceResponse | None:
         self.prompts.append(prompt)
@@ -189,11 +191,21 @@ class AssistantLoopTests(TestCase):
         self.assertEqual(len(gateway.prompts), 3)
 
     def test_deadline_exceeded_mid_turn_stops_before_executing_the_call(self) -> None:
-        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "too late"}])
-        times = iter([0.0, 0.0, 0.0, 100.0, 100.0])
+        clock = [0.0]
+
+        class _SlowGateway(_StubGateway):
+            """The deadline passes while the provider is answering the first round."""
+
+            def send_with_tools(self, *args, **kwargs) -> InferenceResponse | None:
+                response = super().send_with_tools(*args, **kwargs)
+                clock[0] = 100.0
+                return response
+
+        gateway = _SlowGateway([{"tool": "list_trips", "args": {}}, {"reply": "too late"}])
         with (
             patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: next(times)),
+            # ``time`` is one module: the slot's own timing reads this clock too, so it cannot be a fixed sequence.
+            patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: clock[0]),
         ):
             turn = run_assistant_turn(self.profile, [], "hi")
         self.assertEqual(turn.reply, _TIMEOUT_REPLY)
@@ -201,6 +213,38 @@ class AssistantLoopTests(TestCase):
         # Only the first round's prompt was ever sent - the call the deadline
         # caught never executed, so there was nothing to feed a second round.
         self.assertEqual(len(gateway.prompts), 1)
+
+    def test_each_provider_round_is_one_reserved_row_with_its_cost(self) -> None:
+        """Every round goes through the egress policy and the ledger (D26), not one summary row per turn."""
+        from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
+
+        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "Here are your trips."}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            run_assistant_turn(self.profile, [], "what are my trips?")
+        rows = list(ApiCallLog.objects.filter(service="assistant"))
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row.success for row in rows))
+        self.assertTrue(all(row.cost_estimate is not None for row in rows))
+
+    def test_a_switched_off_assistant_makes_no_provider_call(self) -> None:
+        from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
+
+        ApiRateLimit.objects.create(service="assistant", display_name="Assistant (AI)", enabled=False)
+        gateway = _StubGateway([{"reply": "never"}])
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway):
+            turn = run_assistant_turn(self.profile, [], "hi")
+        self.assertEqual(gateway.prompts, [])
+        self.assertEqual(turn.reply, _NO_RESPONSE_REPLY)
+
+    def test_log_api_call_records_failure_when_the_model_gives_up(self) -> None:
+        """A dead gateway (send_with_tools returns None) still logs one failed call, not zero."""
+        from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
+
+        with patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=_StubGateway([])):
+            run_assistant_turn(self.profile, [], "hi")
+        rows = list(ApiCallLog.objects.filter(service="assistant"))
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0].success)
 
     def test_dismissals_reach_the_recent_dismissals_tool(self) -> None:
         from urbanlens.dashboard.services.ai.dismissals import DismissalEntry

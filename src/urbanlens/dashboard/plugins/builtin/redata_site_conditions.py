@@ -10,6 +10,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import L
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -125,18 +126,21 @@ class SiteConditionsPlugin(UrbanLensPlugin):
         return {
             "redata_land_cover": ServiceDefaults(
                 display_name="REData Land Cover",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="NLCD land cover via GET /land-cover/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_land_cover_gateway.",
             ),
             "redata_soil": ServiceDefaults(
                 display_name="REData Soil",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="USDA soil composition via GET /soil/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_soil_gateway.",
             ),
             "redata_walkability": ServiceDefaults(
                 display_name="REData Walkability",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="EPA walkability index via GET /walkability/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_walkability_gateway.",

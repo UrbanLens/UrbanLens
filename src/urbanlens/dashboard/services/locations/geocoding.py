@@ -16,5 +16,6 @@ def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
         A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the address doesn't resolve to a place.
 
     Raises:
-        RateLimitExceededError: The app-wide Nominatim budget refused the direct fallback call."""
+        GatewayRequestError: The address could not be looked up: REData could not answer and the direct fallback was
+            not asked (off production), the Nominatim budget refused it, or this environment does not call Nominatim."""
     return geocode_address(address)

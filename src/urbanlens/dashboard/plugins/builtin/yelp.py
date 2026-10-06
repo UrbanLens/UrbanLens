@@ -9,6 +9,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -104,6 +105,7 @@ class YelpPlugin(UrbanLensPlugin):
         return {
             "redata_points_of_interest": ServiceDefaults(
                 display_name="REData (points of interest)",
+                category=EgressCategory.REDATA,
                 calls_per_minute=120,
                 calls_per_day=10000,
                 notes="Our own standalone REData service, not a third-party budget - shared with the EPA ECHO plugin (same endpoint, different provider= value).",

@@ -37,6 +37,7 @@ from django.views import View
 
 from urbanlens.dashboard.middleware import mark_shared_cacheable
 from urbanlens.dashboard.services.core import bounded_cache
+from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
@@ -369,7 +370,7 @@ class VectorBasemapTileView(AccessMixin, View):
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer, session_key_for, tile_auth_key
         from urbanlens.dashboard.services.map.tile_cache_keys import vector_tile_cache_key
 
-        key = app_settings.protomaps_api_key
+        key = hosted_basemap_api_key()
         if not key:
             return HttpResponse(status=404)
         if not coordinate_is_valid(z, x, y):
@@ -448,7 +449,7 @@ class VectorBasemapStyleView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.map.basemap_catalogue import vector_tile_url_template
         from urbanlens.dashboard.services.map.tile_cache_keys import vector_style_cache_key
 
-        key = app_settings.protomaps_api_key
+        key = hosted_basemap_api_key()
         if not key or theme not in SERVED_THEMES:
             return HttpResponse(status=404)
 

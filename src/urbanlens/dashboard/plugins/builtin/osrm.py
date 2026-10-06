@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 
 class OSRMPlugin(UrbanLensPlugin):
@@ -24,6 +25,7 @@ class OSRMPlugin(UrbanLensPlugin):
         return {
             "osrm": ServiceDefaults(
                 display_name="OSRM",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=10,
                 calls_per_day=500,
                 notes="Free, keyless. Public demo server is dev/testing-only per OSRM's own docs - self-host for production.",

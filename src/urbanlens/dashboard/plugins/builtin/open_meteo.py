@@ -6,6 +6,7 @@ from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 
 class OpenMeteoPlugin(UrbanLensPlugin):
@@ -21,6 +22,7 @@ class OpenMeteoPlugin(UrbanLensPlugin):
         return {
             "open_meteo": ServiceDefaults(
                 display_name="Open-Meteo",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=20,
                 calls_per_day=1000,
                 notes="Free, keyless weather API - no account required.",

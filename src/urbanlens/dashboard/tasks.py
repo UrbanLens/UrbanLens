@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.ai.tasks import (  # noqa: F401 - celery's aut
 )
 from urbanlens.dashboard.services.core.capacity import ALBUM_PHOTOS, CapacityExceededError, ensure_room
 from urbanlens.dashboard.services.core.celery import RetryNoticeError, update_task_progress
+from urbanlens.dashboard.services.core.egress import external_background_task
 from urbanlens.dashboard.services.core.locks import acquire_lock, beat_lock, release_lock
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.media.storage_errors import OBJECT_STORE_ERRORS, STORAGE_ERRORS, is_transient
@@ -447,6 +448,7 @@ PENDING_CALENDAR_PUSH_BATCH = 200
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+@external_background_task("calendar-push-sweep")
 def requeue_pending_calendar_pushes() -> int:
     """Queue the auto-sync pushes whose trip change was never delivered to the calendar.
 
@@ -860,6 +862,7 @@ _WAYBACK_SWEEP_LOCK_SECONDS = 660
 
 
 @shared_task(soft_time_limit=600, time_limit=_WAYBACK_SWEEP_LOCK_SECONDS, queue=Queue.MAINTENANCE)
+@external_background_task("wayback-archive-sweep")
 def sweep_unarchived_links(limit: int | None = None) -> dict[str, int]:
     """Ask the Wayback Machine again about links it has not archived yet (P308).
 
@@ -3428,6 +3431,7 @@ def run_scheduled_database_backup(self) -> bool:
 # firing; a soft time limit propagates out of run_enrichment_cycle so the
 # task winds down cleanly mid-batch.
 @shared_task(bind=True, soft_time_limit=2900, time_limit=3100, queue=Queue.MAINTENANCE)
+@external_background_task("scheduled-location-enrichment")
 def run_scheduled_enrichment(self) -> dict:
     """Run one background-enrichment cycle when site settings allow it.
 
@@ -4236,6 +4240,7 @@ def classify_trivia_submission(question_id: int) -> None:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+@external_background_task("scheduled-trivia-generation")
 def run_scheduled_trivia_generation() -> dict:
     """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
 
@@ -4260,6 +4265,7 @@ def run_scheduled_trivia_generation() -> dict:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+@external_background_task("scheduled-trivia-wiki-incorporation")
 def run_scheduled_trivia_wiki_incorporation() -> dict:
     """Fold well-upvoted user-submitted Trivia questions into their location wikis.
 
@@ -5004,6 +5010,7 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@external_background_task("stripe-subscriptions-sync")
 def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_started_at: float | None = None) -> int:
     """Re-sync one page of Stripe subscriptions onto their RoleSubscription rows, then hand off the next page.
 
@@ -5044,6 +5051,7 @@ def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_sta
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
+@external_background_task("stripe-subscriptions-sync")
 def reconcile_unlisted_stripe_subscriptions(sweep_started_at: float, after_pk: int, chunk_size: int = 100) -> int:
     """Retrieve one chunk of live RoleSubscription rows the Stripe listing did not reach, then hand off the next.
 
@@ -5306,6 +5314,7 @@ def run_scheduled_demo_account_purge() -> bool:
 
 
 @shared_task(queue=Queue.MAINTENANCE)
+@external_background_task("scheduled-redata-public-locations-sync")
 def run_scheduled_redata_public_locations_sync() -> bool:
     """Refresh the demo instance's location pool from REData. A no-op everywhere else.
 

@@ -8,6 +8,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -133,6 +134,7 @@ class AzureMapsPlugin(UrbanLensPlugin):
         return {
             "azure_maps": ServiceDefaults(
                 display_name="Azure Maps (Search/Geocoding)",
+                category=EgressCategory.BILLED,
                 calls_per_minute=50,
                 calls_per_day=2500,
                 free_tier_per_calendar_month=5_000,

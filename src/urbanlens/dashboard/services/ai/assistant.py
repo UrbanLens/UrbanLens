@@ -14,6 +14,7 @@ from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.inference_client import ToolSpec as InferenceToolSpec, ToolUseBlock
 from urbanlens.dashboard.services.ai.tools import MAX_TOOL_CALLS, REGISTRY, ToolContext, available_tools, execute
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_query
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -123,8 +124,7 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
         return AssistantTurn(reply=_EMPTY_MESSAGE_REPLY)
     transcript = _history_block(history)
     prompt = (f"{transcript}\n" if transcript else "") + f"USER: {user_message}"
-    started = time.monotonic()
-    deadline = started + TURN_DEADLINE_SECONDS
+    deadline = time.monotonic() + TURN_DEADLINE_SECONDS
     context = ToolContext(profile=profile, now=timezone.now(), page=page, deadline=deadline, dismissals=dismissals)
     wire_tools = _wire_tools(context)
     tool_call_count = 0
@@ -141,7 +141,15 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
         if time.monotonic() > deadline:
             return AssistantTurn(reply=_TIMEOUT_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
 
-        response = gateway.send_with_tools(prompt, wire_tools, timeout=max(MIN_CALL_SECONDS, deadline - time.monotonic()))
+        # One reserved, logged call per provider round (D26), so the switch and the ledger see each one.
+        try:
+            with api_call_slot("assistant", endpoint=gateway.model) as slot:
+                cost_before = gateway.cost
+                response = gateway.send_with_tools(prompt, wire_tools, timeout=max(MIN_CALL_SECONDS, deadline - time.monotonic()))
+                slot.success, slot.cost_estimate = response is not None, gateway.cost - cost_before
+        except RequestCancelledError as exc:
+            logger.info("Assistant round refused before its AI call: %s", exc)
+            return AssistantTurn(reply=_NO_RESPONSE_REPLY, actions=actions, proposals=proposals, client_actions=client_actions)
         if response is None:
             reply = _TIMEOUT_REPLY if time.monotonic() > deadline else _NO_RESPONSE_REPLY
             return AssistantTurn(reply=reply, actions=actions, proposals=proposals, client_actions=client_actions)

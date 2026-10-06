@@ -8,8 +8,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import repair_legacy_pin_coordinates
-from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
-from urbanlens.dashboard.services.pins.pin_creation import AddressResolutionError, NoLocationProvidedError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import AddressResolutionError, NoLocationProvidedError, PinCreationForbiddenError, coordinates_for_address, create_pin_for_profile
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -68,7 +67,7 @@ def resolve_pin_import_failure(
             raise NoLocationProvidedError("Neither coordinates nor an address were given.")
         if not profile.external_apis_enabled:
             raise PinCreationForbiddenError("external_apis_enabled is False for this profile.")
-        latitude, longitude = get_pin_by_address(address)
+        latitude, longitude = coordinates_for_address(address)
         if latitude is None or longitude is None:
             raise AddressResolutionError("Geocoding the given address returned no coordinates.")
 

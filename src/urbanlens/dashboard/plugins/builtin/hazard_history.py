@@ -10,6 +10,7 @@ from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import at_limit
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -134,6 +135,7 @@ class HazardHistoryPlugin(UrbanLensPlugin):
         return {
             "redata_hazards": ServiceDefaults(
                 display_name="REData Natural Hazards",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="Wildfire perimeters, disaster declarations and earthquakes via GET /hazards/. Also spent by the usgs_earthquakes plugin, which declares nothing so this is the one budget. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_hazards_gateway.",

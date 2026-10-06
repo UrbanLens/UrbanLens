@@ -10,6 +10,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, NameSearchSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -105,6 +106,7 @@ class GdeltPlugin(UrbanLensPlugin):
         return {
             "redata_search_news": ServiceDefaults(
                 display_name="REData News Search",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="GDELT-backed news search via GET /search/news/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_search_gateway.",

@@ -13,6 +13,7 @@ from pydantic._internal._model_construction import ModelMetaclass
 from pydantic_core import Url
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from urbanlens.UrbanLens.egress import parse_share_overrides
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import DebugTypes, EnvironmentTypes, environment_from_env
@@ -651,36 +652,41 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "UL_METRICS_TOKEN for defense in depth; either alone satisfies the startup check."
         ),
     )
-    billed_api_share: float | None = Field(
+    environment_share: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
         description=(
-            "This deployment's share (0-1) of UrbanLens's allotment of each billed API's free tier - Google Maps "
-            "Platform and Azure Maps. Unset takes the UL_ENVIRONMENT default: production 0.8, staging 0.1, "
-            "development and local 0.05, anything else 0. Every deployment holding a key draws on the same "
-            "vendor allowance, so keep the shares of all of them at or below 1; 0 keeps a deployment off every "
-            "billed API. Enforced in services.core.rate_limiter.free_tier_ceiling."
+            "This deployment's share (0-1) of every quota'd and billed external service's budget: each such "
+            "service's per-minute, per-day and 30-day limits, and its share of a vendor's free tier. Unset takes "
+            "the UL_ENVIRONMENT default: production 0.9, staging 0.05, development and local 0, anything else 0. "
+            "0 keeps the deployment off every such service. REData, our own hosts and AI are not scaled; email, "
+            "SMS, push and writes to a third party are production's only. Every host shares one address, so keep "
+            "all deployments' shares at or below 1. See urbanlens.UrbanLens.egress (D26)."
         ),
     )
-    allow_outbound_apis: bool | None = Field(
-        default=None,
+    environment_share_overrides: Annotated[dict[str, float], NoDecode] = Field(
+        default_factory=dict,
         description=(
-            "Whether this deployment may call external providers. Unset means 'decide from the "
-            "environment': development and local refuse, everything else calls out. Setting it "
-            "explicitly overrides that in either direction, which is what makes it useful twice. "
-            "True on a development box while working on an integration itself. **False on a "
-            "throwaway environment that is not a development one** - `dev_env.py --environment "
-            "staging` sets UL_ENVIRONMENT=staging to get gunicorn, and the application branches on "
-            "that one variable, so a disposable environment is otherwise indistinguishable from a "
-            "real deployment and would call providers for real. False also works as an incident "
-            "switch on a real deployment when a provider needs to be taken out of the path. "
-            "Off-by-default for development exists because those calls are a side effect of work "
-            "nobody is watching: one load run's pin import enqueued 2,644 background tasks that "
-            "spent hours on the wire against the production REData, which bills a step later "
-            "(P109). The demo has its own narrower rule that this cannot reopen. Enforced in "
-            "services.core.rate_limiter.outbound_calls_permitted, the one point every gateway call "
-            "passes through."
+            "Per-service shares that replace UL_ENVIRONMENT_SHARE for the named services, as "
+            "'nominatim=0.02,google_geocoding=0.01'. The way to try a provider from development or staging. For "
+            "messaging (sms, whatsapp, unified_push) and public writes (wayback_save, google_calendar, stripe) any "
+            "share above 0 opts the service in off production, and 0 turns it off on production. Logged at startup."
+        ),
+    )
+    background_tasks_allowlist: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Beat entries (CELERY_BEAT_SCHEDULE names, comma-separated) that reach outside this deployment but "
+            "run here anyway. Off production only internal entries are scheduled by default; see "
+            "urbanlens.UrbanLens.egress.BEAT_EGRESS."
+        ),
+    )
+    email_send_outside_production: bool = Field(
+        default=False,
+        description=(
+            "Deliver mail for real off production, through UL_EMAIL_BACKEND (SMTP by default). Unset, development "
+            "and staging print every message, verification codes and magic links included, to the log instead."
         ),
     )
     protomaps_api_key: str = Field(
@@ -691,7 +697,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "this origin: VectorBasemapStyleView rewrites the hosted style's tiles to "
             "VectorBasemapTileView, which fetches them with the key server-side. Glyphs and "
             "sprites stay on protomaps.github.io, which the CSP admits to connect-src and img-src whenever "
-            "this is set. Leave it empty and the layers keep whatever REData published."
+            "this is set. Leave it empty and the layers keep whatever REData published. Read on production "
+            "only: the hosted basemap is billed, so every other environment ignores the key and keeps the "
+            "self-hosted mirror (D26)."
         ),
     )
     basemap_style_base_url: str = Field(
@@ -954,7 +962,20 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "field_encryption_key_fallbacks", mode="before")
+    @field_validator("environment_share_overrides", mode="before")
+    @classmethod
+    def _parse_share_overrides(cls, value: Any) -> dict[str, float]:
+        """Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``service=share,...``).
+
+        Args:
+            value: The raw value pydantic read.
+
+        Returns:
+            Service key to share.
+        """
+        return parse_share_overrides(value)
+
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "field_encryption_key_fallbacks", "background_tasks_allowlist", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: Any) -> Any:
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""

@@ -1,0 +1,18 @@
+{% comment %}An external-data panel whose source this environment does not call (D26): said so, never polled, never cached as "nothing here".{% endcomment %}
+<div id="{{ section_id }}"{% if outer_class %} class="{{ outer_class }}"{% endif %} data-ext-panel-unavailable-here>
+    {% if outer_is_card %}
+    <div class="card-header">
+        <i class="material-symbols-outlined">{{ icon }}</i>
+        <h3>{{ title }}</h3>
+    </div>
+    <p class="text-muted">Not available in this environment.</p>
+    {% else %}
+    <div class="card card--secondary">
+        <div class="card-header">
+            <i class="material-symbols-outlined">{{ icon }}</i>
+            <h3>{{ title }}</h3>
+        </div>
+        <p class="text-muted">Not available in this environment.</p>
+    </div>
+    {% endif %}
+</div>

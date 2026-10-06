@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.core.request_upstream import refusal_json
 from urbanlens.dashboard.services.map_pins import MapPinPayloadService, document as map_document, filter_results
 from urbanlens.dashboard.services.map_pins.view_urls import with_view_urls
 from urbanlens.dashboard.services.pins.pin_creation import (
+    AddressLookupUnavailableError,
     AddressResolutionError,
     DuplicateCoordinatesError,
     DuplicatePropertyError,
@@ -274,6 +275,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             except NoLocationProvidedError as e:
                 logger.info("pin creation rejected: %s", e)
                 return HttpResponse("Error: an address or coordinates are required.", status=400)
+            except AddressLookupUnavailableError as e:
+                logger.info("pin creation deferred: %s", e)
+                return HttpResponse("Error: address lookup isn't available right now - drop a pin on the map instead.", status=503)
             except AddressResolutionError as e:
                 logger.info("pin creation rejected: %s", e)
                 return HttpResponse("Error: that address couldn't be converted to coordinates.", status=400)

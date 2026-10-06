@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 
 class GooglePhotosPlugin(UrbanLensPlugin):
@@ -27,6 +28,7 @@ class GooglePhotosPlugin(UrbanLensPlugin):
         return {
             "google_photos": ServiceDefaults(
                 display_name="Google Photos Picker API",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=30,
                 calls_per_day=2000,
                 notes="Free API; Google quota is per-user. Session polling is the bulk of the call volume.",

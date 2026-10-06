@@ -12,6 +12,7 @@ from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.pins.external_data import GatewayMediaPanelSource, LocationCachePanelSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -358,12 +359,14 @@ class WikipediaPlugin(UrbanLensPlugin):
         return {
             "wikipedia": ServiceDefaults(
                 display_name="Wikipedia",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=30,
                 calls_per_day=2000,
                 notes="Free API. Be polite - set a descriptive User-Agent.",
             ),
             "wikipedia_media": ServiceDefaults(
                 display_name="Wikipedia (article images)",
+                category=EgressCategory.QUOTA,
                 calls_per_minute=20,
                 calls_per_day=1000,
                 notes="Free API. Only called for pins with an already-matched article.",

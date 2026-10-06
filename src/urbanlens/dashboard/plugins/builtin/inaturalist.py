@@ -9,6 +9,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import r
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import count_label
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -101,6 +102,7 @@ class INaturalistPlugin(UrbanLensPlugin):
         return {
             "redata_nature_observations": ServiceDefaults(
                 display_name="REData Nature Observations",
+                category=EgressCategory.REDATA,
                 calls_per_minute=20,
                 calls_per_day=None,
                 notes="Nearby wildlife and plant sightings via GET /nature-observations/. Shares REData's one 1,000/hour lookup pool per key. See services.apis.locations.redata_nature_gateway.",

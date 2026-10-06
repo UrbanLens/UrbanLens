@@ -21,11 +21,19 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
         A ``(latitude, longitude)`` tuple, or ``(None, None)`` when the address doesn't resolve to a place anywhere.
 
     Raises:
-        RateLimitExceededError: The app-wide Nominatim budget refused the fallback call (see :func:`nominatim_geocode`)."""
+        LocationContextUnavailableError: REData could not answer, off production, where the direct fallback is not
+            asked (D26): a busy REData must not push its load onto Nominatim from an address production shares.
+        RateLimitExceededError: The app-wide Nominatim budget refused the fallback call (see :func:`nominatim_geocode`).
+        EnvironmentRefusedError: This environment does not call Nominatim (see :func:`nominatim_geocode`)."""
+    from urbanlens.dashboard.services.core.egress import direct_fallback_permitted
+
     if redata_configured():
         try:
             envelope = RedataGeocodeGateway().geocode(address, limit=1)
         except LocationContextUnavailableError as exc:
+            if not direct_fallback_permitted():
+                logger.info("REData geocode unavailable for an address lookup (%s); not falling back to direct Nominatim off production", exc.reason)
+                raise
             logger.warning("REData geocode failed for an address lookup, falling back to direct Nominatim: %s", exc.reason)
         else:
             if envelope.results:
@@ -48,7 +56,8 @@ def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
         A ``(latitude, longitude)`` tuple, or ``(None, None)`` when Nominatim has no such place or the request failed (the gateway flattens failures to an empty result).
 
     Raises:
-        RateLimitExceededError: The app-wide Nominatim budget refused the call - propagated so a caller cannot mistake "we did not ask" for "no such place"."""
+        RateLimitExceededError: The app-wide Nominatim budget refused the call - propagated so a caller cannot mistake "we did not ask" for "no such place".
+        EnvironmentRefusedError: This environment does not call Nominatim, propagated for the same reason."""
     from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
     from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError
 

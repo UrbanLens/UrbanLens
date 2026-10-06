@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from django.utils import timezone
 
 from urbanlens.dashboard.models.link_extraction.model import MAX_EXTRACTION_URL_LENGTH, LinkExtraction, LinkExtractionStatus
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
@@ -638,11 +639,18 @@ def run_extraction(extraction: LinkExtraction) -> None:
         _notify_extraction_complete(extraction)
         return
 
+    answer: str | None = None
     try:
-        answer = gateway.send_prompt(prompt)
-    except Exception:
-        logger.exception("Link extraction AI call failed for extraction %s", extraction.pk)
-        answer = None
+        with api_call_slot("link_extraction", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
+            try:
+                answer = gateway.send_prompt(prompt)
+            except Exception:
+                logger.exception("Link extraction AI call failed for extraction %s", extraction.pk)
+                answer = None
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
+    except RequestCancelledError as exc:
+        logger.info("Link extraction %s was refused before its AI call: %s", extraction.pk, exc)
     if not answer:
         _fail("The AI service didn't return a usable answer.")
         _notify_extraction_complete(extraction)

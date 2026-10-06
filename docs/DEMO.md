@@ -148,7 +148,8 @@ Set on the **demo** instance:
 
 | Setting | Purpose |
 |---|---|
-| `UL_DEMO_MODE=true` | Marks this as the demo. Registers `/demo/start/`, shows the banner, and restricts outbound APIs. |
+| `UL_DEMO_MODE=true` | Marks this as the demo. Registers `/demo/start/` and shows the banner. It no longer decides what the instance calls (D26). |
+| `UL_ENVIRONMENT_SHARE=0` | Keeps the demo off every quota'd and billed provider; REData, our own hosts and AI stay on. |
 | `UL_DEMO_LOCATIONS_FILE` | Path to the seeding manifest written by `import_public_locations`. |
 | `UL_DEMO_REAL_SITE_URL` | The real site, for the banner's "create a real account" link. |
 
@@ -162,14 +163,12 @@ Set on the **real** site:
 
 ## Outbound APIs
 
-A demo instance may call **REData and nothing else that needs a key**. Enforced in
-`rate_limiter.service_is_enabled`, which every outbound call already passes
-through via `_reserve_call`, and checked before the cached-config fast path so a
-caller already holding a row cannot skip it.
-
-REData is exempt because it is this project's own service: the demo is the thing
-it exists to show off, and calling it costs nothing but our own capacity. Every
-other provider bills per call, and a demo visitor is anonymous.
+Since D26 the demo's egress follows the same per-environment policy as every other deployment
+(`urbanlens/UrbanLens/egress.py`): `UL_DEMO_MODE` used to allow only REData, and that exemption is gone.
+To keep a demo on REData alone, as before, set `UL_ENVIRONMENT_SHARE=0`: every `quota` and `billed`
+provider is then refused at the choke point every call passes through (`rate_limiter._reserve_call`).
+AI stays allowed, and the seeded profiles below keep it switched off. Run the demo as a non-production
+environment, so mail is printed rather than sent and nothing is written to a third party.
 
 Seeding additionally suppresses `safely_enqueue_task` and writes each profile with
 `external_apis_enabled=False` and `ai_enabled=False` *before* any content exists,

@@ -396,6 +396,7 @@ class AutoTagService:
             Matched Label instances validated against the eligible list.
         """
         from urbanlens.dashboard.services.ai.factory import get_gateway
+        from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 
         prompt = self._build_prompt(target)
         if not prompt:
@@ -406,7 +407,15 @@ class AutoTagService:
         if not gateway:
             return []
 
-        names = gateway.send_prompt_list(prompt, max_results=self.max_labels)
+        try:
+            with api_call_slot("category_suggestions", endpoint=gateway.model) as slot:
+                cost_before = gateway.cost
+                names = gateway.send_prompt_list(prompt, max_results=self.max_labels)
+                # The gateway marks an answered call itself; an answer with nothing usable in it is still an answer.
+                slot.success, slot.cost_estimate = slot.success or bool(names), gateway.cost - cost_before
+        except RequestCancelledError as exc:
+            logger.info("AI category suggestion was refused before its call: %s", exc)
+            return []
         name_to_label = {b.name.lower(): b for b in eligible}
         results: list[Label] = []
         for raw_name in names:

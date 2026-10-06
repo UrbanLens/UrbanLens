@@ -322,16 +322,16 @@ def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] |
     if not url or _redata_host_is_local(str(url)):
         return []
 
-    allowed = bool(getattr(app_settings, "allow_outbound_apis", False))
-    state = "UL_ALLOW_OUTBOUND_APIS is on, so these calls are going out right now" if allowed else "UL_ALLOW_OUTBOUND_APIS is off, so nothing is calling it yet - but turning that on, which is what working on an integration means, makes it live"
     return [
         CheckWarning(
             f"This {environment} deployment's REData is {url}, which is not a local or dev instance.",
             hint=(
-                f"{state}. REData reaches billable providers on our behalf, so a dev box pointed at a "
-                "real one spends a real budget on background work nobody is watching - one pin import "
-                "enqueues thousands of such calls. Point UL_REDATA_API_URL at your own instance "
-                "(dev_env.py --own-redata), or clear it (--no-redata) and accept empty panels."
+                "REData calls are allowed from every environment (D26), so this deployment's calls spend that "
+                "REData's budget - production's, when it is the hosted one. REData reaches billable providers on "
+                "our behalf on a cache miss, and one pin import enqueues thousands of such calls. That is the "
+                "intended way for development to reach real data (REData caches the answer for everyone), but "
+                "point UL_REDATA_API_URL at your own instance (dev_env.py --own-redata), or clear it "
+                "(--no-redata), for bulk work nobody is watching."
             ),
             id="dashboard.W003",
         ),

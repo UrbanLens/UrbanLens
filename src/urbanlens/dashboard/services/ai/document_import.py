@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 import zipfile
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.sandbox import untrusted_parse
 
 if TYPE_CHECKING:
@@ -236,7 +237,13 @@ def extract_pins_from_text(filename: str, text: str, profile: Profile) -> tuple[
     prompt = _build_prompt(text)
 
     try:
-        answer = gateway.send_prompt(prompt)
+        with api_call_slot("document_pin_import", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
+            answer = gateway.send_prompt(prompt)
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
+    except RequestCancelledError as exc:
+        logger.info("AI document pin extraction for '%s' was refused before its call: %s", filename, exc)
+        return None, None
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning("AI document pin extraction failed for '%s': %s", filename, exc)
         return None, None

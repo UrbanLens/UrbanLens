@@ -176,9 +176,7 @@ class ResolvePinImportFailureTests(TestCase):
     def test_resolve_via_address_success(self) -> None:
         failure = self._failure()
         with (
-            mock.patch(
-                "urbanlens.dashboard.services.pins.pin_import_failures.get_pin_by_address", return_value=(40.0, -74.0)
-            ),
+            mock.patch("urbanlens.dashboard.services.pins.pin_creation.get_pin_by_address", return_value=(40.0, -74.0)),
             mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             pin = resolve_pin_import_failure(failure, self.profile, address="123 Main St, Springfield")

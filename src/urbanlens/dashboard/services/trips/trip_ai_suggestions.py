@@ -11,6 +11,7 @@ import requests
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.trips.trip_legs import TripLeg, activity_coords, compute_legs
 from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
@@ -433,7 +434,15 @@ def generate_trip_suggestions(trip: Trip, requester: Profile) -> TripSuggestions
         return _UNAVAILABLE
 
     context = build_trip_context(trip, requester)
-    answer = gateway.send_prompt(_format_prompt(context))
+    try:
+        with api_call_slot("trip_suggestions", endpoint=gateway.model) as slot:
+            cost_before = gateway.cost
+            answer = gateway.send_prompt(_format_prompt(context))
+            slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
+    except RequestCancelledError as exc:
+        # Switched off, over its limit or not called here (D26): unavailable, and nothing is cached.
+        logger.info("Trip suggestions for trip %s were refused before the AI call: %s", trip.pk, exc)
+        return _UNAVAILABLE
     if not answer:
         return TripSuggestions(summary="Couldn't reach the AI provider just now - try again shortly.")
 

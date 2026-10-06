@@ -12,6 +12,7 @@ from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, safe_int_or_none
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
@@ -54,6 +55,31 @@ class NoLocationProvidedError(PinCreationError):
 
 class AddressResolutionError(PinCreationError):
     """The given address couldn't be geocoded to coordinates."""
+
+
+class AddressLookupUnavailableError(AddressResolutionError):
+    """The address could not be looked up right now - not that it names no place.
+
+    The geocoder did not answer, its budget is spent, or this environment does not ask it (D26).
+    """
+
+
+def coordinates_for_address(address: str) -> tuple[float | None, float | None]:
+    """Geocode an address for pin creation, telling "not looked up" apart from "no such place".
+
+    Args:
+        address: The address to geocode.
+
+    Returns:
+        ``(latitude, longitude)``, or ``(None, None)`` when the address resolves to no place.
+
+    Raises:
+        AddressLookupUnavailableError: The lookup could not be made.
+    """
+    try:
+        return get_pin_by_address(address)
+    except GatewayRequestError as exc:
+        raise AddressLookupUnavailableError(f"Address lookup unavailable: {exc}") from exc
 
 
 class InvalidCoordinatesError(PinCreationError):
@@ -188,7 +214,7 @@ def create_pin_for_profile(
             raise NoLocationProvidedError("Neither coordinates nor an address were given.")
         if not profile.external_apis_enabled:
             raise PinCreationForbiddenError("external_apis_enabled is False for this profile.")
-        latitude, longitude = get_pin_by_address(address)
+        latitude, longitude = coordinates_for_address(address)
         if latitude is None or longitude is None:
             raise AddressResolutionError("Geocoding the given address returned no coordinates.")
 

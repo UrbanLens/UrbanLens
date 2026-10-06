@@ -16,6 +16,7 @@ from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, OverviewSummary, PanelApiKind, PanelPlacement
 from urbanlens.dashboard.services.pins.redata_panel import RedataBackedSource
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -990,6 +991,7 @@ class PropertyRecordsPlugin(UrbanLensPlugin):
         return {
             "redata_api": ServiceDefaults(
                 display_name="REData (property records service)",
+                category=EgressCategory.REDATA,
                 calls_per_minute=120,
                 calls_per_day=10000,
                 usa_only=True,

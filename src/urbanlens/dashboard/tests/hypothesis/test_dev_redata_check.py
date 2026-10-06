@@ -16,11 +16,11 @@ PRODUCTION_REDATA = "https://redata.urbanlens.org"
 
 
 @contextlib.contextmanager
-def _deployment(environment: str, url: str | None, *, allow: bool = False) -> Iterator[None]:
+def _deployment(environment: str, url: str | None) -> Iterator[None]:
     """Pretend to be one deployment with one REData URL."""
     with (
         override_settings(ENVIRONMENT_NAME=environment),
-        mock.patch.multiple("urbanlens.UrbanLens.settings.app.settings", redata_api_url=url, allow_outbound_apis=allow),
+        mock.patch.multiple("urbanlens.UrbanLens.settings.app.settings", redata_api_url=url),
     ):
         yield
 
@@ -45,16 +45,12 @@ class ItFiresWhereItShouldTests(TestCase):
         with _deployment("local", PRODUCTION_REDATA):
             self.assertEqual(_ids(check_dev_is_not_pointed_at_a_real_redata()), ["dashboard.W003"])
 
-    def test_it_fires_even_while_outbound_calls_are_refused(self) -> None:
-        """The guard is what makes this harmless today, and flags get turned on."""
-        with _deployment("development", PRODUCTION_REDATA, allow=False):
-            self.assertEqual(_ids(check_dev_is_not_pointed_at_a_real_redata()), ["dashboard.W003"])
-
-    def test_the_message_says_which_state_the_flag_is_in(self) -> None:
-        with _deployment("development", PRODUCTION_REDATA, allow=True):
-            self.assertIn("going out right now", check_dev_is_not_pointed_at_a_real_redata()[0].hint)
-        with _deployment("development", PRODUCTION_REDATA, allow=False):
-            self.assertIn("nothing is calling it yet", check_dev_is_not_pointed_at_a_real_redata()[0].hint)
+    def test_the_message_says_whose_budget_it_spends(self) -> None:
+        """REData is allowed from every environment (D26), so the hint names the budget instead of a switch."""
+        with _deployment("development", PRODUCTION_REDATA):
+            hint = check_dev_is_not_pointed_at_a_real_redata()[0].hint
+        self.assertIn("production's", hint)
+        self.assertNotIn("UL_ALLOW_OUTBOUND_APIS", hint)
 
 
 class ItStaysQuietWhereItShouldTests(TestCase):

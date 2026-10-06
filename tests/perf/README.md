@@ -122,9 +122,10 @@ application branches on, so it gets gunicorn *and* is treated as a real
 deployment by anything reading that variable. Two consequences worth knowing
 before you run a load test on one:
 
-- Set **`UL_ALLOW_OUTBOUND_APIS=false`** in its `.env`. Otherwise the import
-  phase calls providers for real, thousands of times (P109). It is inherited
-  automatically from this repo's own `.env`, which carries it.
+- Set **`UL_ENVIRONMENT_SHARE=0`** in its `.env`. Otherwise, as staging, the
+  import phase spends a share of every quota'd and billed provider's budget for
+  real, thousands of times (P109, D26). REData and AI stay reachable either way;
+  point `UL_REDATA_API_URL` at your own instance, or clear it, for a load run.
 - Set **`COMPOSE_PROFILES=metrics`** alongside `--metrics`, or the Celery
   exporter is silently absent (N15).
 

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, KeywordSourceUnavailableError, PhotoKeywordProvider, analysis_jpeg_bytes
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -130,6 +131,7 @@ class AiVisionKeywordsPlugin(UrbanLensPlugin):
         return {
             SERVICE_AI_PHOTO_KEYWORDS: ServiceDefaults(
                 display_name="AI photo keywords (vision)",
+                category=EgressCategory.AI,
                 calls_per_minute=10,
                 calls_per_day=500,
                 notes="Vision-model describe call per uploaded photo for AI-photo-processing subscribers. Costs more than text AI calls.",
@@ -208,6 +210,7 @@ class ClassifierKeywordsPlugin(UrbanLensPlugin):
         return {
             SERVICE_PHOTO_CLASSIFIER: ServiceDefaults(
                 display_name="Photo content classifier (ResNet-50)",
+                category=EgressCategory.AI,
                 calls_per_minute=30,
                 calls_per_day=2000,
                 notes="Cloudflare Workers AI image classification per uploaded photo. Near-free per call.",

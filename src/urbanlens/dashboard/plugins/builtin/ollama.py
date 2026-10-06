@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, analysis_jpeg_bytes
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -68,6 +69,7 @@ class OllamaPlugin(UrbanLensPlugin):
         return {
             "ollama": ServiceDefaults(
                 display_name="Ollama (local vision AI)",
+                category=EgressCategory.INTERNAL,
                 calls_per_minute=30,
                 calls_per_day=2000,
                 notes="Self-hosted, free - limits here are about not overloading the local server, not cost.",

@@ -12,6 +12,7 @@ from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
+from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -147,6 +148,7 @@ class GooglePlacesPlugin(UrbanLensPlugin):
         return {
             "google_places": ServiceDefaults(
                 display_name="Google Places API",
+                category=EgressCategory.BILLED,
                 calls_per_minute=20,
                 calls_per_day=200,
                 # One budget spans several SKUs; the smallest free one it can hit is 1,000 a month

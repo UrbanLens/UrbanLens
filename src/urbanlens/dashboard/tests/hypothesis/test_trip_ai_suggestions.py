@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -32,6 +33,9 @@ from urbanlens.dashboard.services.trips.trip_ai_suggestions import (
 
 class _StubGateway:
     """A minimal LLMGateway stand-in that returns a fixed answer."""
+
+    model = "stub-model"
+    cost = Decimal(0)
 
     def __init__(self, answer: str | None) -> None:
         self.answer = answer

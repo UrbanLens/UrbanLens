@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.core.egress import egress_permitted
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_secret
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -93,6 +94,10 @@ class Command(BaseCommand):
 
         if not key:
             self.stdout.write(self.style.ERROR("ERROR: No API key configured. Set UL_GOOGLE_UNRESTRICTED_API_KEY in your .env file."))
+            return
+        # Its requests go straight to the billed Places API, outside the ledger, so it asks the policy itself (D26).
+        if not egress_permitted("google_places"):
+            self.stdout.write(self.style.ERROR("ERROR: this environment does not call google_places. Set UL_ENVIRONMENT_SHARE_OVERRIDES=google_places=<share> to run it here."))
             return
 
         session = requests.Session()

@@ -110,7 +110,7 @@ def protomaps_theme_for(source_id: str) -> str | None:
     Chosen here rather than in REData so one catalogue serves both a deployment that self-hosts
     this basemap and one that pays Protomaps to host it: REData says which layers exist and what
     they may be credited as, this says where *this* deployment's browsers fetch the style from.
-    Self-hosting stays the default - the key being unset is what selects it.
+    Self-hosting stays the default - the key being unset, or this not being production, selects it.
 
     Args:
         source_id: The REData layer id.
@@ -118,10 +118,10 @@ def protomaps_theme_for(source_id: str) -> str | None:
     Returns:
         The theme name, or None to keep whatever REData published.
     """
-    from urbanlens.UrbanLens.settings.app import settings
+    from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
 
     theme = _PROTOMAPS_THEMES.get(source_id)
-    return theme if theme and settings.protomaps_api_key else None
+    return theme if theme and hosted_basemap_api_key() else None
 
 
 def vector_style_url(source_id: str) -> str | None:

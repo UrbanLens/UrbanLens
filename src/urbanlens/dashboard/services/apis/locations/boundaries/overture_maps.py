@@ -28,7 +28,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.overture import serv
 
 # Adjust this import to wherever Gateway/Gateway actually live.
 from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRateLimitedError, GatewayRequestError
-from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, _finalize_call, _reserve_call
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RequestCancelledError, _finalize_call, _reserve_call
 from urbanlens.dashboard.services.core.timeout_utils import call_with_deadline
 
 try:
@@ -253,8 +253,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             completes.
 
         Raises:
-            GatewayRateLimitedError: This service is administratively disabled, this deployment's
-                outbound calls are off (see ``outbound_calls_permitted``), or this service's own
+            EnvironmentRefusedError: This environment does not read the public release (D26).
+            GatewayRateLimitedError: This service is administratively disabled, or this service's own
                 request budget (``SERVICE_REGISTRY["overture_maps"]``) is exhausted for the
                 current window.
         """
@@ -263,6 +263,9 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             raise RuntimeError("OvertureMapsGateway has no service_key; ServiceMeta should have derived one")
         try:
             return _reserve_call(service, endpoint=overture_type)
+        except EnvironmentRefusedError:
+            # Not a spent budget: this environment does not read the public release at all.
+            raise
         except RequestCancelledError as exc:
             raise GatewayRateLimitedError(str(exc)) from exc
 

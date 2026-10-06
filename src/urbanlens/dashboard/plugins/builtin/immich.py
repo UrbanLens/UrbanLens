@@ -7,6 +7,7 @@ from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.UrbanLens.egress import EgressCategory
 
 
 class ImmichPlugin(UrbanLensPlugin):
@@ -26,6 +27,7 @@ class ImmichPlugin(UrbanLensPlugin):
         return {
             "immich": ServiceDefaults(
                 display_name="Immich",
+                category=EgressCategory.INTERNAL,
                 calls_per_minute=60,
                 calls_per_day=5000,
                 notes="Self-hosted per user - each user's calls hit their own server, not a shared quota, so limits here mainly guard against runaway loops.",

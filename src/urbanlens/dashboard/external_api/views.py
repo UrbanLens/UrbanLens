@@ -200,7 +200,6 @@ from urbanlens.dashboard.services.labels.merge import (
     merge_labels,
 )
 from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
-from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
 from urbanlens.dashboard.services.media.images import delete_stored_file
 from urbanlens.dashboard.services.media.media_labels import (
@@ -237,6 +236,7 @@ from urbanlens.dashboard.services.notifications.push import (
 )
 from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
 from urbanlens.dashboard.services.pins.pin_creation import (
+    AddressLookupUnavailableError,
     AddressResolutionError,
     DuplicateCoordinatesError,
     DuplicatePropertyError,
@@ -245,6 +245,7 @@ from urbanlens.dashboard.services.pins.pin_creation import (
     PinCreationError,
     PinCreationForbiddenError,
     PinParentNotFoundError,
+    coordinates_for_address,
     create_pin_for_profile,
 )
 from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
@@ -768,6 +769,9 @@ class PinsView(ExternalApiView):
         except NoLocationProvidedError as exc:
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "An address or coordinates are required."}, status=400)
+        except AddressLookupUnavailableError as exc:
+            logger.info("external API pin creation deferred: %s", exc)
+            return Response({"error": "Address lookup isn't available right now. Send coordinates instead."}, status=503)
         except AddressResolutionError as exc:
             logger.info("external API pin creation rejected: %s", exc)
             return Response({"error": "That address couldn't be converted to coordinates."}, status=400)
@@ -991,7 +995,11 @@ class PinSuggestionsView(ExternalApiView):
         if latitude is None or longitude is None:
             if not profile.external_apis_enabled:
                 return Response({"error": "External lookups are turned off in your settings - drop a pin on the map instead."}, status=403)
-            latitude, longitude = get_pin_by_address(address)
+            try:
+                latitude, longitude = coordinates_for_address(address)
+            except AddressLookupUnavailableError as exc:
+                logger.info("external API address lookup deferred: %s", exc)
+                return Response({"error": "Address lookup isn't available right now. Send coordinates instead."}, status=503)
             if latitude is None or longitude is None:
                 return Response({"error": "Unable to convert address to lat/lng."}, status=400)
 

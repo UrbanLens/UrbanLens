@@ -117,3 +117,9 @@ class DashboardConfig(AppConfig):
         # Plugin discovery only imports modules and instantiates plugin
         # classes - it must never touch the database this early.
         plugin_registry.discover()
+
+        # What this deployment may call, once per process, so an override or allow-listed sweep is never silent.
+        # After discovery: plugin services are classified by their own defaults.
+        from urbanlens.dashboard.services.core.egress import log_egress_policy
+
+        log_egress_policy()

@@ -194,7 +194,31 @@ class DeploymentDefaultsTests(_ReloadsSettings):
             self._reload("development").EMAIL_DELIVERY_BACKEND, "django.core.mail.backends.console.EmailBackend"
         )
 
-    def test_a_configured_mail_backend_wins_everywhere(self) -> None:
+    def test_staging_prints_mail_even_with_smtp_configured(self) -> None:
+        """D26: a staging clone holds real addresses, and development's relay bills per message."""
+        smtp = "django.core.mail.backends.smtp.EmailBackend"
+        for environment in ("staging", "development"):
+            with self.subTest(environment=environment):
+                reloaded = self._reload(environment, **_CONFIGURED, UL_EMAIL_BACKEND=smtp)
+                self.assertEqual(reloaded.EMAIL_DELIVERY_BACKEND, "django.core.mail.backends.console.EmailBackend")
+
+    def test_the_explicit_opt_in_restores_real_delivery_off_production(self) -> None:
+        smtp = "django.core.mail.backends.smtp.EmailBackend"
+        with mock.patch("urbanlens.UrbanLens.settings.app.settings.email_send_outside_production", True):
+            reloaded = self._reload("staging", **_CONFIGURED, UL_EMAIL_BACKEND=smtp)
+        self.assertEqual(reloaded.EMAIL_DELIVERY_BACKEND, smtp)
+
+    def test_staging_schedules_only_internal_beat_entries(self) -> None:
+        reloaded = self._reload("staging", **_CONFIGURED)
+        self.assertIn("wayback-archive-sweep", reloaded.FULL_BEAT_SCHEDULE)
+        self.assertNotIn("wayback-archive-sweep", reloaded.CELERY_BEAT_SCHEDULE)
+        self.assertIn("task-outbox-drain", reloaded.CELERY_BEAT_SCHEDULE)
+
+    def test_production_schedules_everything(self) -> None:
+        reloaded = self._reload("production", **_CONFIGURED)
+        self.assertEqual(set(reloaded.CELERY_BEAT_SCHEDULE), set(reloaded.FULL_BEAT_SCHEDULE))
+
+    def test_a_configured_mail_backend_wins_on_production(self) -> None:
         reloaded = self._reload(
             "production", **_CONFIGURED, UL_EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"
         )

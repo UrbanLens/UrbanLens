@@ -17,6 +17,8 @@ import requests
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
 from urbanlens.dashboard.services.core.capacity import PUSH_DEVICES, reserve
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.egress import require_egress
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, is_blocked_address, open_public_url
 
 if TYPE_CHECKING:
@@ -25,6 +27,9 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+#: The egress policy's key for UnifiedPush delivery (``messaging``): production's alone unless overridden.
+PUSH_SERVICE = "unified_push"
 
 #: Consecutive delivery failures after which a device is auto-revoked.
 MAX_CONSECUTIVE_FAILURES = 10
@@ -175,7 +180,12 @@ def send_push_to_devices(device_ids: list[int], payload: dict) -> int:
         payload: JSON-serializable notification payload.
 
     Returns:
-        Number of devices successfully delivered to."""
+        Number of devices successfully delivered to; 0, recording nothing against the devices, where this environment
+        does not push (D26)."""
+    try:
+        require_egress(PUSH_SERVICE)
+    except EnvironmentRefusedError:
+        return 0
     devices = list(PushDevice.objects.filter(pk__in=device_ids, transport=PushTransport.UNIFIEDPUSH).active())
     if not devices:
         return 0

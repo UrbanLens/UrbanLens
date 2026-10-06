@@ -452,12 +452,14 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
     # Fall back to Nominatim (OpenStreetMap) - no API key required. Through
     # the shared rate-limited gateway helper, never a raw geopy client.
     from urbanlens.dashboard.services.apis.locations.geocode_resolution import nominatim_geocode
-    from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+    from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RateLimitExceededError
 
     try:
         latitude, longitude = nominatim_geocode(address)
     except RateLimitExceededError:
         return JsonResponse({"error": "Address lookups are momentarily rate limited - try again shortly."}, status=429)
+    except EnvironmentRefusedError:
+        return JsonResponse({"error": "Address lookup isn't available in this environment."}, status=503)
     if latitude is not None and longitude is not None:
         return JsonResponse({"lat": latitude, "lng": longitude})
 
