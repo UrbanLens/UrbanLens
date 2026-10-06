@@ -20,7 +20,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import Pr
 from urbanlens.dashboard.services.core.gateway import GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError
 from urbanlens.dashboard.services.core.rate_limiter import UpstreamThrottledError, _RateLimitedSession
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, detail_unresolved_body
 
 _BASE = "https://redata.example.test/api/v1/"
 _NEARBY = f"{_BASE}places/search/nearby/"
@@ -392,6 +392,48 @@ class PropertyRecordsGatewayTests(TestCase):
 
         with pytest.raises(PropertyRecordsBusyError):
             gateway.lookup_parcel(42.0, -73.0)
+
+
+class UnresolvedCrisDetailTests(TestCase):
+    """REData answers a CRIS detail fetch it holds with a 200, not a 503, so that it leaves every other call alone."""
+
+    _RESOURCE = "54d64e82-04d4-438c-8003-056aa3480754"
+    _DETAIL = f"{_BASE}cultural-resources/{_RESOURCE}/fetch-detail/"
+
+    def _gateway(self, *answers: mock.Mock) -> RedataGateway:
+        gateway = RedataGateway(base_url="https://redata.example.test", api_key="test-key")
+        gateway.session._session = mock.Mock()
+        gateway.session._session.request.side_effect = list(answers)
+        return gateway
+
+    def test_it_opens_no_breaker_scope(self) -> None:
+        answer = _response(200, detail_unresolved_body(resource_uuid=self._RESOURCE))
+
+        self.assertIsNone(RedataBreaker().scope_tripped_by(self._DETAIL, None, answer))
+
+    def test_every_call_still_goes_out_afterwards(self) -> None:
+        gateway = self._gateway(_response(200, detail_unresolved_body(resource_uuid=self._RESOURCE)))
+
+        with pytest.raises(PropertyRecordsBusyError):
+            gateway.fetch_cultural_resource_detail(self._RESOURCE)
+
+        for url in (self._DETAIL, _PARCEL, _NEARBY, _CAPABILITIES, f"{_BASE}cultural-resources/lookup/"):
+            with self.subTest(url=url):
+                self.assertIsNone(
+                    RedataBreaker().wait(url), "a held resource must not hold off REData's other endpoints"
+                )
+
+    def test_the_resource_is_asked_about_again_not_short_circuited(self) -> None:
+        held = _response(200, detail_unresolved_body(resource_uuid=self._RESOURCE))
+        resolved = _response(200, {"detail_status": "fetched", "resource": {"uuid": self._RESOURCE, "attachments": []}})
+        gateway = self._gateway(held, resolved)
+
+        with pytest.raises(PropertyRecordsBusyError):
+            gateway.fetch_cultural_resource_detail(self._RESOURCE)
+        detail = gateway.fetch_cultural_resource_detail(self._RESOURCE)
+
+        self.assertEqual(gateway.session._session.request.call_count, 2)
+        self.assertEqual(detail["uuid"], self._RESOURCE)
 
 
 class LocationContextGatewayTests(TestCase):

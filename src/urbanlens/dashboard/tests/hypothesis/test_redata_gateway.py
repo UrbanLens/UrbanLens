@@ -5,6 +5,7 @@ All HTTP calls are mocked so no real network access occurs.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 import io
 from unittest.mock import MagicMock
 
@@ -12,12 +13,16 @@ from urllib3.response import HTTPResponse
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    REASON_DETAIL_UNRESOLVED,
     REASON_MANUAL_ONLY,
     REASON_SOURCE_ERROR,
+    TRANSIENT_REASONS,
+    PropertyRecordsBusyError,
     PropertyRecordsUnavailableError,
     RedataGateway,
 )
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
+from urbanlens.dashboard.services.core.gateway import UPSTREAM_BUSY_MAX_SECONDS, UpstreamBusyError
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, detail_unresolved_body
 
 
 def _response(
@@ -404,6 +409,116 @@ class FetchCulturalResourceDetailTests(SimpleTestCase):
         gateway = _gateway(session)
         with self.assertRaises(PropertyRecordsUnavailableError):
             gateway.fetch_cultural_resource_detail("r1")
+
+
+class FetchCulturalResourceDetailUnresolvedTests(SimpleTestCase):
+    """REData holds a resource its source cannot resolve, and answers 200 ``unresolved`` with the resource and no detail.
+
+    Handed on as the resource, that answer reads as a fetched record, and the share cache keeps it for an hour.
+    """
+
+    def _gateway(self, *bodies: dict) -> tuple[RedataGateway, MagicMock]:
+        session = MagicMock()
+        session.post.side_effect = [_response(200, json_body=body) for body in bodies]
+        return _gateway(session), session
+
+    def test_it_raises_the_transient_reason_with_redatas_message(self) -> None:
+        gateway, _session = self._gateway(detail_unresolved_body())
+
+        with self.assertRaises(PropertyRecordsUnavailableError) as caught:
+            gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertEqual(caught.exception.reason, REASON_DETAIL_UNRESOLVED)
+        self.assertEqual(
+            str(caught.exception),
+            "The source could not resolve this resource to a record, so nothing more was fetched.",
+        )
+
+    def test_the_reason_is_one_a_caller_treats_as_ask_again_later(self) -> None:
+        gateway, _session = self._gateway(detail_unresolved_body())
+
+        with self.assertRaises(PropertyRecordsUnavailableError) as caught:
+            gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertIn(REASON_DETAIL_UNRESOLVED, TRANSIENT_REASONS)
+        self.assertTrue(
+            caught.exception.is_outage, "a caller that stores a settled 'no detail' for it would never ask again"
+        )
+
+    def test_it_carries_the_wait_like_a_throttle_does(self) -> None:
+        gateway, _session = self._gateway(detail_unresolved_body())
+
+        with self.assertRaises(PropertyRecordsUnavailableError) as caught:
+            gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertIsInstance(caught.exception, PropertyRecordsBusyError)
+        self.assertIsInstance(caught.exception, UpstreamBusyError)
+
+    def test_the_wait_is_how_long_until_redatas_hold_ends(self) -> None:
+        in_five_minutes = (datetime.now(UTC) + timedelta(minutes=5)).isoformat()
+        for retry_after in (in_five_minutes, 300, "300", 300.0):
+            with self.subTest(retry_after=retry_after):
+                gateway, _session = self._gateway(detail_unresolved_body(retry_after=retry_after))
+
+                with self.assertRaises(PropertyRecordsBusyError) as caught:
+                    gateway.fetch_cultural_resource_detail(f"r-{retry_after}")
+
+                self.assertTrue(295 <= caught.exception.retry_after <= 300, caught.exception.retry_after)
+
+    def test_a_hold_longer_than_a_busy_wait_may_be_is_bounded_like_one(self) -> None:
+        a_week = (datetime.now(UTC) + timedelta(days=7)).isoformat()
+        gateway, _session = self._gateway(detail_unresolved_body(retry_after=a_week))
+
+        with self.assertRaises(PropertyRecordsBusyError) as caught:
+            gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertEqual(caught.exception.retry_after, UPSTREAM_BUSY_MAX_SECONDS)
+
+    def test_a_missing_or_unreadable_wait_still_raises_with_a_bounded_one(self) -> None:
+        for retry_after in ("", "someday", None):
+            with self.subTest(retry_after=retry_after):
+                body = detail_unresolved_body()
+                body["retry_after"] = retry_after
+                gateway, _session = self._gateway(body)
+
+                with self.assertRaises(PropertyRecordsBusyError) as caught:
+                    gateway.fetch_cultural_resource_detail(f"r-{retry_after}")
+
+                self.assertEqual(caught.exception.retry_after, UPSTREAM_BUSY_MAX_SECONDS)
+
+    def test_a_hold_that_has_already_ended_is_asked_again_at_once(self) -> None:
+        gateway, _session = self._gateway(
+            detail_unresolved_body(retry_after=(datetime.now(UTC) - timedelta(minutes=1)).isoformat())
+        )
+
+        with self.assertRaises(PropertyRecordsBusyError) as caught:
+            gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertEqual(caught.exception.retry_after, 1)
+
+    def test_it_is_not_shared_so_the_next_ask_goes_back_to_redata(self) -> None:
+        resolved = {"detail_status": "fetched", "resource": {"uuid": "r1", "attachments": [{"id": 1, "kind": "photo"}]}}
+        gateway, session = self._gateway(detail_unresolved_body(), detail_unresolved_body(), resolved)
+
+        for _ in range(2):
+            with self.assertRaises(PropertyRecordsBusyError):
+                gateway.fetch_cultural_resource_detail("r1")
+        detail = gateway.fetch_cultural_resource_detail("r1")
+
+        self.assertEqual(session.post.call_count, 3)
+        self.assertEqual(detail["attachments"][0]["id"], 1)
+
+    def test_a_resource_with_nothing_deeper_published_is_still_a_settled_answer(self) -> None:
+        """Only ``unresolved`` is held: REData's other envelopes still return the resource."""
+        for detail_status in ("fetched", "no_detail_published", "already_fetched", "not_supported"):
+            with self.subTest(detail_status=detail_status):
+                gateway, _session = self._gateway(
+                    {"detail_status": detail_status, "resource": {"uuid": f"u-{detail_status}"}}
+                )
+
+                self.assertEqual(
+                    gateway.fetch_cultural_resource_detail(f"r-{detail_status}"), {"uuid": f"u-{detail_status}"}
+                )
 
 
 class QueueCulturalResourceDetailsTests(SimpleTestCase):

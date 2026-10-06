@@ -39,7 +39,11 @@ from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.external_data import run_panel_fetch
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import CAMPUS_LAT, CAMPUS_LNG, offset, parcel_square, rect
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import (
+    DETAIL_WITHHELD_ANSWERS,
+    RedataConfiguredMixin,
+    detail_withheld_error,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -103,6 +107,8 @@ class FakeRedata:
                 "attachments": [_form(100 + index), {"id": 200 + index, "kind": "photo", "name": "Elevation"}],
             }
         self.transient_details: set[str] = set()
+        #: Resources REData will not detail for now, each with the error the gateway raises for it.
+        self.withheld_details: dict[str, PropertyRecordsUnavailableError] = {}
 
     @property
     def total(self) -> int:
@@ -116,6 +122,8 @@ class FakeRedata:
         self.calls["detail"] += 1
         if resource_uuid in self.transient_details:
             raise PropertyRecordsUnavailableError("rate_limited", "budget spent")
+        if resource_uuid in self.withheld_details:
+            raise self.withheld_details[resource_uuid]
         if resource_uuid not in self.details:
             raise PropertyRecordsUnavailableError("source_error", "no detail")
         return copy.deepcopy(self.details[resource_uuid])
@@ -629,3 +637,109 @@ class UndetailedCampusRecordsAreFilledLaterTests(CampusSeedingTestCase):
 
         documents = [a for a in self.landed(self.site).data["attachments"] if a.get("id") == 900]
         self.assertEqual(documents[0]["extracted_images"], [{"url": "https://example.com/1.jpg"}])
+
+
+class WithheldDetailTests(CampusSeedingTestCase):
+    """REData withholds a resource's detail for now: its source is down (a 503), or it holds a resource its source cannot
+    resolve (a 200 ``unresolved``).
+
+    Every caller of the detail fetch degrades the same for both. The resource is asked about again, nothing records that it
+    has no detail, and what REData did give is kept.
+    """
+
+    def reset(self) -> None:
+        """Back to a campus never fetched, between the answers a test loops over."""
+        LocationCache.objects.filter(source=_CACHE).delete()
+        cache.clear()
+        self.redata.calls.clear()
+        self.redata.withheld_details.clear()
+        self.enqueued.clear()
+        self.enqueue_options.clear()
+
+    def withhold(self, answer: str, *uuids: str) -> None:
+        for uuid in uuids:
+            self.redata.withheld_details[uuid] = detail_withheld_error(answer)
+
+    def fills(self) -> list[tuple]:
+        return [args[1:] for args in self.enqueued if args and args[0] is tasks.fill_cris_campus_details]
+
+    def test_a_campus_building_withheld_in_the_site_pass_is_left_pending(self) -> None:
+        for answer in DETAIL_WITHHELD_ANSWERS:
+            with self.subTest(answer=answer):
+                self.reset()
+                self.withhold(answer, "b-45")
+
+                self.run_fetch(self.site)
+
+                data = self.landed(self.site).data
+                documented = {a["resource_uuid"] for a in data["attachments"] if a.get("site_building")}
+                self.assertNotIn("b-45", documented)
+                self.assertIn("b-28", documented, "only the withheld building is skipped")
+                self.assertEqual(data["campus_pending"], {"b-45": "building"})
+                entry = next(e for e in data["campus_buildings"] if e["resource_uuid"] == "b-45")
+                self.assertIs(entry["detailed"], False, "a building never detailed is not listed as detailed")
+                self.assertEqual(self.fills(), [(self.site_location.pk, 0)], "a later pass asks again")
+
+    def test_a_later_pass_details_a_building_once_it_is_no_longer_withheld(self) -> None:
+        for answer in DETAIL_WITHHELD_ANSWERS:
+            with self.subTest(answer=answer):
+                self.reset()
+                self.withhold(answer, "b-45")
+                self.run_fetch(self.site)
+
+                with self.redata_patched():
+                    self.assertEqual(tasks.fill_cris_campus_details(self.site_location.pk, 0), 0)
+                self.assertEqual(self.landed(self.site).data["campus_pending"], {"b-45": "building"})
+                self.redata.withheld_details.clear()
+                with self.redata_patched():
+                    tasks.fill_cris_campus_details(self.site_location.pk, 1)
+
+                data = self.landed(self.site).data
+                self.assertNotIn("campus_pending", data)
+                self.assertIn("b-45", {a["resource_uuid"] for a in data["attachments"] if a.get("site_building")})
+
+    def test_a_withheld_site_record_lands_no_row_for_the_site_or_its_children(self) -> None:
+        for answer in DETAIL_WITHHELD_ANSWERS:
+            with self.subTest(answer=answer):
+                self.reset()
+                self.withhold(answer, "dist-hrsh")
+
+                self.run_fetch(self.site)
+
+                self.assertIsNone(self.row(self.site), "a row would claim the site has no record")
+                for child in self.children.values():
+                    self.assertIsNone(self.row(child))
+                self.assertTrue(
+                    cache.get(CrisBuildingPanelSource().skip_key(self.site)), "the panel is not asked every poll"
+                )
+
+                self.redata.withheld_details.clear()
+                self.run_fetch(self.site)
+                self.assertTrue(CrisBuildingPanelSource().media_is_ready(self.landed(self.site).data))
+
+    def test_a_withheld_child_detail_is_retried_later_not_cached_as_nothing(self) -> None:
+        for answer in DETAIL_WITHHELD_ANSWERS:
+            with self.subTest(answer=answer):
+                self.reset()
+                with patch.object(cris_module, "_MAX_SITE_DETAIL_FETCHES", 0):
+                    self.run_fetch(self.site)
+                mortuary = self.children["b-45"]
+                self.withhold(answer, "b-45")
+
+                self.run_fetch(mortuary)
+
+                panel = CrisBuildingPanelSource()
+                self.assertEqual(
+                    self.landed(mortuary).data["USNName"],
+                    "BLDG 45/MORTUARY & LAB",
+                    "the card keeps what the lookup gave",
+                )
+                self.assertFalse(
+                    panel.media_is_ready(self.landed(mortuary).data), "REData has not said it has no detail"
+                )
+                self.assertTrue(cache.get(panel.skip_key(mortuary)), "the panel is not asked every poll")
+
+                self.redata.withheld_details.clear()
+                self.run_fetch(mortuary)
+                self.assertTrue(panel.media_is_ready(self.landed(mortuary).data))
+                self.assertIn(102, [a["id"] for a in self.landed(mortuary).data["attachments"]])

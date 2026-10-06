@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 import hashlib
 import json
 import logging
+import math
+import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.cache import DEFAULT_CACHE_ALIAS
 
 from urbanlens.dashboard.services.core.bounded_cache import get_or_none, set_or_skip
 from urbanlens.dashboard.services.core.coalesce import coalesced
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
+from urbanlens.dashboard.services.core.gateway import UPSTREAM_BUSY_MAX_SECONDS, Gateway, GatewayRequestError, UpstreamBusyError, read_capped, upstream_retry_after
 from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -73,12 +76,17 @@ REASON_NOT_EXTRACTABLE = "not_extractable"
 REASON_EXTRACTION_UNAVAILABLE = "extraction_unavailable"
 #: CRIS no longer lists the attachment.
 REASON_ATTACHMENT_UNAVAILABLE = "attachment_unavailable"
+#: REData's CRIS detail fetch answered 200 ``unresolved``: the source could not resolve the resource to a record, so REData holds
+#: it until ``retry_after``. Not a claim that the record does not exist, and not an outage of REData.
+REASON_DETAIL_UNRESOLVED = "detail_unresolved"
+#: The ``detail_status`` of that answer.
+_DETAIL_UNRESOLVED = "unresolved"
 
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
 #: stores a payload for one of these turns a passing outage into a blank card for the whole
 #: ``external_data_cache_days`` window.
-TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED, REASON_KEY_BUDGET_EXHAUSTED, REASON_ALL_PROVIDERS_UNAVAILABLE})
+TRANSIENT_REASONS: frozenset[str] = frozenset({REASON_SOURCE_ERROR, REASON_SOURCE_RATE_LIMITED, REASON_RATE_LIMITED, REASON_KEY_BUDGET_EXHAUSTED, REASON_ALL_PROVIDERS_UNAVAILABLE, REASON_DETAIL_UNRESOLVED})
 _SETTLED_EXTRACTION_REFUSALS: frozenset[str] = frozenset({REASON_NOT_EXTRACTABLE, REASON_EXTRACTION_UNAVAILABLE, REASON_ATTACHMENT_UNAVAILABLE})
 
 
@@ -138,6 +146,38 @@ def _download_failure(response: requests.Response) -> PropertyRecordsUnavailable
     if wait is None:
         return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, message)
     return PropertyRecordsBusyError(REASON_RATE_LIMITED if response.status_code == 429 else REASON_SOURCE_ERROR, message, retry_after=wait)
+
+
+def _hold_wait(retry_after: object) -> int:
+    """How long to leave a resource REData is holding, from the ``retry_after`` of its ``unresolved`` answer.
+
+    Args:
+        retry_after: REData's ``retry_after``: the time the hold ends, as an ISO 8601 timestamp, or a number of seconds. Anything else is unread.
+
+    Returns:
+        Seconds, at least 1 and at most :data:`UPSTREAM_BUSY_MAX_SECONDS`, which is also the wait for an answer that names none: REData holds a resource for an hour at least.
+    """
+    seconds = _seconds_from_now(retry_after)
+    if seconds is None or not math.isfinite(seconds):
+        return UPSTREAM_BUSY_MAX_SECONDS
+    return max(1, min(math.ceil(seconds), UPSTREAM_BUSY_MAX_SECONDS))
+
+
+def _seconds_from_now(value: object) -> float | None:
+    """A wait REData named, as seconds from now: a number of seconds, or the ISO 8601 time it ends; None when it is neither."""
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        return None
+    if not isinstance(value, str):
+        return float(value)
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        ends = datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+    return (ends if ends.tzinfo else ends.replace(tzinfo=UTC)).timestamp() - time.time()
 
 
 def _named_wait(response: requests.Response) -> int | None:
@@ -700,10 +740,13 @@ class RedataGateway(Gateway):
         Args:
             resource_uuid: The resource's REData uuid (from :meth:`lookup_cultural_resources`).
 
+        A resource its source cannot resolve is held by REData, which answers 200 with ``detail_status`` ``unresolved`` and the resource without its detail. That is raised, not returned: returned, it reads as a fetched record, and :meth:`fetch_cultural_resource_detail` would share it.
+
         Returns:
             The resource dict, now with ``detail_payload``/``detail_retrieved_at`` and ``attachments`` populated.
 
         Raises:
+            PropertyRecordsBusyError: REData holds the resource (``REASON_DETAIL_UNRESOLVED``, a transient reason), carrying the wait REData named, bounded as any busy wait is.
             PropertyRecordsUnavailableError: This resource type has no detail-fetch path (e.g. ``archaeological_buffer_area``), or the request to REData failed.
         """
         base_url = self.base_url
@@ -715,6 +758,12 @@ class RedataGateway(Gateway):
                 body = dict(response.json())
             except ValueError as exc:
                 raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+            if body.get("detail_status") == _DETAIL_UNRESOLVED:
+                raise PropertyRecordsBusyError(
+                    REASON_DETAIL_UNRESOLVED,
+                    str(body.get("message") or "REData could not resolve this resource to a record yet."),
+                    retry_after=_hold_wait(body.get("retry_after")),
+                )
             resource = body.get("resource")
             return dict(resource) if isinstance(resource, dict) else body
         if response.status_code == 400:
@@ -736,7 +785,7 @@ class RedataGateway(Gateway):
             radius_meters: Search radius around the coordinate, as for :meth:`lookup_cultural_resources`.
 
         Returns:
-            REData's counts - ``queued``/``already_fetched``/``unsupported``/``considered``.
+            REData's counts - ``queued``/``already_fetched``/``unsupported``/``held``/``considered``.
 
         Raises:
             PropertyRecordsUnavailableError: The key lacks ``cultural_resources:write`` (403), or the request to REData failed.
