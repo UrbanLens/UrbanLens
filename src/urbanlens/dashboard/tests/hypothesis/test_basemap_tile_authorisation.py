@@ -20,6 +20,7 @@ from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache, caches
 from django.db import connection
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
@@ -39,6 +40,10 @@ _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gatewa
 TILE_BYTES = b"x" * 128
 
 
+# Production keeps sessions in Dragonfly (`cached_db`), but settings only pick that engine when a
+# Dragonfly URL is configured - which a worktree with no `.env` is not - and on plain `db` every
+# request pays a `django_session` read. Pinned so the budget is measured on the deployed engine.
+@override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cached_db")
 class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
     """The gate, probed from the outside."""
 

@@ -263,6 +263,20 @@ class TheDepthFollowsTheBytesTests(SimpleTestCase):
 
         self.assertEqual(entry["max_zoom"], 19)
 
+    def test_darks_raster_half_is_published_as_deep_as_esri_draws_it(self) -> None:
+        """REData names CARTO's dark_all for this layer and publishes its ceiling of 20; the bytes
+        come from Esri's dark canvas, which draws through 16 and answers every deeper level with
+        one 2521-byte "not yet available" JPEG at 200 (measured over Manhattan and Buffalo,
+        2026-10-06). The browser's own raster table already stops at 16; the catalogue has to
+        agree, or a map without WebGL2 asks for four levels of that placeholder."""
+        sources = [s for s in TheCreditFollowsTheBytesTests._sources() if s["id"] == "dark"]
+        sources[0]["fallback_max_zoom"] = 20
+
+        entry = next(e for e in _offered_layers(sources) if e["id"] == "dark")
+
+        self.assertEqual(entry["fallback_max_zoom"], 16)
+        self.assertEqual(entry["max_zoom"], 15, "the Protomaps style's own depth was overwritten")
+
     def test_on_a_vector_layer_the_depth_lands_on_the_raster_half(self) -> None:
         """`max_zoom` is the vector style's ceiling and `fallback_max_zoom` the raster's, so a
         raster vendor's limit applied to `max_zoom` would crop the layer actually being drawn."""
