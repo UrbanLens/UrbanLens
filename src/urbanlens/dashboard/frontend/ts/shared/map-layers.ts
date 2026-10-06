@@ -11,6 +11,7 @@ import type { Map as MaplibreMap } from "maplibre-gl";
 import { bindMapContextMenu, type BindMapContextMenuOptions } from "./map-context-menu";
 import { composeAttribution, esriServiceForUrl, isEsriServiceName, type AttributionView, type CreditSource } from "./esri-attribution";
 import { createLayersPanel } from "./map-layers-panel";
+import { onHostedBasemapFallback, useHostedTilesOn, vectorBaseCredit } from "./hosted-basemap";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import type { RasterSourceInput } from "./maplibre-raster-style";
 import { acquireOwnTileSlot, isOwnTileUrl, ownTileRetriesAreSuspended, ownTileRetryDelayMs, recordOwnTileOutcome } from "./own-tiles";
@@ -73,26 +74,28 @@ const OVERLAY_ERROR_TILE_URL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///y
  * layer never drops out when the user zooms past the native depth.
  */
 const TILE_DEFS: Record<string, TileDef> = {
+    // Esri's street and dark canvas maps: keyless, and the same bytes a signed-in viewer's catalogue layer is
+    // proxied to (`services/map/basemap_vendors.py`), so a signed-out map draws what a signed-in one does. Not
+    // CARTO, whose `light_all`/`dark_all` now answer every tile with a 200 "API KEY REQUIRED" picture (2026-10-06),
+    // and not OSM's own tile.openstreetmap.org, whose usage policy wants the Referer this site never sends
+    // (`Referrer-Policy: no-referrer`) and answers its absence with an "Access blocked" tile, also at 200 - neither
+    // reaches `errorTileUrl`. These are the raster tier, for a map that cannot draw vector: where it can, the
+    // street and dark bases are vector (`VECTOR_STYLE_DEFS`, then `BUILT_IN_VECTOR_STYLE_DEFS`).
     street: {
-        // Not OSM's own tile.openstreetmap.org: that server enforces a usage
-        // policy against unauthorized production hotlinking (osm.wiki/Blocked)
-        // and answers a violation with a rendered "Access blocked" tile at a
-        // 200 status rather than a real error, so it isn't even caught by
-        // errorTileUrl below. CARTO's raster CDN serves the same OSM data
-        // under terms that permit this, same as "dark" already does.
-        url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}",
         options: {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            maxNativeZoom: 20,
+            attribution: "Esri, HERE, Garmin, USGS, Intermap, INCREMENT P, NRCan, METI, NGCC, &copy; OpenStreetMap contributors, and the GIS User Community",
+            maxNativeZoom: 19,
             maxZoom: MAP_MAX_ZOOM,
             errorTileUrl: BASE_ERROR_TILE_URL,
         },
     },
     dark: {
-        url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+        url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
         options: {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-            maxNativeZoom: 20,
+            attribution: "Esri, HERE, Garmin, &copy; OpenStreetMap contributors, and the GIS User Community",
+            // Measured 2026-10-06: real tiles through 16, and the same "not yet available" picture from 17 down.
+            maxNativeZoom: 16,
             maxZoom: MAP_MAX_ZOOM,
             errorTileUrl: BASE_ERROR_TILE_URL,
         },
@@ -146,29 +149,55 @@ export interface VectorStyleDef {
     attribution: string;
     minZoom: number;
     maxZoom: number;
+    /** A public keyless style rather than this deployment's own, so Protomaps' hosted tiles never apply to it. */
+    builtIn?: boolean;
 }
 
 /**
  * Vector sources registered from the catalogue, by the same key `TILE_DEFS` uses, so a layer
  * offered in both shapes resolves to one or the other by engine rather than by id.
  *
- * Never populated with a built-in: there is no vendor default here. An empty entry means this
- * deployment has no self-hosted style for that layer and both engines fall back to `TILE_DEFS`.
+ * Never populated with a built-in: those are `BUILT_IN_VECTOR_STYLE_DEFS`, consulted only for a
+ * layer the catalogue said nothing about.
  */
 const VECTOR_STYLE_DEFS: Record<string, VectorStyleDef> = {};
 
+/** What OpenFreeMap asks a map drawing its tiles to show (openfreemap.org, "Attribution"). */
+const OPENFREEMAP_ATTRIBUTION =
+    '<a href="https://openfreemap.org">OpenFreeMap</a> <a href="https://www.openmaptiles.org/">&copy; OpenMapTiles</a> Data from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
 /**
- * The self-hosted style document for one of the canonical sources, if this deployment serves one.
+ * The last tier of the street and dark vector bases, for an installation with neither Protomaps' hosted tiles nor
+ * a basemap of its own: OpenFreeMap's public instance, which is free, keyless and unmetered, allows any use, and
+ * serves its styles, tiles, glyphs and sprites from one CORS-open host with no Referer needed (checked 2026-10-06).
+ * Its own styles are drawn as they are - Positron is the look CARTO's `light_all` had, and Dark its dark one.
  *
- * Only `maplibre-layers.ts` can act on the result - Leaflet has no vector renderer, so a Leaflet
- * map draws `TILE_DEFS` for the same key and the two engines diverge on bytes while agreeing on
- * which layer is showing. Both sides are this deployment's own since `D15`; before it, the raster
- * side of a self-hosted layer was a hardcoded vendor CDN.
+ * Only where the catalogue registered nothing for the key, in either shape: a deployment whose REData serves a
+ * layer keeps serving it, and a signed-out viewer, whose catalogue keeps only the vector entries, gets the same
+ * styles a signed-in one does.
+ */
+const BUILT_IN_VECTOR_STYLE_DEFS: Record<string, VectorStyleDef> = {
+    street: { styleUrl: "https://tiles.openfreemap.org/styles/positron", attribution: OPENFREEMAP_ATTRIBUTION, minZoom: 0, maxZoom: MAP_MAX_ZOOM, builtIn: true },
+    dark: { styleUrl: "https://tiles.openfreemap.org/styles/dark", attribution: OPENFREEMAP_ATTRIBUTION, minZoom: 0, maxZoom: MAP_MAX_ZOOM, builtIn: true },
+};
+
+/**
+ * The style document one of the canonical sources draws as vector: this deployment's own where the
+ * catalogue registered one, else a public keyless built-in for a layer the catalogue said nothing
+ * about (`BUILT_IN_VECTOR_STYLE_DEFS`), else none.
+ *
+ * Drawn by `maplibre-layers.ts`, and by the Leaflet bridge on pages that load it (`baseLayer()`);
+ * every other Leaflet map draws `TILE_DEFS` for the same key, so the engines diverge on bytes while
+ * agreeing on which layer is showing.
  * @param kind - Canonical or legacy source key.
  */
 export function vectorStyleFor(kind: string): VectorStyleDef | null {
     applyEmbeddedCatalogue();
-    return VECTOR_STYLE_DEFS[kind] ?? VECTOR_STYLE_DEFS[normalizeBase(kind)] ?? null;
+    const registered = VECTOR_STYLE_DEFS[kind] ?? VECTOR_STYLE_DEFS[normalizeBase(kind)];
+    if (registered) return registered;
+    // The catalogue replacing the raster def is the catalogue saying something about this layer.
+    const key = kind in BUILT_IN_VECTOR_STYLE_DEFS ? kind : normalizeBase(kind);
+    return TILE_DEFS[key] === BUILT_IN_TILE_DEFS[key] ? (BUILT_IN_VECTOR_STYLE_DEFS[key] ?? null) : null;
 }
 
 /**
@@ -262,7 +291,7 @@ declare const maplibregl: typeof import("maplibre-gl") | undefined;
 
 declare module "leaflet" {
     /** `@maplibre/maplibre-gl-leaflet`: draws a whole MapLibre style as one Leaflet layer. */
-    function maplibreGL(options: { style: string; attribution?: string }): L.Layer;
+    function maplibreGL(options: { style: string; attribution?: string }): L.Layer & { getMaplibreMap?(): MaplibreMap | null };
 }
 
 /**
@@ -295,6 +324,13 @@ export function baseLayer(kind: string, extraOptions?: L.TileLayerOptions): L.La
     if (def && canDrawVectorBase()) {
         const layer = L.maplibreGL({ style: def.styleUrl, attribution: def.attribution });
         vectorBases.add(layer);
+        // The bridge builds a fresh MapLibre map each time the layer is added, so each one is pointed at the hosted
+        // tiles in turn (`hosted-basemap.ts`). Where this page draws our own tiles, the layer is left as it was.
+        const hostedMap = (): void => {
+            const glMap = layer.getMaplibreMap?.();
+            if (glMap) useHostedTilesOn(glMap, kind);
+        };
+        if (!def.builtIn && typeof layer.on === "function") layer.on("add", hostedMap);
         return layer;
     }
     return tileLayer(kind, extraOptions);
@@ -1205,7 +1241,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
             // Mirrors `baseLayer()`'s own choice, so the credit names the dataset actually drawn:
             // a vector base and the raster it displaces are different datasets from different vendors.
             const vector = !opts.rasterOnly && canDrawVectorBase() ? vectorStyleFor(key) : null;
-            return vector ? { kind: "text", text: attributionAsText(vector.attribution) } : rasterCreditFor(key, fallback);
+            return vector ? { kind: "text", text: attributionAsText(vectorBaseCredit(key, vector)) } : rasterCreditFor(key, fallback);
         };
         if (map.hasLayer(satelliteLayer)) {
             sources.push(creditFor("satellite", "© Esri"));
@@ -1241,6 +1277,8 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         // Only kept while it is still to run: a frame that ran during the call has nothing to cancel.
         if (attributionPending) attributionFrame = frame;
     }
+    // The hosted basemap tiles falling back changes whose bytes the vector base is drawing, and so its credit.
+    const stopHostedFallbackCredit = opts.onAttribution ? onHostedBasemapFallback(onAttributionLayerChange) : null;
     if (opts.onAttribution) {
         // Which providers to credit follows the area and zoom on screen, not only the layers. A map
         // turned by leaflet-rotate shows a different area, and turning it fires `rotate`, not `moveend`.
@@ -1430,6 +1468,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         destroy: () => {
             map.off("layeradd layerremove", onTopoLayerChange);
             if (opts.onAttribution) map.off("layeradd layerremove moveend rotate", onAttributionLayerChange);
+            stopHostedFallbackCredit?.();
             if (attributionFrame !== null) {
                 window.cancelAnimationFrame(attributionFrame);
                 attributionFrame = null;

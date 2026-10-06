@@ -15,6 +15,9 @@ Category                      production       staging          development, loc
 ``public_write``              allowed          refused          refused
 ============================  ===============  ===============  =========================
 
+The hosted Protomaps basemap is browser-side, so it has no budget here: :data:`HOSTED_BASEMAP_ENVIRONMENTS` says
+which environments hand their browsers the key (production and staging).
+
 The share is ``UL_ENVIRONMENT_SHARE``, else :data:`ENVIRONMENT_SHARE_DEFAULTS`. One service can be
 given its own with ``UL_ENVIRONMENT_SHARE_OVERRIDES`` (``nominatim=0.02,sms=1``); for ``messaging``,
 ``public_write`` and ``ai`` an override above 0 opts the service in, and 0 turns it off. An ``ai``
@@ -249,20 +252,43 @@ def scaled_limit(limit: int | None, share: float) -> int | None:
     return max(1, math.floor(limit * share))
 
 
-def hosted_basemap_key(environment: str, protomaps_api_key: str) -> str:
-    """The Protomaps key this deployment buys the hosted basemap with, or nothing.
+#: Where the street and dark basemaps' tiles come from Protomaps' hosted API rather than this project's own mirror:
+#: production and staging (Jess, 2026-10-06), and the test suite. The browser fetches them directly with the key, so
+#: the service is browser-side - free for noncommercial use, and nothing server-side spends or counts it - and no
+#: ``UL_ENVIRONMENT_SHARE`` applies. Development and local draw our own tiles, which are internal and free.
+HOSTED_BASEMAP_ENVIRONMENTS = frozenset({EnvironmentTypes.PRODUCTION, EnvironmentTypes.STAGING, EnvironmentTypes.TESTING})
 
-    The hosted basemap is billed, and production holds that budget: everywhere else draws the street and
-    dark layers from the self-hosted mirror whatever ``UL_PROTOMAPS_API_KEY`` says.
+#: Where those tiles come from. MapLibre fetches them from a worker, so the CSP's ``connect-src`` names this origin
+#: wherever the key is handed out (``settings.base.allow_hosted_basemap_tiles``).
+PROTOMAPS_API_ORIGIN = "https://api.protomaps.com"
+
+
+def hosted_basemap_permitted(environment: str) -> bool:
+    """Whether ``environment``'s browsers fetch the street and dark tiles from Protomaps' hosted API.
+
+    Args:
+        environment: A :func:`policy_environment` value.
+
+    Returns:
+        True for production, staging and testing; False for development, local and anything unknown.
+    """
+    return environment in HOSTED_BASEMAP_ENVIRONMENTS
+
+
+def hosted_basemap_key(environment: str, protomaps_api_key: str) -> str:
+    """The Protomaps key this deployment hands its browsers for the hosted basemap tiles, or nothing.
+
+    Handed out on production and staging only: everywhere else draws the street and dark layers from the
+    self-hosted mirror whatever ``UL_PROTOMAPS_API_KEY`` says.
 
     Args:
         environment: A :func:`policy_environment` value.
         protomaps_api_key: ``UL_PROTOMAPS_API_KEY``.
 
     Returns:
-        The key on production (and in tests), else an empty string.
+        The key on production and staging (and in tests), else an empty string.
     """
-    return protomaps_api_key if full_egress(environment) else ""
+    return protomaps_api_key if hosted_basemap_permitted(environment) else ""
 
 
 SMTP_EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

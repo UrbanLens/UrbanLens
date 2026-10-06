@@ -5,7 +5,8 @@
  * a real WebGL map, which bun's DOM has no canvas for.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { resetHostedBasemapForTests } from "./hosted-basemap";
 import { BASE_ERROR_TILE_COLOR, createMapLayers, registerRedataLayers, resetRedataLayersCacheForTests } from "./map-layers";
 import { createMaplibreMapLayers, isMaplibreMap } from "./maplibre-layers";
 import { parseContributors, resetEsriAttributionForTests, seedEsriCoveragesForTests } from "./esri-attribution";
@@ -482,14 +483,16 @@ describe("overlays", () => {
 });
 
 describe("tile sources", () => {
-    test("expands Leaflet's {s} subdomain token, which MapLibre has no equivalent for", () => {
+    test("hands MapLibre templates it can fill in, with none of Leaflet's {s} or {r} tokens", () => {
         const map = makeMap();
         map.finishStyleLoad();
         createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
 
-        const tiles = map.sources.get(STREET)!.tiles as string[];
-        expect(tiles).toHaveLength(3);
-        for (const url of tiles) expect(url).not.toContain("{s}");
+        for (const id of [STREET, DARK, TOPO, SATELLITE]) {
+            const tiles = map.sources.get(id)!.tiles as string[];
+            expect(tiles.length).toBeGreaterThan(0);
+            for (const url of tiles) expect(url).not.toMatch(/\{[sr]\}/);
+        }
     });
 
     test("carries each vendor's native depth over as the source maxzoom", () => {
@@ -519,7 +522,9 @@ describe("attribution", () => {
 
     test("credits the vendor behind the selected base layer", () => {
         expect(attributionFor({}).at(-1)).toContain("OpenStreetMap");
-        expect(attributionFor({}).at(-1)).toContain("CARTO");
+        // Esri's street map, where no catalogue replaced the raster street base - never CARTO, which now wants a key.
+        expect(attributionFor({}).at(-1)).toContain("INCREMENT P");
+        expect(attributionFor({}).at(-1)).not.toContain("CARTO");
         // Both are Esri services, so the tokens have to be ones only that service's credit carries -
         // "Esri" alone would pass with the two layers swapped.
         expect(attributionFor({ defaultBase: "satellite" }).at(-1)).toContain("GeoEye");
@@ -941,7 +946,8 @@ describe("vector base layers", () => {
     });
 
     test("draws the dark layer's own style when dark mode is on", async () => {
-        stubFetch({ layers: [vectorEntry("dark")] });
+        // Street is raster here, so the light map draws no style of its own before dark mode is turned on.
+        stubFetch({ layers: [vectorEntry("dark"), { id: "street", source_type: "raster", url_template: "/dashboard/map/basemap-tiles/street/{z}/{x}/{y}/", attribution: "Attr" }] });
         await registerRedataLayers();
         const map = makeMap();
         const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, darkMode: "light" });
@@ -1002,6 +1008,113 @@ describe("vector base layers", () => {
 
         expect(calls.calls).toEqual([CATALOGUE_URL]);
         expect(map.visibilityOf(STREET)).toBe("visible");
+    });
+
+    test("an installation with no catalogue draws OpenFreeMap's keyless style, and credits it", async () => {
+        const calls = stubFetch({ layers: [] });
+        await registerRedataLayers();
+        const map = makeMap();
+        const credits: string[] = [];
+        createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => credits.push(text) });
+
+        map.finishStyleLoad();
+        await settle();
+
+        expect(calls.calls).toContain("https://tiles.openfreemap.org/styles/positron");
+        expect(map.getLayer("ul-layers-vector-street-water")).toBeTruthy();
+        expect(credits.at(-1)).toContain("OpenFreeMap © OpenMapTiles Data from OpenStreetMap");
+    });
+
+    describe("drawing the basemap's tiles from Protomaps' hosted API", () => {
+        const HOSTED = "https://api.protomaps.com/tiles/v4/{z}/{x}/{y}.mvt?key=pk_test";
+        const OWN = "https://tiles.urbanlens.org/basemap/{z}/{x}/{y}";
+        const SOURCE = "ul-layers-vector-street-protomaps";
+        const protomapsStyle = {
+            version: 8,
+            sources: { protomaps: { type: "vector", tiles: [OWN], maxzoom: 15 } },
+            glyphs: "https://tiles.urbanlens.org/fonts/{fontstack}/{range}.pbf",
+            layers: [{ id: "water", type: "fill", source: "protomaps", "source-layer": "water" }],
+        };
+
+        function embedHostedTiles(): void {
+            const el = document.createElement("script");
+            el.type = "application/json";
+            el.id = "ul-hosted-basemap";
+            el.textContent = JSON.stringify({ tiles: HOSTED });
+            document.body.appendChild(el);
+        }
+
+        /** MapLibre's vector source, as far as the fallback reaches into it. */
+        function canSetTiles(map: FakeMaplibreMap, id: string): void {
+            const source = map.sources.get(id)!;
+            source.setTiles = (tiles: string[]) => {
+                source.tiles = tiles;
+            };
+        }
+
+        let warn: ReturnType<typeof spyOn>;
+        beforeEach(() => {
+            resetHostedBasemapForTests();
+            warn = spyOn(console, "warn").mockImplementation(() => {});
+        });
+        afterEach(() => {
+            warn.mockRestore();
+            sessionStorage.clear();
+            resetHostedBasemapForTests();
+        });
+
+        test("only the tile source moves - glyphs stay our own - and a refusal puts our own tiles back", async () => {
+            embedHostedTiles();
+            stubFetch({ layers: [{ ...vectorEntry("street"), attribution: "© OpenStreetMap contributors © Protomaps" }], style: protomapsStyle });
+            await registerRedataLayers();
+            const map = makeMap();
+            const credits: string[] = [];
+            const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false, onAttribution: (text) => credits.push(text) });
+            map.finishStyleLoad();
+            await settle();
+
+            expect(map.sources.get(SOURCE)).toMatchObject({ tiles: [HOSTED], maxzoom: 15 });
+            expect(map.glyphs).toBe("https://tiles.urbanlens.org/fonts/{fontstack}/{range}.pbf");
+            expect(credits.at(-1)).toContain("Protomaps © OpenStreetMap");
+
+            canSetTiles(map, SOURCE);
+            map.fire("error", { error: Object.assign(new Error("AJAXError"), { status: 403 }), sourceId: SOURCE });
+
+            expect(map.sources.get(SOURCE)?.tiles).toEqual([OWN]);
+            expect(credits.at(-1)).toContain("© OpenStreetMap contributors © Protomaps");
+            expect(warn).toHaveBeenCalledTimes(1);
+
+            engine.destroy();
+            expect(map.listenerCount("error")).toBe(0);
+        });
+
+        test("without the embed the style's own tiles are drawn and nothing listens for errors", async () => {
+            stubFetch({ layers: [vectorEntry("street")], style: protomapsStyle });
+            await registerRedataLayers();
+            const map = makeMap();
+            createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
+            map.finishStyleLoad();
+            await settle();
+
+            expect(map.sources.get(SOURCE)).toMatchObject({ tiles: [OWN] });
+            expect(map.listenerCount("error")).toBe(0);
+        });
+
+        test("stops watching when another base replaces the vector one", async () => {
+            embedHostedTiles();
+            stubFetch({ layers: [vectorEntry("street")], style: protomapsStyle });
+            await registerRedataLayers();
+            const map = makeMap();
+            const engine = createMaplibreMapLayers(asMaplibre(map), { defaultBase: "street", contextMenu: false });
+            map.finishStyleLoad();
+            await settle();
+            expect(map.listenerCount("error")).toBe(1);
+
+            engine.setBase("satellite");
+            await settle();
+
+            expect(map.listenerCount("error")).toBe(0);
+        });
     });
 
     test("abandons an in-flight style when the engine is destroyed", async () => {

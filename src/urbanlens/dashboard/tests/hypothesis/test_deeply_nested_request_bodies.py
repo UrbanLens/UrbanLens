@@ -491,11 +491,10 @@ class ChatSocketFrameTests(TransactionTestCase):
 
 
 #: ``json.loads`` calls in request-handling code that never see client input: the server's own HX-Trigger headers
-#: and response bodies, and an upstream map style. Keyed by file and enclosing function.
+#: and response bodies. Keyed by file and enclosing function.
 _TRUSTED_JSON_LOADS = {
     ("controllers/albums.py", "AlbumUploadView.post"),
     ("controllers/aliases.py", "_show_toast"),
-    ("controllers/basemap_tiles.py", "VectorBasemapStyleView.get"),
     ("controllers/custom_fields.py", "_show_toast"),
     ("controllers/custom_layers.py", "CustomLayerShareToWikiView.post"),
     ("controllers/notifications.py", "_merge_triggers"),

@@ -12,7 +12,7 @@ from dotenv import find_dotenv, load_dotenv
 from oauth2_provider.utils import set_oauthlib_user_to_device_request_user
 
 from urbanlens.dashboard.services.auth.oauth_device import refuse_an_inactive_account
-from urbanlens.UrbanLens.egress import email_delivery_backend, hosted_basemap_key, policy_environment, scheduled_beat_entries
+from urbanlens.UrbanLens.egress import PROTOMAPS_API_ORIGIN, email_delivery_backend, hosted_basemap_key, policy_environment, scheduled_beat_entries
 from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, environment_from_env
 from urbanlens.UrbanLens.settings._env import (
     deployment_settings_required,
@@ -794,11 +794,12 @@ CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
 #
-# Tile hosts need wildcard and bare forms for Leaflet's {s} expansion.
-#
 # script-src refuses inline script: no template or bundle-built markup carries any (docs/notes/csp-violations.md), and
 # test_templates_run_no_inline_script.py keeps it that way. htmx must not need 'unsafe-eval' either: no hx-on, js:
 # hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
+#: The keyless public vector basemap (openfreemap.org): free, no key, no usage limits, any use allowed.
+OPENFREEMAP_ORIGIN = "https://tiles.openfreemap.org"
+
 _CSP_DIRECTIVES: dict[str, list[str]] = {
     "default-src": ["'self'"],
     # CDN scripts plus runtime-injected Maps API.
@@ -826,11 +827,11 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "blob:",
         # Tiles the browser fetches itself (TILE_DEFS in frontend/ts/shared/map-layers.ts): the borders and weather
         # overlays, and each base layer REData's catalogue does not replace, which is all of them when signed out.
-        "https://*.basemaps.cartocdn.com",
-        "https://basemaps.cartocdn.com",
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
+        # OpenFreeMap's sprite and its styles' raster relief, which MapLibre can load as <img> (see connect-src).
+        OPENFREEMAP_ORIGIN,
         # The Maps JavaScript API's imagery (SpotGuessr's Street View), as Google's CSP guide lists it.
         "https://*.googleapis.com",
         "https://*.gstatic.com",
@@ -850,14 +851,15 @@ _CSP_DIRECTIVES: dict[str, list[str]] = {
         "https://en.wikipedia.org",
         "https://maps.googleapis.com",
         # MapLibre fetches the tiles Leaflet draws as <img> (PL8 item 9), so these mirror img-src's tile hosts.
-        "https://*.basemaps.cartocdn.com",
-        "https://basemaps.cartocdn.com",
         "https://server.arcgisonline.com",
         "https://services.arcgisonline.com",
         "https://tile.openweathermap.org",
         # Esri's per-area credits for its basemaps (frontend/ts/shared/esri-attribution.ts). A static file per service, so
         # the request says which basemap is on screen and nothing about where.
         "https://static.arcgis.com",
+        # OpenFreeMap: the keyless street and dark vector styles an installation with no basemap of its own draws
+        # (BUILT_IN_VECTOR_STYLE_DEFS in map-layers.ts). Style, TileJSON, tiles, glyphs and sprites are all on this host.
+        OPENFREEMAP_ORIGIN,
         # Leaflet's source map, fetched when devtools is open against the unpkg build.
         "https://unpkg.com",
     ],
@@ -941,9 +943,9 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
     origin has no bearing on them.
 
     More than one origin is accepted because a style's assets need not share a host with its
-    tiles: Protomaps' hosted API serves tiles from ``api.protomaps.com`` and the glyphs and sprite
-    its style names from ``protomaps.github.io``. Admitting only the style's own origin leaves
-    MapLibre with no labels.
+    tiles, and admitting only the style's own origin then leaves MapLibre with no labels. The
+    hosted Protomaps tile host is not one of these: ``allow_hosted_basemap_tiles`` admits it
+    wherever the key is handed out.
 
     Args:
         directives: The CSP directive lists, modified in place.
@@ -969,27 +971,32 @@ def allow_basemap_style_origins(directives: dict[str, list[str]], base_urls: str
     return admitted
 
 
-#: Where Protomaps' hosted styles fetch glyphs and sprites; VectorBasemapStyleView proxies only the tiles.
-PROTOMAPS_STYLE_ASSETS_ORIGIN = "https://protomaps.github.io"
+def allow_hosted_basemap_tiles(directives: dict[str, list[str]], protomaps_api_key: str) -> list[str]:
+    """Admit Protomaps' hosted tile API to ``connect-src``, wherever this deployment hands its browsers the key.
 
-
-def allow_hosted_basemap_assets(directives: dict[str, list[str]], protomaps_api_key: str) -> list[str]:
-    """Admit the glyph and sprite host of the hosted Protomaps styles, when this deployment buys them.
+    MapLibre fetches vector tiles from its worker, which runs under this policy, so without this every hosted tile is
+    refused and the map falls back to the self-hosted ones (``frontend/ts/shared/hosted-basemap.ts``). Only the tiles:
+    the style, glyphs and sprites stay on the mirror ``UL_BASEMAP_STYLE_BASE_URL`` admits.
 
     Args:
         directives: The CSP directive lists, modified in place.
-        protomaps_api_key: The configured key, or empty when the hosted basemap is off.
+        protomaps_api_key: The key this environment hands out, or empty when it draws only its own tiles.
 
     Returns:
         The origins admitted.
     """
-    return allow_basemap_style_origins(directives, PROTOMAPS_STYLE_ASSETS_ORIGIN) if protomaps_api_key else []
+    if not protomaps_api_key:
+        return []
+    hosts = directives.get("connect-src")
+    if hosts is not None and PROTOMAPS_API_ORIGIN not in hosts:
+        hosts.append(PROTOMAPS_API_ORIGIN)
+    return [PROTOMAPS_API_ORIGIN]
 
 
 allow_vendor_mirror(_CSP_DIRECTIVES, _app_settings.vendor_asset_base_url)
 allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
-allow_hosted_basemap_assets(_CSP_DIRECTIVES, hosted_basemap_key(EGRESS_ENVIRONMENT, _app_settings.protomaps_api_key))
+allow_hosted_basemap_tiles(_CSP_DIRECTIVES, hosted_basemap_key(EGRESS_ENVIRONMENT, _app_settings.protomaps_api_key))
 
 # Enforced unless UL_CSP_ENFORCE=false; docs/notes/csp-violations.md covers diagnosing a block.
 CSP_ENFORCE = _app_settings.csp_enforce

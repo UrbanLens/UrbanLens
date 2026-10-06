@@ -64,8 +64,10 @@ Off production, a REData failure never falls through to direct Google (D26): the
 REData, so the 441 background Google Geocoding calls a week development made when production REData answered
 503 cannot recur from staging either.
 
-`protomaps_basemap` (the hosted basemap, 900,000 a 30 days) is production's alone: elsewhere
-`UL_PROTOMAPS_API_KEY` is ignored and the self-hosted mirror serves the layers.
+`protomaps_basemap` (the hosted basemap tiles) is no longer held here: since 2026-10-06 the browser fetches
+`api.protomaps.com` directly with the key, which is free for noncommercial use, so nothing server-side spends or
+counts it. Production and staging hand the key out; development and local ignore `UL_PROTOMAPS_API_KEY` and the
+self-hosted mirror serves the tiles. Restrict the key's allowed origins in the Protomaps dashboard.
 
 Not held here:
 

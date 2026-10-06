@@ -12,12 +12,16 @@
 
 ## Decision
 
-The basemap, vector-tile and vector-style proxies answer `Cache-Control: private, max-age=<ttl>, immutable`
+The basemap tile proxy answers `Cache-Control: private, max-age=<ttl>, immutable`
 (`_keep_for` in `src/urbanlens/dashboard/controllers/basemap_tiles.py`). For a raster layer fetched from a vendor,
 `<ttl>` is cut to the vendor's own lifetime (`VendorTiles.browser_max_age`, `_browser_ttl`): Esri sends
 `Cache-Control: max-age=86400` (read off World_Imagery and World_Street_Map on 2026-10-06), so every Esri layer
 is kept a day by the browser. This deployment's own store still keeps the bytes for a week, and the sixteen world
 tiles for a year (`_ttl_for`).
+
+The vector-tile and vector-style proxies this decision also covered were removed on 2026-10-06: the browser now
+fetches Protomaps' hosted tiles directly (`frontend/ts/shared/hosted-basemap.ts`), and their caching is
+Protomaps' own (`cache-control: public, max-age=14400`, `vary: Origin`).
 
 The response is still marked viewer-independent (`mark_viewer_independent` in `middleware.py`), so the session and
 media-cookie layers' `Set-Cookie` and `Vary: Cookie` are stripped: the bytes are identical for every viewer who

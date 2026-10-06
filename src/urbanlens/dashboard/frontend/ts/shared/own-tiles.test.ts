@@ -46,7 +46,7 @@ describe("isOwnTileUrl", () => {
     });
 
     test("a vendor's absolute URL is not", () => {
-        expect(isOwnTileUrl("https://a.basemaps.cartocdn.com/light_all/3/1/2.png")).toBe(false);
+        expect(isOwnTileUrl("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/3/2/1")).toBe(false);
     });
 
     test("a protocol-relative URL is not, since it names someone else's host", () => {

@@ -225,50 +225,6 @@ class GoogleStaticSatelliteTests(TestCase):
         )
 
 
-class ProtomapsTests(TestCase):
-    def test_a_tile_outside_the_pyramid_never_reaches_protomaps(self) -> None:
-        from urbanlens.dashboard.services.apis.locations.protomaps_basemap_gateway import ProtomapsBasemapGateway
-
-        session = mock.Mock()
-        gateway = ProtomapsBasemapGateway(session=session)
-        for z, x, y in ((3, 8, 0), (3, 0, 8), (20, 0, 0)):
-            with self.subTest(z=z, x=x, y=y), self.assertRaises(ImpossibleInputError):
-                gateway.download_tile(z, x, y, key="k", origin="https://urbanlens.test")
-        session.get.assert_not_called()
-
-    def test_the_proxy_answers_a_tile_outside_the_pyramid_with_404(self) -> None:
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-        cache.clear()
-        baker.make(User)
-        self.client.force_login(baker.make(User))
-        with (
-            mock.patch.object(app_settings, "protomaps_api_key", "SECRET"),
-            mock.patch("requests.Session.request") as wire,
-        ):
-            response = self.client.get(reverse("map.basemap_vector_tiles", kwargs={"z": 3, "x": 8, "y": 0}))
-        self.assertEqual(response.status_code, 404)
-        wire.assert_not_called()
-
-    def test_asking_again_for_a_tile_outside_the_pyramid_writes_no_row_each_time(self) -> None:
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-        cache.clear()
-        baker.make(User)
-        self.client.force_login(baker.make(User))
-        with (
-            mock.patch.object(app_settings, "protomaps_api_key", "SECRET"),
-            mock.patch("requests.Session.request") as wire,
-        ):
-            for _ in range(5):
-                self.assertEqual(
-                    self.client.get(reverse("map.basemap_vector_tiles", kwargs={"z": 25, "x": 3, "y": 4})).status_code,
-                    404,
-                )
-        wire.assert_not_called()
-        self.assertFalse(ApiCallLog.objects.filter(was_rejected_input=True).exists())
-
-
 class VirusTotalTests(TestCase):
     def test_a_value_that_is_not_a_sha256_never_reaches_virustotal(self) -> None:
         from urbanlens.dashboard.services.apis.security.virustotal import VirusTotalGateway

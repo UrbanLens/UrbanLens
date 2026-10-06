@@ -697,14 +697,14 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     protomaps_api_key: str = Field(
         default="",
         description=(
-            "Buy the street and dark basemaps from Protomaps' hosted API instead of drawing them "
-            "from this deployment's own mirror. Set it and those two layers are served through "
-            "this origin: VectorBasemapStyleView rewrites the hosted style's tiles to "
-            "VectorBasemapTileView, which fetches them with the key server-side. Glyphs and "
-            "sprites stay on protomaps.github.io, which the CSP admits to connect-src and img-src whenever "
-            "this is set. Leave it empty and the layers keep whatever REData published. Read on production "
-            "only: the hosted basemap is billed, so every other environment ignores the key and keeps the "
-            "self-hosted mirror (D26)."
+            "Draw the street and dark basemaps' tiles from Protomaps' hosted API instead of this "
+            "deployment's own mirror. The browser fetches them directly: the key is written into the "
+            "page, which is how Protomaps keys are meant to be used, so restrict its allowed origins in "
+            "the Protomaps dashboard. Only the tile source moves - the style, glyphs and sprites stay the "
+            "ones REData publishes - and the client falls back to the style's own tiles for the session "
+            "when the hosted ones fail. The CSP admits https://api.protomaps.com to connect-src whenever "
+            "the key is handed out. Read on production and staging only: development and local ignore it "
+            "and draw the self-hosted tiles (D26). Leave it empty and every environment does."
         ),
     )
     basemap_style_base_url: str = Field(
@@ -713,7 +713,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Origins serving this deployment's vector basemap - the style documents, "
             "their glyphs and sprites, and the tiles they name. Whitespace- or comma-separated, "
             "because a style's assets need not share a host with its tiles. Protomaps' hosted "
-            "basemap needs nothing here; protomaps_api_key admits its glyph host. Admitted to CSP's "
+            "tile API needs nothing here; protomaps_api_key admits it. Admitted to CSP's "
             "connect-src and img-src, and nothing else: it is not where tiles are fetched "
             "from by this server, it is where the *browser* is allowed to fetch them from. A "
             "raster layer is proxied same-origin and needs no exception, so a deployment whose "

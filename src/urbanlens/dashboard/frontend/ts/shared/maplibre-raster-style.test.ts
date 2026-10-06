@@ -58,7 +58,7 @@ describe("this deployment's own tiles under MapLibre", () => {
     test("a vendor's URL is left on https, so nothing routes a CDN through the proxy's queue", () => {
         stubMaplibre();
 
-        for (const url of toMapLibreTileUrls("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png")) {
+        for (const url of toMapLibreTileUrls("https://{s}.tiles.example.test/light/{z}/{x}/{y}{r}.png")) {
             expect(url.startsWith("https://")).toBe(true);
         }
     });
@@ -77,10 +77,10 @@ describe("this deployment's own tiles under MapLibre", () => {
 
 describe("toMapLibreTileUrls", () => {
     test("expands {s} into one URL per Leaflet's default a/b/c subdomains", () => {
-        expect(toMapLibreTileUrls("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png")).toEqual([
-            "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-            "https://b.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
-            "https://c.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png",
+        expect(toMapLibreTileUrls("https://{s}.tiles.example.test/light/{z}/{x}/{y}{r}.png")).toEqual([
+            "https://a.tiles.example.test/light/{z}/{x}/{y}.png",
+            "https://b.tiles.example.test/light/{z}/{x}/{y}.png",
+            "https://c.tiles.example.test/light/{z}/{x}/{y}.png",
         ]);
     });
 

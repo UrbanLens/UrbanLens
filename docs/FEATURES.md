@@ -545,6 +545,12 @@ floorplan alongside a building; they answer only through their own endpoints
   listed as slides: they are dates to materialise on request, not images that already exist
 - **Extra basemap layers from REData** — `/tiles/sources/` layers are registered alongside the
   built-in ones and served through an UrbanLens proxy, so REData's key stays server-side
+- **Street and dark basemap chain** — vector where the map can draw it: our own Protomaps style with
+  its tiles from Protomaps' hosted API (production and staging, browser-direct), falling back to our
+  self-hosted tiles for the session when those fail; our self-hosted tiles alone elsewhere; and
+  OpenFreeMap's keyless Positron and Dark styles for an installation with no basemap of its own.
+  Where a map cannot draw vector, Esri's street and dark canvas rasters. The credit line follows
+  whichever tier is drawn
 - **Distress signals on the property card** — recorded liens/fines and tax delinquency from
   REData's `/parcels/{uuid}/liens/` and `/parcels/{uuid}/tax-payments/`. For this application
   they are the most telling records on the card: an open code-enforcement lien and years of
@@ -856,7 +862,8 @@ skipped by the boundary chain rather than deferred, shows as "Not available in t
 panel without caching anything, and off production the name and geocode chains never fall through
 from REData to a direct provider. Beat schedules only internal entries off production (plus
 `UL_BACKGROUND_TASKS_ALLOWLIST`), and each external task checks for itself. The hosted Protomaps
-basemap is production's; elsewhere the self-hosted mirror serves it. The startup log names the
+basemap tiles are fetched by the browser on production and staging, with the self-hosted mirror's as the
+automatic fallback; development and local draw the mirror's. The startup log names the
 environment, share, overrides and allow-listed tasks.
 
 A request no provider could answer is refused before it spends anything: no rate-limit slot, no

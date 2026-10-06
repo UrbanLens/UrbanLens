@@ -105,7 +105,7 @@ describe("esriServiceForUrl", () => {
     });
 
     test("is null for anyone else's tiles, and for this deployment's proxy", () => {
-        expect(esriServiceForUrl("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png")).toBeNull();
+        expect(esriServiceForUrl("https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png")).toBeNull();
         expect(esriServiceForUrl("/dashboard/map/basemap-tiles/satellite/{z}/{x}/{y}/")).toBeNull();
     });
 
@@ -143,7 +143,7 @@ describe("composeAttribution", () => {
     });
 
     test("credits a non-Esri base without Esri's line", () => {
-        expect(composeAttribution([{ kind: "text", text: "© OpenStreetMap contributors © CARTO" }], albanyAt(15), "MapLibre")).toBe("© OpenStreetMap contributors © CARTO · MapLibre");
+        expect(composeAttribution([{ kind: "text", text: "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" }], albanyAt(15), "MapLibre")).toBe("OpenFreeMap © OpenMapTiles Data from OpenStreetMap · MapLibre");
     });
 
     test("leaves the renderer off an exported image", () => {
