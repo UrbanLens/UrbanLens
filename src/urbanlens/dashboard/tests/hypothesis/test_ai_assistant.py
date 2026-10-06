@@ -191,11 +191,21 @@ class AssistantLoopTests(TestCase):
         self.assertEqual(len(gateway.prompts), 3)
 
     def test_deadline_exceeded_mid_turn_stops_before_executing_the_call(self) -> None:
-        gateway = _StubGateway([{"tool": "list_trips", "args": {}}, {"reply": "too late"}])
-        times = iter([0.0, 0.0, 0.0, 100.0, 100.0])
+        clock = [0.0]
+
+        class _SlowGateway(_StubGateway):
+            """The deadline passes while the provider is answering the first round."""
+
+            def send_with_tools(self, *args, **kwargs) -> InferenceResponse | None:
+                response = super().send_with_tools(*args, **kwargs)
+                clock[0] = 100.0
+                return response
+
+        gateway = _SlowGateway([{"tool": "list_trips", "args": {}}, {"reply": "too late"}])
         with (
             patch("urbanlens.dashboard.services.ai.assistant.get_gateway", return_value=gateway),
-            patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: next(times)),
+            # ``time`` is one module: the slot's own timing reads this clock too, so it cannot be a fixed sequence.
+            patch("urbanlens.dashboard.services.ai.assistant.time.monotonic", side_effect=lambda: clock[0]),
         ):
             turn = run_assistant_turn(self.profile, [], "hi")
         self.assertEqual(turn.reply, _TIMEOUT_REPLY)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest import mock
 
 from django.test import override_settings
@@ -55,7 +56,7 @@ def test_suggest_label_style_validates_ai_answers(monkeypatch: pytest.MonkeyPatc
         "urbanlens.dashboard.models.subscriptions.user_has_feature",
         lambda _user, feature: feature == SiteFeature.AI,
     )
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model", cost=Decimal(0))
     gateway.send_prompt_list.return_value = ["🏭", "#F44336"]
     monkeypatch.setattr(
         "urbanlens.dashboard.services.ai.factory.get_gateway",
@@ -101,7 +102,7 @@ def test_suggest_label_style_does_not_need_the_assistant_worker(monkeypatch: pyt
         "urbanlens.dashboard.models.subscriptions.user_has_feature",
         lambda _user, feature: feature == SiteFeature.AI,
     )
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model", cost=Decimal(0))
     gateway.send_prompt_list.return_value = ["🏭", "#F44336"]
     monkeypatch.setattr("urbanlens.dashboard.services.ai.factory.get_gateway", lambda *_args, **_kwargs: gateway)
 
@@ -113,7 +114,7 @@ def _ai_gateway(monkeypatch: pytest.MonkeyPatch, answers: list[str]) -> mock.Moc
         "urbanlens.dashboard.models.subscriptions.user_has_feature",
         lambda _user, feature: feature == SiteFeature.AI,
     )
-    gateway = mock.Mock()
+    gateway = mock.Mock(model="test-model", cost=Decimal(0))
     gateway.send_prompt_list.return_value = answers
     monkeypatch.setattr("urbanlens.dashboard.services.ai.factory.get_gateway", lambda *_args, **_kwargs: gateway)
     return gateway

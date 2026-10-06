@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from model_bakery import baker
@@ -25,6 +26,7 @@ class _FakeGateway:
     def __init__(self, pairs: list[str]):
         self._pairs = pairs
         self.model = "fake-model"
+        self.cost = Decimal(0)
 
     def send_prompt_list(self, prompt: str, *, max_results=None, **kwargs) -> list[str]:
         return self._pairs[:max_results] if max_results else self._pairs
