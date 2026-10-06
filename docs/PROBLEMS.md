@@ -135,31 +135,6 @@ a row with no slug generates one on save, and a save naming its `update_fields` 
 slug, so it was regenerated on every later save and never stored (`test_slug_generated_on_scoped_save.py`).
 `FieldSnapshot` only deep-copies JSON containers, so a model with a file field is safe to snapshot.
 
-## P6 — Production REData still 404s `/api/v1/public-locations/`, so a fresh dev environment seeds no catalog pins
-
-`id: P6` · `status: open` · `updated: 2026-08-21`
-
-Previously titled "production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)".
-
-Verified live against a fresh dev environment (`a962bf8`, `--redata production`, the default as of
-this session): `bin/dev_env.py create` correctly reported credentials (`demo / demo-a962bf8`,
-confirming the seed-summary parser fix), but seeding logged `REData request to
-/api/v1/public-locations/ failed (404)` and fell back to zero catalog pins - only the Hudson River
-State Hospital landmark pin was seeded.
-
-Confirmed with `curl` directly against `https://redata.urbanlens.org/api/v1/public-locations/`
-(plain HTML 404, not a DRF JSON 404 - the route itself isn't matched) and
-`https://redata.urbanlens.org/api/v1/capabilities/` (same). Both routes exist in the local REData
-checkout (`../REData`, `src/redata/api/urls.py`, HEAD `6273443` 2026-08-20) and both are the routes
-the 2026-08-21 session's work built against - `parcels/lookup/` on the same host returns 401
-(route matched, auth/params rejected), so this isn't a credentials problem. Production REData is
-answering from a build older than both routes.
-
-This means "production REData by default" for new dev environments currently seeds no real
-catalog pins - not a UrbanLens-repo defect, but worth knowing before trusting a fresh environment's
-seeded pin count. Resolves itself once REData's production deployment picks up the commit that adds
-these routes; nothing to do here in the meantime beyond this note.
-
 ## P7 — REData's reconciled building `ref` has no stability guarantee, and UrbanLens persists it as permanent identity
 
 `id: P7` · `status: open` · `updated: 2026-09-23`
@@ -190,14 +165,15 @@ same assumption; not re-tested here.
 
 ## P9 — Land-use-area boundary geometry is not drawn, pending a map-overlay decision
 
-`id: P9` · `status: open` · `updated: 2026-10-05`
+`id: P9` · `status: open` · `updated: 2026-10-06`
 
 Previously titled "REData's `?limit=` param is inert client-side, and land-use-area boundary geometry
-needs a map-overlay decision". The `limit` half is closed: REData 0.3.0 applies `limit` per provider
-(its `parse_result_limit`, clamped to 200), and `RedataLocationContextGateway.near_point` caps each
-provider's rows the same way (`cap_per_provider`), so a panel's "N+" floor is decided per provider
-(`redata_panel.at_limit`). Production REData still runs 5aabe887, which ignores `limit`, until 0.3.0
-is deployed there; the client-side cap bounds the cache rows meanwhile.
+needs a map-overlay decision". The `limit` half is closed: REData applies `limit` per provider (its
+`parse_result_limit`, clamped to 200, from `a682b74f`, first tagged v0.3.4), and production REData has run v0.3.4
+since 2026-10-06 15:21Z, so it no longer ignores `limit`. `RedataLocationContextGateway.near_point` caps each
+provider's rows the same way (`cap_per_provider`, `redata_context_gateway.py:98`), so a panel's "N+" floor is
+decided per provider (`redata_panel.at_limit`); that client-side cap is on `release/v_0_9_0` only and ships
+with 0.9.0, as `origin/main` (0.8.0) has no `cap_per_provider`.
 
 **Land-use-areas' boundary geometry is still not rendered, on purpose.** The category chips already
 shown on the Property Records card come from a different, already-consumed field; rendering the
@@ -421,28 +397,6 @@ mentions, the same rules as the hourly icon sweep (`stored_field._may_delete`). 
 because its cost follows the table. What is left is running it once per environment, reporting first:
 `docker exec <app> python manage.py sweep_unnamed_pin_images`, then `--delete`. Tests:
 `test_pin_image_orphan_sweep.py`.
-
----
-
-## P15 — openresty's 90s proxy cap cuts any Overpass query needing longer, whatever `[timeout:N]` asked for
-
-`id: P15` · `status: open` · `updated: 2026-07-22`
-
-Previously titled "Overpass deploy-side follow-up: raise the openresty 90s proxy cap (found 2026-07-22; edge box located 2026-07-23)".
-
-The self-hosted Overpass instance (`overpass.osm.urbanlens.org`, now the primary endpoint) sits
-behind an openresty reverse proxy that cuts every connection at exactly 90s, regardless of the
-Overpass `[timeout:N]` the client requested - the benchmark's only self-hosted failures were
-region-scale scans hitting this cap, not Overpass giving up (see
-`docs/reports/overpass-mirror-test.md`). Until the proxy timeout is raised above the intended
-`[timeout:N]` ceiling, any query needing >90s fails at the proxy.
-
-**Narrowed 2026-07-23**: the Overpass container itself runs on chiron
-(`overpass`, `wiktorn/overpass-api:latest`, host port 21890), but the openresty is NOT on
-chiron (no 80/443 listener, no openresty/nginx service there; the domain resolves to
-163.182.80.211, a separate edge box proxying to chiron:21890). Raising the cap means editing
-`proxy_read_timeout`/`proxy_send_timeout` (or the openresty equivalent) on that edge box -
-access only Jess has.
 
 ---
 
@@ -1128,7 +1082,7 @@ per-endpoint rather than to completion, so more instances of it likely exist bey
 
 ## P125 — This deployment's ceiling is between 500 and 1,000 concurrent users, and every wall it has hit so far was a container CPU limit: 175 on 2 app cores, 350 on 4, 500 on a 2-core database, and 1,000 on the same 4 app cores once the database was given 4 of its own
 
-`id: P125` · `status: open` · `updated: 2026-09-20`
+`id: P125` · `status: open` · `updated: 2026-10-06`
 
 **This is a different axis from P113 and P123.** Those are the "neighbour" question - does one
 account's action cost a *different* account anything at all (D11, `tests/perf/k6/neighbour.js`).
@@ -1264,25 +1218,23 @@ staging are unaffected, and only production's app tier gets the increase, via it
 `test_production_app_cpu_allocation.py` pins the floor at 4 cores, pins the shared default at 2, and
 fails if staging's app limit ever rises to meet production's.
 
-**Not yet applied anywhere.** Like every `*.sample.env`, this has to be copied into production's
-`.env` on damballa and `urbanlens_production_app` recreated - a running container's `--cpus` is
-fixed at creation. **Not yet re-measured.** Nothing here confirms 4 cores actually pushes the
-capacity ceiling past 500 concurrent users; only `capacity-content`'s original measurement exists,
-and it was against 2 cores, on the perf environment - never on damballa. Re-running
-`tests/perf/k6/population.js` after the real deploy is what would confirm or refute that.
+**Superseded as a statement about production: that was damballa's compose production, which stopped serving on
+2026-10-02.** `urbanlens.org` moved to the k3s cluster that night, and compose's UrbanLens app and celery are stopped
+(`../infrastructure/docs/STATUS.md`, "Production has run here since 2026-10-02"). Everything this section and the later
+"production has none of this" bullets say about `production.sample.env`, `urbanlens_production_app` and
+`urbanlens_production_db` is about that compose stack and is a record of what was true of it, not of production now.
+As of 2026-09-21, the last time it was checked, none of the sample's sizing had been applied there: the container was
+still uncapped (`docker inspect urbanlens_production_app` on damballa showed `NanoCpus: 0` on 2026-09-17, the same root
+cause as P114's `CpuShares: 0`) and on the default 3 workers. Whether it was applied before the cutover was not
+checked, and no capacity run was ever made against damballa. The sample file and its test still size the compose
+files that dev and perf environments use.
 
-**This is a cap on today's real production, not a raise from it - checked 2026-09-17**:
-`docker inspect urbanlens_production_app` on damballa shows `NanoCpus: 0`, same root cause as
-P114's `CpuShares: 0` - the container predates the `cpus:` key entirely, so it is **currently
-unbounded** on a 16-core host, not sitting at the compose file's 2-core default the way the perf
-environment (and every other environment) is. Applying this fix does not repeat P125's
-2-core-to-4-core story on production itself; it moves production from no cap at all to a 4-core
-cap. That is very likely still an improvement - unbounded means it can be starved by whatever else
-lands on the same host, same complaint as P114 - but it is a different claim than "production gets
-more like the perf environment did," and worth the deployer knowing before they apply it. It also
-means recreating production for P114's fix *without* this file would regress the app container from
-unbounded to the bare 2-core default, which is worse than either state - the two fixes should be
-deployed together.
+**What production runs now** is the k3s web tier's own sizing, from the infrastructure repo's
+`platform/urbanlens-app/base/deployment-web.yaml` on `origin/main`: 2 replicas, each `gunicorn -k gthread --threads 4`
+with `WEB_CONCURRENCY=2` (16 request threads per site), a 100m CPU request, a 1Gi memory limit and no CPU limit, with
+the database on CNPG. None of this is what the ladders above measured (4 cores, 6 to 12 workers, a 4-core Postgres
+container), and **no capacity run exists against it**, so the 500-user ceiling above says nothing about production
+today. Re-running `tests/perf/k6/population.js` against a k3s-shaped environment is what would.
 
 Found and fixed in passing: `staging.sample.env` was stale against the current
 `docker-compose.yml` - D16's Dragonfly/RabbitMQ broker migration added `CPU_SHARES__DRAGONFLY`,
@@ -1348,8 +1300,8 @@ container's CPU allocation, and now also how unevenly a map load arrives at it.
 
 ### What this does not establish
 
-- **The 4-core production override is still unapplied and unmeasured**, exactly as the 2026-09-17
-  section leaves it. Everything above is 2 cores.
+- **The 4-core compose override was never measured on production, and production is no longer compose**;
+  see the superseded note in the 2026-09-17 section. Everything above is 2 cores.
 - **Tiles are served from cache here, never fetched.** The grid is seeded and `UL_REDATA_API_URL`
   points at a closed port in the perf environment, so no run touches REData. A deployment whose
   viewers pan onto uncached ground pays an upstream fetch that this says nothing about (`P131`).
@@ -1403,9 +1355,10 @@ a Postgres allocation question, not an app one - the opposite of where this entr
   (idle 2-14%, load average 19-22) with the load generator beside the target, so those rows say the
   database is throttled, not by how much. They need a run with a separate generator before any number
   from them is quoted.
-- **Production still has none of this.** `CPU_LIMIT__APP=4`, `WEB_CONCURRENCY=6` and
-  `MEM_LIMIT__APP=3g` are in `production.sample.env` and deployed to the perf environment only.
-  Production's app container is still uncapped (`NanoCpus: 0`) and on the default 3 workers.
+- **Production, then compose, had none of this, and is now k3s.** `CPU_LIMIT__APP=4`, `WEB_CONCURRENCY=6` and
+  `MEM_LIMIT__APP=3g` went into `production.sample.env` and were deployed to the perf environment only; on 2026-09-21
+  damballa's production app container was still uncapped (`NanoCpus: 0`) and on the default 3 workers. What production
+  runs now is described in the 2026-09-17 section's superseded note.
 - **The database's 2-core limit was not raised and not tested.** It is the identified next lever,
   untried.
 - **A tile still costs one query** - `auth_user`, from `LoginRequiredMixin`. Removing it is a
@@ -1466,11 +1419,11 @@ own `CPU_LIMIT__DB` of 2 cores.** Raising it is the next lever and has still not
 - **Nothing between 350 and 500 was measured**, so "the ceiling is between them" is exactly as
   precise as it sounds. The 2026-09-21 ladder below measures 500 as passing on a 4-core database,
   which supersedes that reading.
-- **Production has none of this.** `production.sample.env` now carries the app tier *and* the
-  database sizing, and is deployed to the perf environment only. `urbanlens_production_db` runs
-  bare `postgres` with no arguments and `NanoCpus=0` (verified read-only 2026-09-21), so it has
-  neither the limits nor the `shared_buffers`/`jit=off` tuning; both need a recreate, not a
-  restart.
+- **Production, then compose, had none of this.** `production.sample.env` carries the app tier *and* the
+  database sizing, and was deployed to the perf environment only. damballa's `urbanlens_production_db` ran bare
+  `postgres` with no arguments and `NanoCpus=0` (verified read-only 2026-09-21), so it had neither the limits nor the
+  `shared_buffers`/`jit=off` tuning. That database is the retry path since the 2026-10-02 cutover, not production's;
+  production's is CNPG on k3s, whose tuning this entry has not read.
 - **The 30-minute window is a real trade.** A revocation that leaves the session record intact - an
   admin disabling an account, a password change invalidating other sessions - keeps drawing tiles,
   and nothing else, until the entry expires. Signing out, a flush or an expiry revokes immediately,
@@ -1769,7 +1722,7 @@ table is what says which ones were actually up.
 
 ## P131 — REData's ~1.45s PBKDF2 key-check is fixed upstream (confirmed 2026-09-21); basemap tiles now pay 0.43–0.98s for cold-tile rendering instead, and the concurrency bound's own trigger condition is met for auth but not for that
 
-`id: P131` · `status: open` · `updated: 2026-09-21` · `supersedes the 2026-09-19 "~1.45s PBKDF2 per call" claim below: REData shipped a hasher change (their T9, done) that removed it. Left open because the entry's own open items were about what to do once that happened, and that work is now live, not because the original defect is still present.
+`id: P131` · `status: open` · `updated: 2026-10-06` · `supersedes the 2026-09-19 "~1.45s PBKDF2 per call" claim below: REData shipped a hasher change (`f87d0ebe`, 2026-09-19) that removed it. Left open because the entry's own open items were about what to do once that happened, and that work is now live, not because the original defect is still present.
 
 **Why `open` and not `fixed`/archived:** the thing this entry was created to describe — per-request cost on every authenticated REData call — has not gone away, it changed shape. Auth is now cheap, but a cold basemap tile is not, and two of this entry's three open items (the concurrency bound's value, the nginx-proxy question) were always contingent on this exact measurement. Archiving would lose the connection between the old number and the new one; `docs/README.md`'s "rewrite the claim" rule is followed by rewriting the section in place instead.
 
@@ -1811,14 +1764,19 @@ Confirmed in REData's source, not inferred: `git show origin/main:src/redata/api
 `feat/scout-campaign`, whose copy of this file is stale) now stores a bare SHA-256 under an `rdk1$`
 scheme tag; the module docstring gives the same reasoning as above, in REData's own words. Keys issued
 before the change still verify through `check_password` and are rewritten into the new format on
-first use, so nothing had to be reissued. REData's `docs/INDEX.md` on `origin/main` marks the work
-`T9`, `done`.
+first use, so nothing had to be reissued. The change is `f87d0ebe`, first tagged v0.3.4. (This entry
+used to cite REData's `T9` as the hasher change; REData's `T9` is the `style_url` request that `167cd8c9`
+answers, a different piece of work, described just below.)
 
 **What replaced it as the cost that matters here: rendering a tile REData has not served before.**
 0.43s to 0.98s cold, ~0.11s warm, on the three raster layers measured above. `street` has no row
-because production no longer serves it as tiles at all: `GET /api/v1/tiles/street/14/4823/6037/`
-answers `400 vector_layer_not_served` in 0.10s, and the catalogue publishes `street` and `dark` as
-`source_type: "vector"` with a `style_url` and **no** `url_template`. That is tile
+because production then did not serve it as tiles at all: `GET /api/v1/tiles/street/14/4823/6037/`
+answered `400 vector_layer_not_served` in 0.10s, and the catalogue published `street` and `dark` as
+`source_type: "vector"` with a `style_url` and **no** `url_template`. That has since changed: REData's
+`167cd8c9` (2026-09-21) publishes `url_template` and `style_url` both and removes `vector_layer_not_served`
+(its `api/views_tiles.py` on `origin/main`, `TileSourcesView`), and it first shipped in v0.3.4, in production
+since 2026-10-06 15:21Z. So `street` and `dark` have a raster row to measure again, which this entry has
+not done; the 0.43–0.98s figures are for `terrain`, `satellite` and `borders` only. What they measure is tile
 rendering/caching inside REData, not authentication, and — like the old PBKDF2 cost — it does not
 depend on a warm cache existing, so a first viewer of any given tile still pays it. Not re-measured:
 whether it is CPU-bound rendering, an upstream fetch, or something else; this entry only has REData's
@@ -1827,17 +1785,20 @@ black-box timing, not a profile of its cause.
 **What this changes for UrbanLens.** The fan-out shape is unchanged — a cold map viewport is still
 ~30 upstream requests, one page view — but the per-request cost dropped from ~1.45s to, on this
 measurement, 0.43–0.98s for a genuinely uncached tile and ~0.11–0.13s for one REData has already
-rendered. `basemap_tile_upstream_concurrency` (default 2, `src/urbanlens/UrbanLens/settings/app.py:607`)
-still exists to keep that fan-out from occupying every gunicorn request thread in a process
-(`--threads 4`, `gunicorn.conf.py`) and queuing the rest of the site behind a cold map load; nothing
-in this session's measurement removes the need for some bound, only changes what number it should be.
+rendered. `basemap_tile_upstream_concurrency` (default 6, `src/urbanlens/UrbanLens/settings/app.py:751`; it was 2
+when this was measured, and 6 has shipped on production since 0.8.0, `ed9ab3608`) still exists to keep that fan-out
+from occupying every gunicorn request thread in a process (`--threads 4`, `package.json`'s `start` script) and
+queuing the rest of the site behind a cold map load; the setting's own description now says that at or above the
+thread count the thread pool rations instead, and that the default sits above it on purpose. Nothing in this
+session's measurement removes the need for some bound, only changes what number it should be.
 
 **Open:**
 
 - ~~The hasher change in REData.~~ **Done.** Shipped and confirmed above; this was the entry's
   original "actual fix" and is no longer open.
 - **What `basemap_tile_upstream_concurrency` should be, now that the trigger condition is partly
-  met.** This entry's own text set the trigger as "if TTFB for a valid key matches the 55ms an
+  met.** (It has been raised to 6 since this was measured, by a change that did not record a new measurement;
+  the paragraph below still describes what would justify any number.) This entry's own text set the trigger as "if TTFB for a valid key matches the 55ms an
   invalid one gets, the bound is no longer doing useful work" — that is now true for *auth*
   (0.125s valid vs. 0.077s invalid, both dominated by network/TLS, not by key verification) but
   **not** for a cold tile (0.43–0.98s, still far above the auth floor). The bound still has a job:
@@ -1926,11 +1887,18 @@ hour was about 20 page views.
 
 ## P145 — The HRSH courtyard pin on staging got a circle, a service road for a title, a building's name as an alias, no Wikipedia article and one building in its CRIS card
 
-`id: P145` · `status: open` · `updated: 2026-09-23` · `decision: D20` · `tests: tests/integration/specs/location/hrsh-naming.spec.ts`
+`id: P145` · `status: open` · `updated: 2026-10-06` · `decision: D20` · `tests: tests/integration/specs/location/hrsh-naming.spec.ts`
 
 Jess pinned 41.73266, -73.92736, a courtyard on the Hudson River State Hospital campus, on staging
-(Location 67). Traced read-only on staging, then reproduced and fixed on `development_main`. **Open until
-the fixes reach staging and its caches from before the fix refresh.**
+(Location 67). Traced read-only on staging, then reproduced and fixed on `development_main`. **The fixes shipped
+in v0.8.0, which is what production runs. Open until the caches from before the fix refresh and the forced boundary
+run below is done.**
+
+The commits cited in the table were `development_main` commits and are not reachable from `origin/main` or
+`release/v_0_9_0`: v0.8.0 landed as one squash, `ed9ab3608`. Their changes are inside it, checked on 2026-10-06 by
+looking for each commit's added source lines on `origin/main`; `8799603ca`'s `surveyed_buildings` helper has since
+been reshaped (the `HistoricName` fallback it added is at `plugins/builtin/cris_buildings.py:822-823`). Search the
+squash by the commit's subject, not its hash.
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -1960,13 +1928,13 @@ and `hrsh-place-identity` (46/46).
 - A property with one known building now gets one building child pin. That applies to every house, not only
   campuses.
 
-**Staging after deploy:** register, CRIS and parcel-building caches from before the fix carry no
-`contains_point` and name nothing until they refresh. The miss stamped on Location 67 needs a forced boundary
+**After deploy:** register, CRIS and parcel-building caches from before the fix carry no
+`contains_point` and name nothing until they refresh. Whether staging runs v0.8.0 yet was not checked here. The miss stamped on Location 67 needs a forced boundary
 run (`generate_boundaries_for_location(67, force=True)`), which nobody has done from here.
 
 ## P148 — A county-sized "parcel" put strangers across the Capital District into one wiki and pin-in-common domain
 
-`id: P148` · `status: open` · `updated: 2026-09-24` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_oversized_places.py, src/urbanlens/dashboard/tests/hypothesis/test_redata_boundary_provider.py`
+`id: P148` · `status: open` · `updated: 2026-10-06` · `tests: src/urbanlens/dashboard/tests/hypothesis/test_oversized_places.py, src/urbanlens/dashboard/tests/hypothesis/test_redata_boundary_provider.py`
 
 On `development_main`, parcel place 1740 ("103 Schermerhorn Rd, Cohoes") covered 1,322 km² and held 105
 Locations from Duanesburg to Cohoes. Place membership decides wiki visibility (`_domains_given_pins`) and
@@ -1992,7 +1960,9 @@ dozens of placeless wikis under wikis 3422 and 3423, both of which stood on it. 
 uuid with one building and a 0.001 km² suggested boundary, so the exact list it returned then cannot be
 recovered.
 
-**Fixed in `356c2ca6a` and `178cc8939`.**
+**Fixed in `356c2ca6a` and `178cc8939`**, `development_main` commits that are not reachable from either branch: both
+are inside the v0.8.0 squash, `ed9ab3608`, which production runs (`MAX_PLAUSIBLE_AREA_SQM` is at
+`models/place/model.py:37` and `PlaceQuerySet.implausible` at `models/place/queryset.py:44` on `origin/main`).
 - A transient ranking or buildings failure defers the provider. It no longer degrades to the hull.
 - The hull uses only records on the property (REData's `on_parcel` is not false) within 1 km of the queried
   point, and never a `project` match.
@@ -2016,19 +1986,20 @@ both ways for the e2e accounts. A second run finds nothing. 205 locations are le
 (places, locations, wikis, pin types) was saved outside the repo.
 
 **Still open:**
-- **Production is unchecked.** The hull fallback shipped in v0.6.0 and the ranking call in v0.7.0; before
-  v0.7.0, every NY parcel took the hull directly. A read-only check lists
+- **Production is unchecked, and now runs the fix.** The hull fallback shipped in v0.6.0 and the ranking call in
+  v0.7.0; before v0.7.0, every NY parcel took the hull directly. A read-only check lists
   `dashboard_places` rows with `kind in ('parcel','site') and area_sqm > 1e7` (or `kind='building' and
   area_sqm > 1e6`). For each, count the distinct `dashboard_locations` and `dashboard_user_pins.profile_id`
   under its `domain_root_id`. Hulls below the ceiling look like 877: `ST_NPoints` under about 20, convex
   (`ST_Area(ST_ConvexHull(g)) / ST_Area(g)` ≈ 1), a `redata` Boundary row, and members more than 1 km apart.
-  Once this commit is deployed, `detach_oversized_places --dry-run` gives the same list.
+  The fix is deployed with 0.8.0, so `detach_oversized_places --dry-run` (on `origin/main`) gives the same list;
+  nobody has run either against production.
 - **A hull below the ceiling can still exist.** 877 (13.8 km²) is only caught because it is over 10 km²;
   hulls of 8.4 km² (23, superseded) and 4.9 km² (1632) remain. The origin fix stops new ones.
 - **Children the bogus parcels spawned are detached, not deleted.** 864's 500 OSM building places (an
   Overpass fetch of 5,788 buildings inside its outline) and the 359 building child pins made for
   `e2e-primary` under it are still there. 72's 743 REData building places came from the statewide
-  survey-roster expansion REData fixed in `fb878e2c`. Their 478 wikis are no longer nested under the HRSH wiki.
+  survey-roster expansion REData fixed in `fb878e2c` (first tagged v0.3.4, in production since 2026-10-06). Their 478 wikis are no longer nested under the HRSH wiki.
 - REData still flags roster and project matches 28 km away as `is_on_property`. That belongs in REData.
 - Oversized `Boundary` candidate rows were left in place: they can no longer win, and deleting them would
   also delete any votes cast on them.
@@ -2152,7 +2123,7 @@ is the other lever, and changes what a revert has to do.
 
 ## P182 — A building place from an OSM relation has no outline, because REData sends the relation's centre point; containment can never reach it
 
-`id: P182` · `status: open, upstream` · `updated: 2026-10-01` · `found by: P181's investigation, 2026-10-01`
+`id: P182` · `status: open, fixed upstream and deployed, live check pending` · `updated: 2026-10-06` · `found by: P181's investigation, 2026-10-01`
 
 `BuildingNester` (`services/pins/pin_restructure.py`, via `ensure_building_places`) creates a building place for
 each building record it mirrors. For HRSH's Kirkbride (OSM relation 10813427) on v080e2e that place, 483, was stored
@@ -2170,11 +2141,15 @@ the only Overpass record. `building_footprint` and `_as_multipolygon` handle pol
 UrbanLens stores what it was given. Asked of REData in
 [`handoffs/redata-osm-relation-building-returned-as-point.md`](handoffs/redata-osm-relation-building-returned-as-point.md).
 
-**Upstream fix, not deployed.** REData joins a relation's split member ways into rings and replied (its T10) that Kirkbride
-should come back as a polygon, probably merged with its Overture footprint. REData's deploy waits for v0.8.0. Nothing here
-should need to change: `upsert_place` updates a building place by its provider key once the cached `parcel_buildings`
-answer refreshes. If the merge gives Kirkbride a new key, place 483 is orphaned, with no Location on it: migration 0034
-moved them all by containment. To close: after REData deploys, refresh HRSH's buildings and re-run the location project.
+**Upstream fix, deployed.** REData joins a relation's split member ways into rings (`c1e50276`, 2026-10-01) and replied
+(its T10) that Kirkbride should come back as a polygon, probably merged with its Overture footprint. `c1e50276` is
+inside `5aabe887`, the build production ran until 2026-10-06, and inside v0.3.4, which has run there since 2026-10-06
+15:21Z. On REData staging HRSH's MAIN/ADMIN came back a Polygon, per
+[`handoffs/redata-osm-relation-building-returned-as-point.md`](handoffs/redata-osm-relation-building-returned-as-point.md);
+that was not re-read against production. Nothing here should need to change: `upsert_place` updates a building place by
+its provider key once the cached `parcel_buildings` answer refreshes. If the merge gives Kirkbride a new key, place 483
+is orphaned, with no Location on it: migration 0034 moved them all by containment. To close: refresh HRSH's buildings
+against production and re-run the location project. Neither has been done, so this stays open.
 
 ## P206 — `dashboard_location_cache` is 81% of production's database
 
@@ -2239,33 +2214,41 @@ alone, for example by keeping the dateline out of `title` and `caption`, or have
 Check the shape against the live collection first; it was returning 503s and timeouts on 2026-10-03, and on
 2026-10-04 REData's search still ended in `chronicling_america could not be reached: ReadTimeout`.
 
-## P240 — Inside the US, Overture data needs REData 0.3.0's index-backed lookups, which production REData does not run yet
+## P240 — Inside the US, Overture data needs REData's index-backed lookups, which production now runs (v0.3.4); only the buildings route has been seen answering
 
-`id: P240` · `status: open` · `updated: 2026-10-05` · `follows: P110`
+`id: P240` · `status: open` · `updated: 2026-10-06` · `follows: P110`
 
 Since P110 (archived 2026-10-05), every Overture question REData's mirror covers goes to REData: buildings to
 `GET /buildings/?provider=overture&radius_meters=10`, places to
 `GET /points-of-interest/lookup/?provider=overture&radius_meters=150`
-(`services.apis.locations.boundaries.overture.OvertureProvider`). Probed once each against the deployed REData on
-2026-10-03, at the US Capitol: `/buildings/` gave no response within 60 s, and the places lookup was a 504 from
-REData's proxy at 90 s. `/capabilities/` answered in 0.3 s, so REData was up.
+(`services.apis.locations.boundaries.overture.OvertureProvider`). Probed once each against the REData then deployed
+(5aabe887) on 2026-10-03, at the US Capitol: `/buildings/` gave no response within 60 s, and the places lookup was a
+504 from REData's proxy at 90 s. `/capabilities/` answered in 0.3 s, so REData was up.
 
 The cause was on REData's side. Both lookups filtered with `geometry__distance_lte` on SRID 4326 columns, which
 compiles to `ST_DistanceSphere(...) <= r`, cannot use the spatial index, and scans the whole US table. REData
-`release/0.3.0` replaced it with an index-backed `ST_DWithin` prefilter (`7ac19bf6`, `bfb47503`; REData checked the
-plan with `EXPLAIN`). The same release syncs `roof_shape`, `roof_material` and places' `operating_status` into
-`attributes`, where UrbanLens already reads them, takes a place's category from Overture's `taxonomy` now that
-release 2026-09-23 dropped `categories`, and backfills `buildings:read` onto existing keys (its migration `0007`).
+replaced it with an index-backed `ST_DWithin` prefilter (`7ac19bf6`, `bfb47503`, on its `release/0.3.0` branch; REData
+checked the plan with `EXPLAIN`), first tagged v0.3.4, which has been in production since 2026-10-06 15:21Z. The same
+release syncs `roof_shape`, `roof_material` and places' `operating_status` into `attributes`, where UrbanLens already
+reads them, and takes a place's category from Overture's `taxonomy` now that release 2026-09-23 dropped `categories`.
+It does not backfill `buildings:read`: this entry used to say REData's migration `0007` did, but `0007`
+(`api/migrations/0007_backfill_locations_prewarm_scope.py`) backfills `locations:prewarm`, and `buildings:read` appears
+in it only in the frozen list of scopes a full-grant key already holds. No REData migration grants `buildings:read`,
+so whether an existing key holds it is a fact about that key.
 
-What it costs while the deployed REData predates 0.3.0:
+Seen live on 2026-10-06, by the session that coordinated this edit and not repeated here: production's key 1 answered
+`GET /api/v1/buildings/` with 200 and 40 Overture results.
 
-- Every US Building Characteristics fetch waits 30 s (`redata_context_gateway._REQUEST_TIMEOUT`), raises an outage, and
-  caches nothing, so the panel stays empty and is retried.
-- The chain's Overture step defers after the same 30 s, which schedules up to `MAX_DEFERRED_RETRIES` reruns of the
+What it cost while production REData predated these lookups (until 2026-10-06):
+
+- Every US Building Characteristics fetch waited 30 s (`redata_context_gateway._REQUEST_TIMEOUT`), raised an outage,
+  and cached nothing, so the panel stayed empty and was retried.
+- The chain's Overture step deferred after the same 30 s, which scheduled up to `MAX_DEFERRED_RETRIES` reruns of the
   location's boundary generation.
-- Each call probably starts one of the scans on REData's Overture database; not checked on REData's side.
+- Each call probably started one of the scans on REData's Overture database; not checked on REData's side.
 
-So UrbanLens 0.9.0 has to reach production after REData 0.3.0, the order PL9 already plans.
+The ordering this entry insisted on is met: REData's fix is in production, and UrbanLens 0.9.0, the first release that
+reads Overture only from REData, has not shipped. PL9 plans the same order.
 
 A point inside `is_usa_coordinates` but outside every shard REData syncs (Montreal, Nassau, Hermosillo, the western
 Aleutians) gets "ok" with no rows from REData (its P97). UrbanLens does not ask there: `served_by_redata` also requires
@@ -2274,9 +2257,9 @@ one of REData's shard boxes, vendored as `boundaries.redata_overture_shards` and
 synced yet answers "ok" with no rows too, which UrbanLens takes as final. The handoff is
 [`handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md).
 
-**Not verified:** any answer from REData 0.3.0. On 2026-10-05 this session's probe of REData staging could not
-resolve its host from the agent sandbox. Re-probe both requests above against staging, and against production once
-it runs 0.3.0; close this when both answer in a few seconds with rows at the Capitol.
+**Not verified:** the places lookup, `GET /points-of-interest/lookup/?provider=overture&radius_meters=150`, at the
+Capitol on production, and how long the buildings answer took (the 2026-10-06 report gave a status and a count, not a
+time). Close this when both answer in a few seconds with rows at the Capitol.
 
 ## P242 — Migration 0033's operator command can't run on the schema it is meant for, since 0040 added a Location column
 
@@ -2354,27 +2337,30 @@ can lift it. `manage.py audit_inverted_friendship_blocks --before YYYY-MM-DD` re
 read-only, with no default `--before` on purpose: the fix's deploy date for a given production
 database is something only a human knows.
 
-## P286 — A campus pin can lose its own National Register listing, because REData answers a point with the rows last found from it
+## P286 — A campus pin could lose its own National Register listing, because REData answered a point with the rows last found from it; fixed in REData v0.3.4, not yet seen on production
 
-`id: P286` · `status: open` · `updated: 2026-10-04` · `follows: P228`
+`id: P286` · `status: open` · `updated: 2026-10-06` · `follows: P228`
 
 P228's link to NPS's record appears only when REData's `nps_nrhp` answer for the pin's point holds the listing. On
 2026-10-04, HRSH's campus pin (location 97736) had none: REData's cached answer from that point was Isaac Roosevelt
 House alone, while a `force_refresh=true` search from the same point found HRSH's own listing (89001166), its boundary
 holding the pin.
 
-REData keys a resource to the last point that found it, and answers a point with the rows keyed to it
+REData keyed a resource to the last point that found it, and answered a point with the rows keyed to it
 ([handoff](handoffs/redata-cultural-resource-cache-keyed-by-last-search.md)). A search from a neighbouring point, such
-as one of the campus's building pins, moves the shared listing away. The campus point keeps a fresh but partial answer
-for as long as any of its other rows stays put. It also works in reverse: a row the last live search did not find,
-like Isaac Roosevelt House at about 540 m, keeps answering. The same read serves 59 of REData's providers.
+as one of the campus's building pins, moved the shared listing away. The campus point kept a fresh but partial answer
+for as long as any of its other rows stayed put. It also worked in reverse: a row the last live search did not find,
+like Isaac Roosevelt House at about 540 m, kept answering. The same read served 59 of REData's providers.
 
 UrbanLens's side is correct given a correct answer. After one forced refresh on development, the pin and its wiki
 gained `National Register #89001166` and its National Archives record. The Property Records Overview named the
 listing with its number, and Isaac Roosevelt House, whose boundary does not hold the pin, was not linked.
 
-Closes when REData answers a point with what its last search there found, and HRSH's campus pin keeps its listing
-after a lookup from one of its building pins.
+**Fixed upstream; the live check is pending.** REData's `ba890af5` (answer a point from what its own last search found)
+and `e9f83ffb` are first tagged v0.3.4, in production since 2026-10-06 15:21Z, and on REData staging the register check
+passed for all four primary campuses (the handoff's header). Not run against production.
+
+Closes when HRSH's campus pin keeps its listing after a lookup from one of its building pins, against production.
 
 ---
 

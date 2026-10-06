@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: PL9` · `status: live` · `updated: 2026-10-05`
+`id: PL9` · `status: live` · `updated: 2026-10-06`
 
 ## What done means
 
@@ -47,11 +47,14 @@ records, register listings and image search cached. The one gap is Athens's buil
 
 **P1 - blocks the goal on production.**
 
-1. Deploy REData 0.3.0 to production, then UrbanLens 0.9.0 (Jess approved both on 2026-10-05). Everything above
-   that is fixed is fixed only on staging until then: NY parcels by polygon, campus footprints beyond the parcel
+1. Deploy UrbanLens 0.9.0 (Jess approved it and REData 0.3.0's deploy on 2026-10-05). REData's half is done:
+   releases 0.3.0 to 0.3.4 are all ancestors of its `v0.3.4` tag, which has run in production since 2026-10-06
+   15:21Z, so what had been fixed only on staging (NY parcels by polygon, campus footprints beyond the parcel
    box, Athens County's owner, web and news search, the cultural-resource cache, Chronicling America
-   descriptions, per-provider `limit`, the loc.gov walk. The order is required, not only preferred: inside the US
-   0.9.0 reads Overture only from REData (P110), whose lookups time out before 0.3.0 (P240).
+   descriptions, per-provider `limit`, the loc.gov walk) is in REData's production code. UrbanLens's own half of those
+   ships with 0.9.0 (`release/v_0_9_0`; production runs 0.8.0), and the live-locations run above was against staging,
+   not re-run on production. The order was required, not only preferred: inside the US 0.9.0 reads Overture only
+   from REData (P110), whose lookups timed out before the index-backed ones (P240); that order is now met.
 2. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
    (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
    REData's `Retry-After` (P315, REData P70).

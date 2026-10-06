@@ -1,8 +1,9 @@
 # REData's Chronicling America search drops every page's text
 
-- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`ba890af5`) and deployed to its staging; not seen live, because Chronicling America was unavailable during the run. Production REData is still 5aabe887.** Found by UrbanLens's P196 work, checking which fields each reference provider
+- **Status: ANSWERED 2026-10-05: fixed on REData `release/0.3.0` (`ba890af5`) and deployed to its staging; not seen live, because Chronicling America was unavailable during the run. Updated 2026-10-06: `ba890af5` is in REData v0.3.4, in production since 2026-10-06 15:21Z; still not seen live.** Found by UrbanLens's P196 work, checking which fields each reference provider
   returns. The REData code cited is `main` as of 2026-10-03.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
+- `id: N38` · `status: current`
 
 ## What happens
 

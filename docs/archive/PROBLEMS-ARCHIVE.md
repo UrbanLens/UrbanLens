@@ -11,6 +11,55 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-10-06: Production REData 404ed `/api/v1/public-locations/`, so a fresh dev environment seeded no catalog pins
+
+`id: P6` · `status: fixed` · `resolved: 2026-10-06` · `found by: a fresh dev environment's seed (a962bf8), 2026-08-21`
+
+Previously titled "production REData 404s on `/api/v1/public-locations/` (and `/capabilities/`)".
+
+**What was wrong:** `bin/dev_env.py create` against production REData logged `REData request to
+/api/v1/public-locations/ failed (404)` and seeded zero catalog pins, only the Hudson River State Hospital
+landmark. `curl` showed a plain HTML 404, not a DRF JSON one, so the route itself was not matched, while
+`parcels/lookup/` on the same host answered 401 (matched, auth refused). It was not a credentials problem and not
+a UrbanLens defect: production REData was answering from a build older than the route.
+
+**Fixed by REData's deploy, not by anything here.** `api/urls.py` on REData `origin/main` routes
+`public-locations/` (line 247) and `capabilities/` (line 320). The catalogue route arrived in `0491bba9`
+(2026-10-02, "serve the PublicLocation catalog at /public-locations/"), whose first tag is v0.3.4, and production
+has run v0.3.4 since 2026-10-06 15:21Z. This entry's 2026-08-21 line that both routes already existed in the local
+REData checkout does not match `main`'s history for `public-locations/`: it is not in 5aabe887, the build
+production ran until today.
+
+**Checked 2026-10-06, unauthenticated, one request each:** `GET https://redata.urbanlens.org/api/v1/public-locations/`
+and `/api/v1/capabilities/` both answer 401, not 404, so both routes are matched on production now.
+
+**Not re-run:** a fresh dev environment's seed, or an authenticated read of the catalogue. If a seed still lands
+zero catalog pins, that is a new defect with a new id.
+
+## RESOLVED 2026-10-06: openresty's 90s proxy cap cut any Overpass query needing longer, and no query UrbanLens sends needs longer
+
+`id: P15` · `status: fixed` · `resolved: 2026-10-06` · `fixed as: obsolete in practice` · `found by: the Overpass mirror benchmark, 2026-07-22`
+
+Previously titled "Overpass deploy-side follow-up: raise the openresty 90s proxy cap (found 2026-07-22; edge box located 2026-07-23)".
+
+**What was wrong:** the self-hosted Overpass (`overpass.osm.urbanlens.org`, the primary endpoint) sits behind an
+openresty on a separate edge box that cuts every connection at 90 s whatever `[timeout:N]` the client asked for. The
+benchmark's only self-hosted failures were region-scale scans hitting that cap (`docs/reports/overpass-mirror-test.md`).
+Raising it meant editing `proxy_read_timeout`/`proxy_send_timeout` on that edge box, which only Jess can reach.
+
+**Why it is closed without raising the cap:** the cap was never the binding limit for what UrbanLens asks. Every
+Overpass call it makes stays well under 90 s, on both `origin/main` (0.8.0) and `release/v_0_9_0`:
+
+- `OverpassGateway` asks for `[timeout:25]` (`ql_timeout`) with a 30 s HTTP timeout, in each of its three query
+  builders (`services/apis/locations/boundaries/overpass.py:227-228`, `:452`, `:517`, `:562`);
+- the infrastructure map asks for `[timeout:25]` and passes `timeout=30` (`services/map/infrastructure_map.py:67,160`);
+- OpenHistoricalMap's public Overpass is a different host and asks for 15-20 s (`open_historical_map.py:144,188,224`).
+
+So no call UrbanLens sends can reach the proxy's cap. This was verified by reading the call sites, not by a run, and
+the edge box's setting was not re-read. The cap would matter again only if a caller were added with a `[timeout:N]`
+above about 85 s; the gateway's own comment (`overpass.py:224-226`) already says the HTTP timeout must stay above the
+QL one.
+
 ## RESOLVED 2026-10-05: MapLibre 5.24's attribution sanitizer could be bypassed, and the only fix was in the v6 line
 
 `id: P278` · `status: fixed` · `resolved: 2026-10-05` · `found by: Claude, reading Dependabot alert #87 on push` · `fixed on: fix/maplibre-6`

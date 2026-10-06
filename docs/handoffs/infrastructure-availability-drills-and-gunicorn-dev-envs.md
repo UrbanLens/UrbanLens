@@ -1,6 +1,8 @@
 # Ask: a dev environment that runs gunicorn, and somewhere to put availability chaos
 
-- **Status: CLOSED 2026-10-05: the infrastructure repo closed the thread (its 9d63fac).** All three asks implemented; see the reply at
+- **Status: CLOSED 2026-10-05: the infrastructure repo closed the thread (its 9d63fac), with one item still open.** Asks 1 and 2 are implemented,
+  and ask 3's environment half is (`bin/dev_env.py create --name perf --environment staging`). Ask 3's Docker access on chiron, for seeding by
+  `docker exec`, is not: it is Jess's decision, carried in the infrastructure repo as `../infrastructure/docs/plans/compose-era-tooling.md` #7. See the reply at
   [`infrastructure-availability-drills-reply.md`](infrastructure-availability-drills-reply.md).
   Two of the asks below were corrected in the answering: `--gunicorn` promised an
   axis the app does not have, and the ask omitted `DJANGO_SECRET_KEY`, without
