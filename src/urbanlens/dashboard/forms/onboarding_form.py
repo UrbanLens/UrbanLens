@@ -13,9 +13,10 @@ CATEGORY_FIELDS = ("history_enabled", "community_enabled", "external_apis_enable
 class WelcomeOnboardingForm(forms.ModelForm):
     """One checkbox per feature category, plus a required Terms of Service agreement.
 
-    ``customize_features`` is a UI-only toggle (not persisted) that reveals those three cards - most new
-    users can leave it off and continue with everything enabled, since the toggle is purely progressive
-    disclosure.
+    ``customize_features`` is a UI-only field (not persisted) holding whether the "I want to disable some features"
+    accordion is expanded: the page hides the box itself and ``<details data-mirrors-open>`` keeps it equal to the
+    accordion's state. Most new users leave it collapsed and continue with everything enabled, since it is purely
+    progressive disclosure.
     ``tos_agreed`` is the other exception to the "checked by default" rule - it defaults unchecked,
     since agreement has to be an explicit action rather than something left on by default.
     """
@@ -23,15 +24,15 @@ class WelcomeOnboardingForm(forms.ModelForm):
     customize_features = forms.BooleanField(
         required=False,
         initial=False,
-        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
-        label="Choose features to disable.",
+        widget=forms.CheckboxInput(attrs={"class": "onboarding-accordion-state", "hidden": True}),
+        label="I want to disable some features",
     )
     history_enabled = forms.BooleanField(
         required=False,
         initial=True,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
         label="History",
-        help_text="UrbanLens allows you to keep a visit journal, and upload location data if you choose to. Disabling this will prevent you from uploading location data, even if you try.",
+        help_text="Your visit journal, and any location data you choose to upload.",
     )
     community_enabled = forms.BooleanField(
         required=False,
@@ -63,8 +64,9 @@ class WelcomeOnboardingForm(forms.ModelForm):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        # A re-rendered form keeps a category the user switched off in view, not behind the collapsed toggle.
-        if self.is_bound and not all(self.data.get(name) for name in CATEGORY_FIELDS):
+        # A re-rendered form keeps a category the user switched off in view, not behind the collapsed accordion.
+        self.customize_open = self.is_bound and (bool(self.data.get("customize_features")) or not all(self.data.get(name) for name in CATEGORY_FIELDS))
+        if self.customize_open:
             self.fields["customize_features"].widget.attrs["checked"] = True
 
     def save(self, commit: bool = True) -> Profile:

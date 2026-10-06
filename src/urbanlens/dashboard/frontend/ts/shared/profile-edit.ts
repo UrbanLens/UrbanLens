@@ -1,10 +1,10 @@
 /**
  * The profile edit page (``pages/profile/edit.html``): every ``[data-autosave]`` field saves on change, the
- * username is checked as it is typed, and the avatar choices save at once. Values arrive on
- * ``.edit-profile-page``'s data attributes.
+ * username is checked as it is typed, and the avatar choices save at once and show everywhere the page draws the
+ * user's avatar (``data-user-avatar``). Values arrive on ``.edit-profile-page``'s data attributes.
  */
 
-import { saveAvatar, saveProfileField, showAvatar, USERNAME_PATTERN, USERNAME_RULE, usernameAvailability, avatarSavedText, type AvatarChoice, type FieldResult } from "./profile-field";
+import { saveAvatar, saveProfileField, showSavedAvatar, USERNAME_PATTERN, USERNAME_RULE, usernameAvailability, avatarSavedText, type AvatarChoice, type FieldResult } from "./profile-field";
 
 const DATE_FIELDS = new Set(["birth_date", "started_exploring"]);
 const USERNAME_CHECK_DELAY_MS = 400;
@@ -79,8 +79,9 @@ export class ProfileEditForm {
 
     private onClick(event: MouseEvent): void {
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("#avatar-gravatar-btn")) {
-            void this.chooseAvatar({ kind: "gravatar" });
+        const gravatar = target?.closest<HTMLElement>("#avatar-gravatar-btn");
+        if (gravatar) {
+            void this.chooseAvatar({ kind: "gravatar", previewUrl: gravatar.dataset.gravatarUrl });
             return;
         }
         const emoji = target?.closest<HTMLElement>(".edit-avatar-emoji-opt");
@@ -137,10 +138,12 @@ export class ProfileEditForm {
             return;
         }
         this.setStatus("avatar", "saved", avatarSavedText(result));
-        if (!result.avatar_url) return;
-        showAvatar(byId("avatar-preview"), result.avatar_url, "edit-avatar-preview");
-        // The page hero draws the same avatar separately.
-        showAvatar(byId("profile-hero-avatar"), result.avatar_url, "profile-avatar-img");
+        const outcome = await showSavedAvatar(this.saveUrl, choice, result);
+        if (outcome === "published") this.setStatus("avatar", "saved", "✓ Saved");
+        if (outcome === "unchanged") {
+            this.setStatus("avatar", "error", "✗");
+            window.toastr?.error("That image couldn't be processed, so your picture hasn't changed.");
+        }
     }
 
     // -- Username

@@ -445,6 +445,8 @@ $z-nav: 1100;
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .08);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .12);
     --ul-shadow-lg: 0 8px 32px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .08);
+    // Under a glyph (emoji, icon) drawn on a coloured disc, so one the colour of its disc still shows (.ul-glyph).
+    --ul-glyph-shadow: rgba(0, 0, 0, .45);
 
     --ul-hover-bg: rgba(0, 0, 0, .04);
     --ul-hover-bg-primary: rgba(33, 150, 243, .08);
@@ -551,6 +553,7 @@ $z-nav: 1100;
     --ul-shadow-sm: 0 1px 3px rgba(0, 0, 0, .3);
     --ul-shadow-md: 0 4px 16px rgba(0, 0, 0, .4);
     --ul-shadow-lg: 0 8px 32px rgba(0, 0, 0, .5), 0 2px 8px rgba(0, 0, 0, .3);
+    --ul-glyph-shadow: rgba(0, 0, 0, .7);
 
     --ul-hover-bg: rgba(255, 255, 255, .05);
     --ul-hover-bg-primary: rgba(66, 165, 245, .1);

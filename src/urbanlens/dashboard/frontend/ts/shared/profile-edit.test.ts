@@ -18,7 +18,12 @@ const settle = (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function render(openOnLoad = false): void {
     document.body.innerHTML = `
-      <div id="profile-hero-avatar" class="profile-avatar-placeholder">JM</div>
+      <div id="profile-hero-avatar" class="profile-avatar-placeholder" data-user-avatar="profile-avatar-img">JM</div>
+      <header>
+        <span class="nav-avatar-initial" data-user-avatar="nav-avatar-img" data-avatar-alt="">J</span>
+        <img class="nav-avatar-img" data-user-avatar="nav-avatar-img" data-avatar-alt="" src="/media/avatars/old.png" alt="">
+      </header>
+      <img id="someone-else" class="profile-avatar-img" src="/media/avatars/friend.png" alt="Avatar">
       <dialog id="date-error-dialog" ${openOnLoad ? "data-open-on-load" : ""}>
         <ul class="date-error-list"><li>Server-rendered error</li></ul>
       </dialog>
@@ -28,9 +33,11 @@ function render(openOnLoad = false): void {
         <input id="username-input" value="owl_one">
         <span id="username-hint"></span>
         <p id="username-requirements-hint" style="display:none"></p>
-        <div class="edit-avatar-placeholder" id="avatar-preview">JM</div>
+        <div class="edit-avatar-placeholder" id="avatar-preview" data-user-avatar="edit-avatar-preview">JM</div>
         <span data-field-status="avatar"></span>
-        <button type="button" id="avatar-gravatar-btn">Gravatar</button>
+        <input type="file" data-autosave="avatar">
+        <button type="button" id="avatar-gravatar-btn" data-gravatar-url="/static/dashboard/gravatar-copy.png">Gravatar</button>
+        <button type="button" class="edit-avatar-emoji-opt" data-animal="owl" data-color="teal">Owl</button>
         <span data-field-status="birth_date"></span>
         <input type="date" data-autosave="birth_date" value="">
         <span data-field-status="bio"></span>
@@ -131,16 +138,59 @@ describe("autosave", () => {
 });
 
 describe("avatar and username", () => {
-    test("a new avatar shows in the form and in the page hero", async () => {
+    test("a suggested icon shows in the form, the page hero and the navbar", async () => {
         respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "/media/a.png" }), { status: 200 });
+        render();
+        document.querySelector<HTMLElement>(".edit-avatar-emoji-opt")?.click();
+        await settle();
+        expect(calls[0]?.body).toEqual({ field: "avatar_emoji", animal: "owl", color: "teal" });
+        const preview = document.getElementById("avatar-preview");
+        const hero = document.getElementById("profile-hero-avatar");
+        expect(preview instanceof HTMLImageElement && preview.className === "edit-avatar-preview").toBe(true);
+        expect(hero instanceof HTMLImageElement && hero.className === "profile-avatar-img").toBe(true);
+        const nav = [...document.querySelectorAll("header [data-user-avatar]")];
+        expect(nav.map((el) => el instanceof HTMLImageElement && el.className === "nav-avatar-img" && el.alt === "" && el.getAttribute("src")?.startsWith("/media/a.png?"))).toEqual([true, true]);
+        // An avatar of someone else's on the page is not the user's to change.
+        expect(document.getElementById("someone-else")?.getAttribute("src")).toBe("/media/avatars/friend.png");
+        expect(document.querySelector('[data-field-status="avatar"]')?.textContent).toBe("✓ Saved");
+    });
+
+    test("an upload shows at once from the user's own file, though the server answers with the picture it replaces", async () => {
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: "/media/avatars/old.png", avatar_pending: true }), { status: 200 });
+        render();
+        const file = new File([new Uint8Array([137, 80, 78, 71])], "me.png", { type: "image/png" });
+        const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+        if (!input) throw new Error("no file input");
+        Object.defineProperty(input, "files", { value: [file], configurable: true });
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await settle();
+        expect(calls[0]?.body.field).toBe("avatar");
+        const shown = ["avatar-preview", "profile-hero-avatar"].map((id) => document.getElementById(id));
+        expect(shown.every((el) => el instanceof HTMLImageElement && el.getAttribute("src")?.startsWith("blob:"))).toBe(true);
+        expect([...document.querySelectorAll("header [data-user-avatar]")].every((el) => el.getAttribute("src")?.startsWith("blob:"))).toBe(true);
+        expect(document.querySelector('[data-field-status="avatar"]')?.textContent).toBe("✓ Processing…");
+    });
+
+    test("an upload the browser cannot draw waits for the stored copy instead of showing a broken image", async () => {
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: null, avatar_pending: true }), { status: 200 });
+        render();
+        const file = new File([new Uint8Array([0])], "me.heic", { type: "image/heic" });
+        const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+        if (!input) throw new Error("no file input");
+        Object.defineProperty(input, "files", { value: [file], configurable: true });
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        await settle();
+        expect(document.getElementById("avatar-preview") instanceof HTMLImageElement).toBe(false);
+    });
+
+    test("a Gravatar shows from the site's copy of it", async () => {
+        respond = () => new Response(JSON.stringify({ ok: true, avatar_url: null, avatar_pending: true }), { status: 200 });
         render();
         document.getElementById("avatar-gravatar-btn")?.click();
         await settle();
         expect(calls[0]?.body).toEqual({ field: "avatar_gravatar" });
         const preview = document.getElementById("avatar-preview");
-        const hero = document.getElementById("profile-hero-avatar");
-        expect(preview instanceof HTMLImageElement && preview.className === "edit-avatar-preview").toBe(true);
-        expect(hero instanceof HTMLImageElement && hero.className === "profile-avatar-img").toBe(true);
+        expect(preview instanceof HTMLImageElement && preview.getAttribute("src")?.startsWith("/static/dashboard/gravatar-copy.png?")).toBe(true);
     });
 
     test("a malformed username shows the rule and is not saved on blur", async () => {

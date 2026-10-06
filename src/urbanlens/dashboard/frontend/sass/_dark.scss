@@ -12,12 +12,6 @@
         color: var(--ul-grey-5);
     }
 
-    // Chromium paints popup rows on the option's background, else the select's, else white; inputs here are translucent.
-    option, optgroup {
-        background-color: var(--ul-grey-0);
-        color: var(--ul-grey-8);
-    }
-
     // Its dark-scheme highlight row is pale blue, illegible under light text; the light scheme's is dark blue.
     select {
         color-scheme: light;

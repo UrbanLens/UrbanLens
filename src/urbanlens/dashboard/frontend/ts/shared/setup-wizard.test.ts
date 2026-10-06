@@ -24,7 +24,7 @@ function render(official = false): SetupWizard {
         ${[1, 2, 3, 4, 5].map((n) => `<div class="setup-step${n === 1 ? " setup-step--active" : ""}" data-step="${n}"><button type="button" data-setup-goto="${n + 1}">Next</button></div>`).join("")}
         <input id="setup-username-input">
         <span id="setup-username-hint"></span>
-        <div id="setup-avatar-preview">JM</div>
+        <div id="setup-avatar-preview" data-user-avatar="setup-avatar-preview">JM</div>
         <span id="setup-avatar-status"></span>
         <button type="button" id="setup-avatar-gravatar-btn">Gravatar</button>
         <button type="button" class="setup-avatar-emoji-btn" data-animal="owl" data-color="teal">Owl</button>

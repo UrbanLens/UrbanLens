@@ -16,6 +16,8 @@
  *   one's value in that input and marks it ``aria-pressed``.
  * - ``data-readout="<id>"`` on an input shows its value in that element as it changes.
  * - ``data-toggles="<id>"`` on a button shows or hides that panel, marking the button ``.is-open``.
+ * - ``data-mirrors-open="<checkbox id>"`` on a ``<details>`` keeps that checkbox ticked exactly while it is open,
+ *   so a form posts whether the section was expanded. The checkbox, which a browser may restore, wins on a page show.
  * - ``data-empties="<id>"`` on a button empties that element, and ``data-removes="<id>"`` on any control removes it.
  * - ``data-autosubmit`` on a file input submits its form once a file is chosen.
  * - ``data-autogrow`` on a textarea fits its height to its content when it arrives and as it is typed in, for
@@ -166,6 +168,25 @@ function syncEnabledBy(): void {
     }
 }
 
+/** Tick the checkbox *details* names while it is open, and clear it while it is closed. */
+function mirrorOpen(details: HTMLDetailsElement): void {
+    const box = document.getElementById(details.dataset.mirrorsOpen ?? "");
+    if (box instanceof HTMLInputElement && box.type === "checkbox") box.checked = details.open;
+}
+
+/** Open or close each mirroring ``<details>`` to match its checkbox, which a back/forward visit may have restored. */
+function syncMirroredOpen(): void {
+    for (const details of document.querySelectorAll<HTMLDetailsElement>("details[data-mirrors-open]")) {
+        const box = document.getElementById(details.dataset.mirrorsOpen ?? "");
+        if (box instanceof HTMLInputElement && box.type === "checkbox") details.open = box.checked;
+    }
+}
+
+/** ``toggle`` does not bubble, so this is installed as a capturing listener. */
+function onToggle(event: Event): void {
+    if (event.target instanceof HTMLDetailsElement && event.target.hasAttribute("data-mirrors-open")) mirrorOpen(event.target);
+}
+
 function onChange(event: Event): void {
     const target = event.target;
     if (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio")) syncEnabledBy();
@@ -194,9 +215,11 @@ export function installDeclarativeActions(): void {
     document.addEventListener("reset", onReset);
     // close does not bubble.
     document.addEventListener("close", onDialogClose, true);
+    document.addEventListener("toggle", onToggle, true);
     document.addEventListener("htmx:load", onLoad);
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", syncEnabledBy, { once: true });
     else syncEnabledBy();
     // A back/forward visit can restore a ticked box under the server's disabled button.
     window.addEventListener("pageshow", syncEnabledBy);
+    window.addEventListener("pageshow", syncMirroredOpen);
 }

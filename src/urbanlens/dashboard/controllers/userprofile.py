@@ -360,6 +360,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     """Save a single profile field immediately (auto-save AJAX endpoint).
 
     GET  ?field=username&value=foo  →  availability check (JSON)
+    GET  ?field=avatar              →  the avatar's address and whether an upload is still being processed (JSON)
     POST field=<name> value=<val>   →  save field (JSON)
     """
 
@@ -384,10 +385,12 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     _PROFILE_PREFERENCE_TEXT = frozenset({f"{field}_other" for field in _PROFILE_PREFERENCE_CHOICES}) | frozenset({"additional_preferences"})
 
     def get(self, request: HttpRequest) -> JsonResponse:
-        """Username availability check."""
+        """Username availability check, or the avatar's state (``field=avatar``)."""
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required."}, status=401)
         field = request.GET.get("field", "")
+        if field == "avatar":
+            return self._avatar_state(request)
         if field != "username":
             return JsonResponse({"error": "Unsupported."}, status=400)
         username = request.GET.get("value", "").strip()
@@ -523,6 +526,23 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             return JsonResponse({"ok": True})
 
         return JsonResponse({"error": "Unknown field."}, status=400)
+
+    def _avatar_state(self, request: HttpRequest) -> JsonResponse:
+        """The picture shown now, and whether an upload is still held for processing.
+
+        An upload or Gravatar is stored as the avatar only once the sandbox worker has re-encoded it, so a page that
+        just saved one asks until ``avatar_pending`` is false.
+
+        Args:
+            request: The authenticated request.
+
+        Returns:
+            JSON with ``avatar_url`` (or null) and ``avatar_pending``.
+        """
+        profile = Profile.objects.filter(user=request.user).first()
+        if profile is None:
+            return JsonResponse({"avatar_url": None, "avatar_pending": False})
+        return JsonResponse({"avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": bool(profile.avatar_upload)})
 
     def _save_username(self, request: HttpRequest) -> JsonResponse:
         if not isinstance(request.user, User):

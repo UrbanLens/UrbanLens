@@ -344,3 +344,53 @@ describe("data-empties", () => {
         expect(document.getElementById("detail")?.childNodes.length).toBe(0);
     });
 });
+
+describe("data-mirrors-open", () => {
+    const markup = (open: boolean, checked = open) =>
+        `<form><details id="more" data-mirrors-open="more-box"${open ? " open" : ""}><summary>I want to disable some features</summary><input type="checkbox" name="more" id="more-box"${checked ? " checked" : ""} hidden></details></form>`;
+
+    function parts(): { details: HTMLDetailsElement; box: HTMLInputElement } {
+        const details = document.getElementById("more");
+        const box = document.getElementById("more-box");
+        if (!(details instanceof HTMLDetailsElement) || !(box instanceof HTMLInputElement)) throw new Error("markup");
+        return { details, box };
+    }
+
+    // The browser fires toggle (which does not bubble) once the open attribute has changed.
+    function setOpen(details: HTMLDetailsElement, open: boolean): void {
+        details.open = open;
+        details.dispatchEvent(new Event("toggle"));
+    }
+
+    test("the checkbox is ticked while the section is expanded, and clear while it is collapsed", () => {
+        render(markup(false));
+        const { details, box } = parts();
+        expect(box.checked).toBe(false);
+        setOpen(details, true);
+        expect(box.checked).toBe(true);
+        expect(new FormData(document.querySelector("form") as HTMLFormElement).get("more")).toBe("on");
+        setOpen(details, false);
+        expect(box.checked).toBe(false);
+        expect(new FormData(document.querySelector("form") as HTMLFormElement).has("more")).toBe(false);
+    });
+
+    test("a section the server rendered expanded posts as checked", () => {
+        render(markup(true));
+        expect(new FormData(document.querySelector("form") as HTMLFormElement).get("more")).toBe("on");
+    });
+
+    test("a page restored with the box ticked expands its section on show", () => {
+        render(markup(false, true));
+        window.dispatchEvent(new Event("pageshow"));
+        expect(parts().details.open).toBe(true);
+    });
+
+    test("a toggle on a details that names no checkbox is left alone", () => {
+        render(`<form><details id="plain"><summary>Plain</summary></details><input type="checkbox" id="stray"></form>`);
+        const plain = document.getElementById("plain");
+        if (!(plain instanceof HTMLDetailsElement)) throw new Error("markup");
+        plain.open = true;
+        plain.dispatchEvent(new Event("toggle"));
+        expect((document.getElementById("stray") as HTMLInputElement).checked).toBe(false);
+    });
+});

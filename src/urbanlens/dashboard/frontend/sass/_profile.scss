@@ -1221,10 +1221,6 @@
 .edit-field {
     margin-bottom: 1.1rem;
     flex: 1;
-
-    + .edit-field {
-        margin-left: 1rem;
-    }
 }
 
 .edit-field-row {
@@ -1232,13 +1228,31 @@
     gap: 1rem;
     flex-wrap: wrap;
 
+    // Only side by side: fields stacked in a card all sit on its left edge.
+    > .edit-field + .edit-field {
+        margin-left: 1rem;
+    }
+
     input[type="text"] {
         width: calc(100% - 1rem);
     }
 }
 
+// A preference dropdown, and the note beneath it when "Other" is chosen, are sized by their short choices rather than the card.
+$edit-preference-width: 22rem;
+
+.edit-select {
+    max-width: $edit-preference-width;
+}
+
 .edit-preference-other {
     margin-top: .5rem;
+    max-width: $edit-preference-width;
+
+    // The site's input reset is content-box, which would add the input's padding to the width it is given.
+    input.edit-input[type="text"] {
+        box-sizing: border-box;
+    }
 }
 
 .edit-label {
@@ -1460,20 +1474,40 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
 
 .edit-avatar-layout {
     display: flex;
-    gap: 18px;
-    align-items: flex-start;
+    gap: 1.5rem 18px;
+    // One centre line for the current avatar and every choice beside it.
+    align-items: center;
     flex-wrap: wrap;
 }
 
-.edit-avatar-current-wrap { flex-shrink: 0; }
+.edit-avatar-current-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+// Under the avatar without taking part in the row's height, so a message appearing never moves it. A wrapper, because
+// the status itself has its whole class list replaced as it changes state.
+.edit-avatar-status {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 4px;
+    white-space: nowrap;
+
+    .field-status {
+        margin-left: 0;
+    }
+}
 
 .edit-avatar-sources {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    align-items: flex-end;
+    align-items: center;
 }
 
+// Every choice is the same card around a 52px figure and a caption, so their figures share a centre line.
 .edit-avatar-option {
     display: flex;
     flex-direction: column;
@@ -1484,7 +1518,9 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     border-radius: $radius-sm + 2;
     border: 1.5px solid var(--ul-surface-raised-border);
     background: var(--ul-surface-raised);
+    font: inherit;
     font-size: .75rem;
+    line-height: 1.25;
     color: var(--ul-grey-6);
     min-width: 64px;
     transition: border-color .15s, box-shadow .15s;
@@ -1493,25 +1529,39 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
         border-color: $color-indigo-600;
         box-shadow: 0 0 0 3px rgba($color-indigo-600, .12);
     }
-
-    .material-symbols-outlined,
-    .material-icons { font-size: 1.6rem; color: var(--ul-grey-6); }
 }
 
-.edit-avatar-option-img {
-    width: 52px;
-    height: 52px;
-    border-radius: 50%;
-    object-fit: cover;
-}
-
+.edit-avatar-option-img,
+.edit-avatar-option-icon,
 .edit-avatar-emoji-circle {
     width: 52px;
     height: 52px;
     border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.edit-avatar-option-img {
+    object-fit: cover;
+}
+
+.edit-avatar-option-icon,
+.edit-avatar-emoji-circle {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.edit-avatar-option-icon {
+    background: var(--ul-surface-2);
+
+    .material-symbols-outlined,
+    .material-icons {
+        font-size: 1.6rem;
+        color: var(--ul-grey-6);
+    }
+}
+
+.edit-avatar-emoji-circle {
     font-size: 28px;
     line-height: 1;
 }
