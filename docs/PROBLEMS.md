@@ -2610,3 +2610,132 @@ Found by spark-audit shard B, verified by reading `src/urbanlens/dashboard/model
 The revision `bulk_create` (in its own savepoint, with a comment explaining the aborted-transaction hazard) is wrapped in `except Exception: logger.exception(...)` with re-raise only `if django_settings.DEBUG or TESTING`. A failing revision write therefore leaves the data write succeeded but its field-provenance rows missing, visible only in logs — the exact substrate `resolve_fields` callers cannot detect. The "never break the write" tradeoff is deliberate; the silent-integrity gap is still worth recording before offline access and merging land (same reasoning as P5's provenance paragraph).
 
 No `PROBLEMS.md`/archive entry for `_record_fields` swallowing — appears new.
+
+## P334 — `InferenceRequest.max_tokens` has no lower bound, so `0`/negative passes schema and policy and fails later as a provider error
+
+`id: P334` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A follow-up, verified by reading the cited code.
+
+`src/urbanlens_ai/schema.py:107` declares bare `max_tokens: int` while the sibling field carries `timeout_seconds: float | None = Field(default=None, gt=0)` (`schema.py:110`). `policy.validate_request` (`policy.py:207-208`) only checks the ceiling (`if request.max_tokens > MAX_ALLOWED_TOKENS`), so `0` or a negative value passes both layers and fails downstream as a provider rejection instead of a 400. Fail-closed, wasted call at worst — low severity, one-line fix (`ge=1`).
+
+No duplicate in `docs/PROBLEMS.md` or the archive (only `docs/AI_PIPELINE.md:53` on the over-cap upper bound).
+
+## P335 — Test harness gaps: the network guard does not patch DNS, and the throwaway TLS key is world-readable
+
+`id: P335` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A follow-up, verified by reading the cited code. Two test-support gaps, one entry — both are the harness being looser than its documentation.
+
+1. `src/urbanlens/core/testing_network.py:105-109` patches exactly `socket.create_connection`, `socket.connect`, `connect_ex`, and `sendto`. Nothing intercepts `socket.getaddrinfo`/`gethostbyname`, so a test doing name resolution still emits real DNS traffic despite the module docstring (`testing_network.py:1`: "Fail fast on accidental external network calls in tests"). The archive records only the `connect_ex` gap as fixed (`PROBLEMS-ARCHIVE.md:17953-17958`); DNS is unmentioned.
+2. `src/urbanlens/core/tests/slow_servers.py:72-82` writes the throwaway private key with bare `open(key_path, "wb")`, inheriting the umask (typically 0644) with no `chmod(0o600)` anywhere. Mitigations that keep this low: the `mkdtemp` dir is 0700, the key is ephemeral EC, the cert lives one hour, test-only loopback.
+
+No duplicate in `docs/PROBLEMS.md` or the archive for either half.
+
+## P336 — Three small `bin/` helper defects: dead CodeQL arm64 branch, `map_layers.py` wrong usage string and untyped `main`, settings-parser typo and placeholder divergence
+
+`id: P336` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard A follow-up, verified by reading each file. Grouped as one entry: all trivial, all in operator/dev helpers.
+
+1. `bin/run_codeql.py:181-183`: `if machine in {"arm64", "aarch64"}: return "codeql-bundle-osx64.tar.gz"` followed by an identical default return — Apple Silicon silently fetches the Intel bundle (works via Rosetta, slower) with no comment.
+2. `bin/map_layers.py:7-9`: usage string says `python convert_to_webp.py ...` though the file is `map_layers.py` and no `convert_to_webp.py` exists; `def main():` (`map_layers.py:59`) is untyped while its helpers are annotated; `unique_path`/`convert_image` have no tests (repo-wide grep hits only the file itself plus `unused_functions.txt:821-822`).
+3. `src/bin/utils/settings.py:61`: `raise FileEmptyError(f"No data in settings file at f{filepath}")` renders `at f/...` (error path only, cosmetic); `:55` uses `yaml.load(file, Loader=SafeLoader)` instead of `safe_load` (functionally safe, non-idiomatic); `:20-22` define `INSTAGRAM_GRAPH_URL`/`GOOGLE_LENS_URL` as `"your-*-placeholder"` strings while `src/bin/settings.py:3-7` holds the real defaults — two sources of truth for the same keys.
+
+No `PROBLEMS.md`/archive entry for any of the three (the `P324` research-helper entry is the same shard but a different issue).
+
+## P337 — `unique_together` is still used in ~9 model files instead of `UniqueConstraint`
+
+`id: P337` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard B follow-up; coordinator confirmed `rg -l unique_together src/urbanlens/dashboard/models/` hits `friendship/model.py`, `location/model.py`, `location/queryset.py`, `safety/model.py` (`SafetyCheckinPartner`, line 584), `cache/location_cache.py`, `reviews/model.py`, `abstract/model.py`, `trips/model.py`, `trips/queryset.py`.
+
+Django still enforces it (soft-deprecated in favour of `UniqueConstraint`, no removal scheduled), so this is style/forward-compat debt, not a live bug — info/low severity. Filed so the tree-wide shape is recorded once rather than rediscovered per model; fix is mechanical per file.
+
+Archive mentions of `unique_together` are incidental (friendship pairs, lat/long races); no open entry asks for the migration.
+
+## P338 — Device-scan marker path has no composite indexes and reconciles clusters without a transaction
+
+`id: P338` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shards B/C follow-up, verified by reading the cited code. Same subsystem (device_scan), one entry.
+
+1. `DeviceScanEntry.Meta` (`models/device_scan/model.py:180-181`) and `DeviceSignalReading.Meta` (`:202-203`) declare only `db_table` — no `indexes`/`constraints`. Django's default per-FK B-tree covers single-column lookups; what is missing is composite/query-shaped indexes (e.g. `(entry, observed_at)`) for the clustering reads. Sibling models show the pattern (`ScannedDevice.Meta:102` `idxdb_scandev_mac`, `DeviceScanUpload.Meta:142-148`). Low severity: perf only, clustering reads are bounded batch jobs.
+2. `services/device_scan/clustering.py:254-267` loops clusters with per-cluster field assignment and bare `marker.save()` (full-row, N round trips; the STALE sweep 20 lines below at `:283-286` uses `update_fields`), with no `transaction.atomic` in the function or its caller (`pipeline.py:11-42`; contrast sibling `ingestion.py:66`). A crash/retry mid-loop leaves a half-updated marker set — self-healing on the next recompute (the function rebuilds from scratch, `:214-222`), so crash-consistency only. Fix: one `atomic()` around the reconcile plus `update_fields` on the hot path.
+
+`DATA_ENCRYPTION.md` Follow-up #9 covers device-scan retention/encryption, not indexes; no `PROBLEMS.md` entry on either half. (`DATA_ENCRYPTION.md` Follow-up #9 and the Jess 2026-09-29 never-delete decision for `DeviceScanUpload.profile = SET_NULL` are deliberate and not challenged here.)
+
+## P339 — 66 nullable string columns create NULL-vs-`""` ambiguity tree-wide; only 5 are tracked
+
+`id: P339` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard B follow-up; coordinator counted 51 `CharField…null=True` lines across 17 files plus `TextField…null=True` in 11 files under `src/urbanlens/dashboard/models/` (66 sites, consistent with the shard's "~60"). Representatives: `images/model.py:260` (`caption`), `location/model.py:43` (`official_name` + 7 address siblings), `pin/model.py` (5×), `wiki/model.py` (4× + 1× TextField), `profile/model.py` (2× TextField).
+
+Django convention is `blank=True, default=""` for strings; dual null/empty states split `__isnull` vs `=""` queries and `Lower()`-unique semantics. Individually trivial, collectively query-correctness drag — low-medium. The fix direction is already documented (`DATA_ENCRYPTION.md:245-250` prescribes `blank=True, default=""` for new `fail_soft` content fields; Follow-up #4 tracks converting the five encrypted ones with a demonstrated data-loss consequence). This entry records the tree-wide count so the remaining ~60 are not each rediscovered.
+
+No `PROBLEMS.md` entry quantifies the pattern as such — appears new.
+
+## P340 — AI gateway and global-search error logs capture full prompt queues, full model responses, and verbatim queries
+
+`id: P340` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard C follow-up, verified end-to-end (log call → what the logged object contains → absence of redaction).
+
+- `services/ai/gateway.py:372`: `logger.error("No answer from message queue: %s", queue)` where `queue` is a `MessageQueue` whose `__str__` is the full message list (`services/ai/message.py:73-74`), built from system + user prompts (`gateway.py:321,334`).
+- `services/ai/gateway.py:454`: `logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)` where `message_content` is the full model response text (`:366-370`).
+- `services/global_search/engine.py:163`: `logger.exception("Global search provider '%s' failed for query %r", provider.slug, parsed.raw)` where `parsed.raw` is documented as the query exactly as typed (`services/global_search/parser.py:90,497`).
+
+The prompts are not just typed text: callers wrap untrusted content via `wrap_user_data` (`document_import.py:321`, `article_expansion.py:230-247`, `link_extraction.py:569`, `article_safety.py:90`). A grep of `gateway.py`'s logger calls shows only token counts/model names — no `redact_*`, no truncation (the only AI redaction in-tree is URL redaction in `link_extraction.py`, not applied here). Error-path only, but server logs then hold full prompts (PII, pin names, article text, document contents) and full answers — medium severity, log hygiene.
+
+Not the archive's coordinates-in-logs entry (that grep matches log calls naming latitude/longitude/coords — `queue`/`message_content`/`parsed.raw` contain no such token) and not P212's Celery `args/kwargs` redaction (different sink). Appears new.
+
+## P341 — Held-upload publish reads the whole file into memory with no bound; icon uploads can be 250 MB
+
+`id: P341` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard C follow-up, verified including the size-ceiling asymmetry.
+
+`services/media/held_upload.py:229-232` does `raw = handle.read()` then re-encodes from `BytesIO(raw)` — no size check, no chunked read. The function's contract (`held_upload.py:141`: "already size-checked, sniffed and scanned") pushes the ceiling onto callers, and callers differ: avatar uploads enforce `AVATAR_MAX_UPLOAD_BYTES` (default 5 MB, `services/profile/avatar.py:314-316`, pinned by `test_avatar_upload_is_bounded.py`), while icon doors (label/pin/achievement `custom_icon` via `HELD_FIELDS`, `held_upload.py:104-112`, capped only by `ICON_MAX_PX = 256` *dimensions*) call only the shared `image_upload_error` gauntlet whose sole size gate is the site-wide cap (default 250 MB, raisable toward 900 MB). So a 250 MB icon passes validation, is held, then fully materialised in RAM on publish. Bounds on severity: the read runs in the sandbox worker, not gunicorn, and icons still pass the synchronous malware scan at request time — medium, memory/DoS amplification in the memory-tight sandbox worker (`MEDIA_PIPELINE.md` §2.4), re-queueable via the retry/sweep path (`:337-381`).
+
+No `PROBLEMS.md` entry; archive held-upload mentions are publish-mark races and orphan lifecycle, not the read. Appears new.
+
+## P342 — Safety-contact mark-safe/opt-out token POSTs have no throttle; the message route already has a service-layer budget
+
+`id: P342` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard D follow-up, verified view by view.
+
+`SafetyContactMarkSafeView.post` (`controllers/safety.py:1633-1645`) and `SafetyContactOptOutView.post` (`:1686-1700`) mutate check-in state behind an anonymous UUID capability with no decorator, counter, or rate check, and no `throttled()` wrapper on any contact route (`urls.py:1889-1892`) — contrast `e2ee.login_params` throttled per address (`urls.py:2010-2012`, `Rate(30, 60)`). The third contact route was checked and is *not* part of this problem: `SafetyCheckinMessageView.post` is budgeted at the service layer (`charge_message` per-participant-per-checkin, `MessageRateLimitedError` → 429). Severity low: token is a UUID path segment (404 otherwise, not enumerable) and both writes are idempotent (second mark-safe short-circuits, `:1705-1715`), so the exposure is unauthenticated DB-write + notification fan-out replay, not takeover. The message route is the in-repo pattern to copy.
+
+Open P329 covers throttle gaps on assistant/search routes, never safety contacts; the archived G5-3 throttle list never mentions them. Appears new.
+
+## P343 — WebSocket bearer credentials travel only as `?key=`, which persists in logs, history, and referers
+
+`id: P343` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard D follow-up; coordinator confirmed `_extract_token` (`websocket_auth.py:63-68`) parses only the `key` query-string parameter — the sole credential parse in the file, with no header/cookie/subprotocol branch — and it is consulted for anonymous sessions (`:54-60`, class docstring `:35`).
+
+A PAT or OAuth2 token therefore travels only in the URL; browsers keep session-cookie auth via the outer stack, but non-browser clients have no alternative transport. Query strings persist in access logs, history, referers, and error text (P203's `SecretRedactionFilter` mitigates app-log leakage but does not bless credential-in-URL). Scope checks themselves are correctly placed pre-`group_add` with 60 s revalidation — transport only, not scope. Medium-low severity, standard hygiene.
+
+Archive websocket-auth entries cover PBKDF2-off-thread and scope enforcement, never the transport. Appears new.
+
+## P344 — Health probes opt out of throttling while doing per-call cache writes and DB reads
+
+`id: P344` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard D follow-up, verified with mitigations.
+
+`controllers/health.py:64-66` sets `authentication_classes = []`, `permission_classes = [AllowAny]`, `throttle_classes = []`, and the routes carry no `throttled()` wrapper (`UrbanLens/urls.py:110-114`). The endpoints do real work per call: a cache **write** on every call (`:214`), DB probes (`:185-205`), and a migration-graph inspection (`:223-239`). Mitigations that keep this low: 30 s/5 s process memos on the expensive halves (`:39-40`, consumed `:126-127`) and a 2 s `statement_timeout` scoped to the probe transaction (`:30,43-54`) — so per-scrape cost is ~1 cache write + 1–2 cheap statements, not a full graph build. Residual is cache-write-per-scrape + DB-read amplification by an anonymous poller against intentionally-unauthenticated LB/K8s probes.
+
+No `PROBLEMS.md`/archive entry on health throttling. Appears new.
+
+## P345 — Two more P5 instances: onboarding does a whole-row save, profile autosave rewrites every field
+
+`id: P345` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit shard D follow-up, verified; neither instance is in P5's table (`PROBLEMS.md:52-136`; `rg -i onboarding|_save_profile|ProfileForm|WelcomeOnboarding` over `PROBLEMS.md` = zero hits).
+
+1. `forms/onboarding_form.py:72-97`: `Meta.fields = []`, then `save()` sets ~8 columns (`track_pin_visits/track_routes/track_geolocation/community_enabled/external_apis_enabled/places_*/ai_enabled/tos_accepted_at`) and calls bare `instance.save()` — whole-row write. Once-per-user, low concurrency risk, but exactly the last-writer-wins shape.
+2. `controllers/userprofile.py:683-685`: `form.save(commit=False).save(update_fields=list(form.fields))` — scoped to the form's ~dozen columns (`forms/profile_form.py:58-68`) yet rewritten in full on **every autosave** (frontend is per-field `data-autosave`, server rewrites all): concurrent-tab revert risk, `updated` bump, and per-P5 ~14-write provenance noise per save.
+
+P5 (open) is the umbrella and P326 added two model-layer instances; these are the form/controller counterparts. Cite all three when touching the area — `see P5, P326 and P345 in docs/PROBLEMS.md`.

@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P334` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P346` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -233,3 +233,15 @@ still resolves after it is fixed, and the id is never handed out again.
 | P331 | open | 2026-10-06 | The OAuth authorize/introspect views have zero test references anywhere in the repo | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P332 | open | 2026-10-06 | Pin CSV exports write unsanitized user content, enabling spreadsheet formula injection | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P333 | open | 2026-10-06 | `VersionedModel` provenance recording swallows all exceptions in production, leaving write-succeeded/provenance-missing gaps silent | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P334 | open | 2026-10-06 | `InferenceRequest.max_tokens` has no lower bound, so `0`/negative passes schema and policy and fails later as a provider error | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P335 | open | 2026-10-06 | Test harness gaps: the network guard does not patch DNS, and the throwaway TLS key is world-readable | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P336 | open | 2026-10-06 | Three small `bin/` helper defects: dead CodeQL arm64 branch, `map_layers.py` wrong usage string and untyped `main`, settings-parser typo and placeholder divergence | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P337 | open | 2026-10-06 | `unique_together` is still used in ~9 model files instead of `UniqueConstraint` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P338 | open | 2026-10-06 | Device-scan marker path has no composite indexes and reconciles clusters without a transaction | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P339 | open | 2026-10-06 | 66 nullable string columns create NULL-vs-`""` ambiguity tree-wide; only 5 are tracked | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P340 | open | 2026-10-06 | AI gateway and global-search error logs capture full prompt queues, full model responses, and verbatim queries | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P341 | open | 2026-10-06 | Held-upload publish reads the whole file into memory with no bound; icon uploads can be 250 MB | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P342 | open | 2026-10-06 | Safety-contact mark-safe/opt-out token POSTs have no throttle; the message route already has a service-layer budget | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P343 | open | 2026-10-06 | WebSocket bearer credentials travel only as `?key=`, which persists in logs, history, and referers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P344 | open | 2026-10-06 | Health probes opt out of throttling while doing per-call cache writes and DB reads | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P345 | open | 2026-10-06 | Two more P5 instances: onboarding does a whole-row save, profile autosave rewrites every field | [`docs/PROBLEMS.md`](PROBLEMS.md) |
