@@ -16,7 +16,12 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, RedataConfiguredMixin
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import (
+    BUDGET_REFUSALS,
+    DETAIL_WITHHELD_ANSWERS,
+    RedataConfiguredMixin,
+    detail_withheld_error,
+)
 
 
 class SearxngImageOutageTests(RedataConfiguredMixin, TestCase):
@@ -307,6 +312,15 @@ class CrisDetailOutageTests(RedataConfiguredMixin, TestCase):
             self._fetch(side_effect=PropertyRecordsUnavailableError("source_error", "503"))
 
         self.assertEqual(self._rows(), 0)
+
+    def test_a_detail_redata_withholds_for_now_writes_nothing(self) -> None:
+        """A 503 and a held resource (``unresolved``) are both "ask again later", never "no deeper record"."""
+        for answer in DETAIL_WITHHELD_ANSWERS:
+            with self.subTest(answer=answer):
+                with self.assertRaises(PropertyRecordsUnavailableError):
+                    self._fetch(side_effect=detail_withheld_error(answer))
+
+                self.assertEqual(self._rows(), 0)
 
     def test_a_detail_redata_does_not_have_keeps_the_search_row(self) -> None:
         self._fetch(side_effect=PropertyRecordsUnavailableError("no_data_found", ""))
