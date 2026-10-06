@@ -12,7 +12,10 @@ brightest thing on the screen.
 ## What it is now
 
 `frontend/ts/shared/map-layers.ts` draws a blurred picture of the world behind
-everything, in a pane at `z-index: 180` (Leaflet's own `tilePane` is 200).
+everything, in a pane at `z-index: 180` (Leaflet's own `tilePane` is 200) - under a
+raster base only. A vector base overzooms its own tiles through a zoom and paints its
+own background over the whole map once its style loads, so since 2026-10-06 it gets no
+underlay, and the container's own colour shows until then (not re-measured).
 
 The picture is **sixteen tiles at `z=2`, fetched from the active base's own
 endpoint**, drawn once into a 1024×1024 canvas. An `L.GridLayer` subclass cuts
