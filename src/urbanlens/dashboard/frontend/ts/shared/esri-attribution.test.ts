@@ -197,6 +197,17 @@ describe("esriCoverages", () => {
         }
     });
 
+    test("asks without cookies or a referrer, and reports its own failure rather than toasting it", async () => {
+        let sent: (RequestInit & { __ulReported?: boolean }) | undefined;
+        setEsriAttributionFetchForTests((_url, init) => {
+            sent = init;
+            return Promise.resolve({ ok: true, json: () => Promise.resolve(albany.World_Imagery) } as Response);
+        });
+        esriCoverages("World_Street_Map");
+        await settledForTests("World_Street_Map");
+        expect(sent).toMatchObject({ credentials: "omit", referrerPolicy: "no-referrer", __ulReported: true });
+    });
+
     test("never builds a request from something that is not a service name", () => {
         const seen = answer(albany.World_Imagery);
         expect(esriCoverages("../../oops")).toBeNull();

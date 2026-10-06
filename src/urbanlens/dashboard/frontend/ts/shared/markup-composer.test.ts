@@ -281,6 +281,88 @@ describe("keys", () => {
         expect(composer.document.hasMarkup()).toBe(true);
     });
 
+    test("Ctrl+Z with nothing left to undo is still taken, so the page's own undo never sees it", () => {
+        let reachedPage = 0;
+        const pageUndo = (): void => void reachedPage++;
+        document.addEventListener("keydown", pageUndo);
+        try {
+            const event = press(document.body, "z", { ctrlKey: true });
+            expect(event.defaultPrevented).toBe(true);
+            press(document.body, "Z", { ctrlKey: true, shiftKey: true });
+            press(document.body, "y", { ctrlKey: true });
+            expect(reachedPage).toBe(0);
+        } finally {
+            document.removeEventListener("keydown", pageUndo);
+        }
+    });
+
+    test("Escape in a text field leaves the field, not the dialog, and lets go of the selection", () => {
+        composer.load([ARROW]);
+        composer.document.select(composer.document.items()[0]!.id);
+        const title = document.getElementById("cmc-title-input") as HTMLInputElement;
+        title.focus();
+        expect(press(title, "Escape").defaultPrevented).toBe(true);
+        const cancel = new Event("cancel", { cancelable: true });
+        dialog.dispatchEvent(cancel);
+        expect(cancel.defaultPrevented).toBe(true);
+        expect(document.activeElement).not.toBe(title);
+        expect(composer.document.selectedId()).toBeNull();
+    });
+
+    test("the next Escape after one that let go of something closes the dialog as usual", async () => {
+        composer.load([ARROW]);
+        composer.document.select(composer.document.items()[0]!.id);
+        press(document.body, "Escape");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(press(document.body, "Escape").defaultPrevented).toBe(false);
+        const cancel = new Event("cancel", { cancelable: true });
+        dialog.dispatchEvent(cancel);
+        expect(cancel.defaultPrevented).toBe(false);
+    });
+
+    test("held arrow keys move the selection as one undo step", () => {
+        composer.load([ARROW]);
+        const id = composer.document.items()[0]!.id;
+        composer.document.select(id);
+        for (let i = 0; i < 150; i++) press(document.body, "ArrowRight");
+        expect(composer.document.get(id)!.shape.latlngs).not.toEqual(ARROW.latlngs);
+        composer.document.undo();
+        expect(composer.document.get(id)!.shape.latlngs).toEqual(ARROW.latlngs);
+        expect(composer.document.canUndo()).toBe(false);
+    });
+
+    test("an arrow key with Alt, Ctrl or Cmd is left to the browser", () => {
+        composer.load([ARROW]);
+        composer.document.select(composer.document.items()[0]!.id);
+        expect(press(document.body, "ArrowLeft", { altKey: true }).defaultPrevented).toBe(false);
+        expect(press(document.body, "ArrowLeft", { ctrlKey: true }).defaultPrevented).toBe(false);
+        expect(press(document.body, "ArrowLeft", { metaKey: true }).defaultPrevented).toBe(false);
+        expect(press(document.body, "Delete", { altKey: true }).defaultPrevented).toBe(false);
+        expect(composer.document.hasMarkup()).toBe(true);
+    });
+
+    test("any editable region counts as typing, whatever its contenteditable value", () => {
+        composer.load([ARROW]);
+        composer.document.select(composer.document.items()[0]!.id);
+        const editable = document.createElement("div");
+        editable.setAttribute("contenteditable", "plaintext-only");
+        dialog.appendChild(editable);
+        press(editable, "Backspace");
+        expect(composer.document.hasMarkup()).toBe(true);
+    });
+
+    test("a back gesture with a tool armed puts the tool down rather than closing", () => {
+        (document.querySelector('.cmc-tool-btn[data-tool="arrow"]') as HTMLButtonElement).click();
+        expect(document.querySelector('.cmc-tool-btn[data-tool="arrow"]')!.classList.contains("is-active")).toBe(true);
+        const cancel = new Event("cancel", { cancelable: true });
+        dialog.dispatchEvent(cancel);
+        expect(cancel.defaultPrevented).toBe(true);
+        expect(document.querySelector('.cmc-tool-btn[data-tool="arrow"]')!.classList.contains("is-active")).toBe(false);
+        const again = new Event("cancel", { cancelable: true });
+        dialog.dispatchEvent(again);
+        expect(again.defaultPrevented).toBe(false);
+    });
+
     test("keys pressed outside the dialog are not the composer's", () => {
         composer.load([ARROW]);
         composer.document.select(composer.document.items()[0]!.id);

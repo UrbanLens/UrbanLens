@@ -10,6 +10,7 @@ import { MarkupDocument, type DocItem, type ShapeType } from "./markup-document"
 import { createMarkupEditor, type MarkupEditor } from "./markup-editor";
 import { MarkupEngine, safeColor, textRotation, type LatLngTuple, type ShapeSpec } from "./markup-engine";
 import { TEXT_SIZE_MAX, TEXT_SIZE_MIN } from "./markup-geometry";
+import { matchesHotkey } from "./hotkeys";
 import { canTurn, ensureLeafletRotate, rotateOptions, toCompassBearing, toContentTurn, type ScriptSource } from "./leaflet-rotate-loader";
 
 // `L` is a page global from a CDN <script>; see markup-engine.ts.
@@ -30,6 +31,9 @@ const TYPE_ICONS: Record<ShapeType, string> = {
 
 /** How far one press of a turn button turns the map. */
 const TURN_STEP = 15;
+
+/** Arrow-key nudges this close together are one undo step. */
+const NUDGE_PAUSE_MS = 700;
 
 /** Where the open state of the Layers list is remembered, per browser. */
 const LAYERS_OPEN_KEY = "ul_cmc_layers_open";
@@ -54,7 +58,8 @@ export interface MarkupComposer {
 /** Whether a key pressed here is typing, which no shortcut may take. */
 function isTextEntry(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false;
-    if (target.closest("[contenteditable=''], [contenteditable='true']")) return true;
+    if (target instanceof HTMLElement && target.isContentEditable) return true;
+    if (target.closest("[contenteditable]:not([contenteditable='false'])")) return true;
     if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
     if (!(target instanceof HTMLInputElement)) return false;
     return !["range", "color", "checkbox", "radio", "button", "submit", "reset", "file", "image"].includes(target.type);
@@ -211,8 +216,12 @@ export function createMarkupComposer(map: L.Map, root: HTMLElement): MarkupCompo
         );
     });
 
-    el.undo?.addEventListener("click", () => doc.undo());
-    el.redo?.addEventListener("click", () => doc.redo());
+    el.undo?.addEventListener("click", () => {
+        if (!editor.isDragging()) doc.undo();
+    });
+    el.redo?.addEventListener("click", () => {
+        if (!editor.isDragging()) doc.redo();
+    });
     el.clear?.addEventListener("click", () => {
         session.cancelShape();
         doc.clear();
@@ -476,7 +485,17 @@ export function createMarkupComposer(map: L.Map, root: HTMLElement): MarkupCompo
 
     // -- Keyboard ------------------------------------------------------------------------------
 
-    let escapeHandledAt = 0;
+    /** Set while the Escape that just let go of something is being handled, so the dialog's own cancel does not also close it. */
+    let escapeConsumed = false;
+    /** Pending close of the arrow-key nudges since the last pause - held keys repeat, and that is one move, not a hundred. */
+    let nudgeTimer: number | null = null;
+
+    function endNudge(): void {
+        if (nudgeTimer === null) return;
+        window.clearTimeout(nudgeTimer);
+        nudgeTimer = null;
+        doc.commit();
+    }
 
     function isOpen(): boolean {
         return root instanceof HTMLDialogElement ? root.open : root.isConnected;
@@ -491,23 +510,51 @@ export function createMarkupComposer(map: L.Map, root: HTMLElement): MarkupCompo
         if (session.getCurrentTool()) return;
         const typing = isTextEntry(target);
         const key = event.key;
-        const mod = event.ctrlKey || event.metaKey;
+        const undoKey = matchesHotkey(event, "undo");
+        const redoKey = !undoKey && matchesHotkey(event, "redo");
+        const modified = event.ctrlKey || event.metaKey || event.altKey;
         let handled = false;
 
-        if ((key === "Delete" || key === "Backspace") && !typing && !mod) {
+        if (key === "Escape") {
+            if (typing) {
+                // Leaves the field, not the dialog: closing from a field would throw the drawing away.
+                doc.commit();
+                (target as HTMLElement).blur();
+                doc.select(null);
+                handled = true;
+            } else {
+                handled = editor.escape();
+            }
+            if (handled) {
+                escapeConsumed = true;
+                window.setTimeout(() => (escapeConsumed = false), 0);
+            }
+        } else if (typing) {
+            // Everything else typed into a field is the field's: its own undo, Backspace and arrows.
+            return;
+        } else if (editor.isDragging()) {
+            // An undo or a delete mid-drag would split the drag's single undo step in two.
+            handled = undoKey || redoKey || key === "Delete" || key === "Backspace" || key.startsWith("Arrow");
+        } else if (undoKey || redoKey) {
+            endNudge();
+            if (redoKey) doc.redo();
+            else doc.undo();
+            // Taken even with nothing left to undo: let through, it reaches the page's own undo, which
+            // would revert something on the server behind this dialog.
+            handled = true;
+        } else if ((key === "Delete" || key === "Backspace") && !modified) {
+            endNudge();
             handled = editor.deleteSelection();
-        } else if (key === "Escape" && !typing) {
-            handled = editor.escape();
-            if (handled) escapeHandledAt = Date.now();
-        } else if (mod && !typing && (key === "z" || key === "Z")) {
-            handled = event.shiftKey ? doc.redo() : doc.undo();
-        } else if (mod && !typing && (key === "y" || key === "Y")) {
-            handled = doc.redo();
-        } else if (key.startsWith("Arrow") && !typing && !(target instanceof HTMLInputElement && target.type === "range") && doc.selectedId()) {
+        } else if (key.startsWith("Arrow") && !modified && !(target instanceof HTMLInputElement && target.type === "range") && doc.selectedId()) {
             const step = event.shiftKey ? 10 : 1;
             const dx = key === "ArrowLeft" ? -step : key === "ArrowRight" ? step : 0;
             const dy = key === "ArrowUp" ? -step : key === "ArrowDown" ? step : 0;
-            handled = editor.nudge(dx, dy);
+            // Joins the nudges before it, or opens a step of its own if something closed theirs.
+            doc.begin();
+            editor.nudge(dx, dy);
+            if (nudgeTimer !== null) window.clearTimeout(nudgeTimer);
+            nudgeTimer = window.setTimeout(endNudge, NUDGE_PAUSE_MS);
+            handled = true;
         }
         if (!handled) return;
         event.preventDefault();
@@ -515,9 +562,17 @@ export function createMarkupComposer(map: L.Map, root: HTMLElement): MarkupCompo
     }
     document.addEventListener("keydown", onKeyDown, true);
 
-    // Escape that let go of something must not also close the dialog.
     function onCancel(event: Event): void {
-        if (session.getCurrentTool() || editor.isDragging() || Date.now() - escapeHandledAt < 500) event.preventDefault();
+        // An Escape that let go of something, or one pressed mid-drag, does not also close the dialog.
+        if (escapeConsumed || editor.isDragging()) {
+            event.preventDefault();
+            return;
+        }
+        // A back gesture with a tool armed puts the tool down; the next one closes the dialog.
+        if (session.getCurrentTool()) {
+            event.preventDefault();
+            session.deactivate();
+        }
     }
     root.addEventListener("cancel", onCancel);
 
@@ -596,6 +651,7 @@ export function createMarkupComposer(map: L.Map, root: HTMLElement): MarkupCompo
         canRotate: () => canTurn(map),
         deactivate() {
             session.deactivate();
+            endNudge();
             doc.commit();
             doc.select(null);
         },
@@ -605,6 +661,7 @@ export function createMarkupComposer(map: L.Map, root: HTMLElement): MarkupCompo
             map.off("rotate", syncCompass);
             rotateControl?.remove();
             if (noticeTimer !== null) window.clearTimeout(noticeTimer);
+            endNudge();
             editor.destroy();
             session.destroy();
         },

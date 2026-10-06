@@ -1228,8 +1228,9 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         if (attributionPending) attributionFrame = frame;
     }
     if (opts.onAttribution) {
-        // Which providers to credit follows the area and zoom on screen, not only the layers.
-        map.on("layeradd layerremove moveend", onAttributionLayerChange);
+        // Which providers to credit follows the area and zoom on screen, not only the layers. A map
+        // turned by leaflet-rotate shows a different area, and turning it fires `rotate`, not `moveend`.
+        map.on("layeradd layerremove moveend rotate", onAttributionLayerChange);
     }
 
     // -- Tile loading visual feedback -------------------------------------------------
@@ -1414,7 +1415,7 @@ function createLeafletMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
         attribution: (includeEngine = true) => attributionText(includeEngine),
         destroy: () => {
             map.off("layeradd layerremove", onTopoLayerChange);
-            if (opts.onAttribution) map.off("layeradd layerremove moveend", onAttributionLayerChange);
+            if (opts.onAttribution) map.off("layeradd layerremove moveend rotate", onAttributionLayerChange);
             if (attributionFrame !== null) {
                 window.cancelAnimationFrame(attributionFrame);
                 attributionFrame = null;

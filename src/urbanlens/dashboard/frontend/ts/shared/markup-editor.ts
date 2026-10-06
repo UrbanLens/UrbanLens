@@ -111,6 +111,17 @@ export function createMarkupEditor(map: L.Map, doc: MarkupDocument, options: Mar
     let activeVertexIndex: number | null = null;
     let drag: Drag | null = null;
     let suppressClickUntil = 0;
+
+    /**
+     * Whether this click is the one a drag ended with, which is the drag's and not a new pick. Only the
+     * first click inside the window is: a later one - picking another shape straight away, or the map
+     * reopened after a quick save - is the viewer's.
+     */
+    function consumeDragClick(): boolean {
+        if (Date.now() >= suppressClickUntil) return false;
+        suppressClickUntil = 0;
+        return true;
+    }
     let destroyed = false;
 
     if (!map.getPane(HANDLE_PANE)) {
@@ -174,7 +185,7 @@ export function createMarkupEditor(map: L.Map, doc: MarkupDocument, options: Mar
             if (!interactive) continue;
             layer.on("click", (event: L.LeafletMouseEvent) => {
                 L.DomEvent.stop(event as unknown as Event);
-                if (Date.now() < suppressClickUntil) return;
+                if (consumeDragClick()) return;
                 if (doc.selectedId() !== item.id) activeVertexIndex = null;
                 doc.select(item.id);
             });
@@ -537,7 +548,7 @@ export function createMarkupEditor(map: L.Map, doc: MarkupDocument, options: Mar
     container.addEventListener("touchstart", onContainerPress, { capture: true, passive: true });
 
     function onMapClick(): void {
-        if (!interactive || Date.now() < suppressClickUntil) return;
+        if (!interactive || consumeDragClick()) return;
         activeVertexIndex = null;
         doc.select(null);
     }

@@ -9,6 +9,7 @@
  * Until that file arrives, or if it never does, a layer is credited with the static string its def
  * carries - the full list, which says more than the view needs and never less.
  */
+import type { FetchInit } from "./site-runtime";
 
 /** Esri's own credit, required wherever one of its basemaps is drawn. */
 export const POWERED_BY_ESRI = "Powered by Esri";
@@ -186,7 +187,10 @@ export function setEsriAttributionFetchForTests(impl: (url: string, init: Reques
 async function fetchCoverages(service: string): Promise<EsriCoverage[] | null> {
     try {
         // No credentials and no referrer: the request names the basemap and nothing about the page.
-        const response = await fetchAttribution(`${ATTRIBUTION_ROOT}${service}`, { credentials: "omit", referrerPolicy: "no-referrer" });
+        // Reported here, by falling back to the static credit: site-runtime's fetch wrapper would
+        // otherwise toast an error for what is a cosmetic lookup an adblocker may well refuse.
+        const init: FetchInit = { credentials: "omit", referrerPolicy: "no-referrer", __ulReported: true };
+        const response = await fetchAttribution(`${ATTRIBUTION_ROOT}${service}`, init);
         if (!response.ok) return null;
         const coverages = parseContributors(await response.json());
         if (!coverages.length) return null;

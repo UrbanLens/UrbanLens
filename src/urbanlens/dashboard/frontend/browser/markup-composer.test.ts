@@ -308,6 +308,69 @@ describe.skipIf(!BUILT)("the map composer in a browser", () => {
         await context.close();
     });
 
+    test("keys stay in the dialog: Escape in a field keeps it open, Ctrl+Z never reaches the page's undo, and a key mid-drag leaves the drag one step", async () => {
+        const { context, page } = await openComposer();
+        // The page's own undo - the server-side stack behind the dialog - as a spy.
+        await page.evaluate(() => {
+            const w = window as unknown as { __siteUndo: string[]; ulUndo?: { register: (p: unknown) => void } };
+            w.__siteUndo = [];
+            w.ulUndo?.register({ canUndo: () => true, canRedo: () => true, undo: () => void w.__siteUndo.push("undo"), redo: () => void w.__siteUndo.push("redo") });
+        });
+        const siteUndo = (): Promise<string[]> => page.evaluate(() => (window as unknown as { __siteUndo: string[] }).__siteUndo);
+        const dialogOpen = (): Promise<boolean> => page.evaluate(() => (document.getElementById("comment-map-composer") as HTMLDialogElement).open);
+
+        const { from, to } = await drawArrow(page);
+        await page.locator("#comment-map-composer-map").focus();
+        for (let i = 0; i < 3; i++) await page.keyboard.press("Control+z");
+        for (let i = 0; i < 3; i++) await page.keyboard.press("Control+Shift+z");
+        expect(await layerNames(page)).toEqual(["Arrow 1"]);
+        expect(await siteUndo()).toEqual([]);
+
+        // Escape typed into a field leaves the field, not the dialog - closing would lose the drawing.
+        await page.focus("#cmc-title-input");
+        await page.keyboard.press("Escape");
+        expect(await dialogOpen()).toBe(true);
+        expect(await layerNames(page)).toEqual(["Arrow 1"]);
+
+        // Ctrl+Z and Delete pressed in the middle of a drag: the drag is still one undo step.
+        const mid = { x: (from.x + to.x) / 2, y: from.y };
+        await page.mouse.click(mid.x, mid.y);
+        await page.waitForSelector(".markup-selection-outline");
+        await page.mouse.move(mid.x, mid.y);
+        await page.mouse.down();
+        for (let i = 1; i <= 5; i++) {
+            await page.mouse.move(mid.x, mid.y + i * 6);
+            await settle(page);
+        }
+        await page.keyboard.press("Control+z");
+        await page.keyboard.press("Delete");
+        for (let i = 6; i <= 10; i++) {
+            await page.mouse.move(mid.x, mid.y + i * 6);
+            await settle(page);
+        }
+        await page.mouse.up();
+        await settle(page);
+        expect(await layerNames(page)).toEqual(["Arrow 1"]);
+        await page.click("#cmc-undo");
+        await page.click("#cmc-undo");
+        expect(await layerNames(page)).toEqual([]);
+        expect(await buttonStates(page)).toMatchObject({ undo: false });
+
+        // Held arrow keys are one nudge, not one step per repeat.
+        await page.click("#cmc-redo");
+        await page.click("#cmc-redo");
+        await page.click('.cmc-layer-row >> nth=0 >> button[data-layer-action="select"]');
+        await page.locator("#comment-map-composer-map").focus();
+        for (let i = 0; i < 30; i++) await page.keyboard.press("ArrowRight");
+        await page.keyboard.press("Escape");
+        await page.click("#cmc-undo");
+        await page.click("#cmc-undo");
+        await page.click("#cmc-undo");
+        expect(await layerNames(page)).toEqual([]);
+        expect(await siteUndo()).toEqual([]);
+        await context.close();
+    });
+
     test("the Layers list picks, hides, reorders and deletes, and a hidden shape is not saved", async () => {
         const { context, page } = await openComposer();
         await drawArrow(page);

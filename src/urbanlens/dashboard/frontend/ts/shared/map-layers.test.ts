@@ -1757,6 +1757,18 @@ describe("the attribution line", () => {
         resetEsriAttributionForTests();
     });
 
+    test("turning the view re-credits it: leaflet-rotate fires rotate, not moveend", () => {
+        seedAlbany();
+        const map = albanyMap();
+        const { seen } = creditsOn(map, { defaultBase: "satellite" });
+        Object.assign(map, { getZoom: () => 10 });
+
+        map.fire("rotate");
+
+        expect(seen.at(-1)).toBe("Powered by Esri · Earthstar Geographics · Leaflet");
+        resetEsriAttributionForTests();
+    });
+
     test("credits the borders overlay on a satellite base too, with Esri's own line once", () => {
         resetEsriAttributionForTests();
         const text = creditFor({ defaultBase: "satellite", initialOverlays: ["borders"] });
