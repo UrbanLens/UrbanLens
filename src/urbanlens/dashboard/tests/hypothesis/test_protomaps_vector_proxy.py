@@ -89,7 +89,7 @@ class VectorTileProxyTests(VectorProxyTestCase):
             response = self.client.get(self.url)
 
         self.assertIn("immutable", response["Cache-Control"])
-        self.assertIn("public", response["Cache-Control"])
+        self.assertIn("private", response["Cache-Control"])
         self.assertIn("max-age=604800", response["Cache-Control"])
 
     def test_a_signed_out_visitor_is_refused(self) -> None:

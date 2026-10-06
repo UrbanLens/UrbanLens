@@ -33,8 +33,10 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
-from urbanlens.dashboard.services.core import bounded_cache
+from urbanlens.dashboard.services.core import bounded_cache, call_tally
+from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
+from urbanlens.dashboard.tests.hypothesis.vendor_tile_wire import vendor_wire
 
 if TYPE_CHECKING:
     from django.core.cache.backends.base import BaseCache
@@ -243,19 +245,58 @@ class BasemapTileCostTests(TestCase):
         """Without this the browser re-asks for every tile on every pan back over the same ground.
 
         A tile is immutable for a given layer and coordinate - that is why the server keeps it for a
-        week - so the answer it already has is the answer it would get."""
+        week - so the answer it already has is the answer it would get. For as long as the vendor allows
+        it, and no further: Esri says a day."""
         response = self._serve_cached()
 
         directives = cache_directives(response)
         print(f"\n  cached tile Cache-Control: {directives!r}")
-        self.assertIn("max-age=", directives)
-        self.assertIn(
-            "public", directives, "a CDN that will not store a tile leaves every one of them on a request thread"
-        )
-        self.assertNotIn("private", directives)
         self.assertIn("immutable", directives, "re-validating a tile that cannot change is a round trip for nothing")
         max_age = int(directives.split("max-age=")[1].split(",")[0])
         self.assertGreaterEqual(max_age, 86400)
+        self.assertLessEqual(max_age, VENDOR_TILES["street"].browser_max_age or max_age)
+
+    def test_no_shared_cache_may_keep_a_tile(self) -> None:
+        """The endpoint is behind a login. A CDN holding a tile would answer it to anyone, and its hit or miss
+        would say whether somebody here has looked at that coordinate."""
+        for response in (self._serve_cached(), self._serve_fetched(x=1214)):
+            directives = {part.strip() for part in cache_directives(response).split(",")}
+            self.assertIn("private", directives)
+            self.assertNotIn("public", directives)
+            self.assertNotIn("s-maxage", " ".join(directives))
+
+    def _serve_fetched(self, x: int) -> HttpResponseBase:
+        with (
+            mock.patch(_CONFIGURED, return_value=True),
+            mock.patch(f"{_GATEWAY}.download_tile", return_value=(200, b"PNG", "image/png")),
+        ):
+            return self.client.get(self._url(x=x))
+
+    @override_settings(SESSION_ENGINE="django.contrib.sessions.backends.cached_db")
+    def test_an_uncached_tile_asks_the_database_nothing(self) -> None:
+        """The miss path, through the real rate-limited session to a stubbed vendor: the budget is checked on the
+        cache's counters, the outcome is tallied there, and the ledger is written by the roll-up a minute later.
+        On 0.8.0 a miss cost seven queries, two under a lock on the service's one ``ApiRateLimit`` row.
+
+        Sessions are cache-backed here as in every deployment with a store, which this host's test settings are
+        not; the limits are as the roll-up last published them, and the process has not read them yet."""
+        client = self.client_class()
+        client.force_login(self.user)
+        _tile_store().set(basemap_tile_cache_key("street", 12, 1204, 1539), (b"x" * TILE_BYTES, "image/png"), 60)
+        with mock.patch(_CONFIGURED, return_value=True), vendor_wire() as wire:
+            client.get(self._url())  # the session's first tile establishes its tile access
+            call_tally.publish_limits("basemap_vendor_tiles")
+            call_tally._limits.clear()
+            with CaptureQueriesContext(connection) as miss:
+                response = client.get(self._url(x=1216))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(wire.call_count, 1)
+        statements = [query["sql"] for query in miss.captured_queries]
+        print(f"\n  uncached tile: {len(statements)} queries")
+        for statement in statements:
+            print(f"    {statement[:100]}")
+        self.assertEqual(statements, [])
 
     def test_a_tile_carries_no_more_headers_than_it_needs(self) -> None:
         """Header bytes are paid per tile, so a page's worth of them is ~30x per map opened."""
@@ -292,10 +333,7 @@ class BasemapTileCostTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("max-age=", cache_directives(response))
-        # `public`, so the freshly-fetched tile is the one a shared cache keeps: it is the only one
-        # that cost an upstream call, and the next viewer of the same area should not repeat it.
-        self.assertIn("public", cache_directives(response))
-        self.assertNotIn("private", cache_directives(response))
+        self.assertIn("immutable", cache_directives(response))
 
     def test_a_miss_the_server_already_remembers_is_not_re_asked_either(self) -> None:
         """The cached-sentinel path, which is how a hole in a layer is answered after the first ask."""

@@ -126,11 +126,11 @@ test.describe("basemap tiles the browser has already fetched", () => {
             async (path) => (await fetch(path, { headers: { Accept: "image/*" } })).headers.get("Cache-Control"),
             first[0]!.name,
         );
-        // `public` on purpose (a4229e994, `_keep_for` in controllers/basemap_tiles.py): the bytes are
-        // keyed on layer and coordinate alone, identical for every signed-in viewer, and `private`
-        // kept every tile off the CDN and on a request thread.
-        expect(directives, "a tile a CDN refuses to store is a tile the origin serves every time").toContain("public");
-        expect(directives).not.toContain("private");
+        // `private` on purpose (D27, `_keep_for` in controllers/basemap_tiles.py): the endpoint is
+        // behind a login, and a shared cache's hits would say which coordinates somebody looked at.
+        // The browser's own cache is the one this spec is about.
+        expect(directives).toContain("private");
+        expect(directives).not.toContain("public");
         expect(directives).toContain("max-age=");
 
         // A new document, so the browser decides about every tile again rather than reusing the

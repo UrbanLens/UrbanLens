@@ -18,13 +18,14 @@ nothing else. Anything that ends the session itself takes the tiles with it imme
 the gate re-reads the session every time: signing out, a flush, an expiry.
 
 ``TILE_AUTH_TTL`` bounds a *fetch*, not a pixel. ``BasemapTileView`` hands the browser
-``Cache-Control: public, max-age=604800, immutable`` (``_keep_for``), so tiles that browser - or
-a shared cache in front of this deployment - already holds keep rendering for up to a week with no
-request reaching this deployment, whatever happened to the session since. That
-is accepted rather than overlooked: the bytes are public vendor imagery, proxied so the vendor
+``Cache-Control: private, max-age=<ttl>, immutable`` (``_keep_for``) - a day for Esri's layers,
+which is what Esri itself allows, and up to a week otherwise - so tiles that browser already holds
+keep rendering with no request reaching this deployment, whatever happened to the session since.
+That is accepted rather than overlooked: the bytes are public vendor imagery, proxied so the vendor
 never learns which coordinates a viewer is looking at, and they carry nothing about the account
 that fetched them. A shorter header would re-fetch every tile a viewer has already seen, which is
-the cost this module exists to remove.
+the cost this module exists to remove. No shared cache may hold them (``D27``): one would answer
+anyone, and its hits would say which coordinates somebody here has looked at.
 """
 
 from __future__ import annotations

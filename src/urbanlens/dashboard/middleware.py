@@ -26,22 +26,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: Set on a response whose body is identical for every viewer, by a view that wants a shared cache
-#: to hold it. Read by ``SecurityHeadersMiddleware``.
-SHARED_CACHE_ATTR = "_ul_shared_cacheable"
+#: Set on a response whose body is identical for every viewer who passes its access check. Read by
+#: ``SecurityHeadersMiddleware``.
+VIEWER_INDEPENDENT_ATTR = "_ul_viewer_independent"
 
 
-def mark_shared_cacheable(response: HttpResponse) -> HttpResponse:
+def mark_viewer_independent(response: HttpResponse) -> HttpResponse:
     """Declare that this response's body does not depend on who asked for it.
 
     The declaration has to be acted on later than a view can reach. A view runs before the session,
     auth and cookie layers, and each of those adds something that means "this answer was built for
-    one person" - a ``Set-Cookie``, or ``Cookie`` in ``Vary``. Either one is enough for Cloudflare
-    to refuse to store the response, so a view that sets ``Cache-Control: public`` and stops there
-    has changed nothing.
+    one person" - a ``Set-Cookie``, or ``Cookie`` in ``Vary``. A browser keys a cached entry on every
+    header ``Vary`` names, so ``Vary: Cookie`` turns any cookie refresh into a miss on bytes that did
+    not change.
 
-    Only for a body that is genuinely viewer-independent. The access check may well be per-viewer:
-    what this asserts is that two viewers who both pass it get identical bytes.
+    Who may keep the response is still ``Cache-Control``'s to say; this only stops the layers below
+    from tying it to one viewer. The access check may well be per-viewer: what this asserts is that
+    two viewers who both pass it get identical bytes.
 
     Args:
         response: The response to mark.
@@ -49,7 +50,7 @@ def mark_shared_cacheable(response: HttpResponse) -> HttpResponse:
     Returns:
         The same response.
     """
-    setattr(response, SHARED_CACHE_ATTR, True)
+    setattr(response, VIEWER_INDEPENDENT_ATTR, True)
     return response
 
 
@@ -180,12 +181,12 @@ class SecurityHeadersMiddleware:
         had their turn.
 
         Args:
-            response: A response already marked by `mark_shared_cacheable`.
+            response: A response already marked by `mark_viewer_independent`.
         """
         # Django writes these out as Set-Cookie at the WSGI boundary, so they are not in `headers`.
         response.cookies.clear()
-        # Accept-Encoding is the one Vary a shared cache can act on; the rest name request headers
-        # this body does not actually depend on.
+        # Accept-Encoding is the one Vary this body really depends on; the rest name request headers
+        # it does not.
         kept = [part.strip() for part in response.headers.get("Vary", "").split(",") if part.strip().lower() == "accept-encoding"]
         if kept:
             response.headers["Vary"] = ", ".join(kept)
@@ -195,7 +196,7 @@ class SecurityHeadersMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         """Attach configured security headers to the response."""
         response = self.get_response(request)
-        if getattr(response, SHARED_CACHE_ATTR, False):
+        if getattr(response, VIEWER_INDEPENDENT_ATTR, False):
             self._drop_per_viewer_headers(response)
         policy = getattr(settings, "PERMISSIONS_POLICY", "")
         if policy:

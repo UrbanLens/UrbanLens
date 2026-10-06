@@ -19,6 +19,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import basemap_tiles
+from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway.BasemapVendorTilesGateway"
 _CONFIGURED = "urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured"
@@ -70,32 +71,46 @@ class UnderlayTileLifetimeTests(TestCase):
         return first, second, download
 
     def test_the_world_is_bought_once_for_the_whole_site_and_kept_for_a_year(self) -> None:
-        first, second, download = self._get(_WORLD_ZOOM)
+        with mock.patch.object(
+            basemap_tiles.bounded_cache, "set_if_small", wraps=basemap_tiles.bounded_cache.set_if_small
+        ) as stored:
+            first, second, download = self._get(_WORLD_ZOOM)
 
         self.assertEqual(first.status_code, 200)
         self.assertEqual(second.content, b"PNGDATA")
         self.assertEqual(download.call_count, 1, "the second viewer of the world picture must not reach the vendor")
-        self.assertIn(f"max-age={basemap_tiles._UNDERLAY_CACHE_TTL}", first["Cache-Control"])
+        self.assertEqual(stored.call_args.args[3], basemap_tiles._UNDERLAY_CACHE_TTL)
         self.assertIn("immutable", first["Cache-Control"])
-        self.assertIn("public", first["Cache-Control"], "a private answer is one no CDN will hold")
+
+    def test_the_browser_keeps_it_as_long_as_the_vendor_allows(self) -> None:
+        """This deployment keeps the bytes for a year; it tells the browser what Esri tells it, which is a day."""
+        first, _, _ = self._get(_WORLD_ZOOM)
+
+        self.assertIn(f"max-age={VENDOR_TILES['satellite'].browser_max_age}", first["Cache-Control"])
 
     def test_the_lifetime_survives_the_cache_hit(self) -> None:
         """A header stamped only on the fresh path would quietly shorten to nothing the moment the
         tile was cached - which is every request after the first, i.e. all of them."""
-        _, second, _ = self._get(_WORLD_ZOOM)
+        first, second, _ = self._get(_WORLD_ZOOM)
 
-        self.assertIn(f"max-age={basemap_tiles._UNDERLAY_CACHE_TTL}", second["Cache-Control"])
+        self.assertEqual(second["Cache-Control"], first["Cache-Control"])
 
     def test_an_ordinary_tile_is_left_on_the_ordinary_lifetime(self) -> None:
         """This is a narrow exemption for sixteen URLs per layer, not a site-wide change to how
         long a basemap tile is held."""
-        first, _, _ = self._get(12)
+        with mock.patch.object(
+            basemap_tiles.bounded_cache, "set_if_small", wraps=basemap_tiles.bounded_cache.set_if_small
+        ) as stored:
+            self._get(12)
 
-        self.assertIn(f"max-age={basemap_tiles._TILE_CACHE_TTL}", first["Cache-Control"])
+        self.assertEqual(stored.call_args.args[3], basemap_tiles._TILE_CACHE_TTL)
 
     def test_a_missing_world_tile_is_not_a_year_long_hole(self) -> None:
-        first, _, _ = self._get(_WORLD_ZOOM, answer=(404, b"", ""))
+        with mock.patch.object(
+            basemap_tiles.bounded_cache, "set_or_skip", wraps=basemap_tiles.bounded_cache.set_or_skip
+        ) as stored:
+            first, _, _ = self._get(_WORLD_ZOOM, answer=(404, b"", ""))
 
         self.assertEqual(first.status_code, 404)
-        self.assertIn(f"max-age={basemap_tiles._TILE_CACHE_TTL}", first["Cache-Control"])
+        self.assertEqual(stored.call_args.args[2], basemap_tiles._TILE_CACHE_TTL)
         self.assertNotIn(f"max-age={basemap_tiles._UNDERLAY_CACHE_TTL}", first["Cache-Control"])

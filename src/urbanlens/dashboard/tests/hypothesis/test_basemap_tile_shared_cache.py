@@ -1,13 +1,10 @@
-"""Whether a CDN will actually store a proxied basemap tile.
+"""Who may keep a proxied basemap tile: the viewer's browser, for as long as the vendor allows, and nobody else.
 
-The proxy's throughput is bounded by ``basemap_tile_upstream_concurrency`` slots per process, so a
-viewport of ~30 tiles is served a few at a time no matter how much hardware is behind it. The only
-way out is for the tiles not to reach the origin at all, which needs an edge cache to hold them -
-and an edge cache refuses for reasons a view cannot see, because sessions, auth and the media
-cookie all touch the response after the view has returned.
-
-So these tests assert the property that decides it - "a shared cache may store this" - rather than
-the individual headers, which are only the current spelling of it.
+The endpoint is behind a login, so a shared cache holding a tile would hand it to anyone who asked, and its hit or
+miss would say whether somebody here had looked at that coordinate. The browser is the cache that matters anyway:
+it is what keeps a pan back over the same ground off the proxy. It only does that if the layers below the view do
+not tie the response to one viewer - sessions, auth and the media cookie all touch it after the view returns, and a
+``Vary: Cookie`` makes every cookie refresh a miss on bytes that did not change.
 """
 
 from __future__ import annotations
@@ -15,8 +12,9 @@ from __future__ import annotations
 from django.http import HttpResponse, HttpResponseRedirect
 from django.test import SimpleTestCase
 
-from urbanlens.dashboard.controllers.basemap_tiles import _keep_for
-from urbanlens.dashboard.middleware import SHARED_CACHE_ATTR, SecurityHeadersMiddleware, mark_shared_cacheable
+from urbanlens.dashboard.controllers.basemap_tiles import _browser_ttl, _keep_for
+from urbanlens.dashboard.middleware import VIEWER_INDEPENDENT_ATTR, SecurityHeadersMiddleware, mark_viewer_independent
+from urbanlens.dashboard.services.map.basemap_vendors import VENDOR_TILES
 
 
 def _served(response: HttpResponse) -> HttpResponse:
@@ -24,20 +22,18 @@ def _served(response: HttpResponse) -> HttpResponse:
     return SecurityHeadersMiddleware(lambda _request: response)(None)
 
 
-def _refusals(response: HttpResponse) -> list[str]:
-    """Why a shared cache would decline to store this response, if it would.
+def _directives(response: HttpResponse) -> set[str]:
+    return {part.strip().lower() for part in response.headers.get("Cache-Control", "").split(",") if part.strip()}
 
-    Each entry is one of Cloudflare's documented reasons for `BYPASS`/`DYNAMIC`. An empty list
-    means the response is storable.
-    """
+
+def _browser_misses(response: HttpResponse) -> list[str]:
+    """Why a browser would not answer the next request for this URL from what it kept, if it would not."""
     reasons: list[str] = []
-    directives = {part.strip().lower() for part in response.headers.get("Cache-Control", "").split(",")}
-    if "public" not in directives:
-        reasons.append("Cache-Control does not say public")
-    if any(d in directives for d in ("private", "no-store", "no-cache", "max-age=0")):
-        reasons.append("Cache-Control forbids a shared cache")
-    if response.cookies:
-        reasons.append("Set-Cookie is present")
+    directives = _directives(response)
+    if not any(d.startswith("max-age=") and d != "max-age=0" for d in directives):
+        reasons.append("no lifetime")
+    if directives & {"no-store", "no-cache"}:
+        reasons.append("Cache-Control forbids keeping it")
     vary = [part.strip().lower() for part in response.headers.get("Vary", "").split(",") if part.strip()]
     if "cookie" in vary:
         reasons.append("Vary names Cookie")
@@ -46,40 +42,40 @@ def _refusals(response: HttpResponse) -> list[str]:
     return reasons
 
 
-class TileResponsesAreStorableByASharedCacheTests(SimpleTestCase):
+class OnlyTheViewersBrowserKeepsATileTests(SimpleTestCase):
     """The 200 and the definitive 404 - the two answers worth holding."""
 
-    def test_a_tile_survives_everything_the_layers_below_add_to_it(self) -> None:
-        """The regression this exists for: a view saying `public` is not enough on its own.
+    def test_no_shared_cache_may_keep_one(self) -> None:
+        for response in (
+            _keep_for(HttpResponse(b"tile", content_type="image/png")),
+            _keep_for(HttpResponse(status=404)),
+        ):
+            directives = _directives(_served(response))
+            self.assertIn("private", directives)
+            self.assertNotIn("public", directives)
+            self.assertFalse([d for d in directives if d.startswith("s-maxage")])
 
-        The session layer adds ``Vary: Cookie`` whenever it is read, and the media cookie
-        middleware calls ``set_media_cookie`` on any authenticated response due a refresh. Either
-        one alone is a `BYPASS`, and neither is visible from the view.
-        """
+    def test_the_browser_keeps_it_through_everything_the_layers_below_add(self) -> None:
+        """The session layer adds ``Vary: Cookie`` whenever it is read, and the media cookie middleware sets a
+        cookie on any authenticated response due a refresh. Neither is visible from the view."""
         response = _keep_for(HttpResponse(b"tile", content_type="image/png"))
         response.headers["Vary"] = "Cookie"
         response.set_cookie("ul_media", "refreshed")
 
-        self.assertEqual(_refusals(_served(response)), [])
+        served = _served(response)
 
-    def test_a_definitive_404_is_storable_too(self) -> None:
-        """A blank area is re-asked on every pan over the same ground otherwise."""
-        response = _keep_for(HttpResponse(status=404))
-        response.headers["Vary"] = "Cookie"
+        self.assertEqual(_browser_misses(served), [])
+        self.assertFalse(served.cookies)
 
-        self.assertEqual(_refusals(_served(response)), [])
-
-    def test_the_browser_is_still_told_to_keep_it(self) -> None:
-        """Edge caching is the new half; the browser cache was already load-bearing."""
+    def test_a_tile_is_kept_without_revalidating(self) -> None:
         served = _served(_keep_for(HttpResponse(b"tile", content_type="image/png")))
 
-        self.assertIn("immutable", served.headers["Cache-Control"])
-        self.assertIn("max-age=604800", served.headers["Cache-Control"])
+        self.assertIn("immutable", _directives(served))
+        self.assertIn("max-age=604800", _directives(served))
         self.assertEqual(served.headers["X-Content-Type-Options"], "nosniff")
 
     def test_negotiated_encoding_still_varies(self) -> None:
-        """Accept-Encoding is the one Vary a CDN keys on rather than ignores, so dropping it
-        wholesale would let a gzipped body reach a client that cannot read it."""
+        """Dropping Accept-Encoding along with Cookie would let a gzipped body reach a client that cannot read it."""
         response = _keep_for(HttpResponse(b"tile", content_type="image/png"))
         response.headers["Vary"] = "Accept-Encoding, Cookie"
 
@@ -91,13 +87,32 @@ class TileResponsesAreStorableByASharedCacheTests(SimpleTestCase):
         self.assertNotIn("Vary", _served(response).headers)
 
 
+class TheVendorsLifetimeIsTheCeilingTests(SimpleTestCase):
+    """Esri sends ``Cache-Control: max-age=86400``; the browser is told no longer, however long this deployment
+    keeps the bytes itself."""
+
+    def test_every_vendor_layer_is_cut_to_its_vendors_lifetime(self) -> None:
+        for layer, vendor in VENDOR_TILES.items():
+            with self.subTest(layer=layer):
+                self.assertIsNotNone(vendor.browser_max_age)
+                self.assertEqual(_browser_ttl(layer, 365 * 86400), vendor.browser_max_age)
+
+    def test_a_shorter_life_of_our_own_is_kept(self) -> None:
+        self.assertEqual(_browser_ttl("satellite", 3600), 3600)
+
+    def test_a_layer_no_vendor_table_names_keeps_this_deployments_lifetime(self) -> None:
+        self.assertEqual(_browser_ttl("some_redata_layer", 604800), 604800)
+
+    def test_at_least_a_day_where_the_vendor_allows_a_day(self) -> None:
+        self.assertGreaterEqual(_browser_ttl("satellite", 604800), 86400)
+
+
 class OnlyMarkedResponsesAreStrippedTests(SimpleTestCase):
     """The mark is the whole safety boundary: stripping is destructive to anything else."""
 
     def test_a_signed_out_visitors_redirect_keeps_its_cookies(self) -> None:
-        """The tile view answers an anonymous request with `handle_no_permission()`, which never
-        reaches `_keep_for`. Stripping that one would drop the session cookie carrying the
-        `next` round trip, and cache a login redirect under a tile's URL."""
+        """The tile view answers an anonymous request with `handle_no_permission()`, which never reaches
+        `_keep_for`. Stripping that one would drop the session cookie carrying the `next` round trip."""
         response = HttpResponseRedirect("/accounts/login/")
         response.set_cookie("sessionid", "abc")
         response.headers["Vary"] = "Cookie"
@@ -106,32 +121,22 @@ class OnlyMarkedResponsesAreStrippedTests(SimpleTestCase):
 
         self.assertEqual(served.cookies["sessionid"].value, "abc")
         self.assertEqual(served.headers["Vary"], "Cookie")
-        self.assertNotEqual(_refusals(served), [])
 
-    def test_a_503_is_left_uncacheable(self) -> None:
-        """Slot exhaustion and an unreachable upstream both answer 503 without the stamp. Holding
-        one would turn a passing outage into a permanently blank map region."""
-        response = HttpResponse(status=503, headers={"Retry-After": "1"})
+    def test_a_503_is_left_unmarked_and_without_a_lifetime(self) -> None:
+        """Slot exhaustion and an unreachable upstream both answer 503 without the stamp. Keeping one would turn a
+        passing outage into a blank map region."""
+        served = _served(HttpResponse(status=503, headers={"Retry-After": "1"}))
 
-        served = _served(response)
-
-        self.assertFalse(getattr(served, SHARED_CACHE_ATTR, False))
-        self.assertNotEqual(_refusals(served), [])
-
-    def test_the_catalogue_is_not_marked_by_the_tile_stamp(self) -> None:
-        """`/sources/` answers a different layer list to a signed-in viewer than to a signed-out
-        one, so it is the one thing on this prefix that must never be shared."""
-        response = HttpResponse(b'{"layers": []}', content_type="application/json")
-
-        self.assertNotEqual(_refusals(_served(response)), [])
+        self.assertFalse(getattr(served, VIEWER_INDEPENDENT_ATTR, False))
+        self.assertIn("no lifetime", _browser_misses(served))
 
 
 class TheStripRunsAfterTheLayersItUndoesTests(SimpleTestCase):
     """Position, not behaviour - but the mechanism is silently inert if it ever moves.
 
-    `SecurityHeadersMiddleware` only sees headers added by middleware listed below it, because the
-    response phase runs in reverse. Below `SessionMiddleware` it would strip a `Vary: Cookie` that
-    the session layer then adds straight back, and nothing would fail except the cache hit rate.
+    `SecurityHeadersMiddleware` only sees headers added by middleware listed below it, because the response phase
+    runs in reverse. Below `SessionMiddleware` it would strip a `Vary: Cookie` that the session layer then adds
+    straight back, and nothing would fail except the browser's hit rate.
     """
 
     def test_the_stripper_is_listed_above_every_layer_that_marks_a_response_per_viewer(self) -> None:
@@ -149,9 +154,9 @@ class TheStripRunsAfterTheLayersItUndoesTests(SimpleTestCase):
             self.assertLess(stripper, order.index(name), f"{name} runs after the strip and would undo it")
 
 
-class MarkSharedCacheableTests(SimpleTestCase):
+class MarkViewerIndependentTests(SimpleTestCase):
     def test_it_returns_the_same_response_so_it_can_wrap_a_return(self) -> None:
         response = HttpResponse(b"x")
 
-        self.assertIs(mark_shared_cacheable(response), response)
-        self.assertTrue(getattr(response, SHARED_CACHE_ATTR, False))
+        self.assertIs(mark_viewer_independent(response), response)
+        self.assertTrue(getattr(response, VIEWER_INDEPENDENT_ATTR, False))

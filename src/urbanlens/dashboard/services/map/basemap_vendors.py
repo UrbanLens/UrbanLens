@@ -41,12 +41,15 @@ class VendorTiles:
             its published depth describes an endpoint that is not being used: too shallow and the
             client upscales levels this vendor would have drawn, too deep and the proxy fetches
             Esri's blank-past-coverage JPEG, which is a 200 and caches for a week like any tile.
+        browser_max_age: The longest the vendor lets a client keep a tile, from its own
+            ``Cache-Control``; the browser is told no longer than this.
     """
 
     url_template: str
     subdomains: tuple[str, ...] = ()
     attribution: str | None = None
     max_native_zoom: int | None = None
+    browser_max_age: int | None = None
 
     @property
     def cache_tag(self) -> str:
@@ -96,6 +99,9 @@ class VendorTiles:
 
 
 _ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services"
+#: What Esri sends with a tile: ``Cache-Control: max-age=86400``, read off World_Imagery and
+#: World_Street_Map on 2026-10-06.
+_ESRI_MAX_AGE = 86_400
 
 #: The service path inside an ArcGIS Online tile URL - ``Canvas/World_Dark_Gray_Base`` keeps its folder.
 _ESRI_SERVICE = re.compile(r"^https://(?:server|services)\.arcgisonline\.com/ArcGIS/rest/services/(.+?)/MapServer/", re.IGNORECASE)
@@ -103,15 +109,16 @@ _ESRI_SERVICE = re.compile(r"^https://(?:server|services)\.arcgisonline\.com/Arc
 #: REData layer id -> the endpoint REData would have fetched on our behalf. Mirrors its
 #: ``TILE_PROVIDERS``; a layer absent here still goes through REData.
 VENDOR_TILES: dict[str, VendorTiles] = {
-    "street": VendorTiles(url_template=f"{_ESRI}/World_Street_Map/MapServer/tile/{{z}}/{{y}}/{{x}}"),
-    "satellite": VendorTiles(url_template=f"{_ESRI}/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}"),
-    "borders": VendorTiles(url_template=f"{_ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{{z}}/{{y}}/{{x}}"),
+    "street": VendorTiles(url_template=f"{_ESRI}/World_Street_Map/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
+    "satellite": VendorTiles(url_template=f"{_ESRI}/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
+    "borders": VendorTiles(url_template=f"{_ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{{z}}/{{y}}/{{x}}", browser_max_age=_ESRI_MAX_AGE),
     # Esri's dark canvas rather than CARTO's dark_all, which was the last CARTO reference left and
     # was never a deliberate choice here. Only the fallback either way: `dark` draws as a Protomaps
     # vector style wherever WebGL2 is available.
     "dark": VendorTiles(
         url_template=f"{_ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, © OpenStreetMap contributors, and the GIS User Community",
+        browser_max_age=_ESRI_MAX_AGE,
     ),
     # Esri's topographic map rather than OpenTopoMap, which measured 0.566s a tile against 0.25s
     # here. It is the full map - contours, roads and labels - rather than the bare relief of
@@ -125,6 +132,7 @@ VENDOR_TILES: dict[str, VendorTiles] = {
         url_template=f"{_ESRI}/World_Topo_Map/MapServer/tile/{{z}}/{{y}}/{{x}}",
         attribution="Esri, HERE, Garmin, Intermap, USGS, NPS, © OpenStreetMap contributors, and the GIS User Community",
         max_native_zoom=19,
+        browser_max_age=_ESRI_MAX_AGE,
     ),
 }
 

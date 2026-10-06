@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: D18` · `status: accepted` · `updated: 2026-09-23`
+`id: D18` · `status: superseded` · `updated: 2026-10-06` · `superseded by: D27`
 
 ## Decision
 
