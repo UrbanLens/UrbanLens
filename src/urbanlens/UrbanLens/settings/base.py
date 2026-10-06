@@ -711,6 +711,9 @@ _S3_STORAGE_OPTIONS = {
     "querystring_auth": True,
     # Never overwrite; differs from S3Storage's default.
     "file_overwrite": False,
+    # Opening an object downloads all of it on the first read. S3Storage's default of 0 keeps every byte in RAM, so a
+    # 900 MB video held 900 MB; past this many bytes it spools to a temporary file instead.
+    "max_memory_size": 16 * 1024 * 1024,
 }
 
 # Manifest storage needs collectstatic; tests use plain storage.
