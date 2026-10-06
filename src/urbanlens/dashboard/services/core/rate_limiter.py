@@ -333,7 +333,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         # about 10,000 queries a day per address, and that address is the one production REData shares.
         calls_per_minute=10,
         calls_per_day=2_000,
-        notes="The public Overpass instances the self-hosted primary fails over to. Their limits are per address, shared by every deployment and REData.",
+        notes="Free API: the public Overpass instances the self-hosted primary fails over to. Their limits are per address, shared by every deployment and REData.",
         billable=False,
     ),
     "digital_commonwealth": ServiceDefaults(
