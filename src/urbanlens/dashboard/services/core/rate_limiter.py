@@ -118,11 +118,15 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         calls_per_day=500,
         calls_per_30_days=9999,
-        # Geocoding, and the legacy Place Details `cid:` lookup counted here (Essentials), are
-        # 10,000 a month free each; REData bills the same SKUs.
+        # Geocoding is 10,000 a month free, and REData bills it too. The legacy Place Details `cid:` lookup
+        # (GoogleGeocodingGateway.get_coordinates_by_cid) is counted here as well, but Google bills it as
+        # "Places Details", a Pro SKU with 5,000 free a month, even for `fields=geometry`. This ceiling still
+        # keeps that SKU free: with the deployments' shares summing to at most 1, 0.4 x 10,000 here plus
+        # google_places' 0.4 x 1,000 is at most 4,400 of its 5,000, and REData sends no legacy Place Details
+        # request. That holds by arithmetic, not by design.
         free_tier_per_calendar_month=10_000,
         free_tier_allotment=0.4,
-        notes="Free tier: 10,000 calls/month for Geocoding and for Place Details Essentials, shared with REData on the same billing account.",
+        notes="Free tier: 10,000 calls/month for Geocoding, shared with REData on the same billing account. The legacy Place Details cid: lookup is counted here too, though Google bills it as Places Details (Pro, 5,000 free a month).",
         cost_per_call=Decimal("0.005"),
     ),
     "redata_cid_lookup": ServiceDefaults(
@@ -145,6 +149,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=20,
         # REData's whole Google Places budget is 160 uncached calls a UTC day, shared by every key and its own CID
         # resolution; it asks each client for about 40 (../REData/docs/infrastructure-2026-10-02-replies.md, item 3).
+        # Migration 0064 gives this to a row still holding 0.8.0's uncapped default.
         calls_per_day=40,
         notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
     ),
@@ -611,6 +616,8 @@ def _still_at_fallback(row: Any, service: str) -> bool:
 def get_limit_config(service: str) -> Any:
     """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
     A row still holding the generic fallback takes the service's registered defaults once there are some; ``enabled`` is never touched.
+    A row holding a service's own defaults is never rewritten here, since an admin may have chosen them: a changed default
+    reaches existing rows only through a data migration that touches rows still holding the old values exactly (0064).
 
     Args:
         service: The service key (e.g. ``"nps"``).
