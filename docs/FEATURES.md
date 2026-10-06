@@ -407,6 +407,20 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   by the user. Overture comes from REData's own Overture mirror where it holds the point and from
   Overture's public release elsewhere (`services.apis.locations.boundaries.overture.OvertureProvider`)
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
+- **Editing in the map composer** (the "Attach a Map" / "take a screenshot" dialog,
+  `partials/map/_markup_composer_dialog.html`, `frontend/ts/shared/markup-composer.ts`) — everything
+  drawn stays editable: click or tap a shape to select it, then drag it, pull its handles to move,
+  add (the "+" on each edge) or remove points, extend a line or arrow from either end, scale it from
+  its corner, or turn it from its stalk; change its colour, width, fill, or a label's words, size and
+  turn. Delete/Backspace (never while typing), the Delete button, or the Layers list remove it; the
+  Layers list also selects, hides (a hidden shape is not saved or downloaded) and reorders.
+  Undo/Redo cover every edit, and Undo, Redo and Clear are disabled when they would do nothing. The
+  map itself turns (leaflet-rotate, loaded only for this dialog); the saved map keeps its
+  `bearing` and reopens and downloads turned
+- **Per-area basemap credits** — an Esri basemap's footer credits the providers for the area and
+  zoom on screen (Esri's `static.arcgis.com/attribution/<service>` coverage file, as esri-leaflet
+  does), not the worldwide list; "Powered by Esri" always shows, and the static credit stands in
+  until the coverage arrives or if it cannot be had. Downloads burn the same credit into the image
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
 - **Georeferenced image overlays** — drop a historical map image (a Sanborn fire-insurance sheet,
