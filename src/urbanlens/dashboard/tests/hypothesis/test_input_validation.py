@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from datetime import date
+import io
 import logging
 import math
 import re
 from unittest import mock
+
+from PIL import Image as PILImage
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
@@ -22,6 +25,7 @@ from urbanlens.dashboard.services.core.input_validation import (
     require_date_within,
     require_format,
     require_in_range,
+    require_jpeg_size,
     require_query,
 )
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, _RateLimitedSession, check_rate_limit
@@ -121,6 +125,33 @@ class RequireInRangeFormatDateTests(TestCase):
         with self.assertRaises(ImpossibleInputError) as caught:
             require_date_within(SERVICE, "start", date(1939, 1, 1), earliest=date(1940, 1, 1))
         self.assertIs(caught.exception.reason, InputRejection.OUTSIDE_DATE_COVERAGE)
+
+
+class RequireJpegSizeTests(TestCase):
+    @staticmethod
+    def _jpeg(width: int, height: int) -> bytes:
+        buffer = io.BytesIO()
+        PILImage.new("RGB", (width, height)).save(buffer, format="JPEG")
+        return buffer.getvalue()
+
+    def test_a_jpeg_at_the_minimum_is_returned_unchanged(self) -> None:
+        for size in ((4, 4), (4, 512), (512, 4)):
+            jpeg = self._jpeg(*size)
+            with self.subTest(size=size):
+                self.assertIs(require_jpeg_size(SERVICE, "image", jpeg, minimum_side=4), jpeg)
+
+    def test_a_jpeg_under_the_minimum_on_either_side_is_out_of_range(self) -> None:
+        for size in ((3, 4), (4, 3), (1, 1)):
+            with self.subTest(size=size), self.assertRaises(ImpossibleInputError) as caught:
+                require_jpeg_size(SERVICE, "image", self._jpeg(*size), minimum_side=4)
+            self.assertIs(caught.exception.reason, InputRejection.OUT_OF_RANGE)
+            self.assertIn(f"{size[0]}x{size[1]}", caught.exception.detail)
+
+    def test_a_size_the_header_does_not_give_is_left_to_the_provider(self) -> None:
+        for content in (b"", b"not-a-jpeg", self._jpeg(1, 1)[:40]):
+            with self.subTest(content=content[:12]):
+                self.assertIs(require_jpeg_size(SERVICE, "image", content, minimum_side=4), content)
+        self.assertFalse(ApiCallLog.objects.filter(service=SERVICE).exists())
 
 
 class RejectionIsCountedTests(TestCase):

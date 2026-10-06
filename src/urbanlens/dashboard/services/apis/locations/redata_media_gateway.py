@@ -16,6 +16,29 @@ if TYPE_CHECKING:
 
 _MEDIA_LOOKUP_PATH = "/api/v1/media/lookup/"
 
+#: REData's street-level imagery networks among its media providers. Their captures are the Street-level tab's, read by date
+#: from ``/street-view/``; no tab built from ``/media/lookup/`` shows them.
+STREET_LEVEL_PROVIDERS = frozenset({"mapillary", "kartaview", "panoramax"})
+
+#: The ``/media/lookup/`` providers the Nearby Media and Aerial tabs render: every one REData registers but the street-level
+#: networks. REData reads a repeated ``?provider=`` as the only sources to run - the rest are never called, which is what
+#: spares the networks' own request budgets - and has no form that excludes one, so this names the ones kept. A provider
+#: REData adds is therefore not shown until it is added here (and to ``PROVIDER_LABELS`` in
+#: ``plugins.builtin.redata_nearby_media``, which a test holds to this list). One it renames or retires is refused as
+#: ``unknown_provider``; ``redata_point_data.media_near`` then asks once more with no filter and logs a warning naming
+#: the tag, so the tab keeps working until this list is corrected.
+NEARBY_MEDIA_PROVIDERS: tuple[str, ...] = (
+    "nps_media",
+    "wikimedia_commons",
+    "flickr",
+    "instagram",
+    "youtube",
+    "tiktok",
+    "vimeo",
+    "dailymotion",
+    "internet_archive_video",
+)
+
 
 @dataclass(slots=True, kw_only=True)
 class RedataMediaGateway(RedataLocationContextGateway):

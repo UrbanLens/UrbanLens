@@ -5,16 +5,19 @@ from __future__ import annotations
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 import pytest
+import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.redata_aerial_media import AerialMediaSource
 from urbanlens.dashboard.plugins.builtin.redata_nearby_media import NearbyMediaSource, media_item_from_row
 from urbanlens.dashboard.plugins.builtin.redata_street_level import StreetLevelPhotosSource
+from urbanlens.dashboard.services.apis.locations import redata_media_gateway
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
     LocationContextEnvelope,
     LocationContextUnavailableError,
@@ -25,6 +28,7 @@ from urbanlens.dashboard.services.apis.locations.redata_locations_context_gatewa
 )
 from urbanlens.dashboard.services.apis.locations.redata_media_gateway import RedataMediaGateway
 from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+from urbanlens.dashboard.services.core.coalesce import coalesced
 from urbanlens.dashboard.services.locations import redata_point_data
 from urbanlens.UrbanLens.settings.app import settings
 
@@ -33,6 +37,25 @@ if TYPE_CHECKING:
 
 _MEDIA_UUID = "6f1c2b9e-1d1a-4e0b-9a43-2f6f7a1b9c10"
 _CAPTURE_UUID = "0b7f8d3e-55aa-4c11-8e2d-1c1f2a3b4c5d"
+#: Every REData media provider the Nearby Media and Aerial tabs can show, spelled out here rather than read from the code
+#: under test: a provider added to or dropped from the request must change this on purpose.
+_RENDERED_PROVIDERS = [
+    "nps_media",
+    "wikimedia_commons",
+    "flickr",
+    "instagram",
+    "youtube",
+    "tiktok",
+    "vimeo",
+    "dailymotion",
+    "internet_archive_video",
+]
+_STREET_LEVEL = {"mapillary", "kartaview", "panoramax"}
+#: REData's ``unknown_provider`` message for a request that named two retired tags.
+_UNKNOWN_PROVIDER_MESSAGE = (
+    "Unknown provider(s): dailymotion, vimeo. Valid: nps_media, mapillary, kartaview, panoramax, wikimedia_commons, "
+    "flickr, instagram, youtube, tiktok, internet_archive_video."
+)
 
 
 @contextmanager
@@ -249,7 +272,151 @@ class SharedPointDataTests(SimpleTestCase):
         ):
             redata_point_data.media_near(41.7, -73.9)
             redata_point_data.media_near(41.7, -73.9)
-        lookup.assert_called_once_with(41.7, -73.9)
+        lookup.assert_called_once_with(41.7, -73.9, provider=_RENDERED_PROVIDERS)
+
+    def test_the_lookup_asks_for_the_providers_the_tabs_render_and_no_street_level_network(self) -> None:
+        """The request REData is sent, not the call that makes it: each provider asked costs REData an upstream search."""
+        body = {"count": 1, "complete": True, "results": [_media_row()], "providers": []}
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "_request", return_value=_response(200, body)) as request,
+        ):
+            rows = redata_point_data.media_near(41.7, -73.9).results
+
+        request.assert_called_once()
+        path, params = request.call_args.args
+        self.assertEqual(path, "/api/v1/media/lookup/")
+        self.assertEqual(params["provider"], _RENDERED_PROVIDERS)
+        self.assertFalse(_STREET_LEVEL & set(params["provider"]))
+        # REData documents ``provider`` as repeatable, so the wire form is one ``provider=`` pair per tag.
+        wire = parse_qs(
+            urlsplit(requests.Request("GET", "https://redata.example.test/", params=params).prepare().url or "").query
+        )
+        self.assertEqual(wire["provider"], _RENDERED_PROVIDERS)
+        self.assertEqual([row["uuid"] for row in rows], [_MEDIA_UUID])
+
+    def test_the_provider_filter_is_part_of_the_shared_answers_key(self) -> None:
+        """An answer shared under one provider set is not handed to a reader that asked for another."""
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "lookup_envelope", return_value=_envelope([_media_row()])) as lookup,
+        ):
+            redata_point_data.media_near(41.7, -73.9)
+            with mock.patch.object(redata_media_gateway, "NEARBY_MEDIA_PROVIDERS", ("flickr",)):
+                redata_point_data.media_near(41.7, -73.9)
+        self.assertEqual([call.kwargs["provider"] for call in lookup.call_args_list], [_RENDERED_PROVIDERS, ["flickr"]])
+
+    def test_an_unknown_provider_is_retried_once_without_the_filter_and_named_in_a_warning(self) -> None:
+        """A provider REData renamed or retired must not blank the tab: the retry gets every provider's rows."""
+        rejected = _response(400, {"error": "unknown_provider", "message": _UNKNOWN_PROVIDER_MESSAGE})
+        answer = _response(200, {"count": 1, "complete": True, "results": [_media_row()], "providers": []})
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "_request", side_effect=[rejected, answer]) as request,
+            self.assertLogs(redata_point_data.logger, level="WARNING") as logged,
+        ):
+            rows = redata_point_data.media_near(41.7, -73.9).results
+
+        self.assertEqual(request.call_count, 2)
+        first, second = (call.args for call in request.call_args_list)
+        self.assertEqual(first, ("/api/v1/media/lookup/", {"lat": 41.7, "lng": -73.9, "provider": _RENDERED_PROVIDERS}))
+        self.assertEqual(second, ("/api/v1/media/lookup/", {"lat": 41.7, "lng": -73.9}))
+        self.assertEqual([row["uuid"] for row in rows], [_MEDIA_UUID])
+        (record,) = logged.records
+        self.assertEqual(record.levelname, "WARNING")
+        # The tags REData rejected, not the nine asked for: that is what tells an operator which one drifted.
+        self.assertIn("dailymotion", record.getMessage())
+        self.assertIn("vimeo", record.getMessage())
+        self.assertNotIn("flickr", record.getMessage())
+
+    def test_an_unknown_provider_message_that_names_none_logs_the_whole_list(self) -> None:
+        rejected = _response(400, {"error": "unknown_provider", "message": "Unknown provider."})
+        answer = _response(200, {"count": 0, "complete": True, "results": [], "providers": []})
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "_request", side_effect=[rejected, answer]),
+            self.assertLogs(redata_point_data.logger, level="WARNING") as logged,
+        ):
+            redata_point_data.media_near(41.7, -73.9)
+
+        for provider in _RENDERED_PROVIDERS:
+            self.assertIn(provider, logged.records[0].getMessage())
+
+    def test_the_unfiltered_retry_is_shared_under_the_unfiltered_key_for_every_reader(self) -> None:
+        rejected = _response(400, {"error": "unknown_provider", "message": _UNKNOWN_PROVIDER_MESSAGE})
+        answer = _response(200, {"count": 1, "complete": True, "results": [_media_row()], "providers": []})
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "_request", side_effect=[rejected, answer]) as request,
+            self.assertLogs(redata_point_data.logger, level="WARNING"),
+        ):
+            redata_point_data.media_near(41.7, -73.9)
+            again = redata_point_data.media_near(41.7, -73.9)
+
+            def unreachable() -> LocationContextEnvelope:
+                raise AssertionError("the unfiltered answer was not shared under its own key")
+
+            shared = coalesced(redata_point_data.media_key(41.7, -73.9, None), unreachable, ttl=60)
+
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual([row["uuid"] for row in again.results], [_MEDIA_UUID])
+        self.assertEqual(shared, again)
+        self.assertNotEqual(
+            redata_point_data.media_key(41.7, -73.9, None),
+            redata_point_data.media_key(41.7, -73.9, _RENDERED_PROVIDERS),
+        )
+
+    def test_a_failing_unfiltered_retry_is_not_shared(self) -> None:
+        rejected = _response(400, {"error": "unknown_provider", "message": _UNKNOWN_PROVIDER_MESSAGE})
+        down = _response(503, {"error": "all_providers_unavailable", "message": "down"})
+        answer = _response(200, {"count": 1, "complete": True, "results": [_media_row()], "providers": []})
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "_request", side_effect=[rejected, down, rejected, answer]),
+            self.assertLogs(redata_point_data.logger, level="WARNING"),
+        ):
+            with pytest.raises(LocationContextUnavailableError):
+                redata_point_data.media_near(41.7, -73.9)
+            rows = redata_point_data.media_near(41.7, -73.9).results
+
+        self.assertEqual([row["uuid"] for row in rows], [_MEDIA_UUID])
+
+    def test_any_other_refusal_is_one_request_and_is_raised_as_before(self) -> None:
+        for status, error in (
+            (400, "invalid_coordinates"),
+            (400, "unknown_kind"),
+            (400, "invalid_parameter"),
+            (503, "unknown_provider"),
+        ):
+            with self.subTest(status=status, error=error):
+                with (
+                    _redata_on(),
+                    mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+                    mock.patch.object(
+                        RedataMediaGateway,
+                        "_request",
+                        return_value=_response(status, {"error": error, "message": "no"}),
+                    ) as request,
+                    pytest.raises(LocationContextUnavailableError) as raised,
+                ):
+                    redata_point_data.media_near(41.7, -73.9)
+                self.assertEqual(request.call_count, 1)
+                self.assertEqual(raised.value.reason, error)
+
+    def test_every_known_provider_is_either_rendered_or_a_street_level_network(self) -> None:
+        """A tag the tabs label but never ask for would silently vanish from them; a tag asked for but unlabelled is untitled."""
+        from urbanlens.dashboard.plugins.builtin.redata_nearby_media import PROVIDER_LABELS, STREET_LEVEL_PROVIDERS
+
+        rendered = set(redata_media_gateway.NEARBY_MEDIA_PROVIDERS)
+        self.assertEqual(len(rendered), len(redata_media_gateway.NEARBY_MEDIA_PROVIDERS))
+        self.assertFalse(rendered & STREET_LEVEL_PROVIDERS)
+        self.assertEqual(rendered | STREET_LEVEL_PROVIDERS, set(PROVIDER_LABELS))
 
     def test_an_unreadable_context_falls_back_to_the_endpoint(self) -> None:
         with (
@@ -365,13 +532,52 @@ class NearbyMediaSourceTests(TestCase):
         ):
             NearbyMediaSource().fetch(self.pin)
             AerialMediaSource().fetch(self.pin)
-        lookup.assert_called_once()
+        lookup.assert_called_once_with(41.7, -73.9, provider=_RENDERED_PROVIDERS)
 
         nearby = LocationCache.get_fresh(self.pin.location, "redata_media")
         aerial = LocationCache.get_fresh(self.pin.location, "redata_aerial")
         assert nearby is not None and aerial is not None
         self.assertEqual([row["provider"] for row in nearby.data["items"]], ["wikimedia_commons", "flickr"])
         self.assertNotIn("attributes", nearby.data["items"][0])
+        self.assertEqual([row["title"] for row in aerial.data["items"]], ["Drone over the mill"])
+
+    def test_a_context_answer_that_holds_street_level_rows_still_shows_none_of_them(self) -> None:
+        """The context read cannot be narrowed to providers, so the tab drops the networks' rows itself."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        context = LocationsContext(domains={"media": _envelope(self.rows)})
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=context),
+            mock.patch.object(RedataMediaGateway, "lookup_envelope") as lookup,
+        ):
+            NearbyMediaSource().fetch(self.pin)
+
+        lookup.assert_not_called()
+        nearby = LocationCache.get_fresh(self.pin.location, "redata_media")
+        assert nearby is not None
+        self.assertEqual([row["provider"] for row in nearby.data["items"]], ["wikimedia_commons", "flickr"])
+
+    def test_a_retired_provider_leaves_both_tabs_as_they_were_for_the_price_of_one_retry(self) -> None:
+        """The retry's unfiltered answer holds the street-level rows again; the tabs drop them as they always did."""
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        rejected = _response(400, {"error": "unknown_provider", "message": _UNKNOWN_PROVIDER_MESSAGE})
+        answer = _response(200, {"count": len(self.rows), "complete": True, "results": self.rows, "providers": []})
+        with (
+            _redata_on(),
+            mock.patch.object(RedataLocationsContextGateway, "get_context", return_value=LocationsContext()),
+            mock.patch.object(RedataMediaGateway, "_request", side_effect=[rejected, answer]) as request,
+            self.assertLogs(redata_point_data.logger, level="WARNING"),
+        ):
+            NearbyMediaSource().fetch(self.pin)
+            AerialMediaSource().fetch(self.pin)
+
+        self.assertEqual(request.call_count, 2)
+        nearby = LocationCache.get_fresh(self.pin.location, "redata_media")
+        aerial = LocationCache.get_fresh(self.pin.location, "redata_aerial")
+        assert nearby is not None and aerial is not None
+        self.assertEqual([row["provider"] for row in nearby.data["items"]], ["wikimedia_commons", "flickr"])
         self.assertEqual([row["title"] for row in aerial.data["items"]], ["Drone over the mill"])
 
     def test_a_mirrored_image_is_read_through_this_sites_proxy(self) -> None:

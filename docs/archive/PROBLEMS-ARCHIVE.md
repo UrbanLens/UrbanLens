@@ -24326,6 +24326,125 @@ reason and not the account id; a 5007 "No such model" and a non-JSON 502 stay fa
 unanswered classifier keeps a photo's keywords, and a refusal clears them. Three existing tests asserted `[]` for a
 failure and now assert None.
 
+## RESOLVED 2026-10-06: Media and street-view frames REData marks as gone at their source were still shown, copied and proxied
+
+`id: P325` · `status: fixed` · `resolved: 2026-10-06` · `found by: a cross-repo check of REData's attributes.mirror_gone against UrbanLens's REData readers, which had no reference to it`
+
+**What was wrong.** REData marks a media row or street-view capture `attributes.mirror_gone`
+(`{"status", "reason", "at"}`, REData `parcels/services/mirror_state.py`) once every image URL its source published
+answered that the image does not exist (404 or 410, `reason: "missing"`), or KartaView's storage said the blob is
+archived where nobody can read it (`"archived"`). Such a row's `thumbnail_url` does not load, REData never mirrors it
+(`cached_url` stays empty and `/media/{uuid}/download/` answers 404 `media_not_cached`), and its street-view download
+404s. REData publishes the mark on `MediaItemSerializer` and `StreetViewCaptureSerializer` rows alike. On staging on
+2026-10-05 REData found about 600 of its 1,300 KartaView captures in this state.
+
+UrbanLens never read it:
+- The Nearby Media and Aerial tabs cached a gone row like any other. With no `cached_url` its tile fell back to
+  `thumbnail_url`, which the gallery turns into a `RemoteImageCopy` (`services.media.remote_copies`): a server-side
+  download on first view, asked again after an hour, doubling to seven days, whenever a page still links it. Saving it
+  to a pin, album or wiki (`materialize_media_item`) downloaded the dead URL and failed.
+- REData's street-view timeline picks each date's representative by distance alone, gone or not, and UrbanLens's own
+  grouping of the context read's captures (`dates_from_captures`) did the same. So a Street-level tile or carousel
+  slide could be a frame that will not load while other frames of that date would, and the tile's lightbox opened
+  `pin.redata.street_view`, whose download 404s.
+
+Keywording was never reached: it reads a stored `Image.analysis_thumbnail`, which a failed materialization never makes.
+
+**Fix.** In `services.locations.redata_point_data`, the one way every REData media row and capture reaches UrbanLens:
+- `mirror_gone(row)` is true only for a mapping whose `attributes` is a mapping holding a truthy `mirror_gone`
+  (REData's dict, or `True`). Missing or malformed `attributes`, or a null, false or empty mark, is not gone, and it
+  never raises.
+- `media_near` drops gone rows from the `/locations/context/` envelope and the `/media/lookup/` one alike
+  (`without_gone_media`), inside what `coalesced` shares, and lowers the envelope's `count` to match. That includes
+  the unfiltered lookup it retries after an `unknown_provider` refusal, which is shared under its own key as well.
+  `providers[].count` keeps each source's own figure: UrbanLens reads `providers` only for which sources answered. The
+  context envelope the other domains share is copied, never edited.
+- `dates_from_captures` leaves gone captures out before grouping, so a date's picture is its nearest frame still there
+  and its `count` counts only those; a date with none is left out.
+- On the `/street-view/timeline/` path, `live_timeline_date` drops a date whose representative is gone. When REData
+  names the date's frames (`captures`, sent only for `include_captures=true`), the nearest one still there stands in
+  and `count`, `is_panoramic` and `captures` are recomputed from what is left.
+- UrbanLens derives nothing from the timeline's `earliest`, `latest`, `years` or `providers_timeline`
+  (`StreetViewDates` carries only `dates` and `complete`), so no summary can disagree with the dates kept.
+
+Every reader is downstream of those two functions: `NearbyMediaSource`, `AerialMediaSource`,
+`StreetLevelPhotosSource` and the Mapillary, KartaView and Panoramax carousel providers
+(`redata_media_gateway._RedataStreetViewProvider`), and through their cached rows the gallery's copies, the Photos tab
+and materialization. Nothing else asks `/media/lookup/`, `/street-view/timeline/` or `/locations/context/` for media;
+`RedataMediaGateway.lookup` has no caller outside tests. `redata_contract.READS` now lists `redata_point_data.py`'s
+reads of `attributes` on both endpoints. No background job keeps asking for a gone URL: `fetch_remote_image_copy` is
+queued only by a request for the copy (`controllers/remote_copies.py`) and by its own wait for a download slot, and
+`public-media-cache-sweep` edits cached rows without fetching anything.
+
+**Not fixed.**
+- Rows cached before this keep their gone items until they refresh, since they drop `attributes` and cannot be
+  filtered on read: `LocationCache` rows for `redata_media`, `redata_aerial` and `redata_street_level`
+  (`external_data_cache_days`, 7 by default), the carousel's cached slides, and the 10-minute shared answers.
+  `RemoteImageCopy` rows already made for gone URLs stay, asked for again only by a page that still links them.
+- UrbanLens does not ask the timeline for `include_captures=true`, which REData leaves off because a busy corner holds
+  hundreds of frames. So on the timeline path a date whose representative is gone is dropped even when its other
+  frames are fine; only the context read picks the next frame. The fix belongs in REData: its
+  `street_view/timeline._representative` choosing among frames not marked gone
+  ([`handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md`](../handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md)).
+  A kept date's `count` on that path still counts gone frames; nothing displays it.
+- `pin.redata.media` and `pin.redata.street_view` still ask REData for any uuid they are given, and do not remember a
+  404.
+
+**Tests.** `test_redata_mirror_gone.py`, 22 tests: the mark is read in REData's forms and every malformed shape is not
+gone, with three Hypothesis properties over arbitrary JSON; gone media rows are dropped on the context and lookup
+paths with `count` lowered and `complete` kept, the shared answer is cached already filtered, as is the unfiltered
+retry after an `unknown_provider` refusal under both keys it is shared under, and the context envelope
+other domains share is left as it was; on the context path gone captures are left out before grouping and the
+next-nearest frame stands in; on the timeline path a gone representative's date is dropped, or replaced from
+`captures`; the Nearby Media, Aerial and Street-level tabs and both carousel paths show no gone item. Against the code
+before the fix, with only `mirror_gone` added so the module imports, 13 fail; the 9 that pass are the helper's own
+tests and three controls (an answer with nothing gone, an unmarked or malformed representative, the shared envelope
+left intact). `test_redata_consumer_contract.py` checks the new contract rows against REData's vendored schema.
+
+## RESOLVED 2026-10-06: The classifier was still asked about images it always refuses; the analysis copy's JPEG header now gives the size, and those are refused before the call
+
+`id: P324` · `status: fixed` · `resolved: 2026-10-06` · `found by: P320's "Not fixed"`
+
+**What was wrong.** Cloudflare's ResNet-50 refuses an image under 4x4 pixels (HTTP 400, code 3011, "image too small,
+expected image at least 4x4"). P320 made that refusal an answer, logged answered and clearing the photo's classifier
+keywords, but `classify_photo` still made the request, once per such photo and again on every keyword re-run. The
+analysis copy is downscaled to fit 512 px, so it is under 4 px on a side whenever the original is and whenever the
+original is about 150 or more times wider than tall (Pillow turns 2000x10 into 512x3). P320 left it because the app
+tier never decodes the copy, so it did not know the size. It needs no decode: the size is in the copy's JPEG frame
+header. Nothing stored would have done instead. `Image` keeps no width or height, and `exif_data` describes the
+original, is encrypted, and is absent for most small files.
+
+**Fix.**
+- `services/media/jpeg_header.py` `jpeg_dimensions` walks the marker segments from SOI, stepping over fill bytes and
+  the standalone TEM and RST markers, to the first start-of-frame header (any SOFn, not DHT, JPG or DAC), and returns
+  its width and height. Pure Python, bounded by the buffer, never raises. It returns None for anything else: not a
+  JPEG, cut short, malformed, or a height of 0 left to a DNL marker. It stops before the image data, so keywording
+  still never decodes (`test_photo_keyword_sandboxing.py`, `docs/MEDIA_PIPELINE.md`).
+- `input_validation.require_jpeg_size(service, name, content, *, minimum_side)` refuses a JPEG whose header declares
+  either side under `minimum_side` as `InputRejection.OUT_OF_RANGE`: one `ApiCallLog` row flagged
+  `was_rejected_input` (`endpoint="rejected:out_of_range"`), which no budget and not provider health counts. The
+  message names the size only. A size the header does not give is left to the provider.
+- `vision.classify_photo` calls it with `CLASSIFIER_MIN_SIDE_PIXELS = 4` before `api_call_slot`, and returns `[]`,
+  which is what Cloudflare's refusal already returned, so the photo's classifier keywords are cleared the same way
+  without the request.
+
+**Not fixed.** `describe_photo_keywords` (LLaVA on Workers AI, or OpenAI) and Ollama still send a tiny copy. Nothing
+found shows any of them refusing one: Cloudflare's model docs give LLaVA no minimum input size, and nothing in this
+repo records a refusal from them. If LLaVA does refuse with "image too small", the adapter already logs it answered
+(P320). A copy whose header cannot be read is still sent, and Cloudflare's refusal stays the backstop.
+
+**Tests.** `test_jpeg_header.py`, 19 tests: the reader imports nothing; the size read is the one Pillow decodes,
+across sizes up to 2048 px, baseline and progressive, RGB, L and CMYK, any quality, subsampling, comment, EXIF and
+restart markers (a hypothesis property); a copy cut short reads as None or its true size; every SOFn is read and DHT,
+JPG and DAC are not; fill bytes, TEM and RST before the frame are stepped over; a frame cut anywhere, a height of 0, a
+width of 0, a short frame header, a scan or EOI before the frame, and PNG, WebP, GIF and garbage are None; arbitrary
+bytes and a corrupted JPEG never raise. `test_classifier_skips_too_small_images.py`, 7 tests: a 512x3, 3x512 or 1x1
+copy returns `[]` without reaching the inference client and writes exactly one rejected-input row; a 4x4 copy and
+bytes whose size cannot be read are sent; the vision description is not held to the minimum; a 2000x10 panorama,
+through the sandbox writer's 512x3 copy and the keyword pipeline, stores no classifier keywords and makes no call.
+`test_input_validation.py` `RequireJpegSizeTests`, 3 tests. Four of the seven classifier tests fail against the code
+before the fix; with no-op stand-ins for the reader and the helper, 11 of the 29 fail.
+
 ## RESOLVED 2026-10-06: An Ollama outage deleted a photo's Ollama keywords, and an unreadable analysis copy deleted every image provider's
 
 `id: P322` · `status: fixed` · `resolved: 2026-10-06` · `found by: an audit of the keyword providers after P320, whose "Not fixed" named Ollama`

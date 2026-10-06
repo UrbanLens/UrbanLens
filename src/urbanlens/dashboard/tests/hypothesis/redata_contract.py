@@ -512,6 +512,16 @@ READS: tuple[Read, ...] = (
         "dates[].captured_on",
         *_within("dates[].representative.", ("image_url", "thumbnail_url", "heading_degrees", "latitude", "longitude")),
     ),
+    # REData's ``attributes.mirror_gone``: a row whose source image is gone is left out (P325).
+    _get("services/locations/redata_point_data.py", "/api/v1/media/lookup/", "results[].attributes.*"),
+    _get(
+        "services/locations/redata_point_data.py",
+        "/api/v1/street-view/timeline/",
+        "complete",
+        "dates[].captured_on",
+        "dates[].representative.attributes.*",
+        *_within("dates[].captures[].", ("latitude", "longitude", "is_panoramic", "attributes.*")),
+    ),
     _get(
         "plugins/builtin/redata_historical_map_media.py",
         "/api/v1/maps/",

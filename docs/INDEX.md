@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P324` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P326` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N45`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -220,4 +220,5 @@ still resolves after it is fixed, and the id is never handed out again.
 | N40 | current | 2026-10-06 | REData's Overture near-point lookups timed out, and UrbanLens reads Overture from them inside the US (P110, P240); fixed in REData v0.3.4, buildings route seen live, places route not | [`docs/handoffs/redata-overture-near-point-lookups.md`](handoffs/redata-overture-near-point-lookups.md) |
 | N41 | current | 2026-10-06 | REData's news search accepted a `months` GDELT rejects (P235); clamped, with a SearXNG fallback, in REData v0.3.4, not re-checked on production | [`docs/handoffs/redata-gdelt-months-cap.md`](handoffs/redata-gdelt-months-cap.md) |
 | N42 | current | 2026-10-06 | A cultural-resource search's cached answer was the rows last found from its point, so a neighbouring search took HRSH's National Register listing away (P286); fixed in REData v0.3.4, not seen live | [`docs/handoffs/redata-cultural-resource-cache-keyed-by-last-search.md`](handoffs/redata-cultural-resource-cache-keyed-by-last-search.md) |
-| N43 | current | 2026-10-05 | REData's Google Open Buildings source reads a level-4 shard whole and the median one is 138 MiB (P319); sent, and latent while nothing names that source | [`docs/handoffs/redata-open-buildings-shards-read-whole.md`](handoffs/redata-open-buildings-shards-read-whole.md) |
+| N43 | answered | 2026-10-05 | REData's Google Open Buildings source read a level-4 shard whole (P319); answered by REData v0.3.5 (#129 64 MiB cap on level-6 shards, #132 256 MiB on Microsoft), in production 2026-10-06 | [`docs/handoffs/redata-open-buildings-shards-read-whole.md`](handoffs/redata-open-buildings-shards-read-whole.md) |
+| N44 | current | 2026-10-06 | REData's street-view timeline picks a date's representative frame without looking at `mirror_gone`, so UrbanLens drops a date whose other frames still load (P325); sent | [`docs/handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md`](handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md) |
