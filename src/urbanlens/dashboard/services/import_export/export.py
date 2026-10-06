@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import pathlib
+import posixpath
 import shutil
 from typing import TYPE_CHECKING, Any, ClassVar, Self, TextIO
 import zipfile
@@ -18,10 +19,15 @@ from django.core.cache import cache
 from django.db.models import OuterRef, QuerySet, Subquery
 from django.utils import timezone
 
+from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS, is_missing
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from django.core.files.base import File
+    from django.core.files.storage import Storage
     from django.db.models import Model
+    from django.db.models.fields.files import FieldFile
 
     from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
     from urbanlens.dashboard.models.markup.model import PinMarkup
@@ -306,6 +312,9 @@ def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id:
 #: Rows fetched per round trip while exporting; prefetches run once per chunk.
 EXPORT_CHUNK_SIZE = 500
 
+#: Bytes per read while a stored media file is streamed into the archive's staging directory.
+_COPY_CHUNK_BYTES = 1024 * 1024
+
 
 class JsonArrayFile:
     """A JSON array written one element at a time, so an export never holds a whole table.
@@ -363,27 +372,78 @@ def _write_json(temp_dir: str, filename: str, data: Any) -> None:
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
-def _copy_into_archive(source_path: str | None, dest_dir: str, unique_suffix: Any) -> str | None:
-    """Copy a stored media file into the archive, disambiguating name collisions.
-    Mirrors the file handling in :func:`_export_photos`: two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
+def _copy_into_archive(stored: FieldFile | None, dest_dir: str, *, unique_suffix: object) -> str | None:
+    """Stream a stored media file into the archive through its storage, disambiguating name collisions.
+    Never through a local path: object storage, which production uses, has none, and asking for one failed the whole export (see P321, "an export with photos fails outright on object storage", in docs/PROBLEMS.md). Two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
 
     Args:
-        source_path: Absolute path of the stored file, or None/"" when absent.
+        stored: The row's file field, or None when the row has none.
         dest_dir: Directory inside the archive to copy into (created by caller).
         unique_suffix: Value appended to the stem on a name collision.
 
     Returns:
-        The archive-relative filename that was written, or None when there was no readable source file."""
-    if not source_path or not os.path.exists(source_path):
+        The archive-relative filename that was written, or None when the row names no file or storage does not have it,
+        including one deleted while it was being copied.
+
+    Raises:
+        OSError: Storage could not read a file it has, or the archive could not be written; on the S3 backend, any of
+            :data:`~urbanlens.dashboard.services.media.storage_errors.STORAGE_ERRORS`. That fails the export rather
+            than leaving a hole in it that nothing reports."""
+    if stored is None or not stored.name:
         return None
-    filename = os.path.basename(source_path)
+    name: str = stored.name
+    filename = posixpath.basename(name)
     dest = os.path.join(dest_dir, filename)
     if os.path.exists(dest):
         base, ext = os.path.splitext(filename)
         filename = f"{base}_{unique_suffix}{ext}"
         dest = os.path.join(dest_dir, filename)
-    shutil.copy2(source_path, dest)
+    try:
+        # S3Storage downloads the whole object on first read, into memory up to its max_memory_size and to disk past it.
+        source = stored.storage.open(name, "rb")
+    except FileNotFoundError:
+        return None
+    modified: float | None = None
+    with source, open(dest, "wb") as out:
+        try:
+            shutil.copyfileobj(source, out, _COPY_CHUNK_BYTES)
+        except STORAGE_ERRORS as exc:
+            if not is_missing(exc):
+                raise
+            missing = True
+        else:
+            missing = False
+            modified = _stored_modified_time(source, stored.storage, name)
+    if missing:
+        os.remove(dest)
+        return None
+    if modified is not None:
+        # The stored file's date, as the shutil.copy2 this replaced kept it.
+        os.utime(dest, (modified, modified))
     return filename
+
+
+def _stored_modified_time(source: File, storage: Storage, name: str) -> float | None:
+    """When a stored file was last modified, as a POSIX timestamp.
+
+    Only a date for the archived copy, so a storage that cannot say, or fails to, gives None instead of failing the
+    export.
+
+    Args:
+        source: The file as storage opened it.
+        storage: The storage holding it.
+        name: Its stored name.
+
+    Returns:
+        The timestamp, or None.
+    """
+    try:
+        # S3File checked the object exists when it was opened, so it already holds Last-Modified; storage would ask again.
+        loaded = getattr(getattr(source, "obj", None), "last_modified", None)
+        modified = loaded if isinstance(loaded, datetime) else storage.get_modified_time(name)
+    except (NotImplementedError, *STORAGE_ERRORS):
+        return None
+    return modified.timestamp()
 
 
 # -- Manifest ------------------------------------------------------------------
@@ -853,16 +913,7 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     with JsonArrayFile(os.path.join(photos_dir, "metadata.json")) as rows:
         for image in images.iterator(chunk_size=EXPORT_CHUNK_SIZE):
             target_type, target, target_uuid = _resolve_target(image)
-            file_path = image.image.path if image.image else None
-            filename = os.path.basename(file_path) if file_path else None
-
-            if file_path and filename is not None and os.path.exists(file_path):
-                dest = os.path.join(photos_dir, filename)
-                if os.path.exists(dest):
-                    base, ext = os.path.splitext(filename)
-                    dest = os.path.join(photos_dir, f"{base}_{image.pk}{ext}")
-                    filename = os.path.basename(dest)
-                shutil.copy2(file_path, dest)
+            filename = _copy_into_archive(image.image, photos_dir, unique_suffix=image.pk)
 
             rows.append(
                 {
@@ -1211,8 +1262,8 @@ class MapAnnotationsExport(ExportType):
 
         files_dir = os.path.join(temp_dir, self.files_dir_name)
         os.makedirs(files_dir, exist_ok=True)
-        stored = overlay.image.image if overlay.image_id and overlay.image and overlay.image.image else None
-        filename = _copy_into_archive(stored.path if stored is not None else None, files_dir, overlay.pk)
+        stored = overlay.image.image if overlay.image_id and overlay.image else None
+        filename = _copy_into_archive(stored, files_dir, unique_suffix=overlay.pk)
 
         return {
             "uuid": str(overlay.uuid),

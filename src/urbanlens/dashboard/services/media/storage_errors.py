@@ -6,7 +6,7 @@ from boto3.exceptions import S3UploadFailedError as Boto3UploadFailedError
 from botocore.exceptions import ClientError, ConnectionError as BotocoreConnectionError, FlexibleChecksumError, HTTPClientError
 from s3transfer.exceptions import RetriesExceededError, S3UploadFailedError as TransferUploadFailedError
 
-__all__ = ["IMPORT_STORAGE_WAITS", "OBJECT_STORE_ERRORS", "STORAGE_ERRORS", "STORAGE_RETRY_AFTER_SECONDS", "is_transient", "storage_retry_countdown"]
+__all__ = ["IMPORT_STORAGE_WAITS", "OBJECT_STORE_ERRORS", "STORAGE_ERRORS", "STORAGE_RETRY_AFTER_SECONDS", "is_missing", "is_transient", "storage_retry_countdown"]
 
 #: The S3 backend's failures: the object store unreachable, timing out, refusing, breaking every download attempt, or
 #: sending a download that fails its checksum. The rest of botocore's errors, such as missing credentials or a bad
@@ -65,3 +65,21 @@ def is_transient(exc: BaseException) -> bool:
     if isinstance(exc, (Boto3UploadFailedError, TransferUploadFailedError)):
         return exc.__context__ is not None and is_transient(exc.__context__)
     return False
+
+
+def is_missing(exc: BaseException) -> bool:
+    """Whether a storage failure means the file is not there, on either backend.
+
+    ``S3Storage.open`` turns a 404 into ``FileNotFoundError``, but only for the existence check it makes when the file
+    is opened. The download happens on the first read, so an object deleted in between fails there with a 404
+    ``ClientError``.
+
+    Args:
+        exc: What storage raised.
+
+    Returns:
+        True for ``FileNotFoundError`` or a 404 from the object store.
+    """
+    if isinstance(exc, FileNotFoundError):
+        return True
+    return isinstance(exc, ClientError) and exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode") == 404

@@ -2441,3 +2441,71 @@ read. A CID REData refuses is recorded with the existing
 `LOOKUP_ERROR` reason rather than a new one, so its owner-facing wording ("lookup service was
 unreachable") is imprecise for that case.
 
+
+## P321 — A data export that includes photos or image overlays fails outright on object storage, which production 0.8.0 uses; fixed on `release/v_0_9_0`, live until 0.9.0 deploys
+
+`id: P321` · `status: open` · `updated: 2026-10-06`
+
+**What was wrong.** `_export_photos` asked every photo for `image.image.path`, and
+`MapAnnotationsExport._overlay_row` asked every image overlay's file for `stored.path`, then copied from
+that local path. `GatedS3Storage` (`services/media/object_storage.py`) is an `S3Storage`, and neither
+defines `path()`, so Django's `Storage.path` raises `NotImplementedError`. Nothing in the export catches
+it until `run_export`'s blanket `except Exception`. The whole export fails: no archive, the job status
+reads "Export failed. Please try again.", and the log shows `Export failed for user <id>` with the
+`NotImplementedError` traceback. The Celery task does not retry, because `run_export` returns False and
+does not raise. Files are not silently dropped. That only happens on a backend whose `path()` returns a
+path where nothing exists: `InMemoryStorage` does that, and the old code skipped the file there without
+saying so.
+
+An export fails when it includes `photos` (checked by default on the Tools page) and the account has any
+`Image` row with a stored name, whether or not the object exists. It also fails when it includes
+`map_annotations` and the account has any image overlay. An account with neither exports normally.
+
+**Production impact: inferred from code and config, not observed.** On 2026-10-06 the infrastructure
+repo's `origin/main` pinned `ghcr.io/urbanlens/urbanlens:sha-d1fb1bf`
+(`platform/urbanlens-app/base/kustomization.yaml`). `d1fb1bf` is the 0.8.0 release commit, and its
+`export.py` has both calls (lines 856 and 1214). The same repo's `base/deployment-web.yaml` and
+`base/deployment-worker.yaml` set `UL_MEDIA_STORAGE_BACKEND=s3`, which selects `GatedS3Storage`. 0.8.0's
+`uv.lock` has django-storages 1.14.6, whose `S3Storage.path is Storage.path`. Not checked: what the
+cluster is actually running, the production logs, and whether anyone has requested an export there.
+
+**Reproduced.** `test_export_on_object_storage.py` runs the real `run_export` over a path-less
+`InMemoryStorage` subclass, and over `GatedS3Storage` built from production's `_S3_STORAGE_OPTIONS` and
+answered by an in-process bucket (the `object_store` harness from `test_object_store_client_config.py`).
+Against the old code, all five export tests fail on `run_export reported failure`, with the
+`NotImplementedError` above.
+
+**Fixed on `fix/export-on-object-storage`.** `export._copy_into_archive` opens the stored name through
+its storage and streams it into the staging directory with `shutil.copyfileobj` in 1 MiB reads. It keeps
+the `_{pk}` suffix when two files share a basename. A file storage does not have gives `filename: null`
+and the row is still exported. That includes an object deleted between `S3Storage.open`'s existence
+check and the download: the download fails with a 404 `ClientError`, which
+`storage_errors.is_missing` recognises, and the partial copy is removed. Any other storage error still
+fails the export, so the archive never has a hole that nothing reports. A test holds that for a 503 and
+a 403. `_stored_modified_time` dates each archived copy as `shutil.copy2` did. On S3 it uses the
+`Last-Modified` that `S3File` already loaded, so an object costs the export only the requests that
+reading it does (two HEADs and a GET with django-storages 1.14.6). One change on the local backend: a photo whose file
+was missing used to export its basename as `filename`, pointing at nothing (or at another photo's copy
+with the same basename). It now exports `null`, like overlays always did. The importer counts both as
+"missing from the archive".
+
+**Memory.** `storage.open` + `copyfileobj` alone does not bound memory on S3. `S3File` downloads the whole
+object on the first read into a `SpooledTemporaryFile` capped at `max_memory_size`, and `S3Storage`
+defaults that to 0, which means it never spills, so every byte stays in RAM. With a 900 MB upload cap
+(`SiteSettings.max_upload_file_size_mb`), one video could hold 900 MB in a worker with a 4 GiB limit.
+`_S3_STORAGE_OPTIONS` now sets `max_memory_size` to 16 MiB, past which the download spools to a
+temporary file. This covers every `S3File` read in the app, including video and document processing
+(`videos.py`, `documents.py`), which copy the whole object out the same way.
+
+**Other `.path` on a stored file in production code**, from
+`git grep -nE '\.path\b' -- 'src/**/*.py' ':!*/tests/*' ':!*/migrations/*'` with each hit read. Only
+`management/commands/anonymize_stored_photo_filenames.py:48-49` (`storage.path(old_name)`) remains, and it
+already catches `NotImplementedError` and falls back to `storage.open`/`save`/`delete`. Thumbnails, EXIF
+stripping, keywording, the malware scan, video and document conversion, and the comment-image scan all
+read through `FieldFile.open("rb")`. The import side reads only its own extracted archive on local disk.
+A related problem that is not a `.path` call, and is not fixed here:
+`services/admin/media_usage.py:96` sizes `MEDIA_ROOT` with `os.walk`. On the S3 backend that counts
+only the local scratch subtrees, so the admin panel's media size reads near zero in production.
+
+**Still open until 0.9.0 is deployed.** Production keeps failing these exports until an image built from
+`release/v_0_9_0` replaces `sha-d1fb1bf`. Close this entry when that happens.
