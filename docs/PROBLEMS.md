@@ -2739,3 +2739,193 @@ Found by spark-audit shard D follow-up, verified; neither instance is in P5's ta
 2. `controllers/userprofile.py:683-685`: `form.save(commit=False).save(update_fields=list(form.fields))` — scoped to the form's ~dozen columns (`forms/profile_form.py:58-68`) yet rewritten in full on **every autosave** (frontend is per-field `data-autosave`, server rewrites all): concurrent-tab revert risk, `updated` bump, and per-P5 ~14-write provenance noise per save.
 
 P5 (open) is the umbrella and P326 added two model-layer instances; these are the form/controller counterparts. Cite all three when touching the area — `see P5, P326 and P345 in docs/PROBLEMS.md`.
+
+## P346 — The assistant turn concatenates history, user message, and tool results with no user-data delimiters; tool-arg validation is thin and confirm re-executes under a stripped context
+
+`id: P346` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (AI), verified by reading each site. One entry, three trust-boundary gaps in the same assistant loop.
+
+1. `services/ai/assistant.py:84-90` serializes history as bare `ROLE: content` lines, `:126-127` appends `USER: {user_message}` unwrapped, and `:184` appends tool calls/results as unwrapped JSON — while every other AI feature wraps untrusted content in `wrap_user_data` (`link_extraction.py:569`, `article_expansion.py:230,254`, `article_safety.py:90`, `document_import.py:321`). The registry wraps only declared `user_content_fields` per tool result (`tools/registry.py:189-203`); history text, the live message, and the envelope itself are never wrapped. `send_with_tools` scans the blob but scanning is not a boundary — the system prompt's `<USER_DATA>` contract (`meta.py:8-14`) has nothing to key on. Medium-high: prompt injection shapes the tool calls the user confirms.
+2. `tools/registry.py:42` URL gate is `re.compile(r"https?://")` — misses `data:`, `javascript:`, protocol-relative, encoded, and bare-domain exfil shapes (`:267-268`). `tools/trips.py:58-60` `CreateTripArgs.name` defaults to `""` with no `min_length` (compare `places.py:101-102` `min_length=1`), so the model can propose — and after one click create — an empty-named trip. Low-medium.
+3. `controllers/assistant.py:351-352` re-executes cached AI-chosen args with `ToolContext(profile=profile, now=timezone.now())`, dropping the turn's `page`, `deadline`, and `dismissals` (`assistant.py:129`). `registry._is_available` (`:233-240`) re-evaluates `needs_page`/`requires_external_apis`/deadline against different facts than the turn saw — a TOCTOU window inside the 15-min proposal TTL (`turns.py:29`). Latent today (no tool sets `needs_page=True`); low.
+
+P340 covers logging the prompt, P329 the route throttles — neither covers delimiting, arg validation, or confirm context. Appears new.
+
+## P347 — Every AI feature inherits the same 16,000-token output budget and, except link extraction, no per-user daily cap
+
+`id: P347` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (AI), verified by reading the gateway and all callers.
+
+`services/ai/gateway.py:46` defaults `max_tokens = MAX_TOKENS` (`meta.py:2`, 16000), wired to the wire at `:402` as the only `max_tokens` any feature sends. No caller narrows it (`link_extraction.py:659`, `article_expansion.py:213-217`, `article_safety.py:80`, `document_import.py:238` pass no budget arg; only vision bypasses with `_KEYWORD_MAX_TOKENS = 300`). A keyword/category call can offer 16k completion tokens. Separately, only link extraction has a per-user daily cap (`extractions_remaining_today`, enforced at `link_extraction.py:460` against `SiteSettings.ai_link_extraction_daily_limit`); assistant (turn-bounded by `MAX_ROUNDS = 4`/`MAX_TOOL_CALLS = 6` but not turns/day), article expansion/safety, document import, and vision have none — the cost ledger (`call_log.py`) prices but never refuses. Both medium (spend control, not correctness).
+
+Adjacent to P334 (the schema/policy *lower* bound) and P329 (request throttles bound concurrency, not spend) — neither names call-site budgets or daily caps. Appears new.
+
+## P348 — The concealed wiki payload leaks exact latitude/longitude to viewers it exists to withhold detail from
+
+`id: P348` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (geo/wiki), verified by reading the payload builder.
+
+`services/wiki/wiki_detail.py:133-134` reads `wiki.latitude`/`wiki.longitude` and emits them verbatim at `:161-162` (`float(latitude)`), alongside `_boundary_geojson` (`:36-37,165`). The conceal branch swaps only `shown` fields, `cover_photo`, and row sets — coordinates pass through, and `ALWAYS_UNSET` (`wiki/concealment.py:28`) lists only security indicators, never coordinates. Per `PRIVACY_MODEL.md` §§1-3 exact location is the gated asset. Latent while `concealment_active` returns `False` (`concealment.py:112-121`), live the day it flips — medium, and cheaper to fix before the flip than after.
+
+The *boundary-geometry* half is already recorded (`designs/concealment-review-2-2026-08-24.md:155` names `wiki_detail.py:171`); the exact lat/lng float half has no entry. Filed as its own problem so the geometry fix does not silently close it.
+
+## P349 — Plugins run unsandboxed in-process: entry points and settings modules are arbitrary code with full DB and keys
+
+`id: P349` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (tasks/plugins), verified by reading the loader.
+
+`plugins/registry.py` `_load_entry_points` (`ep.load()`) and `_load_settings_modules` (`importlib.import_module(module_path)`, every `UL_PLUGIN_MODULES` path) register code with no import sandbox, no permission model, no timeout; `discover()` runs in `AppConfig.ready()`. Contribution aggregation and the hook bus (`hooks.py:97-101`) contain only *failures* (log-and-skip) — not *effects*: a plugin that imports fine already ran module-level code with settings, ORM, `UL_FIELD_ENCRYPTION_KEY`, provider/OAuth keys, and filesystem in scope before any `try` applies. `is_enabled()` gates contribution *use*, not import. High integrity severity by design (whole-app blast radius for any malicious/buggy plugin); no privilege boundary exists, so "fix" means defining one (signing, subprocess isolation, or an explicit trusted-code policy).
+
+No sandboxing/blast-radius entry in `docs/PROBLEMS.md` or the archive (hits are the mypy plugin and builtin-provider refs). Appears new.
+
+## P350 — Video location strip clears only container-level tags; stream-level location tags survive remux and re-encode
+
+`id: P350` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (media), verified by reading the ffmpeg arg builders.
+
+`_LOCATION_TAGS` (`services/media/videos.py:76-80`) feeds `_clear_location_args` (`:136-141`), which emits only global `-metadata {tag}=` args. Both consumers use those args alone: `_reencode` (`:162-183`) and `_remux_without_location` (`:187-189`, `-c copy` — preserving all stream metadata verbatim). No `-metadata:s:v`/`-metadata:s:a` variant exists, and `extract_video_metadata` keys `needs_strip` off global `fmt_tags` only (`:110-125`), so a stream-tagged location is neither detected nor stripped while the feature advertises a scrub. Medium (location survives an explicit "scrub"; photo path has an analogous `has_gps` exemption at `:232-236`).
+
+`PROBLEMS.md`/archive grep for remux/`_LOCATION_TAGS`/stream tags hits only container-tag handling and `test_video_location_strip.py` (container-level). Appears new.
+
+## P351 — Import pipeline ceilings: every archive JSON is `json.load`ed unbounded, and the extraction budget falls back to 64 GiB
+
+`id: P351` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (media), verified by reading both functions. One entry, two ceilings in the same import path.
+
+1. `_read_json` (`services/import_export/import_data.py:681-687`) is bare `json.load(fh)`, used for `manifest.json` and every `metadata.json`/`trips.json` (`:1563`, `:1675`) — while `_scan_extracted_files` explicitly *skips* `.json`/`.csv` in the malware+mismatch scan (`:640-643`) and the shard's own `json_stream.py:3-4` warns `json.loads` "holds Python objects several times the file's size". The archive byte ceiling bounds disk, not RSS multiplication. Medium (sandbox-contained, but OOM/kill + retry loop on attacker-shaped archives).
+2. `_extraction_size_ceiling` (`:488-502`) returns `_EXTRACTED_BYTES_FLOOR * 32` = 64 GiB when the quota is unknown (`profile=None` callers, quota-resolution failure), used as the live per-byte budget in `_extract_zip_members_bounded` (`:571-619`). Low-medium (production passes a profile; the write-then-check loop still writes up to ceiling before refusing).
+
+P304 covers preview-time limits, not `_read_json`; archive `:20677` notes `_read_json` "fails the task" with no memory bound. Appears new.
+
+## P352 — Four more upstream-bound tasks sit on INTERACTIVE outside P167's list
+
+`id: P352` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (tasks), verified against the decorators and P167's roster (`docs/PROBLEMS.md:2064-2075`).
+
+- `fetch_panel_source` (`tasks.py:3813-3814`): live third-party panel fetch, `soft_time_limit=110, time_limit=130`, `queue=Queue.INTERACTIVE` — a 130 s upstream call on the 4-slot prefork worker alongside safety sweeps and signup mail. Deliberately no autoretry, so queue placement is the whole story. Medium-high (same starvation shape as P167, new occupant).
+- `score_reputation_event` (`tasks.py:4846-4847`, INTERACTIVE; docstring: photo input "can mean walking external gallery panels - by far the most expensive input"), `refresh_pin_web_search` (`tasks.py:3463-3464`, INTERACTIVE, live `search_web` per missing search), `prewarm_spotguessr_round/solo_start` (`tasks.py:4442+`, INTERACTIVE, live Street View warm via `GoogleMapsGateway`). All network-bound, user-independent, `autoretry OSError 3x`. Medium.
+
+None appears in P167/P113/P125. Same fix direction as P167 (move off INTERACTIVE); cite both — `see P167 and P352 in docs/PROBLEMS.md`.
+
+## P353 — The upstream breaker and slot guard fail open on cache outage — protection drops fleet-wide exactly when the upstream is hot
+
+`id: P353` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (core), verified by reading both guards. One entry, two halves of one failure mode.
+
+- `UpstreamBreaker.wait` (`services/core/upstream_breaker.py:84-91`): `except _CACHE_ERRORS: return None` — "an unreadable cache lets the call go out." A Dragonfly outage turns every breaker-guarded call into pass-through, hammering an already-throttling upstream. Contrast `call_tally`/`counters` REFUSE policy for the same someone-else's-budget limits.
+- `KeyedUpstreamSlots.hold` (`services/core/upstream_slots.py:131-133,151-153`): `except _CACHE_ERRORS: yield True` — per-process bound holds, fleet-wide per-account bound gone, so one account holds its cap in every process simultaneously. Deliberate per docstring, but a fail-open of an anti-abuse bound.
+
+Low-medium (cost/429 amplification during outages). P157 names counters/locks/socket-budget policies, not these two; archive breaker entries cover scope/429 handling, not outage behavior. Appears new.
+
+## P354 — Three check-then-act races: breaker `trip()` can shorten a recorded wait, outbox drains double-enqueue, WebAuthn cap/dup checks race
+
+`id: P354` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (core/auth), verified by reading each site. One entry, one bug class in three places.
+
+1. `upstream_breaker.trip` (`:126-133`) get-then-sets despite its "never shortening a longer wait" docstring: two concurrent `trip()` calls interleave get/get/set/set and the shorter wait wins. Fix is a Lua compare-and-hold (like `counters.delete_if_value`). Breaker timing only — low.
+2. `drain_outbox` (`services/core/task_outbox.py:94-122`) reads `due()` rows, `apply_async`s, then `delete()`s with no select-for-update/claim column — two beat replicas (or overlapping runs) enqueue the same row twice. Safe only if every outboxed task is idempotent, which the module never states. Low.
+3. WebAuthn registration checks the 10-credential cap and credential-id uniqueness before create (`services/auth/webauthn.py:148-150,225-243`) while `credential_id` is `unique=True` (`models/account/model.py:56`): a concurrent double-submit turns `CredentialAlreadyRegisteredError` into a raw 500 `IntegrityError`, and two parallel ceremonies push an account to 11. Low.
+
+P157 covers counters/locks races, not these three. Appears new.
+
+## P355 — The verification-email resend path never releases its inflight reservation, letting a user self-exhaust their email budget
+
+`id: P355` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (core/security), verified caller by caller.
+
+`email_rate_limit_error` (`services/security/email_safety.py:89-97`) takes a cache reservation (`cache.add` + `incr`, 300 s TTL) counted against the hourly/daily/monthly limits; the caller must return it via `release_email_reservation` (`:113-120`). Both in-scope owners pair them (`services/auth/email_claims.py:154-155`, `services/social/friendship.py:680-681`). But `controllers/userprofile.py:808-814` calls the limiter then, on success, only `record_email_sent(...)` + `queue_confirmation(...)` — no release. Each resend inflates `logs.count() + inflight` until TTL expiry. Low (self-inflicted budget exhaustion, 5 min per resend).
+
+`PROBLEMS.md` greps for the reservation show only P147 enumeration entries. Appears new.
+
+## P356 — Image/byte downloads buffer uncapped `response.content` in memory across four gateways
+
+`id: P356` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (apis), verified per call site.
+
+`apis/flickr/gateway.py:209-216` and `flickr/public.py:198-205` (`return response.content, ...`), `apis/photos/google.py:308-312`, `apis/locations/google/maps.py:501-513` (satellite) and `:556-560` (street-view, only a lower-bound placeholder check) all fully buffer the upstream body on a request/task worker. Sibling code shows the intended pattern: `read_capped` (`locations/google/places.py:188`, `locations/basemap_vendor_tiles_gateway.py:64`) and `read_limited` (`immich/gateway.py:183`). A large or hostile upstream body is a worker-memory event. Medium.
+
+Partially known: the archive's P153 resolution (`PROBLEMS-ARCHIVE.md:846-847`) already notes "the Flickr download's uncapped read is a size problem"; the Google Photos/Maps instances are new. Filed to track all four to the capped pattern.
+
+## P357 — Provider API keys travel as query params, so `raise_for_status()` writes key material into exception text
+
+`id: P357` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (apis), verified per client.
+
+`apis/locations/azure/gateway.py:48-51` puts `subscription-key` in `request_params` then calls bare `raise_for_status()`; `requests`' `HTTPError` string embeds the full encoded query string, so any uncaught/out-of-process-logged failure carries the key. Same shape: `locations/google/places.py:41-51` (`"key": self.api_key`), `locations/google/maps.py:430-437` (directions) and `:501-512` (static map). Header-authenticated clients (VirusTotal `x-apikey`, Places-New `X-Goog-Api-Key`, Immich `x-api-key` with redirect-host pinning) lack the exposure — and the log-ledger side is clean (only base URL logged, `rate_limiter.py:1197`). Medium (key-in-error-text reaches logs/crash reports; rotation-bounded).
+
+No `PROBLEMS.md`/archive hit for subscription-key/query-key logging. Appears new.
+
+## P358 — Three more P5 instances: `update_trip`, trip-activity edit, and `save_article` write whole rows
+
+`id: P358` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (geo/pins/trips/wiki); P5's table lists only `controllers/*` handlers and P326/P345 never mention these files — verified new instances.
+
+1. `services/trips/trip_crud.py:229`: `update_trip` assigns only the presence-keyed subset (`name/description/start_date/end_date`, `:221-228`) then bare `trip.save()`. Two organizers editing different fields round-trip each other; `updated` bumps on no-ops. Medium.
+2. `services/trips/trip_activities.py:640-642`: a no-change guard (`_editable_state == before: return`) then bare `activity.save()` — concurrent edits to different columns (title vs schedule vs place) last-writer-win. Medium.
+3. `services/wiki/articles.py:549-553`: sets `content/content_html/toc/last_edited_by` then bare `article.save()`; the pin-existence lock at `:540` does not lock the article row. History survives via `ArticleRevision`, but the live row is last-writer-wins. Low-medium.
+
+P5 (open) is the umbrella; P326 (models) and P345 (onboarding/profile) are siblings. Cite all four — `see P5, P326, P345 and P358 in docs/PROBLEMS.md`.
+
+## P359 — Trip visibility runs a friendship query per COMMON_FRIEND activity, and the trip map fans out a full query per linked child trip
+
+`id: P359` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (trips), verified by reading both loops. One entry, compounding layers of one render cost.
+
+- `services/trips/trip_visibility.py:78-87`: inside `for act in c_friend_acts`, one `Friendship.objects.filter(...)` query per activity (plus per-act flattening `:88-92`). Called by every trip-activities-panel and trip-map render; cost scales with trip size. Medium.
+- `services/trips/trip_map.py:64-67`: per linked child trip, a full `activity_queryset(child_trip)` load plus `viewer_hidden_activity_ids` — which re-runs the per-activity friendship queries above. N extra loads plus N extra visibility evaluations per map request. Medium (P277 shape, trips flavor).
+
+Archive `trip_visibility.py` mentions concern semantics/strictness, never query count; `GOALS_CODE_AUDIT.md` cites `trip_map.py:70,96` only for the title-visibility leak; P277 is pin panels, not trips. Appears new.
+
+## P360 — Scan pipeline recomputes each (device, wiki) pair once per entry, and one boundary vote re-resolves every location in the polygon inline
+
+`id: P360` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (device_scan/geo), verified by reading both loops. One entry, two unbounded-fan-out paths.
+
+1. `services/device_scan/pipeline.py:26-42`: `for entry in entries: for wiki in wikis_containing_point(entry.location): recompute_wiki_device_markers(device, wiki)` — `wikis_containing_point` (`wiki_lookup.py:25`) is itself a spatial query per entry, and each recompute re-reads all entries, re-clusters, and writes markers. An upload with K entries at one wiki pays K spatial lookups and K full recomputes, each independently crashable with no surrounding `atomic`. Medium (background, but multiplicative).
+2. `services/geo/boundary_voting.py:183` → `apply_winning_boundary` (`:150-155`) → `resolution.resolve_locations_in(polygon)` (`services/places/resolution.py:64-70`), looping every `Location.objects.filter(point__within=polygon)` with per-location `resolve_location_place` (own `UPDATE` + cache check) — inside the vote POST, no batching, no backgrounding, no cap. A vote on a large parcel re-resolves an unbounded set inline. Medium.
+
+P338 covers `clustering.py` internals and marker indexes — explicitly a different loop; no `pipeline.py` entry exists. P148 is the county-sized membership bug and `PROBLEMS.md:1958` notes the 104-location move as incident color, not fan-out cost. Appears new.
+
+## P361 — Trip/wiki change fan-out tasks are non-idempotent under at-least-once delivery, so redelivery double-notifies
+
+`id: P361` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (tasks), verified from decorator to insert path.
+
+`announce_trip_change_task` (`tasks.py:5442`) and `announce_wiki_change_task` (`:5465`) are `Queue.BULK` tasks that `notify_*` by inserting `NotificationLog` rows per audience member (fold supported, but redelivery re-executes the whole fan-out). Enqueue path `_enqueue` (`services/notifications/change_notifications.py:155-161`) is `transaction.on_commit` + `safely_enqueue_task` with no dedup key; `CELERY_TASK_ACKS_LATE = True` (`settings/base.py:384`) redelivers any task whose worker dies after the inserts but before ack, and the outbox (durable default) replays refused enqueues. Contrast `archive_safety_checkin` (documents idempotency) and `process_device_scan_upload` (PENDING→PROCESSING claim) — these two document none. Medium (duplicate member notifications).
+
+The archive's chunk-541 beat-idempotency thread covers sweeps and calls these fan-outs neither way; P113/P125 do not name them. Appears new.
+
+## P362 — Document sniffing fails open for unfingerprintable bytes, and uploaded PDFs are stored and served verbatim
+
+`id: P362` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (media/security), verified on both paths. One entry, two halves of document trust.
+
+1. `sniff_media_kind` returning `None` (unfingerprintable) passes: `services/security/content_sniffing.py:101-104` (`if sniffed is None or sniffed == declared: return None`) on upload and the same mismatch-only structure on the import-archive path (`import_data.py:653-663`, photo-gate only) — so a script/HTML renamed `.docx`/`.pdf` that `filetype` cannot fingerprint is stored. The office-doc half reaches the LibreOffice converter in sandbox; the PDF half is stored as-is.
+2. `services/media/documents.py:64-69`: `.pdf` returns `None` (no conversion) — unlike photos (downscale + pixel/ICC normalization, `images.py:896-929`) and video (transcode/remux + tag strip). `extract_pdf_text` (`:106-117`) reads via `PdfReader` + OCR but never rewrites, so embedded JS/launch/attachment actions survive to the served `application/pdf` (media origin serves PDFs unsandboxed, `proxied_media.py:40` + `MEDIA_PIPELINE.md` §4).
+
+Medium-low (sandbox + `pending_scan` quarantine + media-gate auth contain it; residual is polyglot/mislabeled content reaching converters and viewers' PDF renderers). The sniff fail-open is documented as intentional for docs (`content_sniffing.py:12-14`) but never filed as a bypass. Appears new.
+
+## P363 — `reencode_stored_field` reads the whole stored file into RAM unbounded — the P341 pattern in a second file
+
+`id: P363` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (media), verified: `services/media/stored_field.py:232-235` does `raw = handle.read()` then `reencode_image_file(io.BytesIO(raw), ...)` with no size check — the same shape as P341's `held_upload.py:229-232`, covering comment/trip-comment images and icon/avatar re-encodes, gated only by the site-wide upload cap (default 250 MB, raisable toward 900 MB). Sandbox worker-memory DoS, re-queueable. Medium, smaller blast radius than P341's icon path.
+
+P341 names only the held path; grep for `reencode_stored_field` in `PROBLEMS.md`/archive hits nothing. Filed separately so fixing one file does not silently close the other — `see P341 and P363 in docs/PROBLEMS.md`.

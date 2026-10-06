@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P346` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P364` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -245,3 +245,21 @@ still resolves after it is fixed, and the id is never handed out again.
 | P343 | open | 2026-10-06 | WebSocket bearer credentials travel only as `?key=`, which persists in logs, history, and referers | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P344 | open | 2026-10-06 | Health probes opt out of throttling while doing per-call cache writes and DB reads | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P345 | open | 2026-10-06 | Two more P5 instances: onboarding does a whole-row save, profile autosave rewrites every field | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P346 | open | 2026-10-06 | The assistant turn concatenates history, user message, and tool results with no user-data delimiters; tool-arg validation is thin and confirm re-executes under a stripped context | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P347 | open | 2026-10-06 | Every AI feature inherits the same 16,000-token output budget and, except link extraction, no per-user daily cap | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P348 | open | 2026-10-06 | The concealed wiki payload leaks exact latitude/longitude to viewers it exists to withhold detail from | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P349 | open | 2026-10-06 | Plugins run unsandboxed in-process: entry points and settings modules are arbitrary code with full DB and keys | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P350 | open | 2026-10-06 | Video location strip clears only container-level tags; stream-level location tags survive remux and re-encode | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P351 | open | 2026-10-06 | Import pipeline ceilings: every archive JSON is `json.load`ed unbounded, and the extraction budget falls back to 64 GiB | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P352 | open | 2026-10-06 | Four more upstream-bound tasks sit on INTERACTIVE outside P167's list | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P353 | open | 2026-10-06 | The upstream breaker and slot guard fail open on cache outage — protection drops fleet-wide exactly when the upstream is hot | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P354 | open | 2026-10-06 | Three check-then-act races: breaker `trip()` can shorten a recorded wait, outbox drains double-enqueue, WebAuthn cap/dup checks race | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P355 | open | 2026-10-06 | The verification-email resend path never releases its inflight reservation, letting a user self-exhaust their email budget | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P356 | open | 2026-10-06 | Image/byte downloads buffer uncapped `response.content` in memory across four gateways | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P357 | open | 2026-10-06 | Provider API keys travel as query params, so `raise_for_status()` writes key material into exception text | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P358 | open | 2026-10-06 | Three more P5 instances: `update_trip`, trip-activity edit, and `save_article` write whole rows | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P359 | open | 2026-10-06 | Trip visibility runs a friendship query per COMMON_FRIEND activity, and the trip map fans out a full query per linked child trip | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P360 | open | 2026-10-06 | Scan pipeline recomputes each (device, wiki) pair once per entry, and one boundary vote re-resolves every location in the polygon inline | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P361 | open | 2026-10-06 | Trip/wiki change fan-out tasks are non-idempotent under at-least-once delivery, so redelivery double-notifies | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P362 | open | 2026-10-06 | Document sniffing fails open for unfingerprintable bytes, and uploaded PDFs are stored and served verbatim | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P363 | open | 2026-10-06 | `reencode_stored_field` reads the whole stored file into RAM unbounded — the P341 pattern in a second file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
