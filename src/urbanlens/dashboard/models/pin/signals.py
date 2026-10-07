@@ -15,14 +15,16 @@ logger = logging.getLogger(__name__)
 
 @receiver(pre_save, sender=Pin, dispatch_uid="pin_remember_child_boundary_parent")
 def remember_child_boundary_parent(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    """Remember hierarchy/coordinate changes for the post-save boundary hook."""
+    """Remember hierarchy/coordinate changes for the post-save boundary and calendar hooks."""
     update_fields = kwargs.get("update_fields")
     if update_fields is not None and not {"parent_pin", "parent_pin_id", "location", "location_id"}.intersection(update_fields):
         instance.child_boundary_previous_parent_id = instance.parent_pin_id
         instance.child_boundary_position_changed = False
+        instance.previous_location_id = instance.location_id
         return
     previous = Pin.objects.filter(pk=instance.pk).values("parent_pin_id", "location_id").first() if instance.pk else None
     instance.child_boundary_previous_parent_id = previous["parent_pin_id"] if previous else None
+    instance.previous_location_id = previous["location_id"] if previous else None
     instance.child_boundary_position_changed = bool(previous and (previous["parent_pin_id"] != instance.parent_pin_id or previous["location_id"] != instance.location_id))
 
 

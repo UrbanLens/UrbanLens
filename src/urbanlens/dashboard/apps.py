@@ -47,6 +47,7 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.aliases.signals
         import urbanlens.dashboard.models.api_rate_limit.signals
         import urbanlens.dashboard.models.cache.signals
+        import urbanlens.dashboard.models.calendar_sync.signals
         import urbanlens.dashboard.models.comments.signals
         import urbanlens.dashboard.models.floorplans.signals
         import urbanlens.dashboard.models.images.signals

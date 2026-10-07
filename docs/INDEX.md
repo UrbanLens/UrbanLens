@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| (live|actionable) ' docs/INDEX.md   # plans and ideas still in play
 ```
 
-**Next free id:** `PL11` · `X32` · `I8` · `R32` · `N46`
+**Next free id:** `PL11` · `X32` · `I8` · `R32` · `N47`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -160,3 +160,4 @@ the detail.
 | N42 | current | 2026-10-06 | A cultural-resource search's cached answer was the rows last found from its point, so a neighbouring search took HRSH's National Register listing away (P286); fixed in REData v0.3.4, not seen live | [`docs/handoffs/redata-cultural-resource-cache-keyed-by-last-search.md`](handoffs/redata-cultural-resource-cache-keyed-by-last-search.md) |
 | N43 | current | 2026-10-05 | REData's Google Open Buildings source read a level-4 shard whole (P319); answered by REData v0.3.5 (#129 64 MiB cap on level-6 shards, #132 256 MiB on Microsoft), in production 2026-10-06 | [`docs/handoffs/redata-open-buildings-shards-read-whole.md`](handoffs/redata-open-buildings-shards-read-whole.md) |
 | N44 | current | 2026-10-06 | REData's street-view timeline picks a date's representative frame without looking at `mirror_gone`, so UrbanLens drops a date whose other frames still load (P325); sent | [`docs/handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md`](handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md) |
+| N46 | current | 2026-10-07 | The 0.9.0 production rollout should run `manage.py clear_withheld_calendar_locations` once (dry run, then `--apply`) to clear the locations and titles 0.8.0 calendar exports left on events nothing pushes to (#301); sent | [`docs/handoffs/infrastructure-clear-withheld-calendar-locations.md`](handoffs/infrastructure-clear-withheld-calendar-locations.md) |

@@ -104,6 +104,7 @@ problems on its first run is a check somebody switches off.
 | `cache_media_item_into_wiki` | INTERACTIVE | the tile is on screen |
 | `classify_detail_marker` | INTERACTIVE | feeds a suggestion the user is looking at |
 | `classify_trivia_submission` | INTERACTIVE | a player is waiting on the verdict |
+| `delete_orphaned_calendar_events` | INTERACTIVE | a member just deleted the stop or trip |
 | `detect_dm_address_mentions` | INTERACTIVE | message is being read now |
 | `dispatch_native_push` | INTERACTIVE | a person is waiting for the notification |
 | `enrich_wiki_location` | PANEL_FETCH | waits on Google, OSM and REData for up to four minutes; on the interactive pool four of them held every slot and new pins' wikis took over two minutes to appear (integration suite, 2026-10-01). Bulk when queued from a batch task (`services/core/celery.py::follow_on_queue`, P109) |
