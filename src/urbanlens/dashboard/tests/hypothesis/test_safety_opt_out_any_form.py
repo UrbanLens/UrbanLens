@@ -212,7 +212,7 @@ class EmailContactOptOutSpellingTests(_OptOutTestCase):
         self.assertIn("squatted@example.com", self._emailed())
 
     def test_a_row_written_before_the_normalized_column_still_matches_as_typed(self) -> None:
-        """Code from before 0069, still serving during a rolling deploy, writes no normalized copy."""
+        """Code from before 0071, still serving during a rolling deploy, writes no normalized copy."""
         set_checkin_contacts(self.checkin, [(None, "J.Doe@gmail.com", "")])
         self._opt_out_by_email("J.Doe@gmail.com")
         SafetyContactOptOut.objects.update(email_normalized="")
