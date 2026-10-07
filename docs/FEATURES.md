@@ -849,6 +849,13 @@ category suggestions, and each assistant round) reserve their ledger row before 
 cannot read its counts refuses billable services. The six LLM features added to it on 2026-10-05
 carry no cap: AI is logged, not limited.
 
+A service's `ServiceDefaults` reach its `ApiRateLimit` row when the row is created, and once more if the row still
+holds the generic 20 a minute, 500 a day fallback when the service first registers defaults. An admin can edit every
+field, so a changed default reaches existing rows only through a data migration that rewrites a row still holding an
+earlier default exactly and logs one it leaves: 0064 moved 0.8.0's values to 0.9.0's, and 0068 does the same for a
+default any release has written, read from git history (Overpass rows from v0.3.0b0 and v0.4.0b3 allowed 2 calls a
+minute). `enabled` is never touched.
+
 A service declared `ledger=CallLedger.TALLIED` (`basemap_vendor_tiles`, one call per uncached raster
 tile) makes no query at all per call: it is checked against the same `ApiRateLimit` limits, share
 and switch on atomic fixed-window counters in the default cache, and each outcome is added to a
@@ -1052,7 +1059,16 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
-  when more exist; the import runs in the `import_calendar_events` task behind a progress poll
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll.
+  An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
+  under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
+  (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
+  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. A rate limit never drops the
+  connection; an auth or permission refusal does, and so, for now, does any failed token refresh
+  (P337). Each member's export applies their own location visibility: a stop whose location they
+  may not see is exported with `location: ""` and the title "Secret Location", so an update clears
+  a location an earlier export wrote (a PATCH keeps omitted fields). An imported event keeps its own
+  location unless one is withheld
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an
@@ -1622,7 +1638,7 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
   marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
   PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
-  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`),
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`: an auto-sync change, or an export the budget cut short),
   `sweep_unarchived_links` (a pin or wiki link without a Wayback snapshot: a failed URL waits
   1 h, 6 h, 1 d, 3 d, 7 d, then 30 d before it is given up, in `wayback_retry_at`; a link whose
   own task never ran is taken up after 15 minutes; `services/links/wayback_archive.py`).
@@ -1659,7 +1675,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - Deployment configuration fails closed at import (`settings/_env.require_deployment_setting`):
   outside local/development/testing, a missing `DJANGO_SECRET_KEY`, `UL_SITE_URL` (or a loopback
   one), broker or Dragonfly URL, or `DJANGO_DEBUG=true`, refuses to start. `UL_ENVIRONMENT` is
-  resolved once by `environments.meta.environment_from_env` (unset is production). See P156.
+  resolved once by `environments.meta.environment_from_env`; unset or blank refuses to start (Jess, 2026-10-07),
+  except in a test run, which is `testing`. See P156.
 - `services/core/site_urls.absolute_url(path)` builds request-less links (mail, SMS, Celery) on
   `SITE_URL`; nothing else may join onto it (`test_site_urls.py`)
 - `/thanks/` credits page, rendering live contributor data pulled from the GitHub API

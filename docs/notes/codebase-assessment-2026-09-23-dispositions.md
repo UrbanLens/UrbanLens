@@ -1,6 +1,6 @@
 # N30 — Where every verified N29 finding stands
 
-`id: N30` · `status: current` · `updated: 2026-10-06`
+`id: N30` · `status: current` · `updated: 2026-10-07`
 
 N29's 131 claims were re-verified into 103 real or partial findings (G1–G6; those verification reports lived in a
 session scratchpad and are not in the repo). On 2026-09-29 two independent passes checked every finding against
@@ -29,6 +29,7 @@ except the rows that give her ruling.
 | Batch 1 (third pass): the Wikipedia-cache first-title hook seeds one article per pin | Fixed 2026-10-01 by 40d418c1d (P181), two days after the third pass: the hook seeds the location's wiki only, and a pin takes the match from its owner's own activity (`seed_pin_from_cached_wikipedia`: the new pin's prefetch, its Wikipedia panel, its page), one pin per action. The hook makes no outbound request: it reads the cached row, and the wiki's lead-image cover is not fetched (`_store_cover_from_url` has no owner for a wiki cover yet). A bulk import never runs the per-pin prefetch (`create_pin_for_profile` is not on that path), and the lookup that writes the row is per Location | `test_wikipedia_cache_hook_cost.py` (the same query count with 1 or 25 pins on the location; any HTTP request fails it, with egress opened), `test_cross_user_pin_isolation.py` |
 | Batch 1 (third pass): `resolve_deferred_pin_locations` has `max_retries=None` | `max_retries` is now `_DEFERRED_MAX_RETRIES`: the two-day deadline over the shortest gap between retries (Google's fixed 65 s), rounded up, which is 2,659. The deadline still ends a batch first. The bound ends one whose `started_at` the deadline cannot read, which it treated as never expiring. At the bound the task records `PinImportFailure` rows and tells the user, as at the deadline, rather than calling a `retry()` Celery would refuse. 159c1498a. Giving up now places what the last round resolved instead of recording it as a failure, 0cd954fde | `test_deferred_lookup_retry_window.py::DeferredLookupRetryBoundTests` |
 | Batch 1 (third pass): smart-list resync runs inline on the request below its ceiling | Measured 2026-10-06 against 25 smart lists (the ceiling) over 2,000 pins: one pin save cost 116 queries and 145-180 ms of commit hooks, a bulk edit of 50 pins 8,420 queries and 16 s, and one of 500 (`MAX_BULK_PINS`) about 84,000 queries and 174 s, since the ceiling was per pin. A change now writes a `SmartListSyncRequest` in its own transaction, and one sync per account runs on the queue, single-flight. It evaluates every requested pin against each list together, and a beat sweep re-queues a lost sync. After: a single save's commit hooks cost 1 query and 2 ms, and its queued sync 71 queries and about 100 ms. A 500-pin bulk edit request costs 4,397 queries and 3.8 s, against 3,396 and 3.2 s with no smart lists. Until the sync runs, the list's page says it is catching up and the external API reports `membership_pending`. 70fe951cd, a09ed7ce4 | `test_smart_list_sync_off_request.py` |
+| Batch 26 (third pass): calendar export makes one Google request per activity (the lost-enqueue half was already fixed) | Still one request per event, not batched: Google counts every request inside a batch, the limiter counts one per HTTP request, and a batch whose response is lost leaves every event in it unlinked. Measuring it found that a trip with 30 or more scheduled activities could never finish an export under the site-wide 30-a-minute budget, filed as P334 and fixed 2026-10-07. Every export, the button and API included, skips events whose link's `event_fingerprint` matches the new body, so an attempt resumes where the last stopped. Creates carry a deterministic client-assigned id, so a retry after a lost response gets 409 rather than a duplicate. An export the budget cuts short reports how many of the trip's events are on the calendar and owes a push, which `requeue_pending_calendar_pushes` delivers. `MAX_CALENDAR_PUSH_ATTEMPTS` counts only pushes that wrote nothing, and `google_calendar` allows 120 a minute (migration 0067) | `test_calendar_export_resumable.py`, `test_calendar_minute_limit_migration.py` |
 
 ## Reverted by Jess
 
@@ -39,7 +40,7 @@ except the rows that give her ruling.
 
 ## Unhandled (third pass, 2026-09-29)
 
-None left. On 2026-10-06 three of the six were fixed, the calendar export was filed as P334, and Jess ruled on the two retention rows.
+None left. On 2026-10-06 three of the six were fixed, the calendar export was filed as P334 (fixed 2026-10-07), and Jess ruled on the two retention rows.
 
 ## Open, filed
 
@@ -51,7 +52,6 @@ None left. On 2026-10-06 three of the six were fixed, the calendar export was fi
 | Batch 33: article revisions never deleted (*second pass*) | P170 |
 | Batch 33: album grid and membership unbounded (*second pass*; P166 had listed it as left open) | P171 |
 | Batch 35: organize screen materialises every label | P66, already open |
-| Batch 26 (third pass): calendar export makes one Google request per activity (the lost-enqueue half is fixed) | P334. Not batched: Google counts every request inside a batch, the limiter counts one per HTTP request, and a batch whose response is lost leaves every event in it unlinked, so the retry duplicates them all. Measuring it found that a trip with 30 or more scheduled activities can never finish an export under the site-wide 30-a-minute budget |
 
 ## Kept, with the reason
 

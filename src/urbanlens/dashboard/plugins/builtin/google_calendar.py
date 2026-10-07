@@ -9,6 +9,10 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.UrbanLens.egress import EgressCategory
 
+#: Site-wide calls a minute. At least ``max_trip_activities + 1`` at default settings, so one export of a full trip
+#: finishes in one attempt; an export that does run out is finished by a push (``services.trips.calendar_sync``).
+GOOGLE_CALENDAR_CALLS_PER_MINUTE = 120
+
 
 class GoogleCalendarPlugin(UrbanLensPlugin):
     """Google Calendar integration: per-user trip import/export."""
@@ -29,8 +33,8 @@ class GoogleCalendarPlugin(UrbanLensPlugin):
             "google_calendar": ServiceDefaults(
                 display_name="Google Calendar API",
                 category=EgressCategory.PUBLIC_WRITE,
-                calls_per_minute=30,
+                calls_per_minute=GOOGLE_CALENDAR_CALLS_PER_MINUTE,
                 calls_per_day=2000,
-                notes="Free API; Google quota is per-user (default 600 queries/min/user across the project).",
+                notes=("Free API; Google's quota is per user (600 a minute by default), so this is our own politeness limit. A minute holds one whole trip export: an event per activity (max_trip_activities, 100 by default) plus the trip's own."),
             ),
         }

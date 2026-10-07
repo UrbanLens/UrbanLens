@@ -71,6 +71,20 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         """
         return self.filter(profile=profile, google_event_id=event_id).exists()
 
+    def forget_written_events(self, profile: Profile) -> int:
+        """Stop trusting that this profile's calendar holds what UrbanLens last wrote to it.
+
+        Called when the profile (re)connects a Google account, which may not be the one the events went to: the next
+        export rewrites every event instead of skipping it as current.
+
+        Args:
+            profile: The profile that connected.
+
+        Returns:
+            How many links were reset.
+        """
+        return self.filter(profile=profile).exclude(event_fingerprint="").update(event_fingerprint="")
+
     def set_auto_sync(self, link_pk: int, auto_sync: bool) -> None:
         """Update just the auto_sync flag for one link, by pk.
 

@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
+from django.core.exceptions import ImproperlyConfigured
+
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.environments.base import BaseEnvironment
@@ -222,10 +224,14 @@ class SelectEnvironmentTests(SimpleTestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "development"}):
             self.assertIsInstance(select_environment(None), Development)
 
-    def test_no_env_var_is_production(self) -> None:
+    def test_no_env_var_refuses(self) -> None:
+        """Unset used to mean production; since 2026-10-07 a process has to say which environment it is."""
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
-        with patch.dict(os.environ, stripped, clear=True):
-            self.assertIsInstance(select_environment(None), Production)
+        with (
+            patch.dict(os.environ, stripped, clear=True),
+            self.assertRaisesRegex(ImproperlyConfigured, "UL_ENVIRONMENT is not set"),
+        ):
+            select_environment(None)
 
     def test_env_var_staging_returns_staging(self) -> None:
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "staging"}):

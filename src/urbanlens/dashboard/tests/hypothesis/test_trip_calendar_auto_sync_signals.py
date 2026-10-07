@@ -152,10 +152,12 @@ class CalendarPushRequestTests(TestCase):
         self.link.refresh_from_db()
         return self.link.push_requested_at
 
-    def _push(self, **export):
+    def _push(self, **run):
+        """Push the trip with each export attempt's outcome stubbed; by default it finishes."""
         from urbanlens.dashboard.services.trips import calendar_sync
 
-        with mock.patch.object(calendar_sync, "export_trip_to_calendar", **export):
+        run.setdefault("return_value", mock.Mock(complete=True, written=1))
+        with mock.patch.object(calendar_sync._TripCalendarExport, "run", autospec=True, **run):
             return calendar_sync.push_auto_synced_trip_changes(self.trip)
 
     def test_a_trip_save_marks_the_link_as_owing_a_push(self):
@@ -186,6 +188,7 @@ class CalendarPushRequestTests(TestCase):
 
         def change_meanwhile(*_args, **_kwargs):
             TripCalendarLink.objects.filter(pk=self.link.pk).update(push_requested_at=later)
+            return mock.DEFAULT
 
         self._push(side_effect=change_meanwhile)
 

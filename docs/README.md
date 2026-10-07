@@ -4,8 +4,8 @@
 It records what one automated session measured or believed on a given date. It
 was not independently reviewed. Treat it as evidence, not authority.
 
-`CLAUDE.md` is loaded into every session and every subagent, so it stays under
-140 lines and agents cannot edit it. This directory is the writable surface.
+`AGENTS.md` (which each `CLAUDE.md` imports) is loaded into every session and
+every subagent, so it stays under 140 lines and agents cannot edit it. This directory is the writable surface.
 
 ## Start at `INDEX.md`
 
@@ -15,19 +15,36 @@ record. Read the index before reading anything else here.
 ```bash
 grep -E '^\| P7 ' docs/INDEX.md          # one record by id
 grep -i 'encryption' docs/INDEX.md       # by keyword
-grep -E '\| open ' docs/INDEX.md         # everything still open
+grep -E '\| (live|actionable) ' docs/INDEX.md   # plans and ideas in play
 ```
+
+## Where things live
+
+| What | Where |
+|---|---|
+| **Work to do** - a defect, a task, anything that will be closed | A GitHub issue, labelled per [`agents/triage-labels.md`](agents/triage-labels.md); see [`agents/issue-tracker.md`](agents/issue-tracker.md) |
+| **A decision** - we chose X over Y because Z | An ADR in [`adr/`](adr/README.md) |
+| **Domain vocabulary** | [`CONTEXT.md`](CONTEXT.md), per [`agents/domain.md`](agents/domain.md) |
+| **Knowledge** - measurements, how things work, plans, ideas, notes | A document here, indexed in `INDEX.md` |
+
+Problems (`P#`), tasks (`T#`) and decisions (`D#`) used to be index records.
+They moved on 2026-10-07: [`PROBLEMS.md`](PROBLEMS.md) maps each former `P#`
+and `T#` to its issue, and each `D#` became the ADR with the same number (`D8` is `adr/0008-*.md`). `bin/check_docs_index.py`
+refuses new rows with those prefixes.
+
+An issue body is written by the same agents as this directory, so the
+disclaimer below applies to it too; open it with the one-line form used by the
+migrated issues. When an issue needs long-form analysis, write it here as a
+note and link it from the issue - the issue holds the status, the document
+the detail.
 
 ## The ID prefixes
 
 | | | Status values |
 |---|---|---|
-| `P#` | **Problem** — a known defect, with how it was found and why it was deferred | `open` · `blocking` · `fixed` |
-| `I#` | **Idea** — an unvalidated proposal, or a practice worth transferring | `unvalidated` · `actionable` · `absorbed` |
-| `D#` | **Decision** — we chose X over Y because Z. Immutable once accepted; a later `D#` supersedes it | `accepted` · `superseded` |
+| `I#` | **Idea** — a proposal needing long-form analysis (a short one is just an `enhancement` issue); once actionable, its row names its issue | `unvalidated` · `actionable` · `absorbed` |
 | `X#` | **Experiment** — one measurement, with its method and its unit of analysis | `holds` · `collapsed` · `untestable` · `disqualified` |
-| `T#` | **Task** — actionable and closeable | `open` · `blocked` · `done` |
-| `PL#` | **Plan** — a multi-stage body of work | `live` · `superseded` |
+| `PL#` | **Plan** — a multi-stage body of work; its row names the issue tracking it | `live` · `superseded` |
 | `R#` | **Reference** — how a subsystem currently works | `current` · `stale` |
 | `N#` | **Note** — something worth recording that is none of the above: an observation, a caveat, a thing someone will otherwise rediscover | `current` · `stale` |
 
@@ -42,25 +59,13 @@ grep -E '\| open ' docs/INDEX.md         # everything still open
 
 ## Closing a problem
 
-A resolved `P#` **moves** to `archive/PROBLEMS-ARCHIVE.md`; it is not left in
-`PROBLEMS.md` marked fixed. The live file is what still needs attention, and an
-entry that says "fixed" at the top still costs every reader the time to work out
-that it does.
+Close its issue with a comment that records what was actually wrong. Where the
+original guessed and the fix proved it wrong, say so - that correction is
+usually the most useful sentence, and the next person to guess the same way is
+the one it is for. Repoint anything in `src/` that cited it.
 
-1. Rewrite the entry as the record of what was actually wrong. Where the
-   original guessed and the fix proved it wrong, say so — that correction is
-   usually the most useful sentence in the entry, and the next person to guess
-   the same way is the one it is for.
-2. Move it under a `## RESOLVED <date>: <title>` heading in the archive, keeping
-   its metadata line as `` `id: P#` · `status: fixed` · `resolved: <date>` ``.
-   The id line is load-bearing twice over: a citation of `P70` still resolves
-   after the entry is fixed, and `bin/check_docs_index.py` counts archived ids
-   toward the next free one, so finishing the highest-numbered problem cannot
-   hand its id to the next writer.
-3. Delete its row from `INDEX.md`. Do **not** lower the next-free-id header —
-   ids are never reused.
-4. Repoint anything in `src/` that cited it. `bin/check_docs_refs.py` catches a
-   path that stops resolving; nothing catches a `P#` that has moved.
+`archive/PROBLEMS-ARCHIVE.md` holds problems resolved before the move to
+issues. It takes no new entries; a former `P#` closed since is a closed issue.
 
 ## House style
 
@@ -79,7 +84,7 @@ than believe you.
 
 ## The disclaimer block
 
-`INDEX.md`, `PROBLEMS.md` and any new standalone file open with this,
+`INDEX.md` and any new standalone file open with this,
 immediately after the title. Older documents predate the convention and are
 being converted as they are next edited, rather than in one sweep that would
 touch every file without reading it:
