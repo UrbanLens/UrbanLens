@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from django.conf import settings
@@ -39,6 +39,9 @@ from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.media.storage import cap_to_ingress
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+
+if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
 
 logger = logging.getLogger(__name__)
 
@@ -404,25 +407,44 @@ class ImportStartView(LoginRequiredMixin, View):
             )
 
         # Claimed before the upload is written, as an export is: an import extracts, scans and writes a whole archive on
-        # a sandbox worker slot.
+        # a sandbox worker slot. Held by the job's own id from the start, so a task that ends before this view returns
+        # still finds its claim to release.
+        job_id = str(uuid.uuid4())
         guard = import_guard_key(request.user.pk)
-        if not single_flight.claim(guard, import_guard_ttl()):
+        if not single_flight.claim(guard, import_guard_ttl(), token=job_id):
             return render(
                 request,
                 "dashboard/partials/tools/import_progress.html",
                 {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An import is already running."},
             )
 
-        job_id = str(uuid.uuid4())
-        imp_dir = _import_dir(job_id)
-        os.makedirs(imp_dir, exist_ok=True)
+        try:
+            refused = self._start(request, upload, job_id)
+        except BaseException:
+            single_flight.release(guard)
+            raise
+        if refused is not None:
+            single_flight.release(guard)
+            return refused
+        return render(
+            request,
+            "dashboard/partials/tools/import_progress.html",
+            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
+        )
 
+    def _start(self, request: HttpRequest, upload: UploadedFile, job_id: str) -> HttpResponse | None:
+        """Save the upload and queue its import.
+
+        Returns:
+            None once it is queued, or the response saying why it was not.
+        """
+        imp_dir = _import_dir(job_id)
         zip_path = os.path.join(imp_dir, "upload.zip")
         try:
+            os.makedirs(imp_dir, exist_ok=True)
             with open(zip_path, "wb") as fh:
                 fh.writelines(upload.chunks())
         except OSError:
-            single_flight.release(guard)
             logger.exception("Failed to save import file for user %s", request.user.pk)
             return _import_error_partial(request, job_id, "Failed to save the uploaded file. Please try again.")
 
@@ -433,7 +455,6 @@ class ImportStartView(LoginRequiredMixin, View):
 
         result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id, durable=False)
         if result is None:
-            single_flight.release(guard)
             ImportJobStatus(job_id).write("error", 0, "Import queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
@@ -441,14 +462,8 @@ class ImportStartView(LoginRequiredMixin, View):
                 {"job_id": job_id, "status": "error", "progress": 0, "message": "Import queue is unavailable. Please try again later."},
                 status=503,
             )
-
-        single_flight.adopt(guard, job_id, import_guard_ttl())
         logger.info("Import task %s started for user %s", result.id, request.user.pk)
-        return render(
-            request,
-            "dashboard/partials/tools/import_progress.html",
-            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
-        )
+        return None
 
 
 class ImportStatusView(LoginRequiredMixin, View):

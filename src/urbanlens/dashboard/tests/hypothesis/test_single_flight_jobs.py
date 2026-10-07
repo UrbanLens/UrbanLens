@@ -224,6 +224,27 @@ class TheImportButtonTests(TestCase):
 
         self.assertEqual(len(self._import_calls()), 2, "the guard was left held after the enqueue failed")
 
+    def test_a_failure_before_the_enqueue_does_not_hold_the_guard(self) -> None:
+        with mock.patch("urbanlens.dashboard.controllers.tools.os.makedirs", side_effect=OSError("volume full")):
+            self._press()
+        self._press()
+
+        self.assertEqual(len(self._import_calls()), 1, "the guard was left held after the upload could not be saved")
+
+    def test_an_import_that_ends_before_the_view_returns_gives_its_claim_up(self) -> None:
+        """An eager or very fast worker finishes before the view would have recorded the job's id."""
+        from urbanlens.dashboard.services.import_export.import_data import run_import
+
+        def run_at_once(task, user_id, zip_path, job_id, **_kwargs):  # noqa: ANN001, ANN202, ARG001 - safely_enqueue_task's shape
+            with mock.patch("urbanlens.dashboard.services.import_export.import_data.schedule_import_cleanup"):
+                run_import(user_id, zip_path, job_id)
+            return mock.Mock(id="task-eager")
+
+        self.enqueue.side_effect = run_at_once
+        self._press()
+
+        self.assertIsNone(self._guard(), "an import that had already ended still held the guard")
+
     def test_a_finished_import_releases_the_guard_when_its_status_is_polled(self) -> None:
         from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
 
