@@ -849,6 +849,13 @@ category suggestions, and each assistant round) reserve their ledger row before 
 cannot read its counts refuses billable services. The six LLM features added to it on 2026-10-05
 carry no cap: AI is logged, not limited.
 
+A service's `ServiceDefaults` reach its `ApiRateLimit` row when the row is created, and once more if the row still
+holds the generic 20 a minute, 500 a day fallback when the service first registers defaults. An admin can edit every
+field, so a changed default reaches existing rows only through a data migration that rewrites a row still holding an
+earlier default exactly and logs one it leaves: 0064 moved 0.8.0's values to 0.9.0's, and 0068 does the same for a
+default any release has written, read from git history (Overpass rows from v0.3.0b0 and v0.4.0b3 allowed 2 calls a
+minute). `enabled` is never touched.
+
 A service declared `ledger=CallLedger.TALLIED` (`basemap_vendor_tiles`, one call per uncached raster
 tile) makes no query at all per call: it is checked against the same `ApiRateLimit` limits, share
 and switch on atomic fixed-window counters in the default cache, and each outcome is added to a
