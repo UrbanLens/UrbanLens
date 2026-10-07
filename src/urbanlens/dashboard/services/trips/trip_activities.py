@@ -583,6 +583,7 @@ def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
 def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Mapping[str, Any]) -> TripActivity:
     """Apply a presence-keyed partial update to an activity.
     Only keys actually present in *changes* are touched, so the external API's PATCH semantics and the internal form's full-replace semantics are the same call - the internal controller simply supplies every key.
+    A blank ``title`` or ``place`` from an actor who may not see the activity's location keeps the stored one: it was never shown to them (P338).
 
     Args:
         trip: The trip owning the activity.
@@ -600,9 +601,11 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
     before = _editable_state(activity)
+    # Whether the actor was shown this stop's location and the title taken from it (P338).
+    withheld = bool(viewer_hidden_activity_ids([activity], actor))
 
     if "title" in changes:
-        _apply_title(activity, actor, _clean_text(changes["title"]))
+        _apply_title(activity, _clean_text(changes["title"]), withheld=withheld)
     if "notes" in changes:
         clean_notes = _clean_text(changes["notes"])
         length_error = text_length_error(clean_notes, MAX_TRIP_ACTIVITY_NOTES_LENGTH, "Notes")
@@ -614,7 +617,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     if "scheduled_end" in changes:
         activity.scheduled_end = _checked_schedule(changes["scheduled_end"], "The end time")
     if "place" in changes:
-        activity.location, activity.pin = resolve_activity_place(changes["place"] or {}, actor, trip=trip)
+        _apply_place(activity, *resolve_activity_place(changes["place"] or {}, actor, trip=trip), withheld=withheld)
     if "status" in changes:
         new_status = str(changes["status"] or "").strip()
         if new_status in SETTABLE_STATUSES:
@@ -636,7 +639,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     return activity
 
 
-def _apply_title(activity: TripActivity, actor: Profile, title: str | None) -> None:
+def _apply_title(activity: TripActivity, title: str | None, *, withheld: bool) -> None:
     """Set a title the actor submitted, which is theirs from then on rather than the place's.
 
     The edit dialog posts every field, and a title taken from a place the actor may not see reached them blank
@@ -646,16 +649,38 @@ def _apply_title(activity: TripActivity, actor: Profile, title: str | None) -> N
 
     Args:
         activity: The activity being edited.
-        actor: The profile editing it.
         title: The submitted title, cleaned.
+        withheld: The actor may not see the activity's location.
     """
-    withheld = activity.title_from_place and bool(viewer_hidden_activity_ids([activity], actor))
+    withheld = withheld and activity.title_from_place
     if title is None and withheld:
         return
     if title == activity.title and not withheld:
         return
     activity.title = title
     activity.title_from_place = False
+
+
+def _apply_place(activity: TripActivity, location: Location | None, pin: Pin | None, *, withheld: bool) -> None:
+    """Set the place the actor submitted, unless they submitted back blank a place they were never shown.
+
+    The edit dialog posts every field, and its place is blank for an actor who may not see the stop's location, as
+    its title is. Clearing the location on that save would also stop the stop being hidden, and show them the name it
+    took from the place. A place such an actor picks replaces it, and a title taken from the old place goes with it:
+    it would otherwise name that place to whoever may see the new one, the actor included.
+
+    Args:
+        activity: The activity being edited.
+        location: The submitted place's location, resolved.
+        pin: The submitted place's pin, resolved.
+        withheld: The actor may not see the activity's location.
+    """
+    if withheld and location is None and pin is None:
+        return
+    if withheld and activity.title_from_place and location != activity.location:
+        activity.title = None
+        activity.title_from_place = False
+    activity.location, activity.pin = location, pin
 
 
 def _editable_state(activity: TripActivity) -> tuple[Any, ...]:

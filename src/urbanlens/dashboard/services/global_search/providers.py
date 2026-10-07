@@ -867,7 +867,8 @@ class TripSearchProvider(SearchProvider):
 
         from urbanlens.dashboard.models.friendship.blocks import SharedSpaceBlocks
         from urbanlens.dashboard.models.trips import Trip
-        from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
+        from urbanlens.dashboard.models.trips.model import TripActivity, TripComment, TripMembership
+        from urbanlens.dashboard.services.trips.trip_visibility import shown_activity_title, viewer_hidden_activity_ids
 
         queryset = Trip.objects.filter(Q(pk__in=TripMembership.objects.filter(profile=profile).values("trip_id")) | Q(creator=profile))
         if parsed.date_start and parsed.date_end:
@@ -894,21 +895,28 @@ class TripSearchProvider(SearchProvider):
                 queryset = queryset.exclude(state_q) if negated else queryset.filter(state_q)
             # else: unbacked (shared/private/public/archived/starred) or
             # unrecognized - already surfaced via parsed.unsupported.
-        fields = ["name", "description", "activities__title", "activities__notes"]
+        fields = ["name", "description", "activities__notes"]
         blocks = SharedSpaceBlocks.for_viewer(profile)
-        comment_match: Callable[[str], Q] | None = None
+        trip_ids = list(queryset.values_list("pk", flat=True))
+
+        def visible_title_match(term: str) -> Q:
+            # A stop's title taken from its place matches only for a member who may see the place, or a match on
+            # a hidden stop would say what it is called (P338).
+            activities = list(TripActivity.objects.filter(trip_id__in=trip_ids, title__icontains=term).select_related("added_by"))
+            hidden = viewer_hidden_activity_ids(activities, profile)
+            return Q(pk__in={activity.trip_id for activity in activities if shown_activity_title(activity, hidden=activity.id in hidden)})
+
+        extra: Callable[[str], Q] = visible_title_match
         if blocks.since:
             # A comment a block hides must not be what matches its trip, or the match says what it holds.
-            trip_ids = list(queryset.values_list("pk", flat=True))
-
             def visible_comment_match(term: str) -> Q:
                 comments = blocks.exclude_hidden(TripComment.objects.filter(trip_id__in=trip_ids, text__icontains=term), author_field="author_id")
-                return Q(pk__in=list(comments.values_list("trip_id", flat=True)))
+                return visible_title_match(term) | Q(pk__in=list(comments.values_list("trip_id", flat=True)))
 
-            comment_match = visible_comment_match
+            extra = visible_comment_match
         else:
             fields.append("comments__text")
-        queryset = self.apply_text(queryset, parsed, fields, extra=comment_match)
+        queryset = self.apply_text(queryset, parsed, fields, extra=extra)
         queryset, _ = apply_sort(queryset, parsed)
 
         results = []

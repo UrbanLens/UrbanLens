@@ -24,7 +24,11 @@ from django.utils import timezone
 from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
+from urbanlens.dashboard.models.calendar_sync.model import (
+    CalendarSyncDirection,
+    GoogleCalendarAccount,
+    TripCalendarLink,
+)
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
@@ -36,10 +40,13 @@ from urbanlens.dashboard.services.trips.trip_visibility import (
     HIDDEN_ACTIVITY_TITLE,
     masked_activity_title,
     shown_activity_title,
+    viewer_hidden_activity_ids,
 )
 
 _PLACE_NAME = "Packard Plant"
 _TYPED = "Meet at the gate"
+_IMPORTED_LOCATION = "123 Factory Rd, Utica, NY"
+_IMPORT_NOTE = "Location from the imported Google Calendar event."
 _WHEN = datetime.datetime(2026, 11, 6, 9, 0, tzinfo=datetime.UTC)
 _MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0069_calendar_privacy_followups")
 
@@ -144,6 +151,50 @@ class APlaceSearchNameIsRecordedAsSuchTests(_HiddenStopCase):
                 self.assertEqual((activity.title, activity.title_from_place), (guess, False))
                 self.assertEqual(self._row(activity, self.viewer)["display_title"], guess)
 
+    def test_an_editor_who_may_not_see_the_stop_does_not_clear_its_location_by_saving(self) -> None:
+        """The dialog's place is blank for them too; a stop with no location is hidden from no one, name and all."""
+        activity = self._searched_stop()
+        location_id = activity.location_id
+        TripMembership.objects.filter(trip=self.trip, profile=self.viewer).update(is_organizer=True)
+        blank_place = {"location_uuid": "", "pin_uuid": "", "geocoded_lat": "", "geocoded_lng": "", "geocoded_name": ""}
+
+        update_activity(
+            self.trip, self.viewer, activity.pk, changes={"title": "", "notes": "Gate code 1234", "place": blank_place}
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual((activity.location_id, activity.notes), (location_id, "Gate code 1234"))
+        self.assertEqual(self._row(activity, self.viewer)["display_title"], HIDDEN_ACTIVITY_TITLE)
+
+    def test_a_place_an_editor_who_may_not_see_the_stop_picks_takes_the_old_places_name_with_it(self) -> None:
+        """Else moving the stop to a place they may see would show them the name of the one they may not."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        Profile.objects.filter(pk=self.mate.pk).update(trip_pin_location_visibility=VisibilityChoice.COMMON_PIN)
+        activity = self._searched_stop()
+        TripMembership.objects.filter(trip=self.trip, profile=self.viewer).update(is_organizer=True)
+        their_pin = Pin.objects.create(
+            profile=self.viewer, location=Location.objects.create(latitude=40.0, longitude=-80.0)
+        )
+
+        update_activity(
+            self.trip, self.viewer, activity.pk, changes={"title": "", "place": {"pin_uuid": str(their_pin.uuid)}}
+        )
+
+        activity.refresh_from_db()
+        self.assertEqual(activity.location_id, their_pin.location_id)
+        self.assertFalse(activity.title_from_place)
+        row = self._row(activity, self.viewer)
+        self.assertNotIn(_PLACE_NAME, json.dumps([row["display_title"], row["display_own_title"]]))
+
+    def test_the_stops_author_still_moves_or_clears_its_place(self) -> None:
+        activity = self._searched_stop()
+
+        update_activity(self.trip, self.mate, activity.pk, changes={"place": {}})
+
+        activity.refresh_from_db()
+        self.assertEqual((activity.location_id, activity.title, activity.title_from_place), (None, _PLACE_NAME, True))
+
     def test_an_imported_events_location_is_marked_as_the_places(self) -> None:
         account = GoogleCalendarAccount.objects.create(profile=self.viewer, access_token="a", refresh_token="r")  # noqa: S106 - fixture value
         event = {
@@ -226,6 +277,30 @@ class EverySurfaceMasksAPlaceSearchNameTests(_HiddenStopCase):
         self.assertIn(_PLACE_NAME, str(seen_by_mate))
         self.assertIn(str(activity.location.uuid), str(seen_by_mate))
 
+    def test_searching_for_the_name_does_not_find_the_trip(self) -> None:
+        """A match would say what the hidden stop is called."""
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+        from urbanlens.dashboard.services.global_search.providers import TripSearchProvider
+
+        self._searched_stop()
+
+        self.assertEqual(TripSearchProvider().search(self.viewer, parse_query("Packard"), 10), [])
+        self.assertEqual(
+            [result.title for result in TripSearchProvider().search(self.mate, parse_query("Packard"), 10)],
+            ["Long weekend"],
+        )
+
+    def test_searching_for_a_typed_title_still_finds_the_trip(self) -> None:
+        from urbanlens.dashboard.services.global_search.parser import parse_query
+        from urbanlens.dashboard.services.global_search.providers import TripSearchProvider
+
+        self._searched_stop(title=_TYPED)
+
+        self.assertEqual(
+            [result.title for result in TripSearchProvider().search(self.viewer, parse_query("gate"), 10)],
+            ["Long weekend"],
+        )
+
     def test_the_member_who_may_see_it_still_sees_the_name(self) -> None:
         """Anti-vacuity: the adder's own setting never hides their stop from them."""
         activity = self._searched_stop()
@@ -235,6 +310,47 @@ class EverySurfaceMasksAPlaceSearchNameTests(_HiddenStopCase):
         self.assertFalse(row["effective_location_hidden"])
         self.assertEqual((row["display_title"], row["display_own_title"]), (_PLACE_NAME, _PLACE_NAME))
         self.assertIn(_PLACE_NAME, self._api_activities(self.mate_user))
+
+
+class AnImportedEventsLocationIsHiddenAsAPlaceIsTests(_HiddenStopCase):
+    """An import stores the event's location as the stop's title and makes no Location of it: the title is the place."""
+
+    def _imported_stop(self, *, by: Profile | None = None) -> TripActivity:
+        return TripActivity.objects.create(
+            trip=self.trip,
+            added_by=by or self.mate,
+            title=_IMPORTED_LOCATION,
+            title_from_place=True,
+            notes=_IMPORT_NOTE,
+            scheduled_at=_WHEN,
+        )
+
+    def test_a_member_who_may_not_see_the_adders_stops_sees_it_nowhere(self) -> None:
+        activity = self._imported_stop()
+
+        row = self._row(activity, self.viewer)
+        payload = self._api_activities(self.viewer_user)
+        body = activity_to_event_body(activity, hidden_activity_ids=viewer_hidden_activity_ids([activity], self.viewer))
+
+        self.assertTrue(row["effective_location_hidden"])
+        self.assertEqual((row["display_title"], row["display_own_title"]), (HIDDEN_ACTIVITY_TITLE, None))
+        self.assertNotIn(_IMPORTED_LOCATION, payload)
+        assert body is not None
+        self.assertNotIn(_IMPORTED_LOCATION, json.dumps(body))
+
+    def test_the_importer_still_sees_it(self) -> None:
+        """Anti-vacuity: the adder's own setting never hides their stop from them."""
+        activity = self._imported_stop()
+
+        self.assertEqual(self._row(activity, self.mate)["display_title"], _IMPORTED_LOCATION)
+
+    def test_a_typed_title_on_a_stop_with_no_place_is_shown_to_everyone(self) -> None:
+        activity = TripActivity.objects.create(trip=self.trip, added_by=self.mate, title=_TYPED, scheduled_at=_WHEN)
+
+        row = self._row(activity, self.viewer)
+
+        self.assertFalse(row["effective_location_hidden"])
+        self.assertEqual(row["display_title"], _TYPED)
 
 
 class CompletingAHiddenStopTests(_HiddenStopCase):
@@ -287,6 +403,36 @@ class TheMemoriesTimelineDoesNotPlaceATripAtAHiddenStopTests(_HiddenStopCase):
         event = self._trip_event()
         assert event is not None
         self.assertAlmostEqual(float(event.latitude), 42.38, places=2)
+
+    def test_the_feed_checks_every_trips_stops_at_once_not_one_trip_at_a_time(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from urbanlens.dashboard.services.memories.aggregator import _trips_for_range
+
+        Profile.objects.filter(pk=self.mate.pk).update(trip_pin_location_visibility=VisibilityChoice.COMMON_FRIEND)
+
+        def queries() -> int:
+            with CaptureQueriesContext(connection) as captured:
+                events = list(
+                    _trips_for_range(
+                        self.viewer, datetime.date(2026, 11, 1), datetime.date(2026, 11, 30), None, limit=50
+                    )
+                )
+            self.assertTrue(all(event.latitude is None for event in events))
+            return len(captured)
+
+        self._searched_stop()
+        one_trip = queries()
+        for number in range(9):
+            self.trip = Trip.objects.create(
+                name=f"Weekend {number}", creator=self.viewer, start_date=datetime.date(2026, 11, 6)
+            )
+            for profile in (self.viewer, self.mate):
+                TripMembership.objects.create(trip=self.trip, profile=profile, status=TripMembership.STATUS_JOINED)
+            self._searched_stop()
+
+        self.assertEqual(queries(), one_trip)
 
 
 class ATypedTitleIsStillShownTests(_HiddenStopCase):
@@ -344,18 +490,34 @@ class TheSurfacesAgreeTests(SimpleTestCase):
 
 
 class BackfillTests(TestCase):
-    """Existing rows cannot be told apart, so every stored title is taken to be a place's until its author types one."""
+    """A located stop's stored title may be its place search's name, and cannot be told from a typed one, so it is taken
+    to be the place's until its author types one. A stop with no place has a place's name only from an import."""
 
-    def test_every_stored_title_is_marked_and_an_untitled_stop_is_not(self) -> None:
+    def test_every_title_that_may_be_a_places_is_marked_and_no_other(self) -> None:
         profile = User.objects.create_user(username="p338-backfill").profile
         trip = Trip.objects.create(name="Old trip", creator=profile)
-        titled = TripActivity.objects.create(trip=trip, added_by=profile, title="Meet at the gate")
-        blank = TripActivity.objects.create(trip=trip, added_by=profile, title="  ")
-        untitled = TripActivity.objects.create(trip=trip, added_by=profile, title=None)
+        mill = Location.objects.create(latitude=42.38, longitude=-83.03)
+        located = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title="Meet at the gate")
+        typed = TripActivity.objects.create(trip=trip, added_by=profile, title="Drive home")
+        imported = TripActivity.objects.create(
+            trip=trip, added_by=profile, title=_IMPORTED_LOCATION, notes=_IMPORT_NOTE
+        )
+        timed_import = TripActivity.objects.create(
+            trip=trip, added_by=profile, title=_IMPORTED_LOCATION, notes="Bring boots"
+        )
+        GoogleCalendarAccount.objects.create(profile=profile, access_token="a", refresh_token="r")  # noqa: S106 - fixture value
+        TripCalendarLink.objects.create(
+            trip=trip,
+            activity=timed_import,
+            profile=profile,
+            google_event_id="evt",
+            direction=CalendarSyncDirection.IMPORTED,
+        )
+        blank = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title="  ")
+        untitled = TripActivity.objects.create(trip=trip, added_by=profile, location=mill, title=None)
+        rows = [located, typed, imported, timed_import, blank, untitled]
 
         _MIGRATION.mark_stored_titles_as_possibly_the_places(apps, None)
 
-        flags = dict(
-            TripActivity.objects.filter(pk__in=[titled.pk, blank.pk, untitled.pk]).values_list("pk", "title_from_place")
-        )
-        self.assertEqual(flags, {titled.pk: True, blank.pk: False, untitled.pk: False})
+        flags = dict(TripActivity.objects.filter(pk__in=[row.pk for row in rows]).values_list("pk", "title_from_place"))
+        self.assertEqual([flags[row.pk] for row in rows], [True, False, True, True, False, False])

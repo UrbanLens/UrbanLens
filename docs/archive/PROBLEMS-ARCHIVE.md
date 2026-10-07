@@ -99,18 +99,23 @@ it; a title the author genuinely typed may still be shown; every surface that ma
   stays the bare token for that viewer. Completing a stop suggested a visit, naming the place and its coordinates,
   to every member who said yes, including those who may not see it; they get none now. The Memories timeline placed
   a trip at its first located stop even when that stop was hidden from the viewer, and its `bbox` filter could find
-  the point; hidden stops are passed over.
-- **An editor who was never shown the title cannot clear it by saving.** The edit dialog posts every field and its
-  title box is blank for them, so a blank title from such an editor keeps the stored one. Any other title they type
-  is theirs, even one matching the stored name, so whether a guess matched cannot be read off the result.
+  the point; hidden stops are passed over. Global search matched a trip on any of its stops' titles, so searching a
+  place's name found the trip whose hidden stop was named after it; a title now matches only where the searcher may
+  see it (`TripSearchProvider`).
+- **An editor who was never shown the title or the place cannot clear them by saving.** The edit dialog posts every
+  field, and its title and place are blank for them, so a blank title or place from such an editor keeps the stored
+  one. (Clearing the location also unhid the stop, name and all; the stop's own author, for a stop with "hide
+  location" on, lost its location the same way.) Any other title they type is theirs, even one matching the stored
+  name, so whether a guess matched cannot be read off the result. A place they pick replaces the location and drops
+  a title taken from the old one, which would otherwise name it to whoever may see the new one.
 - **Migration 0069 marks every stored title** (`title ~ '\S'`): none can be shown to have been typed. A hidden
   stop's typed title then reads "Secret Location" to members who may not see the stop, until its author types a
   title again; a visible stop is unchanged.
 
 **Tests.** `dashboard/tests/hypothesis/test_hidden_stop_titles.py`: the flag on each path; the panel row, the
 rendered panel, the API and the calendar for a place-search stop; the weather panel, `@act` mentions, visit
-suggestions and the Memories timeline; the adder still seeing the name; a typed title shown everywhere; the
-blank-save and guessing cases; a Hypothesis property that panel, API and calendar agree; and the backfill.
+suggestions, the Memories timeline and global search; the adder still seeing the name; a typed title shown everywhere; the
+blank-save (title and place), new-place and guessing cases; a Hypothesis property that panel, API and calendar agree; and the backfill.
 `test_calendar_withheld_fields.py`'s property now marks a place-derived title as such, and a typed one is shown.
 
 ## RESOLVED 2026-10-07: A location hidden after export stayed on a calendar no push reached: exports without auto-sync, visibility changes with no trip edit, and a deleted activity's orphaned event

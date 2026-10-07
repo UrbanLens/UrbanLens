@@ -46,9 +46,15 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
     push_auto_synced_trip_changes,
     run_calendar_import,
 )
+from urbanlens.dashboard.tasks import (
+    MAX_CALENDAR_PUSH_ATTEMPTS,
+    MAX_OWED_CALENDAR_WRITE_AGE,
+    requeue_pending_calendar_pushes,
+)
 from urbanlens.dashboard.tests.hypothesis.test_calendar_withheld_fields import (
     INSUFFICIENT_SCOPE,
     INVALID_CREDENTIALS,
+    RATE_LIMIT,
     _google_error,
     _raw_response,
     _TripWithAMateCase,
@@ -148,10 +154,6 @@ class _ExpiredTokenCase(_TripWithAMateCase):
 
     def setUp(self) -> None:
         super().setUp()
-        # The site's OAuth client, which a refresh sends to the (fake) token endpoint.
-        patcher = mock.patch.object(calendar_google, "_oauth_client", return_value=("client-id", "client-secret"))
-        patcher.start()
-        self.addCleanup(patcher.stop)
         self._expire_token()
 
     def _expire_token(self) -> None:
@@ -253,7 +255,8 @@ class ATokenRefreshGoogleCouldNotAnswerIsBusyTests(_ExpiredTokenCase):
 
         link.refresh_from_db()
         self.assertIsNotNone(link.push_requested_at)
-        self.assertEqual(link.push_attempts, 1)
+        # A busy token service passes, so the push is not counted toward the cap that drops it.
+        self.assertEqual(link.push_attempts, 0)
         self.assertTrue(self._connected())
 
         self.google.token_answer = (200, {"access_token": "refreshed", "expires_in": 3599})
@@ -295,6 +298,18 @@ class ARefusalOfTheSiteIsNotTheUsersTests(_ExpiredTokenCase):
                 self.assertEqual(message, calendar_sync.CALENDAR_UNAVAILABLE_MESSAGE)
                 self.assertTrue(self._connected())
 
+    def test_a_site_with_no_oauth_client_reports_unavailable_rather_than_failing(self) -> None:
+        with (
+            mock.patch.object(
+                calendar_google, "_oauth_client", side_effect=calendar_google.CalendarNotConfiguredError("no client")
+            ),
+            self.assertLogs(calendar_google.logger, "ERROR"),
+        ):
+            message = self._press_export()
+
+        self.assertEqual(message, calendar_sync.CALENDAR_UNAVAILABLE_MESSAGE)
+        self.assertTrue(self._connected())
+
     def test_a_disabled_calendar_api_is_logged_as_an_error_and_keeps_every_connection(self) -> None:
         self._fresh_token()
         for label, payload in _SITE_REFUSALS.items():
@@ -334,6 +349,26 @@ class ARefusalOfTheSiteIsNotTheUsersTests(_ExpiredTokenCase):
         self.assertIsNotNone(link.push_requested_at)
         self.assertTrue(self._connected())
 
+    def test_a_403_that_names_no_reason_keeps_the_connection(self) -> None:
+        """Every refusal the Calendar API makes names a reason; a 403 naming none is a front end or proxy refusing the site."""
+        self._fresh_token()
+        for content in (
+            b"<html><title>403 Forbidden</title></html>",
+            b"",
+            b'{"error": {"code": 403, "message": "Forbidden"}}',
+        ):
+            with self.subTest(content=content):
+                with (
+                    mock.patch.object(
+                        GoogleCalendarGateway, "_send", return_value=_raw_response(403, content, "text/html")
+                    ),
+                    self.assertLogs(calendar_google.logger, "ERROR"),
+                ):
+                    message = self._press_export()
+
+                self.assertEqual(message, calendar_sync.CALENDAR_UNAVAILABLE_MESSAGE)
+                self.assertTrue(self._connected())
+
     def test_a_refusal_of_one_event_is_not_a_dead_grant(self) -> None:
         self._fresh_token()
         self.google.refuse_next = [(403, NON_ORGANIZER)]
@@ -344,6 +379,74 @@ class ARefusalOfTheSiteIsNotTheUsersTests(_ExpiredTokenCase):
         self.assertNotIsInstance(caught.exception, GoogleAuthExpiredError)
         self.assertNotIsInstance(caught.exception, CalendarUnavailableError)
         self.assertTrue(self._connected())
+
+
+class APushGoogleCannotTakeNowIsNeverGivenUpTests(_ExpiredTokenCase):
+    """Only a refusal of the push's own counts toward ``MAX_CALENDAR_PUSH_ATTEMPTS``.
+
+    A push that would clear a hidden location must not be dropped because Google failed, rate-limited or refused the
+    site for an hour. Such a push waits for the sweep, bounded only by ``MAX_OWED_CALENDAR_WRITE_AGE``.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._fresh_token()
+        export_trip_to_calendar(self.account, self.trip)
+        self.link = self._link(None)
+        TripCalendarLink.objects.filter(pk=self.link.pk).update(auto_sync=True)
+
+    def _rename(self, name: str) -> None:
+        Trip.objects.filter(pk=self.trip.pk).update(name=name)
+        self.trip.refresh_from_db()
+        self.trip.save(update_fields=["updated"])
+
+    def _rounds_of_push_and_sweep(self, rounds: int) -> None:
+        for _round in range(rounds):
+            push_auto_synced_trip_changes(self.trip)
+            TripCalendarLink.objects.filter(pk=self.link.pk, push_requested_at__isnull=False).update(
+                push_requested_at=timezone.now() - datetime.timedelta(hours=1)
+            )
+            requeue_pending_calendar_pushes()
+
+    def test_google_failing_rate_limiting_or_refusing_the_site_never_uses_one_up(self) -> None:
+        cases = {
+            "Google failing": (503, _google_error(503, "backendError", "Backend Error")),
+            "Google's rate limit": (403, RATE_LIMIT),
+            "the site refused": (403, API_DISABLED),
+        }
+        for label, failure in cases.items():
+            with self.subTest(label):
+                self._rename(f"Renamed for {label}")
+                self.google.fail_after, self.google.failure = 0, failure
+
+                self._rounds_of_push_and_sweep(MAX_CALENDAR_PUSH_ATTEMPTS + 2)
+
+                self.link.refresh_from_db()
+                self.assertIsNotNone(self.link.push_requested_at)
+                self.assertEqual(self.link.push_attempts, 0)
+
+                self.google.fail_after = None
+                self.assertEqual(push_auto_synced_trip_changes(self.trip), 1)
+                self.assertEqual(self._event(None)["summary"], f"Renamed for {label}")
+
+    def test_a_refusal_of_its_own_is_counted_and_dropped_at_the_cap(self) -> None:
+        self._rename("Renamed")
+        self.google.fail_after, self.google.failure = 0, (400, _google_error(400, "invalid", "Invalid value"))
+
+        self._rounds_of_push_and_sweep(MAX_CALENDAR_PUSH_ATTEMPTS + 1)
+
+        self.link.refresh_from_db()
+        self.assertIsNone(self.link.push_requested_at)
+
+    def test_the_sweep_drops_a_push_owed_longer_than_the_age_cap(self) -> None:
+        TripCalendarLink.objects.filter(pk=self.link.pk).update(
+            push_requested_at=timezone.now() - MAX_OWED_CALENDAR_WRITE_AGE - datetime.timedelta(minutes=1)
+        )
+
+        requeue_pending_calendar_pushes()
+
+        self.link.refresh_from_db()
+        self.assertIsNone(self.link.push_requested_at)
 
 
 class A401IsAnsweredWithAFreshTokenFirstTests(_ExpiredTokenCase):

@@ -45,13 +45,19 @@ def _account_going(kwargs: dict[str, Any]) -> bool:
     return _origin_model(kwargs) in (User, Profile)
 
 
+def _stops_added_by(profile_ids: list[int]) -> Q:
+    """Links of trips holding a stop one of *profile_ids* added that names a place: a located one, or one whose title
+    is a place's (an imported event's location, P338). In one ``filter``, so both hold of the same stop."""
+    return Q(trip__activities__added_by_id__in=profile_ids) & (Q(trip__activities__location__isnull=False) | Q(trip__activities__title_from_place=True))
+
+
 def queue_pushes_for_stops_added_by(profile_ids: list[int]) -> None:
-    """Queue the push for every auto-synced trip holding a located stop one of *profile_ids* added.
+    """Queue the push for every auto-synced trip holding a stop that names a place, added by one of *profile_ids*.
 
     Args:
         profile_ids: The adders whose stops' visibility changed.
     """
-    queue_calendar_pushes_where(Q(trip__activities__added_by_id__in=profile_ids, trip__activities__location__isnull=False))
+    queue_calendar_pushes_where(_stops_added_by(profile_ids))
 
 
 @receiver(pre_save, sender=Profile, dispatch_uid="calendar_remember_trip_pin_visibility")
@@ -94,7 +100,7 @@ def _push_for_friendship_ended(friendship: Friendship) -> None:
     The second covers a third member whose COMMON_FRIEND view of one side's stops relied on the other side.
     """
     pair = [friendship.from_profile_id, friendship.to_profile_id]
-    queue_calendar_pushes_where(Q(profile_id__in=pair) | Q(trip__activities__added_by_id__in=pair, trip__activities__location__isnull=False))
+    queue_calendar_pushes_where(Q(profile_id__in=pair) | _stops_added_by(pair))
 
 
 @receiver(post_save, sender=Friendship, dispatch_uid="calendar_push_on_friendship_ended")
@@ -113,7 +119,8 @@ def push_on_friendship_deleted(sender: type[Friendship], instance: Friendship, *
 
 def _push_for_pin_left(pin: Pin, location_id: int | None) -> None:
     """Push the pin owner's auto-synced trips with a stop where the pin was: a COMMON_PIN stop there may now be hidden."""
-    if location_id is None:
+    # Most accounts auto-sync no trip, so a bulk pin delete costs them one indexed lookup a pin.
+    if location_id is None or not TripCalendarLink.objects.filter(profile_id=pin.profile_id, activity__isnull=True, auto_sync=True).exists():
         return
     from urbanlens.dashboard.models.location.model import Location
 

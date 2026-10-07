@@ -218,6 +218,14 @@ class CalendarUnavailableError(GatewayRequestError):
     """
 
 
+class CalendarServerError(GatewayRequestError):
+    """Google Calendar failed or did not answer (a 5xx, a 408, no response): it passes, and nothing was refused.
+
+    The Calendar guide's answer to 500 and 503 ``backendError`` is to retry with exponential backoff. Nothing written
+    for later counts it against the write it stopped, so a delete or push waits for Google rather than being dropped.
+    """
+
+
 class CalendarNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError):
     """Raised when the site has no Google OAuth client configured."""
 
@@ -355,11 +363,14 @@ class GoogleCalendarGateway(Gateway):
         Raises:
             GoogleAuthExpiredError: When no refresh token is stored or Google refused the grant.
             CalendarBusyError: Google's token service did not refresh it this time.
-            CalendarUnavailableError: Google refused the site's OAuth client."""
+            CalendarUnavailableError: Google refused the site's OAuth client, or the site has none configured."""
         if not self.account.refresh_token:
             raise GoogleAuthExpiredError("Google Calendar connection is missing a refresh token. Please reconnect.")
         try:
             payload = refresh_access_token(self.account.refresh_token)
+        except CalendarNotConfiguredError as exc:
+            logger.exception("A Google Calendar token cannot be refreshed: this site has no OAuth client configured")
+            raise CalendarUnavailableError("Google Calendar is not configured on this site.") from exc
         except google_oauth.GoogleTokenServiceBusyError as exc:
             raise CalendarBusyError(type(self).service_key, retry_after=exc.retry_after, message="Google's token service could not refresh the calendar grant") from exc
         except google_oauth.GoogleOAuthClientRefusedError as exc:
@@ -385,7 +396,7 @@ class GoogleCalendarGateway(Gateway):
             Google's response, whatever its status.
 
         Raises:
-            GatewayRequestError: No response came; a write may still have reached Google, so callers retry with the
+            CalendarServerError: No response came; a write may still have reached Google, so callers retry with the
                 same event id.
         """
         headers = self._auth_headers()
@@ -393,7 +404,7 @@ class GoogleCalendarGateway(Gateway):
             return self.session.request(method, url, params=params, json=json_body, headers=headers, timeout=30)
         except requests.RequestException as exc:
             logger.warning("Google Calendar API %s %s got no response: %s", method, url, type(exc).__name__)
-            raise GatewayRequestError("Google Calendar did not answer.") from exc
+            raise CalendarServerError("Google Calendar did not answer.") from exc
 
     def _request(
         self,
@@ -419,12 +430,14 @@ class GoogleCalendarGateway(Gateway):
         Raises:
             CalendarBusyError: Google refused for a rate or usage limit (429, or 403 naming one), or could not refresh
                 the access token just now.
-            CalendarUnavailableError: Google refused the site's Google project or OAuth client; logged at ERROR.
-            GoogleAuthExpiredError: Google refused the grant: a 401 a fresh access token did not cure, any 403 not
-                about rate, the site or one event, or a refresh Google refused.
+            CalendarUnavailableError: Google refused the site's Google project or OAuth client, or a 403 named no
+                reason; logged at ERROR.
+            GoogleAuthExpiredError: Google refused the grant: a 401 a fresh access token did not cure, any 403 naming
+                a reason not about rate, the site or one event, or a refresh Google refused.
             CalendarEventNotFoundError: The event does not exist, or was deleted (404/410).
             CalendarEventExistsError: The client-assigned id of an event being created is taken (409).
-            GatewayRequestError: Any other failure, including no response at all and a refusal of one event.
+            CalendarServerError: Google failed (5xx, 408) or did not answer.
+            GatewayRequestError: Any other failure, including a refusal of one event.
         """
         refreshed = self.account.is_token_expired
         response = self._send(method, url, params=params, json_body=json_body)
@@ -441,6 +454,11 @@ class GoogleCalendarGateway(Gateway):
             return response.json()
         if is_site_refusal(response):
             logger.error("Google Calendar API %s %s refused this site's Google project (%s): %s", method, url, response.status_code, response.text[:500])
+            raise CalendarUnavailableError("Google Calendar is not available to this site.")
+        if response.status_code == 403 and not _error_reasons(response):
+            # Every refusal the Calendar API makes names a reason (its "Handle API errors" guide); a 403 naming none
+            # is a front end or a proxy refusing the site, not Google refusing the user's grant.
+            logger.error("Google Calendar API %s %s was refused without a reason (%s): %s", method, url, response.status_code, response.text[:500])
             raise CalendarUnavailableError("Google Calendar is not available to this site.")
         logger.warning(
             "Google Calendar API %s %s failed (%s): %s",
@@ -459,6 +477,8 @@ class GoogleCalendarGateway(Gateway):
             raise CalendarEventNotFoundError("Calendar event not found.")
         if response.status_code == 409:
             raise CalendarEventExistsError("A calendar event with this id already exists.")
+        if response.status_code >= 500 or response.status_code == 408:
+            raise CalendarServerError(f"Google Calendar failed with status {response.status_code}.")
         raise GatewayRequestError(f"Google Calendar API request failed with status {response.status_code}.")
 
     def list_events(

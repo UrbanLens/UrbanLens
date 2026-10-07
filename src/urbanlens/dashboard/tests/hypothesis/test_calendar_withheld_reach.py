@@ -43,7 +43,12 @@ from urbanlens.dashboard.tasks import (
     push_trip_to_calendar,
     requeue_pending_calendar_pushes,
 )
-from urbanlens.dashboard.tests.hypothesis.test_calendar_withheld_fields import _ADDRESS, _TripWithAMateCase
+from urbanlens.dashboard.tests.hypothesis.test_calendar_transient_failures import API_DISABLED
+from urbanlens.dashboard.tests.hypothesis.test_calendar_withheld_fields import (
+    _ADDRESS,
+    _IMPORTED_LOCATION,
+    _TripWithAMateCase,
+)
 
 _COMMAND = "clear_withheld_calendar_locations"
 
@@ -125,6 +130,26 @@ class AVisibilityChangeQueuesThePushAnEditWouldTests(_ExportedStopCase):
         self.assertEqual(self._pushes_queued(), [self.trip.pk])
         self._deliver()
         self._assert_cleared()
+
+    def test_a_restriction_reaches_a_stop_titled_with_an_imported_events_location(self) -> None:
+        """An import makes no Location of the event's location: the stop names its place by its title alone."""
+        TripActivity.objects.filter(pk=self.activity.pk).update(
+            location=None, title=_IMPORTED_LOCATION, title_from_place=True
+        )
+        export_trip_to_calendar(self.account, self.trip)
+        self.assertIn(_IMPORTED_LOCATION, self._event(self.activity)["summary"])
+        self._auto_sync()
+        self.mate.refresh_from_db()
+        self.enqueue.reset_mock()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.mate.trip_pin_location_visibility = VisibilityChoice.NO_ONE
+            self.mate.save()
+
+        self.assertEqual(self._pushes_queued(), [self.trip.pk])
+        self._deliver()
+        self.assertEqual(self._event(self.activity)["summary"], f"Long weekend: {HIDDEN_ACTIVITY_TITLE}")
+        self.assertNotIn(_IMPORTED_LOCATION, json.dumps([self._event(self.activity), self._event(None)]))
 
     def test_ending_the_friendship_a_friends_only_stop_relied_on_queues_the_push(self) -> None:
         self._set_mate_visibility(VisibilityChoice.FRIENDS)
@@ -279,6 +304,38 @@ class ADeletedStopTakesItsEventWithItTests(_ExportedStopCase):
         self.assertEqual(self._deletions_queued(), [self.profile.pk])
         self.assertEqual(delete_orphaned_calendar_events(self.profile.pk), 1)
         self.assertEqual(self.google.events[event_id]["status"], "cancelled")
+
+    def test_google_failing_or_refusing_the_site_for_an_hour_never_uses_a_delete_up(self) -> None:
+        """Only a refusal of the delete itself counts toward the cap; what passes, or is the site's to fix, waits."""
+        event_id = self._link(self.activity).google_event_id
+        with self.captureOnCommitCallbacks(execute=True):
+            delete_activity(self.trip, self.profile, self.activity.pk)
+        cases = {
+            "Google failing": (500, {"error": {"code": 500, "message": "Backend Error"}}),
+            "the site refused": (403, API_DISABLED),
+        }
+        for label, failure in cases.items():
+            with self.subTest(label):
+                self.google.fail_after, self.google.failure = 0, failure
+                for _sweep in range(MAX_CALENDAR_PUSH_ATTEMPTS + 2):
+                    self.assertEqual(delete_orphaned_calendar_events(self.profile.pk), 0)
+                    CalendarEventDeletion.objects.update(created=timezone.now() - datetime.timedelta(hours=1))
+                    requeue_pending_calendar_pushes()
+
+                self.assertEqual(CalendarEventDeletion.objects.get().attempts, 0)
+
+        self.google.fail_after = None
+        self.assertEqual(delete_orphaned_calendar_events(self.profile.pk), 1)
+        self.assertEqual(self.google.events[event_id]["status"], "cancelled")
+
+    def test_a_refusal_of_the_delete_itself_counts(self) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            delete_activity(self.trip, self.profile, self.activity.pk)
+        self.google.refuse_next = [(400, {"error": {"code": 400, "errors": [{"reason": "invalid"}]}})]
+
+        self.assertEqual(delete_orphaned_calendar_events(self.profile.pk), 0)
+
+        self.assertEqual(CalendarEventDeletion.objects.get().attempts, 1)
 
     def test_without_a_connection_the_delete_waits_and_a_reconnect_delivers_it(self) -> None:
         event_id = self._link(self.activity).google_event_id

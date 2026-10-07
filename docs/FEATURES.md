@@ -1083,10 +1083,13 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   of exports without auto-sync that may still hold a location or title now withheld
 - A hidden stop (its own "hide location", or its adder's `trip_pin_location_visibility`) shows a
   member who may not see it neither its place's name nor its location: the activities panel and its
-  edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel
-  and `@act` mentions all mask it. A title taken from a place search or an imported event's location
+  edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel,
+  `@act` mentions, visit suggestions on completion, the Memories timeline and global search all mask
+  it. A title taken from a place search or an imported event's location
   (`TripActivity.title_from_place`) is masked with the location; a title the author typed is still
-  shown (P338)
+  shown (P338). An editor who may not see the stop who saves it with the title or place left blank
+  keeps the stored ones; a place they pick replaces the location and drops a title taken from the
+  old one
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an

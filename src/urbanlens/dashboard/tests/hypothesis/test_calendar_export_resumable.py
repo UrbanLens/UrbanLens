@@ -182,6 +182,13 @@ class _CalendarExportCase(TestCase):
         patcher = mock.patch.object(requests.Session, "request", autospec=True, side_effect=self.google)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The site's OAuth client, which a token refresh sends to the fake token endpoint.
+        oauth_client = mock.patch(
+            "urbanlens.dashboard.services.apis.calendar.google._oauth_client",
+            return_value=("client-id", "client-secret"),
+        )
+        oauth_client.start()
+        self.addCleanup(oauth_client.stop)
         # Continuations are queued by the sweep; capture them rather than run Celery.
         enqueue = mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
         self.enqueue = enqueue.start()
@@ -415,6 +422,10 @@ class ClientEventIdTests(SimpleTestCase):
 
 
 class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
+    """A push that wrote resets the count; one that wrote nothing adds to it only when Google refused it for a reason
+    of its own. The budget, Google's rate limit or failure, and a refusal of the site pass (P337), and a push held up by
+    one waits for the sweep however long it takes, up to ``MAX_OWED_CALENDAR_WRITE_AGE``."""
+
     def setUp(self) -> None:
         super().setUp()
         self._limit(30)
@@ -433,29 +444,30 @@ class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
         self.link.refresh_from_db()
         return self.link.push_attempts
 
-    def test_a_push_that_wrote_events_resets_the_count_and_one_that_wrote_none_adds_to_it(self) -> None:
+    def test_a_push_that_wrote_events_resets_the_count_and_one_the_budget_stopped_leaves_it(self) -> None:
         self.assertEqual(push_auto_synced_trip_changes(self.trip), 0)
         self.assertEqual(len(self.google.requests), 30)
         self.assertEqual(self._attempts(), 0)
 
-        # The minute is still spent: the next push writes nothing.
+        # The minute is still spent: the next push writes nothing, and is not counted for it.
         self.assertEqual(push_auto_synced_trip_changes(self.trip), 0)
         self.assertEqual(len(self.google.requests), 30)
-        self.assertEqual(self._attempts(), 1)
+        self.assertEqual(self._attempts(), 0)
         self.assertIsNotNone(self.link.push_requested_at)
 
-    def test_pushes_that_go_nowhere_reach_the_cap_and_the_sweep_drops_the_request(self) -> None:
+    def test_a_push_the_budget_stops_is_never_dropped_for_it(self) -> None:
         ApiCallLog.objects.bulk_create([ApiCallLog(service=SERVICE, success=True) for _ in range(30)])
 
         push_auto_synced_trip_changes(self.trip)
 
         self.assertEqual(self.google.requests, [])
-        self.assertEqual(self._attempts(), MAX_CALENDAR_PUSH_ATTEMPTS)
-        self.assertEqual(requeue_pending_calendar_pushes(), 0)
+        self.assertEqual(self._attempts(), MAX_CALENDAR_PUSH_ATTEMPTS - 1)
+        self.assertEqual(requeue_pending_calendar_pushes(), 1)
         self.link.refresh_from_db()
-        self.assertIsNone(self.link.push_requested_at)
+        self.assertIsNotNone(self.link.push_requested_at)
 
-    def test_a_failure_after_some_writes_does_not_count_and_one_before_any_does(self) -> None:
+    def test_a_refusal_after_some_writes_does_not_count_and_one_before_any_does(self) -> None:
+        self.google.failure = (400, {"error": {"code": 400, "errors": [{"reason": "invalid"}]}})
         self.google.fail_after = 5
 
         push_auto_synced_trip_changes(self.trip)

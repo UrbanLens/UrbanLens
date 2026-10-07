@@ -92,11 +92,25 @@ def _in_slices[RowT: Model](queryset: QuerySet[RowT], size: int | None) -> Itera
     Yields:
         The rows, in order.
     """
+    for batch in _slices(queryset, size):
+        yield from batch
+
+
+def _slices[RowT: Model](queryset: QuerySet[RowT], size: int | None) -> Iterator[list[RowT]]:
+    """The slices :func:`_in_slices` reads, for a caller that works on a slice's rows together.
+
+    Args:
+        queryset: Rows in a total order, so consecutive slices neither repeat nor skip.
+        size: Rows per slice.
+
+    Yields:
+        Each slice's rows, in order; the last may be short or empty.
+    """
     size = size or _DEFAULT_SLICE
     offset = 0
     while True:
         batch = list(queryset[offset : offset + size])
-        yield from batch
+        yield batch
         if len(batch) < size:
             return
         offset += size
@@ -147,19 +161,15 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-def _trip_representative_point(trip: Trip, profile: Profile) -> tuple[float, float] | None:
-    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity *profile* may see.
+def _trip_representative_point(trip: Trip, hidden: set[int]) -> tuple[float, float] | None:
+    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity the viewer may see.
 
-    A stop whose location is hidden from the profile is passed over: its point would place the trip on the map, and
-    a ``bbox`` filter could find it.
+    A stop whose location is hidden from the viewer (*hidden*, from ``viewer_hidden_activity_ids``) is passed over:
+    its point would place the trip on the map, and a ``bbox`` filter could find it.
     """
-    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
-
     # trip.activities.all() rather than a fresh .select_related().order_by() chain, so the
     # caller's Prefetch is actually used - re-filtering the manager would re-query per trip.
-    activities = list(trip.activities.all())
-    hidden = viewer_hidden_activity_ids(activities, profile)
-    for activity in activities:
+    for activity in trip.activities.all():
         if activity.id in hidden:
             continue
         if activity.lat_override is not None and activity.lng_override is not None:
@@ -174,6 +184,7 @@ def _trip_representative_point(trip: Trip, profile: Profile) -> tuple[float, flo
 def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None, before: datetime | None = None, *, limit: int | None = None) -> Iterator[MemoryEvent]:
     """Yield a MemoryEvent for each Trip whose effective date range overlaps the given range."""
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
+    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
     # Mirrors Trip.effective_start_date/effective_end_date: explicit start_date/end_date win, else
     # fall back to the earliest/latest scheduled activity.
@@ -197,14 +208,22 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         # per-source cap is not spent on rows the caller has already seen.
         trips = trips.filter(_eff_start__lte=before.date())
 
-    for trip in _in_slices(trips, limit):
+    for batch in _slices(trips, limit):
+        # Which stops the viewer may not see, for the whole slice at once rather than a query or two per trip.
+        hidden = viewer_hidden_activity_ids([activity for trip in batch for activity in trip.activities.all()], profile)
+        yield from _trip_events(batch, hidden, bbox)
+
+
+def _trip_events(trips: list[Trip], hidden: set[int], bbox: BBox | None) -> Iterator[MemoryEvent]:
+    """The MemoryEvents of one slice of :func:`_trips_for_range`'s trips, with the ids of the stops hidden from the viewer."""
+    for trip in trips:
         # The annotations, not the equivalent model properties: those re-derive the same
         # two dates with a query apiece, which on this page is per trip in the feed.
         occurred_at = trip._eff_start  # noqa: SLF001
         if occurred_at is None:
             continue
         ended_at = trip._eff_end  # noqa: SLF001
-        point = _trip_representative_point(trip, profile)
+        point = _trip_representative_point(trip, hidden)
         if bbox is not None and (point is None or not (bbox.min_lat <= point[0] <= bbox.max_lat and bbox.min_lng <= point[1] <= bbox.max_lng)):
             continue
         yield MemoryEvent(

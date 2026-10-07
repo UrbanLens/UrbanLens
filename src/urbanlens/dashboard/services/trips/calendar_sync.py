@@ -23,6 +23,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     TRIP_UUID_EVENT_PROPERTY,
     CalendarEventExistsError,
     CalendarEventNotFoundError,
+    CalendarServerError,
     CalendarUnavailableError,
     EventListing,
     GoogleCalendarGateway,
@@ -54,6 +55,22 @@ GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try agai
 CALENDAR_BUSY_MESSAGE = "Google Calendar is busy right now. Please try again in a minute."
 #: Google refused this site rather than the user (``CalendarUnavailableError``): the operator's to fix.
 CALENDAR_UNAVAILABLE_MESSAGE = "Google Calendar sync is unavailable on this site right now. Please try again later."
+
+
+def _passes(exc: GatewayRequestError) -> bool:
+    """Whether a calendar call failed for a reason that is not the write's own, so the write waits rather than counts.
+
+    Our budget or Google's rate limit, a token service that could not answer, Google failing or not answering, and a
+    refusal of the site (P337) all pass or are the operator's to fix. A write held up by one must not be used up
+    against ``tasks.MAX_CALENDAR_PUSH_ATTEMPTS``: it may be what clears a location withheld from the calendar.
+
+    Args:
+        exc: What a calendar call raised.
+
+    Returns:
+        True for those; False for a refusal of the write itself, or of the grant.
+    """
+    return isinstance(exc, (RateLimitExceededError, CalendarServerError, CalendarUnavailableError))
 
 
 class TooManyEventsError(ValueError):
@@ -1304,10 +1321,10 @@ def queue_calendar_event_deletion(link: TripCalendarLink) -> None:
 def delete_queued_calendar_events(profile_id: int) -> int:
     """Delete from one profile's calendar the events owed a delete, through the calendar budget.
 
-    An event Google no longer has counts as deleted. A refusal that passes (the budget, Google's rate limit or a busy
-    token service) or one about the site stops the run and leaves the rest for the sweep; a refused grant counts an
-    attempt against every delete owed, so the sweep drops them past the cap; any other failure counts against its
-    own delete. With no calendar connected nothing is sent, and the deletes wait for a reconnect or the sweep's age cap.
+    An event Google no longer has counts as deleted. A failure that :func:`_passes` (the budget, Google's rate limit, a
+    busy token service, Google failing or not answering, a refusal of the site) stops the run and leaves the rest for
+    the sweep, counting nothing; a refused grant counts an attempt against every delete owed, so the sweep drops them
+    past the cap; a refusal of one delete counts against it. With no calendar connected nothing is sent, and the deletes wait for a reconnect or the sweep's age cap.
 
     Args:
         profile_id: Whose calendar.
@@ -1327,14 +1344,14 @@ def delete_queued_calendar_events(profile_id: int) -> int:
     for row in owed.order_by("pk"):
         try:
             gateway.delete_event(row.google_event_id, calendar_id=row.google_calendar_id)
-        except (RateLimitExceededError, CalendarUnavailableError):
-            logger.info("Calendar deletes for profile %s stopped after %d; the sweep finishes them.", profile_id, deleted)
-            break
         except GoogleAuthExpiredError:
             logger.warning("Calendar deletes for profile %s refused: Google refused the grant.", profile_id)
             owed.update(attempts=F("attempts") + 1)
             break
-        except GatewayRequestError:
+        except GatewayRequestError as exc:
+            if _passes(exc):
+                logger.info("Calendar deletes for profile %s stopped after %d (%s); the sweep finishes them.", profile_id, deleted, type(exc).__name__)
+                break
             logger.warning("Could not delete calendar event %s for profile %s.", row.google_event_id, profile_id, exc_info=True)
             CalendarEventDeletion.objects.filter(pk=row.pk).update(attempts=F("attempts") + 1)
             continue
@@ -1351,9 +1368,10 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
 
     A link's ``push_requested_at`` is cleared only by a push that finished and that still finds the value read before
     it, so a change made during the push stays owed. A push the budget cut short, or that failed, leaves the request
-    for ``tasks.requeue_pending_calendar_pushes``, and counts an attempt only if it wrote nothing: one that made
-    progress resets the count, so the cap drops a request only after pushes that went nowhere. A trip with no dates,
-    or a grant Google revoked, cannot be pushed until something changes, so it settles the request instead.
+    for ``tasks.requeue_pending_calendar_pushes``. One that made progress resets the attempt count; one that wrote
+    nothing adds to it only for a failure of its own, not one that :func:`_passes` (the budget, Google's rate limit or
+    failure, a refusal of the site), so the cap drops a request only after pushes that kept being refused. A trip
+    with no dates, or a grant Google revoked, cannot be pushed until something changes, so it settles the request.
 
     Args:
         trip: The trip whose linked calendar events should be refreshed.
@@ -1375,21 +1393,26 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
             logger.warning("Auto-sync of trip %s to profile %s's calendar cannot be pushed until it changes.", trip.uuid, link.profile_id, exc_info=True)
             _settle_push_request(link, requested)
             continue
-        except GatewayRequestError:
+        except GatewayRequestError as exc:
             logger.warning("Auto-sync of trip %s to profile %s's calendar failed after %d writes.", trip.uuid, link.profile_id, export.written, exc_info=True)
-            _count_push_attempt(link, made_progress=export.written > 0)
+            _count_push_attempt(link, made_progress=export.written > 0, counts=not _passes(exc))
             continue
         if not result.complete:
-            _count_push_attempt(link, made_progress=result.written > 0)
+            # Cut short by the budget or Google's rate limit, which pass, or by the trip leaving the calendar.
+            _count_push_attempt(link, made_progress=result.written > 0, counts=False)
             continue
         _settle_push_request(link, requested)
         synced += 1
     return synced
 
 
-def _count_push_attempt(link: TripCalendarLink, *, made_progress: bool) -> None:
-    """Record a push that left the request owed: one that wrote nothing counts toward the cap, one that wrote resets it."""
-    TripCalendarLink.objects.filter(pk=link.pk).update(push_attempts=0 if made_progress else F("push_attempts") + 1)
+def _count_push_attempt(link: TripCalendarLink, *, made_progress: bool, counts: bool) -> None:
+    """Record a push that left the request owed: one that wrote resets the count, and one that wrote nothing adds to it
+    only when it *counts*, failing for a reason of its own rather than one that :func:`_passes`."""
+    if made_progress:
+        TripCalendarLink.objects.filter(pk=link.pk).update(push_attempts=0)
+    elif counts:
+        TripCalendarLink.objects.filter(pk=link.pk).update(push_attempts=F("push_attempts") + 1)
 
 
 def _settle_push_request(link: TripCalendarLink, requested: datetime.datetime | None) -> None:

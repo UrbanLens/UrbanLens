@@ -443,14 +443,15 @@ def push_trip_to_calendar(trip_id: int) -> int:
 
 #: A push request older than this lost its push, or its push failed or was cut short by the calendar budget.
 PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
-#: Pushes in a row that wrote nothing, after which a request is dropped until the trip changes again. A push that
-#: wrote some events and ran out of budget does not count, so a long export is finished however many it takes.
-#: Also the cap on a calendar event delete Google keeps refusing.
+#: Pushes in a row that Google refused for a reason of their own, after which a request is dropped until the trip
+#: changes again. A push that wrote some events resets the count, and one held up by something that passes (the
+#: budget, Google's rate limit or failure, a refusal of the site) does not add to it, so a push that clears a
+#: withheld location is not given up during an outage (P337). Also the cap on a calendar event delete Google refuses.
 MAX_CALENDAR_PUSH_ATTEMPTS = 5
 PENDING_CALENDAR_PUSH_BATCH = 200
-#: A calendar event delete still owed after this long is dropped: its calendar was never reconnected, or Google
-#: kept refusing the site.
-MAX_CALENDAR_DELETION_AGE = timedelta(days=30)
+#: A push or calendar event delete still owed after this long is dropped: its calendar was never reconnected, or
+#: Google kept failing or refusing the site for a month.
+MAX_OWED_CALENDAR_WRITE_AGE = timedelta(days=30)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
@@ -486,9 +487,9 @@ def requeue_pending_calendar_pushes() -> int:
     cutoff = now - PENDING_CALENDAR_PUSH_AGE
     # Not limited to auto_sync links: an export the budget cut short marks its link whether or not it auto-syncs.
     pending = TripCalendarLink.objects.filter(activity__isnull=True, push_requested_at__lt=cutoff)
-    abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
+    abandoned = pending.filter(Q(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS) | Q(push_requested_at__lt=now - MAX_OWED_CALENDAR_WRITE_AGE)).update(push_requested_at=None, push_attempts=0)
     if abandoned:
-        logger.warning("Dropped %d calendar push request(s) after %d pushes that wrote nothing", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+        logger.warning("Dropped %d calendar push request(s) Google refused %d times or that were owed for %s", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS, MAX_OWED_CALENDAR_WRITE_AGE)
     trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
     queued = 0
     for trip_id in trip_ids:
@@ -496,9 +497,9 @@ def requeue_pending_calendar_pushes() -> int:
         if safely_enqueue_task(push_trip_to_calendar, trip_id, durable=False) is not None:
             queued += 1
 
-    dropped, _by_model = CalendarEventDeletion.objects.filter(Q(attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS) | Q(created__lt=now - MAX_CALENDAR_DELETION_AGE)).delete()
+    dropped, _by_model = CalendarEventDeletion.objects.filter(Q(attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS) | Q(created__lt=now - MAX_OWED_CALENDAR_WRITE_AGE)).delete()
     if dropped:
-        logger.warning("Dropped %d calendar event delete(s) Google kept refusing or no calendar took for %s", dropped, MAX_CALENDAR_DELETION_AGE)
+        logger.warning("Dropped %d calendar event delete(s) Google kept refusing or no calendar took for %s", dropped, MAX_OWED_CALENDAR_WRITE_AGE)
     owed_deletes = CalendarEventDeletion.objects.filter(created__lt=cutoff).order_by("profile_id").values_list("profile_id", flat=True).distinct()
     for profile_id in list(owed_deletes[:PENDING_CALENDAR_PUSH_BATCH]):
         if safely_enqueue_task(delete_orphaned_calendar_events, profile_id, durable=False) is not None:
