@@ -37,7 +37,7 @@ from urbanlens.dashboard.services.locations.enrichment import (
     self_reported_skip,
     stagger_seconds,
 )
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import BUDGET_REFUSALS, RedataConfiguredMixin
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
 
 
@@ -581,6 +581,98 @@ class RunEnrichmentCycleTests(TestCase):
             summary = self._run(source)
         mock_refresh.assert_called_once_with({location.pk})
         self.assertEqual(summary["names_refreshed"], 1)
+
+
+class PlacePhotosStopAtTheFirstRefusalTests(RedataConfiguredMixin, TestCase):
+    """The hourly cycle's place-photo backfill against a REData whose Places budget is spent.
+
+    Production (0.8.0) logged 31 ``places/search/nearby`` 503s in 13 h, in a burst at :12-:14 past every hour: the
+    cycle went on to the next location after Google's own 429 relayed by REData, and stopped only at REData's
+    ``rate_limited``. The budget is small and shared, so the first refusal ends the batch until the next cycle.
+    """
+
+    _NEARBY = "places/search/nearby/"
+
+    def setUp(self) -> None:
+        super().setUp()
+        for index in range(3):
+            baker.make(Pin, profile=_make_profile(), location=_make_location(lat=f"40.{index:06d}"))
+
+    def _run(self, refusal: Mock) -> tuple[dict, Mock]:
+        from django.core.cache import cache
+        import requests
+
+        from urbanlens.dashboard.services.apis.locations import places_resolution
+        from urbanlens.dashboard.services.photos.photo_enrichment import PlacePhotoEnrichmentSource
+        from urbanlens.dashboard.tests.hypothesis.redata_helpers import REDATA_TEST_KEY, REDATA_TEST_URL
+
+        cache.clear()
+
+        def gateway() -> RedataPlacesGateway:
+            # The gateway's own rate-limited session, breaker included, over a stubbed transport.
+            return RedataPlacesGateway(base_url=REDATA_TEST_URL, api_key=REDATA_TEST_KEY)
+
+        with (
+            patch(
+                "urbanlens.dashboard.services.locations.enrichment.enrichment_sources",
+                return_value=[PlacePhotoEnrichmentSource()],
+            ),
+            patch.object(SiteSettings, "get_effective_environment_type", return_value=EnvironmentTypes.PRODUCTION),
+            patch.object(places_resolution, "RedataPlacesGateway", side_effect=gateway),
+            patch.object(requests.Session, "request", return_value=refusal) as upstream,
+        ):
+            # The pause between locations outlasts the breaker's hold: Google named a shorter wait, or the
+            # per-minute limit was lowered, which lengthens the pause.
+            summary = run_enrichment_cycle(sleep=lambda _seconds: cache.clear())
+        return summary, upstream
+
+    @staticmethod
+    def _refusal(status: int, body: dict, headers: dict[str, str] | None = None) -> Mock:
+        response = Mock(status_code=status, headers=headers or {}, ok=False, text=str(body))
+        response.json.return_value = body
+        return response
+
+    def _nearby_calls(self, upstream: Mock) -> int:
+        return sum(1 for call in upstream.call_args_list if self._NEARBY in str(call.args[1]))
+
+    def test_googles_own_throttle_relayed_by_redata_ends_the_batch(self) -> None:
+        refusal = self._refusal(
+            503,
+            {
+                "error": "places_api_unavailable",
+                "message": "Places API (New) answered 429 for https://places.googleapis.com/v1/places:searchNearby.",
+            },
+        )
+
+        summary, upstream = self._run(refusal)
+
+        self.assertEqual(self._nearby_calls(upstream), 1)
+        self.assertEqual(summary["sources"]["place_photos"]["skipped"], "rate_limited")
+        self.assertFalse(
+            LocationCache.objects.filter(source="place_photo_backfill").exists(),
+            "nothing was learned about any location",
+        )
+
+    def test_every_budget_refusal_ends_the_batch(self) -> None:
+        refusals = [self._refusal(503, {"error": error, "message": "spent"}) for error in BUDGET_REFUSALS]
+        refusals.append(
+            self._refusal(
+                429, {"detail": "Request was throttled. Expected available in 30 seconds."}, {"Retry-After": "30"}
+            )
+        )
+        refusals.append(
+            self._refusal(
+                503,
+                {"error": "places_api_unavailable", "message": "Places API (New) answered 503."},
+                {"Retry-After": "20"},
+            )
+        )
+        for refusal in refusals:
+            with self.subTest(refusal.status_code, body=refusal.json.return_value):
+                summary, upstream = self._run(refusal)
+
+                self.assertEqual(self._nearby_calls(upstream), 1)
+                self.assertEqual(summary["sources"]["place_photos"]["skipped"], "rate_limited")
 
 
 class EnrichmentCycleProductionGateTests(TestCase):

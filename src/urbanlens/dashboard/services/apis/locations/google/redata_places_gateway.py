@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
+import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.coalesce import coalesced
@@ -25,12 +26,35 @@ logger = logging.getLogger(__name__)
 _BUDGET_REFUSED_ERRORS = frozenset({"rate_limited", "key_budget_exhausted"})
 
 
+#: Google's own 429 in the message of a ``places_api_unavailable`` REData relays: the same shared budget, refused upstream.
+_PROVIDER_THROTTLED = re.compile(r"\b(?:answered|status)\s+429\b")
+
+
 def _is_budget_refusal_body(body: Any) -> bool:
     return isinstance(body, dict) and body.get("error") in _BUDGET_REFUSED_ERRORS
 
 
+def _is_rate_limit(response: Any, body: Any) -> bool:
+    """Whether REData said "not now" for its Places budget, rather than failing the one question.
+
+    Args:
+        response: REData's non-success response.
+        body: Its decoded body, or None.
+
+    Returns:
+        True for a budget refusal, REData's own throttle (429), a 503 naming a wait, or Google's 429 relayed.
+    """
+    if response.status_code == 429 or _is_budget_refusal_body(body):
+        return True
+    if response.status_code != 503:
+        return False
+    if str(response.headers.get("Retry-After", "")).strip():
+        return True
+    return isinstance(body, dict) and body.get("error") in RedataBreaker.PROVIDER_FAILURE_ERRORS and _PROVIDER_THROTTLED.search(str(body.get("message", ""))) is not None
+
+
 class PlacesRateLimitedError(GatewayRateLimitedError, UpstreamBusyError):
-    """REData's Places budget, or this key's share of it, is spent for now; a caller may retry after ``retry_after`` seconds."""
+    """REData's Places budget, this key's share of it, or Google behind it refused for now; a caller may retry after ``retry_after`` seconds."""
 
 
 def _rows(body: Any) -> list[dict[str, Any]]:
@@ -113,7 +137,7 @@ class RedataPlacesGateway(Gateway):
             message: The exception message.
 
         Returns:
-            A :class:`PlacesRateLimitedError` carrying REData's ``Retry-After`` when REData's body identifies an exhausted request budget (its own, or this key's share of it), an ``UpstreamBusyError`` held for as long as the breaker holds the endpoint when REData refused the key, else the plain, less specific ``GatewayRequestError``.
+            A :class:`PlacesRateLimitedError` carrying REData's ``Retry-After`` when REData said "not now" (see :func:`_is_rate_limit`): a batch stops at it rather than spend the shared budget on refusals; an ``UpstreamBusyError`` held for as long as the breaker holds the endpoint when REData refused the key, else the plain, less specific ``GatewayRequestError``.
         """
         if response.status_code in RedataBreaker.REFUSED_STATUSES:
             return UpstreamBusyError(f"{message} REData refused this key; it may lack the endpoint's scope.", retry_after=RedataBreaker.REFUSED_SECONDS)
@@ -121,7 +145,7 @@ class RedataPlacesGateway(Gateway):
             body = response.json()
         except ValueError:
             body = None
-        if _is_budget_refusal_body(body):
+        if _is_rate_limit(response, body):
             # Without a Retry-After, as long as the breaker holds a busy source.
             wait = upstream_retry_after(response, default=RedataBreaker.SOURCE_BUSY_SECONDS) or RedataBreaker.SOURCE_BUSY_SECONDS
             return PlacesRateLimitedError(message, retry_after=wait)

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import io
+from unittest import mock
 from unittest.mock import MagicMock
 
 from urllib3.response import HTTPResponse
@@ -848,8 +849,11 @@ class LookupDemographicsTests(SimpleTestCase):
         self.assertIsNone(kwargs.get("params"))
 
     def test_503_rate_limited_raises_unavailable(self) -> None:
+        from django.core.cache import cache
+
         for error in BUDGET_REFUSALS:
             with self.subTest(error):
+                cache.clear()
                 session = MagicMock()
                 session.get.return_value = _response(503, json_body={"error": error})
                 gateway = _gateway(session)
@@ -867,6 +871,157 @@ class LookupDemographicsTests(SimpleTestCase):
         with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
             gateway.lookup_demographics("parcel-uuid")
         self.assertEqual(ctx.exception.reason, "census_data_api_unavailable")
+
+
+def _demographics_body(**fields: object) -> dict:
+    return {"demographics": {"uuid": "d1", "population": 4210, "geography_level": "census_tract", **fields}}
+
+
+class DemographicsSharedPerParcelTests(SimpleTestCase):
+    """Every location on one parcel asks REData for the same parcel's demographics.
+
+    In 0.8.0 each location made its own call: 24 locations on one parcel were 24 calls in a cycle, whatever REData
+    answered. The answer is the parcel's, so one call answers all of them.
+    """
+
+    _PARCEL = "parcel-uuid"
+
+    def _shared_for(self, body: dict) -> int:
+        """Seconds the answer to ``body`` is shared for."""
+        from django.core.cache import cache
+
+        cache.clear()
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=body)
+        with mock.patch.object(cache, "set", wraps=cache.set) as stored:
+            _gateway(session).lookup_demographics(self._PARCEL)
+        timeouts = [
+            call.args[2]
+            for call in stored.call_args_list
+            if self._PARCEL in call.args[0] and "flight" not in call.args[0]
+        ]
+        self.assertEqual(len(timeouts), 1, stored.call_args_list)
+        return timeouts[0]
+
+    def test_one_parcel_is_asked_once_for_every_location_on_it(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=_demographics_body())
+
+        answers = [_gateway(session).lookup_demographics(self._PARCEL) for _ in range(24)]
+
+        self.assertEqual(session.get.call_count, 1)
+        self.assertEqual({answer["population"] for answer in answers if answer}, {4210})
+
+    def test_another_parcel_is_its_own_question(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=_demographics_body())
+
+        _gateway(session).lookup_demographics("parcel-a")
+        _gateway(session).lookup_demographics("parcel-b")
+
+        self.assertEqual(session.get.call_count, 2)
+
+    def test_an_answer_is_shared_as_long_as_the_parcel_lookup_is(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records import redata_gateway
+
+        self.assertEqual(self._shared_for(_demographics_body()), redata_gateway._PARCEL_LOOKUP_SHARE_SECONDS)
+        self.assertEqual(
+            self._shared_for({"demographics": None}),
+            redata_gateway._PARCEL_LOOKUP_SHARE_SECONDS,
+            "no coordinate, or outside the USA, is settled",
+        )
+
+    def test_an_older_redata_answer_without_a_level_is_shared_as_long(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records import redata_gateway
+
+        body = {"demographics": {"uuid": "d1", "population": 4210}}
+
+        self.assertEqual(self._shared_for(body), redata_gateway._PARCEL_LOOKUP_SHARE_SECONDS)
+
+    def test_a_partial_or_coarser_answer_is_shared_briefly(self) -> None:
+        """REData answers a tract question at county level when it cannot resolve the tract, such as before its tract layer syncs."""
+        from urbanlens.dashboard.services.apis.property_records import redata_gateway
+
+        for body in (
+            _demographics_body(geography_level="county"),
+            {**_demographics_body(), "complete": False},
+            {**_demographics_body(), "degraded": True},
+        ):
+            with self.subTest(body):
+                self.assertEqual(self._shared_for(body), redata_gateway._PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS)
+
+    def test_a_failure_is_remembered_briefly_and_raised_again_alike(self) -> None:
+        """The next location on the parcel learns what the first did, without asking: an outage stays an outage."""
+        from django.core.cache import cache
+
+        failures = (
+            _response(503, json_body={"error": "census_data_api_unavailable"}),
+            _response(503, json_body={"error": "census_data_api_not_configured"}),
+            _response(503, json_body={"error": "rate_limited"}, headers={"Retry-After": "120"}),
+            # REData older than the endpoint answers its route's 404.
+            _response(404, text="<html>Not Found</html>", raise_on_json=True),
+        )
+        for response in failures:
+            with self.subTest(response.status_code, body=response.json.return_value):
+                cache.clear()
+                session = MagicMock()
+                session.get.return_value = response
+                raised = []
+                for _ in range(3):
+                    with self.assertRaises(PropertyRecordsUnavailableError) as ctx:
+                        _gateway(session).lookup_demographics(self._PARCEL)
+                    raised.append(ctx.exception)
+
+                self.assertEqual(session.get.call_count, 1)
+                first, *rest = raised
+                for again in rest:
+                    self.assertIs(type(again), type(first))
+                    self.assertEqual(
+                        (again.reason, again.is_outage, again.retry_later, again.status_code, str(again)),
+                        (first.reason, first.is_outage, first.retry_later, first.status_code, str(first)),
+                    )
+                    self.assertEqual(getattr(again, "retry_after", None), getattr(first, "retry_after", None))
+
+    def test_a_failure_is_asked_about_again_once_its_memory_lapses(self) -> None:
+        from django.core.cache import cache
+
+        from urbanlens.dashboard.services.apis.property_records import redata_gateway
+
+        session = MagicMock()
+        session.get.return_value = _response(503, json_body={"error": "census_data_api_unavailable"})
+        with (
+            mock.patch.object(cache, "set", wraps=cache.set) as stored,
+            self.assertRaises(PropertyRecordsUnavailableError),
+        ):
+            _gateway(session).lookup_demographics(self._PARCEL)
+        remembered = [
+            call.args[2]
+            for call in stored.call_args_list
+            if self._PARCEL in call.args[0] and "flight" not in call.args[0]
+        ]
+        self.assertEqual(remembered, [redata_gateway._PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS])
+
+        cache.clear()
+        session.get.return_value = _response(200, json_body=_demographics_body())
+        self.assertEqual((_gateway(session).lookup_demographics(self._PARCEL) or {}).get("population"), 4210)
+        self.assertEqual(session.get.call_count, 2)
+
+    def test_a_longer_wait_redata_named_is_kept(self) -> None:
+        from django.core.cache import cache
+
+        session = MagicMock()
+        session.get.return_value = _response(503, json_body={"error": "rate_limited"}, headers={"Retry-After": "720"})
+        with (
+            mock.patch.object(cache, "set", wraps=cache.set) as stored,
+            self.assertRaises(PropertyRecordsUnavailableError),
+        ):
+            _gateway(session).lookup_demographics(self._PARCEL)
+        remembered = [
+            call.args[2]
+            for call in stored.call_args_list
+            if self._PARCEL in call.args[0] and "flight" not in call.args[0]
+        ]
+        self.assertEqual(remembered, [720])
 
 
 # -- lookup_national_parks --------------------------------------------------------------

@@ -208,6 +208,7 @@ def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: 
     # split) - genuinely useful context for someone researching a site.
     # Best-effort: the endpoint 503s wholesale without REData's own Census API key configured
     # server-side, which is settled until REData's operator configures one (_SETTLED_SECTION_REFUSALS).
+    # The gateway shares the answer, or the failure, with every other location on the parcel.
     if demographics := asked("demographics", gateway.lookup_demographics):
         payload["demographics"] = demographics
 

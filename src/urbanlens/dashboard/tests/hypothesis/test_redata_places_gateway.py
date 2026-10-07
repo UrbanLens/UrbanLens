@@ -221,6 +221,45 @@ class RateLimitedTests(SimpleTestCase):
                         raised.is_outage, "a spent budget says nothing about the place, so nothing is cached"
                     )
 
+    def test_a_provider_throttle_redata_relays_is_a_rate_limit_too(self) -> None:
+        """Google's own 429, passed on by REData as ``places_api_unavailable``, is the same shared budget saying no.
+
+        Production (0.8.0) logged 18 of these in 13 h, each followed by the next location's call.
+        """
+        relayed = {
+            "error": "places_api_unavailable",
+            "message": "Places API (New) answered 429 for https://places.googleapis.com/v1/places:searchNearby.",
+        }
+        for headers, wait in (({}, RedataBreaker.SOURCE_BUSY_SECONDS), ({"Retry-After": "300"}, 300)):
+            for call in _every_call(_gateway(mock.Mock())):
+                with self.subTest(call, headers=headers):
+                    raised = self._raised(call, _response(503, relayed, headers))
+
+                    self.assertIsInstance(raised, GatewayRateLimitedError, "an enrichment run stops at it")
+                    assert isinstance(raised, UpstreamBusyError)
+                    self.assertEqual(raised.retry_after, wait)
+
+    def test_any_answer_naming_a_wait_is_a_rate_limit(self) -> None:
+        """REData's own throttle (429), and a 503 that says when to come back, both mean "not now"."""
+        answers = (
+            _response(
+                429, {"detail": "Request was throttled. Expected available in 600 seconds."}, {"Retry-After": "600"}
+            ),
+            _response(
+                503,
+                {"error": "places_api_unavailable", "message": "Places API (New) answered 503."},
+                {"Retry-After": "45"},
+            ),
+        )
+        for response in answers:
+            for call in _every_call(_gateway(mock.Mock())):
+                with self.subTest(call, status=response.status_code):
+                    raised = self._raised(call, response)
+
+                    self.assertIsInstance(raised, GatewayRateLimitedError)
+                    assert isinstance(raised, UpstreamBusyError)
+                    self.assertEqual(raised.retry_after, int(response.headers["Retry-After"]))
+
     def test_other_failures_are_unchanged(self) -> None:
         failures = (
             _response(503, {"error": "places_api_unavailable", "message": "Places API (New) answered 500"}),

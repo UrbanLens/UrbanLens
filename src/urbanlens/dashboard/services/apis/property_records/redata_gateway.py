@@ -35,6 +35,8 @@ _PARCEL_LOOKUP_SHARE_SECONDS = 3600
 #: at least five minutes before it asks the tier it lacks again, so a shorter share would only repeat the same partial
 #: answer, and an hour would keep the partial one from the retry that completes it.
 _PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS = 300
+#: The ``geography_level`` of a demographics answer given for the county where the tract was asked about.
+_COUNTY_LEVEL = "county"
 #: The key REData's own ``record_payload`` lists its unanswered tiers under, read only when a body carries no
 #: top-level ``complete``/``sources``. It happens to equal :data:`~urbanlens.dashboard.models.cache.location_cache.UNANSWERED_SOURCES_KEY`.
 _RECORD_UNANSWERED_KEY = "unanswered_sources"
@@ -292,6 +294,55 @@ def unanswered_tiers(payload: Mapping[str, Any]) -> frozenset[int]:
 def _parcel_lookup_share_seconds(body: Mapping[str, Any]) -> int:
     """How long a parcel lookup's answer is shared: briefly when REData says it is partial, else :data:`_PARCEL_LOOKUP_SHARE_SECONDS`."""
     return _PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS if parcel_unanswered_sources(body) else _PARCEL_LOOKUP_SHARE_SECONDS
+
+
+def _demographics_share_seconds(body: Any) -> int:
+    """How long a parcel's demographics answer is shared.
+
+    Briefly when REData says the answer is partial or degraded, or answered the tract question at county level, which it
+    does when it cannot resolve the tract (as before its tract layer has synced). An older REData sends no level.
+
+    Args:
+        body: REData's ``/parcels/{uuid}/demographics/`` body.
+
+    Returns:
+        Seconds.
+    """
+    if not isinstance(body, dict):
+        return _PARCEL_LOOKUP_SHARE_SECONDS
+    demographics = body.get("demographics")
+    coarser = isinstance(demographics, dict) and demographics.get("geography_level") == _COUNTY_LEVEL
+    return _PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS if coarser or body.get("complete") is False or body.get("degraded") else _PARCEL_LOOKUP_SHARE_SECONDS
+
+
+def _failure_memo(exc: PropertyRecordsUnavailableError) -> dict[str, Any]:
+    """What :func:`_remembered_failure` needs to raise ``exc`` again, as plain data the cache can hold."""
+    return {
+        "reason": exc.reason,
+        "message": str(exc),
+        "links": dict(exc.links),
+        "retry_later": exc.retry_later,
+        "status_code": exc.status_code,
+        "retry_after": exc.retry_after if isinstance(exc, PropertyRecordsBusyError) else None,
+    }
+
+
+def _remembered_failure(memo: Mapping[str, Any]) -> PropertyRecordsUnavailableError:
+    """The error a :func:`_failure_memo` was taken from, as a caller classifies it.
+
+    Args:
+        memo: The remembered failure.
+
+    Returns:
+        A busy error when REData named a wait, else the plain error with the same reason, status and retry flag.
+    """
+    reason, message = str(memo.get("reason") or REASON_SOURCE_ERROR), str(memo.get("message") or "")
+    links = memo.get("links") if isinstance(memo.get("links"), dict) else None
+    retry_after = memo.get("retry_after")
+    if isinstance(retry_after, int):
+        return PropertyRecordsBusyError(reason, message, retry_after=retry_after, links=links)
+    status_code = memo.get("status_code")
+    return PropertyRecordsUnavailableError(reason, message, links=links, retry_later=bool(memo.get("retry_later")), status_code=status_code if isinstance(status_code, int) else None)
 
 
 #: Names the sources REData asked and could not hear from, on an answer that is therefore partial.
@@ -592,7 +643,11 @@ class RedataGateway(Gateway):
         return dict(body) if isinstance(body, dict) else {}
 
     def lookup_demographics(self, parcel_uuid: str) -> dict[str, Any] | None:
-        """Return neighbourhood demographics for the census tract containing a parcel.
+        """Return neighbourhood demographics for the census tract containing a parcel, shared by every location on it.
+
+        An answer is shared as long as a parcel lookup is (briefly when partial or coarser, see
+        :func:`_demographics_share_seconds`); a failure is remembered briefly, or for as long as REData asked, and raised
+        again alike.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -603,7 +658,18 @@ class RedataGateway(Gateway):
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed, or REData 503s the whole endpoint (e.g. ``RD_US_CENSUS_API_KEY`` not configured server-side, or the Census API is rate-limited).
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/demographics/") or {}
+        unanswered_key = f"redata:parcel-demographics-unanswered:{parcel_uuid}"
+        unanswered = get_or_none(unanswered_key, label="parcel demographics failure", alias=DEFAULT_CACHE_ALIAS)
+        if isinstance(unanswered, dict):
+            raise _remembered_failure(unanswered)
+        try:
+            body = coalesced(f"redata:parcel-demographics:{parcel_uuid}", lambda: self._get_json(f"/api/v1/parcels/{parcel_uuid}/demographics/") or {}, ttl=_demographics_share_seconds)
+        except PropertyRecordsUnavailableError as exc:
+            # Every location on a parcel asks for the parcel's demographics; the next one learns this answer from here.
+            named = exc.retry_after if isinstance(exc, PropertyRecordsBusyError) else 0
+            wait = max(_PARTIAL_PARCEL_LOOKUP_SHARE_SECONDS, min(named, UPSTREAM_BUSY_MAX_SECONDS))
+            set_or_skip(unanswered_key, _failure_memo(exc), wait, label="parcel demographics failure", alias=DEFAULT_CACHE_ALIAS)
+            raise
         demographics = body.get("demographics") if isinstance(body, dict) else None
         return dict(demographics) if isinstance(demographics, dict) else None
 

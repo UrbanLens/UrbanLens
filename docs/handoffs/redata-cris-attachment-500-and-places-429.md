@@ -43,6 +43,10 @@ tell "not available" from "try later".
 Earlier the same day it answered `503 {"error":"rate_limited","message":"Places API (New) request budget is
 exhausted ..."}`. UrbanLens opens its breaker for 60 s on either (on `places_api_unavailable` only since 2026-10-05,
 P302). Every new pin's naming and wiki enrichment asks this endpoint first, so while it holds, pins get worse names.
+On `release/v_0_9_0`, since 2026-10-07, `RedataPlacesGateway` also raises `PlacesRateLimitedError` for it (Google's 429
+relayed, REData's own 429, or any 503 naming a wait), so the hourly enrichment cycle's place-photo backfill stops at
+the first one instead of going on to its next location. 0.8.0 stopped only at `rate_limited`; production logged 31 of
+these 503s in 13 h on 2026-10-07, in a burst at :12-:14 past each hour (the cycle runs at :12).
 
 **Still failing 2026-10-05**, with the same body. Dev's `ApiCallLog` shows nearby search has barely worked for a month:
 of the calls that reached REData, 2 answered on 10-04, 0 on 10-03, and 10 of 1,933 since 09-23. News search fails the
