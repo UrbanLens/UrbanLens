@@ -193,6 +193,35 @@ class VideoLocationStripTests(TestCase):
         self.assertNotIn("location", stored)
         self.assertNotIn("42.6526", stored)
 
+    def test_a_video_mp4_cannot_carry_as_it_is_is_still_scrubbed(self) -> None:
+        """VP8 and Vorbis, WebM's older codecs, cannot be copied into MP4, so the copy that strips the tag fails."""
+        out = Path(tempfile.mkdtemp(dir=self._media_root)) / "old.webm"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=size=320x240:rate=10:duration=1",
+                "-c:v",
+                "libvpx",
+                "-metadata",
+                f"location={_COORDS}",
+                str(out),
+            ],
+            capture_output=True,
+            check=True,
+        )
+        image = baker.make(Image, image=None)
+        image.image.save("old.webm", ContentFile(out.read_bytes()), save=True)
+
+        process_uploaded_video(image, None)
+
+        self.assertNotIn("42.6526", _every_tag(Path(image.image.path)))
+
 
 class StreamLevelLocationTests(SimpleTestCase):
     """What runs without ffmpeg: finding a stream's location, and the arguments that clear it."""

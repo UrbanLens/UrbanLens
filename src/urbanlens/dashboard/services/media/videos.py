@@ -238,6 +238,10 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
             succeeded = _reencode(src_path, out_path, max_height, strip_location=needs_strip)
         else:
             succeeded = _remux_without_location(src_path, out_path)
+            # MP4 cannot carry some codecs as they are (WebM's VP8 and Vorbis), so the copy fails; keeping the upload
+            # as it came would keep its location, so it is re-encoded at its own height instead.
+            if not succeeded and current_height is not None:
+                succeeded = _reencode(src_path, out_path, current_height, strip_location=True)
         if not succeeded:
             return metadata, None
 
