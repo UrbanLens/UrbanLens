@@ -195,7 +195,7 @@ class ImageVisibilityFriendTests(TestCase):
         wiki = baker.make("dashboard.Wiki")
         self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=wiki)
         # visible_to()'s container gate asks whether the VIEWER can reach this specific wiki (earned only by a
-        # pin at its place - see models/wiki/CLAUDE.md), not merely whether the photo sits on *some* wiki.
+        # pin at its place - see models/wiki/AGENTS.md), not merely whether the photo sits on *some* wiki.
         Pin.objects.create(profile=self.viewer, location=wiki.location)
 
     def _set_upload_visibility(self, visibility: str) -> None:

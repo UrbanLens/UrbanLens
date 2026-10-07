@@ -160,7 +160,7 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
         export_trip_to_calendar(self.account, trip)
 
         body = gateway.create_event.call_args_list[0][0][0]
-        self.assertNotIn("location", body)
+        self.assertEqual(body["location"], "")
 
     def test_activity_event_omits_a_location_the_exporter_may_not_see(self) -> None:
         """The per-activity timed event must not carry it either."""
@@ -177,7 +177,7 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
         bodies = [call[0][0] for call in gateway.create_event.call_args_list]
         activity_bodies = [body for body in bodies if "dateTime" in body["start"]]
         self.assertEqual(len(activity_bodies), 1)
-        self.assertNotIn("location", activity_bodies[0])
+        self.assertEqual(activity_bodies[0]["location"], "")
 
     def test_a_visible_location_is_still_exported(self) -> None:
         """The gate must not swallow locations the exporter is allowed to see."""

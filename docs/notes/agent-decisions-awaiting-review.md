@@ -52,6 +52,10 @@ Just before the audit window, same kind: d25e8b168 (news limited to the site's l
 mostly non-Latin headlines dropped), bd959d6d1 (a mail guard drops Gmail recipients with characters Gmail never
 issues), 5c82d2d6f (a nested pin adopts its site's panel answers only within 1 km).
 
+Since the audit, same kind: 633a4819f (a Google Calendar event for a stop whose location the exporting member may
+not see is titled "Secret Location", even when the stop's author typed a title; the panel still shows that title,
+and P338 asks which way both should go).
+
 ## N30 "Kept" items
 
 Each is an agent's disposition. The two security ones and the unverified one come first:

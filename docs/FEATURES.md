@@ -1062,7 +1062,13 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   when more exist; the import runs in the `import_calendar_events` task behind a progress poll.
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
-  runs out partway reports "N of M" and leaves the rest to `requeue_pending_calendar_pushes`
+  (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
+  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. A rate limit never drops the
+  connection; an auth or permission refusal does, and so, for now, does any failed token refresh
+  (P337). Each member's export applies their own location visibility: a stop whose location they
+  may not see is exported with `location: ""` and the title "Secret Location", so an update clears
+  a location an earlier export wrote (a PATCH keeps omitted fields). An imported event keeps its own
+  location unless one is withheld
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an

@@ -15,7 +15,8 @@ import requests
 
 from urbanlens.dashboard.services.auth import google_oauth
 from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import UPSTREAM_BUSY_DEFAULT_SECONDS, Gateway, GatewayRateLimitedError, GatewayRequestError, UpstreamBusyError, upstream_retry_after
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -42,6 +43,11 @@ ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 
 #: Google's own ceiling on ``maxResults`` for ``events.list``.
 EVENTS_PAGE_SIZE = 250
+
+#: Error ``reason`` values for a rate or usage limit, which Google answers with 403 as well as 429. The Calendar API's
+#: error guide names ``rateLimitExceeded``, ``userRateLimitExceeded`` and ``quotaExceeded``; ``dailyLimitExceeded`` is
+#: Google's general daily-quota reason, and ``RATE_LIMIT_EXCEEDED`` the ``details[].reason`` of its newer envelope.
+RATE_LIMIT_REASONS = frozenset({"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "dailyLimitExceeded", "RATE_LIMIT_EXCEEDED"})
 
 
 def client_event_id(*parts: object) -> str:
@@ -72,6 +78,54 @@ class EventListing:
 
     events: list[dict[str, Any]]
     truncated: bool = False
+
+
+def is_rate_limit_refusal(response: requests.Response) -> bool:
+    """Whether Google refused a call for a rate or usage limit, which passes, rather than for the grant, which does not.
+
+    Google gives a rate limit as 429, or as 403 with a usage-limit ``reason``. Every other 403 (``forbidden``,
+    ``insufficientPermissions``, a body with no readable reason) is not one. The envelope's ``status`` is not read:
+    Google sends PERMISSION_DENIED with a per-user quota refusal too.
+
+    Args:
+        response: A Calendar API response.
+
+    Returns:
+        True for a 429, or a 403 naming a reason in :data:`RATE_LIMIT_REASONS`.
+    """
+    if response.status_code == 429:
+        return True
+    if response.status_code != 403:
+        return False
+    try:
+        payload = response.json()
+    except ValueError:
+        return False
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return False
+    entries: list[object] = []
+    for key in ("errors", "details"):
+        listed = error.get(key)
+        if isinstance(listed, list):
+            entries.extend(listed)
+    return any(isinstance(entry, dict) and isinstance(entry.get("reason"), str) and entry["reason"] in RATE_LIMIT_REASONS for entry in entries)
+
+
+class CalendarRateLimitedError(RateLimitExceededError, UpstreamBusyError, GatewayRateLimitedError):
+    """Google refused a call for a rate or usage limit: the grant is sound, and a later attempt may pass.
+
+    A :class:`RateLimitExceededError`, so an export it cuts short owes a push the way one our own budget cuts short
+    does, and every caller that answers "busy" for our budget answers the same for Google's.
+
+    Args:
+        service: The rate-limiter service key.
+        retry_after: Seconds Google asked callers to wait, or the default when it named none.
+    """
+
+    def __init__(self, service: str, *, retry_after: int) -> None:
+        super().__init__(service, f"Google refused '{service}' for a rate or usage limit")
+        self.retry_after = retry_after
 
 
 class CalendarNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError):
@@ -241,7 +295,8 @@ class GoogleCalendarGateway(Gateway):
             Decoded JSON body, or None for empty (204) responses.
 
         Raises:
-            GoogleAuthExpiredError: When Google rejects the current credentials (401/403).
+            CalendarRateLimitedError: Google refused for a rate or usage limit (429, or 403 naming one).
+            GoogleAuthExpiredError: When Google rejects the current credentials (401, or any other 403).
             CalendarEventNotFoundError: The event does not exist, or was deleted (404/410).
             CalendarEventExistsError: The client-assigned id of an event being created is taken (409).
             GatewayRequestError: Any other failure, including no response at all.
@@ -264,6 +319,8 @@ class GoogleCalendarGateway(Gateway):
             response.status_code,
             response.text[:500],
         )
+        if is_rate_limit_refusal(response):
+            raise CalendarRateLimitedError(type(self).service_key, retry_after=upstream_retry_after(response) or UPSTREAM_BUSY_DEFAULT_SECONDS)
         if response.status_code in (401, 403):
             raise GoogleAuthExpiredError("Google Calendar access was denied. Please reconnect your account.")
         if response.status_code in (404, 410):
