@@ -398,8 +398,9 @@ class _DirectoryReadBound:
     that many bytes are used, whatever count the record claims. Refusing that read refuses the directory before any
     of it is held. Every other read it makes while opening is a few bytes, or the end record's last 64 KiB.
 
-    Each read asks the file for no more than it holds past its position. A buffered ``read(n)`` allocates ``n`` bytes
-    before it reads, so the read-to-end ``zipfile`` makes for the end record cost a whole limit's worth (P316).
+    Each read asks the file for no more than it holds past its position: a buffered ``read(n)`` allocates ``n`` bytes
+    before it reads, so answering ``zipfile``'s read-to-end of the end record with the limit would allocate all of it
+    for every ZIP opened (see UrbanLens#298 ("Nine tests fail under bin/host_pytest.sh on release/v_0_9_0")).
     """
 
     def __init__(self, raw: IO[bytes], limit: int) -> None:

@@ -102,10 +102,10 @@ class ZipDirectoryTests(SimpleTestCase):
         self.assertLess(peak, archive_extractor.MAX_ZIP_DIRECTORY_BYTES + 4 * 1024 * 1024)
 
     def test_opening_a_small_zip_holds_about_what_it_reads(self) -> None:
-        """P316: zipfile reads the end record to the file's end, and that read asked a real file for the whole bound.
+        """zipfile reads the end record to the file's end, and a buffered ``read(n)`` allocates ``n`` before reading.
 
-        A buffered ``read(n)`` allocates ``n`` bytes before reading, so every ZIP cost 8 MiB to open whatever its
-        size. A ``BytesIO`` slices instead, which is why this opens a file on disk.
+        Asking a real file for the whole bound there costs 8 MiB per ZIP opened. A ``BytesIO`` slices instead, which is
+        why this opens a file on disk. See UrbanLens#298 ("Nine tests fail under bin/host_pytest.sh on release/v_0_9_0").
         """
         with tempfile.TemporaryFile() as handle:
             handle.write(_zip_of(0, _CSV))
