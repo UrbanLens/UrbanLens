@@ -18,8 +18,8 @@ def _vip_role() -> SubscriptionRole:
     """The role migration 0020 seeds, made here when a flush has removed it.
 
     A TransactionTestCase truncates every table when it ends, seeded rows included. pytest-django runs those last in
-    one process, but ``--dist loadfile`` hands a worker a whole file, so on a worker given a file that mixes both kinds
-    the seeded row was gone before these ran.
+    one process, but ``--dist loadfile`` hands a worker a whole file, so a worker given a file that mixes both kinds
+    can run these after the flush.
     """
     role, _created = SubscriptionRole.objects.get_or_create(slug="vip", defaults={"name": "VIP"})
     return role
