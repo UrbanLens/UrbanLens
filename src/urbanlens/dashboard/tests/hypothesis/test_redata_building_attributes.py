@@ -29,6 +29,7 @@ _NEAR_BUILDING = {
     "name": "Old Mill",
     "building_number": "72",
     "year_built": 1937,
+    "year_built_basis": "building",
     "latitude": 42.6501,
     "longitude": -73.7501,
 }
