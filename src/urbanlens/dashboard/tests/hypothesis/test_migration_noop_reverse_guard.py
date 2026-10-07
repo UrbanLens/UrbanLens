@@ -110,6 +110,11 @@ REVIEWED: dict[str, str] = {
         "Sets database defaults on columns 0036-0053 added. A reverse leaves them; no release reads a column's default, "
         "and reversing those migrations drops the columns with their defaults."
     ),
+    "0069_withdraw_year_built_trivia.py": (
+        "withdraw_year_built_questions marks approved deterministic year-built trivia questions REJECTED with the "
+        "generator's withdrawn reason. A reverse leaves them so: one the generator withdrew since cannot be told apart, "
+        "and older code reads an ordinary rejected question, which it never serves and never re-approves - lossy, valid."
+    ),
 }
 
 
