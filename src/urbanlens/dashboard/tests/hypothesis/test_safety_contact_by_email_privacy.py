@@ -104,7 +104,7 @@ class EmailContactStillSeesTheCheckinTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.owner = baker.make(User, username="hiker").profile
-        self.member = _verified("secret_member", "jess.a.mann+ul@gmail.com")
+        self.member = _verified("secret_member", "jane.q.publ+ul@gmail.com")
         self.checkin = baker.make(
             SafetyCheckin,
             profile=self.owner,
@@ -113,13 +113,13 @@ class EmailContactStillSeesTheCheckinTests(TestCase):
             destination_latitude="40.000000",
             destination_longitude="-74.000000",
         )
-        set_checkin_contacts(self.checkin, [(None, "J.E.S.S.A.M.A.N.N@googlemail.com", "")])
+        set_checkin_contacts(self.checkin, [(None, "J.A.N.E.Q.P.U.B.L@googlemail.com", "")])
 
     def test_it_is_shared_with_the_verified_account_by_any_spelling(self) -> None:
         self.assertIn(self.checkin, SafetyCheckin.objects.shared_with(self.member.profile))
 
     def test_an_unverified_holder_of_the_address_does_not_see_it(self) -> None:
-        squatter = baker.make(User, username="squatter", email="jessamann@gmail.com", is_active=True)
+        squatter = baker.make(User, username="squatter", email="janeqpubl@gmail.com", is_active=True)
 
         self.assertNotIn(self.checkin, SafetyCheckin.objects.shared_with(squatter.profile))
 
