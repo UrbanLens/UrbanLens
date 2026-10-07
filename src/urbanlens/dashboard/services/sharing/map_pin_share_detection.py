@@ -161,7 +161,7 @@ def geometry_to_geos(geometry: dict | None) -> GEOSGeometry | None:
     try:
         geom = GEOSGeometry(json.dumps(geometry))
     except Exception:
-        logger.debug("Could not convert markup geometry to GEOS: %r", geometry)
+        logger.debug("Could not convert markup geometry to GEOS: type=%s", geom_type)
         return None
     if geom.srid is None:
         geom.srid = 4326

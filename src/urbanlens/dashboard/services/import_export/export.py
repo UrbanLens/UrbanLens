@@ -72,6 +72,37 @@ def export_dir(job_id: str) -> str:
     return os.path.join(django_settings.MEDIA_ROOT, "exports", job_id)
 
 
+def export_guard_key(user_id: int | None) -> str:
+    """One in-flight export per account.
+
+    Args:
+        user_id: The exporting account.
+
+    Returns:
+        The cache key holding that account's in-flight export.
+
+    Raises:
+        ValueError: There is no authenticated user.
+    """
+    if user_id is None:
+        raise ValueError("an export guard needs an authenticated user")
+    return f"ul:single-flight:export:{user_id}"
+
+
+def release_export_guard(user_id: int | None, job_id: str) -> None:
+    """Give up *user_id*'s export claim, if *job_id* is what holds it.
+
+    Args:
+        user_id: The exporting account.
+        job_id: The export that ended.
+    """
+    from urbanlens.dashboard.services.core import single_flight
+
+    guard = export_guard_key(user_id)
+    if single_flight.holder(guard) == job_id:
+        single_flight.release(guard)
+
+
 class ExportJobStatus:
     """Cache-backed progress state for a user export job.
     The export archive remains on disk as the final downloadable artifact; transient status lives in the application cache rather than a JSON sidecar in MEDIA_ROOT."""
@@ -133,23 +164,23 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         job_id: UUID string for this export job.
         email_to_user: When True, email the finished export to the user's account address (UL-373) - see :func:`send_export_email`."""
     from django.contrib.auth import get_user_model
-    from django.core.exceptions import ObjectDoesNotExist
 
     User = get_user_model()
     resolved_job_id = job_id or pathlib.Path(export_dir_path).name
 
+    # Nothing below raises out of here: an export that ended without releasing its claim locks the account out of
+    # exporting until the claim expires, and a status left at "pending" spins until then.
     try:
         user = User.objects.select_related("profile").get(pk=user_id)
         profile = user.profile
-    except (ObjectDoesNotExist, AttributeError):
+    except Exception:
         logger.exception("Export: could not load user %s", user_id)
         ExportJobStatus(resolved_job_id).write("error", 0, "Failed to load user data.")
         schedule_export_cleanup(export_dir_path, ExportJobStatus(resolved_job_id))
+        release_export_guard(user_id, resolved_job_id)
         return False
 
     temp_dir = os.path.join(export_dir_path, "data")
-    os.makedirs(temp_dir, exist_ok=True)
-
     total_steps = len(export_types) + 1  # +1 for zipping
     step = 0
 
@@ -172,6 +203,7 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
     }
 
     try:
+        os.makedirs(temp_dir, exist_ok=True)
         _run_export_steps(
             profile,
             export_types,
@@ -191,6 +223,8 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         return False
     finally:
         schedule_export_cleanup(export_dir_path, ExportJobStatus(resolved_job_id))
+        # However it ended: a user who never polls the status is not locked out until the claim expires.
+        release_export_guard(user_id, resolved_job_id)
 
 
 def _run_export_steps(

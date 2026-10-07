@@ -73,11 +73,46 @@ def probe_video(path: str) -> dict[str, Any] | None:
         return None
 
 
-#: Container tags a phone writes the capture coordinates into. ffmpeg copies global metadata across
-#: both a re-encode and a stream copy, so these have to be cleared explicitly; assigning an empty
-#: value is how ffmpeg deletes a tag.
-#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path,
+#: Tags a phone writes the capture coordinates into. ffmpeg copies the file's and each stream's metadata across both a
+#: re-encode and a stream copy, so these are cleared explicitly at both levels; assigning an empty value is how ffmpeg
+#: deletes a tag. The rewrite is always MP4, whose muxer writes no tag it has no atom for, so a location under any
+#: other name (a Matroska track's ``GPS``, Apple's accuracy and place-name keys) does not survive it either.
+#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path, which drops the GPS
+#: IFD and leaves the rest of the EXIF alone. Rotation is a display matrix, not a tag, so it is kept either way.
 _LOCATION_TAGS = ("location", "location-eng", "com.apple.quicktime.location.ISO6709")
+
+#: A tag name that says where: any of :data:`_LOCATION_TAGS` and every other spelling of one. Compared case-folded.
+_LOCATION_KEY = re.compile(r"location|gps|iso6709", re.IGNORECASE)
+
+
+#: Data tracks that carry no location: a timecode track says only where in the recording a frame is, and cameras write
+#: one to most of their files.
+_HARMLESS_DATA_TAGS = frozenset({"tmcd"})
+
+#: The streams a rewrite keeps: the first picture that is not a cover image, and the first sound. Naming them, rather
+#: than taking ffmpeg's default pick, also drops the subtitle track that pick would copy.
+_KEPT_STREAMS = ["-map", "0:V:0?", "-map", "0:a:0?"]
+
+
+def _is_location_track(stream: dict[str, Any]) -> bool:
+    """Whether a stream can say where the video was shot, beside its pictures and sound.
+
+    A drone captions every frame with its position (DJI writes it as a subtitle track), an action camera records GPS
+    telemetry in a data track (GoPro's GPMF, ``gpmd``), phones and others write timed-metadata tracks, and a cover
+    picture is an image with metadata of its own. What such a stream says is not read here, so every one counts.
+
+    Args:
+        stream: One of ffprobe's ``streams``.
+
+    Returns:
+        Whether a rewrite has to drop it.
+    """
+    codec_type = stream.get("codec_type")
+    if codec_type in {"subtitle", "attachment"}:
+        return True
+    if codec_type == "data":
+        return str(stream.get("codec_tag_string") or "").lower() not in _HARMLESS_DATA_TAGS
+    return bool((stream.get("disposition") or {}).get("attached_pic"))
 
 
 def _parse_iso6709(location: str) -> tuple[float, float] | None:
@@ -91,6 +126,12 @@ def _parse_iso6709(location: str) -> tuple[float, float] | None:
         return None
 
 
+def _location_values(tags: dict[str, Any]) -> list[Any]:
+    """The non-empty location values of one case-folded tag set, the well-known tags first."""
+    known = [tag.lower() for tag in _LOCATION_TAGS]
+    return [tags[tag] for tag in known if tags.get(tag)] + [value for key, value in tags.items() if value and key not in known and _LOCATION_KEY.search(key)]
+
+
 def extract_video_metadata(path: str) -> dict[str, Any]:
     """Best-effort metadata extraction for an uploaded video.
 
@@ -98,7 +139,7 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
         path: Local filesystem path to the video file.
 
     Returns:
-        Dict with any of ``taken_at`` (datetime), ``latitude``/``longitude`` (float), ``width``/``height`` (int) that could be determined."""
+        Dict with any of ``taken_at`` (datetime), ``latitude``/``longitude`` (float), ``width``/``height`` (int) that could be determined, and ``has_location_tag`` / ``has_location_track`` when the file carries a location tag or a track that can hold one (:func:`_is_location_track`)."""
     metadata: dict[str, Any] = {}
     probed = probe_video(path)
     if not probed:
@@ -118,11 +159,16 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
     # the tag being *present*, not off it being readable.
     # A tag in a notation _parse_iso6709 doesn't handle still discloses where the video was taken,
     # and gating the strip on successful parsing would leave exactly those behind.
-    location_tag = next((fmt_tags.get(tag) for tag in _LOCATION_TAGS if fmt_tags.get(tag)), None)
-    if location_tag:
+    # A stream can carry one as well as the file: Matroska tags a track as readily as the file.
+    tag_sets = [fmt_tags, *({str(k).lower(): v for k, v in (stream.get("tags") or {}).items()} for stream in probed.get("streams") or [])]
+    locations = [str(value) for tags in tag_sets for value in _location_values(tags)]
+    if locations:
         metadata["has_location_tag"] = True
-        if coords := _parse_iso6709(location_tag):
+        if coords := next(filter(None, map(_parse_iso6709, locations)), None):
             metadata["latitude"], metadata["longitude"] = coords
+
+    if any(_is_location_track(stream) for stream in probed.get("streams") or []):
+        metadata["has_location_track"] = True
 
     for stream in probed.get("streams") or []:
         if stream.get("codec_type") == "video" and stream.get("width") and stream.get("height"):
@@ -134,10 +180,10 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
 
 
 def _clear_location_args() -> list[str]:
-    """Build the ffmpeg args that delete every container-level location tag."""
+    """Build the ffmpeg args that delete every location tag, from the file and from each of its streams."""
     args: list[str] = []
     for tag in _LOCATION_TAGS:
-        args += ["-metadata", f"{tag}="]
+        args += ["-metadata", f"{tag}=", "-metadata:s", f"{tag}="]
     return args
 
 
@@ -161,8 +207,9 @@ def _run_ffmpeg(args: list[str], src_path: str, what: str) -> bool:
 
 @untrusted_parse("video.transcode")
 def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: bool = False) -> bool:
-    """Downscale to ``max_height``, optionally dropping the location tags; True on success."""
+    """Downscale to ``max_height``, keeping only the picture and sound and optionally dropping the location tags; True on success."""
     args = [
+        *_KEPT_STREAMS,
         "-vf",
         f"scale=-2:{max_height}",
         "-c:v",
@@ -185,8 +232,8 @@ def _reencode(src_path: str, out_path: str, max_height: int, *, strip_location: 
 
 @untrusted_parse("video.transcode")
 def _remux_without_location(src_path: str, out_path: str) -> bool:
-    """Drop the location tags without touching the streams; True on success."""
-    return _run_ffmpeg(["-c", "copy", *_clear_location_args(), "-movflags", "+faststart", out_path], src_path, "location strip")
+    """Drop the location tags, and every stream but the picture and sound, without re-encoding; True on success."""
+    return _run_ffmpeg([*_KEPT_STREAMS, "-c", "copy", *_clear_location_args(), "-movflags", "+faststart", out_path], src_path, "location strip")
 
 
 def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], StoredFileReplacement | None]:
@@ -210,9 +257,9 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
         metadata = extract_video_metadata(src_path)
         current_height = metadata.get("height")
         needs_downscale = max_height is not None and not (current_height is not None and current_height <= max_height)
-        # Keyed off the tag's presence, not off parsed coordinates - see
+        # Keyed off the tag's or track's presence, not off parsed coordinates - see
         # extract_video_metadata. Only worth rewriting a file that carries one.
-        needs_strip = bool(metadata.get("has_location_tag"))
+        needs_strip = bool(metadata.get("has_location_tag") or metadata.get("has_location_track"))
 
         if not needs_downscale and not needs_strip:
             return metadata, None
@@ -225,6 +272,10 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
             succeeded = _reencode(src_path, out_path, max_height, strip_location=needs_strip)
         else:
             succeeded = _remux_without_location(src_path, out_path)
+            # MP4 cannot carry some codecs as they are (WebM's VP8 and Vorbis), so the copy fails; keeping the upload
+            # as it came would keep its location, so it is re-encoded at its own height instead.
+            if not succeeded and current_height is not None:
+                succeeded = _reencode(src_path, out_path, current_height, strip_location=True)
         if not succeeded:
             return metadata, None
 

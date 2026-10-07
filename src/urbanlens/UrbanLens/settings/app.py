@@ -45,18 +45,10 @@ def _encryption_key_weakness(key: str) -> str | None:
         Operator-facing explanation, or None when acceptable.
     """
     if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
-        return (
-            f"field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters "
-            f"(got {len(key)}). Generate one with: "
-            'python -c "import secrets; print(secrets.token_urlsafe(64))"'
-        )
+        return f'field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters (got {len(key)}). Generate one with: python -c "import secrets; print(secrets.token_urlsafe(64))"'
     # Crude entropy stand-in calibrated against random output.
     if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
-        return (
-            f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
-            "predictable to resist an offline attack against a stolen database. Use a random "
-            'value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
-        )
+        return f'field_encryption_key uses only {len(set(key))} distinct characters, which is too predictable to resist an offline attack against a stolen database. Use a random value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
     return None
 
 
@@ -184,10 +176,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     s3_endpoint_url: str = Field(
         default="",
-        description=(
-            "Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required "
-            "when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."
-        ),
+        description=("Base URL of the S3-compatible API, e.g. http://garage-s3.garage.svc.cluster.local:3900. Required when UL_MEDIA_STORAGE_BACKEND is 's3'. Leave empty for real AWS S3, which boto3 derives from the region."),
     )
     s3_bucket_name: str = Field(default="", description="Bucket holding user uploads. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
     s3_access_key_id: str | None = Field(default=None, description="Access key for the object store. Required when UL_MEDIA_STORAGE_BACKEND is 's3'.")
@@ -198,10 +187,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     s3_addressing_style: str = Field(
         default="path",
-        description=(
-            "'path' (endpoint/bucket/key) or 'virtual' (bucket.endpoint/key). Garage and most self-hosted stores "
-            "need 'path', because virtual-host style needs a wildcard DNS record and a wildcard certificate."
-        ),
+        description=("'path' (endpoint/bucket/key) or 'virtual' (bucket.endpoint/key). Garage and most self-hosted stores need 'path', because virtual-host style needs a wildcard DNS record and a wildcard certificate."),
     )
     s3_connect_timeout_seconds: float = Field(
         default=2.0,
@@ -307,6 +293,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "where the bytes are not the user's choice at all."
         ),
     )
+    icon_max_upload_bytes: int = Field(
+        default=5_000_000,
+        description=(
+            "Largest label, pin or award icon an upload may carry, refused before the upload gauntlet's antivirus scan "
+            "copies it. Icons were bounded only by the site-wide photo/video ceiling, 250MB by default, for an image "
+            "re-encoded to at most 256px. The ceiling bounds the picture someone picks, usually a phone photo or a "
+            "screenshot, not the stored icon, so it matches the avatar's: an icon is shown smaller than an avatar."
+        ),
+    )
     immich_max_thumbnail_bytes: int = Field(
         default=8_000_000,
         description=(
@@ -348,11 +343,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     immich_profile_upstream_concurrency: int = Field(
         default=3,
         ge=1,
-        description=(
-            "How many Immich thumbnails one account may be fetching at once across every web process, leased in the "
-            "shared cache. The per-process cap alone lets one account pointed at a slow server hold that cap in every "
-            "process at once."
-        ),
+        description=("How many Immich thumbnails one account may be fetching at once across every web process, leased in the shared cache. The per-process cap alone lets one account pointed at a slow server hold that cap in every process at once."),
     )
     public_costs_page_cache_seconds: int = Field(
         default=600,
@@ -396,10 +387,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     organize_rows_page_size: int = Field(
         default=100,
         gt=0,
-        description=(
-            "How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at "
-            "once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card (P66)."
-        ),
+        description=("How many label cards one page of an Organize tab renders; the rest arrive as the list scrolls, or all at once when a filter, the tree view or select-all needs them. Rendering costs about 3 ms a card (P66)."),
     )
     max_smart_lists_per_sync: int = Field(
         default=25,
@@ -420,10 +408,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     search_max_label_groups: int = Field(
         default=8,
-        description=(
-            "How many label filter groups one search may carry. The groups arrive as client-supplied JSON and each "
-            "one adds conditions to the query, so without a ceiling the request decides how much work it is."
-        ),
+        description=("How many label filter groups one search may carry. The groups arrive as client-supplied JSON and each one adds conditions to the query, so without a ceiling the request decides how much work it is."),
     )
     search_max_label_filter_ids: int = Field(
         default=20,
@@ -509,10 +494,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     allow_dev_toolbar_for_non_admins: bool = Field(
         default=False,
-        description=(
-            "Allow authenticated users without site-admin permission to see the developer toolbar. "
-            "Only takes effect in development, local, or testing environments - ignored in staging/production."
-        ),
+        description=("Allow authenticated users without site-admin permission to see the developer toolbar. Only takes effect in development, local, or testing environments - ignored in staging/production."),
     )
     csp_enforce: bool = Field(
         default=True,
@@ -559,10 +541,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     websocket_frame_burst: int = Field(
         default=60,
-        description=(
-            "Frames one sender may send back to back before UL_WEBSOCKET_FRAMES_PER_MINUTE's refill "
-            "rate applies. Must stay above UL_MESSAGE_BURST. Capped at the per-minute value."
-        ),
+        description=("Frames one sender may send back to back before UL_WEBSOCKET_FRAMES_PER_MINUTE's refill rate applies. Must stay above UL_MESSAGE_BURST. Capped at the per-minute value."),
     )
     websocket_fanout_frames_per_minute: int = Field(
         default=20,
@@ -586,10 +565,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     message_burst: int = Field(
         default=30,
-        description=(
-            "Chat messages one sender may send back to back before UL_MESSAGES_PER_MINUTE's refill "
-            "rate applies. Capped at the per-minute value."
-        ),
+        description=("Chat messages one sender may send back to back before UL_MESSAGES_PER_MINUTE's refill rate applies. Capped at the per-minute value."),
     )
 
     metrics_enabled: bool = Field(
@@ -681,18 +657,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     background_tasks_allowlist: Annotated[list[str], NoDecode] = Field(
         default_factory=list,
-        description=(
-            "Beat entries (CELERY_BEAT_SCHEDULE names, comma-separated) that reach outside this deployment but "
-            "run here anyway. Off production only internal entries are scheduled by default; see "
-            "urbanlens.UrbanLens.egress.BEAT_EGRESS."
-        ),
+        description=("Beat entries (CELERY_BEAT_SCHEDULE names, comma-separated) that reach outside this deployment but run here anyway. Off production only internal entries are scheduled by default; see urbanlens.UrbanLens.egress.BEAT_EGRESS."),
     )
     email_send_outside_production: bool = Field(
         default=False,
-        description=(
-            "Deliver mail for real off production, through UL_EMAIL_BACKEND (SMTP by default). Unset, development "
-            "and staging print every message, verification codes and magic links included, to the log instead."
-        ),
+        description=("Deliver mail for real off production, through UL_EMAIL_BACKEND (SMTP by default). Unset, development and staging print every message, verification codes and magic links included, to the log instead."),
     )
     protomaps_api_key: str = Field(
         default="",
@@ -812,7 +781,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     test_runner: str = Field(default="urbanlens.core.tests.runner.TestRunner", description="The test runner")
 
     # Urls
-    deployment_name : str | None = Field(default=None, description="K3s site/node name, if any. Used to distinguish between deployments.")
+    deployment_name: str | None = Field(default=None, description="K3s site/node name, if any. Used to distinguish between deployments.")
     login_url: str = Field(default="login", description="The login url")
     static_url: str = Field(default="static/", description="The static url")
 
@@ -843,18 +812,11 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     )
     ai_inference_token: str | None = Field(
         default=None,
-        description=(
-            "Shared bearer secret presented to ai-inference. Must match that service's own copy of the "
-            "same variable exactly - it is the same credential, not two."
-        ),
+        description=("Shared bearer secret presented to ai-inference. Must match that service's own copy of the same variable exactly - it is the same credential, not two."),
     )
     ai_inference_timeout_seconds: float = Field(
         default=90.0,
-        description=(
-            "How long to wait for a single ai-inference HTTP call before giving up. Comfortably above "
-            "that service's own worst case (a 30s provider timeout, one retry) so this client is never "
-            "the one that times out first."
-        ),
+        description=("How long to wait for a single ai-inference HTTP call before giving up. Comfortably above that service's own worst case (a 30s provider timeout, one retry) so this client is never the one that times out first."),
     )
     google_unrestricted_api_key: str | None = Field(default=None, description="The google unrestricted api key")
     google_domain_restricted_api_key: str | None = Field(default=None, description="The google domain restricted api key")
@@ -1053,8 +1015,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             weakness = _encryption_key_weakness(key)
             if weakness:
                 logger.warning(
-                    "A retired field-encryption key is too weak to be accepted as the active key. "
-                    "It still decrypts existing rows, but finish the rotation and drop it: %s",
+                    "A retired field-encryption key is too weak to be accepted as the active key. It still decrypts existing rows, but finish the rotation and drop it: %s",
                     weakness,
                 )
         return value

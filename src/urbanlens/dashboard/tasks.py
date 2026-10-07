@@ -1821,6 +1821,7 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
     from urbanlens.dashboard.models.remote_tiles.model import RemoteTile
     from urbanlens.dashboard.services.map.remote_tiles import REMOTE_TILE_MAX_DIMENSION, pending_marker, record_failure, store
     from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+    from urbanlens.dashboard.services.security.redact import redact_tile
 
     tile = RemoteTile.objects.select_related("source").filter(pk=tile_id).first()
     try:
@@ -1832,7 +1833,7 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
             record_failure(tile)
             return False
         if not store(tile, *rendered):
-            logger.warning("Tile source %s keeps as many tiles as it may; %s/%s/%s was not kept", tile.source_id, tile.z, tile.x, tile.y)
+            logger.warning("Tile source %s keeps as many tiles as it may; %s was not kept", tile.source_id, redact_tile(tile.z, tile.x, tile.y))
             record_failure(tile)
             return False
         return True
@@ -2530,6 +2531,10 @@ def scan_trip_comment_image(self, comment_id: int) -> bool:
     return _run_comment_image_scan(self, comment, TripComment)
 
 
+#: Why a comment image over the site's upload limit was refused: the limit was lowered between its upload and its scan.
+_COMMENT_IMAGE_TOO_LARGE = "That photo is larger than this site's upload limit."
+
+
 def _run_comment_image_scan(task, comment, model) -> bool:
     """Shared body for ``scan_comment_image``/``scan_trip_comment_image`` - see either's docstring.
 
@@ -2544,15 +2549,24 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.services.media import upload_retry
+    from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+    from urbanlens.dashboard.services.media.stored_field import read_at_most
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
     target = f"{model._meta.label}.image"  # noqa: SLF001 - _meta is Django's public model API
+    # The ceiling its upload passed; read no further, whatever is stored.
+    ceiling = max_upload_file_size_bytes()
     # Read before the scan, which reports any OSError reading its stream as the scanner being down.
     try:
         with comment.image.open("rb") as handle:
-            upload = ContentFile(handle.read(), name=comment.image.name)
+            raw = read_at_most(handle, ceiling)
     except STORAGE_ERRORS as exc:
         return _comment_storage_failed(task, comment, target, exc)
+    if raw is None:
+        upload_retry.stop_waiting(target, comment.pk)
+        reject_comment_upload(comment, _COMMENT_IMAGE_TOO_LARGE)
+        return False
+    upload = ContentFile(raw, name=comment.image.name)
 
     try:
         malware_error = malware_error_for_upload(upload)
@@ -2583,6 +2597,7 @@ def _run_comment_image_scan(task, comment, model) -> bool:
             comment.image.name,
             max_dimension=max_dimension,
             convert_webp=convert_webp,
+            max_bytes=ceiling,
             only_if={"pending_scan": True},
             also_set={"pending_scan": False},
         )
@@ -2591,6 +2606,9 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     upload_retry.stop_waiting(target, comment.pk)
     if outcome is Reencoded.UNDECODABLE:
         reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    if outcome is Reencoded.TOO_LARGE:
+        reject_comment_upload(comment, _COMMENT_IMAGE_TOO_LARGE)
         return False
     if outcome is Reencoded.REPLACED:
         upload_retry.record_storage_success()
@@ -2990,6 +3008,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
     from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
     from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
+    from urbanlens.dashboard.services.security.redact import redact_text
 
     created_count = exists_count = skipped_count = 0
     # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, reputation
@@ -3007,7 +3026,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                 try:
                     category_label, _ = resolve_or_create_styled_label(profile, stem, KIND_CATEGORY)
                 except CapacityExceededError as exc:
-                    logger.info("Deferred import for profile %s: no category %r: %s", profile.pk, stem, exc)
+                    logger.info("Deferred import for profile %s: no category %s: %s", profile.pk, redact_text(stem), exc)
 
             for pin_dict in lst.get("pins", []):
                 cid = pin_dict["cid"]

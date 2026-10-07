@@ -294,7 +294,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             try:
                 PinAlias.objects.resolve_or_create(self, new_name)
             except DatabaseError:
-                logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
+                logger.debug("Could not ensure alias for pin %s", self.pk, exc_info=True)
         self._loaded_name = self.name
 
     def coerce_colors(self) -> None:

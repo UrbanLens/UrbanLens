@@ -21,6 +21,19 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
 
     service_key: ClassVar[str] = "redata_historical_maps"
 
+    @staticmethod
+    def endpoint_for_log(url: str) -> str:
+        """Record the georeference, never the tile coordinate.
+
+        Args:
+            url: The URL about to be requested.
+
+        Returns:
+            A tile URL truncated after its ``/tiles/`` segment; any other URL as it is.
+        """
+        prefix, marker, _tile = url.partition("/tiles/")
+        return f"{prefix}{marker}" if marker else url
+
     def get_maps_covering(
         self,
         latitude: float,

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.services.apis.assets.base import PAGED_DOCUMENT_CONTENT_TYPES, MediaItem, MediaProvider
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 from urbanlens.dashboard.services.core.user_agent import USER_AGENT
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -90,7 +91,7 @@ class WikimediaGateway(MediaProvider):
         except Exception as exc:
             if is_source_outage(exc):
                 raise
-            logger.exception("Wikimedia search failed for %r", query)
+            logger.exception("Wikimedia search failed for %s", redact_text(query))
             return []
 
     def _fetch_image_info(self, titles: list[str]) -> list[dict[str, Any]]:

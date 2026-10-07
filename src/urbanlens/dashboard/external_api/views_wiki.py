@@ -1058,7 +1058,7 @@ class _CommentListMixin(PaginatedListMixin):
         except InvalidCommentHostError as exc:
             # Defensive: this view always calls create_comment with exactly one of pin/wiki, so reaching this
             # means the caller wiring above it is broken, not that the requester did anything wrong.
-            logger.warning("comment creation rejected: %s", exc)
+            logger.warning("comment creation rejected: %s", type(exc).__name__)
             return Response({"error": "That comment couldn't be created."}, status=400)
 
         # The freshly created comment never passes through visible_comment_tree, so its mentions are resolved

@@ -606,7 +606,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         try:
             lat, lng = _parse_destination(request.POST)
         except InvalidDestinationError as exc:
-            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, exc)
+            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, type(exc).__name__)
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Invalid destination."}, status=400)
 
         allowed_contacts, rejected_contacts = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
@@ -827,7 +827,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         try:
             destination = _parse_destination(request.POST)
         except InvalidDestinationError as exc:
-            logger.info("Safety check-in edit rejected on checkin %s: %s", checkin.pk, exc)
+            logger.info("Safety check-in edit rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
             if is_xhr:
                 return JsonResponse({"ok": False, "error": "Invalid destination."}, status=400)
             messages.error(request, "Invalid destination.")
@@ -1035,7 +1035,7 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
                 logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
                 error = "This check-in already has as many partners as it can hold."
             except PartnerNotFoundError as exc:
-                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
                 error = f'No user found with username "{username}".'
             except CannotInviteSelfError as exc:
                 logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)

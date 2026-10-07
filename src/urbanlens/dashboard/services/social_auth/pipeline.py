@@ -14,6 +14,7 @@ from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDIN
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, UsernameGenerator, username_is_taken
 from urbanlens.dashboard.services.media.held_upload import hold_upload, queue_held_upload
 from urbanlens.dashboard.services.profile.avatar import AvatarService
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -85,7 +86,7 @@ def generate_sso_username(
 
     preferred = _provider_username_preference(backend, response, details)
     if preferred and not username_is_taken(preferred):
-        logger.debug("Using provider SSO username: %s", preferred)
+        logger.debug("Using provider SSO username: %s", redact_text(preferred))
         return {"username": preferred}
 
     return {"username": UsernameGenerator.generate()}
@@ -112,7 +113,7 @@ def suppress_last_name_for_new_users(
     if user.last_name:
         user.last_name = ""
         user.save(update_fields=["last_name"])
-        logger.debug("Cleared last_name for new SSO user %s", user.username)
+        logger.debug("Cleared last_name for new SSO user %s", user.pk)
 
 
 def fetch_and_save_avatar(
@@ -159,7 +160,7 @@ def fetch_and_save_avatar(
         # Signing in does not wait on storage; the next sign-in fetches the avatar again.
         return
     queue_held_upload(profile, "avatar")
-    logger.info("Saved SSO avatar for user %s from %s", user.username, backend.name)
+    logger.info("Saved SSO avatar for user %s from %s", user.pk, backend.name)
 
 
 #: Response keys under which Google (``email_verified``, ``verified_email``) and Discord (``verified``) say the
@@ -301,7 +302,7 @@ def mark_new_user_onboarding(
         profile = user.profile
         profile.profile_setup_complete = False
         profile.save(update_fields=["profile_setup_complete"])
-        logger.debug("Marked onboarding incomplete for new SSO user %s", user.username)
+        logger.debug("Marked onboarding incomplete for new SSO user %s", user.pk)
     except AttributeError:
         logger.warning("Could not mark onboarding for new SSO user pk=%s", getattr(user, "pk", "?"))
 
@@ -340,7 +341,7 @@ def save_discord_social_link(
         platform="discord",
         defaults={"handle": username},
     )
-    logger.debug("Saved Discord social link for user %s: %s", user.username, username)
+    logger.debug("Saved Discord social link for user %s", user.pk)
 
 
 def enforce_two_factor_for_sso(
@@ -369,7 +370,7 @@ def enforce_two_factor_for_sso(
     request = strategy.request
     request.session[SESSION_WEBAUTHN_PENDING_USER] = user.pk
     request.session[SESSION_WEBAUTHN_PENDING_REDIRECT] = reverse("post_login")
-    logger.debug("Detouring SSO login for user %s through the 2FA challenge", user.username)
+    logger.debug("Detouring SSO login for user %s through the 2FA challenge", user.pk)
     return redirect("login.2fa")
 
 

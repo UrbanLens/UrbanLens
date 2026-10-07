@@ -54,7 +54,7 @@ from urbanlens.dashboard.services.import_formats.streams import as_stream, iter_
 from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
 from urbanlens.dashboard.services.pins.history_import import ImportedHistory
 from urbanlens.dashboard.services.sandbox import untrusted_parse
-from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_filename, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
 #: Every error that means "this uploaded file is unusable, skip it and carry on", for the preview's per-file guard
@@ -806,7 +806,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 try:
                     read = self._read_preview_file(fmt, filename, stream, user_profile, room=self.MAX_PREVIEW_PINS - parse.previewed)
                 except IMPORT_PARSE_ERRORS as exc:
-                    logger.warning("Failed to parse '%s' for preview: %s", filename, exc)
+                    logger.warning("Failed to parse %s for preview: %s", redact_filename(filename), exc)
                     parse.failed_formats.append(fmt)
                     continue
                 parse.add(_filename_stem(filename), read)
@@ -817,7 +817,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 try:
                     pins = self._take_preview_pins(iter_shapefile_pins(shp_path, stem, user_profile), user_profile, room=self.MAX_PREVIEW_PINS - parse.previewed)
                 except (OSError, ValueError, ShapefileDataSourceError) as exc:
-                    logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", stem, exc)
+                    logger.warning("Failed to parse shapefile bundle %s for preview: %s", redact_text(stem), exc)
                     parse.failed_formats.append("shapefile")
                     continue
                 parse.add(stem, _PreviewFile(pins=pins))
@@ -920,7 +920,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 unavailable = len(rows) - index
                 break
             except ValueError as exc:
-                logger.warning("Failed to extract coordinates from URL %s: %s", row["maps_url"], exc)
+                logger.warning("Failed to extract coordinates from URL %s: %s", redact_text(row["maps_url"]), exc)
                 continue
             if latitude is None or longitude is None:
                 continue
@@ -1066,7 +1066,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     try:
                         category_label, _ = resolve_or_create_styled_label(user_profile, stem, KIND_CATEGORY)
                     except CapacityExceededError as exc:
-                        logger.info("Confirmed import for profile %s: no category %r: %s", user_profile.pk, stem, exc)
+                        logger.info("Confirmed import for profile %s: no category %s: %s", user_profile.pk, redact_text(stem), exc)
 
                 list_deferred_pins: list[dict[str, Any]] = []
 
@@ -1211,7 +1211,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         try:
             pins = list(self.iter_kml_pins(file_contents, user_profile))
         except IMPORT_PARSE_ERRORS as e:
-            logger.exception("Failed to import pins from KML: %s", e)
+            logger.exception("Failed to import pins from KML: %s", type(e).__name__)
             raise
         logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         return pins

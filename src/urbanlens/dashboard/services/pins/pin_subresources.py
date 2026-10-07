@@ -120,7 +120,7 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
         with transaction.atomic():
             alias = PinAlias.objects.create(pin=pin, name=cleaned, kind=kind)
     except IntegrityError as exc:
-        raise AliasExistsError(f"Pin {pin.pk} already has an alias matching {cleaned!r} case-insensitively.") from exc
+        raise AliasExistsError(f"Pin {pin.pk} already has an alias matching that name case-insensitively.") from exc
     from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_add
 
     stash_pin_alias_add(pin, alias)
@@ -139,7 +139,7 @@ def delete_pin_alias(pin: Pin, alias: PinAlias) -> None:
         AliasIsCurrentNameError: *alias* is the pin's current name.
     """
     if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(pin.effective_name):
-        raise AliasIsCurrentNameError(f"Alias {alias.pk} ({alias.name!r}) on pin {pin.pk} is the pin's current name; refusing delete.")
+        raise AliasIsCurrentNameError(f"Alias {alias.pk} on pin {pin.pk} is the pin's current name; refusing delete.")
     from urbanlens.dashboard.services.undo.mutations import stash_pin_alias_remove
 
     stash_pin_alias_remove(pin, alias)
@@ -198,14 +198,14 @@ def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
     try:
         cleaned_url = clean_link_url(cleaned_url, max_length=MAX_LINK_URL_LENGTH)
     except InvalidLinkUrlError as exc:
-        raise InvalidLinkUrlFormatError(f"Link url {cleaned_url!r} for pin {pin.pk} is not an http(s) link.") from exc
+        raise InvalidLinkUrlFormatError(f"Link url for pin {pin.pk} is not an http(s) link.") from exc
 
     try:
         # Same savepoint reasoning as add_pin_alias above.
         with transaction.atomic():
             link = PinLink.objects.create(pin=pin, name=cleaned_name, url=cleaned_url)
     except IntegrityError as exc:
-        raise LinkExistsError(f"Pin {pin.pk} already has a link with url {cleaned_url!r}.") from exc
+        raise LinkExistsError(f"Pin {pin.pk} already has a link with that url.") from exc
     touch_pin(pin)
     return link
 

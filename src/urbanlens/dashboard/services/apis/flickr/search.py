@@ -11,6 +11,7 @@ from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredEr
 from urbanlens.dashboard.services.apis.flickr.public import photo_web_url
 from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -212,10 +213,10 @@ class FlickrSearchGateway(MediaProvider):
             # TODO: Catch specific exceptions
             if is_source_outage(exc):
                 raise
-            logger.exception("Flickr search failed for %r", text)
+            logger.exception("Flickr search failed for %s", redact_text(text))
             return []
         if body.get("stat") != "ok":
-            logger.warning("Flickr search API returned an error for %r: %s", text, body)
+            logger.warning("Flickr search API returned an error for %s: code=%s message=%s", redact_text(text), body.get("code"), body.get("message"))
             return []
         return body.get("photos", {}).get("photo", [])
 
@@ -274,7 +275,7 @@ class FlickrFeedSearchGateway(MediaProvider):
             # TODO: Catch specific exceptions
             if is_source_outage(exc):
                 raise
-            logger.exception("Flickr public feed request failed for tags=%r", tags_csv)
+            logger.exception("Flickr public feed request failed for tags=%s", redact_text(tags_csv))
             return []
         return body.get("items", [])
 

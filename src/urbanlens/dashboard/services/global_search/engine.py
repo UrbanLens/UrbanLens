@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.services.global_search.parser import ParsedQuery, extract_fallback_terms, parse_query
 from urbanlens.dashboard.services.global_search.providers import SearchProvider, default_providers
 from urbanlens.dashboard.services.global_search.results import RESULT_TYPES, ResultTypeMeta, SearchResult
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -160,7 +161,7 @@ class GlobalSearchEngine:
             try:
                 results = provider.search(profile, parsed, section_limit)
             except Exception:
-                logger.exception("Global search provider '%s' failed for query %r", provider.slug, parsed.raw)
+                logger.exception("Global search provider '%s' failed for query %s", provider.slug, redact_text(parsed.raw))
                 response.errors.append(f"{meta.label} could not be searched right now.")
                 continue
             if results:
