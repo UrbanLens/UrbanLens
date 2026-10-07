@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.auth.email_normalization import normalize_emai
 from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.notifications.notification_delivery import delivery_preference, queue_email, send_sms, send_whatsapp
+from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.visits.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
@@ -180,12 +181,12 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
         msg.attach_alternative(html_body, "text/html")
         msg.send()
     except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send safety check-in email to %s", to)
+        logger.exception("Failed to send safety check-in email to %s", redact_text(to))
     except Exception:
         # A template-context bug (missing var, bad filter) must be logged like every other delivery
         # failure here, not raised uncaught - escalate_checkin() would otherwise abort
         # mid-contact-loop on a template bug, leaving every remaining contact unnotified.
-        logger.exception("Failed to render/send safety check-in email to %s", to)
+        logger.exception("Failed to render/send safety check-in email to %s", redact_text(to))
 
 
 def _queue_email(*, to: str, subject: str, template: str, context: dict) -> None:
@@ -202,7 +203,7 @@ def _queue_email(*, to: str, subject: str, template: str, context: dict) -> None
     try:
         html_body = render_to_string(template, context)
     except Exception:
-        logger.exception("Failed to render safety check-in email to %s", to)
+        logger.exception("Failed to render safety check-in email to %s", redact_text(to))
         return
     queue_email(to=to, subject=subject, text_body=subject, html_body=html_body)
 
@@ -2247,7 +2248,7 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         "Safety check-in %s: chat message %s from %s",
         checkin.uuid,
         message.pk,
-        sender_contact.display_name if sender_contact else (sender_profile.username if sender_profile else "unknown"),
+        f"contact {sender_contact.pk}" if sender_contact else (f"profile {sender_profile.pk}" if sender_profile else "unknown"),
     )
     return message
 

@@ -19,6 +19,7 @@ from PIL.Image import DecompressionBombError
 
 from urbanlens.dashboard.services.media.images import reencode_image_file
 from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from django.core.files.storage import Storage
@@ -70,7 +71,7 @@ def delete_unnamed_file(storage: Storage, name: str) -> bool:
     try:
         storage.delete(name)
     except STORAGE_ERRORS:
-        logger.warning("Could not delete %s, which no row names; the sweep will try again", name, exc_info=True)
+        logger.warning("Could not delete %s, which no row names; the sweep will try again", redact_filename(name), exc_info=True)
         return False
     return True
 

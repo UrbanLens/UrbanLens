@@ -601,7 +601,7 @@ class GroupsView(ExternalApiView):
         try:
             group = create_group_chat(profile, serializer.validated_data["name"], members)
         except MemberNotAcceptingMessagesError as exc:
-            logger.info("external API group creation rejected: %s", exc)
+            logger.info("external API group creation rejected: %s", type(exc).__name__)
             return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
         except GroupChatPermissionError as exc:
             logger.info("external API group creation rejected: %s", exc)
@@ -871,7 +871,7 @@ class GroupMembersView(ExternalApiView):
             logger.info("external API group add-members rejected: %s", exc)
             return Response({"error": "Only the group's creator can add members."}, status=403)
         except MemberNotAcceptingMessagesError as exc:
-            logger.info("external API group add-members rejected: %s", exc)
+            logger.info("external API group add-members rejected: %s", type(exc).__name__)
             return Response({"error": MEMBER_UNAVAILABLE_MESSAGE}, status=403)
         except GroupChatPermissionError as exc:
             logger.info("external API group add-members rejected: %s", exc)

@@ -12,6 +12,8 @@ import unicodedata
 from django.contrib.auth.models import User
 from django.db.models import Q
 
+from urbanlens.dashboard.services.security.redact import redact_text
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -357,7 +359,7 @@ class UsernameGenerator:
             number = secrets.randbelow(9_998) + 1
             username = f"{adj}{animal}{number}"
             if not username_is_taken(username):
-                logger.debug("Generated random username: %s", username)
+                logger.debug("Generated random username: %s", redact_text(username))
                 return username
 
         logger.warning("All username candidates collided; falling back to %s", cls.FALLBACK_PREFIX)
@@ -366,7 +368,7 @@ class UsernameGenerator:
         for _ in range(cls.MAX_RETRIES):
             fallback = f"{cls.FALLBACK_PREFIX}{now}{secrets.randbelow(8_000) + 1_000}"
             if not username_is_taken(fallback):
-                logger.debug("Generated random username from fallback: %s", fallback)
+                logger.debug("Generated random username from fallback: %s", redact_text(fallback))
                 return fallback
 
         raise ValueError("All username candidates collided")

@@ -66,7 +66,7 @@ def building_footprint(building: dict[str, Any]) -> GEOSGeometry | None:
     try:
         shape = GEOSGeometry(json.dumps(geometry), srid=4326)
     except (GEOSException, GDALException, ValueError, TypeError):
-        logger.debug("pin_restructure: unparseable building geometry %r", geometry, exc_info=True)
+        logger.debug("pin_restructure: unparseable building geometry of type %s", geometry.get("type"), exc_info=True)
         return None
     # dims 2 == areal. A provider sending a LineString "footprint" has nothing
     # to test containment against, so it falls back to the centroid radius.

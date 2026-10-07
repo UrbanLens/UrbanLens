@@ -3368,7 +3368,7 @@ class SafetyCheckinPartnersApiView(SafetyCheckinScopedView):
             logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
             return Response({"error": "This check-in already has as many partners as it can hold."}, status=400)
         except PartnerNotFoundError as exc:
-            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
             return Response({"error": f'No user found with username "{username}".'}, status=400)
         except CannotInviteSelfError as exc:
             logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)

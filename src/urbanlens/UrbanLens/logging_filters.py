@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.services.security.redact import redact_urls
+from urbanlens.dashboard.services.security.redact import redact_email_addresses, redact_urls
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -12,6 +12,10 @@ if TYPE_CHECKING:
 RETRY_LATER_ATTRIBUTE = "ul_retry_later"
 
 _TRACEBACKS = logging.Formatter()
+
+
+def _redact(text: str) -> str:
+    return redact_email_addresses(redact_urls(text))
 
 
 def mark_retry_later(request: HttpRequest) -> None:
@@ -42,10 +46,10 @@ class HealthCheckAccessLogFilter(logging.Filter):
 
 
 class SecretRedactionFilter(logging.Filter):
-    """Replace the credentials and coordinates in any URL a record would print, in its message and its traceback.
+    """Replace the credentials and coordinates in any URL a record would print, and any email address, in its message and its traceback.
 
     Belongs on every handler: a ``requests`` error's text is its URL, query-string API key included, so any logger
-    handed one carries it.
+    handed one carries it, and an SMTP refusal's text names the addresses it refused.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -62,17 +66,17 @@ class SecretRedactionFilter(logging.Filter):
         except Exception:
             # The handler reports a record it cannot format.
             message = None
-        if message is not None and (redacted := redact_urls(message)) != message:
+        if message is not None and (redacted := _redact(message)) != message:
             record.msg, record.args = redacted, ()
         try:
             if isinstance(record.exc_info, tuple) and record.exc_info[0] is not None and not record.exc_text:
                 record.exc_text = _TRACEBACKS.formatException(record.exc_info)
             if record.exc_text:
-                record.exc_text = redact_urls(record.exc_text)
+                record.exc_text = _redact(record.exc_text)
         except Exception:
             record.exc_info, record.exc_text = None, "<traceback withheld: it could not be redacted>"
         if record.stack_info:
-            record.stack_info = redact_urls(record.stack_info)
+            record.stack_info = _redact(record.stack_info)
         return True
 
 

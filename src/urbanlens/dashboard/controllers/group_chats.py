@@ -199,7 +199,7 @@ class GroupCreateView(LoginRequiredMixin, View):
             logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseBadRequest("That group couldn't be created.")
         except MemberNotAcceptingMessagesError as exc:
-            logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
+            logger.info("Group creation rejected for profile %s: %s", profile.pk, type(exc).__name__)
             return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         except GroupChatPermissionError as exc:
             logger.info("Group creation rejected for profile %s: %s", profile.pk, exc)
@@ -500,7 +500,7 @@ class GroupAddMembersView(LoginRequiredMixin, View):
             logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
             return HttpResponseForbidden("Only the group's creator can add members.")
         except MemberNotAcceptingMessagesError as exc:
-            logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)
+            logger.info("Group add-members rejected for profile %s: %s", profile.pk, type(exc).__name__)
             return HttpResponseForbidden(MEMBER_UNAVAILABLE_MESSAGE)
         except GroupChatPermissionError as exc:
             logger.info("Group add-members rejected for profile %s: %s", profile.pk, exc)

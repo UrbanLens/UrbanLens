@@ -25,6 +25,7 @@ from PIL.ExifTags import GPSTAGS, TAGS
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, decode_json
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -1511,7 +1512,7 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
         return False
 
     if file_still_referenced("image", name, exclude_pks=excluded):
-        logger.debug("Keeping stored file %s: another image row still references it", name)
+        logger.debug("Keeping stored file %s: another image row still references it", redact_filename(name))
         return False
 
     # Suppressed like the derived files below.
@@ -1521,7 +1522,7 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
     try:
         image.image.delete(save=False)
     except OSError:
-        logger.warning("Could not remove stored file %s; deleting the row anyway", name, exc_info=True)
+        logger.warning("Could not remove stored file %s; deleting the row anyway", redact_filename(name), exc_info=True)
     return True
 
 

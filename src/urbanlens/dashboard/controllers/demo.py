@@ -43,5 +43,5 @@ class DemoLoginView(View):
 
         user = seed_demo_account()
         auth_login(request, user, backend=_AUTH_BACKEND)
-        logger.info("demo: signed in as %s", user.username)
+        logger.info("demo: signed in as user %s", user.pk)
         return redirect(reverse("map.view"))

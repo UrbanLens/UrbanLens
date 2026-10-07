@@ -27,6 +27,7 @@ from django.views import View
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
 from urbanlens.dashboard.services.core.upstream_slots import UpstreamSlots as BaseUpstreamSlots
+from urbanlens.dashboard.services.security.redact import redact_tile
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
         if not redata_configured():
             return HttpResponse(status=404)
 
-        label = f"Historical-map tile {georeference_uuid} {z}/{x}/{y}"
+        label = f"Historical-map tile {georeference_uuid} {redact_tile(z, x, y)}"
         cache_key = historical_tile_cache_key(georeference_uuid, z, x, y)
         cached = bounded_cache.get_or_none(cache_key, label=label)
         if cached is not None:
@@ -115,10 +116,11 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
             except RequestCancelledError as exc:
                 # Rate-limited or switched off: one per tile while panning, so not a warning. First, because it is
                 # also a GatewayRequestError.
-                logger.debug("%s fetch refused: %s", label, exc)
+                logger.debug("%s fetch refused: %s", label, type(exc).__name__)
                 return HttpResponse(status=503)
             except (LocationContextUnavailableError, GatewayRequestError, OSError) as exc:
-                logger.warning("%s fetch failed: %s", label, exc)
+                # The exception's text is the request URL, which carries the tile's own z/x/y.
+                logger.warning("%s fetch failed: %s", label, type(exc).__name__)
                 return HttpResponse(status=503)
 
         if status == 200:

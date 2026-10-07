@@ -90,7 +90,7 @@ def promote_first_user_if_needed(user: User) -> bool:
             ],
         )
         add_user_to_site_admin_group(user)
-        logger.info("Promoted first user %s to site admin", user.username)
+        logger.info("Promoted first user %s to site admin", user.pk)
         return True
 
 
@@ -123,4 +123,4 @@ def complete_site_admin_onboarding(user: User) -> None:
 
     settings.bootstrap_admin_onboarding_complete = True
     settings.save(update_fields=["bootstrap_admin_onboarding_complete"])
-    logger.info("Completed site admin onboarding for %s", user.username)
+    logger.info("Completed site admin onboarding for user %s", user.pk)

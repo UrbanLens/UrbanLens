@@ -295,8 +295,14 @@ server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive
 re-encoding; polyglot tricks stop working because the container is rebuilt.
 
-Video goes through ffmpeg for the same reason, and always has its container
-location tags stripped.
+Video goes through ffmpeg for the same reason, and has its location stripped:
+the container's location tags, and every stream but the first picture
+and the first sound (`videos._is_location_track`). A drone captions each frame
+with its position in a subtitle track (DJI's SRT), an action camera records GPS
+telemetry in a data track (GoPro's GPMF), and phones write timed-metadata
+tracks; none of them is read, so a file carrying any such stream is rewritten
+without it. A timecode track (`tmcd`) alone does not count. A file ffmpeg
+cannot rewrite is kept as uploaded, and the failure is logged.
 
 The rewrite lands under a *new* name whenever the extension changes, and the
 superseded file is **not** deleted by the function that replaced it. It returns

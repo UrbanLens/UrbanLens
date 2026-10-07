@@ -21,6 +21,7 @@ from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS,
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, degrees_or_none
 from urbanlens.dashboard.services.import_export.archive_extractor import ZipDirectoryTooLargeError, open_zip
 from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -677,7 +678,7 @@ def _extract_zip_members_bounded(
         # A symlink entry could otherwise point extraction output at an arbitrary target path, or
         # let a later step unknowingly follow it off the extracted tree.
         if (member.external_attr >> 16) & 0o170000 == 0o120000:
-            logger.warning("Skipping symlink in import archive: %s", member.filename)
+            logger.warning("Skipping symlink in import archive: %s", redact_filename(member.filename))
             continue
 
         dest_path = os.path.join(extract_root, member.filename)
@@ -736,11 +737,11 @@ def _scan_extracted_files(extract_root: str) -> None:
                 # storage, so an extension we would not serve as a passive image has no business in
                 # the archive.
                 if declared_kind is None:
-                    raise _ImportValidationError(f"'{filename}' in the import archive isn't a supported photo, video, or document and the import was rejected.")
+                    raise _ImportValidationError(f"{redact_filename(filename)} in the import archive isn't a supported photo, video, or document and the import was rejected.")
 
                 mismatch_error = content_type_mismatch_error(file_obj, declared_kind)
                 if mismatch_error:
-                    raise _ImportValidationError(f"'{filename}' in the import archive doesn't match its file type and the import was rejected.")
+                    raise _ImportValidationError(f"{redact_filename(filename)} in the import archive doesn't match its file type and the import was rejected.")
 
                 # Sniffing only fires on a *confirmed* mismatch, so a shell
                 # script named .png is unrecognised rather than mismatched. The
@@ -748,14 +749,14 @@ def _scan_extracted_files(extract_root: str) -> None:
                 if declared_kind == MediaKind.PHOTO:
                     not_an_image = photo_is_not_an_image_error(file_obj)
                     if not_an_image:
-                        raise _ImportValidationError(f"'{filename}' in the import archive is named as an image but its contents are not one, and the import was rejected.")
+                        raise _ImportValidationError(f"{redact_filename(filename)} in the import archive is named as an image but its contents are not one, and the import was rejected.")
 
                 try:
                     malware_error = malware_error_for_upload(file_obj)
                 except MalwareScanUnavailableError as exc:
                     raise _ImportValidationError("Our antivirus scanner is temporarily unavailable. Please try again shortly.") from exc
                 if malware_error:
-                    raise _ImportValidationError(f"'{filename}' in the import archive was flagged as malicious and the import was rejected.")
+                    raise _ImportValidationError(f"{redact_filename(filename)} in the import archive was flagged as malicious and the import was rejected.")
 
 
 def _find_data_dir(root: str) -> str | None:
@@ -1128,7 +1129,7 @@ def _import_connections(
 
             friendship = Friendship.request(from_profile=profile, to_profile=other_profile, relationship_type=relationship_type)
         except Exception:
-            logger.warning("Failed to import connection %s → %s", profile, other_profile, exc_info=True)
+            logger.warning("Failed to import connection %s → %s", profile.pk, other_profile.pk, exc_info=True)
             result.warnings.append(f"Could not import connection with '{row.get('other_username', other_uuid)}'.")
             continue
 

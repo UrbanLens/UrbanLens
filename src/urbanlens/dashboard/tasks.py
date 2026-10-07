@@ -1821,6 +1821,7 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
     from urbanlens.dashboard.models.remote_tiles.model import RemoteTile
     from urbanlens.dashboard.services.map.remote_tiles import REMOTE_TILE_MAX_DIMENSION, pending_marker, record_failure, store
     from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+    from urbanlens.dashboard.services.security.redact import redact_tile
 
     tile = RemoteTile.objects.select_related("source").filter(pk=tile_id).first()
     try:
@@ -1832,7 +1833,7 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
             record_failure(tile)
             return False
         if not store(tile, *rendered):
-            logger.warning("Tile source %s keeps as many tiles as it may; %s/%s/%s was not kept", tile.source_id, tile.z, tile.x, tile.y)
+            logger.warning("Tile source %s keeps as many tiles as it may; %s was not kept", tile.source_id, redact_tile(tile.z, tile.x, tile.y))
             record_failure(tile)
             return False
         return True
@@ -3007,6 +3008,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
     from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
     from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
+    from urbanlens.dashboard.services.security.redact import redact_text
 
     created_count = exists_count = skipped_count = 0
     # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, reputation
@@ -3024,7 +3026,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                 try:
                     category_label, _ = resolve_or_create_styled_label(profile, stem, KIND_CATEGORY)
                 except CapacityExceededError as exc:
-                    logger.info("Deferred import for profile %s: no category %r: %s", profile.pk, stem, exc)
+                    logger.info("Deferred import for profile %s: no category %s: %s", profile.pk, redact_text(stem), exc)
 
             for pin_dict in lst.get("pins", []):
                 cid = pin_dict["cid"]

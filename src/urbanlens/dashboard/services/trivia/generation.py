@@ -99,7 +99,7 @@ def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None
     created: list[TriviaQuestion] = []
     for raw_pair in raw_pairs:
         if _PAIR_SEPARATOR not in raw_pair:
-            logger.warning("Trivia generation returned a pair with no separator; discarding: %r", raw_pair)
+            logger.warning("Trivia generation for wiki %s returned a pair with no separator (%d characters); discarding it", wiki.pk, len(raw_pair))
             continue
         question_text, _, answer_text = raw_pair.partition(_PAIR_SEPARATOR)
         question_text, answer_text = question_text.strip(), answer_text.strip()
@@ -108,7 +108,7 @@ def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None
 
         verdict = classify_trivia_question(question_text, answer_text, wiki.location, raise_refusal=raise_refusal)
         if not verdict.approved:
-            logger.info("AI-generated trivia question rejected (%s): %r", verdict.reason, question_text)
+            logger.info("AI-generated trivia question for wiki %s rejected (%s)", wiki.pk, verdict.reason)
             continue
 
         created.append(
