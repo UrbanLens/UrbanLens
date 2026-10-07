@@ -127,6 +127,7 @@ problems on its first run is a check somebody switches off.
 | `send_due_checkin_reminders` | INTERACTIVE | safety: the reminder is the whole mechanism |
 | `send_final_checkin_warnings` | INTERACTIVE | safety: last warning before escalation |
 | `send_notification_text_alerts_if_unread` | INTERACTIVE | notification delivery |
+| `send_safety_resolution_email` | INTERACTIVE | safety: tells a searching contact to stop; a failure is recorded for the escalation sweep to retry |
 | `suggest_pin_category` | INTERACTIVE | feeds a suggestion the user is looking at |
 | `suggest_wiki_category` | INTERACTIVE | feeds a suggestion the user is looking at; bulk when queued from a batch task (`follow_on_queue`) |
 | `advance_pwyw_usage_ledgers` | MAINTENANCE | beat-driven and site-wide |

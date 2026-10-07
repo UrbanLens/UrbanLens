@@ -3643,10 +3643,14 @@ def send_final_checkin_warnings() -> int:
 
 @shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
-    """Notify emergency contacts for every safety check-in whose grace period has elapsed, once its owner had the final warning."""
+    """Notify emergency contacts for every safety check-in whose grace period has elapsed, once its owner had the final warning.
+
+    Then sends any "it's over" notice a failure left owing to contacts an earlier escalation alerted
+    (``services.visits.safety.retry_resolution_notices``), under the same lock, so two runs never both retry one.
+    """
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
-    from urbanlens.dashboard.services.visits.safety import escalate_checkin
+    from urbanlens.dashboard.services.visits.safety import escalate_checkin, retry_resolution_notices
 
     _lock_token = acquire_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _CHECKIN_LOCK_TIMEOUT_SECONDS)
     if _lock_token is None:
@@ -3665,9 +3669,35 @@ def escalate_overdue_checkins() -> int:
                 logger.exception("Safety checkin %s failed to escalate to its emergency contacts; will retry next sweep", checkin.pk)
         if count:
             logger.info("Escalated %s overdue safety check-in(s)", count)
+        try:
+            if retried := retry_resolution_notices():
+                logger.info("Retried the end-of-check-in notice for %s safety contact(s)", retried)
+        except Exception:
+            logger.exception("Retrying owed end-of-check-in notices failed; will retry next sweep")
         return count
     finally:
         release_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _lock_token)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def send_safety_resolution_email(contact_id: int, to: str, subject: str, text_body: str, html_body: str, *, removed: bool = False, attempt: int = 0) -> None:
+    """Send one contact's end-of-check-in email, queued by ``services.visits.safety._tell_contact_it_is_over``.
+
+    Unlike ``send_email_task``, a failed send is retried: marked on the contact for the escalation sweep, or, for a
+    deleted check-in, re-queued by ``send_resolution_email`` itself.
+
+    Args:
+        contact_id: The ``SafetyCheckinContact`` it is for.
+        to: Recipient address.
+        subject: Subject line.
+        text_body: The plain-text body.
+        html_body: The rendered HTML body, or empty.
+        removed: The email is for a check-in being deleted, so a failure re-queues this task rather than wait for a sweep.
+        attempt: Times this send was already re-queued.
+    """
+    from urbanlens.dashboard.services.visits.safety import send_resolution_email
+
+    send_resolution_email(contact_id, to=to, subject=subject, text_body=text_body, html_body=html_body, removed=removed, attempt=attempt)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)

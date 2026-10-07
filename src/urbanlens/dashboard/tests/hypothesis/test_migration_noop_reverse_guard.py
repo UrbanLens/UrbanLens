@@ -141,6 +141,11 @@ REVIEWED: dict[str, str] = {
         "_backfill only fills SafetyContactOptOut.email_normalized, the column this migration adds; reversing the "
         "AddField drops it, and the raw email it was derived from is untouched, so there is nothing left to undo."
     ),
+    "0074_safety_contact_address_hash_and_notice_retry.py": (
+        "_settle_earlier_resolutions stamps resolution_notified_at (0072's column) on alerted contacts of check-ins "
+        "already resolved, so the retry sweep never re-sends a notice the old code sent. A reverse leaves the stamps: "
+        "0072's code reads them as notices already sent, which they were or no longer need to be - lossy, valid."
+    ),
 }
 
 
