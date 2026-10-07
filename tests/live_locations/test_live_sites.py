@@ -160,6 +160,26 @@ class TestLiveRedataGet:
         assert client.get("parcels/").status == 500
         assert client.get("parcels/").status == 200
 
+    def test_a_503_redata_decided_is_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
+        get.return_value = _response(503, {"error": "no_data_found", "message": "Every configured source ..."})
+
+        first = client.get("parcels/lookup/", lat=1)
+
+        assert first.status == 503
+        assert client.get("parcels/lookup/", lat=1) is first
+        assert get.call_count == 1
+
+    def test_a_call_still_refused_when_its_wait_ran_out_is_not_asked_again(
+        self, client: LiveRedata, get: mock.Mock
+    ) -> None:
+        client.max_wait_seconds = 0
+        get.return_value = _response(502, "<html>Bad Gateway</html>")
+
+        for _ in range(3):
+            with pytest.raises(InconclusiveError, match="502"):
+                client.get("parcels/1/buildings/")
+        assert get.call_count == 1
+
     def test_an_answer_is_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
         get.return_value = _response(200, {"results": []})
 

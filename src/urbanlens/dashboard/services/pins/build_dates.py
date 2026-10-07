@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any
 from django.utils import timezone
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.pins.building_clusters import BuildingCluster
@@ -29,6 +31,9 @@ EARLIEST_YEAR = 1000
 SOURCE_BUILDING_RECORD = "building_record"
 SOURCE_HISTORIC_REGISTER = "historic_register"
 SOURCE_PROPERTY_RECORD = "property_record"
+
+#: REData's ``year_built_basis`` for a year a source gave the building itself, such as a CRIS survey date.
+YEAR_BASIS_BUILDING = "building"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,13 +62,33 @@ def plausible_year(value: Any) -> int | None:
         return None
     try:
         year = int(str(value).strip()[:4]) if isinstance(value, str) else int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return year if EARLIEST_YEAR <= year <= timezone.localdate().year else None
 
 
+def own_build_year(record: Mapping[str, Any]) -> int | None:
+    """The year a building record says that building itself was built.
+
+    REData's ``year_built_basis`` says what a ``year_built`` dates. ``"building"`` is the building's own year.
+    ``"parcel"`` is the assessor's one year for the parcel's principal improvement, which REData sets on at most the
+    building under the point the parcel was looked up at, so it says nothing of when that building was built. A record
+    with no basis (from REData before 0.3.6, a list cached before then, or Overpass) may hold either, so it is read as
+    the parcel's.
+
+    Args:
+        record: A building record, reconciled or one source's.
+
+    Returns:
+        The year, or None when the record gives none of the building's own.
+    """
+    if record.get("year_built_basis") != YEAR_BASIS_BUILDING:
+        return None
+    return plausible_year(record.get("year_built"))
+
+
 def cluster_build_year(cluster: BuildingCluster) -> int | None:
-    """The year one physical building was built, from the first of its records that reports one.
+    """The year one physical building was built, from the first of its records that dates it (:func:`own_build_year`).
 
     Args:
         cluster: The building's records.
@@ -71,15 +96,16 @@ def cluster_build_year(cluster: BuildingCluster) -> int | None:
     Returns:
         The year, or None.
     """
-    return next((year for member in cluster.members if (year := plausible_year(member.get("year_built"))) is not None), None)
+    return next((year for member in cluster.members if (year := own_build_year(member)) is not None), None)
 
 
 def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
     """The best year for what a root pin stands for, most specific record first.
 
     A register listing drawn around the pin names the place itself. Failing that, the building the pin stands on is
-    what its owner pointed at. The parcel record's year is last: an assessor's single year for a campus is one
-    structure's, and often a placeholder.
+    what its owner pointed at, when its records date it. The parcel record's year is last, and only for a pin standing
+    for the property: it is the assessor's one year for the parcel's principal improvement, so it dates no particular
+    building, and is often a placeholder.
 
     Args:
         pin: A root pin.
@@ -97,13 +123,46 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
         if isinstance(row, dict) and row.get(CONTAINS_POINT_KEY) and (year := plausible_year(row.get("year_built"))) is not None:
             return BuildYear(year, SOURCE_HISTORIC_REGISTER)
 
-    if (year := next((found for cluster in standing_on(pin, nester) if (found := cluster_build_year(cluster)) is not None), None)) is not None:
+    if (year := standing_year(pin, nester)) is not None:
         return BuildYear(year, SOURCE_BUILDING_RECORD)
 
+    if not parcel_year_may_date(pin):
+        return None
     record = LocationCache.get_fresh(location, "property_records")
     if record and isinstance(record.data, dict) and record.data.get("available") and (year := plausible_year(record.data.get("year_built"))) is not None:
         return BuildYear(year, SOURCE_PROPERTY_RECORD)
     return None
+
+
+def standing_year(pin: Pin, nester: BuildingNester) -> int | None:
+    """The own year of the innermost building the pin stands on that has one (:func:`standing_on`, :func:`cluster_build_year`).
+
+    Args:
+        pin: The pin.
+        nester: Its property's buildings.
+
+    Returns:
+        The year, or None.
+    """
+    return next((found for cluster in standing_on(pin, nester) if (found := cluster_build_year(cluster)) is not None), None)
+
+
+def parcel_year_may_date(marker: Pin | Wiki) -> bool:
+    """Whether the parcel record's year may date a pin or wiki: not one that reads as a building.
+
+    A campus pin standing on its main building's place reads as that building, and the assessor's year for the
+    parcel's principal improvement is not known to be that building's.
+
+    Args:
+        marker: The pin or wiki.
+
+    Returns:
+        False when ``marker`` reads as a building.
+    """
+    from urbanlens.dashboard.models.pin.model import PinType
+    from urbanlens.dashboard.services.places.scope import effective_pin_type
+
+    return effective_pin_type(marker) != PinType.BUILDING
 
 
 def standing_on(pin: Pin, nester: BuildingNester) -> list[BuildingCluster]:
@@ -173,12 +232,22 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
     campus = Wiki.objects.filter(location_id=pin.location_id).first()
     if campus is None:
         return
-    if site_year is not None:
+    if site_year is not None and (site_year.source != SOURCE_PROPERTY_RECORD or parcel_year_may_date(campus)):
         record_wiki_build_year(campus, site_year)
+    # A record that no longer dates the campus takes back what it said, such as a parcel's year recorded as a
+    # building's before REData said which it was.
+    if standing_year(pin, nester) is None:
+        retract_wiki_build_year(campus, SOURCE_BUILDING_RECORD)
+    if not parcel_year_may_date(campus):
+        retract_wiki_build_year(campus, SOURCE_PROPERTY_RECORD)
     matched, _unmatched = match_clusters(nester.clusters, building_markers(campus.descendants().select_related("location")))
     for index, wiki in matched.items():
-        if isinstance(wiki, Wiki) and (year := cluster_build_year(nester.clusters[index])) is not None:
+        if not isinstance(wiki, Wiki):
+            continue
+        if (year := cluster_build_year(nester.clusters[index])) is not None:
             record_wiki_build_year(wiki, BuildYear(year, SOURCE_BUILDING_RECORD))
+        else:
+            retract_wiki_build_year(wiki, SOURCE_BUILDING_RECORD)
 
 
 def record_wiki_build_year(wiki: Wiki, built: BuildYear) -> bool:
@@ -202,6 +271,34 @@ def record_wiki_build_year(wiki: Wiki, built: BuildYear) -> bool:
         return False
     earlier.update(superseded=True)
     return record_evidence(key=BUILT_YEAR_FACT, value=float(built.year), source_kind=FactSourceKind.EXTERNAL_SOURCE, source_name=built.source, wiki=wiki) is not None
+
+
+def retract_wiki_build_year(wiki: Wiki, source: str) -> bool:
+    """Withdraw a source's observations of a wiki's year once that source no longer dates it.
+
+    Args:
+        wiki: The wiki the year was about.
+        source: The record it came from, a ``SOURCE_*`` name.
+
+    Returns:
+        Whether any observation was withdrawn.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard import tasks
+    from urbanlens.dashboard.models.facts.model import Fact, FactEvidence, FactSourceKind
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    earlier = FactEvidence.objects.active().filter(fact__wiki=wiki, fact__key=BUILT_YEAR_FACT, source_kind=FactSourceKind.EXTERNAL_SOURCE, source_name=source)
+    fact_ids = set(earlier.values_list("fact_id", flat=True))
+    if not fact_ids:
+        return False
+    earlier.update(superseded=True)
+    # As record_evidence does for an observation added.
+    Fact.objects.filter(pk__in=fact_ids).update(needs_recompute=True, updated=timezone.now())
+    for fact_id in fact_ids:
+        transaction.on_commit(lambda fact_id=fact_id: safely_enqueue_task(tasks.recompute_fact_confidence, fact_id))
+    return True
 
 
 def wiki_build_year(wiki: Wiki) -> int | None:
