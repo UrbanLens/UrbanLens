@@ -77,6 +77,8 @@ class FakeGoogleCalendar:
         fail_after: Answer ``failure`` to every request after this many.
         failure: ``(status, json body)`` of the answer ``fail_after`` gives; a 500 unless a test sets another.
         refuse_next: ``(status, json body)`` answers given, in order, to the next requests, before anything is applied.
+        refuse_events: ``(status, json body)`` answered to every request naming one of these event ids (a create names
+            its id in the body), as Google answers a change it refuses for that event alone.
         meanwhile: Called once, after the request numbered by its first element has been applied.
         token_answer: What Google's token endpoint answers a refresh with: ``(status, json body)``, or an exception
             to raise as if no answer came.
@@ -90,6 +92,7 @@ class FakeGoogleCalendar:
         self.fail_after: int | None = None
         self.failure: tuple[int, dict[str, Any]] = (500, {"error": {"message": "backend error"}})
         self.refuse_next: list[tuple[int, dict[str, Any]]] = []
+        self.refuse_events: dict[str, tuple[int, dict[str, Any]]] = {}
         self.meanwhile: tuple[int, Callable[[], object]] | None = None
         self.token_answer: tuple[int, dict[str, Any]] | Exception = (
             200,
@@ -119,6 +122,9 @@ class FakeGoogleCalendar:
         self.requests.append((method, event_id, body))
         if self.refuse_next:
             return _response(*self.refuse_next.pop(0))
+        refused = self.refuse_events.get(event_id or (body or {}).get("id") or "")
+        if refused is not None:
+            return _response(*refused)
         if self.fail_after is not None and len(self.requests) > self.fail_after:
             return _response(*self.failure)
         if method == "POST":

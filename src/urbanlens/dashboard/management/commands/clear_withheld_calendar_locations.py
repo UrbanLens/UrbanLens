@@ -1,11 +1,18 @@
-"""Rewrite the Google Calendar events UrbanLens made that may still hold a location or title now withheld.
+"""Rewrite the Google Calendar events that may still hold a location or title now withheld from their owner.
 
 An export without auto-sync is never pushed, so an event keeps what it was last given until its owner exports the
 trip again. Exports made under 0.8.0 left a stop's address on the event, and its place's name in the title, after the
 stop was hidden or its adder restricted who may see it (P335). This rewrites, once, each such event whose link does
 not already vouch for the body it would now get: the location is cleared and the title masked as the activities panel
-masks it. An event with nothing withheld is not touched, an event the user deleted is not recreated, and an event an
-import linked from the user's own calendar is left alone. See UrbanLens#301 ("hidden location stays on an unreached calendar").
+masks it. That covers the trip's own event and each stop's, scheduled or not (an unscheduled stop's event gets only
+its location and title rewritten). An event with nothing withheld is not touched and an event the user deleted is not
+recreated. See UrbanLens#301 ("hidden location stays on an unreached calendar") and UrbanLens#333 ("the rollout
+command misses unscheduled and imported events").
+
+An event an import linked is the user's own. It is rewritten only when its link's fingerprint shows UrbanLens last
+wrote the body that held what is now withheld. Writes from before 0.9.0 recorded no fingerprint (0067 added the field
+blank), so nothing tells a location UrbanLens wrote onto such an event from the user's own: those are counted and left
+alone.
 
 Dry-run by default; ``--apply`` writes. Every write goes through the calendar gateway and its rate limiter
 (``google_calendar``, shared with members' own exports). When the budget runs out the command waits for the next
@@ -83,6 +90,7 @@ class Command(BaseCommand):
                 except RateLimitExceededError as exc:
                     found.written += attempt.written
                     found.gone += attempt.gone
+                    found.refused += attempt.refused
                     idle_waits = 0 if attempt.written else idle_waits + 1
                     if not wait or idle_waits > _MAX_IDLE_WAITS:
                         self.stdout.write(f"The calendar budget ran out after {found.written} rewritten events. Run the command again to continue.")
@@ -104,13 +112,18 @@ class Command(BaseCommand):
                 found.stale += attempt.stale
                 found.written += attempt.written
                 found.gone += attempt.gone
+                found.refused += attempt.refused
+                found.unattributed += attempt.unattributed
                 if attempt.written:
                     idle_waits = 0
                 break
 
         if apply:
-            self.stdout.write(f"Rewrote {found.written} events; {found.gone} were gone from their calendars and were not recreated.")
+            refused = f" Google Calendar refused {found.refused}; a second run tries them again." if found.refused else ""
+            self.stdout.write(f"Rewrote {found.written} events; {found.gone} were gone from their calendars and were not recreated.{refused}")
         else:
             self.stdout.write(f"{found.stale} events may hold a location or title now withheld. Run with --apply to rewrite them.")
+        if found.unattributed:
+            self.stdout.write(f"Left {found.unattributed} imported events alone: each is a user's own event that may hold a location UrbanLens wrote before it was withheld, but no fingerprint shows UrbanLens wrote it.")
         if refused_grants or failed:
             self.stdout.write(f"Skipped {refused_grants} trips whose calendar grant Google refused and {failed} that failed; see the log.")

@@ -37,7 +37,7 @@ from urbanlens.dashboard.services.profile.identity_visibility import resolve_vis
 from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, viewer_hidden_activity_ids
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Collection, Sequence
+    from collections.abc import Callable, Collection, Iterable, Sequence
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -71,6 +71,21 @@ def _passes(exc: GatewayRequestError) -> bool:
         True for those; False for a refusal of the write itself, or of the grant.
     """
     return isinstance(exc, (RateLimitExceededError, CalendarServerError, CalendarUnavailableError))
+
+
+def _refused_for_itself(exc: GatewayRequestError) -> bool:
+    """Whether Google refused one event's write for that event alone, so the writes after it may still go through.
+
+    Not a failure that :func:`_passes` (which would refuse the next write too, and spend the budget doing it), and not
+    a refusal of the grant.
+
+    Args:
+        exc: What a calendar write raised.
+
+    Returns:
+        True for a refusal such as ``forbiddenForNonOrganizer`` or a 400.
+    """
+    return not isinstance(exc, GoogleAuthExpiredError) and not _passes(exc)
 
 
 class TooManyEventsError(ValueError):
@@ -132,6 +147,7 @@ def trip_to_event_body(
     trip_url: str | None = None,
     hidden_activity_ids: Collection[int] | None = None,
     owns_event: bool = True,
+    activities: Iterable[TripActivity] | None = None,
 ) -> dict[str, Any]:
     """Convert a trip into a Google Calendar all-day event payload.
     Trips carry dates (not times), so they map to all-day events.
@@ -145,6 +161,7 @@ def trip_to_event_body(
         hidden_activity_ids: Ids of activities whose location the *exporting* viewer may not see, from :func:`~urbanlens.dashboard.services.trips.trip_visibility.viewer_hidden_activity_ids`.
         owns_event: Whether UrbanLens made the event, so a location the trip no longer has is cleared too. False for an
             event an import linked, whose own location is left alone unless the trip has one withheld from the viewer.
+        activities: The trip's activities in order, when the caller has them loaded; read from the trip otherwise.
 
     Returns:
         Event resource payload for the Calendar API.
@@ -168,7 +185,7 @@ def trip_to_event_body(
         "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
-    _set_location(body, _trip_location_string(trip, hidden_activity_ids=hidden_activity_ids), owns_event=owns_event)
+    _set_location(body, _trip_location_string(trip, hidden_activity_ids=hidden_activity_ids, activities=activities), owns_event=owns_event)
     return body
 
 
@@ -211,22 +228,25 @@ def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Co
     return "" if _location_withheld(activity, hidden_activity_ids) else shown
 
 
-def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | None = None) -> str | None:
+def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | None = None, activities: Iterable[TripActivity] | None = None) -> str | None:
     """Human-readable location for the trip-level calendar event.
     Uses the trip's first activity (by schedule, then manual order) that has a shareable location, so the exported all-day event points at where the trip starts.
 
     Args:
         trip: The trip being exported.
         hidden_activity_ids: Ids of activities whose location the exporting viewer may not see - see :func:`_activity_location_string`.
+        activities: The trip's activities in order, when the caller has them loaded.
 
     Returns:
         The first location the exporting viewer may see; ``""`` when every activity's location is withheld from them;
         None when no activity has a location."""
-    if trip.pk is None:
-        # Unsaved trips (e.g. pure-mapping property tests) have no activities.
-        return None
+    if activities is None:
+        if trip.pk is None:
+            # Unsaved trips (e.g. pure-mapping property tests) have no activities.
+            return None
+        activities = trip.activities.select_related("location", "pin__location")
     withheld = False
-    for activity in trip.activities.select_related("location", "pin__location"):
+    for activity in activities:
         location_string = _activity_location_string(activity, hidden_activity_ids=hidden_activity_ids)
         if location_string:
             return location_string
@@ -825,9 +845,11 @@ class CalendarExportResult:
         events_synced: How many of those now match the trip, whether this attempt or an earlier one wrote them.
         activities_synced: How many of ``events_synced`` are activity events.
         written: Calendar writes this attempt made: creates, updates and deletes.
-        complete: Every event matches the trip and every unscheduled activity's event is gone. False when the
-            calendar budget, ours or Google's rate limit, ran out first; the trip-level link then owes a push, which
-            ``tasks.requeue_pending_calendar_pushes`` queues.
+        complete: Every event matches the trip and every unscheduled activity's event UrbanLens made is gone.
+        refused: Writes Google refused for that event alone (``forbiddenForNonOrganizer``, a 400); the others were
+            still made. Each is tried again by the next export or push.
+        cut_short: The calendar budget, ours or Google's rate limit, ran out first; the trip-level link then owes a
+            push, which ``tasks.requeue_pending_calendar_pushes`` queues.
     """
 
     trip_link: TripCalendarLink
@@ -836,6 +858,8 @@ class CalendarExportResult:
     activities_synced: int
     written: int
     complete: bool
+    refused: int = 0
+    cut_short: bool = False
 
 
 @dataclass(slots=True)
@@ -843,14 +867,41 @@ class WithheldEventsReport:
     """What :meth:`_TripCalendarExport.clear_withheld` found on one calendar.
 
     Attributes:
-        stale: Events UrbanLens made that may hold a location or title now withheld from the calendar's owner.
+        stale: Events that may hold a location or title now withheld from the calendar's owner, which UrbanLens made
+            or whose fingerprint shows UrbanLens wrote what is now withheld.
         written: How many of them were rewritten.
         gone: How many Google no longer had.
+        refused: How many Google refused for that event alone; the next run tries them again.
+        unattributed: Events an import linked that may hold a location UrbanLens wrote, where nothing shows whether it
+            did: a write from before 0.9.0, which recorded no fingerprint, or one the user may have edited since.
+            They are left alone.
     """
 
     stale: int = 0
     written: int = 0
     gone: int = 0
+    refused: int = 0
+    unattributed: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _Plan:
+    """What one calendar's events of a trip should now hold.
+
+    Attributes:
+        trip_link: The trip-level link, if the trip is on the calendar.
+        activity_links: The activity links by activity id, scheduled or not.
+        entries: ``(body, link, activity)`` for the trip's all-day event, then each scheduled activity's in
+            TripActivity order; ``activity`` is None for the trip's.
+        hidden: Ids of activities whose location the calendar's owner may not see.
+        activities: The trip's activities by id.
+    """
+
+    trip_link: TripCalendarLink | None
+    activity_links: dict[int, TripCalendarLink]
+    entries: list[tuple[dict[str, Any], TripCalendarLink | None, TripActivity | None]]
+    hidden: set[int]
+    activities: dict[int, TripActivity]
 
 
 class _TripUnlinkedError(Exception):
@@ -880,7 +931,12 @@ class _TripCalendarExport:
         self._trip_link_pk: int | None = None
 
     def run(self) -> CalendarExportResult:
-        """Write whatever on the calendar does not yet match the trip, in trip-event-then-activity order.
+        """Write whatever on the calendar does not yet match the trip: the trip's event, then each stop's.
+
+        A stop whose location or title is withheld from the calendar's owner is written before the others, so a budget
+        that runs out partway leaves the stale events that matter least. An event Google refuses for itself is
+        skipped, and the rest are still written. The budget, Google's rate limit, Google failing, a refusal of the
+        site or of the grant end the attempt: the next write would meet the same answer.
 
         Returns:
             How far the attempt got.
@@ -889,25 +945,51 @@ class _TripCalendarExport:
             ValueError: When the trip has no dates to export.
             RateLimitExceededError: The budget, ours or Google's rate limit, ran out before the trip had a link to resume from.
             GoogleAuthExpiredError: When Google has rejected the stored grant.
-            GatewayRequestError: When a calendar write fails for any other reason.
+            GatewayRequestError: When a calendar write fails for a reason that would fail the rest too, or Google
+                refused the trip's own first event, which the others hang from.
         """
         profile = self.account.profile
-        trip_link, activity_links, plan, _hidden = self._plan()
-        scheduled_ids = {activity.pk for _body, _link, activity in plan if activity is not None}
-        # Activities that lost their schedule since the last export: their events go.
-        unscheduled = [link for activity_id, link in activity_links.items() if activity_id not in scheduled_ids]
+        plan = self._plan()
+        trip_link = plan.trip_link
+        entries = plan.entries
+        scheduled_ids = {activity.pk for _body, _link, activity in entries if activity is not None}
+        # Activities that lost their schedule since the last export: the events UrbanLens made for them go, and an
+        # event an import linked is the user's, so only its link goes.
+        unscheduled = [link for activity_id, link in plan.activity_links.items() if activity_id not in scheduled_ids]
 
-        matched = [False] * len(plan)
-        complete = True
+        matched = [False] * len(entries)
+        attempted: set[int] = set()
+        refused = 0
+        cut_short = False
+        unlinked_mid_run = False
         try:
-            for index, (body, link, activity) in enumerate(plan):
-                synced_link = self._sync_event(body, link, activity=activity)
+            for index in self._write_order(plan):
+                attempted.add(index)
+                body, link, activity = entries[index]
+                try:
+                    synced_link = self._sync_event(body, link, activity=activity)
+                except GatewayRequestError as exc:
+                    if not _refused_for_itself(exc) or (activity is None and trip_link is None):
+                        raise
+                    logger.warning("Google Calendar refused trip %s's %s event on profile %s's calendar; writing the rest.", self.trip.uuid, "stop" if activity is not None else "trip", profile.pk)
+                    refused += 1
+                    continue
                 if activity is None and synced_link is not None:
                     trip_link = synced_link
                     self._trip_link_pk = synced_link.pk
                 matched[index] = True
             for link in unscheduled:
-                self._gateway.delete_event(link.google_event_id)
+                if not link.google_event_id or not made_by_urbanlens(link, trip_uuid=self.trip.uuid):
+                    link.delete()
+                    continue
+                try:
+                    self._gateway.delete_event(link.google_event_id)
+                except GatewayRequestError as exc:
+                    if not _refused_for_itself(exc):
+                        raise
+                    logger.warning("Google Calendar refused the delete of an unscheduled stop's event of trip %s on profile %s's calendar.", self.trip.uuid, profile.pk)
+                    refused += 1
+                    continue
                 link.delete()
                 self.written += 1
         except RateLimitExceededError as exc:
@@ -915,58 +997,82 @@ class _TripCalendarExport:
                 raise
             logger.info("Calendar budget ran out (%s) exporting trip %s to profile %s's calendar after %d writes; a push will finish it.", type(exc).__name__, self.trip.uuid, profile.pk, self.written)
             self._owe_push(trip_link)
-            complete = False
-            stopped_at = matched.index(False) if False in matched else len(plan)
-            for index in range(stopped_at + 1, len(plan)):
-                body, link, _activity = plan[index]
-                matched[index] = self._matches(body, link)
+            cut_short = True
+            for index, (body, link, _activity) in enumerate(entries):
+                if index not in attempted:
+                    matched[index] = self._matches(body, link)
         except _TripUnlinkedError:
             # Nothing is owed: the person took the trip off this calendar, and writing on would put events back.
             logger.info("Trip %s left profile %s's calendar during its export after %d writes; stopped.", self.trip.uuid, profile.pk, self.written)
             if trip_link is None:
                 raise AssertionError("only a trip with a link can lose it") from None
-            complete = False
+            unlinked_mid_run = True
         if trip_link is None:
             raise AssertionError("the trip's own event is written first, and returns its link or raises")
         return CalendarExportResult(
             trip_link=trip_link,
-            events_total=len(plan),
+            events_total=len(entries),
             events_synced=sum(matched),
             activities_synced=sum(matched[1:]),
             written=self.written,
-            complete=complete,
+            complete=not (cut_short or refused or unlinked_mid_run),
+            refused=refused,
+            cut_short=cut_short,
         )
 
-    def _plan(self) -> tuple[TripCalendarLink | None, dict[int, TripCalendarLink], list[tuple[dict[str, Any], TripCalendarLink | None, TripActivity | None]], set[int]]:
+    @staticmethod
+    def _write_order(plan: _Plan) -> list[int]:
+        """Indexes of *plan*'s entries in the order to write them: the trip's event, then the stops withheld from the
+        calendar's owner, then the rest, each group in TripActivity order."""
+
+        def not_withheld(index: int) -> bool:
+            activity = plan.entries[index][2]
+            return activity is None or not _location_withheld(activity, plan.hidden)
+
+        return [0, *sorted(range(1, len(plan.entries)), key=not_withheld)]
+
+    def _plan(self, *, revealed: bool = False) -> _Plan:
         """The bodies the trip's events should now hold on this calendar, with the links that name them.
 
+        Args:
+            revealed: Build the bodies as if the calendar's owner could see every stop, as when it was written before
+                a stop was withheld: no stop hidden, and no stop's own "hide location" set.
+
         Returns:
-            The trip-level link, the activity links by activity id, ``(body, link, activity)`` for the trip's all-day
-            event and then each scheduled activity's in TripActivity order (``activity`` None for the trip's), and the
-            ids of activities whose location this calendar's owner may not see.
+            The plan.
         """
         profile = self.account.profile
         trip_url = _trip_page_url(self.trip)
-        hidden_activity_ids = _hidden_activity_ids_for(self.trip, profile)
+        hidden_activity_ids = set() if revealed else _hidden_activity_ids_for(self.trip, profile)
         trip_link = TripCalendarLink.objects.trip_level_link(self.trip, profile)
         self._trip_link_pk = trip_link.pk if trip_link is not None else None
         activity_links = TripCalendarLink.objects.activity_links_by_activity_id(self.trip, profile)
-        trip_body = trip_to_event_body(self.trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids, owns_event=self._owns_event(trip_link))
-        plan: list[tuple[dict[str, Any], TripCalendarLink | None, TripActivity | None]] = [(trip_body, trip_link, None)]
-        for scheduled in self.trip.activities.filter(scheduled_at__isnull=False).select_related("trip", "location", "pin__location"):
+        activities = list(self.trip.activities.select_related("trip", "location", "pin__location"))
+        if revealed:
+            for activity in activities:
+                activity.location_hidden = False
+        trip_body = trip_to_event_body(self.trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids, owns_event=self._owns_event(trip_link), activities=activities)
+        entries: list[tuple[dict[str, Any], TripCalendarLink | None, TripActivity | None]] = [(trip_body, trip_link, None)]
+        for scheduled in activities:
             link = activity_links.get(scheduled.pk)
             body = activity_to_event_body(scheduled, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids, owns_event=self._owns_event(link))
             if body is not None:
-                plan.append((body, link, scheduled))
-        return trip_link, activity_links, plan, hidden_activity_ids
+                entries.append((body, link, scheduled))
+        return _Plan(trip_link=trip_link, activity_links=activity_links, entries=entries, hidden=hidden_activity_ids, activities={activity.pk: activity for activity in activities})
 
     def clear_withheld(self, report: WithheldEventsReport, *, apply: bool) -> None:
-        """Rewrite the events UrbanLens made that may hold a location or title this calendar's owner may no longer see.
+        """Rewrite the events that may hold a location or title this calendar's owner may no longer see.
 
-        Only an event whose stop is withheld from the owner, or the trip's own event when any stop is, and whose link
-        does not vouch for the body it would now get. Nothing is created and nothing is deleted: an event Google no
-        longer has is left gone. A write clears its link's fingerprint first and sets it once Google answers, so a
-        run cut short is resumed, not repeated, by the next.
+        An event is stale when the body it would now get differs from the one it would get were every stop visible to
+        the owner, and its link does not vouch for the new one. That covers the trip's own event, each scheduled
+        stop's, and an unscheduled stop's, which gets only its location cleared and its title masked: the next export
+        deletes it. An event UrbanLens made is rewritten. An event an import linked is the user's own, and is
+        rewritten only when its fingerprint shows UrbanLens last wrote the body that held what is now withheld;
+        otherwise nothing tells UrbanLens's location from the user's, so it is counted in ``unattributed`` and left.
+
+        Nothing is created and nothing is deleted: an event Google no longer has is left gone. A write clears its
+        link's fingerprint first and sets it once Google answers, so a run cut short is resumed, not repeated, by the
+        next. An event Google refuses for itself is counted and skipped.
 
         Args:
             report: Counts what is found and written as it goes, so it holds the progress of a run that raises.
@@ -976,20 +1082,46 @@ class _TripCalendarExport:
             ValueError: The trip has no dates, so none of its events has a body.
             RateLimitExceededError: The calendar budget, ours or Google's, ran out; what was written is recorded.
             GoogleAuthExpiredError: Google refused this calendar's grant.
-            GatewayRequestError: Any other failure of a write.
+            GatewayRequestError: Any other failure that would fail the rest of the writes too.
         """
-        trip_link, _activity_links, plan, hidden_activity_ids = self._plan()
-        if trip_link is None:
+        plan = self._plan()
+        if plan.trip_link is None:
             return
-        withheld = {activity.pk for activity in self.trip.activities.all() if _location_withheld(activity, hidden_activity_ids)}
-        for body, link, activity in plan:
-            if link is None or not link.google_event_id or not made_by_urbanlens(link, trip_uuid=self.trip.uuid) or self._matches(body, link):
+        revealed = self._plan(revealed=True)
+        as_if_visible = {(activity.pk if activity is not None else None): body for body, _link, activity in revealed.entries}
+        stale: list[tuple[dict[str, Any], TripCalendarLink, TripActivity | None]] = []
+        for body, link, activity in plan.entries:
+            if link is None or not link.google_event_id or self._matches(body, link):
                 continue
-            if (activity.pk not in withheld) if activity is not None else not withheld:
+            previous = as_if_visible.get(activity.pk if activity is not None else None)
+            if previous is None or previous == body:
+                # Nothing about this event depends on what the owner may not see.
                 continue
-            report.stale += 1
+            if made_by_urbanlens(link, trip_uuid=self.trip.uuid) or link.event_fingerprint == _event_fingerprint(previous, self.account):
+                stale.append((body, link, activity))
+            else:
+                report.unattributed += 1
+        scheduled_ids = {activity.pk for _body, _link, activity in plan.entries if activity is not None}
+        for activity_id, link in plan.activity_links.items():
+            activity = plan.activities.get(activity_id)
+            shown = revealed.activities.get(activity_id)
+            if activity is None or shown is None or activity_id in scheduled_ids or not link.google_event_id or not _location_withheld(activity, plan.hidden):
+                continue
+            body = self._unscheduled_body(activity, plan.hidden)
+            if body == self._unscheduled_body(shown, revealed.hidden) or self._matches(body, link):
+                continue
+            if made_by_urbanlens(link, trip_uuid=self.trip.uuid):
+                stale.append((body, link, activity))
+            else:
+                # Its fingerprint is of a body with times the stop no longer has, so it cannot show what was written.
+                report.unattributed += 1
+
+        report.stale += len(stale)
+        if not apply:
+            return
+        for body, link, activity in stale:
             try:
-                if not apply or not self._claim(link):
+                if not self._claim(link):
                     continue
             except _TripUnlinkedError:
                 # Taken off this calendar meanwhile: its events went with it.
@@ -999,9 +1131,23 @@ class _TripCalendarExport:
             except CalendarEventNotFoundError:
                 report.gone += 1
                 continue
+            except GatewayRequestError as exc:
+                if not _refused_for_itself(exc):
+                    raise
+                report.refused += 1
+                continue
             self.written += 1
             report.written += 1
             self._record_link(link, event_id=event["id"], fingerprint=_event_fingerprint(body, self.account), activity=activity)
+
+    def _unscheduled_body(self, activity: TripActivity, hidden: set[int]) -> dict[str, Any]:
+        """What an unscheduled stop's event gets from :meth:`clear_withheld`: its location and title as the owner may
+        see them, and nothing else, since an unscheduled stop has no times to write."""
+        location = _activity_location_string(activity, hidden_activity_ids=hidden)
+        return {
+            "summary": f"{self.trip.name}: {masked_activity_title(activity, hidden=_location_withheld(activity, hidden))}",
+            "location": location or "",
+        }
 
     def _owns_event(self, link: TripCalendarLink | None) -> bool:
         """Whether UrbanLens made, or is about to make, the event *link* names, rather than linking one the user had.
@@ -1196,9 +1342,14 @@ def export_progress_message(result: CalendarExportResult) -> str:
         result: An export that did not complete.
 
     Returns:
-        A sentence giving how many of the trip's events are on the calendar.
+        How many of the trip's events are on the calendar, how many Google refused, and whether the rest follows.
     """
-    return f"{result.events_synced} of {result.events_total} events are on your Google Calendar. The rest will follow automatically."
+    parts = [f"{result.events_synced} of {result.events_total} events are on your Google Calendar."]
+    if result.refused:
+        parts.append(f"Google Calendar refused to change {result.refused} of them; exporting again retries {'it' if result.refused == 1 else 'them'}.")
+    if result.cut_short:
+        parts.append("The rest will follow automatically.")
+    return " ".join(parts)
 
 
 def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip) -> CalendarExportResult:
@@ -1243,30 +1394,50 @@ def trip_calendar_status(trip: Trip, profile: Profile) -> dict[str, Any]:
     }
 
 
-def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> bool:
-    """Delete the calendar events linked to a trip for this user and drop the links.
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CalendarRemoval:
+    """What taking a trip off one calendar did.
+
+    Attributes:
+        unlinked: Links dropped; zero when the trip was not on the calendar.
+        deleted: Events UrbanLens made that were deleted (or were already gone).
+        kept: Events an import linked from the user's own calendar, unlinked and left there.
+    """
+
+    unlinked: int
+    deleted: int
+    kept: int
+
+
+def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> CalendarRemoval:
+    """Take a trip off this user's calendar: delete the events UrbanLens made, and unlink the rest.
+
+    An event an import linked is the user's own, so it stays on their calendar; only its link goes. See
+    UrbanLens#330 ("removing an imported trip deletes the user's own event").
 
     Args:
         account: The user's connected calendar account.
         trip: The trip whose events should be removed.
 
     Returns:
-        True when at least one link existed and was removed.
+        What was deleted and what was kept.
 
     Raises:
-        GatewayRequestError: When a calendar delete fails."""
+        GatewayRequestError: When a calendar delete fails; the links of events not yet deleted are kept."""
     links = list(TripCalendarLink.objects.filter(trip=trip, profile=account.profile))
-    if not links:
-        return False
     gateway = GoogleCalendarGateway(account=account)
+    deleted = kept = 0
     for link in links:
         # A trip-level link created for a timed import starts with a blank google_event_id (see
         # import_events_as_trips) until the first export/auto-sync push actually creates its all-day
         # mirror - there's nothing on Google's side to delete yet.
-        if link.google_event_id:
+        if link.google_event_id and made_by_urbanlens(link, trip_uuid=trip.uuid):
             gateway.delete_event(link.google_event_id)
+            deleted += 1
+        elif link.google_event_id:
+            kept += 1
         link.delete()
-    return True
+    return CalendarRemoval(unlinked=len(links), deleted=deleted, kept=kept)
 
 
 def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
@@ -1291,19 +1462,23 @@ def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
                 logger.warning("Could not delete calendar event %s for departing trip member %s; queued.", link.google_event_id, profile.pk, exc_info=True)
             else:
                 continue
-        queue_calendar_event_deletion(link)
+        queue_calendar_event_deletion(link, trip_uuid=trip.uuid)
 
     TripCalendarLink.objects.filter(trip=trip, profile=profile).delete()
 
 
-def queue_calendar_event_deletion(link: TripCalendarLink) -> None:
+def queue_calendar_event_deletion(link: TripCalendarLink, *, trip_uuid: object) -> None:
     """Owe a delete of the event *link* names, and queue its delivery once the deletion commits.
 
-    The caller has decided the event is UrbanLens's (:func:`made_by_urbanlens`) and goes.
+    Only an event UrbanLens made (:func:`made_by_urbanlens`) is ever queued: an event an import linked is the user's
+    own, and is left on their calendar whatever the caller asks.
 
     Args:
         link: The link about to go, with a Google event id.
+        trip_uuid: The uuid of the link's trip.
     """
+    if not link.google_event_id or not made_by_urbanlens(link, trip_uuid=trip_uuid):
+        return
     if not CalendarEventDeletion.objects.queue(link):
         # A delete already owed for this profile has its delivery queued, or the sweep finds it.
         return
@@ -1398,8 +1573,9 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
             _count_push_attempt(link, made_progress=export.written > 0, counts=not _passes(exc))
             continue
         if not result.complete:
-            # Cut short by the budget or Google's rate limit, which pass, or by the trip leaving the calendar.
-            _count_push_attempt(link, made_progress=result.written > 0, counts=False)
+            # Cut short by the budget or Google's rate limit, which pass, or by the trip leaving the calendar; or some
+            # event Google refused for itself, which counts.
+            _count_push_attempt(link, made_progress=result.written > 0, counts=result.refused > 0)
             continue
         _settle_push_request(link, requested)
         synced += 1

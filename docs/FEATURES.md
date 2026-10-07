@@ -1071,7 +1071,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
   (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
-  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. Only Google's refusal of the
+  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. Stops withheld from the
+  exporter are written first, so a budget cut leaves the events that matter least. An event Google
+  refuses for itself (`forbiddenForNonOrganizer`, a 400) is skipped and counted ("Google Calendar
+  refused to change K"), and the rest are still written; a push that met one counts an attempt only
+  when it wrote nothing else (UrbanLens#332). Only Google's refusal of the
   user's grant drops the connection: `invalid_grant` from the token endpoint, a 401 a fresh access
   token does not cure (the gateway refreshes and retries once), or a 403 naming a reason that is not
   a rate limit, not about one event (`forbiddenForNonOrganizer`) and not about the site. A refresh
@@ -1090,9 +1094,13 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   adder account) queues the same auto-sync push an edit does (`models/calendar_sync/signals.py`). A
   deleted stop or trip has the events UrbanLens made for it deleted from every exporter's calendar,
   through the calendar budget (`CalendarEventDeletion`, `delete_orphaned_calendar_events`, retried
-  by the push sweep); an event an import linked from the user's own calendar is never deleted (UrbanLens#301).
-  `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`) rewrites, once, the events
-  of exports without auto-sync that may still hold a location or title now withheld
+  by the push sweep). An event an import linked from the user's own calendar is never deleted, on
+  any path: "Remove from Google Calendar" and its API unlink it and say so, an export unlinks it
+  when its stop loses its schedule, and `queue_calendar_event_deletion` refuses it (UrbanLens#301,
+  UrbanLens#330). `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`)
+  rewrites, once, the events of exports without auto-sync that may still hold a location or title
+  now withheld, an unscheduled stop's included; an imported event only when its fingerprint shows
+  UrbanLens wrote what is now withheld, and otherwise it is counted and left (UrbanLens#333)
 - A hidden stop (its own "hide location", or its adder's `trip_pin_location_visibility`) shows a
   member who may not see it neither its place's name nor its location: the activities panel and its
   edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel,
