@@ -73,11 +73,16 @@ def probe_video(path: str) -> dict[str, Any] | None:
         return None
 
 
-#: Container tags a phone writes the capture coordinates into. ffmpeg copies global metadata across
-#: both a re-encode and a stream copy, so these have to be cleared explicitly; assigning an empty
-#: value is how ffmpeg deletes a tag.
-#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path,
+#: Tags a phone writes the capture coordinates into. ffmpeg copies the file's and each stream's metadata across both a
+#: re-encode and a stream copy, so these are cleared explicitly at both levels; assigning an empty value is how ffmpeg
+#: deletes a tag. The rewrite is always MP4, whose muxer writes no tag it has no atom for, so a location under any
+#: other name (a Matroska track's ``GPS``, Apple's accuracy and place-name keys) does not survive it either.
+#: Only the location tags are cleared, never the whole metadata block - this mirrors the photo path, which drops the GPS
+#: IFD and leaves the rest of the EXIF alone. Rotation is a display matrix, not a tag, so it is kept either way.
 _LOCATION_TAGS = ("location", "location-eng", "com.apple.quicktime.location.ISO6709")
+
+#: A tag name that says where: any of :data:`_LOCATION_TAGS` and every other spelling of one. Compared case-folded.
+_LOCATION_KEY = re.compile(r"location|gps|iso6709", re.IGNORECASE)
 
 
 #: Data tracks that carry no location: a timecode track says only where in the recording a frame is, and cameras write
@@ -121,6 +126,12 @@ def _parse_iso6709(location: str) -> tuple[float, float] | None:
         return None
 
 
+def _location_values(tags: dict[str, Any]) -> list[Any]:
+    """The non-empty location values of one case-folded tag set, the well-known tags first."""
+    known = [tag.lower() for tag in _LOCATION_TAGS]
+    return [tags[tag] for tag in known if tags.get(tag)] + [value for key, value in tags.items() if value and key not in known and _LOCATION_KEY.search(key)]
+
+
 def extract_video_metadata(path: str) -> dict[str, Any]:
     """Best-effort metadata extraction for an uploaded video.
 
@@ -148,10 +159,12 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
     # the tag being *present*, not off it being readable.
     # A tag in a notation _parse_iso6709 doesn't handle still discloses where the video was taken,
     # and gating the strip on successful parsing would leave exactly those behind.
-    location_tag = next((fmt_tags.get(tag) for tag in _LOCATION_TAGS if fmt_tags.get(tag)), None)
-    if location_tag:
+    # A stream can carry one as well as the file: Matroska tags a track as readily as the file.
+    tag_sets = [fmt_tags, *({str(k).lower(): v for k, v in (stream.get("tags") or {}).items()} for stream in probed.get("streams") or [])]
+    locations = [str(value) for tags in tag_sets for value in _location_values(tags)]
+    if locations:
         metadata["has_location_tag"] = True
-        if coords := _parse_iso6709(location_tag):
+        if coords := next(filter(None, map(_parse_iso6709, locations)), None):
             metadata["latitude"], metadata["longitude"] = coords
 
     if any(_is_location_track(stream) for stream in probed.get("streams") or []):
@@ -167,10 +180,10 @@ def extract_video_metadata(path: str) -> dict[str, Any]:
 
 
 def _clear_location_args() -> list[str]:
-    """Build the ffmpeg args that delete every container-level location tag."""
+    """Build the ffmpeg args that delete every location tag, from the file and from each of its streams."""
     args: list[str] = []
     for tag in _LOCATION_TAGS:
-        args += ["-metadata", f"{tag}="]
+        args += ["-metadata", f"{tag}=", "-metadata:s", f"{tag}="]
     return args
 
 
@@ -259,6 +272,10 @@ def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[s
             succeeded = _reencode(src_path, out_path, max_height, strip_location=needs_strip)
         else:
             succeeded = _remux_without_location(src_path, out_path)
+            # MP4 cannot carry some codecs as they are (WebM's VP8 and Vorbis), so the copy fails; keeping the upload
+            # as it came would keep its location, so it is re-encoded at its own height instead.
+            if not succeeded and current_height is not None:
+                succeeded = _reencode(src_path, out_path, current_height, strip_location=True)
         if not succeeded:
             return metadata, None
 

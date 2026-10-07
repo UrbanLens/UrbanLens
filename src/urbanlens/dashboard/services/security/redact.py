@@ -73,6 +73,26 @@ _COORDINATE_PARAM_NAMES = frozenset(
     }
 )
 
+#: Parameter names whose values are what someone typed or named: a search, an address, a pin's name sent as a query.
+#: Only :func:`redact_urls` reads it; :func:`redact_params` redacts anything it does not pass through already.
+_SEARCH_TEXT_PARAM_NAMES = frozenset(
+    {
+        "q",
+        "query",
+        "text",
+        "search",
+        "searchterm",
+        "term",
+        "keyword",
+        "keywords",
+        "address",
+        "input",
+        "srsearch",
+        "gsrsearch",
+        "tags",
+    }
+)
+
 #: Parameter names known to carry nothing sensitive, passed through verbatim so
 #: a log line keeps some diagnostic value. Everything not listed is redacted.
 _PASSTHROUGH_PARAM_NAMES = frozenset(
@@ -283,6 +303,8 @@ def _redact_param(match: re.Match[str]) -> str:
         token = redact_secret(value)
     elif match["name"].casefold() in _COORDINATE_PARAM_NAMES or _COORDINATE_PAIR.search(value):
         token = redact_coordinate(value)
+    elif match["name"].casefold() in _SEARCH_TEXT_PARAM_NAMES:
+        token = redact_text(value)
     else:
         return match[0]
     return match.string[match.start() : match.start("value")] + token
@@ -319,18 +341,19 @@ def _redact_mapping_entry(match: re.Match[str]) -> str:
 
 
 def redact_urls(text: str) -> str:
-    """Return ``text`` with the credentials and coordinates it carries replaced by tokens.
+    """Return ``text`` with the credentials, coordinates and search text it carries replaced by tokens.
 
     Covers query parameters (plain and percent-encoded), coordinate pairs in a URL's path, ``user:password@``
     userinfo, credential and coordinate entries of a logged dict or JSON object, and precise ``lat, lng`` pairs
-    anywhere. Everything else in the text, other parameters included, is left as it was.
+    anywhere. A query parameter named in :data:`_SEARCH_TEXT_PARAM_NAMES` is redacted too, since a gateway's search
+    is usually a pin's name or address. Everything else in the text, other parameters included, is left as it was.
 
     Args:
         text: A log message, exception message or traceback.
 
     Returns:
-        The text, with each secret parameter value a :func:`redact_secret` token and each location a
-        :func:`redact_coordinate` token."""
+        The text, with each secret parameter value a :func:`redact_secret` token, each location a
+        :func:`redact_coordinate` token and each search a :func:`redact_text` token."""
     if not any(mark in text for mark in "=%@,:"):
         return text
     text = _PLAIN_PARAM.sub(_redact_param, text)

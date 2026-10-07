@@ -2531,6 +2531,10 @@ def scan_trip_comment_image(self, comment_id: int) -> bool:
     return _run_comment_image_scan(self, comment, TripComment)
 
 
+#: Why a comment image over the site's upload limit was refused: the limit was lowered between its upload and its scan.
+_COMMENT_IMAGE_TOO_LARGE = "That photo is larger than this site's upload limit."
+
+
 def _run_comment_image_scan(task, comment, model) -> bool:
     """Shared body for ``scan_comment_image``/``scan_trip_comment_image`` - see either's docstring.
 
@@ -2545,15 +2549,24 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.services.media import upload_retry
+    from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+    from urbanlens.dashboard.services.media.stored_field import read_at_most
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
     target = f"{model._meta.label}.image"  # noqa: SLF001 - _meta is Django's public model API
+    # The ceiling its upload passed; read no further, whatever is stored.
+    ceiling = max_upload_file_size_bytes()
     # Read before the scan, which reports any OSError reading its stream as the scanner being down.
     try:
         with comment.image.open("rb") as handle:
-            upload = ContentFile(handle.read(), name=comment.image.name)
+            raw = read_at_most(handle, ceiling)
     except STORAGE_ERRORS as exc:
         return _comment_storage_failed(task, comment, target, exc)
+    if raw is None:
+        upload_retry.stop_waiting(target, comment.pk)
+        reject_comment_upload(comment, _COMMENT_IMAGE_TOO_LARGE)
+        return False
+    upload = ContentFile(raw, name=comment.image.name)
 
     try:
         malware_error = malware_error_for_upload(upload)
@@ -2584,6 +2597,7 @@ def _run_comment_image_scan(task, comment, model) -> bool:
             comment.image.name,
             max_dimension=max_dimension,
             convert_webp=convert_webp,
+            max_bytes=ceiling,
             only_if={"pending_scan": True},
             also_set={"pending_scan": False},
         )
@@ -2592,6 +2606,9 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     upload_retry.stop_waiting(target, comment.pk)
     if outcome is Reencoded.UNDECODABLE:
         reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    if outcome is Reencoded.TOO_LARGE:
+        reject_comment_upload(comment, _COMMENT_IMAGE_TOO_LARGE)
         return False
     if outcome is Reencoded.REPLACED:
         upload_retry.record_storage_success()

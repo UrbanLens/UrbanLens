@@ -1211,7 +1211,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         try:
             pins = list(self.iter_kml_pins(file_contents, user_profile))
         except IMPORT_PARSE_ERRORS as e:
-            logger.exception("Failed to import pins from KML: %s", e)
+            logger.exception("Failed to import pins from KML: %s", type(e).__name__)
             raise
         logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         return pins

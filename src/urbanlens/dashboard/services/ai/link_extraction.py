@@ -536,7 +536,7 @@ def fetch_page_text(url: str) -> str:
         logger.info("Link extraction fetch failed for %s: %s", redact_text(url), exc)
         raise LinkExtractionError("That link isn't safe to fetch.") from exc
     except requests.RequestException as exc:
-        logger.info("Link extraction fetch failed for %s: %s", redact_text(url), exc)
+        logger.info("Link extraction fetch failed for %s: %s", redact_text(url), type(exc).__name__)
         raise LinkExtractionError("The page couldn't be fetched.") from exc
 
     text = _html_to_text(body.decode(response.encoding or "utf-8", errors="replace"))
@@ -614,7 +614,7 @@ def apply_extracted_fields(pin: Pin, payload: dict[str, Any]) -> list[dict[str, 
         try:
             value = field.parse(raw)
         except ValueError as exc:
-            logger.info("Extraction field %s rejected value %r: %s", field.key, raw, exc)
+            logger.info("Extraction field %s rejected its value: %s", field.key, type(exc).__name__)
             results.append({"key": field.key, "label": field.label, "value": _clean_text(str(raw), 100), "applied": False, "note": f"Rejected: {field.label} couldn't be read."})
             continue
         if value in ("", []):

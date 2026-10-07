@@ -535,10 +535,9 @@ def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
     if not custom_icon:
         return None, None
 
-    from urbanlens.dashboard.models.images.model import MediaKind
-    from urbanlens.dashboard.services.media.images import image_upload_error
+    from urbanlens.dashboard.services.media.held_upload import icon_upload_error
 
-    upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+    upload_error = icon_upload_error(custom_icon)
     if upload_error:
         return None, upload_error[0]
     return custom_icon, None

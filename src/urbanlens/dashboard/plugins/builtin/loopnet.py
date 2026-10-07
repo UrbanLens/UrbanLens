@@ -9,6 +9,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.media.previews import tile_preview_url
 from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
 from urbanlens.dashboard.services.pins.redata_panel import RedataBackedSource
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -91,7 +92,7 @@ class LoopnetPanelSource(RedataBackedSource, GalleryMediaSource):
         except PropertyRecordsUnavailableError as exc:
             if exc.is_outage:
                 raise
-            logger.debug("LoopnetPanelSource.fetch: no listings available for pin %s (address=%r)", pin.pk, address, exc_info=True)
+            logger.debug("LoopnetPanelSource.fetch: no listings available for pin %s (address=%s)", pin.pk, redact_text(address), exc_info=True)
             LocationCache.set(pin.location, self.cache_source, {}, query_key=address)
             return
 

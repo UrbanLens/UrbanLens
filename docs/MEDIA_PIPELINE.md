@@ -538,6 +538,16 @@ each cap at 500 MB. `UL_MAX_REQUEST_BODY_MB` states what the proxy in front of
 the deployment will actually pass, and
 `services/media/storage.cap_to_ingress` lowers each of the three to it.
 
+Icons and avatars have tighter ceilings of their own, checked from the declared
+size before the gauntlet's antivirus scan reads the file:
+`AVATAR_MAX_UPLOAD_BYTES` and `ICON_MAX_UPLOAD_BYTES` (5 MB each; an icon goes
+through `held_upload.icon_upload_error`). The sandbox worker reads a held icon
+or avatar, and a comment image it scans and re-encodes, no further than the
+ceiling its door applied (`stored_field.read_at_most`): an upload over it is
+dropped, and a comment image over the site cap is rejected. Inside an export
+archive, no JSON file may hold more than 256 MB, since the importer parses each
+one whole.
+
 That exists so the *user* finds out. A body the proxy rejects is answered by
 the proxy: no view runs, nothing is logged here, and the uploader watches an
 upload fail into somebody else's error page after sending the whole cap.

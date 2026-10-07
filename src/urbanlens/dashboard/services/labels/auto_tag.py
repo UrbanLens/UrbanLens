@@ -397,6 +397,7 @@ class AutoTagService:
         """
         from urbanlens.dashboard.services.ai.factory import get_gateway
         from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, api_call_slot
+        from urbanlens.dashboard.services.security.redact import redact_text
 
         prompt = self._build_prompt(target)
         if not prompt:
@@ -423,7 +424,7 @@ class AutoTagService:
             if label:
                 results.append(label)
             else:
-                logger.debug("AI returned '%s' not in eligible list; discarding", raw_name)
+                logger.debug("AI returned %s not in eligible list; discarding", redact_text(raw_name))
         return results
 
     @staticmethod
@@ -488,7 +489,7 @@ class AutoTagService:
                         if place_desc:
                             prompt += f"place description ({source}): {place_desc[:300]}\n"
             except Exception:
-                logger.debug("Could not load LocationCache data for %r", target, exc_info=True)
+                logger.debug("Could not load LocationCache data for %s pk=%s", type(target).__name__, getattr(target, "pk", None), exc_info=True)
 
         # User-supplied fields wrapped to guard against prompt injection.
         user_fields = ""

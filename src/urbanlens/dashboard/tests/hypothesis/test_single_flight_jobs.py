@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from unittest import mock
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 
@@ -142,7 +148,8 @@ class TheExportButtonTests(TestCase):
             enqueue.return_value = mock.Mock(id="task-1")
             self._press()
             job_id = single_flight.holder(f"ul:single-flight:export:{self.user.pk}")
-            self.assertTrue(job_id and job_id != single_flight.PENDING, "the export never recorded its job id")
+            if not job_id or job_id == single_flight.PENDING:
+                self.fail("the export never recorded its job id")
 
             ExportJobStatus(job_id).write("done", 100, "Export complete.", user_id=self.user.pk)
             self.client.get(reverse("tools.export.status", kwargs={"job_id": job_id}))
@@ -158,3 +165,137 @@ class TheExportButtonTests(TestCase):
             self.client.force_login(other)
             self._press()
             self.assertEqual(self._export_calls(enqueue), 2, "one account's export blocked another account's")
+
+
+class TheImportButtonTests(TestCase):
+    """An import extracts, scans and writes a whole archive, up to 500 MB of it, on a sandbox worker slot."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+        media_root = tempfile.mkdtemp(prefix="ul_import_guard_")
+        self.addCleanup(shutil.rmtree, media_root, ignore_errors=True)
+        self.enterContext(override_settings(MEDIA_ROOT=media_root))
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.enqueue = self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
+        self.enqueue.return_value = mock.Mock(id="task-1")
+
+    def _press(self):  # noqa: ANN202
+        return self.client.post(
+            reverse("tools.import.start"),
+            {
+                "import_file": SimpleUploadedFile(
+                    "export.zip", b"PK\x05\x06" + b"\0" * 18, content_type="application/zip"
+                )
+            },
+        )
+
+    def _import_calls(self) -> list[mock._Call]:
+        """Only the import task, as for exports."""
+        from urbanlens.dashboard.tasks import run_user_data_import
+
+        return [call for call in self.enqueue.call_args_list if call.args and call.args[0] is run_user_data_import]
+
+    def _guard(self) -> str | None:
+        return single_flight.holder(f"ul:single-flight:import:{self.user.pk}")
+
+    def test_the_first_press_enqueues(self) -> None:
+        self._press()
+        self.assertEqual(len(self._import_calls()), 1)
+
+    def test_the_second_press_does_not_start_a_second_import(self) -> None:
+        self._press()
+        response = self._press()
+
+        self.assertEqual(len(self._import_calls()), 1, "a second press enqueued a second import")
+        self.assertEqual(response.status_code, 200, "the refused press errored instead of reporting the running import")
+        self.assertContains(response, "An import is already running.")
+        self.assertEqual(
+            len(os.listdir(os.path.join(settings.MEDIA_ROOT, "imports"))), 1, "the refused press still saved its upload"
+        )
+
+    def test_a_failed_enqueue_does_not_hold_the_guard(self) -> None:
+        self.enqueue.return_value = None
+        self._press()
+        self.enqueue.return_value = mock.Mock(id="task-2")
+        self._press()
+
+        self.assertEqual(len(self._import_calls()), 2, "the guard was left held after the enqueue failed")
+
+    def test_a_failure_before_the_enqueue_does_not_hold_the_guard(self) -> None:
+        with mock.patch("urbanlens.dashboard.controllers.tools.os.makedirs", side_effect=OSError("volume full")):
+            self._press()
+        self._press()
+
+        self.assertEqual(len(self._import_calls()), 1, "the guard was left held after the upload could not be saved")
+
+    def test_an_import_that_ends_before_the_view_returns_gives_its_claim_up(self) -> None:
+        """An eager or very fast worker finishes before the view would have recorded the job's id."""
+        from urbanlens.dashboard.services.import_export.import_data import run_import
+
+        def run_at_once(task, user_id, zip_path, job_id, **_kwargs):  # noqa: ANN001, ANN202, ARG001 - safely_enqueue_task's shape
+            with mock.patch("urbanlens.dashboard.services.import_export.import_data.schedule_import_cleanup"):
+                run_import(user_id, zip_path, job_id)
+            return mock.Mock(id="task-eager")
+
+        self.enqueue.side_effect = run_at_once
+        self._press()
+
+        self.assertIsNone(self._guard(), "an import that had already ended still held the guard")
+
+    def test_a_finished_import_releases_the_guard_when_its_status_is_polled(self) -> None:
+        from urbanlens.dashboard.services.import_export.import_data import ImportJobStatus
+
+        self._press()
+        job_id = self._guard()
+        if not job_id or job_id == single_flight.PENDING:
+            self.fail("the import never recorded its job id")
+
+        ImportJobStatus(job_id).write("done", 100, "Import complete!", user_id=self.user.pk)
+        self.client.get(reverse("tools.import.status", kwargs={"job_id": job_id}))
+        self._press()
+
+        self.assertEqual(len(self._import_calls()), 2, "a finished import still held the guard")
+
+    def test_the_import_task_releases_the_guard_however_it_ends(self) -> None:
+        """A user who closes the tab never polls, so the job itself gives the claim up."""
+        from urbanlens.dashboard.services.import_export.import_data import run_import
+
+        self._press()
+        user_id, zip_path, job_id = self._import_calls()[0].args[1:4]
+        with mock.patch("urbanlens.dashboard.services.import_export.import_data.schedule_import_cleanup"):
+            self.assertFalse(run_import(user_id, zip_path, job_id), "the stand-in archive imported")
+
+        self.assertIsNone(self._guard(), "the finished import still held the guard")
+
+    def test_the_import_task_keeps_the_guard_while_it_waits_for_storage(self) -> None:
+        from urbanlens.dashboard.services.import_export import import_data
+
+        self._press()
+        user_id, zip_path, job_id = self._import_calls()[0].args[1:4]
+        waiting = import_data.ImportWaitingForStorageError(resume={}, storage_waits=1, countdown=60, message="waiting")
+        with (
+            mock.patch.object(import_data, "_extract_and_validate", side_effect=waiting),
+            self.assertRaises(import_data.ImportWaitingForStorageError),
+        ):
+            import_data.run_import(user_id, zip_path, job_id)
+
+        self.assertEqual(self._guard(), job_id, "an import waiting to run again gave its claim up")
+
+    def test_finishing_one_import_does_not_release_anothers_guard(self) -> None:
+        from urbanlens.dashboard.services.import_export.import_data import run_import
+
+        single_flight.adopt(f"ul:single-flight:import:{self.user.pk}", "a-newer-job", 60)
+        with mock.patch("urbanlens.dashboard.services.import_export.import_data.schedule_import_cleanup"):
+            run_import(self.user.pk, os.path.join(settings.MEDIA_ROOT, "missing.zip"), "an-older-job")
+
+        self.assertEqual(self._guard(), "a-newer-job")
+
+    def test_two_accounts_can_import_at_once(self) -> None:
+        self._press()
+        self.client.force_login(baker.make(User))
+        self._press()
+
+        self.assertEqual(len(self._import_calls()), 2, "one account's import blocked another account's")

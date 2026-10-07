@@ -116,5 +116,5 @@ def classify_article_text(text: str, *, place_name: str, profile: Profile | None
     if verdict_word in _REJECT_TOKENS:
         return ArticleSafetyVerdict(approved=False, reason=verdict_word.removeprefix("REJECT_").lower())
 
-    logger.warning("Article safety classifier returned an unrecognized token %r; rejecting fail-closed", verdict_word)
+    logger.warning("Article safety classifier returned an unrecognized token of length %d; rejecting fail-closed", len(verdict_word))
     return ArticleSafetyVerdict(approved=False, reason="unparseable")

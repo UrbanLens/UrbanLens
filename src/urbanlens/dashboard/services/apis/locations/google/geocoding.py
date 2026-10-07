@@ -12,7 +12,7 @@ import s2sphere
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, require_coordinates, require_query
-from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_params
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_params, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -142,7 +142,7 @@ class GoogleGeocodingGateway(Gateway):
             return cached
 
         if not self.api_key:
-            logger.debug("Skipping Google geocoding for %r - no API key configured.", place_name)
+            logger.debug("Skipping Google geocoding for %s - no API key configured.", redact_text(place_name))
             return None
 
         params = {
@@ -447,7 +447,7 @@ class GoogleGeocodingGateway(Gateway):
                     if lat is not None and lon is not None:
                         return lat, lon
                 except (ValueError, OSError) as exc:
-                    logger.warning("S2 cell decode failed for %s: %s", url, exc)
+                    logger.warning("S2 cell decode failed for %s: %s", redact_text(url), exc)
 
                 if offline:
                     cached = self.get_cached_coordinates_by_cid(cid)
@@ -459,7 +459,7 @@ class GoogleGeocodingGateway(Gateway):
                         if lat is not None and lon is not None:
                             return lat, lon
                     except (ValueError, OSError) as exc:
-                        logger.warning("CID lookup failed for %s: %s", url, exc)
+                        logger.warning("CID lookup failed for %s: %s", redact_text(url), exc)
 
             if offline:
                 raise CoordinatesNeedNetworkError(url)
@@ -469,8 +469,8 @@ class GoogleGeocodingGateway(Gateway):
             if lat is not None and lon is not None:
                 return lat, lon
 
-            logger.warning('Unable to resolve place "%s" from url: %s', place_name, url)
+            logger.warning("Unable to resolve place %s from url: %s", redact_text(place_name), redact_text(url))
             return None, None
 
-        logger.warning("Unrecognised Google Maps URL format: %s", url)
+        logger.warning("Unrecognised Google Maps URL format: %s", redact_text(url))
         return None, None

@@ -11,7 +11,7 @@ from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 from urbanlens.dashboard.services.core.input_validation import InputRejection, reject, require_coordinates, require_query
 from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RateLimitExceededError
 from urbanlens.dashboard.services.locations.external_tags import humanize_tag_value
-from urbanlens.dashboard.services.security.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class NominatimGateway(Gateway):
             # Callers that treat the two alike still may - they just have to say so.
             raise
         except Exception:
-            logger.exception("Nominatim search failed for %r", query)
+            logger.exception("Nominatim search failed for %s", redact_text(query))
             return []
         if not isinstance(raw, list):
             return []

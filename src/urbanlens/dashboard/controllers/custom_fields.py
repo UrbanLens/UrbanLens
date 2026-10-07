@@ -133,25 +133,25 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     try:
         value.set_value(raw)
     except NumberOutOfRangeError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That number has too many digits."
     except InvalidNumberError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That's not a valid number."
     except InvalidDateError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That's not a valid date. Use YYYY-MM-DD."
     except InvalidTimeError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That's not a valid time. Use HH:MM."
     except InvalidCheckboxValueError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That's not a valid checkbox value."
     except InvalidSelectOptionError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That's not one of this field's options."
     except InvalidUrlError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That's not a valid link."
     except CustomFieldTextTooLongError as e:
         logger.info("custom field value rejected: %s", e)
@@ -160,12 +160,12 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
         logger.warning("custom field value rejected: %s", e)
         return None, "This field isn't fully configured yet - edit it to choose what it references."
     except ReferenceTargetNotFoundError as e:
-        logger.info("custom field value rejected: %s", e)
+        logger.info("custom field value rejected: %s", type(e).__name__)
         return None, "That item wasn't found (or you can't reference it)."
     except CustomFieldValueError as e:
         # Only EmptyValueError reaches here in practice - raw is already stripped and checked non-blank above -
         # but the base class is caught too so a future subclass fails safe instead of raising uncaught.
-        logger.warning("unexpected custom field value error: %s", e)
+        logger.warning("unexpected custom field value error: %s", type(e).__name__)
         return None, "That value couldn't be saved."
     value.save()
     return value, None

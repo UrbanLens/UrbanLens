@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from django.conf import settings
@@ -31,11 +31,17 @@ from urbanlens.dashboard.services.import_export.export import (
 from urbanlens.dashboard.services.import_export.import_data import (
     ImportJobStatus,
     import_dir as _import_dir_fn,
+    import_guard_key,
+    import_guard_ttl,
+    release_import_guard,
 )
 from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.media.storage import cap_to_ingress
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+
+if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +133,9 @@ _EXPORT_GUARD_TTL = 60 * 75
 #: `services/import_export/export.py` and `tasks.py`, which use exactly "running", "done" and "error" - a
 #: guessed vocabulary here would leave the guard held for the whole TTL after a successful export.
 _EXPORT_TERMINAL_STATES = frozenset({"done", "error"})
+
+#: The same for an import, read off ``services/import_export/import_data.py``'s writers.
+_IMPORT_TERMINAL_STATES = frozenset({"done", "error"})
 
 
 class ExportStartView(LoginRequiredMixin, View):
@@ -400,12 +409,42 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
+        # Claimed before the upload is written, as an export is: an import extracts, scans and writes a whole archive on
+        # a sandbox worker slot. Held by the job's own id from the start, so a task that ends before this view returns
+        # still finds its claim to release.
         job_id = str(uuid.uuid4())
-        imp_dir = _import_dir(job_id)
-        os.makedirs(imp_dir, exist_ok=True)
+        guard = import_guard_key(request.user.pk)
+        if not single_flight.claim(guard, import_guard_ttl(), token=job_id):
+            return render(
+                request,
+                "dashboard/partials/tools/import_progress.html",
+                {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An import is already running."},
+            )
 
+        try:
+            refused = self._start(request, upload, job_id)
+        except BaseException:
+            single_flight.release(guard)
+            raise
+        if refused is not None:
+            single_flight.release(guard)
+            return refused
+        return render(
+            request,
+            "dashboard/partials/tools/import_progress.html",
+            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
+        )
+
+    def _start(self, request: HttpRequest, upload: UploadedFile, job_id: str) -> HttpResponse | None:
+        """Save the upload and queue its import.
+
+        Returns:
+            None once it is queued, or the response saying why it was not.
+        """
+        imp_dir = _import_dir(job_id)
         zip_path = os.path.join(imp_dir, "upload.zip")
         try:
+            os.makedirs(imp_dir, exist_ok=True)
             with open(zip_path, "wb") as fh:
                 fh.writelines(upload.chunks())
         except OSError:
@@ -426,13 +465,8 @@ class ImportStartView(LoginRequiredMixin, View):
                 {"job_id": job_id, "status": "error", "progress": 0, "message": "Import queue is unavailable. Please try again later."},
                 status=503,
             )
-
         logger.info("Import task %s started for user %s", result.id, request.user.pk)
-        return render(
-            request,
-            "dashboard/partials/tools/import_progress.html",
-            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
-        )
+        return None
 
 
 class ImportStatusView(LoginRequiredMixin, View):
@@ -463,6 +497,10 @@ class ImportStatusView(LoginRequiredMixin, View):
             if data.get("user_id") != request.user.pk:
                 logger.warning("Unauthorized import status access: job %s, user %s", job_id, request.user.pk)
                 return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
+
+            # The task gives its claim up as it ends; this covers one that wrote its last status and died first.
+            if data.get("status") in _IMPORT_TERMINAL_STATES:
+                release_import_guard(request.user.pk, job_id)
 
             return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
         except Exception:
