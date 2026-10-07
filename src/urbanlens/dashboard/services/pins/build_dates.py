@@ -62,7 +62,7 @@ def plausible_year(value: Any) -> int | None:
         return None
     try:
         year = int(str(value).strip()[:4]) if isinstance(value, str) else int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return year if EARLIEST_YEAR <= year <= timezone.localdate().year else None
 

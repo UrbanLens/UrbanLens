@@ -66,7 +66,7 @@ class OwnBuildYearTests(SimpleTestCase):
                 self.assertIsNone(own_build_year(_building(basis)))
 
     def test_an_impossible_year_is_not_one_even_when_the_building_was_given_it(self) -> None:
-        for year in (None, "", 0, 99, "n/a", True, 3000):
+        for year in (None, "", 0, 99, "n/a", True, 3000, float("inf"), float("nan")):
             with self.subTest(year=year):
                 self.assertIsNone(own_build_year(_building("building", year=year)))
 
