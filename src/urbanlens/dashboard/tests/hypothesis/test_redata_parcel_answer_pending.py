@@ -1,10 +1,11 @@
-"""REData 0.3.7 answers a cold parcel's unfiltered buildings and boundaries with ``503 refresh_queued`` (its P62).
+"""REData answers a cold parcel's unfiltered buildings and boundaries with a 503 while it computes them (its P62).
 
 REData finishes the parcel's one computation in the background and names the wait in the body, not in a
-``Retry-After`` header, because the wait is this parcel's and not the endpoint's. ``compute_timeout`` is the same
-answer when the computation could not be queued or failed lately. UrbanLens honours the wait for that parcel: nothing
-is cached meanwhile, no fallback stands in for an answer REData is about to have, and the parcel is asked again once
-the wait is over.
+``Retry-After`` header, because the wait is this parcel's and not the endpoint's. REData 0.3.7 to 0.3.9 name the pending
+code (``refresh_queued``, or ``compute_timeout`` when the computation could not be queued or failed lately) in
+``error``. Later releases send ``error: source_error``, which an UrbanLens that does not know ``pending`` retries, and
+the code in ``pending``. UrbanLens honours the wait for that parcel either way: nothing is cached meanwhile, no
+fallback stands in for an answer REData is about to have, and the parcel is asked again once the wait is over.
 """
 
 from __future__ import annotations
@@ -38,6 +39,16 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
 
 _PENDING = (("refresh_queued", 60), ("compute_timeout", 120))
+
+
+def _pending_bodies(code: str, wait: int) -> dict[str, dict[str, object]]:
+    """A pending answer's 503 body as each REData shape sends it."""
+    return {
+        "code in error": {"error": code, "message": "computing", "retry_after": wait},
+        "code in pending": {"error": "source_error", "pending": code, "message": "computing", "retry_after": wait},
+    }
+
+
 _BUILDINGS = "urbanlens.dashboard.plugins.builtin.parcel_buildings"
 
 
@@ -60,28 +71,32 @@ def _computing(retry_after: int = 60) -> PropertyRecordsComputingError:
 class GatewayTests(SimpleTestCase):
     def test_a_parcel_being_computed_is_a_wait_of_the_bodys_length(self) -> None:
         for error, wait in _PENDING:
-            for read in ("lookup_parcel_buildings", "lookup_boundaries"):
-                with self.subTest(error=error, read=read):
-                    session = mock.Mock()
-                    session.get.return_value = _response(
-                        503, {"error": error, "message": "computing", "retry_after": wait}
-                    )
+            for shape, body in _pending_bodies(error, wait).items():
+                for read in ("lookup_parcel_buildings", "lookup_boundaries"):
+                    with self.subTest(error=error, shape=shape, read=read):
+                        session = mock.Mock()
+                        session.get.return_value = _response(503, body)
 
-                    with self.assertRaises(PropertyRecordsComputingError) as raised:
-                        getattr(_gateway(session), read)("parcel-uuid")
+                        with self.assertRaises(PropertyRecordsComputingError) as raised:
+                            getattr(_gateway(session), read)("parcel-uuid")
 
-                    self.assertEqual(raised.exception.retry_after, wait)
-                    self.assertEqual(raised.exception.reason, error)
-                    self.assertTrue(raised.exception.is_outage)
+                        self.assertEqual(raised.exception.retry_after, wait)
+                        self.assertEqual(raised.exception.reason, error)
+                        self.assertTrue(raised.exception.is_outage)
 
     def test_a_body_that_names_no_wait_still_waits(self) -> None:
-        session = mock.Mock()
-        session.get.return_value = _response(503, {"error": "refresh_queued", "message": "computing"})
+        for body in (
+            {"error": "refresh_queued", "message": "computing"},
+            {"error": "source_error", "pending": "refresh_queued", "message": "computing"},
+        ):
+            with self.subTest(body=body):
+                session = mock.Mock()
+                session.get.return_value = _response(503, body)
 
-        with self.assertRaises(PropertyRecordsComputingError) as raised:
-            _gateway(session).lookup_parcel_buildings("parcel-uuid")
+                with self.assertRaises(PropertyRecordsComputingError) as raised:
+                    _gateway(session).lookup_parcel_buildings("parcel-uuid")
 
-        self.assertGreater(raised.exception.retry_after, 0)
+                self.assertGreater(raised.exception.retry_after, 0)
 
     def test_a_parcel_being_computed_trips_no_breaker(self) -> None:
         """The wait is one parcel's, so REData sends it in the body; every other parcel is still asked."""
@@ -89,10 +104,37 @@ class GatewayTests(SimpleTestCase):
 
         url = "https://redata.example.test/api/v1/parcels/parcel-uuid/buildings/"
         for error, wait in _PENDING:
-            with self.subTest(error=error):
-                answer = _response(503, {"error": error, "message": "computing", "retry_after": wait})
+            for shape, body in _pending_bodies(error, wait).items():
+                with self.subTest(error=error, shape=shape):
+                    self.assertIsNone(RedataBreaker().scope_tripped_by(url, None, _response(503, body)))
 
-                self.assertIsNone(RedataBreaker().scope_tripped_by(url, None, answer))
+    def test_a_pending_code_this_release_does_not_know_is_still_a_computation(self) -> None:
+        """REData's ``pending`` means "ask again after ``retry_after``", whatever the code says about why."""
+        session = mock.Mock()
+        session.get.return_value = _response(
+            503, {"error": "source_error", "pending": "recount_queued", "message": "computing", "retry_after": 45}
+        )
+
+        with self.assertRaises(PropertyRecordsComputingError) as raised:
+            _gateway(session).lookup_boundaries("parcel-uuid")
+
+        self.assertEqual(raised.exception.reason, "recount_queued")
+        self.assertEqual(raised.exception.retry_after, 45)
+
+    def test_a_pending_that_names_no_code_is_the_outage_error_names(self) -> None:
+        for pending in ("", None, ["refresh_queued"], {"code": "refresh_queued"}, 60):
+            with self.subTest(pending=pending):
+                session = mock.Mock()
+                session.get.return_value = _response(
+                    503, {"error": "source_error", "pending": pending, "message": "computing", "retry_after": 60}
+                )
+
+                with self.assertRaises(PropertyRecordsUnavailableError) as raised:
+                    _gateway(session).lookup_parcel_buildings("parcel-uuid")
+
+                self.assertNotIsInstance(raised.exception, PropertyRecordsComputingError)
+                self.assertEqual(raised.exception.reason, "source_error")
+                self.assertTrue(raised.exception.is_outage)
 
     def test_another_503_is_not_taken_for_a_computation(self) -> None:
         session = mock.Mock()

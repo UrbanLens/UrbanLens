@@ -5589,12 +5589,18 @@
     "properties": {
      "error": {
       "enum": [
-       "refresh_queued",
-       "compute_timeout"
+       "source_error"
       ],
       "type": "string"
      },
      "message": {
+      "type": "string"
+     },
+     "pending": {
+      "enum": [
+       "refresh_queued",
+       "compute_timeout"
+      ],
       "type": "string"
      },
      "retry_after": {
@@ -9653,7 +9659,7 @@
  "info": {
   "title": "REData API",
   "version": "1.0.0",
-  "x-redata-revision": "release/0.3.7 c4e0de94"
+  "x-redata-revision": "fix/pending-answer-transient-for-old-clients 45af1669"
  },
  "openapi": "3.0.3",
  "paths": {

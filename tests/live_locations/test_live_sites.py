@@ -459,13 +459,15 @@ class TestLiveRedataGet:
         assert client.get("parcels/").status == 200
 
     @pytest.mark.parametrize(("error", "wait"), [("refresh_queued", 60), ("compute_timeout", 120)])
+    @pytest.mark.parametrize("in_pending", [False, True], ids=["code in error", "code in pending"])
     def test_a_parcel_redata_is_computing_is_waited_out_once(
-        self, client: LiveRedata, get: mock.Mock, error: str, wait: int
+        self, client: LiveRedata, get: mock.Mock, error: str, wait: int, in_pending: bool
     ) -> None:
-        """REData 0.3.7 names the wait in the body, with no Retry-After header (its P62)."""
+        """REData names the wait in the body, with no Retry-After header (its P62); 0.3.10 moves the code to ``pending``."""
         client.max_wait_seconds = 300
+        body = {"error": "source_error", "pending": error} if in_pending else {"error": error}
         get.side_effect = [
-            _response(503, {"error": error, "message": "computing", "retry_after": wait}),
+            _response(503, {**body, "message": "computing", "retry_after": wait}),
             _response(200, []),
         ]
 
@@ -478,7 +480,9 @@ class TestLiveRedataGet:
         self, client: LiveRedata, get: mock.Mock
     ) -> None:
         client.max_wait_seconds = 300
-        get.return_value = _response(503, {"error": "refresh_queued", "message": "computing", "retry_after": 60})
+        get.return_value = _response(
+            503, {"error": "source_error", "pending": "refresh_queued", "message": "computing", "retry_after": 60}
+        )
 
         with pytest.raises(InconclusiveError):
             client.get("parcels/p/boundaries/")

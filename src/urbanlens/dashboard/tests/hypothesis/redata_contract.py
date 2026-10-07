@@ -151,7 +151,8 @@ _PARCEL_503S = (
     "/api/v1/parcels/{parcel_uuid}/national-parks/",
     "/api/v1/parcels/{parcel_uuid}/sale-records/",
 )
-#: Unfiltered parcel calls REData (0.3.7) answers 503 ``refresh_queued`` while it computes the parcel, waiting ``retry_after``.
+#: Unfiltered parcel calls REData (0.3.7) answers 503 while it computes the parcel, waiting ``retry_after``: the code in
+#: ``error`` before 0.3.10, in ``pending`` from it.
 _PARCEL_PENDING_503S = ("/api/v1/parcels/{parcel_uuid}/boundaries/", "/api/v1/parcels/{parcel_uuid}/buildings/")
 _PLACES_ERRORS = (
     ("/api/v1/places/autocomplete/", "503"),
@@ -236,7 +237,10 @@ READS: tuple[Read, ...] = (
     _post(_BREAKER, "/api/v1/routes/", "error", "message", status="503"),
     *(_get(_PARCELS, path, "error", status="404", gaps=("message",)) for path in _PARCEL_404S),
     *(_get(_PARCELS, path, "error", "message", status="503") for path in _PARCEL_503S),
-    *(_get(_PARCELS, path, "error", "message", "retry_after", status="503") for path in _PARCEL_PENDING_503S),
+    *(
+        _get(_PARCELS, path, "error", "message", "pending", "retry_after", status="503", optional=("pending",))
+        for path in _PARCEL_PENDING_503S
+    ),
     *(_get(_PLACES, path, "error", status=status) for path, status in _PLACES_ERRORS),
     # Places.
     _get(
