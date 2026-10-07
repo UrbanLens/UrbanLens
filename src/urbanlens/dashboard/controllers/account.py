@@ -112,17 +112,21 @@ def _raw_lockout_key(identifier: str) -> str:
 
     Collapses every spelling the login form would accept for one account, so probing variants of an
     identifier that matches no account is rate-limited under one shared key rather than each variant
-    getting a fresh counter - it just isn't tied to a real account id.
+    getting a fresh counter - it just isn't tied to a real account id. Keyed by a keyed digest of the
+    identifier rather than the identifier itself: what a visitor types there is a username, an email
+    address, or now and then a password, and the key sits in the cache and in counter-outage logs.
     """
+    from django.utils.crypto import salted_hmac
+
     from urbanlens.dashboard.services.auth.identity import canonical_identifier
 
-    return f"raw:{canonical_identifier(identifier)}"
+    return f"raw:{salted_hmac('dashboard.account.login_lockout', canonical_identifier(identifier)).hexdigest()[:32]}"
 
 
 def _loggable_lockout_key(key: str) -> str:
-    """Return *key* with a user-typed identifier redacted, for logging.
+    """Return *key* with its identifier part redacted, for logging.
 
-    Only ``uid:<pk>`` keys name an account; any other kind (``raw:<identifier>``) carries what the visitor typed, which may be a username or an email address.
+    Only ``uid:<pk>`` keys name an account; a ``raw:`` key is a digest of what the visitor typed, logged as a token.
     """
     kind, _, value = key.partition(":")
     return key if kind == "uid" else f"{kind}:{redact_text(value)}"

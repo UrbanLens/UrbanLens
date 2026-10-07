@@ -388,3 +388,23 @@ def redact_tile(z: int, x: int, y: int) -> str:
         return f"{z}/{x}/{y}"
     shift = z - LOGGED_TILE_MAX_ZOOM
     return f"{LOGGED_TILE_MAX_ZOOM}/{x >> shift}/{y >> shift} (z{z})"
+
+
+#: An email address in running text. A mail server's refusal names the recipients it refused, and a send failure is
+#: logged with its traceback, so an address reaches the log in an exception's text however the log line itself
+#: names the recipient.
+_EMAIL_ADDRESS = re.compile(r"(?<![\w.%+-])[\w.%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b")
+
+
+def redact_email_addresses(text: str) -> str:
+    """Return ``text`` with each email address in it replaced by a :func:`_tag` token.
+
+    Args:
+        text: A log message, exception message or traceback.
+
+    Returns:
+        The text, each address an ``<email:XXXXXXXX>`` token; the same address draws the same token.
+    """
+    if "@" not in text:
+        return text
+    return _EMAIL_ADDRESS.sub(lambda match: f"<email:{_tag(match[0].casefold())}>", text)

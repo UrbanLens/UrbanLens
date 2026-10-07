@@ -1,12 +1,16 @@
-"""What a model wrote, where a building or a cached lookup is, and which map tile someone looked at stay out of log lines.
+"""What a model wrote, where a building or a cached lookup is, which map tile someone looked at, and whose address or
+login it was stay out of log lines.
 
 Pin names name undisclosed sites and coordinates locate them (``services.security.redact``); a trivia question is
-generated from a wiki's text, a lock key can carry the point it locks, and a high-zoom tile index is a building.
+generated from a wiki's text, a lock key can carry the point it locks, a high-zoom tile index is a building, and a
+lockout counter is keyed by whatever a visitor typed.
 """
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 import logging
+import smtplib
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -14,11 +18,26 @@ from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.log_output import handler_output
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.controllers.account import _is_locked_out, _lockout_key_for_identifier
+from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.core import coalesce, locks
+from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+from urbanlens.dashboard.services.core import coalesce, counters, locks
+from urbanlens.dashboard.services.notifications.notification_delivery import send_email_now
 from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
+from urbanlens.dashboard.services.pins.pin_subresources import (
+    PinSubResourceError,
+    create_pin_alias,
+    create_pin_link,
+    delete_pin_alias,
+)
 from urbanlens.dashboard.services.security.redact import redact_cache_key, redact_tile
 from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict, classify_trivia_question
 from urbanlens.dashboard.services.trivia.generation import generate_questions_for_wiki
@@ -172,3 +191,115 @@ class AMapTileSomeoneViewedTests(RedataConfiguredMixin, TestCase):
         self.assertIn("12/1204/1539", logged)
         self.assertNotIn("77096", logged)
         self.assertNotIn("98496", logged)
+
+
+class AHistoricalMapTileCallTests(SimpleTestCase):
+    """Each REData call is recorded in ``ApiCallLog`` by its endpoint, and an overlay tile's path is the tile."""
+
+    def test_its_recorded_endpoint_stops_at_the_georeference(self) -> None:
+        url = "https://redata.example.test/api/v1/maps/georeferences/abc-123/tiles/18/77096/98496.png"
+
+        endpoint = RedataHistoricalMapsGateway.endpoint_for_log(url)
+
+        self.assertEqual(endpoint, "https://redata.example.test/api/v1/maps/georeferences/abc-123/tiles/")
+
+
+class ALoginCounterTests(TestCase):
+    """A failed login for an identifier that names no account is counted under what was typed: a username, an email
+    address, or now and then a password typed into the wrong field."""
+
+    _TYPED = "quokka.keeper@example.org"
+
+    def _store_down(self) -> ExitStack:
+        broken = mock.Mock()
+        broken.peek_int.side_effect = ConnectionError("dragonfly is gone")
+        stack = ExitStack()
+        stack.enter_context(mock.patch.object(counters, "_ops", return_value=broken))
+        stack.enter_context(mock.patch.object(counters, "_last_warning", float("-inf")))
+        return stack
+
+    def test_its_key_does_not_hold_what_was_typed(self) -> None:
+        key = _lockout_key_for_identifier(self._TYPED)
+
+        self.assertNotIn("quokka", key)
+        self.assertEqual(
+            key,
+            _lockout_key_for_identifier(" Quokka.Keeper@Example.org "),
+            "two spellings of one address drew different keys",
+        )
+
+    def test_a_store_outage_does_not_log_it(self) -> None:
+        with self._store_down(), self.assertLogs("urbanlens", level="DEBUG") as captured:
+            self.assertFalse(_is_locked_out(_lockout_key_for_identifier(self._TYPED)))
+
+        logged = _text(captured.records)
+        self.assertIn("login_lockout", logged, "the outage was not logged with the counter's kind")
+        self.assertNotIn("quokka", logged)
+
+    def test_a_refused_count_does_not_carry_its_key(self) -> None:
+        """A throttle key ends with the client's address."""
+        with self._store_down(), self.assertRaises(counters.CounterUnavailableError) as raised:
+            counters.peek("ul:throttle:login:29112233:203.0.113.9", on_outage=counters.Outage.REFUSE)
+
+        self.assertIn("ul:throttle:login", str(raised.exception))
+        self.assertNotIn("203.0.113.9", str(raised.exception))
+
+
+class AnAddressAMailServerRefusedTests(SimpleTestCase):
+    """A refusal names the recipients it refused, and a failed send is logged with its traceback."""
+
+    def test_the_address_is_not_in_the_log(self) -> None:
+        address = "quokka.keeper@example.org"
+        refusal = smtplib.SMTPRecipientsRefused({address: (550, f"5.1.1 <{address}>: no such user".encode())})
+        with (
+            mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=refusal),
+            handler_output("urbanlens") as output,
+        ):
+            send_email_now(to=address, subject="Hello", text_body="Hello")
+
+        logged = output.getvalue()
+        self.assertIn("SMTPRecipientsRefused", logged, "the failure was not logged")
+        self.assertNotIn("quokka.keeper", logged)
+
+
+class APlacesOtherNamesTests(TestCase):
+    """An alias is another name for the place and a link is often a page about it; refusals are logged as raised."""
+
+    def test_no_refusal_quotes_the_name_or_the_link(self) -> None:
+        profile = Profile.objects.get(user=baker.make(User))
+        pin = baker.make(Pin, profile=profile, location=baker.make(Location), name=_MARKER)
+        current_name, _created = PinAlias.objects.get_or_create(pin=pin, name=_MARKER)
+        create_pin_alias(pin, name="Old Quokkabridge Ward")
+        create_pin_link(pin, name="history", url="https://example.org/quokkabridge")
+
+        for refused in (
+            lambda: create_pin_alias(pin, name="Old Quokkabridge Ward"),
+            lambda: delete_pin_alias(pin, current_name),
+            lambda: create_pin_link(pin, name="history", url="https://example.org/quokkabridge"),
+            lambda: create_pin_link(pin, name="history", url="ftp://quokkabridge.example.org/"),
+        ):
+            with self.assertRaises(PinSubResourceError) as raised:
+                refused()
+            with self.subTest(error=type(raised.exception).__name__):
+                self.assertIn(str(pin.pk), str(raised.exception))
+                self.assertNotIn("quokkabridge", str(raised.exception).casefold())
+
+
+class AMapsLinkThatWouldNotParseTests(TestCase):
+    """A saved-places link carries the place's name and its coordinates."""
+
+    def test_it_is_not_logged(self) -> None:
+        url = f"https://www.google.com/maps/place/Quokkabridge+Sanatorium/@{_LATITUDE},{_LONGITUDE},17z"
+        profile = Profile.objects.get(user=baker.make(User))
+        with (
+            mock.patch.object(GoogleGeocodingGateway, "extract_coordinates_from_url", side_effect=ValueError("no")),
+            self.assertLogs("urbanlens", level="DEBUG") as captured,
+        ):
+            GoogleMapsGateway(api_key="test-key").resolve_preview_rows(
+                [{"stem": "Saved", "maps_url": url, "needs_lookup": True}], profile, room=5
+            )
+
+        logged = _text(captured.records)
+        self.assertIn("ValueError", logged, "the failure was not logged")
+        self.assertNotIn("Quokkabridge", logged)
+        self.assertNotIn(_LATITUDE, logged)
