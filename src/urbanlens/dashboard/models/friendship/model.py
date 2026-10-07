@@ -56,6 +56,8 @@ class Friendship(DashboardModel):
     if TYPE_CHECKING:
         from_profile_id: int
         to_profile_id: int
+        # Transient: set by the calendar pre-save hook (models/calendar_sync/signals.py) for its post-save twin.
+        was_accepted: bool
 
     objects = Manager()
 
