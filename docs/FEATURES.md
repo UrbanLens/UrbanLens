@@ -1132,8 +1132,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - "I didn't come home" style safety net: create a check-in with expected return time and
   emergency contacts (registered friends or external email contacts). A contact added by email is shown as
   the address typed, never matched to an account for the owner; the account that verified it still gets
-  the in-app alerts (`_contact_account` in `services/visits/safety.py`) and sees the check-in under "Shared
-  with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
+  the in-app alerts (`_contact_account` in `services/visits/safety.py`) and, once alerted, sees the check-in
+  under "Shared with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
 - Escalation on missed check-in: emails emergency contacts, optionally posts to the location's
   community wiki, notifies pin owners
 - The owner gets a "check in now" final warning about five minutes before escalation, and escalation waits
@@ -1141,8 +1141,15 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   one that never goes out holds it at most `FINAL_WARNING_MAX_WAIT` past the overdue point. Each side claims
   its row with a conditional write, so the warning never follows a contact alert (`due_for_final_warning`,
   `due_for_escalation`)
-- A contact hears about a check-in only once escalation has alerted them: the "found safe" and "plan updated"
-  notices go only to contacts with `notified_at` set, so a partner resolving it early tells no one else
+- A contact learns nothing of a check-in until escalation alerts them (GOALS.md, "Safety check-ins"); seeing it
+  earlier is for an accepted partner, whom the owner chose. "Shared with you", the shared status page, its
+  photos, and every magic-link token route (portal, photo, route map, chat, mark-safe, opt-out) reach only a
+  contact with `notified_at` set (`SafetyCheckinContact.objects.alerted`, `by_token`). The "found safe" and
+  "plan updated" notices go to those contacts only, so a partner resolving it early tells no one else
+- When an escalated check-in ends, every alerted contact is told, once, through the alert's channels and behind
+  the opt-out gate: "found" when someone reported the owner safe, otherwise an all-clear ("you can stop
+  looking") for the owner checking in late or cancelling. A contact alerted while the owner was checking in
+  gets it from the escalation itself (`_tell_alerted_contacts_it_is_over`)
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts

@@ -1116,7 +1116,7 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
     if checkin.plan_update_notified_at and now - checkin.plan_update_notified_at < PLAN_UPDATE_NOTIFICATION_COOLDOWN:
         return
 
-    for contact in checkin.contacts.filter(notified_at__isnull=False, found_safe_at__isnull=True):
+    for contact in checkin.contacts.alerted().filter(found_safe_at__isnull=True):
         recipients = _contact_recipients(contact, checkin)
         if recipients is None:
             continue
@@ -1570,6 +1570,7 @@ def cancel_checkin(checkin: SafetyCheckin) -> bool:
     if not _claim_resolution(checkin, status=SafetyCheckinStatus.CANCELLED, resolved_by_label="cancelled by owner"):
         return False
     _broadcast_status_update(checkin)
+    _tell_alerted_contacts_it_is_over(checkin, checkin.contacts.alerted())
     schedule_checkin_archival(checkin)
     return True
 
@@ -1674,6 +1675,7 @@ def check_in(checkin: SafetyCheckin, profile: Profile) -> bool:
     if not _claim_resolution(checkin, status=SafetyCheckinStatus.CHECKED_IN, resolved_by_label="you"):
         return False
     _broadcast_status_update(checkin)
+    _tell_alerted_contacts_it_is_over(checkin, checkin.contacts.alerted())
     _conclude_checkin(checkin)
     schedule_checkin_archival(checkin)
     return True
@@ -1750,6 +1752,12 @@ def escalate_checkin(checkin: SafetyCheckin) -> bool:
         )
         contact.notified_at = timezone.now()
         contact.save(update_fields=["notified_at", "updated"])
+        # The owner may have resolved it while this alert went out, after the resolution's own pass to the alerted
+        # contacts had run without this one - so it hears the check-in is over from here.
+        resolved = SafetyCheckin.objects.filter(pk=checkin.pk, status__in=SafetyCheckinStatus.resolved_statuses()).select_related("profile").first()
+        if resolved is not None:
+            _tell_alerted_contacts_it_is_over(resolved, [contact])
+            return True
 
     # Conditional for the same reason as the reminder's: a resolution landing during
     # the contact loop above must win, not be overwritten by OVERDUE.
@@ -1852,35 +1860,68 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
 
     # Only contacts already alerted: a partner can report the owner safe before escalation, and a contact must not
     # learn of a trip whose owner never missed a check-in.
-    other_contacts = checkin.contacts.filter(notified_at__isnull=False)
+    others = checkin.contacts.alerted()
     if exclude_contact is not None:
-        other_contacts = other_contacts.exclude(pk=exclude_contact.pk)
-    for other in other_contacts:
-        recipients = _contact_recipients(other, checkin)
-        if recipients is None:
-            continue
-        account, other_email = recipients
-        portal_path = reverse("safety.contact.portal", kwargs={"token": other.token})
-        if account is not None:
-            NotificationLog.objects.notify(
-                profile=account,
-                status=Status.UNREAD,
-                importance=Importance.MEDIUM,
-                notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
-                title=f"{checkin.profile.username} has been found",
-                message=f"{resolved_by_label} marked {checkin.profile.username} safe.",
-                url=portal_path,
-            )
-        _queue_email(
-            to=other_email,
-            subject=f"{checkin.profile.username} has been found",
-            template="dashboard/email/safety_checkin_resolved.html",
-            context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": absolute_url(portal_path), **_optout_urls(other)},
-        )
+        others = others.exclude(pk=exclude_contact.pk)
+    _tell_alerted_contacts_it_is_over(checkin, others)
 
     _conclude_checkin(checkin)
     schedule_checkin_archival(checkin)
     return True
+
+
+def _tell_alerted_contacts_it_is_over(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckinContact]) -> None:
+    """Tell contacts an escalation already alerted that the check-in is over, so whoever is searching can stop.
+
+    Sent once per resolution, by whichever call won it: "found" when someone reported the owner safe, otherwise an
+    all-clear for the owner checking in or cancelling. It carries nothing the alert did not - no plan or location -
+    and every opt-out applies, through the same channels as the alert.
+
+    Args:
+        checkin: The just-resolved check-in, carrying its resolved ``status`` and ``resolved_by_label``.
+        contacts: The alerted contacts to tell.
+    """
+    owner = checkin.profile.username
+    if checkin.status == SafetyCheckinStatus.FOUND_SAFE:
+        title = f"{owner} has been found"
+        message = f"{checkin.resolved_by_label} marked {owner} safe."
+        importance = Importance.MEDIUM
+        template = "dashboard/email/safety_checkin_resolved.html"
+        context: dict[str, object] = {"resolved_by_label": checkin.resolved_by_label}
+    else:
+        if checkin.status == SafetyCheckinStatus.CHECKED_IN:
+            ended = f'{owner} checked in for "{checkin.title}" and is safe.'
+            title = f"{owner} is safe - you can stop looking"
+        else:
+            ended = f'{owner} cancelled the check-in for "{checkin.title}" themselves.'
+            title = f"{owner} ended their check-in - you can stop looking"
+        message = f"{ended} No further action is needed."
+        importance = Importance.HIGH
+        template = "dashboard/email/safety_checkin_all_clear.html"
+        context = {"ended": ended}
+
+    for contact in contacts:
+        recipients = _contact_recipients(contact, checkin)
+        if recipients is None:
+            continue
+        account, contact_email = recipients
+        portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
+        if account is not None:
+            NotificationLog.objects.notify(
+                profile=account,
+                status=Status.UNREAD,
+                importance=importance,
+                notification_type=NotificationType.SAFETY_CHECKIN_RESOLVED,
+                title=title,
+                message=message,
+                url=portal_path,
+            )
+        _queue_email(
+            to=contact_email,
+            subject=title,
+            template=template,
+            context={"checkin": checkin, "checkin_url": absolute_url(portal_path), **context, **_optout_urls(contact)},
+        )
 
 
 def _conclude_checkin(checkin: SafetyCheckin) -> None:
