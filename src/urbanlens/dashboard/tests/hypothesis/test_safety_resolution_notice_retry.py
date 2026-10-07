@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus
+from urbanlens.dashboard.models.undo.model import UndoAction
 from urbanlens.dashboard.services.undo.service import undo_latest
 from urbanlens.dashboard.services.visits import safety as safety_service
 from urbanlens.dashboard.services.visits.safety import check_in, delete_checkin
@@ -106,19 +107,28 @@ class FailedBuildTests(_RetryTestCase):
         self.assertEqual(self._in_app(self.friend), 1)
 
 
+def _refusing_once(address: str, refused: list[str]):
+    """A stand-in for ``EmailMultiAlternatives.send`` whose first send to ``address`` fails as a dropped connection."""
+    real_send = EmailMultiAlternatives.send
+
+    def send(message, *args, **kwargs):
+        if address in message.to and not refused:
+            refused.append(message.subject)
+            raise smtplib.SMTPServerDisconnected("connection dropped")
+        return real_send(message, *args, **kwargs)
+
+    return send
+
+
 class FailedSendTests(_RetryTestCase):
     def test_a_refused_send_is_sent_again_by_the_next_sweep_with_no_second_in_app_notice(self) -> None:
-        real_send = EmailMultiAlternatives.send
         refused: list[str] = []
 
-        def refuse_once(message, *args, **kwargs):
-            if "rescuer@example.com" in message.to and not refused:
-                refused.append(message.subject)
-                raise smtplib.SMTPServerDisconnected("connection dropped")
-            return real_send(message, *args, **kwargs)
-
         # Outermost, so it is still in place when the queued email is sent on leaving the inner block.
-        with mock.patch.object(EmailMultiAlternatives, "send", refuse_once), notification_emails_sent():
+        with (
+            mock.patch.object(EmailMultiAlternatives, "send", _refusing_once("rescuer@example.com", refused)),
+            notification_emails_sent(),
+        ):
             check_in(self.checkin, self.owner)
 
         self.assertEqual(len(refused), 1)
@@ -132,12 +142,62 @@ class FailedSendTests(_RetryTestCase):
         self.assertEqual(self._emails_to("friend@example.com"), 1)
         self.assertEqual(self._in_app(self.friend), 1)
 
+    def test_an_account_contact_whose_email_was_refused_gets_the_email_again_and_one_in_app_notice(self) -> None:
+        """Their in-app notice went out with the claim; the retry owes them the email alone."""
+        refused: list[str] = []
+        with (
+            mock.patch.object(EmailMultiAlternatives, "send", _refusing_once("friend@example.com", refused)),
+            notification_emails_sent(),
+        ):
+            check_in(self.checkin, self.owner)
+        self.assertEqual((len(refused), self._emails_to("friend@example.com"), self._in_app(self.friend)), (1, 0, 1))
+
+        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._sweep()
+        self._sweep()
+
+        self.assertEqual(self._emails_to("friend@example.com"), 1)
+        self.assertEqual(self._in_app(self.friend), 1)
+
+
+class DeletionTests(_RetryTestCase):
+    """A deleted check-in leaves no row for a sweep to find, so its notice cannot wait for one."""
+
+    def test_an_email_that_fails_to_build_still_goes_out_as_plain_text(self) -> None:
+        def broken_all_clear(template, *args, **kwargs):
+            if template == _ALL_CLEAR:
+                raise ValueError("template bug")
+            return real_render_to_string(template, *args, **kwargs)
+
+        with notification_emails_sent(), mock.patch.object(safety_service, "render_to_string", broken_all_clear):
+            delete_checkin(self.checkin, self.owner)
+
+        (message,) = [message for message in mail.outbox if "rescuer@example.com" in message.to]
+        self.assertIn("stop looking", message.subject)
+        self.assertIn("removed their check-in", message.body)
+        self.assertEqual(getattr(message, "alternatives", []), [])
+
+    def test_a_refused_send_is_retried_by_the_email_task_itself(self) -> None:
+        refused: list[str] = []
+
+        with (
+            mock.patch.object(EmailMultiAlternatives, "send", _refusing_once("rescuer@example.com", refused)),
+            notification_emails_sent(),
+        ):
+            delete_checkin(self.checkin, self.owner)
+
+        self.assertEqual(len(refused), 1)
+        self.assertEqual(self._emails_to("rescuer@example.com"), 1)
+
 
 class SweepBoundsTests(_RetryTestCase):
     """The sweep only finishes what a resolution left undone, and only while the notice still means something."""
 
     def _resolve_without_notices(self, status: str = SafetyCheckinStatus.CHECKED_IN) -> None:
-        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(status=status, resolved_at=timezone.now())
+        now = timezone.now()
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=status, resolved_at=now, archive_scheduled_at=now
+        )
 
     def test_it_leaves_a_resolution_still_in_progress_to_its_own_request(self) -> None:
         """Deleting a check-in resolves it first; a sweep that raced that request would send the wrong wording."""
@@ -150,6 +210,16 @@ class SweepBoundsTests(_RetryTestCase):
     def test_it_does_not_send_hours_after_the_fact(self) -> None:
         self._resolve_without_notices()
         self._resolved(ago=datetime.timedelta(hours=3))
+
+        self._sweep()
+
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_it_leaves_alone_a_checkin_this_site_never_resolved(self) -> None:
+        """An imported check-in arrives resolved, with its contacts' alert times, but was never scheduled for archival."""
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=SafetyCheckinStatus.CANCELLED, resolved_at=timezone.now() - datetime.timedelta(minutes=10)
+        )
 
         self._sweep()
 
@@ -168,16 +238,34 @@ class SweepBoundsTests(_RetryTestCase):
 
 
 class UndoneDeletionTests(_RetryTestCase):
-    def test_a_deleted_then_restored_checkin_does_not_tell_its_contacts_again(self) -> None:
-        """Deleting it told them it was removed; the restored contacts must still read as told."""
-        with notification_emails_sent():
-            delete_checkin(self.checkin, self.owner)
+    def _restore_ten_minutes_after_resolution(self) -> None:
         undo_latest(self.owner)
         SafetyCheckin.objects.filter(profile=self.owner).update(
             resolved_at=timezone.now() - datetime.timedelta(minutes=10)
         )
 
+    def test_a_deleted_then_restored_checkin_does_not_tell_its_contacts_again(self) -> None:
+        """Deleting it told them it was removed; the restored contacts must still read as told."""
+        with notification_emails_sent():
+            delete_checkin(self.checkin, self.owner)
+        self.assertEqual((self._emails_to("rescuer@example.com"), self._in_app(self.friend)), (1, 1))
+        self._restore_ten_minutes_after_resolution()
+
         self._sweep()
 
         self.assertEqual(self._emails_to("rescuer@example.com"), 1)
         self.assertEqual(self._in_app(self.friend), 1)
+
+    def test_one_stashed_before_the_claim_was_saved_does_not_tell_them_again_either(self) -> None:
+        with notification_emails_sent():
+            delete_checkin(self.checkin, self.owner)
+        action = UndoAction.objects.get(profile=self.owner)
+        for entry in action.payload:
+            for contact in entry["contacts"]:
+                contact.pop("resolution_notified_at", None)
+        action.save(update_fields=["payload"])
+        self._restore_ten_minutes_after_resolution()
+
+        self._sweep()
+
+        self.assertEqual(self._emails_to("rescuer@example.com"), 1)

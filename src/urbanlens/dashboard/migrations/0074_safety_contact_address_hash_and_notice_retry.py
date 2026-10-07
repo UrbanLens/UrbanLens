@@ -24,7 +24,7 @@ def _drop_hash_only_opt_outs(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0072_safety_contact_resolution_notified_at"),
+        ("dashboard", "0073_added_calendar_columns_database_defaults"),
     ]
 
     operations = [
@@ -51,10 +51,6 @@ class Migration(migrations.Migration):
             name="email_hmac",
             field=models.CharField(blank=True, db_default="", default="", max_length=64),
         ),
-        migrations.AddIndex(
-            model_name="safetycontactoptout",
-            index=models.Index(fields=["email_hmac"], name="idxdb_scoo_email_hmac"),
-        ),
         migrations.AddConstraint(
             model_name="safetycontactoptout",
             constraint=models.CheckConstraint(
@@ -73,4 +69,9 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(_settle_earlier_resolutions, migrations.RunPython.noop),
         migrations.RunPython(migrations.RunPython.noop, _drop_hash_only_opt_outs),
+        # Index creation goes dead last (migrations/AGENTS.md).
+        migrations.AddIndex(
+            model_name="safetycontactoptout",
+            index=models.Index(fields=["email_hmac"], name="idxdb_scoo_email_hmac"),
+        ),
     ]

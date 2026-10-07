@@ -148,11 +148,12 @@ Never swap the key in one step — that is the data-loss path. Roll it:
    Use it only once you have confirmed the listed rows are unrecoverable rather than a missing
    fallback you could still supply. Everything else is rotated exactly as normal, so the retired
    key is safe to drop; the listed rows were already unreadable before you started.
-3. **Drop the retired key** from `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`. Deploy.
-   *Except while keyed hashes made under it must still match.* `email_hmac` on archived safety contacts and on
-   their opt-outs cannot be re-keyed, because the address is gone. They match under any key still configured
-   (`keyed_digests`), so dropping the key that made one lets that person be alerted again. An opt-out for everyone
-   is kept indefinitely, so in practice a field key that has made one stays in the fallbacks.
+3. **Drop the retired key** from `UL_FIELD_ENCRYPTION_KEY_FALLBACKS` and deploy, **unless it was ever the active
+   key while safety check-ins were archived.** Archival keeps keyed hashes (`email_hmac`) of contacts' addresses,
+   and opt-outs recorded after archival hold the same hashes. Step 2 cannot re-key them, because the address is
+   gone. They match under any key still configured (`keyed_digests`), so dropping the key that made one stops that
+   person's opt-out from matching, and they can be alerted again. An opt-out for everyone is kept indefinitely, so
+   in practice such a key stays in the fallbacks for good. Nothing here checks for this.
 
 To verify step 2 really worked, remove the old key and confirm the app still reads the data —
 that is exactly what `test_field_encryption_rotation.py` asserts.

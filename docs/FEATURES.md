@@ -1151,11 +1151,13 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   owner safe, otherwise an all-clear ("you can stop looking") for the owner checking in late, cancelling or
   deleting it. A contact alerted while the owner was checking in gets it from the escalation itself
   (`_tell_alerted_contacts_it_is_over`)
-- A notice that fails is not lost. One that fails to build releases its claim, and one whose email the worker
+- A notice that fails is retried. One that fails to build releases its claim, and one whose email the worker
   could not send is marked (`resolution_email_failed_at`), so the escalation sweep sends it again, the email alone
-  if the in-app half already went out (`retry_resolution_notices`). It retries only between two minutes and an
-  hour after the resolution: the request that resolved it finishes first, and after the hour the check-in is
-  archived
+  if the in-app half already went out (`retry_resolution_notices`). The sweep retries only between two minutes and
+  an hour after the resolution: the request that resolved it finishes first, and after the hour the check-in is
+  archived. It sweeps only check-ins this site resolved, never an imported one. A deleted check-in leaves nothing
+  to sweep, so there an email that fails to build goes out as plain text, and one that fails to send is re-queued
+  by its own task, five times over about half an hour (`send_resolution_email`)
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts

@@ -3680,20 +3680,23 @@ def escalate_overdue_checkins() -> int:
 
 
 @shared_task(queue=Queue.INTERACTIVE)
-def send_safety_resolution_email(contact_id: int, to: str, subject: str, html_body: str) -> None:
+def send_safety_resolution_email(contact_id: int, to: str, subject: str, text_body: str, html_body: str, attempt: int = 0) -> None:
     """Send one contact's end-of-check-in email, queued by ``services.visits.safety._tell_contact_it_is_over``.
 
-    Unlike ``send_email_task``, a failed send is recorded on the contact, so the escalation sweep sends it again.
+    Unlike ``send_email_task``, a failed send is retried: marked on the contact for the escalation sweep, or, for a
+    deleted check-in, re-queued by ``send_resolution_email`` itself.
 
     Args:
         contact_id: The ``SafetyCheckinContact`` it is for.
         to: Recipient address.
         subject: Subject line.
-        html_body: The rendered email.
+        text_body: The plain-text body.
+        html_body: The rendered HTML body, or empty.
+        attempt: Retries already made for a deleted check-in.
     """
     from urbanlens.dashboard.services.visits.safety import send_resolution_email
 
-    send_resolution_email(contact_id, to=to, subject=subject, html_body=html_body)
+    send_resolution_email(contact_id, to=to, subject=subject, text_body=text_body, html_body=html_body, attempt=attempt)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)

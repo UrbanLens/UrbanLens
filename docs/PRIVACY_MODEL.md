@@ -204,8 +204,12 @@ typed-in contact survive it:
   - It cannot be read back into the address.
   - Without the key, a stolen database or backup cannot even test a guessed address against it.
   - With the key, a specific guessed address can be confirmed. That is the cost of matching at all.
+  - One address hashes the same everywhere, so even without the key, a copy of the database shows that two archived
+    check-ins, of any owners, alerted the same person, and ties that person's opt-out to them. That sameness is
+    what lets one opt-out cover every owner.
   - It is kept as long as the check-in row: until the owner deletes the check-in, their auto-delete window removes
-    it, or their account is deleted.
+    it, or their account is deleted. Deleting it copies the hash into that deletion's undo entry, which is kept
+    seven days (`UNDO_RETENTION`).
 - **An opt-out recorded from that link after archival** (`SafetyContactOptOut.email_hmac`) holds the same hash and
   never the address. It is kept as long as any opt-out:
   - one for that check-in, until the check-in is deleted;

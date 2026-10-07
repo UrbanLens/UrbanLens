@@ -143,7 +143,12 @@ class SafetyCheckinUndoHandler(UndoHandler):
             if entry["markup_map_ids"]:
                 checkin.markup_maps.set(entry["markup_map_ids"])
             for contact_entry in entry["contacts"]:
-                SafetyCheckinContact.objects.create(checkin=checkin, **contact_entry)
+                fields = dict(contact_entry)
+                # A payload stashed before resolution_notified_at was kept: an alerted contact of a resolved check-in
+                # was told it ended when it was deleted, or needed no telling by then, and must not be told again.
+                if "resolution_notified_at" not in fields and fields.get("notified_at") and entry["fields"].get("resolved_at"):
+                    fields["resolution_notified_at"] = entry["fields"]["resolved_at"]
+                SafetyCheckinContact.objects.create(checkin=checkin, **fields)
             for partner_entry in entry.get("partners", []):
                 SafetyCheckinPartner.objects.create(checkin=checkin, **partner_entry)
             image_ids = entry.get("image_ids") or []

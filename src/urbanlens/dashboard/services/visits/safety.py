@@ -1952,6 +1952,9 @@ def _tell_alerted_contacts_it_is_over(checkin: SafetyCheckin, contacts: Iterable
     opt-out applies, through the same channels as the alert. Each contact hears it once and a failure is retried, as
     ``_tell_contact_it_is_over`` describes; one contact's failure is logged and does not stop the others.
 
+    A check-in being deleted leaves no row for the retry sweep to find, so on that path an email that fails to build
+    goes out as plain text, and one that fails to send is retried by its own task (``send_resolution_email``).
+
     Args:
         checkin: The just-resolved check-in, carrying its resolved ``status`` and ``resolved_by_label``.
         contacts: The alerted contacts to tell.
@@ -1963,7 +1966,12 @@ def _tell_alerted_contacts_it_is_over(checkin: SafetyCheckin, contacts: Iterable
         try:
             _tell_contact_it_is_over(checkin, contact, notice, removed=removed)
         except Exception:
-            logger.exception("Safety checkin %s: telling contact %s it is over failed; the next sweep retries it", checkin.pk, contact.pk)
+            logger.exception(
+                "Safety checkin %s: telling contact %s it is over failed%s",
+                checkin.pk,
+                contact.pk,
+                "; it is being deleted, so nothing retries it" if removed else "; the next sweep retries it",
+            )
 
 
 def _tell_contact_it_is_over(checkin: SafetyCheckin, contact: SafetyCheckinContact, notice: _ResolutionNotice, *, removed: bool) -> None:
@@ -1992,7 +2000,7 @@ def _tell_contact_it_is_over(checkin: SafetyCheckin, contact: SafetyCheckinConta
         if recipients is None:
             return
         account, contact_email = recipients
-        html_body = render_to_string(notice.template, {"checkin": checkin, **notice.context, **links}) if contact_email else ""
+        html_body = _build_resolution_email(checkin, notice, links, removed=removed) if contact_email else ""
         if first_telling and account is not None:
             NotificationLog.objects.notify(
                 profile=account,
@@ -2008,25 +2016,69 @@ def _tell_contact_it_is_over(checkin: SafetyCheckin, contact: SafetyCheckinConta
             from urbanlens.dashboard.tasks import send_safety_resolution_email
 
             contact_id = contact.pk
-            transaction.on_commit(lambda: safely_enqueue_task(send_safety_resolution_email, contact_id, contact_email, notice.title, html_body))
+            transaction.on_commit(lambda: safely_enqueue_task(send_safety_resolution_email, contact_id, contact_email, notice.title, notice.message, html_body))
 
 
-def send_resolution_email(contact_id: int, *, to: str, subject: str, html_body: str) -> None:
-    """Send one contact's already-built end-of-check-in email, leaving it for the next sweep if the send fails.
+def _build_resolution_email(checkin: SafetyCheckin, notice: _ResolutionNotice, links: dict[str, str], *, removed: bool) -> str:
+    """Render the notice's HTML email; a failure raises, releasing the claim, except for a check-in being deleted.
+
+    Args:
+        checkin: The resolved check-in.
+        notice: The notice's wording.
+        links: The portal and opt-out links, if any.
+        removed: The check-in is being deleted, so no sweep could retry it: the email goes as plain text instead.
+
+    Returns:
+        The HTML body, or empty for plain text only.
+    """
+    try:
+        return render_to_string(notice.template, {"checkin": checkin, **notice.context, **links})
+    except Exception:
+        if not removed:
+            raise
+        logger.exception("Safety checkin %s: the end-of-check-in email failed to build; sending it as plain text", checkin.pk)
+        return ""
+
+
+#: Retries of a failed end-of-check-in email whose check-in was deleted, with a doubling delay from a minute: about
+#: half an hour in all, the same order as the hour the retry sweep covers for one that still exists.
+MAX_ORPHANED_RESOLUTION_EMAIL_RETRIES = 5
+
+
+def send_resolution_email(contact_id: int, *, to: str, subject: str, text_body: str, html_body: str, attempt: int = 0) -> None:
+    """Send one contact's already-built end-of-check-in email, arranging a retry if the send fails.
+
+    A failure is marked on the contact (``resolution_email_failed_at``) for the escalation sweep to send again. When the
+    contact is gone - its check-in was deleted - there is nothing to mark and no sweep will find it, so this re-queues
+    itself with backoff instead.
 
     Args:
         contact_id: The contact it is for.
         to: Recipient address.
         subject: Subject line.
-        html_body: The rendered email.
+        text_body: The plain-text body.
+        html_body: The rendered HTML body, or empty for plain text only.
+        attempt: How many times this send was already retried after its contact was deleted.
     """
     try:
-        msg = EmailMultiAlternatives(subject=subject, body=subject, from_email=None, to=[to])
-        msg.attach_alternative(html_body, "text/html")
+        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[to])
+        if html_body:
+            msg.attach_alternative(html_body, "text/html")
         msg.send()
     except Exception:
-        logger.exception("Safety contact %s: sending the end-of-check-in email failed; the next sweep retries it", contact_id)
-        SafetyCheckinContact.objects.filter(pk=contact_id).update(resolution_email_failed_at=timezone.now(), updated=timezone.now())
+        logger.exception("Safety contact %s: sending the end-of-check-in email failed", contact_id)
+    else:
+        return
+    now = timezone.now()
+    if SafetyCheckinContact.objects.filter(pk=contact_id).update(resolution_email_failed_at=now, updated=now):
+        return
+    if attempt >= MAX_ORPHANED_RESOLUTION_EMAIL_RETRIES:
+        logger.error("Safety contact %s: gave up on the end-of-check-in email of a deleted check-in after %d retries", contact_id, attempt)
+        return
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import send_safety_resolution_email
+
+    safely_enqueue_task(send_safety_resolution_email, contact_id, to, subject, text_body, html_body, attempt + 1, countdown=60 * 2**attempt)
 
 
 #: How long after a resolution the retry sweep leaves its notices to the request that resolved it. Deleting a check-in
@@ -2038,7 +2090,8 @@ def retry_resolution_notices() -> int:
     """Send every end-of-check-in notice a failure left owing, for check-ins resolved within the archival grace window.
 
     After that the check-in is archived and its title gone, and an all-clear hours late helps nobody. The contact who
-    reported the owner found is never told; they know.
+    reported the owner found is never told; they know. Only a check-in this site resolved is swept: every resolution
+    schedules archival first, and an imported one, which arrives resolved with its contacts' alert times, never is.
 
     Returns:
         How many contacts were retried.
@@ -2051,6 +2104,7 @@ def retry_resolution_notices() -> int:
             found_safe_at__isnull=True,
             checkin__status__in=SafetyCheckinStatus.resolved_statuses(),
             checkin__archive__isnull=True,
+            checkin__archive_scheduled_at__isnull=False,
             checkin__resolved_at__lte=now - RESOLUTION_NOTICE_SETTLE_DELAY,
             checkin__resolved_at__gt=now - ARCHIVE_VIEWER_GRACE_PERIOD,
         )
