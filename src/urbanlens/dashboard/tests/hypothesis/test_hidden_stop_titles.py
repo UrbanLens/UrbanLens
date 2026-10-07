@@ -454,7 +454,8 @@ class ATypedTitleIsStillShownTests(_HiddenStopCase):
 class TheSurfacesAgreeTests(SimpleTestCase):
     """Whatever the title and wherever it came from, the panel, the API and the calendar show the same name."""
 
-    _token = st.text(alphabet=string.ascii_letters, min_size=3, max_size=12)
+    # No "Z": the place's name is marked by its leading "Zq", which must not turn up inside a typed title.
+    _token = st.text(alphabet=string.ascii_letters.replace("Z", ""), min_size=3, max_size=12)
 
     @given(
         place=_token.map(lambda text: f"Zq{text}"),
