@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from typing import TYPE_CHECKING
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+from django.apps import apps as django_apps
 from model_bakery import baker
 
 from hypothesis import given, settings as hyp_settings, strategies as st
@@ -20,6 +22,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
 _hyp = hyp_settings(max_examples=60, deadline=None)
+_seed_vip_role = import_module("urbanlens.dashboard.migrations.0020_seed_vip_subscription_role").seed_vip_role
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +292,12 @@ class SearchSubscriptionFeatureTests(TestCase):
     """Search subscription feature defaults."""
 
     def test_vip_defaults_grant_search_feature(self):
-        """The "vip" role is seeded by a migration, so it already exists here."""
+        """The "vip" role is seeded by a migration.
+
+        Seeded again here, as test_subscriptions_model.py does: a ``TransactionTestCase`` that ran earlier in the
+        same process empties the table, which pytest-xdist can arrange. The seed leaves an existing row alone.
+        """
+        _seed_vip_role(django_apps, None)
         vip = SubscriptionRole.objects.get(slug="vip")
 
         self.assertTrue(vip.grants(SiteFeature.SEARCH))

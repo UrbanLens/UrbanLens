@@ -13,6 +13,7 @@ from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.dashboard.consumers import DirectMessageConsumer, TriviaSessionConsumer
@@ -22,6 +23,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import TriviaSessionChatMessage
 from urbanlens.dashboard.services.trivia.session import TriviaConfig, start_multiplayer_session
+
+# `_settle` takes a row count as final once it holds for 0.4 s, and the frame budgets refill on the clock, so a
+# consumer starved by a loaded pytest-xdist neighbour read as 14 of 30 messages arriving.
+pytestmark = pytest.mark.serial
 
 _coordinate_counter = count()
 

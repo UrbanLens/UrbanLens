@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workers: ["auto", "4", "6"]
+        workers: ["4", "6", "8"]
     services:
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
@@ -149,16 +149,27 @@ jobs:
         run: python3 bin/check_css_variables.py
       - name: No missing migrations
         run: python src/urbanlens/manage.py makemigrations --check --dry-run
-      # pytest-xdist workers, each with its own test database (pytest-django suffixes the name with the worker id,
-      # test_urbanlens_ci_gw0 and so on). --dist loadfile keeps a file's tests on one worker, so a class's
-      # setUpTestData is paid once rather than once per worker. Coverage follows the workers through
-      # `patch = ["subprocess"]` in pyproject.toml; each process writes its own data file, hence the combine.
+      # Two passes, one coverage data file per process, combined at the end (pyproject.toml's `patch = ["subprocess"]`
+      # follows coverage into the pytest-xdist workers).
+      #
+      # 1. Everything not marked `serial`, across pytest-xdist workers. Each worker has its own database (pytest-django
+      #    suffixes the name with the worker id: test_urbanlens_ci_gw0, ...). `--dist loadscope --no-loadscope-reorder`
+      #    hands out whole classes in the order pytest-django sorted them - every TestCase before any
+      #    TransactionTestCase, whose teardown empties the tables migrations seeded - so each worker keeps Django's order.
+      # 2. Tests marked `serial` assert on wall-clock time, and a neighbouring worker's load failed them. They run alone,
+      #    in one process with its own database.
+      #
+      # Both passes run even if the first fails, so one CI run reports every failure.
       - name: Tests with coverage
         run: |
-          coverage run --source=src -m pytest -n "${{ matrix.workers }}" --dist loadfile --durations=40
+          python -c 'import os, psutil; print("cpus:", os.cpu_count(), "physical:", psutil.cpu_count(logical=False))'
+          status=0
+          coverage run --source=src -m pytest -n "${{ matrix.workers }}" --dist loadscope --no-loadscope-reorder -m "not serial" --durations=60 || status=$?
+          coverage run --source=src -m pytest -p no:xdist -m serial --durations=10 || status=$?
           coverage combine
           coverage xml
           coverage report --fail-under=1
+          exit "$status"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7

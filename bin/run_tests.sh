@@ -67,10 +67,12 @@ for arg in "$@"; do
 done
 
 if [ -n "$PARALLEL" ]; then
-    # --dist loadfile keeps each file's tests on one worker. Several suites here
-    # build expensive per-class state, and splitting a class across workers pays
-    # that cost once per worker instead of once.
-    args=(-n "$PARALLEL" --dist loadfile "${args[@]}")
+    # --dist loadscope keeps each class on one worker: several suites here build
+    # expensive per-class state, and splitting a class pays it once per worker.
+    # --no-loadscope-reorder hands classes out in pytest-django's order, every
+    # TestCase before any TransactionTestCase (whose teardown empties the tables
+    # migrations seeded), as CI does.
+    args=(-n "$PARALLEL" --dist loadscope --no-loadscope-reorder "${args[@]}")
 fi
 if [ "$SHUFFLE" -eq 1 ]; then
     # Undoes the `-p no:randomly` in pyproject's addopts; a later -p wins.

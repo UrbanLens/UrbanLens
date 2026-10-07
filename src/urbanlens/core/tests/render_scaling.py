@@ -9,6 +9,7 @@ from typing import Any
 
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+import pytest
 
 from urbanlens.core.tests.scaling import SeedScalingMixin
 
@@ -39,6 +40,10 @@ class RenderTimeScalingMixin(SeedScalingMixin):
 
     Subclasses implement :meth:`seed_rows`, exactly as for the query mixin.
     """
+
+    # A wall-clock ratio: a pytest-xdist neighbour's load lands on one measurement and not the other, which failed
+    # the conversation-list and undo-history subclasses beside 3 and 5 busy workers. Inherited through the MRO.
+    pytestmark = pytest.mark.serial
 
     first_batch: int = FIRST_BATCH
     second_batch: int = SECOND_BATCH
