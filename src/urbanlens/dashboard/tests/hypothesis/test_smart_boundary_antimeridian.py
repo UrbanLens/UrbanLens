@@ -10,7 +10,12 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pins.pin_list_membership import _boundary_matching_ids, _pin_in_boundary
+from urbanlens.dashboard.services.pins.pin_list_membership import _boundary_matching_ids
+
+
+def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
+    """The question a pin change's sync asks: the boundary test over just the changed pins."""
+    return pin.pk in _boundary_matching_ids(pin_list, among=Pin.objects.filter(pk=pin.pk))
 
 
 def _region(west: float, east: float, south: float = -20.0, north: float = -10.0) -> MultiPolygon:
@@ -55,7 +60,7 @@ class SmartBoundaryAntimeridianTests(TestCase):
 
     def test_both_paths_agree(self) -> None:
         """They answer the same question at different times; disagreeing means a
-        pin joins on save and vanishes on resync."""
+        pin joins on its sync and vanishes on resync."""
         east = self._pin("east of line", -179.5)
         pin_list = self._list(_region(179.0, 181.0))
 

@@ -13,7 +13,7 @@ through the same ``_semijoin(Wiki, "labels", ...)`` as P123
 (``test_search_does_not_read_another_accounts_labels.py``) - an
 ``Exists(Wiki._base_manager.filter(...))`` subquery built from the *unfiltered* manager, unscoped to
 wikis the viewer has earned access to. A stranger's wiki, at a place the viewer has never pinned per
-``dashboard/models/wiki/CLAUDE.md``, never needs to be visible to the viewer for its labels to sit in
+``dashboard/models/wiki/AGENTS.md``, never needs to be visible to the viewer for its labels to sit in
 the same ``dashboard_labels`` table the semijoin's inner query scans.
 
 The one structural difference from P123/Photo worth flagging: `label:` matches with ``iexact``, not
@@ -81,7 +81,7 @@ class _WikiLabelOperatorCase(TestCase):
         self.stranger = baker.make(User).profile
         self.labelled = 0
 
-        # The viewer earns access the only way `dashboard/models/wiki/CLAUDE.md` allows: their own
+        # The viewer earns access the only way `dashboard/models/wiki/AGENTS.md` allows: their own
         # pin at the wiki's exact location.
         self.my_location = baker.make(Location, latitude=44.100001, longitude=-70.100001)
         baker.make(Pin, profile=self.viewer, location=self.my_location, name="My Spot", description="")

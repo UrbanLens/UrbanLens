@@ -708,7 +708,7 @@ adding anything.
 ## Part 5 — Implementer's Gotcha Checklist
 
 Compact recap of things that have each burned at least one prior agent. Scan before starting;
-details in `CLAUDE.md` and `docs/NOTES.md`.
+details in `AGENTS.md` and `docs/NOTES.md`.
 
 **Environment**: see `CLAUDE.local.md` for the machine you are on - it is the authority, and
 differs per checkout. GDAL/GEOS must be present for anything importing `django.contrib.gis`,

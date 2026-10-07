@@ -22,6 +22,7 @@ import contextlib
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import async_to_sync
@@ -422,13 +423,13 @@ def refresh_profile_map_center(profile_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def push_trip_to_calendar(trip_id: int) -> int:
-    """Push a changed trip to its auto-synced calendars.
+    """Push a changed trip to its auto-synced calendars, and finish any export of it the calendar budget cut short.
 
     Args:
         trip_id: PK of the trip that changed.
 
     Returns:
-        The number of calendars the trip was successfully pushed to.
+        The number of calendars the trip was fully pushed to.
     """
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.trips.calendar_sync import push_auto_synced_trip_changes
@@ -440,9 +441,10 @@ def push_trip_to_calendar(trip_id: int) -> int:
     return push_auto_synced_trip_changes(trip)
 
 
-#: An auto-sync request older than this lost its push, or its push failed.
+#: A push request older than this lost its push, or its push failed or was cut short by the calendar budget.
 PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
-#: Failed pushes after which a request is dropped until the trip changes again.
+#: Pushes in a row that wrote nothing, after which a request is dropped until the trip changes again. A push that
+#: wrote some events and ran out of budget does not count, so a long export is finished however many it takes.
 MAX_CALENDAR_PUSH_ATTEMPTS = 5
 PENDING_CALENDAR_PUSH_BATCH = 200
 
@@ -450,7 +452,7 @@ PENDING_CALENDAR_PUSH_BATCH = 200
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("calendar-push-sweep")
 def requeue_pending_calendar_pushes() -> int:
-    """Queue the auto-sync pushes whose trip change was never delivered to the calendar.
+    """Queue the calendar pushes owed and not delivered: an auto-sync change, or the rest of a cut-short export.
 
     Returns:
         How many trips were queued.
@@ -459,10 +461,11 @@ def requeue_pending_calendar_pushes() -> int:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
     cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
-    pending = TripCalendarLink.objects.filter(activity__isnull=True, auto_sync=True, push_requested_at__lt=cutoff)
+    # Not limited to auto_sync links: an export the budget cut short marks its link whether or not it auto-syncs.
+    pending = TripCalendarLink.objects.filter(activity__isnull=True, push_requested_at__lt=cutoff)
     abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
     if abandoned:
-        logger.warning("Dropped %d calendar auto-sync request(s) after %d failed pushes", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+        logger.warning("Dropped %d calendar push request(s) after %d pushes that wrote nothing", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
     trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
     queued = 0
     for trip_id in trip_ids:
@@ -2879,6 +2882,14 @@ _DEFERRED_LOOKUP_DEADLINE = timedelta(days=2)
 #: Seconds between retries, indexed by attempt number (the last entry repeats).
 _DEFERRED_RETRY_SCHEDULE = (120, 120, 120, 300, 600, 1800, 3600, 7200, 14400, 21600)
 
+#: Seconds a batch waits on Google's rate limit, whatever the attempt.
+_GOOGLE_RATE_LIMIT_RETRY_SECONDS = 65
+
+#: The most retries the deadline can hold. Each retry waits at least the shortest gap above, and a batch that keeps
+#: resolving a cid or two resets its counters to that gap, so this many retries always outlast the deadline. The
+#: deadline ends a batch first; this ends one whose ``started_at`` it cannot read.
+_DEFERRED_MAX_RETRIES = math.ceil(_DEFERRED_LOOKUP_DEADLINE.total_seconds() / min(*_DEFERRED_RETRY_SCHEDULE, _GOOGLE_RATE_LIMIT_RETRY_SECONDS))
+
 
 def _deferred_retry_countdown(attempt: int) -> int:
     """Seconds to wait before retry number ``attempt`` (0-based).
@@ -3042,7 +3053,7 @@ def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[di
     return checked
 
 
-@shared_task(bind=True, max_retries=None, queue=Queue.BULK)
+@shared_task(bind=True, max_retries=_DEFERRED_MAX_RETRIES, queue=Queue.BULK)
 def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     self,
     profile_id: int,
@@ -3065,6 +3076,9 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     from the retry args, so a retry never redoes finished work - if anything
     is still pending on a rate limit or a REData outage. Reports a summary via
     NotificationLog once every cid is either placed or confirmed unresolvable.
+
+    Retries stop at :data:`_DEFERRED_LOOKUP_DEADLINE`, or at :data:`_DEFERRED_MAX_RETRIES` for a batch the deadline
+    cannot end; either way the cids still pending become ``PinImportFailure`` rows and the user is told.
 
     Args:
         profile_id: PK of the importing profile.
@@ -3134,12 +3148,15 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
     consecutive_request_failures = consecutive_request_failures + 1 if result.request_failed else 0
-    if _deferred_deadline_passed(started_at) and consecutive_request_failures:
+    # self.request.retries counts this run's predecessors; Celery refuses a retry() past max_retries.
+    out_of_time = _deferred_deadline_passed(started_at) or self.request.retries >= _DEFERRED_MAX_RETRIES
+    if out_of_time and consecutive_request_failures:
         logger.error(
-            "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s - giving up.",
+            "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s after %d retries - giving up.",
             consecutive_request_failures,
             len(all_cids),
             profile_id,
+            self.request.retries,
         )
         for cid in all_cids:
             record_pin_import_failure(
@@ -3168,14 +3185,17 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         else:
             consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
 
-        if _deferred_deadline_passed(started_at):
+        if out_of_time:
+            # What this last round did resolve is placed, as on any other round; only what is still pending fails.
+            created_count, exists_count, skipped_count = _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
             logger.error(
-                "resolve_deferred_pin_locations: %d cid(s) for profile %s made no progress across %d consecutive retries - giving up.",
-                len(all_cids),
+                "resolve_deferred_pin_locations: %d cid(s) for profile %s still pending after %d retries (%d without progress) - giving up.",
+                len(result.pending),
                 profile_id,
+                self.request.retries,
                 consecutive_no_progress,
             )
-            for cid in all_cids:
+            for cid in result.pending:
                 record_pin_import_failure(
                     profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED
                 )
@@ -3186,13 +3206,13 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
                 notification_type=NotificationType.ERROR,
                 title="Location lookup is taking longer than expected",
                 message=(
-                    f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
+                    f"{len(result.pending)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
                     "This isn't a problem with your import - review them on the Locations page to enter an address or coordinates yourself."
                 ),
                 url=reverse("memories.locations"),
             )
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
-            return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+            return {"created": created_count, "exists": exists_count, "skipped": skipped_count + len(result.pending)}
 
         # Place whatever DID resolve this round before scheduling the retry: `remaining_pins` below drops every
         # resolved cid from the retry args, so any coordinate not placed here is never placed at all - not this
@@ -3209,7 +3229,7 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         # A Google rate limit clears on its own timescale and is unrelated to how
         # long this batch has been going, so it keeps its short fixed wait.
         if result.provider == "google_places":
-            countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
+            countdown, message = _GOOGLE_RATE_LIMIT_RETRY_SECONDS, "Waiting on Google's rate limit - resuming shortly..."
         else:
             countdown = _deferred_retry_countdown(max(consecutive_no_progress, consecutive_request_failures))
             message = "Still waiting on the location lookup service - checking back periodically..." if countdown > 600 else "Having trouble reaching the location lookup service - retrying shortly..."
@@ -3229,7 +3249,6 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         self.retry(
             args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress, started_at or timezone.now().isoformat()],
             countdown=countdown,
-            max_retries=None,
             throw=False,
         )
         return {"created": 0, "exists": 0, "skipped": 0}
@@ -5397,17 +5416,48 @@ def fan_out_wiki_alias_to_pins(alias_id: int) -> int:
 def sync_pin_against_smart_lists_task(pin_id: int) -> None:
     """Re-evaluate one pin against every smart list its owner has.
 
-    The hand-off for a profile with more smart lists than a request should walk.
+    Nothing queues this any more; it stays so messages queued before :func:`sync_requested_smart_lists` replaced it
+    are still applied.
 
     Args:
         pin_id: Primary key of the pin that was created or edited.
     """
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.pin_list_membership import sync_pin_against_smart_lists
+    from urbanlens.dashboard.services.pins.pin_list_membership import sync_pins_against_smart_lists
 
-    pin = Pin.objects.filter(pk=pin_id).first()
-    if pin is not None:
-        sync_pin_against_smart_lists(pin, deferred=True)
+    profile_id = Pin.objects.filter(pk=pin_id).values_list("profile_id", flat=True).first()
+    if profile_id is not None:
+        sync_pins_against_smart_lists(profile_id, [pin_id])
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def sync_requested_smart_lists(profile_id: int) -> int | None:
+    """Apply an account's outstanding smart-list sync requests (``services.pins.smart_list_sync``).
+
+    Interactive by default, since the account's lists say they are catching up until it runs;
+    ``queue_smart_list_sync`` routes an account past ``MAX_SMART_LISTS_PER_SYNC`` smart lists to the bulk queue.
+
+    Args:
+        profile_id: The account whose pins changed.
+
+    Returns:
+        How many pins were evaluated, or None when another sync held the account and this one was put off.
+    """
+    from urbanlens.dashboard.services.pins.smart_list_sync import drain_smart_list_sync_requests
+
+    return drain_smart_list_sync_requests(profile_id)
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_smart_list_sync_requests() -> int:
+    """Queue a smart-list sync for every account whose requests its own sync never drained.
+
+    Returns:
+        How many syncs were queued.
+    """
+    from urbanlens.dashboard.services.pins.smart_list_sync import queue_stale_requests
+
+    return queue_stale_requests()
 
 
 @shared_task(queue=Queue.INTERACTIVE)

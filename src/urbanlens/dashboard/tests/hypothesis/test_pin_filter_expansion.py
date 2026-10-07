@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.links.model import PinLink
@@ -19,6 +20,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
+from urbanlens.dashboard.tasks import sync_requested_smart_lists
 
 _coord_counter = 0
 
@@ -206,6 +208,8 @@ class MarkViewedTests(TestCase):
     """Pin.mark_viewed(): throttled to once/day, fires the resync signal."""
 
     def setUp(self) -> None:
+        # Smart-list membership is applied by the queued sync (services.pins.smart_list_sync); run it here.
+        self.enterContext(tasks_run_inline(sync_requested_smart_lists))
         self.profile = baker.make(User).profile
         self.pin = _make_pin(self.profile)
 
@@ -263,6 +267,8 @@ class PinLinkResyncSignalTests(TestCase):
     updated timestamp (PinLink writes never call Pin.save() themselves)."""
 
     def setUp(self) -> None:
+        # Smart-list membership is applied by the queued sync (services.pins.smart_list_sync); run it here.
+        self.enterContext(tasks_run_inline(sync_requested_smart_lists))
         self.profile = baker.make(User).profile
         self.pin = _make_pin(self.profile)
         self.pin_list = baker.make(PinList, profile=self.profile, is_smart=True, smart_filter={"has_links": "yes"})
@@ -298,6 +304,8 @@ class DetailPinResyncSignalTests(TestCase):
     fires by default - the parent's detail-pin-count criterion needs its own signal)."""
 
     def setUp(self) -> None:
+        # Smart-list membership is applied by the queued sync (services.pins.smart_list_sync); run it here.
+        self.enterContext(tasks_run_inline(sync_requested_smart_lists))
         self.profile = baker.make(User).profile
         self.parent = _make_pin(self.profile)
         self.pin_list = baker.make(PinList, profile=self.profile, is_smart=True, smart_filter={"min_detail_pins": 1})

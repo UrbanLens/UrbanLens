@@ -34,6 +34,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     EventListing,
 )
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.trips.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
     activity_to_event_body,
@@ -44,6 +45,7 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
     import_events_as_trips,
     push_auto_synced_trip_changes,
     remove_trip_from_calendar,
+    trip_event_id,
     trip_to_event_body,
 )
 
@@ -161,7 +163,7 @@ class TripToEventBodyTests(TestCase):
             lng_override=-73.9,
         )
         body = trip_to_event_body(trip)
-        self.assertNotIn("location", body)
+        self.assertEqual(body["location"], "")
 
 
 class EventToTripKwargsTests(SimpleTestCase):
@@ -693,14 +695,18 @@ class ExportTripTests(_CalendarSyncDBTestCase):
         gateway.create_event.return_value = {"id": "new-evt"}
         trip = self._trip()
 
-        link, activity_count = export_trip_to_calendar(self.account, trip, trip_url="https://example.com/t/")
+        result = export_trip_to_calendar(self.account, trip)
 
-        self.assertEqual(activity_count, 0)
+        self.assertEqual(result.activities_synced, 0)
+        self.assertTrue(result.complete)
         gateway.create_event.assert_called_once()
         body = gateway.create_event.call_args[0][0]
         self.assertEqual(body["summary"], "Export me")
         self.assertEqual(body["start"]["date"], "2026-10-01")
         self.assertEqual(body["end"]["date"], "2026-10-04")
+        self.assertIn(absolute_url(reverse("trips.detail", kwargs={"trip_slug": trip.slug})), body["description"])
+        self.assertEqual(gateway.create_event.call_args.kwargs["event_id"], trip_event_id(trip, self.profile, None))
+        link = result.trip_link
         self.assertEqual(link.google_event_id, "new-evt")
         self.assertEqual(link.direction, CalendarSyncDirection.EXPORTED)
 
@@ -733,7 +739,7 @@ class ExportTripTests(_CalendarSyncDBTestCase):
             direction=CalendarSyncDirection.EXPORTED,
         )
 
-        link, _count = export_trip_to_calendar(self.account, trip)
+        link = export_trip_to_calendar(self.account, trip).trip_link
 
         gateway.create_event.assert_called_once()
         self.assertEqual(link.google_event_id, "evt-new")
@@ -1061,7 +1067,7 @@ class ActivityEventBodyTests(SimpleTestCase):
         body = activity_to_event_body(
             self._activity(scheduled_at=start, location_hidden=True, lat_override=41.5, lng_override=-73.9)
         )
-        self.assertNotIn("location", body)
+        self.assertEqual(body["location"], "")
 
     def test_coordinate_override_exported_as_location(self):
         start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)
@@ -1092,10 +1098,10 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
         gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
         trip, scheduled, _unscheduled = self._trip_with_activities()
 
-        link, activity_count = export_trip_to_calendar(self.account, trip)
+        result = export_trip_to_calendar(self.account, trip)
 
-        self.assertEqual(activity_count, 1)
-        self.assertEqual(link.google_event_id, "trip-evt")
+        self.assertEqual(result.activities_synced, 1)
+        self.assertEqual(result.trip_link.google_event_id, "trip-evt")
         activity_link = TripCalendarLink.objects.get(trip=trip, profile=self.profile, activity=scheduled)
         self.assertEqual(activity_link.google_event_id, "act-evt")
         # Trip-level link + one activity link.
@@ -1105,14 +1111,46 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
         gateway = self._patch_gateway()
         gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
         gateway.update_event.side_effect = lambda event_id, _body: {"id": event_id}
-        trip, _scheduled, _unscheduled = self._trip_with_activities()
+        trip, scheduled, _unscheduled = self._trip_with_activities()
+        export_trip_to_calendar(self.account, trip)
 
-        export_trip_to_calendar(self.account, trip)
-        export_trip_to_calendar(self.account, trip)
+        scheduled.notes = "Bring the tripod."
+        scheduled.save(update_fields=["notes", "updated"])
+        result = export_trip_to_calendar(self.account, trip)
 
         self.assertEqual(gateway.create_event.call_count, 2)
-        self.assertEqual(gateway.update_event.call_count, 2)
+        gateway.update_event.assert_called_once()
+        self.assertEqual(gateway.update_event.call_args[0][0], "act-evt")
+        self.assertEqual((result.written, result.events_synced, result.events_total), (1, 2, 2))
         self.assertEqual(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).count(), 2)
+
+    def test_re_export_of_an_unchanged_trip_writes_nothing(self):
+        gateway = self._patch_gateway()
+        gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
+        trip, _scheduled, _unscheduled = self._trip_with_activities()
+        export_trip_to_calendar(self.account, trip)
+
+        result = export_trip_to_calendar(self.account, trip)
+
+        self.assertEqual(gateway.create_event.call_count, 2)
+        gateway.update_event.assert_not_called()
+        self.assertTrue(result.complete)
+        self.assertEqual(
+            (result.written, result.events_synced, result.events_total, result.activities_synced), (0, 2, 2, 1)
+        )
+
+    def test_reconnecting_rewrites_events_it_would_have_skipped(self):
+        """A reconnect may be to another Google account, which does not hold what the links record."""
+        gateway = self._patch_gateway()
+        gateway.create_event.side_effect = [{"id": "trip-evt"}, {"id": "act-evt"}]
+        gateway.update_event.side_effect = lambda event_id, _body: {"id": event_id}
+        trip, _scheduled, _unscheduled = self._trip_with_activities()
+        export_trip_to_calendar(self.account, trip)
+
+        TripCalendarLink.objects.forget_written_events(self.profile)
+        export_trip_to_calendar(self.account, trip)
+
+        self.assertEqual(gateway.update_event.call_count, 2)
 
     def test_unscheduling_activity_removes_its_event_on_next_export(self):
         gateway = self._patch_gateway()
@@ -1123,9 +1161,10 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
 
         scheduled.scheduled_at = None
         scheduled.save(update_fields=["scheduled_at", "updated"])
-        _link, activity_count = export_trip_to_calendar(self.account, trip)
+        result = export_trip_to_calendar(self.account, trip)
 
-        self.assertEqual(activity_count, 0)
+        self.assertEqual(result.activities_synced, 0)
+        self.assertTrue(result.complete)
         gateway.delete_event.assert_called_once_with("act-evt")
         self.assertFalse(
             TripCalendarLink.objects.filter(trip=trip, profile=self.profile, activity__isnull=False).exists()
@@ -1328,6 +1367,28 @@ class CalendarCallbackViewTests(TestCase):
             response = self.client.get(reverse("trips.calendar.callback"), {"state": state, "code": "abc"})
 
         self.assertEqual(response["Location"], reverse("trips.list"))
+
+    def test_connecting_forgets_what_the_links_say_was_written(self):
+        """A reconnect may be to another Google account, so the next export must not skip any event as current."""
+        from django.core import signing
+
+        trip = Trip.objects.create(name="Exported before", creator=self.profile)
+        link = TripCalendarLink.objects.create(
+            trip=trip,
+            profile=self.profile,
+            google_event_id="evt-old-account",
+            direction=CalendarSyncDirection.EXPORTED,
+            event_fingerprint="f" * 64,
+        )
+        state = signing.dumps({"pid": self.profile.id, "next": "trips.list"}, salt="google-calendar-connect")
+        with mock.patch(
+            "urbanlens.dashboard.controllers.calendar_sync.exchange_code_for_tokens",
+            return_value={"access_token": "tok", "refresh_token": "ref", "expires_in": 3600},
+        ):
+            self.client.get(reverse("trips.calendar.callback"), {"state": state, "code": "abc"})
+
+        link.refresh_from_db()
+        self.assertEqual(link.event_fingerprint, "")
 
 
 class CalendarInviteIdentityMaskingTests(TestCase):

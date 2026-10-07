@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pin_ids_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
+from urbanlens.dashboard.services.pins.smart_list_sync import membership_pending
 from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError, TripQuotaError
 from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -50,6 +51,7 @@ _BULK_ADD_CONFIRM_THRESHOLD = 100
 
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
 _ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
+_SYNC_STATUS_TEMPLATE = "dashboard/partials/pin_lists/_sync_status.html"
 
 #: Rows rendered per page of the items list - matches the height-based "revealed" HTMX pagination the Vault
 #: gallery uses (see controllers.vault_media.VaultMediaView/_GALLERY_PAGE_SIZE), reused here rather than
@@ -59,6 +61,9 @@ _ITEMS_PAGE_SIZE = 50
 #: Cap on markers drawn for the list's overview map, matching
 #: ``saved_filters._PREVIEW_MAP_PIN_LIMIT`` - the same map, over the same pins.
 _MAP_PIN_LIMIT = 500
+
+#: Seconds a smart list that is catching up waits before asking for its panel again, by how often it has asked.
+_SYNC_POLL_DELAYS = (2, 3, 5, 10, 20, 30, 60)
 
 
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
@@ -169,8 +174,25 @@ def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[st
     }
 
 
+def _membership_sync_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
+    """Whether the panel must say the list is catching up, and when its notice asks again.
+
+    Pin changes reach smart lists through a queued sync (``services.pins.smart_list_sync``), so a panel rendered
+    before it runs shows the list as it was. The notice asks :class:`PinListSyncStatusView`, backing off, until the
+    sync has run.
+    """
+    if not membership_pending(pin_list):
+        return {"membership_pending": False}
+    try:
+        polls = max(0, int(request.GET.get("poll", 0)))
+    except ValueError:
+        polls = 0
+    return {"membership_pending": True, "sync_poll_delay": _SYNC_POLL_DELAYS[min(polls, len(_SYNC_POLL_DELAYS) - 1)], "sync_poll_next": polls + 1}
+
+
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
-    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, **_paginated_items_context(request, pin_list)})
+    context = {"pin_list": pin_list, **_paginated_items_context(request, pin_list), **_membership_sync_context(request, pin_list)}
+    return render(request, _ITEMS_PANEL_TEMPLATE, context)
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
@@ -286,6 +308,7 @@ class PinListDetailView(LoginRequiredMixin, View):
             {
                 "pin_list": pin_list,
                 **_paginated_items_context(request, pin_list),
+                **_membership_sync_context(request, pin_list),
                 "saved_filters": saved_filters,
                 **profile.get_map_center_template_context(),
                 # The pins overview map uses the shared layers component, whose base layer (and therefore
@@ -410,6 +433,27 @@ class PinListItemsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         return _render_items_panel(request, pin_list)
+
+
+class PinListSyncStatusView(LoginRequiredMixin, View):
+    """Whether a smart list is still catching up on its owner's pin changes.
+
+    GET /lists/<slug>/sync-status/?poll=N
+
+    While it is, the answer is the notice again, asking later. Once it has caught up, the answer says so with a
+    reload button and fires ``pinListMembershipSettled``, on which the page reloads the items itself unless the
+    reader has scrolled past the first page or is dragging a row.
+    """
+
+    def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
+        context = _membership_sync_context(request, pin_list)
+        if context["membership_pending"]:
+            return render(request, _SYNC_STATUS_TEMPLATE, {"pin_list": pin_list, **context})
+        response = render(request, _SYNC_STATUS_TEMPLATE, {"pin_list": pin_list, "membership_settled": True})
+        response["HX-Trigger"] = json.dumps({"pinListMembershipSettled": {}})
+        return response
 
 
 class PinListItemsPageView(LoginRequiredMixin, View):
