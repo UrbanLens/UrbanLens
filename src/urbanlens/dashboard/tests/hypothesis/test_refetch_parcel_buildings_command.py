@@ -63,7 +63,7 @@ class RefetchParcelBuildingsCommandTests(TestCase):
         output = self._run(*_WINDOW)
 
         self.assertEqual(self._kept(), before)
-        self.assertIn("redata_building_attributes: 1", output)
+        self.assertIn("redata_building_attributes: 1", output)  # the fallback rows' locations hold no attributes row
         self.assertIn("parcel_buildings: 3", output)
         self.assertIn("--apply", output)
 
@@ -74,6 +74,19 @@ class RefetchParcelBuildingsCommandTests(TestCase):
         kept = {self.attributes_found.pk, self.buildings_redata.pk, self.before.pk, self.after.pk, self.other_source.pk}
         self.assertFalse(self._kept() & cleared)
         self.assertEqual(self._kept() & kept, kept)
+
+    def test_apply_clears_building_attributes_read_from_a_fallback_list_it_clears(self) -> None:
+        """0.8.0's Building Attributes reads the cached parcel-buildings list first, so a fallback list fed it too."""
+        fallback = self._row("parcel_buildings", _OSM_LIST)
+        derived = LocationCache.set(fallback.location, "redata_building_attributes", {"name": "", "source": "osm"})
+        LocationCache.objects.filter(pk=derived.pk).update(updated=_INSIDE)
+        trusted = LocationCache.set(self.buildings_redata.location, "redata_building_attributes", {"name": "Main"})
+        LocationCache.objects.filter(pk=trusted.pk).update(updated=_INSIDE)
+
+        self._run(*_WINDOW, "--apply")
+
+        self.assertFalse(LocationCache.objects.filter(pk__in=(fallback.pk, derived.pk)).exists())
+        self.assertTrue(LocationCache.objects.filter(pk=trusted.pk).exists())
 
     def test_a_second_run_finds_nothing(self) -> None:
         self._run(*_WINDOW, "--apply")

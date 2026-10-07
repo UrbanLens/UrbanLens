@@ -781,9 +781,9 @@ direct-only because REData's contract can't reproduce what they show:
   pin with children of its own gets that list alone, and the header adds a child pin or pulls the
   wiki's in. CRIS's campus buildings are in this list, not repeated on the CRIS tab.
   Also shown on the wiki page. `manage.py refetch_parcel_buildings --since ... --until ...` (dry-run
-  unless `--apply`) clears the empty or fallback building lists and empty Building Attributes cached
-  in a window, so they are fetched again: for the rows 0.8.0 cached while REData was still computing
-  the parcel
+  unless `--apply`) clears the empty or fallback building lists cached in a window, and the Building
+  Attributes that are empty or were read from those lists, so they are fetched again: for the rows
+  0.8.0 cached while REData was still computing the parcel
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search
 - **Cameras & Structures** — mapped surveillance cameras (individual agency registers plus

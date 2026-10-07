@@ -4,14 +4,17 @@ REData 0.3.7 to 0.3.9 answer a parcel's buildings with a 503 naming ``refresh_qu
 ``error`` while they compute it. UrbanLens 0.8.0 knows neither code and kept the 503 as REData's settled answer: the
 Building Attributes source cached ``{}``, and the parcel-buildings list cached its OpenStreetMap or CRIS fallback, or
 ``{}``. An enrichment source never refreshes a row it has written, so those rows stay until a panel finds them stale.
+0.8.0's parcel-buildings list falls back on any REData failure, so it keeps writing such rows against REData 0.3.10 too,
+until this release replaces it.
 
-This deletes, from the window given, each Building Attributes row that is empty and each parcel-buildings row that is
-empty or a fallback's. Enrichment and the panels then fetch them again. A row REData answered with buildings, a row
+This deletes, from the window given, each parcel-buildings row that is empty or a fallback's, and each Building
+Attributes row that is empty or stands on one of those locations (0.8.0's Building Attributes reads the cached list
+first, so a fallback list fed it too). Enrichment and the panels then fetch them again. A list REData answered, a row
 from outside the window and every other source are left alone. So are child pins built from a fallback list: a later
 sweep adds pins for buildings REData knows of and removes none.
 
-Dry-run by default; ``--apply`` deletes. Run it once REData answers pending parcels in a shape 0.8.0 retries
-(0.3.10), with the window from REData 0.3.7's deploy to that one.
+Dry-run by default; ``--apply`` deletes. The window runs from REData 0.3.7's deploy to this release's: before that
+deploy, 0.8.0 is still writing such rows.
 """
 
 from __future__ import annotations
@@ -66,7 +69,7 @@ class Command(BaseCommand):
             parser: The argument parser.
         """
         parser.add_argument("--since", required=True, help="Start of the window, ISO 8601 with an offset (REData 0.3.7's deploy).")
-        parser.add_argument("--until", required=True, help="End of the window, exclusive, ISO 8601 with an offset (REData 0.3.10's deploy).")
+        parser.add_argument("--until", required=True, help="End of the window, exclusive, ISO 8601 with an offset (the deploy of the UrbanLens release that replaced 0.8.0).")
         parser.add_argument("--apply", action="store_true", help="Delete the rows; without it, only count them.")
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -102,7 +105,10 @@ class Command(BaseCommand):
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 
         window = LocationCache.objects.filter(updated__gte=since, updated__lt=until)
+        lists = window.filter(source=PARCEL_BUILDINGS_CACHE_SOURCE).filter(Q(data={}) | Q(data__provider__in=_FALLBACK_PROVIDERS))
+        # Read before anything is deleted: the attributes a fallback list fed are found through that list's row.
+        fed = list(lists.filter(~Q(data={})).values_list("location_id", flat=True))
         return {
-            ATTRIBUTES_SOURCE: window.filter(source=ATTRIBUTES_SOURCE, data={}),
-            PARCEL_BUILDINGS_CACHE_SOURCE: window.filter(source=PARCEL_BUILDINGS_CACHE_SOURCE).filter(Q(data={}) | Q(data__provider__in=_FALLBACK_PROVIDERS)),
+            ATTRIBUTES_SOURCE: window.filter(source=ATTRIBUTES_SOURCE).filter(Q(data={}) | Q(location_id__in=fed)),
+            PARCEL_BUILDINGS_CACHE_SOURCE: lists,
         }
