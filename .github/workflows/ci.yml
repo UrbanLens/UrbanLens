@@ -161,9 +161,7 @@ jobs:
       - name: Tests with coverage
         run: |
           status=0
-          export LEAKDET_DIR="$RUNNER_TEMP/leaks" && mkdir -p "$LEAKDET_DIR"  # TEMPORARY
-          PYTHONPATH=tests/_ci_tmp coverage run --source=src -m pytest -p leakdet -n 4 --dist loadscope --no-loadscope-reorder -m "not serial" --durations=25 || status=$?
-          head -n 200 "$LEAKDET_DIR"/* || true  # TEMPORARY
+          coverage run --source=src -m pytest -n 4 --dist loadscope --no-loadscope-reorder -m "not serial" --durations=25 || status=$?
           coverage run --source=src -m pytest -p no:xdist -m serial --durations=10 || status=$?
           coverage combine
           coverage xml
