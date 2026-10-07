@@ -33,6 +33,10 @@ _CACHE_SOURCE = "property_records"
 #: Said in place of an official owner's name to a viewer not entitled to it.
 OWNER_WITHHELD = "Owner on record - subscribers only"
 
+#: The parcel record's ``year_built`` is the assessor's one year for the parcel's principal improvement, which dates
+#: neither the property as a whole nor any other building on it.
+YEAR_BUILT_LABEL = "Year built (main building)"
+
 
 #: Liens shown on the card. A parcel with a long enforcement history is
 #: interesting, but the card is a summary - the full list belongs to whoever
@@ -718,7 +722,7 @@ def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographi
     if data.get("building_sqft"):
         meta.append({"label": "Building size", "value": f"{data['building_sqft']:,.0f} sq ft"})
     if data.get("year_built"):
-        meta.append({"label": "Year built", "value": data["year_built"]})
+        meta.append({"label": YEAR_BUILT_LABEL, "value": data["year_built"]})
     for area in special_land_use_rows(data.get("special_land_use_areas")):
         meta.append({"label": area["label"], "value": area["name"]})
     if data.get("flood_zone_code"):
@@ -928,7 +932,7 @@ class PropertyRecordsPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSou
         if data.get("apn"):
             fields.append({"label": "Parcel", "value": str(data["apn"])})
         if data.get("year_built"):
-            fields.append({"label": "Year built", "value": str(data["year_built"])})
+            fields.append({"label": YEAR_BUILT_LABEL, "value": str(data["year_built"])})
         return OverviewSummary(chips=chips, fields=fields) if chips or fields else None
 
     def debug_count(self, data: dict) -> int:

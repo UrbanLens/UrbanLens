@@ -537,6 +537,40 @@ class BuildDateTests(_BootstrapCase):
 
         self.assertEqual(pin.date_built, _year(ASSESSOR_YEAR))
 
+    def _main_dated_by_the_parcel(self, **basis: str) -> list[dict]:
+        """The campus as REData answers it when the assessor's year is the only one to reach the main building."""
+        buildings = campus_buildings()
+        main = next(building for building in buildings if building["name"] == "MAIN/ADMIN")
+        main.pop("year_built_basis")
+        main.update(year_built=ASSESSOR_YEAR, **basis)
+        return buildings
+
+    def test_a_building_dated_only_by_the_parcels_year_is_left_undated(self) -> None:
+        from urbanlens.dashboard.services.pins.build_dates import wiki_build_year
+
+        self.upstreams = HrshUpstreams(
+            buildings=self._main_dated_by_the_parcel(year_built_basis="parcel", year_built_source="assessor")
+        )
+
+        pin = self.create_pin()
+
+        main = Pin.objects.get(name="MAIN/ADMIN")
+        self.assertIsNone(main.date_built)
+        self.assertIsNone(wiki_build_year(Wiki.objects.get_for_location(main.location)))
+        self.assertEqual(Pin.objects.get(name="LAUNDRY").date_built, _year(LAUNDRY_YEAR))
+        self.assertEqual(pin.date_built, _year(ASSESSOR_YEAR), "the property still takes the parcel's year")
+
+    def test_a_year_older_redata_does_not_explain_dates_no_building(self) -> None:
+        buildings = self._main_dated_by_the_parcel()
+        for building in buildings:
+            building.pop("year_built_basis", None)
+        self.upstreams = HrshUpstreams(buildings=buildings)
+
+        pin = self.create_pin()
+
+        self.assertEqual({child.date_built for child in self.children(pin)}, {None})
+        self.assertEqual(pin.date_built, _year(ASSESSOR_YEAR))
+
     def test_with_nothing_known_the_date_stays_empty(self) -> None:
         self.upstreams = HrshUpstreams(buildings=[], parcel_year=None)
 
