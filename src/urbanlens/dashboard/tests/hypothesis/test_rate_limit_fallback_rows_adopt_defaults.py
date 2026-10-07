@@ -24,6 +24,9 @@ def _fallback_row(**overrides: object) -> ApiRateLimit:
         "calls_per_day": 500,
     }
     values.update(overrides)
+    # Gateway calls run on the deadline pool's threads, whose connections are outside a test case's transaction, so
+    # an earlier test can leave this service's row committed. Removed here, inside this test's transaction.
+    ApiRateLimit.objects.filter(service=_SERVICE).delete()
     return ApiRateLimit.objects.create(**values)
 
 

@@ -99,12 +99,12 @@ class EmergencyContactByEmailTests(TestCase):
 
 
 class EmailContactStillSeesTheCheckinTests(TestCase):
-    """The account that verified a contact's address sees the check-in as a contact, without the owner learning who it is."""
+    """The account that verified a contact's address sees the check-in as a contact once alerted, without the owner learning who it is."""
 
     def setUp(self) -> None:
         super().setUp()
         self.owner = baker.make(User, username="hiker").profile
-        self.member = _verified("secret_member", "jess.a.mann+ul@gmail.com")
+        self.member = _verified("secret_member", "jane.q.publ+ul@gmail.com")
         self.checkin = baker.make(
             SafetyCheckin,
             profile=self.owner,
@@ -113,13 +113,18 @@ class EmailContactStillSeesTheCheckinTests(TestCase):
             destination_latitude="40.000000",
             destination_longitude="-74.000000",
         )
-        set_checkin_contacts(self.checkin, [(None, "J.E.S.S.A.M.A.N.N@googlemail.com", "")])
+        set_checkin_contacts(self.checkin, [(None, "J.A.N.E.Q.P.U.B.L@googlemail.com", "")])
+        self._alert()
+
+    def _alert(self) -> None:
+        """A contact sees the check-in only once escalation has alerted it."""
+        self.checkin.contacts.update(notified_at=timezone.now())
 
     def test_it_is_shared_with_the_verified_account_by_any_spelling(self) -> None:
         self.assertIn(self.checkin, SafetyCheckin.objects.shared_with(self.member.profile))
 
     def test_an_unverified_holder_of_the_address_does_not_see_it(self) -> None:
-        squatter = baker.make(User, username="squatter", email="jessamann@gmail.com", is_active=True)
+        squatter = baker.make(User, username="squatter", email="janeqpubl@gmail.com", is_active=True)
 
         self.assertNotIn(self.checkin, SafetyCheckin.objects.shared_with(squatter.profile))
 
@@ -127,6 +132,7 @@ class EmailContactStillSeesTheCheckinTests(TestCase):
         other = _verified("other_member", "other@example.com")
         ProfileEmail.objects.create(profile=other.profile, email="backup@example.com", is_verified=True)
         set_checkin_contacts(self.checkin, [(None, "backup@example.com", "")])
+        self._alert()
 
         self.assertIn(self.checkin, SafetyCheckin.objects.shared_with(other.profile))
 

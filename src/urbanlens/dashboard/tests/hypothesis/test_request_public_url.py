@@ -384,6 +384,11 @@ class UserAgentTests(SimpleTestCase):
         self.assertEqual(self._sent_user_agent(), USER_AGENT)
         self.assertNotIn("python-requests/2.", USER_AGENT.split(")")[0], "it names the site, not the library alone")
 
+    def test_the_sites_user_agent_names_no_email_address(self) -> None:
+        """Every third party this site calls logs the header, so its contact is the project's URL, not a person."""
+        self.assertNotIn("@", USER_AGENT)
+        self.assertIn("https://", USER_AGENT.split(")")[0])
+
     def test_a_callers_own_user_agent_is_kept(self) -> None:
         self.assertEqual(self._sent_user_agent(headers={"user-agent": "Special/2"}), "Special/2")
 

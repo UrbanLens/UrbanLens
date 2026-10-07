@@ -126,7 +126,7 @@ class TripCalendarLink(abstract.DashboardModel):
     #: SHA-256 of the event body last written and the calendar it went to; blank when nothing UrbanLens wrote is
     #: known to be there. An export skips an event whose new body hashes the same, so a retry resumes where the
     #: last attempt stopped.
-    event_fingerprint = CharField(max_length=64, blank=True, default="")
+    event_fingerprint = CharField(max_length=64, blank=True, default="", db_default="")
     auto_sync = BooleanField(
         default=False,
         help_text="Push future changes to this trip and its activities to the linked calendar event automatically. One-way only - edits made on Google Calendar are never pulled back.",

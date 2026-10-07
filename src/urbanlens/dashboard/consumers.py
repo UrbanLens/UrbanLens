@@ -1212,7 +1212,7 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
 
         if token is not None:
             self.profile_id = None
-            contact = SafetyCheckinContact.objects.select_related("checkin").get(token=token)
+            contact = SafetyCheckinContact.objects.select_related("checkin").by_token(token).get()
             return contact.checkin, contact
 
         user = self.scope.get("user")
