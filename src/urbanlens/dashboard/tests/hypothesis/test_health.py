@@ -268,9 +268,9 @@ class TheProbeDeadlineTests(TestCase):
 
 class TheDeadlineEndsWithTheProbeTests(_FreshProbesTestCase):
     """Inside an enclosing transaction - every test case's, or a caller's - the probe's ``atomic()`` is a savepoint,
-    and releasing one leaves a transaction-scoped setting in force. The deadline stayed, so every request after a
-    readiness probe in one test ran under two seconds, and on a loaded host ``test_write_route_smoke`` saw the safety
-    page cancelled by it. The rolled-back case above never reached that."""
+    and releasing one leaves a transaction-scoped setting in force. Left there, the two-second deadline caps every
+    later query of that transaction, such as the routes ``test_write_route_smoke`` sweeps after the readiness probe.
+    The rolled-back case above does not cover a savepoint that is released."""
 
     _READS_THE_DEADLINE = "SELECT setting::int FROM pg_settings WHERE name = 'statement_timeout'"
 

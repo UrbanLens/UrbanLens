@@ -61,10 +61,9 @@ def _limit_probe_runtime(cursor: CursorWrapper) -> None:
 def _deadlined_cursor() -> Iterator[CursorWrapper]:
     """A cursor in a transaction of its own, whose queries the probe's deadline caps, and nothing after them.
 
-    Inside an enclosing transaction ``atomic()`` is only a savepoint, and releasing one leaves a transaction-scoped
-    setting in force, so the deadline went on capping every later query of the enclosing transaction: in a test case,
-    every request after a readiness probe ran under two seconds. The previous value is put back before the block is
-    left. A query the deadline cancels rolls the savepoint back, which undoes the setting with it.
+    Inside an enclosing transaction, such as a test case's, ``atomic()`` is only a savepoint, and releasing one leaves
+    a transaction-scoped setting in force for every later query of that transaction. So the previous value is put
+    back before the block is left; a query the deadline cancels rolls the savepoint back, which undoes the setting too.
 
     Yields:
         The cursor.
