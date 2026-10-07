@@ -17,9 +17,13 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.pins.search_names import names_remembered, search_names
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
-class PinPageReadsNamesOnceTests(TestCase):
+class PinPageReadsNamesOnceTests(RedataConfiguredMixin, TestCase):
+    """REData configured, as CI's placeholders and a developer's `.env` both have it: without it no gallery source
+    applies, so the page reads no names at all and the count says nothing."""
+
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)
