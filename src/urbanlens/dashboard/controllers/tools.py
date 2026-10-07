@@ -31,6 +31,9 @@ from urbanlens.dashboard.services.import_export.export import (
 from urbanlens.dashboard.services.import_export.import_data import (
     ImportJobStatus,
     import_dir as _import_dir_fn,
+    import_guard_key,
+    import_guard_ttl,
+    release_import_guard,
 )
 from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.media.storage import cap_to_ingress
@@ -127,6 +130,9 @@ _EXPORT_GUARD_TTL = 60 * 75
 #: `services/import_export/export.py` and `tasks.py`, which use exactly "running", "done" and "error" - a
 #: guessed vocabulary here would leave the guard held for the whole TTL after a successful export.
 _EXPORT_TERMINAL_STATES = frozenset({"done", "error"})
+
+#: The same for an import, read off ``services/import_export/import_data.py``'s writers.
+_IMPORT_TERMINAL_STATES = frozenset({"done", "error"})
 
 
 def _export_guard_key(user_id: int | None) -> str:
@@ -397,6 +403,16 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
+        # Claimed before the upload is written, as an export is: an import extracts, scans and writes a whole archive on
+        # a sandbox worker slot.
+        guard = import_guard_key(request.user.pk)
+        if not single_flight.claim(guard, import_guard_ttl()):
+            return render(
+                request,
+                "dashboard/partials/tools/import_progress.html",
+                {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An import is already running."},
+            )
+
         job_id = str(uuid.uuid4())
         imp_dir = _import_dir(job_id)
         os.makedirs(imp_dir, exist_ok=True)
@@ -406,6 +422,7 @@ class ImportStartView(LoginRequiredMixin, View):
             with open(zip_path, "wb") as fh:
                 fh.writelines(upload.chunks())
         except OSError:
+            single_flight.release(guard)
             logger.exception("Failed to save import file for user %s", request.user.pk)
             return _import_error_partial(request, job_id, "Failed to save the uploaded file. Please try again.")
 
@@ -416,6 +433,7 @@ class ImportStartView(LoginRequiredMixin, View):
 
         result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id, durable=False)
         if result is None:
+            single_flight.release(guard)
             ImportJobStatus(job_id).write("error", 0, "Import queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
@@ -424,6 +442,7 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=503,
             )
 
+        single_flight.adopt(guard, job_id, import_guard_ttl())
         logger.info("Import task %s started for user %s", result.id, request.user.pk)
         return render(
             request,
@@ -460,6 +479,10 @@ class ImportStatusView(LoginRequiredMixin, View):
             if data.get("user_id") != request.user.pk:
                 logger.warning("Unauthorized import status access: job %s, user %s", job_id, request.user.pk)
                 return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
+
+            # The task gives its claim up as it ends; this covers one that wrote its last status and died first.
+            if data.get("status") in _IMPORT_TERMINAL_STATES:
+                release_import_guard(request.user.pk, job_id)
 
             return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
         except Exception:

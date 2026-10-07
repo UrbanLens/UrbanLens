@@ -16,6 +16,7 @@ import zipfile
 
 from django.core.cache import cache
 
+from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, degrees_or_none
 from urbanlens.dashboard.services.import_export.archive_extractor import ZipDirectoryTooLargeError, open_zip
@@ -37,6 +38,56 @@ def import_dir(job_id: str) -> str:
     from django.conf import settings as django_settings
 
     return os.path.join(django_settings.MEDIA_ROOT, "imports", job_id)
+
+
+def import_guard_key(user_id: int | None) -> str:
+    """One in-flight import per account.
+
+    Args:
+        user_id: The importing account.
+
+    Returns:
+        The cache key holding that account's in-flight import.
+
+    Raises:
+        ValueError: There is no authenticated user.
+    """
+    if user_id is None:
+        raise ValueError("an import guard needs an authenticated user")
+    return f"ul:single-flight:import:{user_id}"
+
+
+def import_guard_ttl() -> int:
+    """How long an import's claim survives unrefreshed.
+
+    Each run of the import task refreshes it, and a run may last up to the task's hard limit and then wait out the
+    longest storage wait before the next, so it outlives both. A run killed at its hard limit gives it up on expiry.
+
+    Returns:
+        Seconds.
+    """
+    from django.conf import settings as django_settings
+
+    return int(django_settings.CELERY_TASK_TIME_LIMIT) + 2 * storage_retry_countdown(IMPORT_STORAGE_WAITS)
+
+
+def _hold_import_guard(user_id: int, job_id: str) -> None:
+    """Refresh *job_id*'s claim at the start of a run, unless a newer import took the expired claim meanwhile."""
+    guard = import_guard_key(user_id)
+    if single_flight.holder(guard) in {None, job_id}:
+        single_flight.adopt(guard, job_id, import_guard_ttl())
+
+
+def release_import_guard(user_id: int | None, job_id: str) -> None:
+    """Give up *user_id*'s import claim, if *job_id* is what holds it.
+
+    Args:
+        user_id: The importing account.
+        job_id: The import that ended.
+    """
+    guard = import_guard_key(user_id)
+    if single_flight.holder(guard) == job_id:
+        single_flight.release(guard)
 
 
 #: Deferred-row keys, and what to call their files in a message.
@@ -308,6 +359,7 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
 
     User = get_user_model()
     job_status = ImportJobStatus(job_id)
+    _hold_import_guard(user_id, job_id)
 
     try:
         user = User.objects.select_related("profile").get(pk=user_id)
@@ -316,6 +368,7 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
         logger.exception("Import: could not load user %s", user_id)
         job_status.write("error", 0, "Failed to load user data.")
         schedule_import_cleanup(os.path.dirname(zip_path), job_status)
+        release_import_guard(user_id, job_id)
         return False
 
     extract_dir = os.path.join(os.path.dirname(zip_path), "extracted")
@@ -360,9 +413,10 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
         return False
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
-        # A waiting job still needs the archive; the run that finishes it schedules the cleanup.
+        # A waiting job still needs the archive, and keeps its claim; the run that finishes it does both.
         if not waiting:
             schedule_import_cleanup(os.path.dirname(zip_path), job_status)
+            release_import_guard(user_id, job_id)
 
 
 def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_status: ImportJobStatus) -> None:
