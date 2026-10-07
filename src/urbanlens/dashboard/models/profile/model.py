@@ -620,6 +620,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     if TYPE_CHECKING:
         user_id: int
+        # Transient: set by the calendar pre-save hook (models/calendar_sync/signals.py) for its post-save twin.
+        trip_pin_visibility_changed: bool
 
     objects = ProfileManager()
 
