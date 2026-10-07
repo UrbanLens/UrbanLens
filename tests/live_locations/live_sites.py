@@ -189,6 +189,9 @@ class LiveRedata:
             self.session.headers["X-Forwarded-Proto"] = "https"
         self.max_wait_seconds = max_wait_seconds
         self._answers: dict[tuple[str, tuple[tuple[str, str], ...]], Answer] = {}
+        # A call still refused when its wait ran out, by why: the session's verdict for it. Asking again from the next
+        # check repeats work REData could not finish - a cold buildings answer that times a worker out, once per check.
+        self._unanswered: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
         self.log: list[dict[str, Any]] = []
 
     @classmethod
@@ -219,6 +222,8 @@ class LiveRedata:
         key = (path, tuple(sorted((name, str(value)) for name, value in params.items())))
         if key in self._answers:
             return self._answers[key]
+        if key in self._unanswered:
+            raise InconclusiveError(self._unanswered[key])
         deadline = time.monotonic() + self.max_wait_seconds
         while True:
             started = time.monotonic()
@@ -235,9 +240,10 @@ class LiveRedata:
             if _asks_again_later(response, error):
                 wait = _retry_after(response, body)
                 if time.monotonic() + wait > deadline:
-                    raise InconclusiveError(
+                    self._unanswered[key] = (
                         f"{path}: {error or response.status_code} for longer than {self.max_wait_seconds:.0f}s"
                     )
+                    raise InconclusiveError(self._unanswered[key])
                 time.sleep(wait)
                 continue
             answer = Answer(response.status_code, body, seconds)

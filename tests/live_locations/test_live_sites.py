@@ -169,13 +169,16 @@ class TestLiveRedataGet:
         assert client.get("parcels/lookup/", lat=1) is first
         assert get.call_count == 1
 
-    def test_a_bare_503_is_not_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
+    def test_a_call_still_refused_when_its_wait_ran_out_is_not_asked_again(
+        self, client: LiveRedata, get: mock.Mock
+    ) -> None:
         client.max_wait_seconds = 0
-        get.side_effect = [_response(503, "<html>gateway</html>"), _response(200, {"results": []})]
+        get.return_value = _response(502, "<html>Bad Gateway</html>")
 
-        with pytest.raises(InconclusiveError):
-            client.get("parcels/")
-        assert client.get("parcels/").status == 200
+        for _ in range(3):
+            with pytest.raises(InconclusiveError, match="502"):
+                client.get("parcels/1/buildings/")
+        assert get.call_count == 1
 
     def test_an_answer_is_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
         get.return_value = _response(200, {"results": []})
