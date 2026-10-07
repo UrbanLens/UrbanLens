@@ -39,10 +39,13 @@ def _env_bool(name: str, default: bool) -> bool:
 TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
 
 # An unset UL_ENVIRONMENT refuses to start (Jess, 2026-10-07), except in a test run, which is never a deployment:
-# one started without it (a worktree has no .env) is the suite, named as CI names it. Written to os.environ so
-# xdist workers, which hide pytest from argv, and anything reading the variable later get the same answer.
+# one started without it (a worktree has no .env) is the suite, named as CI names it. Both are written to os.environ
+# so anything reading the variable later agrees, and so xdist workers, which hide pytest from argv, know they are a
+# test run as well as its name: without DJANGO_TESTING a worker redirects every request to HTTPS.
 if TESTING and not os.environ.get("UL_ENVIRONMENT", "").strip():
     os.environ["UL_ENVIRONMENT"] = str(EnvironmentTypes.TESTING)
+    if not os.environ.get("DJANGO_TESTING", "").strip():
+        os.environ["DJANGO_TESTING"] = "1"
 
 ENVIRONMENT_NAME = str(environment_from_env())
 _is_local = ENVIRONMENT_NAME == "local"

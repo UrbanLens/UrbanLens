@@ -306,6 +306,18 @@ class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
                     self._reload_as(["/app/.venv/bin/pytest", "-q"], UL_ENVIRONMENT=blank), ("testing", "testing")
                 )
 
+    def test_an_xdist_worker_is_a_test_run_too_not_just_named_one(self) -> None:
+        """A worker hides pytest from argv. Given only the name, it computed TESTING false and, with HTTP not allowed
+        under ``testing``, redirected every request to HTTPS (301s throughout a ``-n 2`` run with no ``.env``)."""
+        with mock.patch.dict("os.environ", dict.fromkeys(_INPUTS, "")):
+            with mock.patch("sys.argv", ["/app/.venv/bin/pytest", "-n", "2"]):
+                importlib.reload(settings_base)
+            with mock.patch("sys.argv", ["-c"]):
+                worker = importlib.reload(settings_base)
+            self.assertEqual(worker.ENVIRONMENT_NAME, "testing")
+            self.assertTrue(worker.TESTING)
+            self.assertFalse(worker.SECURE_SSL_REDIRECT)
+
     def test_the_django_test_flag_counts_as_a_test_run(self) -> None:
         self.assertEqual(self._reload_as(["manage.py", "test"], DJANGO_TESTING="1"), ("testing", "testing"))
 
