@@ -22,6 +22,7 @@ from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway
 from urbanlens.dashboard.services.apis.flickr.public import FlickrAlbumPhoto, FlickrPublicGateway
 from urbanlens.dashboard.services.apis.locations.google import maps
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.photos import google as google_photos
 from urbanlens.dashboard.services.apis.photos.google import GooglePhotosGateway
 from urbanlens.dashboard.services.core.gateway import MAX_PROXIED_MEDIA_BYTES, GatewayRequestError
 from urbanlens.dashboard.tests.hypothesis.test_proxied_media_is_capped import _streamed
@@ -154,3 +155,54 @@ class FixedSizeMapImagesHaveASmallCeilingTests(TestCase):
 
         with pytest.raises(StreetViewNotFoundError):
             gateway.get_street_view_single(1.0, 2.0)
+
+
+class PickerListingIsBoundedTests(TestCase):
+    """Spark P364: ``list_session_media_items`` was ``while True`` on whatever ``nextPageToken`` Google returned."""
+
+    def test_a_listing_that_never_ends_stops_at_the_page_cap_and_says_so(self) -> None:
+        profile = baker.make(User).profile
+        account = GooglePhotosAccount(
+            profile=profile,
+            access_token="a",
+            refresh_token="r",
+            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+        )
+        gateway = GooglePhotosGateway(account=account, session=mock.MagicMock())
+        page = {
+            "mediaItems": [
+                {"id": "a", "mediaFile": {"baseUrl": "https://x/a", "mimeType": "image/jpeg", "filename": "a.jpg"}}
+            ],
+            "nextPageToken": "more",
+        }
+        gateway.session.get.return_value = _json_response(page)
+        gateway.session.get.return_value.ok = True
+
+        with (
+            mock.patch.object(google_photos, "_MAX_PICKER_PAGES", 3),
+            self.assertLogs(google_photos.logger, "WARNING") as logs,
+        ):
+            items = gateway.list_session_media_items("sess")
+
+        self.assertEqual(gateway.session.get.call_count, 3)
+        self.assertEqual(len(items), 3)
+        self.assertIn("3 pages", "\n".join(logs.output))
+
+    def test_a_listing_that_ends_within_the_cap_is_whole_and_silent(self) -> None:
+        profile = baker.make(User).profile
+        account = GooglePhotosAccount(
+            profile=profile,
+            access_token="a",
+            refresh_token="r",
+            token_expiry=timezone.now() + datetime.timedelta(hours=1),
+        )
+        gateway = GooglePhotosGateway(account=account, session=mock.MagicMock())
+        last = _json_response({"mediaItems": [{"id": "z", "mediaFile": {"baseUrl": "https://x/z"}}]})
+        last.ok = True
+        gateway.session.get.return_value = last
+
+        with (
+            mock.patch.object(google_photos, "_MAX_PICKER_PAGES", 3),
+            self.assertNoLogs(google_photos.logger, "WARNING"),
+        ):
+            self.assertEqual([item.id for item in gateway.list_session_media_items("sess")], ["z"])

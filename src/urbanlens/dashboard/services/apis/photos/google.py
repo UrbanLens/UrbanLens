@@ -26,6 +26,8 @@ PICKER_API_BASE = "https://photospicker.googleapis.com/v1"
 PHOTOS_PICKER_SCOPES = ("https://www.googleapis.com/auth/photospicker.mediaitems.readonly", "openid", "email")
 
 _REQUEST_TIMEOUT = 30
+#: Pages of picked items to read, at 100 a page: a bound on a listing whose ``nextPageToken`` never ends, not a limit on how many photos can be picked.
+_MAX_PICKER_PAGES = 100
 _DEFAULT_POLL_INTERVAL_S = 5
 _DEFAULT_TIMEOUT_S = 300
 
@@ -265,7 +267,7 @@ class GooglePhotosGateway(Gateway):
         """
         items: list[PickedMediaItem] = []
         page_token: str | None = None
-        while True:
+        for _ in range(_MAX_PICKER_PAGES):
             params: dict[str, Any] = {"sessionId": session_id, "pageSize": 100}
             if page_token:
                 params["pageToken"] = page_token
@@ -287,7 +289,8 @@ class GooglePhotosGateway(Gateway):
                 )
             page_token = body.get("nextPageToken")
             if not page_token:
-                break
+                return items
+        logger.warning("Google Photos picker listing stopped after %d pages; %d item(s) kept", _MAX_PICKER_PAGES, len(items))
         return items
 
     def download_media_item(self, base_url: str, *, original: bool = True) -> bytes:
