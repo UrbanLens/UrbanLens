@@ -300,7 +300,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
             this check-in's PII, if it has resolved - immediately on resolution if no one but the
             owner could ever see it, or after a 1-hour grace window otherwise (see
             ``services.visits.safety.schedule_checkin_archival``). ``None`` until resolved.
-        resolved_by_label: Display label of whoever concluded this check-in ("you", a partner's
+        resolved_by_label: Display label of whoever concluded this check-in ("you", "removed by owner", a partner's
             username, or a contact's display name) - captured for the archive payload, then
             scrubbed at archival like every other PII field on this model.
         archive_failure_count: Consecutive ``archive_checkin`` failures (e.g. a corrupted E2EE key

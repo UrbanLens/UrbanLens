@@ -1150,7 +1150,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   before sending), through the alert's channels and behind the opt-out gate: "found" when someone reported the
   owner safe, otherwise an all-clear ("you can stop looking") for the owner checking in late, cancelling or
   deleting it. A contact alerted while the owner was checking in gets it from the escalation itself
-  (`_tell_alerted_contacts_it_is_over`)
+  (`_tell_alerted_contacts_it_is_over`). A deletion resolves the check-in as `removed by owner` before deleting
+  it, so that catch, which knows nothing of the deletion, still says it was removed rather than checked in
 - A notice that fails is retried. One that fails to build releases its claim, and one whose email the worker
   could not send is marked (`resolution_email_failed_at`), so the escalation sweep sends it again, the email alone
   if the in-app half already went out (`retry_resolution_notices`). The sweep retries only between two minutes and

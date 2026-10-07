@@ -1566,6 +1566,23 @@ def create_checkin(
     return checkin
 
 
+#: The resolution label of a check-in resolved because its owner is deleting it. It is what tells the escalation's own
+#: catch, and the retry sweep, which know nothing of the deletion, to word the notice as a removal.
+REMOVED_BY_OWNER_LABEL = "removed by owner"
+
+
+def _is_being_removed(checkin: SafetyCheckin) -> bool:
+    """Whether ``checkin`` was resolved by its owner deleting it (``delete_checkin``).
+
+    Args:
+        checkin: A resolved check-in.
+
+    Returns:
+        True for a deletion's resolution.
+    """
+    return checkin.status == SafetyCheckinStatus.CHECKED_IN and checkin.resolved_by_label == REMOVED_BY_OWNER_LABEL
+
+
 def _claim_resolution(checkin: SafetyCheckin, *, status: str, resolved_by_label: str) -> bool:
     """Move an unresolved check-in to a terminal status, once.
 
@@ -1701,7 +1718,7 @@ def check_in(checkin: SafetyCheckin, profile: Profile, *, removing: bool = False
 
     Returns:
         True if this call resolved it, False if it had already concluded - e.g. a contact marked the owner safe in the same moment."""
-    if not _claim_resolution(checkin, status=SafetyCheckinStatus.CHECKED_IN, resolved_by_label="you"):
+    if not _claim_resolution(checkin, status=SafetyCheckinStatus.CHECKED_IN, resolved_by_label=REMOVED_BY_OWNER_LABEL if removing else "you"):
         return False
     _broadcast_status_update(checkin)
     # Archival is scheduled right after the claim, before the steps that can fail: the retry sweep only finishes
@@ -1966,8 +1983,10 @@ def _tell_alerted_contacts_it_is_over(checkin: SafetyCheckin, contacts: Iterable
         checkin: The just-resolved check-in, carrying its resolved ``status`` and ``resolved_by_label``.
         contacts: The alerted contacts to tell.
         removed: The owner is deleting the check-in, so the notice must not claim a check-in or link to a page
-            that is about to go.
+            that is about to go. A deletion's resolution says so itself (``_is_being_removed``), so a caller that
+            does not know of the deletion - the escalation's catch, the sweep - words it the same way.
     """
+    removed = removed or _is_being_removed(checkin)
     notice = _resolution_notice(checkin, removed=removed)
     for contact in contacts:
         try:
