@@ -116,6 +116,17 @@ REVIEWED: dict[str, str] = {
         "0.8.0's could lift a cap somebody chose. The values are ordinary integers and text, and 0.8.0 runs with "
         "REData Places held to 40 a day."
     ),
+    "0067_calendar_export_resumable.py": (
+        "raise_calendar_minute_limit moves google_calendar rows still holding every release's 30 a minute to 120; a row "
+        "at 120 cannot be told from one an admin set to 120, and an older release runs within it. "
+        "settle_marks_nothing_delivers clears push marks on links whose auto-sync is off, which no older release would "
+        "ever have delivered. The schema reverse drops the new field."
+    ),
+    "0068_rate_limit_rows_from_any_release_take_0_9_0_defaults.py": (
+        "bring_earlier_defaults_up_to_0_9_0 is 0064's rule for every earlier release's defaults, not only 0.8.0's: a row "
+        "still holding one of them takes 0.9.0's. Not reversed for 0064's reason - a row with 0.9.0's values cannot be "
+        "told from an admin's choice - and older releases read ordinary integers and text and run within 0.9.0's limits."
+    ),
 }
 
 
