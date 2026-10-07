@@ -200,8 +200,10 @@ A REData answer that says a source did not answer is shown with whatever did com
 again. It is never recorded as "nothing there". REData says so in one of four ways: `complete: false` with a
 `providers` block naming the source as `unavailable`, `rate_limited`, `key_budget_exhausted` or `not_cached`; the
 parcel record's own unanswered tiers; the `X-REData-Unanswered-Sources` header on the buildings answers; or, from
-0.3.7, a 503 `refresh_queued` or `compute_timeout` for a parcel it is still computing. A REData that sends none of
-these (0.3.6 and older on most endpoints) is read as complete, exactly as before.
+0.3.7, a 503 `refresh_queued` or `compute_timeout` for a parcel it is still computing. REData 0.3.7 to 0.3.9 send
+that code in `error`. From 0.3.10 `error` is `source_error` and the code is in `pending`, so that UrbanLens 0.8.0,
+which knows neither code, retries rather than caching the 503 as "no buildings". A REData that sends none of these
+(0.3.6 and older on most endpoints) is read as complete, exactly as before.
 
 | What UrbanLens keeps | Where | When REData answered in part |
 | --- | --- | --- |

@@ -46,7 +46,8 @@ _RETRYABLE_ERRORS = frozenset(
 )  # fmt: skip
 _UNANSWERED_STATUSES = frozenset({"rate_limited", "key_budget_exhausted", "unavailable", "not_cached"})
 #: REData 0.3.7's 503s for a parcel whose answers it is still computing (its P62). The wait is that parcel's, named in
-#: the body's ``retry_after`` and never in a header, so it is waited out once and the parcel asked once more.
+#: the body's ``retry_after`` and never in a header, so it is waited out once and the parcel asked once more. REData
+#: 0.3.7 to 0.3.9 name the code in ``error``; later releases send ``error: source_error`` and the code in ``pending``.
 _COMPUTING_ERRORS = frozenset({"refresh_queued", "compute_timeout"})
 _COMPUTING_DEFAULT_SECONDS = 60.0
 
@@ -325,7 +326,9 @@ class LiveRedata:
                 {"path": path, "params": params, "status": response.status_code, "seconds": round(seconds, 2)}
             )
             error = body.get("error") if isinstance(body, dict) else None
-            if response.status_code == 503 and error in _COMPUTING_ERRORS:
+            computing = _computing_code(body, error) if response.status_code == 503 else None
+            if computing is not None:
+                error = computing
                 wait = _computing_wait(body)
                 if waited_for_computation or time.monotonic() + wait > deadline:
                     why = (
@@ -361,6 +364,14 @@ def _asks_again_later(response: requests.Response, error: Any) -> bool:
     return response.status_code in {502, 503, 504} and (
         error in _RETRYABLE_ERRORS or "Retry-After" in response.headers or not isinstance(error, str)
     )
+
+
+def _computing_code(body: Any, error: Any) -> str | None:
+    """The code of a 503 that says REData is still computing the parcel, or None."""
+    pending = body.get("pending") if isinstance(body, dict) else None
+    if isinstance(pending, str) and pending:
+        return pending
+    return error if isinstance(error, str) and error in _COMPUTING_ERRORS else None
 
 
 def _computing_wait(body: dict[str, Any]) -> float:

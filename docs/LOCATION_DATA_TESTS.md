@@ -79,7 +79,8 @@ UL_LIVE_LOCATIONS=1 UL_TEST_DB_NAME=test_<unique> bin/host_pytest.sh --reuse-db 
 A check that cannot be decided (a budget refusal REData says to wait out for longer than
 `UL_LIVE_MAX_WAIT_SECONDS`, or an empty answer while a covering source did not answer)
 fails as *inconclusive* in the report rather than passing. A parcel REData is still computing
-(a 503 `refresh_queued` or `compute_timeout`, whose body names the wait in `retry_after`) is
+(a 503 naming `refresh_queued` or `compute_timeout` in `pending`, or in `error` before REData
+0.3.10, whose body names the wait in `retry_after`) is
 waited out once and asked once more; still computing then, it is inconclusive, and is never
 asked a third time. A site's `known_issues` maps a
 check to the problem id tracking why it fails today, and marks it `xfail(strict=True)`, so

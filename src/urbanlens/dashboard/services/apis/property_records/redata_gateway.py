@@ -99,7 +99,8 @@ _DETAIL_UNRESOLVED = "unresolved"
 REASON_REFRESH_QUEUED = "refresh_queued"
 #: The same, when the computation outran the request and could not be queued, or failed in the background lately.
 REASON_COMPUTE_TIMEOUT = "compute_timeout"
-#: The 503 reasons that mean REData will have the parcel's answer after the body's ``retry_after``.
+#: The 503 ``error`` codes that mean REData will have the parcel's answer after the body's ``retry_after``, as REData
+#: 0.3.7 to 0.3.9 send them. Later releases send ``error: source_error`` and the code in ``pending``.
 COMPUTING_REASONS: frozenset[str] = frozenset({REASON_REFRESH_QUEUED, REASON_COMPUTE_TIMEOUT})
 #: The wait for a computing answer whose body names none.
 _COMPUTING_DEFAULT_SECONDS = 60
@@ -150,6 +151,23 @@ class PropertyRecordsComputingError(PropertyRecordsBusyError):
     """
 
     answer_pending: ClassVar[bool] = True
+
+
+def _computing_reason(reason: str, body: Mapping[str, Any]) -> str | None:
+    """Why a 503 says REData is still computing the answer, or None when it does not say so.
+
+    Args:
+        reason: The body's ``error``.
+        body: REData's 503 body.
+
+    Returns:
+        The body's ``pending`` when it names one, any code included: it means "ask again after ``retry_after``" whatever
+        the code. Otherwise ``reason`` when it is one of :data:`COMPUTING_REASONS`.
+    """
+    pending = body.get("pending")
+    if isinstance(pending, str) and pending:
+        return pending
+    return reason if reason in COMPUTING_REASONS else None
 
 
 def _computing_wait(body: Mapping[str, Any]) -> int:
@@ -512,8 +530,8 @@ class RedataGateway(Gateway):
             # REData answers 404 for a permanent reason and 503 for one worth asking about again.
             if response.status_code == 404:
                 raise PropertyRecordsUnavailableError(reason, message, links=links, status_code=404)
-            if reason in COMPUTING_REASONS:
-                raise PropertyRecordsComputingError(reason, message, retry_after=_computing_wait(body), links=links)
+            if (computing := _computing_reason(reason, body)) is not None:
+                raise PropertyRecordsComputingError(computing, message, retry_after=_computing_wait(body), links=links)
             if (wait := _named_wait(response)) is not None:
                 raise PropertyRecordsBusyError(reason, message, retry_after=wait, links=links)
             raise PropertyRecordsUnavailableError(reason, message, links=links, retry_later=True)
