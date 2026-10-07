@@ -558,7 +558,7 @@ class BuildDateTests(_BootstrapCase):
 
         main = Pin.objects.get(name="MAIN/ADMIN")
         self.assertIsNone(main.date_built)
-        self.assertIsNone(wiki_build_year(Wiki.objects.get_for_location(main.location)))
+        self.assertIsNone(wiki_build_year(Wiki.objects.get(location=main.location)))
         self.assertEqual(Pin.objects.get(name="LAUNDRY").date_built, _year(LAUNDRY_YEAR))
         # The campus pin stands on the main building's place, so it reads as that building, and the parcel's year is
         # not known to be that building's either. Off every building, it takes the parcel's year (the test above).
@@ -582,7 +582,7 @@ class BuildDateTests(_BootstrapCase):
         from urbanlens.dashboard.services.pins.build_dates import fill_build_dates, wiki_build_year
 
         pin = self.create_pin()
-        main_wiki = Wiki.objects.get_for_location(Pin.objects.get(name="MAIN/ADMIN").location)
+        main_wiki = Wiki.objects.get(location=Pin.objects.get(name="MAIN/ADMIN").location)
         campus_wiki = Wiki.objects.get(location=pin.location)
         self.assertEqual((wiki_build_year(main_wiki), wiki_build_year(campus_wiki)), (MAIN_YEAR, MAIN_YEAR))
         LocationCache.set(
@@ -596,7 +596,7 @@ class BuildDateTests(_BootstrapCase):
 
         self.assertIsNone(wiki_build_year(main_wiki))
         self.assertIsNone(wiki_build_year(campus_wiki))
-        laundry = Wiki.objects.get_for_location(Pin.objects.get(name="LAUNDRY").location)
+        laundry = Wiki.objects.get(location=Pin.objects.get(name="LAUNDRY").location)
         self.assertEqual(wiki_build_year(laundry), LAUNDRY_YEAR)
 
     def test_with_nothing_known_the_date_stays_empty(self) -> None:
