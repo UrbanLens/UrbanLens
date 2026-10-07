@@ -241,7 +241,9 @@ class LiveRedata:
                 time.sleep(wait)
                 continue
             answer = Answer(response.status_code, body, seconds)
-            if response.status_code < 500:
+            # A 503 carrying a REData error code it does not ask us to retry (parcels/lookup's no_data_found) is
+            # REData's answer for this session: asking again repeats the same live lookups upstream, once per check.
+            if response.status_code < 500 or (response.status_code == 503 and isinstance(error, str)):
                 self._answers[key] = answer
             return answer
 

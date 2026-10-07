@@ -160,6 +160,23 @@ class TestLiveRedataGet:
         assert client.get("parcels/").status == 500
         assert client.get("parcels/").status == 200
 
+    def test_a_503_redata_decided_is_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
+        get.return_value = _response(503, {"error": "no_data_found", "message": "Every configured source ..."})
+
+        first = client.get("parcels/lookup/", lat=1)
+
+        assert first.status == 503
+        assert client.get("parcels/lookup/", lat=1) is first
+        assert get.call_count == 1
+
+    def test_a_bare_503_is_not_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
+        client.max_wait_seconds = 0
+        get.side_effect = [_response(503, "<html>gateway</html>"), _response(200, {"results": []})]
+
+        with pytest.raises(InconclusiveError):
+            client.get("parcels/")
+        assert client.get("parcels/").status == 200
+
     def test_an_answer_is_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
         get.return_value = _response(200, {"results": []})
 
