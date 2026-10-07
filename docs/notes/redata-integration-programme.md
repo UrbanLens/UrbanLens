@@ -158,6 +158,10 @@ passed for all four primaries apart from Athens's build date (REData P111).
    index-backed lookups"); that order is now met.
 2. REData's fixes from N47 that every UrbanLens user meets: the Smithsonian parse error that fails archive search
    for 19 of the 57 campuses, and cold buildings and boundaries answers that cost a gunicorn worker (REData P62).
+   Both are fixed on REData's `release/0.3.7`, not yet released: the Smithsonian error (N47 item 1) is isolated as one
+   `unavailable` archive, and a cold parcel's buildings and boundaries answer 503 `refresh_queued` while REData
+   computes them (REData #147). UrbanLens's half of both is on `fix/redata-partial-answers`, into
+   `release/v_0_9_0`; see "How a partial REData answer is cached" below.
 3. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
    (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
    REData's `Retry-After` (P315, REData P70).
@@ -189,11 +193,36 @@ passed for all four primaries apart from Athens's build date (REData P111).
     Overture step read REData inside the US since P110.
     Assistant tools stay direct by design: REData is off under the AI process role.
 
+## How a partial REData answer is cached
+
+A REData answer that says a source did not answer is shown with whatever did come back, kept briefly, and asked for
+again. It is never recorded as "nothing there". REData says so in one of four ways: `complete: false` with a
+`providers` block naming the source as `unavailable`, `rate_limited`, `key_budget_exhausted` or `not_cached`; the
+parcel record's own unanswered tiers; the `X-REData-Unanswered-Sources` header on the buildings answers; or, from
+0.3.7, a 503 `refresh_queued` or `compute_timeout` for a parcel it is still computing. A REData that sends none of
+these (0.3.6 and older on most endpoints) is read as complete, exactly as before.
+
+| What UrbanLens keeps | Where | When REData answered in part |
+| --- | --- | --- |
+| Panel rows (`LocationCache`): info panels, news, archives, hazard history, elevation, site conditions, parcel buildings, property records | `LocationCache.set` | the payload names its `unanswered_sources`, so the row lapses after `PARTIAL_ANSWER_STALE_AFTER` (1 hour) instead of `external_data_cache_days` |
+| A partial answer with nothing in it | `run_panel_fetch` | not cached; the panel is skipped for `FAILURE_SKIP_TTL_SECONDS` (5 minutes), or for REData's own wait when it names one |
+| Satellite and street-view carousels | Django cache | shown but not cached, and warmed again after 5 minutes; only a complete set is kept for the window |
+| Building lists that fall back to OSM and CRIS when REData or a fallback was unreachable | `fetch_parcel_buildings` | the list names what was missing, so it lapses within the hour |
+| A parcel REData is still computing (buildings, boundaries) | gateway, panel, bootstrap, boundary chain | nothing cached and no fallback stands in; the panel waits the body's `retry_after`, the bootstrap asks the same stage again after it (waits of up to 5 minutes, at most 5 times), and the boundary chain retries after it with no back-off |
+| Property record sections (assessments, sale records, liens, tax, owners, sales, demographics, national parks) | `_fetch_payload` | a section REData could not answer is named, so the record lapses within the hour; a refusal REData gives for good (no scope, 404, no Census key configured) is not |
+| Trivia, build dates, official owners | derived from the rows above | a partial building list withdraws only the year-built questions about buildings it names, asks no building-count question and retracts no build year; a partial parcel record links the owner it names and unlinks nobody |
+
+The live-locations harness waits out a `refresh_queued` or `compute_timeout` once, asks once more, and reports the
+parcel inconclusive if it is still computing.
+
 ## Known limits of what was built
 
 - A partial answer is dated back so it lapses within the hour; raising `external_data_cache_days` afterwards
   lengthens it too (`LocationCache.set`).
 - Background enrichment fills only locations with no cache row, so a lapsed partial row is refreshed by the next
   page view, not by the sweep.
+- `/search/web/` sends no `complete`, so a web search missing an engine cannot be told from a complete one.
+- One near-point answer is shared for `SHARE_SECONDS` (10 minutes) across a page's panels whether or not it is
+  complete; each panel's own row then lapses within the hour.
 - A bootstrap whose pin is deleted before its first stage leaves the location's in-flight marker for its hour, so
   enrichment skips that location until then. The task knows only the pin's id.
