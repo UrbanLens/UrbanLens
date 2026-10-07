@@ -89,11 +89,12 @@ class _CalendarTestCase(TestCase):
         gateway.update_event.return_value = {"id": "evt-new"}
         return gateway
 
-    def _new_event(self, _body: dict) -> dict[str, str]:
+    def _new_event(self, _body: dict, event_id: str | None = None) -> dict[str, str]:
         """Return a distinct created-event payload for each gateway call.
 
         Args:
             _body: The event body the service built (unused).
+            event_id: The client-assigned id the service sent (unused).
 
         Returns:
             An event dict with an id unique within this test."""
@@ -241,6 +242,7 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["activities_exported"], 1)
+        self.assertEqual((body["complete"], body["events_synced"], body["events_total"]), (True, 2, 2))
         self.assertTrue(body["calendar"]["connected"])
         self.assertTrue(body["calendar"]["linked"])
         self.assertEqual(body["calendar"]["account_email"], "exporter@example.com")
@@ -275,10 +277,10 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         baseline = len(connection.savepoint_ids)
         depths: list[int] = []
 
-        def _record(body):
+        def _record(body, event_id=None):
             """Record the savepoint depth in force when the gateway is called."""
             depths.append(len(connection.savepoint_ids))
-            return self._new_event(body)
+            return self._new_event(body, event_id)
 
         gateway.create_event.side_effect = _record
 

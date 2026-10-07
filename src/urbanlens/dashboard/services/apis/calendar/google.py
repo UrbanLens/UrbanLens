@@ -3,12 +3,15 @@ The site's Google OAuth client (``UL_GOOGLE_CLIENT_ID`` / ``UL_GOOGLE_CLIENT_SEC
 
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
 import datetime
+import hashlib
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.utils import timezone
+import requests
 
 from urbanlens.dashboard.services.auth import google_oauth
 from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
@@ -39,6 +42,23 @@ ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 
 #: Google's own ceiling on ``maxResults`` for ``events.list``.
 EVENTS_PAGE_SIZE = 250
+
+
+def client_event_id(*parts: object) -> str:
+    """An event id for ``events.insert`` that the same *parts* always reproduce.
+
+    Google takes a client-assigned id of 5 to 1024 base32hex characters (``a``-``v``, ``0``-``9``), unique per
+    calendar. A retry that sends the same id after a lost response is answered 409 rather than creating a
+    second event.
+
+    Args:
+        *parts: What identifies the event; joined in order, so ``("a", "bc")`` and ``("ab", "c")`` differ.
+
+    Returns:
+        52 lowercase base32hex characters: a SHA-256 digest of the parts, unpadded.
+    """
+    seed = "\x1f".join(str(part) for part in parts)
+    return base64.b32hexencode(hashlib.sha256(seed.encode()).digest()).decode().rstrip("=").lower()
 
 
 @dataclass(frozen=True)
@@ -141,6 +161,10 @@ class CalendarEventNotFoundError(GatewayRequestError):
     """Raised when a referenced calendar event no longer exists."""
 
 
+class CalendarEventExistsError(GatewayRequestError):
+    """Raised when an event created with a client-assigned id finds that id already taken on the calendar."""
+
+
 @dataclass(slots=True, kw_only=True)
 class GoogleCalendarGateway(Gateway):
     """Events API client bound to one user's connected Google account.
@@ -218,15 +242,17 @@ class GoogleCalendarGateway(Gateway):
 
         Raises:
             GoogleAuthExpiredError: When Google rejects the current credentials (401/403).
+            CalendarEventNotFoundError: The event does not exist, or was deleted (404/410).
+            CalendarEventExistsError: The client-assigned id of an event being created is taken (409).
+            GatewayRequestError: Any other failure, including no response at all.
         """
-        response = self.session.request(
-            method,
-            url,
-            params=params,
-            json=json_body,
-            headers=self._auth_headers(),
-            timeout=30,
-        )
+        headers = self._auth_headers()
+        try:
+            response = self.session.request(method, url, params=params, json=json_body, headers=headers, timeout=30)
+        except requests.RequestException as exc:
+            # A write may have reached Google even though its answer did not; callers retry with the same event id.
+            logger.warning("Google Calendar API %s %s got no response: %s", method, url, type(exc).__name__)
+            raise GatewayRequestError("Google Calendar did not answer.") from exc
         if response.status_code in ok_statuses:
             if response.status_code == 204 or not response.content:
                 return None
@@ -240,8 +266,10 @@ class GoogleCalendarGateway(Gateway):
         )
         if response.status_code in (401, 403):
             raise GoogleAuthExpiredError("Google Calendar access was denied. Please reconnect your account.")
-        if response.status_code == 404:
+        if response.status_code in (404, 410):
             raise CalendarEventNotFoundError("Calendar event not found.")
+        if response.status_code == 409:
+            raise CalendarEventExistsError("A calendar event with this id already exists.")
         raise GatewayRequestError(f"Google Calendar API request failed with status {response.status_code}.")
 
     def list_events(
@@ -299,19 +327,22 @@ class GoogleCalendarGateway(Gateway):
             raise GatewayRequestError("Google Calendar returned an empty event.")
         return body
 
-    def create_event(self, body: dict[str, Any]) -> dict[str, Any]:
+    def create_event(self, body: dict[str, Any], *, event_id: str | None = None) -> dict[str, Any]:
         """Create an event on the user's calendar.
 
         Args:
             body: Event resource payload.
+            event_id: A client-assigned id (:func:`client_event_id`), so a retried create cannot make a second event;
+                None lets Google choose one.
 
         Returns:
             The created event resource dict.
 
         Raises:
+            CalendarEventExistsError: *event_id* is already taken on this calendar, including by a deleted event.
             GatewayRequestError: On API failure.
         """
-        created = self._request("POST", self._events_url, json_body=body)
+        created = self._request("POST", self._events_url, json_body={**body, "id": event_id} if event_id else body)
         if created is None:
             raise GatewayRequestError("Google Calendar returned an empty response for event creation.")
         return created
