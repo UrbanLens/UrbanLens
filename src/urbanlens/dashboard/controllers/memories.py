@@ -245,7 +245,7 @@ def _parse_datetime(value: str | None) -> datetime.datetime | None:
 
 
 def _parse_bbox(request: HttpRequest) -> BBox | None:
-    """Parse a ``minLat,minLng,maxLat,maxLng`` bbox query param, or None if absent, malformed, non-finite or inverted."""
+    """Parse a ``minLat,minLng,maxLat,maxLng`` bbox query param, or None if absent, malformed, non-finite or with the south edge above the north."""
     raw = request.GET.get("bbox")
     if not raw:
         return None
@@ -253,7 +253,7 @@ def _parse_bbox(request: HttpRequest) -> BBox | None:
         min_lat, min_lng, max_lat, max_lng = (float(part) for part in raw.split(","))
     except ValueError:
         return None
-    if not all(math.isfinite(part) for part in (min_lat, min_lng, max_lat, max_lng)) or min_lat > max_lat or min_lng > max_lng:
+    if not all(math.isfinite(part) for part in (min_lat, min_lng, max_lat, max_lng)) or min_lat > max_lat:
         return None
     return BBox(min_lat, min_lng, max_lat, max_lng)
 

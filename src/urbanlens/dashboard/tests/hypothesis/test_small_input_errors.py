@@ -45,10 +45,12 @@ class MemoriesBboxTests(SimpleTestCase):
             with self.subTest(raw=raw):
                 self.assertIsNone(memories._parse_bbox(self._request(raw)))
 
-    def test_an_inverted_box_is_not_a_box(self) -> None:
-        for raw in ("41,-75,39,-73", "39,-73,41,-75"):
-            with self.subTest(raw=raw):
-                self.assertIsNone(memories._parse_bbox(self._request(raw)))
+    def test_a_south_edge_above_the_north_edge_is_not_a_box(self) -> None:
+        self.assertIsNone(memories._parse_bbox(self._request("41,-75,39,-73")))
+
+    def test_a_west_edge_past_the_east_edge_is_left_as_it_was(self) -> None:
+        """A date-line viewport is not made unfiltered by this fix; only non-finite and south-above-north are refused."""
+        self.assertEqual(memories._parse_bbox(self._request("-10,170,10,-170")), BBox(-10.0, 170.0, 10.0, -170.0))
 
 
 class ViewportParametersDoNotCrashTheEndpointsTests(TestCase):

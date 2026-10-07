@@ -1068,8 +1068,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
-  when more exist; the import runs in the `import_calendar_events` task behind a progress poll, and stops
-  creating trips for a profile at `max_upcoming_trips_per_user`, naming each event it skipped.
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll, and skips
+  an event once the profile is at `max_upcoming_trips_per_user`, saying how many were skipped.
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
   (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports

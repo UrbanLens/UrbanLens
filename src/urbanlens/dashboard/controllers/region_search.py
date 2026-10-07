@@ -11,8 +11,8 @@ from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedErr
 
 _POLYGONAL_TYPES = ("Polygon", "MultiPolygon")
 
-#: Seconds a client is told to wait when the budget refusal names no wait of its own.
-_BUSY_RETRY_AFTER_SECONDS = 5
+#: Seconds a client is told to wait when the budget refusal names no wait of its own: Nominatim's budget is per minute.
+_BUSY_RETRY_AFTER_SECONDS = 60
 
 
 class RegionBoundarySearchView(LoginRequiredMixin, View):
