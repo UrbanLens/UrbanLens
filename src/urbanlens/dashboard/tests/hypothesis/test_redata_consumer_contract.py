@@ -9,7 +9,7 @@ fields at the top level - or a table that has fallen behind the code it describe
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.tests.hypothesis.redata_contract import READS, VENDORED_OVERTURE_SHARDS, VENDORED_SCHEMA, Read
@@ -106,6 +106,9 @@ def _response_schema(schema: dict[str, Any], read: Read) -> dict[str, Any] | Non
 
 
 class ConsumerContractTests(SimpleTestCase):
+    schema: ClassVar[dict[str, Any]]
+    resolver: ClassVar[_Resolver]
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
@@ -135,7 +138,7 @@ class ConsumerContractTests(SimpleTestCase):
 
     def test_every_gap_is_still_a_gap(self) -> None:
         """A gap REData has since filled is a field to move into ``fields``; one UrbanLens stopped reading, to drop."""
-        filled = []
+        filled: list[str] = []
         for read in READS:
             body = _response_schema(self.schema, read) or {}
             filled.extend(
@@ -145,6 +148,21 @@ class ConsumerContractTests(SimpleTestCase):
             )
 
         self.assertEqual(filled, [], "\n".join(filled))
+
+    def test_every_optional_field_is_published_and_not_required(self) -> None:
+        """A field an older REData does not send must not be one the vendored document promises."""
+        problems = []
+        for read in READS:
+            body = _response_schema(self.schema, read) or {}
+            required = set(self.resolver._deref(body).get("required", []))
+            where = f"{read.reader}: {read.method.upper()} {read.path} [{read.status}]"
+            for field in read.optional:
+                if (reason := self.resolver.problem(body, field)) is not None:
+                    problems.append(f"{where} {field}: {reason}")
+                if field in required:
+                    problems.append(f"{where} {field}: required in the vendored document; re-vendor")
+
+        self.assertEqual(problems, [], "\n".join(problems))
 
     def test_the_table_names_each_reader_and_operation_once(self) -> None:
         keys = [(read.reader, read.method, read.path, read.status) for read in READS]
@@ -171,6 +189,8 @@ class ConsumerContractTests(SimpleTestCase):
 class IncidentVocabularyTests(SimpleTestCase):
     """REData's incident ``category`` is a closed vocabulary that UrbanLens both labels and sends back as a filter."""
 
+    published: ClassVar[set[str]]
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
@@ -194,6 +214,8 @@ class IncidentVocabularyTests(SimpleTestCase):
 
 class OvertureShardTableTests(SimpleTestCase):
     """REData syncs Overture only inside its state shard boxes, and UrbanLens decides who answers by the same boxes."""
+
+    vendored: ClassVar[dict[str, Any]]
 
     @classmethod
     def setUpClass(cls) -> None:

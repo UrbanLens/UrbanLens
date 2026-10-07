@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
     import requests
 
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
@@ -89,6 +91,17 @@ REASON_DETAIL_UNRESOLVED = "detail_unresolved"
 #: The ``detail_status`` of that answer.
 _DETAIL_UNRESOLVED = "unresolved"
 
+#: REData is computing a cold parcel's unfiltered boundaries, buildings and related buildings in the background (its
+#: P62, 0.3.7): ask again after the ``retry_after`` its 503 body names. The wait is the parcel's, so it carries no
+#: ``Retry-After`` header, which would hold off every parcel's calls.
+REASON_REFRESH_QUEUED = "refresh_queued"
+#: The same, when the computation outran the request and could not be queued, or failed in the background lately.
+REASON_COMPUTE_TIMEOUT = "compute_timeout"
+#: The 503 reasons that mean REData will have the parcel's answer after the body's ``retry_after``.
+COMPUTING_REASONS: frozenset[str] = frozenset({REASON_REFRESH_QUEUED, REASON_COMPUTE_TIMEOUT})
+#: The wait for a computing answer whose body names none.
+_COMPUTING_DEFAULT_SECONDS = 60
+
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
 #: stores a payload for one of these turns a passing outage into a blank card for the whole
@@ -103,12 +116,14 @@ class PropertyRecordsUnavailableError(GatewayRequestError):
     Attributes:
         reason: REData's ``REASON_*`` string when it responded with a structured error (e.g. ``"manual_only"``, ``"no_data_found"``); ``REASON_SOURCE_ERROR`` for anything REData didn't cleanly report itself (a network failure, a malformed response, or a...
         links: Manual-lookup reference URLs (assessor/treasurer/recorder), when REData supplied them (only for the manual-lookup reasons).
-        retry_later: REData said to ask again later (a 503), whatever its reason."""
+        retry_later: REData said to ask again later (a 503), whatever its reason.
+        status_code: REData's HTTP status, when it answered with one this error records (a 404 or 503)."""
 
-    def __init__(self, reason: str, message: str, *, links: dict[str, str] | None = None, retry_later: bool = False) -> None:
+    def __init__(self, reason: str, message: str, *, links: dict[str, str] | None = None, retry_later: bool = False, status_code: int | None = None) -> None:
         self.reason = reason
         self.links = links or {}
         self.retry_later = retry_later
+        self.status_code = status_code
         super().__init__(message)
 
     @property
@@ -123,6 +138,32 @@ class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyErro
     def __init__(self, reason: str, message: str, *, retry_after: int, links: dict[str, str] | None = None) -> None:
         super().__init__(reason, message, links=links, retry_later=True)
         self.retry_after = retry_after
+
+
+class PropertyRecordsComputingError(PropertyRecordsBusyError):
+    """REData is computing this parcel's answer in the background and will have it after ``retry_after`` seconds.
+
+    Not an outage of REData or a source: a caller neither caches the silence nor settles for a fallback's answer, and
+    asks again once the wait is over.
+    """
+
+    answer_pending: ClassVar[bool] = True
+
+
+def _computing_wait(body: Mapping[str, Any]) -> int:
+    """The wait a computing 503's body names, in seconds.
+
+    Args:
+        body: REData's 503 body.
+
+    Returns:
+        Seconds, at least 1 and at most :data:`UPSTREAM_BUSY_MAX_SECONDS`; :data:`_COMPUTING_DEFAULT_SECONDS` when the
+        body names none.
+    """
+    seconds = _seconds_from_now(body.get("retry_after"))
+    if seconds is None or not math.isfinite(seconds):
+        return _COMPUTING_DEFAULT_SECONDS
+    return max(1, min(math.ceil(seconds), UPSTREAM_BUSY_MAX_SECONDS))
 
 
 def _refused(response: requests.Response) -> PropertyRecordsBusyError:
@@ -257,6 +298,26 @@ def _parcel_lookup_share_seconds(body: Mapping[str, Any]) -> int:
 UNANSWERED_SOURCES_HEADER = "X-REData-Unanswered-Sources"
 
 
+def _provider_results(body: Any) -> LocationContextEnvelope:
+    """A near-a-parcel answer in REData's provider envelope, keeping whether every provider answered.
+
+    Args:
+        body: REData's ``{count, complete, results, providers}`` body.
+
+    Returns:
+        The rows and per-provider outcomes. A body without ``complete`` (an older REData) is taken as complete.
+    """
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
+    if not isinstance(body, dict):
+        return LocationContextEnvelope(count=0, complete=True)
+    results = body.get("results")
+    rows = [row for row in results if isinstance(row, dict)] if isinstance(results, list) else []
+    outcomes = body.get("providers")
+    providers = [entry for entry in outcomes if isinstance(entry, dict)] if isinstance(outcomes, list) else []
+    return LocationContextEnvelope(count=len(rows), complete=body.get("complete") is not False, results=rows, providers=providers)
+
+
 @dataclass(slots=True, frozen=True)
 class ParcelBuildings:
     """A parcel's buildings as REData answered them.
@@ -268,6 +329,32 @@ class ParcelBuildings:
 
     buildings: list[dict[str, Any]]
     unanswered_sources: tuple[str, ...] = ()
+
+
+@dataclass(slots=True, frozen=True)
+class ParcelBoundaries:
+    """A parcel's boundary candidates as REData answered them.
+
+    Attributes:
+        candidates: The scored candidates, as :meth:`RedataGateway.lookup_boundaries` describes them.
+        unanswered_sources: Sources REData asked and could not hear from; when any are named, a candidate a missing
+            source would have outranked may be the one suggested.
+    """
+
+    candidates: list[dict[str, Any]]
+    unanswered_sources: tuple[str, ...] = ()
+
+
+def _unanswered_header(headers: Mapping[str, Any]) -> tuple[str, ...]:
+    """The sources a parcel answer's ``X-REData-Unanswered-Sources`` header names.
+
+    Args:
+        headers: The response headers.
+
+    Returns:
+        The named sources; empty when the header is absent, as it is on a complete answer and from an older REData.
+    """
+    return tuple(name.strip() for name in str(headers.get(UNANSWERED_SOURCES_HEADER, "")).split(",") if name.strip())
 
 
 @dataclass(slots=True, kw_only=True)
@@ -307,13 +394,15 @@ class RedataGateway(Gateway):
             REData's response, whatever its status.
 
         Raises:
-            PropertyRecordsBusyError: The key is throttled and its wait has not passed, so no request was made.
+            PropertyRecordsBusyError: The key is throttled, or REData refused it this endpoint, and the wait has not
+                passed, so no request was made; ``reason`` says which, as the refusal itself did.
             PropertyRecordsUnavailableError: REData could not be reached.
         """
         try:
             return send(url, **kwargs)
         except UpstreamBusyError as exc:
-            raise PropertyRecordsBusyError(REASON_RATE_LIMITED, str(exc), retry_after=exc.retry_after) from exc
+            reason = REASON_FORBIDDEN if RedataBreaker().refuses(url) else REASON_RATE_LIMITED
+            raise PropertyRecordsBusyError(reason, str(exc), retry_after=exc.retry_after) from exc
         except OSError as exc:
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
 
@@ -371,7 +460,9 @@ class RedataGateway(Gateway):
             links = body.get("links") if isinstance(body.get("links"), dict) else None
             # REData answers 404 for a permanent reason and 503 for one worth asking about again.
             if response.status_code == 404:
-                raise PropertyRecordsUnavailableError(reason, message, links=links)
+                raise PropertyRecordsUnavailableError(reason, message, links=links, status_code=404)
+            if reason in COMPUTING_REASONS:
+                raise PropertyRecordsComputingError(reason, message, retry_after=_computing_wait(body), links=links)
             if (wait := _named_wait(response)) is not None:
                 raise PropertyRecordsBusyError(reason, message, retry_after=wait, links=links)
             raise PropertyRecordsUnavailableError(reason, message, links=links, retry_later=True)
@@ -531,20 +622,20 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/national-parks/")
         return dict(body) if isinstance(body, dict) else {}
 
-    def lookup_assessments(self, parcel_uuid: str) -> list[dict[str, Any]]:
+    def lookup_assessments(self, parcel_uuid: str) -> LocationContextEnvelope:
         """Return annual assessor valuations near a parcel.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
 
         Returns:
-            The raw assessment rows; empty outside covered counties.
+            The raw assessment rows (none outside covered counties), and whether every provider covering the parcel
+            answered: an incomplete answer's rows are a floor.
 
         Raises:
-            PropertyRecordsUnavailableError: The request to REData failed.
+            PropertyRecordsUnavailableError: The request to REData failed, or no provider covering the parcel answered.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/") or {}
-        return list(body.get("results") or [])
+        return _provider_results(self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/"))
 
     def lookup_liens(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return recorded liens and fines against a parcel.
@@ -604,7 +695,7 @@ class RedataGateway(Gateway):
         """
         return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/tax-payments/")
 
-    def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
+    def lookup_sale_records(self, parcel_uuid: str) -> LocationContextEnvelope:
         """Return supplementary recorded sales near a parcel.
         Rows are **near-parcel** - ``parcel`` is null and nothing links a row to a specific parcel - so callers must match by address (or a raw PIN in ``attributes``) before attributing a sale to a property.
 
@@ -612,13 +703,13 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
 
         Returns:
-            The raw sale rows; empty outside covered areas.
+            The raw sale rows (none outside covered areas), and whether every provider covering the parcel answered:
+            an incomplete answer's rows are a floor.
 
         Raises:
-            PropertyRecordsUnavailableError: The request to REData failed.
+            PropertyRecordsUnavailableError: The request to REData failed, or no provider covering the parcel answered.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/") or {}
-        return list(body.get("results") or [])
+        return _provider_results(self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/"))
 
     def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
         """Return cached LoopNet commercial listings for a parcel.
@@ -690,23 +781,22 @@ class RedataGateway(Gateway):
             PropertyRecordsUnavailableError: The request to REData failed.
         """
         body, headers = self._get_json_and_headers(f"/api/v1/parcels/{parcel_uuid}/buildings/")
-        unanswered = tuple(name.strip() for name in str(headers.get(UNANSWERED_SOURCES_HEADER, "")).split(",") if name.strip())
-        return ParcelBuildings(list(body) if isinstance(body, list) else [], unanswered)
+        return ParcelBuildings(list(body) if isinstance(body, list) else [], _unanswered_header(headers))
 
-    def lookup_boundaries(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return every boundary candidate REData can find for a parcel, scored.
+    def lookup_boundaries(self, parcel_uuid: str) -> ParcelBoundaries:
+        """Return every boundary candidate REData can find for a parcel, scored, and which of its sources did not answer.
 
         Args:
             parcel_uuid: The parcel's REData uuid.
 
         Returns:
-            Candidate dicts (possibly empty), each with ``geometry`` as standard GeoJSON plus ``kind`` (``"parcel"`` for the parcel's own cadastral line, ``"area"`` for something merely related to it), ``confidence``, ``is_suggested`` and ``confidence_breakdown``.
+            Candidate dicts (possibly empty), each with ``geometry`` as standard GeoJSON plus ``kind`` (``"parcel"`` for the parcel's own cadastral line, ``"area"`` for something merely related to it), ``confidence``, ``is_suggested`` and ``confidence_breakdown``; and the sources REData named as unanswered (0.3.7 names them on this endpoint too).
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/boundaries/")
-        return list(body) if isinstance(body, list) else []
+        body, headers = self._get_json_and_headers(f"/api/v1/parcels/{parcel_uuid}/boundaries/")
+        return ParcelBoundaries(list(body) if isinstance(body, list) else [], _unanswered_header(headers))
 
     def lookup_floorplans(self, parcel_uuid: str, *, building_ref: str = "", on_date: str | None = None) -> list[dict[str, Any]]:
         """List a parcel's floorplan version summaries, resolved by date.

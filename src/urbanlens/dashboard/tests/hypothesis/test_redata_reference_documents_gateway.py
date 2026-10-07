@@ -8,7 +8,10 @@ from unittest import mock
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    LocationContextEnvelope,
+    LocationContextUnavailableError,
+)
 from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import (
     InternetArchiveMediaProvider,
     LibraryOfCongressMediaProvider,
@@ -48,9 +51,12 @@ class RedataReferenceDocumentsGatewaySearchTests(SimpleTestCase):
             },
         )
 
-        results = _gateway(session).search("Bannerman Castle", provider="smithsonian", limit=10)
+        answer = _gateway(session).search("Bannerman Castle", provider="smithsonian", limit=10)
 
-        self.assertEqual(results, [{"provider": "smithsonian", "title": "A Photo", "url": "https://example.test/a"}])
+        self.assertEqual(
+            answer.results, [{"provider": "smithsonian", "title": "A Photo", "url": "https://example.test/a"}]
+        )
+        self.assertTrue(answer.complete)
         params = session.get.call_args.kwargs["params"]
         self.assertEqual(params["q"], "Bannerman Castle")
         self.assertEqual(params["provider"], "smithsonian")
@@ -93,7 +99,11 @@ class _ProviderMediaMappingMixin(_MixinBase):
         # running the tests happens to have REData credentials configured.
         with (
             mock.patch.object(RedataReferenceDocumentsGateway, "__post_init__", return_value=None),
-            mock.patch.object(RedataReferenceDocumentsGateway, "search", return_value=results) as mock_search,
+            mock.patch.object(
+                RedataReferenceDocumentsGateway,
+                "search",
+                return_value=LocationContextEnvelope(count=len(results), complete=True, results=results),
+            ) as mock_search,
         ):
             items = list(self.provider_cls()._generate_media(search_term))
         return items, mock_search

@@ -143,11 +143,13 @@ class ProvisionOutcome:
         place: The most specific place now covering the coordinate, or None.
         deferred: Providers that declined for now rather than answering.
         retry_after: The longest wait a deferring provider asked for, in seconds.
+        backs_off: Whether a retry should back off; False when every deferring provider was computing its answer.
     """
 
     place: Place | None = None
     deferred: list[str] = field(default_factory=list)
     retry_after: int | None = None
+    backs_off: bool = True
 
 
 def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> Place | None:
@@ -218,7 +220,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
     if resolved.deferred and (known := Place.objects.resolve_for_point(location.latitude, location.longitude)) is not None:
         # A fallback's outline must not overwrite one the deferring provider gave earlier; keep it until that provider answers.
         resolution.attach_location(location, known)
-        return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after)
+        return ProvisionOutcome(place=known, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
     if detect_splits and not resolved.deferred:
         detect_subdivision(location, resolved.property_polygon)
@@ -246,7 +248,7 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
         # location looking unknown until the next refresh made the same mistake again.
         standing_on = building or parcel
         resolution.attach_location(location, standing_on)
-    return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after)
+    return ProvisionOutcome(place=standing_on, deferred=list(resolved.deferred), retry_after=resolved.retry_after, backs_off=resolved.backs_off)
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:

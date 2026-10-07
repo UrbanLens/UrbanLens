@@ -15,6 +15,7 @@ from urbanlens.dashboard.plugins.builtin.property_records import (
     _render_available,
     _write_official_owners_and_sales,
 )
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 
 
 class PanelRenderContextTests(SimpleTestCase):
@@ -474,8 +475,8 @@ class FetchPayloadSupplementaryCallsTests(TestCase):
         gateway = mock_gateway_cls.return_value
         gateway.lookup_parcel.return_value = {"uuid": "parcel-1"}
         gateway.lookup_coverage.return_value = overrides.get("coverage", {})
-        gateway.lookup_assessments.return_value = overrides.get("assessments", [])
-        gateway.lookup_sale_records.return_value = overrides.get("sale_records", [])
+        gateway.lookup_assessments.return_value = LocationContextEnvelope(count=0, complete=True)
+        gateway.lookup_sale_records.return_value = LocationContextEnvelope(count=0, complete=True)
         gateway.lookup_liens.return_value = overrides.get("liens", [])
         gateway.lookup_tax_payments.return_value = overrides.get("tax_payments", [])
         gateway.lookup_demographics.return_value = overrides.get("demographics")

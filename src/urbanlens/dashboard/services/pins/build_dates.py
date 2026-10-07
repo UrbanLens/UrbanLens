@@ -224,8 +224,13 @@ def fill_build_dates(pin: Pin) -> int:
 
 
 def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | None) -> None:
-    """Record the campus's and each building's year on the wikis standing for them."""
+    """Record the campus's and each building's year on the wikis standing for them.
+
+    A building record's year is taken back only on a building list REData answered in full: with no list cached, or
+    one a source did not answer, a missing year says nothing.
+    """
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.locations.site_scope import cached_parcel_buildings
     from urbanlens.dashboard.services.pins.building_clusters import match_clusters
     from urbanlens.dashboard.services.pins.pin_restructure import building_markers
 
@@ -234,9 +239,11 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
         return
     if site_year is not None and (site_year.source != SOURCE_PROPERTY_RECORD or parcel_year_may_date(campus)):
         record_wiki_build_year(campus, site_year)
+    cached = cached_parcel_buildings(pin.location)
+    settled = cached is not None and cached.complete
     # A record that no longer dates the campus takes back what it said, such as a parcel's year recorded as a
     # building's before REData said which it was.
-    if standing_year(pin, nester) is None:
+    if settled and standing_year(pin, nester) is None:
         retract_wiki_build_year(campus, SOURCE_BUILDING_RECORD)
     if not parcel_year_may_date(campus):
         retract_wiki_build_year(campus, SOURCE_PROPERTY_RECORD)
@@ -246,7 +253,7 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
             continue
         if (year := cluster_build_year(nester.clusters[index])) is not None:
             record_wiki_build_year(wiki, BuildYear(year, SOURCE_BUILDING_RECORD))
-        else:
+        elif settled:
             retract_wiki_build_year(wiki, SOURCE_BUILDING_RECORD)
 
 

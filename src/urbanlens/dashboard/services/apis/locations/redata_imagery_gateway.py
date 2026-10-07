@@ -15,6 +15,8 @@ from urbanlens.dashboard.services.core.gateway import read_capped
 if TYPE_CHECKING:
     import datetime
 
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
 logger = logging.getLogger(__name__)
 
 _IMAGERY_PATH = "/api/v1/imagery/"
@@ -35,7 +37,7 @@ class RedataImageryGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_imagery"
     answers_at_null_island: ClassVar[bool] = True
 
-    def get_imagery(self, latitude: float, longitude: float, *, providers: list[str] | None = None) -> list[dict[str, Any]]:
+    def get_imagery(self, latitude: float, longitude: float, *, providers: list[str] | None = None) -> LocationContextEnvelope:
         """Return REData's normalized imagery results for a coordinate.
 
         Args:
@@ -45,13 +47,14 @@ class RedataImageryGateway(RedataLocationContextGateway):
                 every provider REData has configured.
 
         Returns:
-            Provider-tagged imagery result dicts (``provider``, ``kind``, ``url``, ``delivery``, ``captured_on``, ``captured_label``, ``attribution``, and an ``attributes`` blob that carries ``subdomains`` for a ``tile_template`` delivery) - empty when nothing answered.
+            The envelope. Its ``results`` are provider-tagged imagery dicts (``provider``, ``kind``, ``url``,
+            ``delivery``, ``captured_on``, ``captured_label``, ``attribution``, and an ``attributes`` blob that carries
+            ``subdomains`` for a ``tile_template`` delivery); ``complete`` is False when a provider asked did not answer.
 
         Raises:
             LocationContextUnavailableError: Every requested provider failed to answer, or the request to REData failed outright.
         """
-        envelope = self.near_point(_IMAGERY_PATH, latitude, longitude, provider=providers)
-        return envelope.results
+        return self.near_point(_IMAGERY_PATH, latitude, longitude, provider=providers)
 
     def get_timeline(self, latitude: float, longitude: float, *, trigger_archive: bool = False) -> dict[str, Any]:
         """Return which dates imagery exists for at a coordinate.
@@ -191,6 +194,6 @@ class RedataImageryGateway(RedataLocationContextGateway):
         if response.status_code in (400, 404) and reason in _NO_IMAGE_REASONS:
             return None
         if response.status_code in (400, 404, 503):
-            raise LocationContextUnavailableError(reason, error_body.get("message", ""), rejected=response.status_code != 503)
+            raise LocationContextUnavailableError(reason, error_body.get("message", ""), rejected=response.status_code != 503, status_code=response.status_code)
         logger.warning("REData imagery capture request failed (%s): %s", response.status_code, response.text[:500])
-        raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.", status_code=response.status_code)

@@ -2,17 +2,49 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest import mock
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from django.core.cache import cache
+
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.satellite_imagery import _REDATA_PROVIDER_NAMES, RedataSatelliteProvider
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SlideFetch, SlideSignal
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    LocationContextEnvelope,
+    LocationContextUnavailableError,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 _GATEWAY_PATH = "urbanlens.dashboard.plugins.builtin.satellite_imagery.RedataImageryGateway"
 _CONFIGURED_PATH = "urbanlens.dashboard.plugins.builtin.satellite_imagery.redata_configured"
 #: Patched at its definition, not at an import site: `_wanted_providers`
 #: imports it inside the function to avoid a module-level cycle.
 _CAPABILITIES_PATH = "urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.applicable_providers"
+
+
+def _complete_slides(generated: Iterable[SatelliteSlide | SlideSignal]) -> list[SatelliteSlide]:
+    """What a complete answer generated: slides only, never a signal that it was partial."""
+    found = list(generated)
+    slides = [item for item in found if isinstance(item, SatelliteSlide)]
+    if len(slides) != len(found):
+        raise AssertionError(f"a complete answer signalled it was partial: {found}")
+    return slides
+
+
+def _partial_slides(generated: Iterable[SatelliteSlide | SlideSignal]) -> list[SatelliteSlide]:
+    """The slides an answer that an outage cost a slide generated, having checked it said so."""
+    found = list(generated)
+    if SlideSignal.PARTIAL not in found:
+        raise AssertionError(f"an answer an outage cost a slide did not say it was partial: {found}")
+    return [item for item in found if isinstance(item, SatelliteSlide)]
+
+
+def _answered(results: list[dict]) -> LocationContextEnvelope:
+    """REData's complete ``/imagery/`` answer."""
+    return LocationContextEnvelope(count=len(results), complete=True, results=results)
 
 
 class RedataSatelliteProviderTests(SimpleTestCase):
@@ -26,13 +58,13 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_CAPABILITIES_PATH, return_value=discovered if discovered is not None else []),
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
-            gateway_cls.return_value.get_imagery.return_value = results
+            gateway_cls.return_value.get_imagery.return_value = _answered(results)
             gateway_cls.return_value.get_timeline.return_value = {}
-            return list(self.provider._generate_satellite_slides(41.7, -73.9))
+            return _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
     def test_yields_nothing_when_redata_is_not_configured(self) -> None:
         with mock.patch(_CONFIGURED_PATH, return_value=False), mock.patch(_GATEWAY_PATH) as gateway_cls:
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
         self.assertEqual(slides, [])
         gateway_cls.assert_not_called()
 
@@ -43,9 +75,9 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_CAPABILITIES_PATH, return_value=discovered),
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
-            gateway_cls.return_value.get_imagery.return_value = []
+            gateway_cls.return_value.get_imagery.return_value = _answered([])
             gateway_cls.return_value.get_timeline.return_value = {}
-            list(self.provider._generate_satellite_slides(41.7, -73.9))
+            _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
             if not gateway_cls.return_value.get_imagery.called:
                 return []
             return list(gateway_cls.return_value.get_imagery.call_args.kwargs["providers"])
@@ -103,7 +135,7 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             gateway_cls.return_value.get_imagery.side_effect = LocationContextUnavailableError("source_error", "boom")
 
             with self.assertRaises(LocationContextUnavailableError):
-                list(self.provider._generate_satellite_slides(41.7, -73.9))
+                _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
     def test_the_carousel_entry_point_still_survives_an_outage(self) -> None:
         """The property the old test was defending, asserted where it now lives."""
@@ -144,17 +176,19 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_CAPABILITIES_PATH, return_value=[]),
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "mapbox",
-                    "url": "/api/v1/imagery/abc/download/",
-                    "delivery": "image",
-                    "captured_label": "Current",
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "mapbox",
+                        "url": "/api/v1/imagery/abc/download/",
+                        "delivery": "image",
+                        "captured_label": "Current",
+                    }
+                ]
+            )
             gateway_cls.return_value.get_timeline.return_value = {}
             gateway_cls.return_value.download_bytes.return_value = b"\xff\xd8\xff"
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertTrue(slides[0].img_src.startswith("data:image/jpeg;base64,"))
@@ -167,19 +201,21 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {"provider": "bing_maps", "url": "/download/", "delivery": "image"},
-                {
-                    "provider": "nasa_gibs",
-                    "url": "https://gibs.example/tile.jpg",
-                    "delivery": "image",
-                    "captured_on": "2019",
-                },
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {"provider": "bing_maps", "url": "/download/", "delivery": "image"},
+                    {
+                        "provider": "nasa_gibs",
+                        "url": "https://gibs.example/tile.jpg",
+                        "delivery": "image",
+                        "captured_on": "2019",
+                    },
+                ]
+            )
             gateway_cls.return_value.download_bytes.side_effect = LocationContextUnavailableError(
                 "source_error", "boom"
             )
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _partial_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].source, "NASA GIBS")
@@ -235,17 +271,19 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "opentopomap",
-                    "uuid": "tile-asset-uuid",
-                    "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-                    "delivery": "tile_template",
-                    "attributes": {"subdomains": ["a", "b", "c"]},
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "opentopomap",
+                        "uuid": "tile-asset-uuid",
+                        "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                        "delivery": "tile_template",
+                        "attributes": {"subdomains": ["a", "b", "c"]},
+                    }
+                ]
+            )
             gateway_cls.return_value.download_archived_copy.return_value = b"\xff\xd8\xff"
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertTrue(slides[0].img_src.startswith("data:image/jpeg;base64,"))
@@ -261,15 +299,17 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "opentopomap",
-                    "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-                    "delivery": "tile_template",
-                    "attributes": {"subdomains": ["a"]},
-                }
-            ]
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "opentopomap",
+                        "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                        "delivery": "tile_template",
+                        "attributes": {"subdomains": ["a"]},
+                    }
+                ]
+            )
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertTrue(slides[0].img_src.startswith("https://a.tile.opentopomap.org/15/"))
@@ -282,19 +322,21 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "opentopomap",
-                    "uuid": "tile-asset-uuid",
-                    "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-                    "delivery": "tile_template",
-                    "attributes": {"subdomains": ["a"]},
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "opentopomap",
+                        "uuid": "tile-asset-uuid",
+                        "url": "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+                        "delivery": "tile_template",
+                        "attributes": {"subdomains": ["a"]},
+                    }
+                ]
+            )
             gateway_cls.return_value.download_archived_copy.side_effect = LocationContextUnavailableError(
                 "source_error", "boom"
             )
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertTrue(slides[0].img_src.startswith("https://a.tile.opentopomap.org/15/"))
@@ -307,19 +349,21 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "uuid": "gibs-layer-uuid",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
-                    "attribution": "NASA GIBS",
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "uuid": "gibs-layer-uuid",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
+                        "attribution": "NASA GIBS",
+                    }
+                ]
+            )
             gateway_cls.return_value.capture_time_series.return_value = {"uuid": "materialized-uuid"}
             gateway_cls.return_value.download_archived_copy.return_value = b"\xff\xd8\xff"
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].source, "NASA GIBS")
@@ -340,23 +384,25 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "uuid": "gibs-layer-uuid",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {
-                        "intervals": [
-                            {"start": "2000-02-24", "end": "2013-03-21", "step": "P1D"},
-                            {"start": "2013-03-22", "end": "2026-08-06", "step": "P1D"},
-                        ]
-                    },
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "uuid": "gibs-layer-uuid",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {
+                            "intervals": [
+                                {"start": "2000-02-24", "end": "2013-03-21", "step": "P1D"},
+                                {"start": "2013-03-22", "end": "2026-08-06", "step": "P1D"},
+                            ]
+                        },
+                    }
+                ]
+            )
             gateway_cls.return_value.capture_time_series.return_value = {"uuid": "materialized-uuid"}
             gateway_cls.return_value.download_archived_copy.return_value = b"bytes"
-            list(self.provider._generate_satellite_slides(41.7, -73.9))
+            _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         call_args = gateway_cls.return_value.capture_time_series.call_args
         self.assertEqual(call_args.args[1].isoformat(), "2026-08-06")
@@ -368,15 +414,17 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
-                }
-            ]
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
+                    }
+                ]
+            )
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(slides, [])
         gateway_cls.return_value.capture_time_series.assert_not_called()
@@ -388,16 +436,18 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "uuid": "gibs-layer-uuid",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {},
-                }
-            ]
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "uuid": "gibs-layer-uuid",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {},
+                    }
+                ]
+            )
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(slides, [])
         gateway_cls.return_value.capture_time_series.assert_not_called()
@@ -409,24 +459,26 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "uuid": "gibs-layer-uuid",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
-                },
-                {
-                    "provider": "esri_world_imagery_placeholder",
-                    "url": "https://example.test/current.jpg",
-                    "delivery": "image",
-                },
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "uuid": "gibs-layer-uuid",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
+                    },
+                    {
+                        "provider": "esri_world_imagery_placeholder",
+                        "url": "https://example.test/current.jpg",
+                        "delivery": "image",
+                    },
+                ]
+            )
             gateway_cls.return_value.capture_time_series.side_effect = LocationContextUnavailableError(
                 "rate_limited", "back off"
             )
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _partial_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].source, "Esri World Imagery Placeholder")
@@ -439,17 +491,19 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "uuid": "gibs-layer-uuid",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "uuid": "gibs-layer-uuid",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
+                    }
+                ]
+            )
             gateway_cls.return_value.capture_time_series.return_value = None
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(slides, [])
         gateway_cls.return_value.download_archived_copy.assert_not_called()
@@ -461,20 +515,22 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             mock.patch(_GATEWAY_PATH) as gateway_cls,
         ):
             gateway_cls.return_value.get_timeline.return_value = {}
-            gateway_cls.return_value.get_imagery.return_value = [
-                {
-                    "provider": "nasa_gibs",
-                    "uuid": "gibs-layer-uuid",
-                    "url": "https://gibs.example/wms?TIME={time}",
-                    "delivery": "time_series",
-                    "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
-                }
-            ]
+            gateway_cls.return_value.get_imagery.return_value = _answered(
+                [
+                    {
+                        "provider": "nasa_gibs",
+                        "uuid": "gibs-layer-uuid",
+                        "url": "https://gibs.example/wms?TIME={time}",
+                        "delivery": "time_series",
+                        "attributes": {"intervals": [{"start": "2000-02-24", "end": "2026-08-06", "step": "P1D"}]},
+                    }
+                ]
+            )
             gateway_cls.return_value.capture_time_series.return_value = {"uuid": "materialized-uuid"}
             gateway_cls.return_value.download_archived_copy.side_effect = LocationContextUnavailableError(
                 "source_error", "boom"
             )
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _partial_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(slides, [])
 
@@ -500,7 +556,7 @@ class NativeResolutionZoomTests(SimpleTestCase):
         self.addCleanup(patches[2].stop)
         gateway = gateway_cls.return_value
         gateway.get_timeline.return_value = {}
-        gateway.get_imagery.return_value = results
+        gateway.get_imagery.return_value = _answered(results)
         gateway.download_archived_copy.return_value = b"\xff\xd8\xff"
         gateway.capture_time_series.return_value = {"uuid": "materialized-uuid"}
         return gateway
@@ -518,7 +574,7 @@ class NativeResolutionZoomTests(SimpleTestCase):
 
     def _zoom_asked(self, result: dict) -> int | None:
         gateway = self._gateway_for([result])
-        list(self.provider._generate_satellite_slides(41.7, -73.9))
+        _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
         return gateway.download_archived_copy.call_args.kwargs["zoom"]
 
     def test_sentinel_2_is_composed_at_zoom_13_not_enlarged(self) -> None:
@@ -557,7 +613,7 @@ class NativeResolutionZoomTests(SimpleTestCase):
             "urbanlens.dashboard.services.locations.imagery_timeline.flatten_timeline",
             return_value=[{"kind": "capture", "asset": capture, "captured_on": "2019-01-01", "date_is_exact": True}],
         ):
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(gateway.download_archived_copy.call_args.kwargs["zoom"], 13)
@@ -575,7 +631,7 @@ class NativeResolutionZoomTests(SimpleTestCase):
                 }
             ]
         )
-        list(self.provider._generate_satellite_slides(41.7, -73.9))
+        _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         gateway.download_archived_copy.assert_called_once_with("materialized-uuid", width=1024, height=1024, zoom=8)
 
@@ -583,6 +639,102 @@ class NativeResolutionZoomTests(SimpleTestCase):
         gateway = self._gateway_for([self._tiles(resolution_meters=10.0)])
         gateway.download_archived_copy.side_effect = LocationContextUnavailableError("source_error", "boom")
 
-        slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+        slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertIn("/GoogleMapsCompatible/13/", slides[0].img_src)
+
+
+_IMAGE = {
+    "provider": "nasa_gibs",
+    "url": "https://gibs.example/tile.jpg",
+    "delivery": "image",
+    "captured_on": "2019",
+    "attribution": "NASA GIBS",
+}
+
+
+class PartialImageryTests(TestCase):
+    """What REData answered only in part is shown, but not kept: the carousel asks again on its failure cadence."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+
+    def _fetch_twice(self, imagery: LocationContextEnvelope, timeline: object) -> tuple[list[SlideFetch], int]:
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_CAPABILITIES_PATH, return_value=["nasa_gibs"]),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_imagery.return_value = imagery
+            if isinstance(timeline, Exception):
+                gateway_cls.return_value.get_timeline.side_effect = timeline
+            else:
+                gateway_cls.return_value.get_timeline.return_value = timeline
+            fetched = [RedataSatelliteProvider().get_satellite_slides(41.7, -73.9) for _ in range(2)]
+            return fetched, gateway_cls.return_value.get_imagery.call_count
+
+    def assert_shown_and_not_kept(self, fetched: list[SlideFetch], asked: int) -> None:
+        self.assertEqual([slide.img_src for slide in fetched[0].slides], [_IMAGE["url"]])
+        self.assertTrue(fetched[0].degraded)
+        self.assertEqual(asked, 2, "a partial answer is asked for again, not served from the slide cache")
+
+    def test_imagery_with_a_provider_unanswered_is_shown_and_not_kept(self) -> None:
+        partial = LocationContextEnvelope(
+            count=1, complete=False, results=[_IMAGE], providers=[{"provider": "s2cloudless", "status": "unavailable"}]
+        )
+
+        self.assert_shown_and_not_kept(*self._fetch_twice(partial, {}))
+
+    def test_imagery_whose_timeline_did_not_answer_is_shown_and_not_kept(self) -> None:
+        self.assert_shown_and_not_kept(
+            *self._fetch_twice(_answered([_IMAGE]), LocationContextUnavailableError("source_error", "503"))
+        )
+
+    def test_imagery_whose_timeline_redata_says_is_incomplete_is_shown_and_not_kept(self) -> None:
+        timeline = {
+            "captures": [],
+            "complete": False,
+            "providers": [{"provider": "esri_wayback", "status": "rate_limited"}],
+        }
+
+        self.assert_shown_and_not_kept(*self._fetch_twice(_answered([_IMAGE]), timeline))
+
+    def _with_a_keyed_download(self, failure: Exception) -> list[SlideFetch]:
+        keyed = {"provider": "bing_maps", "url": "/download/", "delivery": "image"}
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_CAPABILITIES_PATH, return_value=["nasa_gibs", "bing_maps"]),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_imagery.return_value = _answered([_IMAGE, keyed])
+            gateway_cls.return_value.get_timeline.return_value = {"captures": [], "complete": True}
+            gateway_cls.return_value.download_bytes.side_effect = failure
+            return [RedataSatelliteProvider().get_satellite_slides(41.7, -73.9) for _ in range(2)]
+
+    def test_a_slide_an_outage_cost_is_not_kept_without_it(self) -> None:
+        """Review finding 3: a keyed provider's download that REData could not serve for now."""
+        for failure in (
+            LocationContextUnavailableError("source_error", "upstream timed out", status_code=503),
+            LocationContextUnavailableError("source_error", "Could not reach REData"),
+        ):
+            with self.subTest(failure=failure):
+                cache.clear()
+                fetched = self._with_a_keyed_download(failure)
+
+                self.assertEqual([slide.img_src for slide in fetched[0].slides], [_IMAGE["url"]])
+                self.assertTrue(fetched[0].degraded)
+                self.assertFalse(fetched[1].from_cache)
+
+    def test_a_slide_redata_has_no_image_for_is_kept_as_a_gap(self) -> None:
+        fetched = self._with_a_keyed_download(LocationContextUnavailableError("source_error", "404", status_code=404))
+
+        self.assertFalse(fetched[0].degraded)
+        self.assertTrue(fetched[1].from_cache)
+
+    def test_a_complete_answer_is_kept(self) -> None:
+        fetched, asked = self._fetch_twice(_answered([_IMAGE]), {"captures": [], "complete": True})
+
+        self.assertFalse(fetched[0].degraded)
+        self.assertTrue(fetched[1].from_cache)
+        self.assertEqual(asked, 1)

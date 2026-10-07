@@ -54,7 +54,21 @@ class GetImageryTests(SimpleTestCase):
 
         result = _gateway(session).get_imagery(41.7, -73.9)
 
-        self.assertEqual(result, results)
+        self.assertEqual(result.results, results)
+        self.assertTrue(result.complete)
+
+    def test_an_incomplete_answer_says_so(self) -> None:
+        session = mock.Mock()
+        row = {"provider": "nasa_gibs", "url": "https://gibs.example/tile.jpg", "delivery": "image"}
+        providers = [{"provider": "s2cloudless", "status": "unavailable", "count": 0}]
+        session.get.return_value = _response(
+            200, {"count": 1, "complete": False, "results": [row], "providers": providers}
+        )
+
+        result = _gateway(session).get_imagery(41.7, -73.9)
+
+        self.assertEqual(result.results, [row])
+        self.assertEqual(result.unanswered_sources, ["s2cloudless"])
 
     def test_forwards_a_provider_list(self) -> None:
         session = mock.Mock()

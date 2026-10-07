@@ -20,6 +20,7 @@ from unittest import mock
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.apis.locations import redata_reference_documents_gateway as archives
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 from urbanlens.dashboard.services.media.subject_relevance import BoundingBox, MediaSubject
 from urbanlens.dashboard.services.pins.external_data import get_panel_source
 
@@ -142,7 +143,7 @@ def _parsed(
 ) -> list[MediaItem]:
     """``rows`` as the gallery's provider turns REData's answer into media items."""
     with mock.patch.object(archives, "RedataReferenceDocumentsGateway") as gateway:
-        gateway.return_value.search.return_value = rows
+        gateway.return_value.search.return_value = LocationContextEnvelope(count=len(rows), complete=True, results=rows)
         return list(provider()._generate_media("Hudson River State Hospital Poughkeepsie NY"))
 
 

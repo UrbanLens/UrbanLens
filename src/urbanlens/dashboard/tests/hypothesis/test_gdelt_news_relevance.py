@@ -8,6 +8,7 @@ a courtyard and "driving" development.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 import re
 from typing import TYPE_CHECKING, Any
@@ -15,13 +16,20 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType
-from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.cache.location_cache import (
+    PARTIAL_ANSWER_STALE_AFTER,
+    UNANSWERED_SOURCES_KEY,
+    LocationCache,
+)
 from urbanlens.dashboard.plugins.builtin.gdelt import GdeltPanelSource
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+from urbanlens.dashboard.services.pins.external_data import fetch_blocked, run_panel_fetch
 from urbanlens.dashboard.services.pins.news_query import MAX_QUERY_CHARACTERS, NewsQuery
 from urbanlens.dashboard.services.pins.search_names import search_names
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
@@ -78,6 +86,11 @@ _RELEVANT = {
     "title": "Hudson River State Hospital redevelopment clears another hurdle",
     "link": "https://www.poughkeepsiejournal.com/hrsh",
 }
+
+
+def _answered(results: list[dict[str, Any]]) -> LocationContextEnvelope:
+    """GDELT's own, complete answer."""
+    return LocationContextEnvelope(count=len(results), complete=True, results=results)
 
 
 def _hrsh_pin(*, city: str | None = "Poughkeepsie", state: str | None = "NY", country: str = "United States") -> Pin:
@@ -239,7 +252,7 @@ class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
         pin = _hrsh_pin()
         source = GdeltPanelSource()
 
-        with mock.patch(_SEARCH_NEWS, return_value=[*_STAGING_BATCH, _RELEVANT]) as search:
+        with mock.patch(_SEARCH_NEWS, return_value=_answered([*_STAGING_BATCH, _RELEVANT])) as search:
             source.fetch(pin)
 
         sent = [call.args[0] for call in search.call_args_list]
@@ -257,7 +270,7 @@ class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
         pin = _hrsh_pin()
         source = GdeltPanelSource()
 
-        with mock.patch(_SEARCH_NEWS, return_value=list(_STAGING_BATCH)):
+        with mock.patch(_SEARCH_NEWS, return_value=_answered(list(_STAGING_BATCH))):
             source.fetch(pin)
 
         data = source.cached_data(pin)
@@ -285,7 +298,7 @@ class NewsPanelFetchTests(RedataConfiguredMixin, TestCase):
         pin = _hrsh_pin()
         source = GdeltPanelSource()
 
-        with mock.patch(_SEARCH_NEWS, return_value=[]) as search:
+        with mock.patch(_SEARCH_NEWS, return_value=_answered([])) as search:
             source.fetch(pin)
 
         rows = LocationCache.objects.filter(location=pin.location, source=source.cache_source)
@@ -327,6 +340,96 @@ class NewsPanelEndpointTests(RedataConfiguredMixin, TestCase):
         self.assertContains(response, _RELEVANT["link"])
         for article in _STAGING_BATCH:
             self.assertNotContains(response, article["link"])
+
+
+_GET_JSON = "urbanlens.dashboard.services.apis.locations.redata_search_gateway.RedataNewsSearchGateway.get_json"
+
+
+def _news_body(results: list[dict[str, Any]], *, gdelt: str | None) -> dict[str, Any]:
+    """REData's ``/search/news/`` body: 0.3.7's with GDELT in state ``gdelt``, or 0.3.6's when ``gdelt`` is None."""
+    body: dict[str, Any] = {"count": len(results), "results": results, "provider": "gdelt", "query": "q", "months": 24}
+    if gdelt is None:
+        return body
+    answered = gdelt == "ok"
+    return {
+        **body,
+        "complete": answered,
+        "provider": "gdelt" if answered else "searxng",
+        "degraded": not answered,
+        "providers": [
+            {"provider": "gdelt", "status": gdelt, "count": len(results) if answered else 0, "message": None},
+            {
+                "provider": "searxng",
+                "status": "not_attempted" if answered else "ok",
+                "count": 0 if answered else len(results),
+                "message": None,
+            },
+        ],
+    }
+
+
+class NewsPartialAnswerTests(RedataConfiguredMixin, TestCase):
+    """A news answer from SearXNG standing in for GDELT is a floor (UrbanLens N47 item 6): shown, never kept as "no news"."""
+
+    def _fetch(self, body: dict[str, Any]) -> Pin:
+        pin = _hrsh_pin()
+        with mock.patch(_GET_JSON, return_value=body):
+            run_panel_fetch(GdeltPanelSource.key, pin)
+        return pin
+
+    def _rows(self, pin: Pin) -> list[LocationCache]:
+        return list(LocationCache.objects.filter(location=pin.location, source=GdeltPanelSource.cache_source))
+
+    @staticmethod
+    def _an_hour_later() -> mock._patch:
+        return mock.patch(
+            "django.utils.timezone.now", return_value=timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        )
+
+    def test_a_fallbacks_articles_are_shown_and_asked_for_again_within_the_hour(self) -> None:
+        pin = self._fetch(_news_body([_RELEVANT], gdelt="rate_limited"))
+
+        rows = self._rows(pin)
+        self.assertEqual(len(rows), 2, "the shared search and the one for the pin's own name")
+        for row in rows:
+            self.assertEqual(row.data.get(UNANSWERED_SOURCES_KEY), ["gdelt"])
+        data = GdeltPanelSource().cached_data(pin)
+        assert data is not None
+        context = GdeltPanelSource().render_context(pin, data)
+        assert context is not None
+        self.assertEqual([row["value"] for row in context["meta"]], [_RELEVANT["title"]])
+        with self._an_hour_later():
+            self.assertIsNone(GdeltPanelSource().cached_data(pin))
+
+    def test_a_fallbacks_empty_answer_is_not_kept_as_no_news(self) -> None:
+        pin = self._fetch(_news_body([], gdelt="rate_limited"))
+
+        self.assertEqual(self._rows(pin), [])
+        self.assertIsNone(GdeltPanelSource().cached_data(pin))
+        self.assertTrue(
+            fetch_blocked(GdeltPanelSource(), pin), "asked again after a short suppression, not on every poll"
+        )
+
+    def test_gdelts_own_empty_answer_is_no_news_for_the_whole_window(self) -> None:
+        pin = self._fetch(_news_body([], gdelt="ok"))
+
+        with self._an_hour_later():
+            self.assertEqual(GdeltPanelSource().cached_data(pin), {"articles": []})
+
+    def assert_kept_as_it_always_was(self, results: list[dict[str, Any]]) -> None:
+        """REData before 0.3.7 sends no ``complete``; its answer is kept for the whole window, as it always was."""
+        pin = self._fetch(_news_body(results, gdelt=None))
+
+        for row in self._rows(pin):
+            self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
+        with self._an_hour_later():
+            self.assertEqual(GdeltPanelSource().cached_data(pin), {"articles": results})
+
+    def test_an_empty_answer_from_redata_before_0_3_7_is_kept_as_it_always_was(self) -> None:
+        self.assert_kept_as_it_always_was([])
+
+    def test_articles_from_redata_before_0_3_7_are_kept_as_they_always_were(self) -> None:
+        self.assert_kept_as_it_always_was([_RELEVANT])
 
 
 _QUERY = NewsQuery(

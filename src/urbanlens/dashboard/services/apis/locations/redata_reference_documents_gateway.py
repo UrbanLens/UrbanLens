@@ -6,7 +6,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway, redata_configured
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    REASON_ALL_PROVIDERS_UNAVAILABLE,
+    LocationContextUnavailableError,
+    RedataLocationContextGateway,
+    redata_configured,
+)
 from urbanlens.dashboard.services.geo.geo_boundary import USA, state_boundary
 
 if TYPE_CHECKING:
@@ -34,7 +39,7 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
         limit: int | None = None,
         provider: str | list[str] | None = None,
         force_refresh: bool = False,
-    ) -> list[dict[str, Any]]:
+    ) -> LocationContextEnvelope:
         """Search archival/reference material by name.
 
         Args:
@@ -50,7 +55,14 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
-            The envelope's ``results`` list - dicts carrying at least ``provider``, ``title``, ``url``, ``thumbnail_url``, ``date_text`` and ``license`` (REData's own field names - see the "reference documents" section of ``api-reference.md``).
+            The envelope. Its ``results`` are dicts carrying at least ``provider``, ``title``, ``url``,
+            ``thumbnail_url``, ``date_text`` and ``license`` (REData's own field names - see the "reference documents"
+            section of ``api-reference.md``). ``complete`` is False when an archive asked did not answer; from REData
+            0.3.7 that includes one that answered something REData could not read.
+
+        Raises:
+            LocationContextUnavailableError: An archive asked did not answer and none of the rest found anything, or
+                the request failed.
         """
         params: dict[str, Any] = {"q": query}
         if latitude is not None and longitude is not None:
@@ -62,8 +74,7 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
             params["provider"] = provider
         if force_refresh:
             params["force_refresh"] = "true"
-        envelope = self._get_envelope(_SEARCH_PATH, params)
-        return envelope.results
+        return self._get_envelope(_SEARCH_PATH, params)
 
     def near(self, latitude: float, longitude: float, *, radius_meters: float | None = None) -> LocationContextEnvelope:
         """Encyclopaedic material placed near a coordinate - the sources with a real geosearch index (Wikipedia, Wikidata).
@@ -104,11 +115,15 @@ class _RedataReferenceDocumentProvider(MediaProvider):
             address: Unused - REData has no separate address parameter; any
                 address this provider wants is already folded into
                 ``search_term`` (see ``include_address``).
+
+        Raises:
+            LocationContextUnavailableError: After yielding what came back, when REData says an archive it asked did
+                not answer, so ``get_media`` keeps the matches only briefly.
         """
         if not search_term:
             return
-        gateway = RedataReferenceDocumentsGateway()
-        for doc in gateway.search(search_term, provider=self._redata_provider):
+        answer = RedataReferenceDocumentsGateway().search(search_term, provider=self._redata_provider)
+        for doc in answer.results:
             url = doc.get("url") or ""
             if not url:
                 continue
@@ -123,6 +138,8 @@ class _RedataReferenceDocumentProvider(MediaProvider):
                 latitude=_number(doc.get("latitude")),
                 longitude=_number(doc.get("longitude")),
             )
+        if not answer.complete:
+            raise LocationContextUnavailableError(REASON_ALL_PROVIDERS_UNAVAILABLE, f"Not every archive answered: {', '.join(answer.unanswered_sources)}.")
 
 
 def _subjects(attributes: object) -> str:

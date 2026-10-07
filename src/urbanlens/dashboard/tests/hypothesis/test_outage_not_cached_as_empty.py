@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.utils import timezone
 from model_bakery import baker
 import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.cache.location_cache import (
+    PARTIAL_ANSWER_STALE_AFTER,
+    UNANSWERED_SOURCES_KEY,
+    LocationCache,
+)
 from urbanlens.dashboard.models.google_place.model import GooglePlace
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
+    LocationContextEnvelope,
+    LocationContextUnavailableError,
+)
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import (
@@ -479,10 +488,84 @@ class MediaArchiveOutageTests(RedataConfiguredMixin, TestCase):
         self.assertEqual((after.data, after.updated), (stale.data, stale.updated))
 
     def test_a_genuine_empty_answer_is_cached_for_both(self) -> None:
-        with mock.patch(self._SEARCH, return_value=[]):
+        with mock.patch(self._SEARCH, return_value=LocationContextEnvelope(count=0, complete=True)):
             self._source().fetch(self.pin)
 
         self.assertEqual(len(self._audiences()), 2)
+
+    _REQUEST = (
+        "urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway."
+        "RedataReferenceDocumentsGateway._request"
+    )
+    _DOCUMENT = {
+        "provider": "smithsonian",
+        "title": "Hudson River State Hospital, Main Building, 1871",
+        "url": "https://collections.si.edu/search/detail/edanmdm:hrsh-1",
+        "thumbnail_url": "https://ids.si.edu/ids/deliveryService?id=hrsh-1",
+        "description": "",
+    }
+
+    def _fetch_answering(self, body: dict) -> None:
+        """Fetch with REData's archive search answering ``body`` with a 200."""
+        response = mock.Mock(status_code=200)
+        response.json.return_value = body
+        with mock.patch(self._REQUEST, return_value=response):
+            self._source().fetch(self.pin)
+
+    @staticmethod
+    def _answer(results: list[dict], *, smithsonian: str | None) -> dict:
+        """``/reference-documents/search/?provider=smithsonian``: REData 0.3.7's body, or an older one's without a status."""
+        if smithsonian is None:
+            return {"count": len(results), "results": results}
+        providers = [
+            {
+                "provider": "smithsonian",
+                "status": smithsonian,
+                "count": len(results),
+                "message": None if smithsonian == "ok" else "IndexError",
+            }
+        ]
+        providers += [
+            {"provider": name, "status": "skipped", "count": 0, "message": None}
+            for name in ("internet_archive", "library_of_congress")
+        ]
+        return {"count": len(results), "complete": smithsonian == "ok", "results": results, "providers": providers}
+
+    def test_an_archive_redata_isolated_as_unavailable_is_not_cached_as_nothing(self) -> None:
+        """REData 0.3.7 answers a provider's parse error as ``unavailable`` with ``complete: false`` instead of a 500."""
+        with self.assertRaises(LocationContextUnavailableError):
+            self._fetch_answering(self._answer([], smithsonian="unavailable"))
+
+        self.assertEqual(self._audiences(), set())
+
+    def test_an_archive_answer_redata_says_is_incomplete_is_shown_and_kept_briefly(self) -> None:
+        self._fetch_answering(self._answer([self._DOCUMENT], smithsonian="unavailable"))
+
+        rows = LocationCache.objects.filter(location=self.pin.location, source="smithsonian")
+        self.assertEqual(rows.count(), 2)
+        for row in rows:
+            self.assertEqual([item["url"] for item in row.data["items"]], [self._DOCUMENT["url"]])
+            self.assertTrue(row.data.get(UNANSWERED_SOURCES_KEY), row.data)
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNone(LocationCache.get_fresh(self.pin.location, "smithsonian"))
+
+    def assert_kept_for_the_window(self, smithsonian: str | None) -> None:
+        self._fetch_answering(self._answer([self._DOCUMENT], smithsonian=smithsonian))
+
+        rows = LocationCache.objects.filter(location=self.pin.location, source="smithsonian")
+        self.assertEqual(rows.count(), 2)
+        for row in rows:
+            self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNotNone(LocationCache.get_fresh(self.pin.location, "smithsonian"))
+
+    def test_a_complete_archive_answer_keeps_the_window(self) -> None:
+        self.assert_kept_for_the_window("ok")
+
+    def test_an_archive_answer_from_redata_before_0_3_7_keeps_the_window(self) -> None:
+        self.assert_kept_for_the_window(None)
 
 
 class MediaProviderPartialOutageTests(TestCase):
@@ -508,7 +591,7 @@ class MediaProviderPartialOutageTests(TestCase):
     def _rows(self, location: Location) -> int:
         return LocationCache.objects.filter(location=location, source="outage_probe").count()
 
-    def test_an_outage_on_one_query_and_results_on_another_are_cached(self) -> None:
+    def test_an_outage_on_one_query_and_results_on_another_are_cached_briefly(self) -> None:
         location = _hrsh()
         provider = self._provider({"a": requests.ConnectionError("refused"), "b": ["https://example.test/1"]})
 
@@ -516,6 +599,20 @@ class MediaProviderPartialOutageTests(TestCase):
 
         self.assertEqual(len(items), 1)
         self.assertEqual(self._rows(location), 1)
+        row = LocationCache.objects.get(location=location, source="outage_probe")
+        self.assertEqual(row.data.get(UNANSWERED_SOURCES_KEY), ["outage_probe"])
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNone(LocationCache.get_fresh(location, "outage_probe"))
+
+    def test_results_from_every_query_keep_the_window(self) -> None:
+        location = _hrsh()
+        provider = self._provider({"a": ["https://example.test/1"], "b": []})
+
+        provider.get_media(location, ["a", "b"])
+
+        row = LocationCache.objects.get(location=location, source="outage_probe")
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
 
     def test_an_outage_on_one_query_and_nothing_on_another_is_not_cached(self) -> None:
         location = _hrsh()

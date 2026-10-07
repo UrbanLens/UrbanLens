@@ -27,7 +27,11 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBuildings, RedataGateway
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+    ParcelBoundaries,
+    ParcelBuildings,
+    RedataGateway,
+)
 from urbanlens.dashboard.services.core import coalesce
 from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
@@ -35,7 +39,7 @@ _GATEWAY_CLASS_PATH = "urbanlens.dashboard.services.apis.locations.boundaries.re
 _LAT, _LON = 42.005, -73.005
 _SQUARE = [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]]
 _GEOJSON_SQUARE = {"type": "Polygon", "coordinates": [_SQUARE]}
-_SCORED = [{"geometry": _GEOJSON_SQUARE, "is_suggested": True}]
+_SCORED = ParcelBoundaries([{"geometry": _GEOJSON_SQUARE, "is_suggested": True}])
 _TRIANGLE_BUILDINGS = [
     {"latitude": 42.0, "longitude": -73.0},
     {"latitude": 42.0, "longitude": -73.01},
@@ -113,7 +117,7 @@ class BoundaryDeferralTests(_BoundaryCase):
         with mock.patch(_GATEWAY_CLASS_PATH) as gateway_class:
             gateway = gateway_class.return_value
             gateway.lookup_parcel.return_value = {"uuid": "parcel-1", "parcel_geometry": None}
-            gateway.lookup_boundaries.return_value = []
+            gateway.lookup_boundaries.return_value = ParcelBoundaries([])
             gateway.lookup_parcel_buildings.return_value = ParcelBuildings(_TRIANGLE_BUILDINGS)
 
             result = RedataBoundaryProvider().get_typed_boundaries(_LAT, _LON)

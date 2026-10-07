@@ -1,6 +1,15 @@
 # REData production failed UrbanLens's 57-campus live-locations run in seven ways of its own, the worst a Smithsonian parse error that fails archive search for 19 campuses
 
-- **Status: SENT, 2026-10-07.** Measured against `https://redata.urbanlens.org` with UrbanLens production's key,
+- **Status: PARTLY ANSWERED 2026-10-07: items 1 and 6 answered by REData 0.3.7, in production since 2026-10-07 08:30Z.** REData's reply is its T15
+  (`docs/urbanlens-2026-10-07-replies.md` on its `release/0.3.7`, `d1f1bbcb`). Item 1: an archive provider that raises
+  is isolated, reported `unavailable` with `complete: false`, and the other archives' results still come back;
+  Smithsonian reads an empty date list. Item 6: `/search/news/` carries `complete`, `degraded` and a per-provider
+  `providers`, with `complete: false` whenever GDELT did not answer. Both are in REData 0.3.7 (tag `v0.3.7`, `3a2b017d`), in production since 2026-10-07 08:30Z.
+  UrbanLens's vendored schema is from `release/0.3.7` `c4e0de94`; the tag adds only release-please's version bump and one
+  REData test (#150), no API change. UrbanLens reads both on `release/v_0_9_0` (UrbanLens#352, branch `fix/redata-partial-answers`): a partial news or archive
+  answer is shown and kept an hour, an empty one is not kept, and an older REData's answer is read as before.
+  REData #147 on the same release answers item 2's cold parcels with 503 `refresh_queued` and a `retry_after`;
+  UrbanLens waits that out on the same branch. Originally SENT 2026-10-07. Measured against `https://redata.urbanlens.org` with UrbanLens production's key,
   2026-10-07 01:09-05:06Z. Production ran REData v0.3.5 until 03:05:28Z and v0.3.6 after; each item says which. Line
   numbers are REData `v0.3.6`'s.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.

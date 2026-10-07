@@ -47,11 +47,13 @@ class LocationContextUnavailableError(GatewayRequestError):
 
     Attributes:
         reason: One of the module's ``REASON_*`` constants, or REData's own ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``, ``"unknown_provider"``) - REData's fixed reason taxonomy for these endpoints (see the module docstring).
-        rejected: REData refused the request itself (a ``400``), which asking again will not change."""
+        rejected: REData refused the request itself (a ``400``), which asking again will not change.
+        status_code: REData's HTTP status, when it answered with one; None when it could not be asked."""
 
-    def __init__(self, reason: str, message: str, *, rejected: bool = False) -> None:
+    def __init__(self, reason: str, message: str, *, rejected: bool = False, status_code: int | None = None) -> None:
         self.reason = reason
         self.rejected = rejected
+        self.status_code = status_code
         super().__init__(message)
 
     @property
@@ -398,7 +400,7 @@ class RedataLocationContextGateway(Gateway):
             except ValueError:
                 body = {}
             reason = body.get("error") or REASON_SOURCE_ERROR
-            raise LocationContextUnavailableError(reason, body.get("message", ""), rejected=response.status_code == 400)
+            raise LocationContextUnavailableError(reason, body.get("message", ""), rejected=response.status_code == 400, status_code=response.status_code)
 
         if response.status_code in RedataBreaker.REFUSED_STATUSES:
             # Reported once by the breaker, which holds the endpoint off for as long as this asks the caller to wait.
@@ -406,4 +408,4 @@ class RedataLocationContextGateway(Gateway):
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
         if response.status_code == 429:
             raise LocationContextBusyError("REData throttled this key.", retry_after=upstream_retry_after(response) or 1)
-        raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.")
+        raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"REData request failed with status {response.status_code}.", status_code=response.status_code)

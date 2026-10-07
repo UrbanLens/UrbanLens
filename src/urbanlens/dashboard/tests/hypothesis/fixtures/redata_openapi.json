@@ -5204,14 +5204,34 @@
    },
    "NewsSearchResults": {
     "properties": {
+     "complete": {
+      "type": "boolean"
+     },
      "count": {
       "type": "integer"
+     },
+     "degraded": {
+      "type": "boolean"
+     },
+     "error": {
+      "type": "string"
+     },
+     "message": {
+      "nullable": true,
+      "type": "string"
      },
      "months": {
       "type": "integer"
      },
      "provider": {
+      "nullable": true,
       "type": "string"
+     },
+     "providers": {
+      "items": {
+       "$ref": "#/components/schemas/ProviderOutcome"
+      },
+      "type": "array"
      },
      "query": {
       "type": "string"
@@ -5562,6 +5582,29 @@
      "sources",
      "updated",
      "uuid"
+    ],
+    "type": "object"
+   },
+   "ParcelAnswerPending": {
+    "properties": {
+     "error": {
+      "enum": [
+       "refresh_queued",
+       "compute_timeout"
+      ],
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "retry_after": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "error",
+     "message",
+     "retry_after"
     ],
     "type": "object"
    },
@@ -9610,7 +9653,7 @@
  "info": {
   "title": "REData API",
   "version": "1.0.0",
-  "x-redata-revision": "v0.3.6 91bb40d2"
+  "x-redata-revision": "release/0.3.7 c4e0de94"
  },
  "openapi": "3.0.3",
  "paths": {
@@ -11162,6 +11205,15 @@
         }
        }
       }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParcelAnswerPending"
+        }
+       }
+      }
      }
     }
    }
@@ -11219,6 +11271,15 @@
           }
          },
          "type": "object"
+        }
+       }
+      }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParcelAnswerPending"
         }
        }
       }
@@ -12919,7 +12980,7 @@
       "content": {
        "application/json": {
         "schema": {
-         "$ref": "#/components/schemas/Error"
+         "$ref": "#/components/schemas/NewsSearchResults"
         }
        }
       }

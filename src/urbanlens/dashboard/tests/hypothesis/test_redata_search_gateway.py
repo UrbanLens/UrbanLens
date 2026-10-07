@@ -26,6 +26,47 @@ def _gateway(session: mock.Mock, cls: type[RedataSearchGateway] = RedataSearchGa
     return cls(base_url="https://redata.example.test", api_key="test-key", session=session)
 
 
+_ARTICLE = {
+    "title": "T",
+    "link": "http://x.com",
+    "snippet": "example.com",
+    "date": "20240105T120000Z",
+    "thumbnail": None,
+}
+
+
+def _news_body(results: list[dict], *, complete: bool, gdelt: str, searxng: str) -> dict:
+    """A ``/search/news/`` body as REData 0.3.7 sends it, with GDELT and SearXNG in the given states."""
+    answered = "gdelt" if gdelt == "ok" else "searxng" if searxng == "ok" else ""
+    return {
+        "count": len(results),
+        "complete": complete,
+        "results": results,
+        "provider": answered,
+        "degraded": answered == "searxng",
+        "providers": [
+            {
+                "provider": "gdelt",
+                "status": gdelt,
+                "count": len(results) if gdelt == "ok" else 0,
+                "message": None,
+                "radius_meters": None,
+                "limit": 10,
+            },
+            {
+                "provider": "searxng",
+                "status": searxng,
+                "count": len(results) if searxng == "ok" else 0,
+                "message": None,
+                "radius_meters": None,
+                "limit": None,
+            },
+        ],
+        "query": "query",
+        "months": 24,
+    }
+
+
 class ServiceKeyTests(SimpleTestCase):
     """RedataSearchGateway and RedataNewsSearchGateway track separate service keys."""
 
@@ -156,10 +197,70 @@ class SearchNewsTests(SimpleTestCase):
             },
         )
 
-        results = _gateway(session).search_news("query")
+        results = _gateway(session).search_news("query").results
 
         self.assertEqual(results[0]["title"], "T")
         self.assertEqual(results[0]["date"], "20240105T120000Z")
+
+    def test_an_answer_from_a_redata_that_sends_no_completeness_is_complete(self) -> None:
+        """REData before 0.3.7 sends only ``results``, as the body above does; it is read as it always was."""
+        session = mock.Mock()
+        session.get.return_value = _response(200, {"count": 0, "results": [], "provider": "searxng"})
+
+        answer = _gateway(session).search_news("query")
+
+        self.assertTrue(answer.complete)
+        self.assertEqual(answer.results, [])
+        self.assertEqual(answer.unanswered_sources, [])
+
+    def test_gdelts_own_answer_is_complete(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(
+            200, _news_body([_ARTICLE], complete=True, gdelt="ok", searxng="not_attempted")
+        )
+
+        answer = _gateway(session).search_news("query")
+
+        self.assertTrue(answer.complete)
+        self.assertEqual(answer.results, [_ARTICLE])
+        self.assertEqual(answer.unanswered_sources, [])
+
+    def test_a_fallbacks_answer_keeps_its_articles_and_names_the_primary_it_stood_in_for(self) -> None:
+        for status in ("rate_limited", "key_budget_exhausted", "unavailable"):
+            with self.subTest(status):
+                session = mock.Mock()
+                session.get.return_value = _response(
+                    200, _news_body([_ARTICLE], complete=False, gdelt=status, searxng="ok")
+                )
+
+                answer = _gateway(session).search_news("query")
+
+                self.assertFalse(answer.complete)
+                self.assertEqual(answer.results, [_ARTICLE])
+                self.assertEqual(answer.unanswered_sources, ["gdelt"])
+
+    def test_a_fallbacks_empty_answer_is_not_no_news(self) -> None:
+        """GDELT was not asked and SearXNG found nothing: that says nothing about the place's coverage."""
+        session = mock.Mock()
+        session.get.return_value = _response(200, _news_body([], complete=False, gdelt="rate_limited", searxng="ok"))
+
+        with pytest.raises(LocationContextUnavailableError) as ctx:
+            _gateway(session).search_news("query")
+        self.assertTrue(ctx.value.is_outage)
+
+    def test_the_enveloped_503_still_raises(self) -> None:
+        """From 0.3.7 the 503 carries the same envelope as a 200, with ``error`` and ``message`` added."""
+        session = mock.Mock()
+        body = {
+            **_news_body([], complete=False, gdelt="rate_limited", searxng="unavailable"),
+            "error": "search_unavailable",
+            "message": "gdelt: rate_limited; searxng: unavailable",
+        }
+        session.get.return_value = _response(503, body)
+
+        with pytest.raises(LocationContextUnavailableError) as ctx:
+            _gateway(session).search_news("query")
+        self.assertEqual(ctx.value.reason, "search_unavailable")
 
     def test_503_raises_location_context_unavailable(self) -> None:
         for error in BUDGET_REFUSALS:
