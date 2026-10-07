@@ -148,18 +148,21 @@ class RedataBoundaryProvider(BoundaryProvider):
             The suggested boundary, or None when REData offers no candidate or refused for good.
 
         Raises:
-            BoundaryProviderDeferredError: The request failed transiently. Falling through to the hull instead
-                made a 1,322 km² parcel of one house lot (P148).
+            BoundaryProviderDeferredError: The request failed transiently, or REData named a source it could not hear
+                from: the candidate it suggests may be one a missing source would have outranked. Falling through to
+                the hull instead made a 1,322 km² parcel of one house lot (P148).
         """
         if not parcel_uuid:
             return None
         try:
-            candidates = gateway.lookup_boundaries(parcel_uuid)
+            answer = gateway.lookup_boundaries(parcel_uuid)
         except PropertyRecordsUnavailableError as exc:
             self._defer_if_transient(exc)
             logger.debug("REData boundary candidates unavailable for parcel %s: %s", parcel_uuid, exc)
             return None
-        return suggested_boundary(candidates)
+        if answer.unanswered_sources:
+            raise BoundaryProviderDeferredError(self.service_key or "redata_boundary")
+        return suggested_boundary(answer.candidates)
 
     def _defer_if_transient(self, exc: PropertyRecordsUnavailableError) -> None:
         """Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback.
@@ -188,8 +191,8 @@ class RedataBoundaryProvider(BoundaryProvider):
             A convex-hull ``Polygon`` around the buildings that can stand on this property (see :func:`hull_buildings`), or None when there's no uuid, fewer than 3 of them, the points are collinear (the hull degenerates to a line or point), or the buildings lookup itself failed.
 
         Raises:
-            BoundaryProviderDeferredError: The buildings lookup failed transiently, or found fewer than 3 buildings
-                while REData named a source it could not hear from.
+            BoundaryProviderDeferredError: The buildings lookup failed transiently, or REData named a source it could
+                not hear from: the hull of part of the buildings is smaller than the parcel, and would be kept as its line.
         """
         if not parcel_uuid:
             return None
@@ -200,11 +203,11 @@ class RedataBoundaryProvider(BoundaryProvider):
             logger.debug("REData buildings lookup unavailable for parcel %s: %s", parcel_uuid, exc)
             return None
 
+        if answer.unanswered_sources:
+            # Settling on None would stop asking, and a hull of part of the buildings would be kept as the line.
+            raise BoundaryProviderDeferredError(self.service_key or "redata_boundary")
         points = [Point(float(building["longitude"]), float(building["latitude"]), srid=4326) for building in hull_buildings(answer.buildings, latitude, longitude)]
         if len(points) < 3:
-            if answer.unanswered_sources:
-                # Too few buildings because a source did not answer is no answer; settling on None would stop asking.
-                raise BoundaryProviderDeferredError(self.service_key or "redata_boundary")
             return None
 
         hull = MultiPoint(points, srid=4326).convex_hull

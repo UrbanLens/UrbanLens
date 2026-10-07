@@ -149,6 +149,19 @@ class BuildingListTests(RedataConfiguredMixin, TestCase):
         assert source is not None
         self.assertTrue(fetch_blocked(source, self.pin), "asked again once REData's wait is over, not on every poll")
 
+    def test_a_throttle_is_skipped_as_before_not_waited_out_inline(self) -> None:
+        """Review finding 4: only a computation's wait sends the bootstrap back to the same stage."""
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsBusyError
+
+        source = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
+        assert source is not None
+        throttle = PropertyRecordsBusyError("rate_limited", "Throttled.", retry_after=60)
+        with mock.patch.object(type(source), "fetch", side_effect=throttle):
+            waited = run_panel_fetch(PARCEL_BUILDINGS_CACHE_SOURCE, self.pin)
+
+        self.assertIsNone(waited)
+        self.assertTrue(fetch_blocked(source, self.pin), "still left alone for the wait REData named")
+
 
 @dataclass(slots=True, kw_only=True)
 class _Deferring(BoundaryProvider):

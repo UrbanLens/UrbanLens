@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_FORBIDDEN, REASON_MANUAL_ONLY
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.property_owner.model import WikiOwner
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.pins.external_data import PanelSource
@@ -52,8 +52,22 @@ _MAX_LIEN_ROWS = 8
 #: under the record's ``unanswered_sources``, so the cache keeps the record only briefly (``LocationCache.set``); an
 #: incomplete assessments or sale-records answer names each provider missing, as ``assessments:<provider>``.
 _SECTIONS = frozenset({"assessments", "sale-records", "liens", "tax-payments", "owners", "sales", "demographics", "national-parks"})
-#: Refusals REData answers every parcel alike until its operator acts, which asking again within the hour cannot change.
-_SETTLED_SECTION_REFUSALS = frozenset({"census_data_api_not_configured"})
+#: Refusals REData answers every parcel alike until its operator acts, which asking again within the hour cannot change:
+#: a key without the section's scope, and REData without a Census key.
+_SETTLED_SECTION_REFUSALS = frozenset({REASON_FORBIDDEN, "census_data_api_not_configured"})
+
+
+def _section_unanswered(exc: PropertyRecordsUnavailableError) -> bool:
+    """Whether REData could not answer a section for now, rather than answering it for good.
+
+    Args:
+        exc: What the section's lookup raised.
+
+    Returns:
+        True for an outage or a throttle; False for a 404 (REData has no such parcel, whatever the body says) and for
+        a refusal in :data:`_SETTLED_SECTION_REFUSALS`.
+    """
+    return exc.is_outage and exc.status_code != 404 and exc.reason not in _SETTLED_SECTION_REFUSALS
 
 
 def _record_settles_owners(payload: dict[str, Any]) -> bool:
@@ -139,7 +153,7 @@ def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: 
         try:
             return lookup(parcel_uuid)
         except PropertyRecordsUnavailableError as exc:
-            if exc.is_outage and exc.reason not in _SETTLED_SECTION_REFUSALS:
+            if _section_unanswered(exc):
                 unanswered.append(section)
             return None
 

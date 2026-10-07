@@ -7,7 +7,7 @@ without YouTube, a building list without Overture's footprints. Only an answer w
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -559,3 +559,136 @@ class OfficialOwnerTests(_Case):
         _write_official_owners_and_sales(self.location, {"owner_name": ["New Owner LLC"]})
 
         self.assertEqual(self._linked(), {"New Owner LLC"})
+
+
+_ANY_SECTION = {"count": 0, "complete": True, "results": [], "providers": [], "next": None}
+
+
+class SectionRefusalTests(_Case):
+    """Only a section REData could not answer for now is named; one it refused for good is not (review finding 1).
+
+    Asked through the real gateway, so each refusal is classified as REData's status code makes it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def _unanswered(self, section: str, status: int, body: object, headers: dict[str, str] | None = None) -> list[Any]:
+        """The sections named unanswered when ``section`` answers ``status``, through the breaker a real session has."""
+        from urbanlens.dashboard.plugins.builtin.property_records import _add_sections
+
+        def request(_method: str, url: str, **_kwargs: object) -> mock.Mock:
+            failing = f"/{section}/" in url
+            code = status if failing else 200
+            response = mock.Mock(status_code=code, headers=(headers or {}) if failing else {}, text="", ok=code == 200)
+            response.json.return_value = body if failing else _ANY_SECTION
+            return response
+
+        inner = mock.Mock()
+        inner.request.side_effect = request
+        gateway = RedataGateway(base_url="https://redata.example.test", api_key="test-key")
+        # The gateway's own rate-limited session, so REData's breaker sees every answer; only the wire is stubbed.
+        cast("Any", gateway.session)._session = inner
+        payload: dict[str, Any] = {"uuid": "parcel-1", "available": True}
+        _add_sections(payload, gateway, "parcel-1")
+        return list(payload.get(UNANSWERED_SOURCES_KEY) or [])
+
+    def test_a_section_the_key_may_not_read_is_not_asked_for_hourly(self) -> None:
+        for section in ("demographics", "owners", "liens"):
+            with self.subTest(section=section):
+                self.assertEqual(self._unanswered(section, 403, {"detail": "You do not have permission."}), [])
+
+    def test_a_refusal_the_breaker_holds_for_the_next_parcel_is_not_asked_for_hourly_either(self) -> None:
+        """After one 403 the breaker holds the endpoint for an hour, so the next parcel's call never goes out."""
+        refused = {"detail": "You do not have permission."}
+
+        self.assertEqual(self._unanswered("owners", 403, refused), [])
+        self.assertEqual(self._unanswered("owners", 403, refused), [])
+
+    def test_a_section_redata_has_no_such_parcel_for_is_not_asked_for_hourly(self) -> None:
+        for body in ({"detail": "Not found."}, {"error": "no_data_found", "message": "none"}):
+            with self.subTest(body=body):
+                self.assertEqual(self._unanswered("national-parks", 404, body), [])
+
+    def test_a_section_redata_could_not_answer_for_now_is_named(self) -> None:
+        cases: tuple[tuple[int, dict[str, str], dict[str, str]], ...] = (
+            (503, {"error": "source_error", "message": "upstream timed out"}, {}),
+            (500, {"detail": "Server error"}, {}),
+            (429, {"detail": "throttled"}, {"Retry-After": "30"}),
+        )
+        for status, body, headers in cases:
+            with self.subTest(status=status):
+                # A 429 holds REData's whole pool, so the sections asked after it go unanswered too.
+                self.assertIn("liens", self._unanswered("liens", status, body, headers))
+
+
+class PartialBoundaryTests(_Case):
+    """REData 0.3.7 names the sources its unfiltered ``/boundaries/`` could not hear from (review finding 2)."""
+
+    _CANDIDATE = {
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [[-73.931, 41.732], [-73.929, 41.732], [-73.929, 41.734], [-73.931, 41.734], [-73.931, 41.732]]
+            ],
+        },
+        "is_suggested": True,
+        "kind": "area",
+    }
+
+    def test_the_gateway_keeps_the_sources_boundaries_did_not_hear_from(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import UNANSWERED_SOURCES_HEADER
+
+        session = mock.Mock()
+        response = mock.Mock(status_code=200, headers={UNANSWERED_SOURCES_HEADER: "ny_cris, tigerweb"}, text="")
+        response.json.return_value = [self._CANDIDATE]
+        session.get.return_value = response
+
+        answer = RedataGateway(
+            base_url="https://redata.example.test", api_key="test-key", session=session
+        ).lookup_boundaries("parcel-1")
+
+        self.assertEqual((answer.candidates, answer.unanswered_sources), ([self._CANDIDATE], ("ny_cris", "tigerweb")))
+
+    def test_a_scored_boundary_from_a_partial_answer_is_deferred_not_drawn(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBoundaries
+
+        gateway = mock.Mock()
+        gateway.lookup_boundaries.return_value = ParcelBoundaries([self._CANDIDATE], unanswered_sources=("ny_cris",))
+
+        with self.assertRaises(BoundaryProviderDeferredError):
+            RedataBoundaryProvider()._scored_boundary(gateway, "parcel-1")
+
+    def test_a_scored_boundary_from_a_complete_answer_is_drawn(self) -> None:
+        from django.contrib.gis.geos import Polygon
+
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBoundaries
+
+        gateway = mock.Mock()
+        gateway.lookup_boundaries.return_value = ParcelBoundaries([self._CANDIDATE])
+
+        self.assertIsInstance(RedataBoundaryProvider()._scored_boundary(gateway, "parcel-1"), Polygon)
+
+    def test_a_hull_of_a_partial_building_list_is_deferred_however_many_it_names(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+
+        corners = ((41.7325, -73.9305), (41.7325, -73.9295), (41.7335, -73.9295), (41.7335, -73.9305))
+        buildings = [
+            {**_BUILDING, "name": f"Hall {n}", "latitude": lat, "longitude": lng}
+            for n, (lat, lng) in enumerate(corners)
+        ]
+        gateway = mock.Mock()
+        gateway.lookup_parcel_buildings.return_value = ParcelBuildings(buildings, unanswered_sources=("overture",))
+
+        with self.assertRaises(BoundaryProviderDeferredError):
+            RedataBoundaryProvider()._buildings_convex_hull(gateway, "parcel-1", 41.733, -73.93)
+
+        gateway.lookup_parcel_buildings.return_value = ParcelBuildings(buildings)
+        self.assertIsNotNone(RedataBoundaryProvider()._buildings_convex_hull(gateway, "parcel-1", 41.733, -73.93))

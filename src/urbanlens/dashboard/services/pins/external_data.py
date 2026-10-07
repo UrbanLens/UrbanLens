@@ -1879,8 +1879,8 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
         pin: The pin whose panel data should be fetched.
 
     Returns:
-        The seconds the source asked to be left before it is asked again, when it deferred (an
-        ``UpstreamBusyError``); None otherwise."""
+        The seconds to wait before asking again, when the source is working out its answer and will have it then
+        (an ``UpstreamBusyError`` whose ``answer_pending`` is set); None otherwise, a throttle or outage included."""
     source = get_panel_source(source_key)
     if source is None:
         logger.warning("Panel fetch for unknown source '%s' skipped (plugin removed or disabled?)", source_key)
@@ -1915,7 +1915,7 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     except UpstreamBusyError as exc:
         logger.info("Panel fetch %s for pin %s deferred %ss: %s", source_key, pin.pk, exc.retry_after, exc)
         cache.set(source.skip_key(pin), 1, exc.retry_after)
-        deferred_for = exc.retry_after
+        deferred_for = exc.retry_after if exc.answer_pending else None
     except (RateLimitExceededError, ServiceDisabledError) as exc:
         logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)

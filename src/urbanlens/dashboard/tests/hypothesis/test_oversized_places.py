@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_ERROR,
+    ParcelBoundaries,
     ParcelBuildings,
     PropertyRecordsUnavailableError,
 )
@@ -289,7 +290,7 @@ class ProvisioningReproductionTests(TestCase):
 
     def test_without_a_ranking_the_hull_still_stays_on_the_property(self) -> None:
         with mock.patch(self._GATEWAY) as gateway:
-            gateway.return_value.lookup_boundaries.return_value = []
+            gateway.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             self._provision_west(gateway)
 
         self.assertIsNone(self.east.place_id, "a location 35 km away was swept onto the new parcel")

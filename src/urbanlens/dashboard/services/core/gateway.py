@@ -174,7 +174,11 @@ class UpstreamBusyError(GatewayRequestError):
 
     Attributes:
         retry_after: Seconds the upstream asked callers to wait, bounded by :data:`UPSTREAM_BUSY_MAX_SECONDS`.
+        answer_pending: The upstream is working out this one answer and will have it after ``retry_after``, so asking
+            again then is the next step, not a retry of a failure.
     """
+
+    answer_pending: ClassVar[bool] = False
 
     def __init__(self, *args: object, retry_after: int = UPSTREAM_BUSY_DEFAULT_SECONDS) -> None:
         super().__init__(*args)

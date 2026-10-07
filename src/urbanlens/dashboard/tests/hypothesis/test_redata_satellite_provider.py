@@ -34,6 +34,14 @@ def _complete_slides(generated: Iterable[SatelliteSlide | SlideSignal]) -> list[
     return slides
 
 
+def _partial_slides(generated: Iterable[SatelliteSlide | SlideSignal]) -> list[SatelliteSlide]:
+    """The slides an answer that an outage cost a slide generated, having checked it said so."""
+    found = list(generated)
+    if SlideSignal.PARTIAL not in found:
+        raise AssertionError(f"an answer an outage cost a slide did not say it was partial: {found}")
+    return [item for item in found if isinstance(item, SatelliteSlide)]
+
+
 def _answered(results: list[dict]) -> LocationContextEnvelope:
     """REData's complete ``/imagery/`` answer."""
     return LocationContextEnvelope(count=len(results), complete=True, results=results)
@@ -207,7 +215,7 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             gateway_cls.return_value.download_bytes.side_effect = LocationContextUnavailableError(
                 "source_error", "boom"
             )
-            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _partial_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].source, "NASA GIBS")
@@ -470,7 +478,7 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             gateway_cls.return_value.capture_time_series.side_effect = LocationContextUnavailableError(
                 "rate_limited", "back off"
             )
-            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _partial_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(len(slides), 1)
         self.assertEqual(slides[0].source, "Esri World Imagery Placeholder")
@@ -522,7 +530,7 @@ class RedataSatelliteProviderTests(SimpleTestCase):
             gateway_cls.return_value.download_archived_copy.side_effect = LocationContextUnavailableError(
                 "source_error", "boom"
             )
-            slides = _complete_slides(self.provider._generate_satellite_slides(41.7, -73.9))
+            slides = _partial_slides(self.provider._generate_satellite_slides(41.7, -73.9))
 
         self.assertEqual(slides, [])
 
@@ -691,6 +699,38 @@ class PartialImageryTests(TestCase):
         }
 
         self.assert_shown_and_not_kept(*self._fetch_twice(_answered([_IMAGE]), timeline))
+
+    def _with_a_keyed_download(self, failure: Exception) -> list[SlideFetch]:
+        keyed = {"provider": "bing_maps", "url": "/download/", "delivery": "image"}
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_CAPABILITIES_PATH, return_value=["nasa_gibs", "bing_maps"]),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_imagery.return_value = _answered([_IMAGE, keyed])
+            gateway_cls.return_value.get_timeline.return_value = {"captures": [], "complete": True}
+            gateway_cls.return_value.download_bytes.side_effect = failure
+            return [RedataSatelliteProvider().get_satellite_slides(41.7, -73.9) for _ in range(2)]
+
+    def test_a_slide_an_outage_cost_is_not_kept_without_it(self) -> None:
+        """Review finding 3: a keyed provider's download that REData could not serve for now."""
+        for failure in (
+            LocationContextUnavailableError("source_error", "upstream timed out", status_code=503),
+            LocationContextUnavailableError("source_error", "Could not reach REData"),
+        ):
+            with self.subTest(failure=failure):
+                cache.clear()
+                fetched = self._with_a_keyed_download(failure)
+
+                self.assertEqual([slide.img_src for slide in fetched[0].slides], [_IMAGE["url"]])
+                self.assertTrue(fetched[0].degraded)
+                self.assertFalse(fetched[1].from_cache)
+
+    def test_a_slide_redata_has_no_image_for_is_kept_as_a_gap(self) -> None:
+        fetched = self._with_a_keyed_download(LocationContextUnavailableError("source_error", "404", status_code=404))
+
+        self.assertFalse(fetched[0].degraded)
+        self.assertTrue(fetched[1].from_cache)
 
     def test_a_complete_answer_is_kept(self) -> None:
         fetched, asked = self._fetch_twice(_answered([_IMAGE]), {"captures": [], "complete": True})

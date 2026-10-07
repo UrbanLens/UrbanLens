@@ -11,8 +11,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, SlideSignal
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import REASON_FORBIDDEN, LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.apis.locations.redata_imagery_gateway import RedataImageryGateway
+from urbanlens.dashboard.services.core.gateway import is_source_outage
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.web_mercator import native_zoom
 from urbanlens.dashboard.services.security.redact import redact_coordinate
@@ -221,6 +222,23 @@ class EsriPlugin(UrbanLensPlugin):
         return [EsriGateway()]
 
 
+def _missed(exc: LocationContextUnavailableError) -> SlideSignal | None:
+    """What a slide REData could not produce comes to.
+
+    Args:
+        exc: What asking REData for the slide's image raised.
+
+    Returns:
+        :attr:`SlideSignal.PARTIAL` when REData or its source could not answer for now (a 5xx, a throttle, or no
+        answer at all), so the carousel is shown without the slide but not kept without it; None for a gap REData
+        settled (a 4xx, such as no image for the asset, or a refusal of this key).
+    """
+    if exc.reason == REASON_FORBIDDEN or not is_source_outage(exc):
+        return None
+    status = exc.status_code
+    return SlideSignal.PARTIAL if status is None or status >= 500 or status == 429 else None
+
+
 class RedataSatelliteProvider(SatelliteViewProvider):
     """Satellite carousel slides from every REData imagery provider not already covered by Esri."""
 
@@ -260,8 +278,9 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         seen_urls: set[str] = set()
         for result in answer.results:
             slide = self._slide_from_result(gateway, result, latitude, longitude)
-            if slide is not None:
+            if isinstance(slide, SatelliteSlide):
                 seen_urls.add(slide.img_src)
+            if slide is not None:
                 yield slide
 
         # Dated historical captures.
@@ -318,6 +337,9 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             if not asset.get("url"):
                 continue
             slide = self._slide_from_result(gateway, asset, latitude, longitude)
+            if slide is SlideSignal.PARTIAL:
+                yield slide
+                continue
             if slide is None or slide.img_src in seen_urls:
                 continue
             seen_urls.add(slide.img_src)
@@ -326,8 +348,8 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             date = entry["captured_on"] if entry["date_is_exact"] else f"{entry['captured_on']} (published)"
             yield SatelliteSlide(img_src=slide.img_src, source=slide.source, date=str(date), detail=slide.detail)
 
-    def _slide_from_result(self, gateway: RedataImageryGateway, result: dict[str, Any], latitude: float, longitude: float) -> SatelliteSlide | None:
-        """Build one carousel slide from a REData imagery result, or None to skip it."""
+    def _slide_from_result(self, gateway: RedataImageryGateway, result: dict[str, Any], latitude: float, longitude: float) -> SatelliteSlide | SlideSignal | None:
+        """Build one carousel slide from a REData imagery result: None to skip it, :attr:`SlideSignal.PARTIAL` when an outage cost it."""
         provider = result.get("provider")
         if not isinstance(provider, str):
             return None
@@ -353,7 +375,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
                 image_bytes = gateway.download_bytes(url)
             except LocationContextUnavailableError as exc:
                 logger.debug("REData imagery download failed for provider %s: %s", provider, exc)
-                return None
+                return _missed(exc)
             img_src = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('ascii')}"
         else:
             img_src = url
@@ -386,7 +408,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             logger.debug("tile_template imagery result for provider %s carries no uuid; falling back to a raw tile.", result.get("provider"))
         return _resolve_tile_template(url, latitude, longitude, result)
 
-    def _time_series_slide(self, gateway: RedataImageryGateway, result: dict[str, Any], name: str, latitude: float) -> SatelliteSlide | None:
+    def _time_series_slide(self, gateway: RedataImageryGateway, result: dict[str, Any], name: str, latitude: float) -> SatelliteSlide | SlideSignal | None:
         """Materialize and embed one date from a continuous (``time_series``) source.
         This shows exactly one: the range's most recent date (see ``_most_recent_interval_end``), so this provider gets one carousel slide framed the same "current conditions" way every other slide here is, rather than being skipped outright.
 
@@ -397,7 +419,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             latitude: WGS-84 latitude of the slide, for its composed zoom.
 
         Returns:
-            A slide for the materialized date, or None when there is no interval to pick a date from, or REData can't produce an image for it. A documented "nothing here" answer and a transient failure are both an ordinary provider gap here.
+            A slide for the materialized date, or None when there is no interval to pick a date from, or REData can't produce an image for it; :attr:`SlideSignal.PARTIAL` when an outage cost it, so the carousel is not kept without it.
         """
         asset_uuid = result.get("uuid")
         end_date = _most_recent_interval_end(result.get("attributes") or {})
@@ -409,7 +431,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             captured = gateway.capture_time_series(asset_uuid, end_date, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT)
         except LocationContextUnavailableError as exc:
             logger.debug("REData imagery capture failed for asset %s on %s: %s", asset_uuid, end_date, exc)
-            return None
+            return _missed(exc)
         if captured is None:
             return None
 
@@ -422,7 +444,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             image_bytes = gateway.download_archived_copy(captured_uuid, width=_COMPOSED_IMAGE_WIDTH, height=_COMPOSED_IMAGE_HEIGHT, zoom=zoom)
         except LocationContextUnavailableError as exc:
             logger.debug("REData imagery download failed for materialized asset %s: %s", captured_uuid, exc)
-            return None
+            return _missed(exc)
 
         img_src = f"data:image/jpeg;base64,{base64.b64encode(image_bytes).decode('ascii')}"
         return SatelliteSlide(img_src=img_src, source=name, date=end_date.isoformat(), detail=result.get("attribution") or "")
