@@ -1704,8 +1704,9 @@ def check_in(checkin: SafetyCheckin, profile: Profile, *, removing: bool = False
     if not _claim_resolution(checkin, status=SafetyCheckinStatus.CHECKED_IN, resolved_by_label="you"):
         return False
     _broadcast_status_update(checkin)
-    # Archival is scheduled before anything that can fail: the retry sweep only finishes notices for a check-in this
-    # site scheduled, so one left unscheduled by a failure here would leave its contacts untold.
+    # Archival is scheduled right after the claim, before the steps that can fail: the retry sweep only finishes
+    # notices for a check-in this site scheduled, so one left unscheduled by a failure here would leave its contacts
+    # untold.
     schedule_checkin_archival(checkin)
     _conclude_checkin(checkin)
     _tell_alerted_contacts_it_is_over(checkin, checkin.contacts.alerted(), removed=removing)
@@ -2106,8 +2107,8 @@ def _owed_resolution_notices() -> SafetyCheckinContactQuerySet:
 
     That is within the archival grace window after the resolution: after it the check-in is archived and its title
     gone, and an all-clear hours late helps nobody. The contact who reported the owner found is never owed one; they
-    know. Only a check-in this site resolved is included: every resolution schedules archival before anything that can
-    fail, and an imported check-in, which arrives resolved with its contacts' alert times, never is.
+    know. Only a check-in this site resolved is included: every resolution schedules archival right after its claim,
+    and an imported check-in, which arrives resolved with its contacts' alert times, never is.
 
     Returns:
         The contacts, with their check-ins and owners.

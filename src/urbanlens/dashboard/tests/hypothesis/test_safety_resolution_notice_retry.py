@@ -36,7 +36,7 @@ from urbanlens.dashboard.services.visits.safety import (
     mark_found_safe_by_partner,
     send_resolution_email,
 )
-from urbanlens.dashboard.tasks import escalate_overdue_checkins
+from urbanlens.dashboard.tasks import escalate_overdue_checkins, send_safety_resolution_email
 
 _ALL_CLEAR = "dashboard/email/safety_checkin_all_clear.html"
 
@@ -195,7 +195,17 @@ class DeletionTests(_RetryTestCase):
                 self.by_email.pk, to="rescuer@example.com", subject="s", text_body="t", html_body="", removed=True
             )
 
-        enqueue.assert_called_once()
+        enqueue.assert_called_once_with(
+            send_safety_resolution_email,
+            self.by_email.pk,
+            "rescuer@example.com",
+            "s",
+            "t",
+            "",
+            removed=True,
+            attempt=1,
+            countdown=60,
+        )
         self.by_email.refresh_from_db()
         self.assertIsNone(self.by_email.resolution_email_failed_at)
 
@@ -223,6 +233,46 @@ class DeletionTests(_RetryTestCase):
 
         self.assertEqual(len(refused), 1)
         self.assertEqual(self._emails_to("rescuer@example.com"), 1)
+
+
+class FailedInAppNoticeTests(_RetryTestCase):
+    def _notify_failing_for_friend(self):
+        real_notify = NotificationLog.objects.notify
+
+        def notify(**kwargs):
+            if kwargs.get("profile") == self.friend:
+                raise RuntimeError("notification store down")
+            return real_notify(**kwargs)
+
+        return mock.patch.object(NotificationLog.objects, "notify", side_effect=notify)
+
+    def test_it_releases_the_claim_for_the_sweep(self) -> None:
+        with notification_emails_sent(), self._notify_failing_for_friend():
+            check_in(self.checkin, self.owner)
+
+        self.by_account.refresh_from_db()
+        self.assertIsNone(self.by_account.resolution_notified_at)
+        self.assertEqual(self._emails_to("friend@example.com"), 0)
+
+    def test_on_a_deletion_the_email_still_goes(self) -> None:
+        """Nothing will retry a deleted check-in's notice, so the half that can still go out does."""
+        with notification_emails_sent(), self._notify_failing_for_friend():
+            delete_checkin(self.checkin, self.owner)
+
+        self.assertEqual(self._emails_to("friend@example.com"), 1)
+
+
+class FoundEmailTemplateTests(TestCase):
+    def _render(self, **links: str) -> str:
+        checkin = baker.make(SafetyCheckin, title="Tunnel walk", notify_community_wiki=False)
+        return real_render_to_string(
+            "dashboard/email/safety_checkin_resolved.html",
+            {"checkin": checkin, "resolved_by_label": "rescuer", **links},
+        )
+
+    def test_the_button_shows_only_with_a_link(self) -> None:
+        self.assertIn("View check-in", self._render(checkin_url="https://example.com/c"))
+        self.assertNotIn("View check-in", self._render())
 
 
 class SweepBoundsTests(_RetryTestCase):
