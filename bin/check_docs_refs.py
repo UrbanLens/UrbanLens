@@ -37,6 +37,10 @@ _SKIP_FILES = {
     # Declares the changelog it will generate ("changelog-path"), which is a
     # path this repository does not have yet rather than a citation of one.
     "release-please-config.json",
+    # Freezes the notes earlier releases wrote into ApiRateLimit rows, which cite
+    # documents since moved (docs/redata.md, docs/redata-cid-resolution.md). The
+    # text has to match those rows exactly, so it cannot be repointed.
+    "src/urbanlens/dashboard/migrations/0068_rate_limit_rows_from_any_release_take_0_9_0_defaults.py",
 }
 
 #: Build output that happens to be tracked. Minified bundles contain runs like
