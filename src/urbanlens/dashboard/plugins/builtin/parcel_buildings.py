@@ -173,8 +173,8 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
 
     Returns:
         ``{"buildings": [...], "provider": "redata"|"osm"|"cris"}``, or ``{}`` when every provider answered and none
-        found anything. When REData named a source it could not hear from, whatever is returned carries
-        ``"unanswered_sources"``, so the cache keeps it only briefly.
+        found anything. When REData named a source it could not hear from, or REData or a fallback could not be
+        reached, whatever is returned carries ``"unanswered_sources"``, so the cache keeps it only briefly.
 
     Raises:
         Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
@@ -186,7 +186,7 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
 
     latitude = float(location.latitude or 0)
     longitude = float(location.longitude or 0)
-    outages: list[Exception] = []
+    outages: dict[str, Exception] = {}
 
     answer = ParcelBuildings([])
     if redata_configured():
@@ -199,19 +199,20 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
             # from the failed request's own URL. See services/security/redact.py.
             logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
             if is_source_outage(exc):
-                outages.append(exc)
+                outages["redata"] = exc
 
     partial = list(answer.unanswered_sources)
 
     def marked(payload: dict[str, Any]) -> dict[str, Any]:
-        # Whatever stands in for a REData list missing a source is a floor too.
-        return {**payload, UNANSWERED_SOURCES_KEY: partial} if partial else payload
+        # Whatever stands in for a REData list missing a source, or for a provider that could not be reached, is a floor too.
+        unanswered = [*partial, *outages]
+        return {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
 
     if answer.buildings:
         return marked({"buildings": answer.buildings, "provider": "redata"})
 
-    osm_buildings = _asked(_overpass_buildings, location, outages)
-    cris_buildings = _asked(_cris_buildings, location, outages)
+    osm_buildings = _asked("overpass", _overpass_buildings, location, outages)
+    cris_buildings = _asked("cris", _cris_buildings, location, outages)
     if osm_buildings:
         from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
@@ -223,17 +224,18 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         if merged:
             return marked({"buildings": merged, "provider": "cris"})
     if outages:
-        raise outages[0]
+        raise next(iter(outages.values()))
     return marked({"buildings": []}) if partial else {}
 
 
-def _asked(lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: list[Exception]) -> list[dict[str, Any]]:
+def _asked(name: str, lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: dict[str, Exception]) -> list[dict[str, Any]]:
     """One fallback's buildings, or none with its outage noted in ``outages``.
 
     Args:
+        name: The fallback's name, as the payload's ``unanswered_sources`` gives it.
         lookup: The fallback.
         location: The location whose parcel to search.
-        outages: Where an outage is noted.
+        outages: Where an outage is noted, by name.
 
     Returns:
         The fallback's buildings.
@@ -243,7 +245,7 @@ def _asked(lookup: Callable[[Location], list[dict[str, Any]]], location: Locatio
     except Exception as exc:
         if not is_source_outage(exc):
             raise
-        outages.append(exc)
+        outages[name] = exc
         return []
 
 
