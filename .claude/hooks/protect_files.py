@@ -28,7 +28,7 @@ _WRITE_TO_DOCS = (
     "Write what you learned in docs/ instead:\n"
     "  - a defect or work to do -> a GitHub issue  (docs/agents/issue-tracker.md)\n"
     "  - a choice you made      -> docs/adr/       (next ADR number)\n"
-    "  - a domain term          -> CONTEXT.md      (docs/agents/domain.md)\n"
+    "  - a domain term          -> docs/CONTEXT.md (docs/agents/domain.md)\n"
     "  - a measurement          -> docs/NOTES.md   (X id, and state its unit)\n"
     "  - how something works    -> the relevant docs/*.md reference (R id)\n"
     "and add any X/R/N entry's line to docs/INDEX.md in the same commit.\n"

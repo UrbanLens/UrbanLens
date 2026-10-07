@@ -24,7 +24,7 @@ grep -E '\| (live|actionable) ' docs/INDEX.md   # plans and ideas in play
 |---|---|
 | **Work to do** - a defect, a task, anything that will be closed | A GitHub issue, labelled per [`agents/triage-labels.md`](agents/triage-labels.md); see [`agents/issue-tracker.md`](agents/issue-tracker.md) |
 | **A decision** - we chose X over Y because Z | An ADR in [`adr/`](adr/README.md) |
-| **Domain vocabulary** | `CONTEXT.md` at the repo root, per [`agents/domain.md`](agents/domain.md) |
+| **Domain vocabulary** | [`CONTEXT.md`](CONTEXT.md), per [`agents/domain.md`](agents/domain.md) |
 | **Knowledge** - measurements, how things work, plans, ideas, notes | A document here, indexed in `INDEX.md` |
 
 Problems (`P#`), tasks (`T#`) and decisions (`D#`) used to be index records.

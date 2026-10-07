@@ -18,10 +18,6 @@ _Avoid_: detail pin, sub-pin
 An immutable, shared record of one exact coordinate plus official data about it (address, official name, Google place link, cached external results). No user can query it directly: it is only ever served alongside something the caller may already see.
 _Avoid_: place, address
 
-**Location cache**:
-The cached external-provider results stored against a Location (`LocationCache`, reached as `Location.external_cache`), where an empty result means "searched, found nothing". Some rows are scoped to an audience key, so a search built from one pin's private names is read only by pins whose names produce the same key.
-_Avoid_: enrichment data, geocode cache
-
 **Place**:
 The real-world thing a coordinate resolves onto: a parcel, a building or a site, with official geometry. It is the single answer to "is this the same place?" (ADR-0004), and it anchors the wiki. Many Locations resolve onto one Place.
 _Avoid_: property, location, boundary
@@ -134,10 +130,6 @@ _Avoid_: user (in domain code), account
 **User**:
 The Django auth record behind a Profile: credentials, email and login factors only.
 _Avoid_: profile
-
-**Friend**:
-A profile with an accepted `Friendship` row to another. Friends satisfy every visibility option except "no one".
-_Avoid_: contact, connection
 
 ### Organising and browsing
 
