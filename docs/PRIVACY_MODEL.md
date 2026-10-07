@@ -192,6 +192,29 @@ nothing about the place, and the default group message is "Shared a pin".
    came from an official alias rather than from the sharer.~~ — **fixed 2026-10-02** (P193): it is
    `bool(shared_name)`.
 
+### What an archived safety check-in keeps of its contacts (2026-10-07)
+
+Archival seals a resolved check-in's details, its contacts' addresses included, to the owner's key, and scrubs the
+plaintext. The archived-check-in notice tells the owner that only they can read it again. Two things about a
+typed-in contact survive it:
+
+- **A keyed hash of the address, for an alerted contact only** (`SafetyCheckinContact.email_hmac`). Only alerted
+  contacts were emailed an opt-out link, and the hash is what lets that link still record an opt-out once the address
+  is gone. It is an HMAC-SHA256 of the normalized address under the field-encryption key (`keyed_digest`).
+  - It cannot be read back into the address.
+  - Without the key, a stolen database or backup cannot even test a guessed address against it.
+  - With the key, a specific guessed address can be confirmed. That is the cost of matching at all.
+  - It is kept as long as the check-in row: until the owner deletes the check-in, their auto-delete window removes
+    it, or their account is deleted.
+- **An opt-out recorded from that link after archival** (`SafetyContactOptOut.email_hmac`) holds the same hash and
+  never the address. It is kept as long as any opt-out:
+  - one for that check-in, until the check-in is deleted;
+  - one for that owner, until the owner's account is deleted;
+  - one for everyone, indefinitely, because it is the person's standing instruction not to be contacted.
+
+An opt-out for that check-in alone, recorded before archival, held the address in plain text beside the archive.
+Archival now deletes it, because an archived check-in sends nothing it could govern.
+
 ### The reputation ledger (new, 2026-08-24)
 
 `ReputationEvent` is a new dataset with a privacy weight of its own, and it did not

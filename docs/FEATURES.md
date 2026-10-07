@@ -1151,6 +1151,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   owner safe, otherwise an all-clear ("you can stop looking") for the owner checking in late, cancelling or
   deleting it. A contact alerted while the owner was checking in gets it from the escalation itself
   (`_tell_alerted_contacts_it_is_over`)
+- A notice that fails is not lost. One that fails to build releases its claim, and one whose email the worker
+  could not send is marked (`resolution_email_failed_at`), so the escalation sweep sends it again, the email alone
+  if the in-app half already went out (`retry_resolution_notices`). It retries only between two minutes and an
+  hour after the resolution: the request that resolved it finishes first, and after the hour the check-in is
+  archived
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
@@ -1159,6 +1164,10 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   that account verified (compared normalized), stops both the email and the in-app alert, as the opt-out page
   promises. One on an address no account has verified stops mail to that address only, so an account that
   never proved it is that person is still alerted in-app (`is_contact_opted_out`, `_contact_recipients`)
+- An opt-out still works from a link clicked after the check-in is archived. Archival keeps a keyed hash of each
+  alerted typed-in contact's address (`contact_address_digest`), the opt-out records that hash, and the gate
+  matches it against every address a later contact is reached at, so it holds for any spelling, or for the account
+  that verified the address. A check-in archived before the hash existed cannot record one, and the page says so
 - Community-wiki posting is gated by `services.visits.safety.find_visible_community_wiki` and
   `community_wiki_opt_in`, so a check-in can only notify or link a wiki its owner can actually see
 

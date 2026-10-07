@@ -39,7 +39,10 @@ _RESTORABLE_FIELDS = (
     "resolved_by_label",
 )
 
-_CONTACT_FIELDS = ("email", "name", "notified_at", "found_safe_at")
+# resolution_notified_at, because deleting an escalated check-in told its contacts it was removed, and a restored
+# contact reading as untold would be told again by the retry sweep. resolution_email_failed_at is left out, so a
+# restored check-in never retries a send its deletion left failed.
+_CONTACT_FIELDS = ("email", "email_hmac", "name", "notified_at", "resolution_notified_at", "found_safe_at")
 
 _PARTNER_FIELDS = ("status", "accepted_at")
 

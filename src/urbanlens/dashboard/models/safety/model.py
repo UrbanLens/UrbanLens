@@ -31,7 +31,7 @@ from django.db.models import (
 from django.db.models.fields import CharField, DateTimeField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.fields import EncryptedTextField
+from urbanlens.dashboard.models.fields import EncryptedTextField, keyed_digest, keyed_digests
 from urbanlens.dashboard.models.safety.queryset import (
     EmergencyContactDefaultManager,
     SafetyCheckinContactManager,
@@ -95,6 +95,38 @@ def humanize_hours_minutes(delta: timedelta) -> str:
     if minutes or not hours:
         parts.append(f"{minutes} minute" + ("" if minutes == 1 else "s"))
     return " ".join(parts)
+
+
+#: What archival writes over a typed-in contact's address, which the contact row cannot leave empty.
+SCRUBBED_CONTACT_EMAIL = "scrubbed@archived.invalid"
+
+_CONTACT_ADDRESS_DIGEST_PURPOSE = "safety-contact-address"
+
+
+def contact_address_digest(address: str) -> str:
+    """The keyed hash archival keeps of an alerted contact's address, so an opt-out from its emailed link still counts.
+
+    Args:
+        address: The address, in any spelling - it is normalized first, so every spelling of one mailbox matches.
+
+    Returns:
+        The hex digest under the active field-encryption key.
+    """
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+    return keyed_digest(_CONTACT_ADDRESS_DIGEST_PURPOSE, normalize_email(address))
+
+
+def contact_address_digests(addresses: set[str]) -> set[str]:
+    """Every digest ``contact_address_digest`` could have kept for these normalized addresses, under any configured key.
+
+    Args:
+        addresses: Normalized addresses.
+
+    Returns:
+        Their hex digests.
+    """
+    return {digest for address in addresses if address for digest in keyed_digests(_CONTACT_ADDRESS_DIGEST_PURPOSE, address)}
 
 
 class EmergencyContactDefault(abstract.DashboardModel):
@@ -438,9 +470,15 @@ class SafetyCheckinContact(abstract.DashboardModel):
     email_normalized = CharField(max_length=254, blank=True, default="")
     name = CharField(max_length=150, blank=True, default="")
     token = UUIDField(default=uuid4, unique=True, editable=False)
+    # A keyed hash of the address (``contact_address_digest``), kept once archival scrubs the address itself, so an
+    # opt-out from the link this contact was emailed still records against them. Only an alerted contact gets one.
+    email_hmac = CharField(max_length=64, blank=True, default="", db_default="")
     notified_at = DateTimeField(null=True, blank=True)
-    # When this contact was told the check-in is over, claimed before sending so each alerted contact hears it once.
+    # When this contact's end-of-check-in notice was settled: claimed before it is built, released if building it
+    # fails, so each alerted contact hears it once and a failure leaves it for the next sweep.
     resolution_notified_at = DateTimeField(null=True, blank=True)
+    # When sending that notice's email failed, after its in-app half went out; the next sweep sends the email again.
+    resolution_email_failed_at = DateTimeField(null=True, blank=True)
     found_safe_at = DateTimeField(null=True, blank=True)
 
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="contacts")
@@ -506,12 +544,16 @@ class SafetyContactOptOutScope(abstract.TextChoices):
 
 class SafetyContactOptOut(abstract.DashboardModel):
     """Records that a contact (by profile or email) no longer wants safety check-in notifications.
-    Identity is resolved the same way as ``SafetyCheckinContact`` - exactly one of ``contact_profile``/``email``.
+    Identity is exactly one of ``contact_profile``, ``email``, or ``email_hmac`` - the last for an opt-out made from a
+    link on a check-in whose archival already scrubbed the address.
     """
 
     email = EmailField(null=True, blank=True)
     # What opt-outs are matched on, so any spelling of the mailbox stays opted out.
     email_normalized = CharField(max_length=254, blank=True, default="", db_default="")
+    # The archived contact's keyed address hash (``contact_address_digest``), matched against the digests of the
+    # addresses a later contact is reached at; it never holds, or yields, the address.
+    email_hmac = CharField(max_length=64, blank=True, default="", db_default="")
     scope = CharField(max_length=10, choices=SafetyContactOptOutScope.choices)
     owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, null=True, blank=True, related_name="contact_opt_outs")
@@ -539,17 +581,22 @@ class SafetyContactOptOut(abstract.DashboardModel):
         Returns:
             String like "<contact> opted out (<scope>)".
         """
-        who = self.contact_profile.username if self.contact_profile else (self.email or "Unknown contact")
+        who = self.contact_profile.username if self.contact_profile else (self.email or ("An archived contact" if self.email_hmac else "Unknown contact"))
         return f"{who} opted out ({self.scope})"
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_opt_outs"
         indexes = [
             Index(fields=["email_normalized"], name="idxdb_scoo_email_normalized"),
+            Index(fields=["email_hmac"], name="idxdb_scoo_email_hmac"),
         ]
         constraints = [
             CheckConstraint(
-                condition=Q(contact_profile__isnull=False) ^ Q(email__isnull=False),
+                condition=(
+                    (Q(contact_profile__isnull=False) & Q(email__isnull=True) & Q(email_hmac=""))
+                    | (Q(contact_profile__isnull=True) & Q(email__isnull=False) & Q(email_hmac=""))
+                    | (Q(contact_profile__isnull=True) & Q(email__isnull=True) & ~Q(email_hmac=""))
+                ),
                 name="db_safety_contact_optout_exactly_one_target",
             ),
             CheckConstraint(
@@ -567,6 +614,7 @@ class SafetyContactOptOut(abstract.DashboardModel):
             UniqueConstraint(
                 "contact_profile",
                 "email",
+                "email_hmac",
                 "scope",
                 "owner",
                 "checkin",
