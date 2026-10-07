@@ -263,16 +263,21 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
         address: The candidate address text.
 
     Returns:
-        ``(latitude, longitude)``, or None when unconfigured/no match."""
-    try:
-        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
+        ``(latitude, longitude)``, or None when unconfigured/no match.
 
+    Raises:
+        OSError: The geocoder could not be reached or answered with an error status (``requests.RequestException`` is one), so ``tasks.detect_dm_address_mentions`` retries rather than recording "no match"."""
+    from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    try:
         if not app_settings.google_unrestricted_api_key:
             return None
         data = GoogleGeocodingGateway().geocode_place_name(address)
-    except Exception:
-        logger.warning("Geocoding failed for DM address candidate %r", address, exc_info=True)
+    except (GatewayRequestError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        # A refusal, throttle or unreadable answer will not be different next time. Only the class is logged: the candidate is the user's DM text.
+        logger.warning("Geocoding a DM address candidate failed: %s", type(exc).__name__)
         return None
     results = (data or {}).get("results") or []
     if not results:
