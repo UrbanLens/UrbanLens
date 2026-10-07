@@ -120,11 +120,14 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
     Kalamazoo, St. Peter, Central State VA, Terrell and Eastern State WA, which Wikipedia also records as having lost
     theirs, stay `standing` too. The catalogue's header says so.
 
-  The nine `demolished` entries came from Wikipedia's status column, which describes the Kirkbride, and were not
-  each checked against that meaning. An Esri aerial (2026-10-07) shows buildings at the point of two: Spring Grove
-  (an active hospital; Wikipedia's "Demolished 1963" is its Kirkbride) and Danvers (apartments around the preserved
-  centre of the Kirkbride). The other seven were not looked at. Nothing was changed. None of this has been run
-  against REData.
+  The nine `demolished` entries came from Wikipedia's status column, which describes the Kirkbride, so each was
+  rechecked on 2026-10-07 against OSM building footprints (50 m2 or more) within 100 m of the point and an Esri aerial
+  (2023-2025). Seven have buildings there and are now `standing`: Spring Grove (on the point), Danvers (on the point),
+  Taunton (34 m), Northampton (25 m), Topeka (a new building on the point that OSM lacks), Columbus (79 m: two state
+  office buildings, none a hospital's) and Central State KY (88 m: one park building; the 1996-demolished campus is
+  now a state park). The last two are borderline. Dixmont (nothing within 200 m) and Clinton Valley (open field; the
+  nearest houses are 136 m away, also borderline) stay `demolished`. The seven's building checks now run, and none
+  has been run against REData. The 47 `standing` entries not mentioned here were not rechecked.
 - **Five harness-only fixes:**
   - the URL, key and Host are read from `.env` together or not at all;
   - a `503` carrying a REData error code is remembered for the session;
@@ -170,9 +173,10 @@ passed for all four primaries apart from Athens's build date (REData P111).
 9. Build years outside New York (REData P111: 27 campuses).
 10. A completeness envelope on the buildings endpoints instead of a header (REData P103).
 11. New York centroid parcels with no polygon, and Maryland's centroid layer (REData P101, P102).
-12. A decision on whether every catalogue campus should be expected to have incidents and news. Decided:
-    `status` means whether buildings stand at the catalogue point, not whether the Kirkbride survives. Open: Spring
-    Grove and Danvers, still `demolished` with buildings at the point, and the seven `demolished` entries not looked at.
+12. A decision on whether every catalogue campus should be expected to have incidents and news. `status` is decided
+    (buildings stand at the catalogue point, not whether the Kirkbride survives) and applied to all nine `demolished`
+    entries; the first live run will show whether Columbus and Central State KY, whose only buildings are not
+    hospital ones, belong with the `standing` campuses.
 
 **P3 - ingestion and outsourcing.**
 

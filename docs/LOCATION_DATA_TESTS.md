@@ -18,7 +18,8 @@ Harlem Valley, Athens) have hand-verified anchors and are what a default run che
 `--sites all` checks every campus; a `demolished` one skips the building, footprint and
 build-date checks. A campus's `status` says whether buildings stand at its point, not whether its
 own Kirkbride survives: Mendocino's was razed in 1952 and hospital buildings still stand there, so
-it is `standing`.
+it is `standing`. Only Dixmont and Clinton Valley, with no building within 100 m of their points,
+are `demolished`; the catalogue's header says how that was measured.
 
 A campus's `nrhp` is the reference of its own listing, which can be one building's or its
 district's (Mendota is the Wisconsin Memorial Hospital Historic District, Kalamazoo its Water
