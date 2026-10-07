@@ -33,7 +33,7 @@ load_dotenv(find_dotenv())
 
 
 # pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
-TESTING = env_bool("DJANGO_TESTING", False) or running_under_pytest()
+TESTING = env_bool("DJANGO_TESTING", default=False) or running_under_pytest()
 
 # An unset UL_ENVIRONMENT refuses to start (Jess, 2026-10-07), except in a test run, which is never a deployment:
 # one started without it (a worktree has no .env) is the suite, named as CI names it. Both are written to os.environ
@@ -244,9 +244,9 @@ DATABASES = {
         "PORT": os.getenv("UL_DB_PORT", "5432"),
         # Persistent connections for deployments reaching the DB over high-latency links.
         "CONN_MAX_AGE": persistent_connection_seconds(),
-        "CONN_HEALTH_CHECKS": env_bool("UL_DB_CONN_HEALTH_CHECKS", False),
+        "CONN_HEALTH_CHECKS": env_bool("UL_DB_CONN_HEALTH_CHECKS", default=False),
         # Required behind a transaction-mode pooler: .iterator() outside atomic() holds a cursor across transactions.
-        "DISABLE_SERVER_SIDE_CURSORS": env_bool("UL_DB_DISABLE_SERVER_SIDE_CURSORS", False),
+        "DISABLE_SERVER_SIDE_CURSORS": env_bool("UL_DB_DISABLE_SERVER_SIDE_CURSORS", default=False),
         # Fail fast on unreachable DB so a request errors instead of holding a worker.
         "OPTIONS": {
             "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
@@ -383,7 +383,7 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = os.getenv("UL_CELERY_TIMEZONE", "UTC")
-CELERY_TASK_ALWAYS_EAGER = env_bool("UL_CELERY_TASK_ALWAYS_EAGER", False)
+CELERY_TASK_ALWAYS_EAGER = env_bool("UL_CELERY_TASK_ALWAYS_EAGER", default=False)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SEND_SENT_EVENT = True
 # Events feed the celery-metrics exporter; off when metrics are off.
@@ -416,7 +416,7 @@ UL_AI_INFERENCE_TIMEOUT_SECONDS = _app_settings.ai_inference_timeout_seconds
 UL_DIRECT_INFERENCE_POLICY = _app_settings.direct_inference_policy
 UL_AI_WORKER_ENABLED = _app_settings.ai_worker_enabled
 # Backup defaults, overridable in the database-backed settings UI.
-UL_BACKUP_ENABLED = env_bool("UL_BACKUP_ENABLED", True)
+UL_BACKUP_ENABLED = env_bool("UL_BACKUP_ENABLED", default=True)
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
 UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
