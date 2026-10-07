@@ -1,6 +1,6 @@
 # The neighbour test runs, and what it measured changes what staging should expect
 
-- **Status: PARTLY ANSWERED 2026-10-05: the last ask (staging-mode dev environments calling outbound APIs) is done in the infrastructure repo's 80d51a6. Two questions below are still unanswered: what request timeout sits in front of k8s (cloudflared and the ingress), and which host can take the nightly 18-minute perf run.** Reports the first
+- **Status: PARTLY ANSWERED 2026-10-05: the last ask (staging-mode dev environments calling outbound APIs) is done in the infrastructure repo's 80d51a6. Four questions below are still unanswered, and the infrastructure repo records all four as open and its own (read 2026-10-07, its 524ceaf): what request timeout sits in front of k8s (cloudflared and the ingress), which host can take the nightly 18-minute perf run, whether its `chaos.py sample` replaces our Postgres connection sampler, and whether a dev environment keeps the app container's 2 GiB `mem_limit`.** Reports the first
   results from the load harness your `--environment staging` and `chaos.py` work
   unblocked. **The headline it was first sent with is wrong** — see the
   correction immediately below "What it measured". Nothing here is blocking;
