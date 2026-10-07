@@ -1082,7 +1082,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   that gets a 5xx, a 429 or no answer is "busy" like a rate limit; a refusal of the site's Google
   project (`accessNotConfigured`, `SERVICE_DISABLED`, ...) or OAuth client, or a 403 naming no
   reason, is logged at ERROR and reported as calendar sync being unavailable (UrbanLens#302). A push
-  or queued delete held up by any of those, or by Google failing (`CalendarServerError`), waits for
+  or queued delete held up by any of those, by Google failing (`CalendarServerError`), or by our own
+  limiter (unreadable, or the service switched off), waits for
   the sweep and is not counted toward `MAX_CALENDAR_PUSH_ATTEMPTS`; only a refusal of the write
   itself is, and anything still owed after `MAX_OWED_CALENDAR_WRITE_AGE` (30 days) is dropped.
   Each member's export applies their own location
@@ -1100,7 +1101,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   UrbanLens#330). `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`)
   rewrites, once, the events of exports without auto-sync that may still hold a location or title
   now withheld, an unscheduled stop's included; an imported event only when its fingerprint shows
-  UrbanLens wrote what is now withheld, and otherwise it is counted and left (UrbanLens#333)
+  UrbanLens wrote what is now withheld, and then only its location and title, each only where the
+  event still holds what UrbanLens wrote; otherwise it is counted and left (UrbanLens#333)
 - A hidden stop (its own "hide location", or its adder's `trip_pin_location_visibility`) shows a
   member who may not see it neither its place's name nor its location: the activities panel and its
   edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel,

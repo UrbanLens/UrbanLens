@@ -14,10 +14,12 @@ from __future__ import annotations
 import datetime
 from io import StringIO
 import json
+from unittest import mock
 
 from django.contrib.auth.models import User
 from django.core.management import call_command
 from django.urls import reverse
+from django.utils import timezone
 
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.calendar_sync.model import (
@@ -27,7 +29,9 @@ from urbanlens.dashboard.models.calendar_sync.model import (
 )
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity
+from urbanlens.dashboard.services.apis.calendar.google import CalendarEventNotFoundError, GoogleCalendarGateway
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.core.rate_limiter import RateLimiterUnavailableError, ServiceDisabledError
 from urbanlens.dashboard.services.trips.calendar_sync import (
     export_trip_to_calendar,
     push_auto_synced_trip_changes,
@@ -217,6 +221,42 @@ class APushGoesOnPastAnEventGoogleRefusesTests(_ImportedCase):
             (False, 1, 2, 1),
         )
 
+    def test_a_failure_that_is_not_google_refusing_the_event_still_ends_the_attempt(self) -> None:
+        """Our limiter being unreadable, the service switched off, or the calendar gone would refuse every write."""
+        TripCalendarLink.objects.filter(trip=self.trip).update(event_fingerprint="")
+        failures = {
+            "limiter unreadable": RateLimiterUnavailableError("google_calendar"),
+            "service off": ServiceDisabledError("google_calendar"),
+        }
+        for label, failure in failures.items():
+            with (
+                self.subTest(label),
+                mock.patch.object(GoogleCalendarGateway, "update_event", side_effect=failure),
+                self.assertRaises(type(failure)),
+            ):
+                export_trip_to_calendar(self.account, self.trip)
+        sent = len(self.google.requests)
+        self.google.fail_after, self.google.failure = sent, (404, {"error": {"message": "Not Found"}})
+
+        with self.assertRaises(CalendarEventNotFoundError):
+            export_trip_to_calendar(self.account, self.trip)
+
+        # The trip's update, then its create: nothing more once the calendar is plainly gone.
+        self.assertEqual(len(self.google.requests) - sent, 2)
+
+    def test_a_push_our_limiter_could_not_read_for_is_not_counted(self) -> None:
+        self._auto_sync()
+        TripCalendarLink.objects.filter(trip=self.trip).update(event_fingerprint="", push_requested_at=timezone.now())
+
+        with mock.patch.object(
+            GoogleCalendarGateway, "update_event", side_effect=RateLimiterUnavailableError("google_calendar")
+        ):
+            push_auto_synced_trip_changes(self.trip)
+
+        link = self._link(None)
+        self.assertEqual(link.push_attempts, 0)
+        self.assertIsNotNone(link.push_requested_at)
+
     def test_a_rate_limit_still_ends_the_attempt(self) -> None:
         """Going on would only spend the budget on refusals."""
         TripCalendarLink.objects.filter(trip=self.trip).update(event_fingerprint="")
@@ -288,6 +328,61 @@ class TheRolloutCommandReachesEveryEventThatMayHoldAWithheldLocationTests(_Impor
 
         self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["location"], "")
         self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["status"], "confirmed")
+
+    def _imported_with_proof(self) -> None:
+        """An all-day import whose own event the export then wrote the mate's address onto, recording a fingerprint."""
+        self._import_trip_event()
+        export_trip_to_calendar(self.account, self.trip)
+        self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["location"], _ADDRESS)
+        self._set_mate_visibility(VisibilityChoice.NO_ONE)
+
+    def test_a_cleared_imported_event_is_not_counted_again(self) -> None:
+        self._imported_with_proof()
+        self._run("--apply")
+
+        output = self._run("--apply")
+
+        self.assertIn("Rewrote 0 events", output)
+        self.assertNotIn("imported events alone", output)
+
+    def test_an_imported_event_google_refused_once_is_cleared_by_the_next_run(self) -> None:
+        self._imported_with_proof()
+        self.google.refuse_events[_USERS_TRIP_EVENT] = (403, NON_ORGANIZER)
+        self._run("--apply")
+        self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["location"], _ADDRESS)
+        del self.google.refuse_events[_USERS_TRIP_EVENT]
+
+        self._run("--apply")
+
+        self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["location"], "")
+
+    def test_an_imported_event_the_budget_stopped_is_cleared_by_the_next_run(self) -> None:
+        self._imported_with_proof()
+        self.google.refuse_events[_USERS_TRIP_EVENT] = (429, TOO_MANY_REQUESTS)
+        self.assertIn("budget", self._run("--apply", "--no-wait"))
+        del self.google.refuse_events[_USERS_TRIP_EVENT]
+
+        self._run("--apply", "--no-wait")
+
+        self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["location"], "")
+
+    def test_clearing_an_imported_event_leaves_what_the_user_changed_since(self) -> None:
+        self._imported_with_proof()
+        self.google.events[_USERS_TRIP_EVENT].update(description="My own notes", start={"date": "2030-01-01"})
+
+        self._run("--apply")
+
+        event = self.google.events[_USERS_TRIP_EVENT]
+        self.assertEqual(event["location"], "")
+        self.assertEqual((event["description"], event["start"]), ("My own notes", {"date": "2030-01-01"}))
+
+    def test_an_imported_location_the_user_changed_since_is_theirs(self) -> None:
+        self._imported_with_proof()
+        self.google.events[_USERS_TRIP_EVENT]["location"] = "My own new place"
+
+        self._run("--apply")
+
+        self.assertEqual(self.google.events[_USERS_TRIP_EVENT]["location"], "My own new place")
 
     def test_an_imported_event_with_no_record_of_what_urbanlens_wrote_is_left_alone_and_reported(self) -> None:
         self._import_trip_event()

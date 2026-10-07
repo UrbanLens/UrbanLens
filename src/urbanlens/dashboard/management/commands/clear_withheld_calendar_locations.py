@@ -9,8 +9,9 @@ its location and title rewritten). An event with nothing withheld is not touched
 recreated. See UrbanLens#301 ("hidden location stays on an unreached calendar") and UrbanLens#333 ("the rollout
 command misses unscheduled and imported events").
 
-An event an import linked is the user's own. It is rewritten only when its link's fingerprint shows UrbanLens last
-wrote the body that held what is now withheld. Writes from before 0.9.0 recorded no fingerprint (0067 added the field
+An event an import linked is the user's own. Only when its link's fingerprint shows UrbanLens last wrote the body that
+held what is now withheld is anything sent: its location and title, each only where the event still holds what
+UrbanLens wrote. Writes from before 0.9.0 recorded no fingerprint (0067 added the field
 blank), so nothing tells a location UrbanLens wrote onto such an event from the user's own: those are counted and left
 alone.
 
