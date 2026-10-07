@@ -3,8 +3,9 @@
 N29 batch 1 found the cache hook walking ``location.pins`` the first time a match gained a title, seeding an article
 and adding a link on every pin there. 40d418c1d (P181) took the loop out: the hook seeds the location's wiki, and a
 pin takes the match only from its own owner's activity (``wiki_seed.seed_pin_from_cached_wikipedia``). These keep
-the hook's cost independent of the pin count, and keep it off Wikipedia: it reads the cached row, and the one
-request it can make is the lead-image download for a wiki's first article.
+the hook's cost independent of the pin count, and keep it off the network: it reads the cached row. The wiki's
+lead-image cover is not fetched, since ``_store_cover_from_url`` has no owner for a wiki cover yet (its TODO); the
+egress policy is opened here so that a fetch added there fails these tests rather than being refused quietly.
 """
 
 from __future__ import annotations
@@ -49,16 +50,17 @@ class WikipediaCacheHookCostTests(TestCase):
             baker.make(Pin, profile=baker.make(User).profile, location=location, parent_pin=None)
         return location
 
-    def _cache_a_match(self, location: Location) -> tuple[int, mock.MagicMock, mock.MagicMock, mock.MagicMock]:
+    def _cache_a_match(self, location: Location) -> tuple[int, mock.MagicMock, mock.MagicMock]:
         """Write the match the way a lookup does and run its commit hooks.
 
-        Any HTTP request other than the stubbed image download fails the test here: the hook swallows a failed name
-        refresh, so a request refused by the test network guard would otherwise go unseen.
+        Any HTTP request fails the test here: the hook swallows a failed name refresh, so a request refused by the
+        test network guard would otherwise go unseen.
 
         Returns:
-            Queries the write and its hooks made, and mocks for the per-pin seed, the per-pin link and the image download.
+            Queries the write and its hooks made, and mocks for the per-pin seed and the per-pin link.
         """
         with (
+            mock.patch("urbanlens.dashboard.services.core.egress.egress_permitted", return_value=True),
             mock.patch(
                 "requests.Session.send", side_effect=AssertionError("the Wikipedia cache hook made an HTTP request")
             ) as sent,
@@ -66,13 +68,12 @@ class WikipediaCacheHookCostTests(TestCase):
                 wiki_seed, "seed_pin_article_from_wikipedia", wraps=wiki_seed.seed_pin_article_from_wikipedia
             ) as pin_seed,
             mock.patch("urbanlens.dashboard.services.locations.external_links.add_pin_link") as pin_link,
-            mock.patch.object(wiki_seed, "_store_cover_from_url") as download,
             CaptureQueriesContext(connection) as queries,
             self.captureOnCommitCallbacks(execute=True),
         ):
             LocationCache.set(location, "wikipedia", MATCH, query_key="Hudson River State Hospital")
         sent.assert_not_called()
-        return len(queries.captured_queries), pin_seed, pin_link, download
+        return len(queries.captured_queries), pin_seed, pin_link
 
     def test_the_hook_costs_the_same_with_one_pin_or_many(self) -> None:
         # The first match a test caches costs two queries fewer than every later one, whatever its pin count.
@@ -87,16 +88,18 @@ class WikipediaCacheHookCostTests(TestCase):
         )
 
     def test_no_pin_is_seeded_or_linked_by_the_hook(self) -> None:
-        _queries, pin_seed, pin_link, _download = self._cache_a_match(self.crowded)
+        _queries, pin_seed, pin_link = self._cache_a_match(self.crowded)
 
         pin_seed.assert_not_called()
         pin_link.assert_not_called()
 
-    def test_the_only_outbound_request_is_one_image_for_the_wiki(self) -> None:
-        _queries, _pin_seed, _pin_link, download = self._cache_a_match(self.crowded)
+    def test_the_hook_makes_no_outbound_request(self) -> None:
+        """The wiki's first article reaches the cover step, which is where a fetch would start."""
+        with mock.patch.object(wiki_seed, "_store_cover_from_url", wraps=wiki_seed._store_cover_from_url) as cover:
+            self._cache_a_match(self.crowded)
 
-        download.assert_called_once()
-        self.assertIsNone(download.call_args.kwargs["pin"], "the lead image was fetched for a pin, not the wiki")
+        cover.assert_called_once()
+        self.assertIsNone(cover.call_args.kwargs["pin"], "the cover step ran for a pin, not the wiki")
 
     def test_the_wiki_takes_the_article(self) -> None:
         """The half that stops the tests above passing against a hook that seeds nothing at all."""
