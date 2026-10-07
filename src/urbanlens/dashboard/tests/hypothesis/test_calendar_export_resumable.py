@@ -73,7 +73,8 @@ class FakeGoogleCalendar:
         events: Event resources by id, cancelled ones included.
         requests: ``(method, event id or None, json body)`` for every request that reached the calendar.
         lose_next_response_to: Apply the next request with this method, then raise as if its response were lost.
-        fail_after: Answer 500 to every request after this many.
+        fail_after: Answer ``failure`` to every request after this many.
+        failure: ``(status, json body)`` of the answer ``fail_after`` gives; a 500 unless a test sets another.
         meanwhile: Called once, after the request numbered by its first element has been applied.
     """
 
@@ -82,6 +83,7 @@ class FakeGoogleCalendar:
         self.requests: list[tuple[str, str | None, dict[str, Any] | None]] = []
         self.lose_next_response_to: str | None = None
         self.fail_after: int | None = None
+        self.failure: tuple[int, dict[str, Any]] = (500, {"error": {"message": "backend error"}})
         self.meanwhile: tuple[int, Callable[[], object]] | None = None
 
     def __call__(self, _session: requests.Session, method: str, url: str, **kwargs: Any) -> requests.Response:
@@ -103,7 +105,7 @@ class FakeGoogleCalendar:
         body = kwargs.get("json")
         self.requests.append((method, event_id, body))
         if self.fail_after is not None and len(self.requests) > self.fail_after:
-            return _response(500, {"error": {"message": "backend error"}})
+            return _response(*self.failure)
         if method == "POST":
             return self._insert(dict(body or {}))
         if method == "PATCH":

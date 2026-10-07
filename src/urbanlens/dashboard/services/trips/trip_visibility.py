@@ -14,6 +14,25 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.trips.model import TripActivity
 
 
+#: What a viewer who may not see an activity's location is shown instead.
+HIDDEN_ACTIVITY_TITLE = "Secret Location"
+
+
+def masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
+    """The activity's title as this viewer may see it.
+    An activity's ``effective_title`` falls back to its location's name, so for a hidden activity the title *is* the location - which is why masking it is not cosmetic.
+
+    Args:
+        activity: The activity being rendered.
+        hidden: Whether this viewer may see its location.
+
+    Returns:
+        A display title safe to put anywhere in the page, including in attributes the eye does not reach."""
+    if not hidden:
+        return activity.effective_title
+    return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
+
+
 def apply_trip_visibility_filter(
     sensitive: list[TripActivity],
     viewer: Profile,

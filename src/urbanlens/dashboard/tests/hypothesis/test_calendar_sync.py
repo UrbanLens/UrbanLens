@@ -163,7 +163,7 @@ class TripToEventBodyTests(TestCase):
             lng_override=-73.9,
         )
         body = trip_to_event_body(trip)
-        self.assertNotIn("location", body)
+        self.assertEqual(body["location"], "")
 
 
 class EventToTripKwargsTests(SimpleTestCase):
@@ -1067,7 +1067,7 @@ class ActivityEventBodyTests(SimpleTestCase):
         body = activity_to_event_body(
             self._activity(scheduled_at=start, location_hidden=True, lat_override=41.5, lng_override=-73.9)
         )
-        self.assertNotIn("location", body)
+        self.assertEqual(body["location"], "")
 
     def test_coordinate_override_exported_as_location(self):
         start = datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC)

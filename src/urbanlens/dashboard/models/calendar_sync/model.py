@@ -104,8 +104,9 @@ class TripCalendarLink(abstract.DashboardModel):
         related_name="calendar_links",
     )
     # Set when this link mirrors a single scheduled activity rather than the
-    # whole trip. Deleting the activity cascades away its event link (the
-    # orphaned Google event is cleaned up on the next export/removal sync).
+    # whole trip. Deleting the activity cascades away its event link, and nothing
+    # deletes the Google event: see P336 ("a deleted activity's event is orphaned")
+    # in docs/PROBLEMS.md.
     activity = ForeignKey(
         "dashboard.TripActivity",
         on_delete=CASCADE,

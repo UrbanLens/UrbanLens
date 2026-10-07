@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, viewer_hidden_activity_ids
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Sequence
@@ -105,14 +106,25 @@ _MAX_TRIP_NAME_LENGTH = 255
 DEFAULT_ACTIVITY_EVENT_DURATION = datetime.timedelta(hours=2)
 
 
-def trip_to_event_body(trip: Trip, *, trip_url: str | None = None, hidden_activity_ids: Collection[int] | None = None) -> dict[str, Any]:
+def trip_to_event_body(
+    trip: Trip,
+    *,
+    trip_url: str | None = None,
+    hidden_activity_ids: Collection[int] | None = None,
+    owns_event: bool = True,
+) -> dict[str, Any]:
     """Convert a trip into a Google Calendar all-day event payload.
     Trips carry dates (not times), so they map to all-day events.
+
+    An update is a PATCH, which keeps every field the body leaves out, so a location this export withholds is sent as
+    ``""`` rather than left out (P335).
 
     Args:
         trip: The trip to export.
         trip_url: Optional absolute URL of the trip page to append to the event description.
         hidden_activity_ids: Ids of activities whose location the *exporting* viewer may not see, from :func:`~urbanlens.dashboard.services.trips.trip_visibility.viewer_hidden_activity_ids`.
+        owns_event: Whether UrbanLens made the event, so a location the trip no longer has is cleared too. False for an
+            event an import linked, whose own location is left alone unless the trip has one withheld from the viewer.
 
     Returns:
         Event resource payload for the Calendar API.
@@ -136,10 +148,25 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None, hidden_activi
         "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
-    location_string = _trip_location_string(trip, hidden_activity_ids=hidden_activity_ids)
-    if location_string:
-        body["location"] = location_string
+    _set_location(body, _trip_location_string(trip, hidden_activity_ids=hidden_activity_ids), owns_event=owns_event)
     return body
+
+
+def _set_location(body: dict[str, Any], location: str | None, *, owns_event: bool) -> None:
+    """Put an event's ``location`` in *body*: the location, ``""`` to clear it, or nothing to leave the event's own.
+
+    Args:
+        body: The event payload being built.
+        location: From :func:`_activity_location_string` or :func:`_trip_location_string`.
+        owns_event: Whether UrbanLens made the event, so having no location clears it rather than leaving it.
+    """
+    if location is not None or owns_event:
+        body["location"] = location or ""
+
+
+def _location_withheld(activity: TripActivity, hidden_activity_ids: Collection[int] | None) -> bool:
+    """Whether the exporting viewer may not see *activity*'s location."""
+    return activity.location_hidden or (hidden_activity_ids is not None and activity.pk in hidden_activity_ids)
 
 
 def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Collection[int] | None = None) -> str | None:
@@ -150,19 +177,18 @@ def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Co
         hidden_activity_ids: Ids of activities whose location the exporting viewer may not see.
 
     Returns:
-        A location string for the event, or None when nothing shareable exists."""
-    if activity.location_hidden:
-        return None
-    if hidden_activity_ids is not None and activity.pk in hidden_activity_ids:
-        return None
+        The address, else the coordinates; ``""`` when the activity has a location the exporting viewer may not see;
+        None when it has none."""
     location = activity.location or (activity.pin.location if activity.pin else None)
-    if location is not None and location.address:
-        return location.address
     lat = activity.lat_override if activity.lat_override is not None else (float(location.latitude) if location else None)
     lng = activity.lng_override if activity.lng_override is not None else (float(location.longitude) if location else None)
-    if lat is not None and lng is not None:
-        return f"{lat:.6f}, {lng:.6f}"
-    return None
+    if location is not None and location.address:
+        shown = location.address
+    elif lat is not None and lng is not None:
+        shown = f"{lat:.6f}, {lng:.6f}"
+    else:
+        return None
+    return "" if _location_withheld(activity, hidden_activity_ids) else shown
 
 
 def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | None = None) -> str | None:
@@ -174,25 +200,38 @@ def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | 
         hidden_activity_ids: Ids of activities whose location the exporting viewer may not see - see :func:`_activity_location_string`.
 
     Returns:
-        A location string for the event, or None when no activity has one."""
+        The first location the exporting viewer may see; ``""`` when every activity's location is withheld from them;
+        None when no activity has a location."""
     if trip.pk is None:
         # Unsaved trips (e.g. pure-mapping property tests) have no activities.
         return None
+    withheld = False
     for activity in trip.activities.select_related("location", "pin__location"):
         location_string = _activity_location_string(activity, hidden_activity_ids=hidden_activity_ids)
         if location_string:
             return location_string
-    return None
+        withheld = withheld or location_string == ""
+    return "" if withheld else None
 
 
-def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = None, hidden_activity_ids: Collection[int] | None = None) -> dict[str, Any] | None:
+def activity_to_event_body(
+    activity: TripActivity,
+    *,
+    trip_url: str | None = None,
+    hidden_activity_ids: Collection[int] | None = None,
+    owns_event: bool = True,
+) -> dict[str, Any] | None:
     """Convert one scheduled trip activity into a timed calendar event payload.
     Activities without a scheduled start cannot be placed on a calendar and yield None.
+
+    A location withheld from the exporting viewer is sent as ``""``, so an update clears it (P335), and the title is
+    masked the way the activities panel masks it, since ``effective_title`` falls back to the place's name or address.
 
     Args:
         activity: The TripActivity to export (with ``trip`` loaded).
         trip_url: Optional absolute URL of the trip page to append to the event description.
         hidden_activity_ids: Ids of activities whose location the exporting viewer may not see - see :func:`_activity_location_string`.
+        owns_event: Whether UrbanLens made the event - see :func:`trip_to_event_body`.
 
     Returns:
         Event resource payload, or None when the activity is unscheduled."""
@@ -207,8 +246,9 @@ def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = Non
     if trip_url:
         description = f"{description}\n\n{trip_url}".strip()
 
+    title = masked_activity_title(activity, hidden=_location_withheld(activity, hidden_activity_ids))
     body: dict[str, Any] = {
-        "summary": f"{activity.trip.name}: {activity.effective_title}",
+        "summary": f"{activity.trip.name}: {title}",
         "description": description,
         "start": {"dateTime": start.isoformat()},
         "end": {"dateTime": end.isoformat()},
@@ -219,9 +259,7 @@ def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = Non
             },
         },
     }
-    location_string = _activity_location_string(activity, hidden_activity_ids=hidden_activity_ids)
-    if location_string:
-        body["location"] = location_string
+    _set_location(body, _activity_location_string(activity, hidden_activity_ids=hidden_activity_ids), owns_event=owns_event)
     return body
 
 
@@ -748,8 +786,6 @@ def _hidden_activity_ids_for(trip: Trip, profile: Profile) -> set[int]:
 
     Returns:
         The hidden activity ids; empty when nothing is restricted."""
-    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
-
     activities = list(trip.activities.select_related("added_by"))
     return viewer_hidden_activity_ids(activities, profile)
 
@@ -765,7 +801,7 @@ class CalendarExportResult:
         activities_synced: How many of ``events_synced`` are activity events.
         written: Calendar writes this attempt made: creates, updates and deletes.
         complete: Every event matches the trip and every unscheduled activity's event is gone. False when the
-            calendar budget ran out first; the trip-level link then owes a push, which
+            calendar budget, ours or Google's rate limit, ran out first; the trip-level link then owes a push, which
             ``tasks.requeue_pending_calendar_pushes`` queues.
     """
 
@@ -811,24 +847,25 @@ class _TripCalendarExport:
 
         Raises:
             ValueError: When the trip has no dates to export.
-            RateLimitExceededError: The budget ran out before the trip had a link to resume from.
+            RateLimitExceededError: The budget, ours or Google's rate limit, ran out before the trip had a link to resume from.
             GoogleAuthExpiredError: When Google has rejected the stored grant.
             GatewayRequestError: When a calendar write fails for any other reason.
         """
         profile = self.account.profile
         trip_url = _trip_page_url(self.trip)
         hidden_activity_ids = _hidden_activity_ids_for(self.trip, profile)
-        trip_body = trip_to_event_body(self.trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids)
         trip_link = TripCalendarLink.objects.trip_level_link(self.trip, profile)
         self._trip_link_pk = trip_link.pk if trip_link is not None else None
         activity_links = TripCalendarLink.objects.activity_links_by_activity_id(self.trip, profile)
+        trip_body = trip_to_event_body(self.trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids, owns_event=self._owns_event(trip_link, activity=None))
 
         # The trip's all-day event first, then each scheduled activity's, in TripActivity order.
         plan: list[tuple[dict[str, Any], TripCalendarLink | None, TripActivity | None]] = [(trip_body, trip_link, None)]
         for scheduled in self.trip.activities.filter(scheduled_at__isnull=False).select_related("trip", "location", "pin__location"):
-            body = activity_to_event_body(scheduled, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids)
+            link = activity_links.get(scheduled.pk)
+            body = activity_to_event_body(scheduled, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids, owns_event=self._owns_event(link, activity=scheduled))
             if body is not None:
-                plan.append((body, activity_links.get(scheduled.pk), scheduled))
+                plan.append((body, link, scheduled))
         scheduled_ids = {activity.pk for _body, _link, activity in plan if activity is not None}
         # Activities that lost their schedule since the last export: their events go.
         unscheduled = [link for activity_id, link in activity_links.items() if activity_id not in scheduled_ids]
@@ -846,10 +883,10 @@ class _TripCalendarExport:
                 self._gateway.delete_event(link.google_event_id)
                 link.delete()
                 self.written += 1
-        except RateLimitExceededError:
+        except RateLimitExceededError as exc:
             if trip_link is None:
                 raise
-            logger.info("Calendar budget ran out exporting trip %s to profile %s's calendar after %d writes; a push will finish it.", self.trip.uuid, profile.pk, self.written)
+            logger.info("Calendar budget ran out (%s) exporting trip %s to profile %s's calendar after %d writes; a push will finish it.", type(exc).__name__, self.trip.uuid, profile.pk, self.written)
             self._owe_push(trip_link)
             complete = False
             stopped_at = matched.index(False) if False in matched else len(plan)
@@ -870,6 +907,16 @@ class _TripCalendarExport:
             written=self.written,
             complete=complete,
         )
+
+    def _owns_event(self, link: TripCalendarLink | None, *, activity: TripActivity | None) -> bool:
+        """Whether UrbanLens made, or is about to make, the event *link* names, rather than linking one the user had.
+
+        An import links the user's own event, and a location that event came with is not one UrbanLens can tell from
+        one it wrote. An event created under :func:`trip_event_id` is UrbanLens's whichever way the link was made.
+        """
+        if link is None or link.direction == CalendarSyncDirection.EXPORTED or not link.google_event_id:
+            return True
+        return link.google_event_id == trip_event_id(self.trip, self.account.profile, activity)
 
     def _matches(self, body: dict[str, Any], link: TripCalendarLink | None) -> bool:
         """Whether *link* records that its event already holds *body* on this calendar."""
@@ -1032,7 +1079,7 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip) -> Calen
 
     Raises:
         ValueError: When the trip has no dates to export.
-        RateLimitExceededError: The budget ran out before anything of the trip was on the calendar.
+        RateLimitExceededError: The budget, ours or Google's rate limit, ran out before anything of the trip was on the calendar.
         GoogleAuthExpiredError: When Google has rejected the stored grant and the connection must be re-established.
         GatewayRequestError: When a calendar write fails."""
     return _TripCalendarExport(account, trip).run()
