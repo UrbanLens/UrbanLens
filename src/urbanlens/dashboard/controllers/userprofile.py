@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, use
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate
 
@@ -407,7 +408,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
 
         if field in self._USER_FIELDS:
             # Cut to the column width, as ``EditProfileView._save_profile`` does for the same two fields.
-            value = request.POST.get("value", "").strip()[: User._meta.get_field(field).max_length]  # noqa: SLF001 - _meta is public API
+            value = request.POST.get("value", "").strip()[: column_max_length(User, field)]
             setattr(request.user, field, value)
             request.user.save(update_fields=[field])
             return JsonResponse({"ok": True})
