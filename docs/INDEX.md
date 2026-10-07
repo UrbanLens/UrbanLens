@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P336` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N45`
+**Next free id:** `P339` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N45`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -211,7 +211,9 @@ still resolves after it is fixed, and the id is never handed out again.
 | P316 | open | 2026-10-05 | Nine tests fail under `bin/host_pytest.sh` on `release/v_0_9_0`, from three causes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P318 | open | 2026-10-05 | The import wizard sent each Google Maps CID through the browser as a JSON number, zeroing its low digits; fixed, but stored rounded CIDs in import failures need `fix_float_rounded_cids` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P321 | open | 2026-10-06 | A data export that includes photos or image overlays fails outright on object storage, which production 0.8.0 uses; fixed on `release/v_0_9_0`, live until 0.9.0 deploys | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P335 | open | 2026-10-07 | A calendar event keeps a location the trip no longer exports, because an update is a PATCH and the body leaves `location` out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P336 | open | 2026-10-07 | A location hidden after export stays on a calendar no push reaches: exports without auto-sync, visibility changes with no trip edit, and a deleted activity's orphaned event | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P337 | open | 2026-10-07 | A failed Google token refresh, or a 403 about the site rather than the user, still drops the user's calendar connection | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P338 | open | 2026-10-07 | A hidden stop added from a place search still shows the place's name to members who may not see it, because the name is stored as its title | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | N34 | current | 2026-10-05 | Ask: RabbitMQ's 30-minute consumer timeout makes a Celery worker exit while a long countdown waits, so site-a and site-b need `consumer_timeout` raised as compose now does (P290) | [`docs/handoffs/infrastructure-rabbitmq-consumer-timeout.md`](handoffs/infrastructure-rabbitmq-consumer-timeout.md) |
 | N35 | current | 2026-10-06 | Two REData production failures from 2026-10-01, some CRIS attachment downloads 500 with an HTML page and nearby Places answers 503 on a Google 429; REData's T10 answered, and the Places budget is Jess's call | [`docs/handoffs/redata-cris-attachment-500-and-places-429.md`](handoffs/redata-cris-attachment-500-and-places-429.md) |
 | N36 | current | 2026-10-05 | REData's building lookup marked every building on any survey naming one HRSH building as on the property; deployed in REData 5aabe887 | [`docs/handoffs/redata-survey-roster-marks-other-surveys-on-property.md`](handoffs/redata-survey-roster-marks-other-surveys-on-property.md) |
