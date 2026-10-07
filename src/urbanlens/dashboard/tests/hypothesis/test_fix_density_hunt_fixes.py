@@ -147,6 +147,7 @@ class HiddenActivityLocationTests(TestCase):
         )
 
         self.assertNotIn("act.effective_title", panel)
+        self.assertNotIn("act.title", panel)
         self.assertNotIn("act.location.", panel)
         self.assertIn("{{ item.display_title }}", panel)
         self.assertIn('data-act-location-name="{{ item.display_location_name }}"', panel)
