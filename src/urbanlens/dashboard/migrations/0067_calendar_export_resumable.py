@@ -10,7 +10,13 @@ holding a service's own defaults, since an admin may have chosen them, so as in 
 into a row that still holds exactly what every release since 0.4.0 wrote. The daily limit stays 2,000. An edited row
 is left alone and logged.
 
-Reverse drops the field and leaves the row: a row at 120 cannot be told from one an admin set to 120.
+From this release a trip-level link owes a push whenever ``push_requested_at`` is set, ``auto_sync`` or not, since an
+export the budget cut short marks its link either way. Before it, only an auto-synced link was pushed, so a mark left
+on a link whose auto-sync was then switched off was never delivered. Those marks are cleared here, so the upgrade does
+not push a trip its owner had stopped syncing.
+
+Reverse drops the field and leaves the rows: a row at 120 cannot be told from one an admin set to 120, and a cleared
+mark was never going to be delivered.
 """
 
 import logging
@@ -54,6 +60,12 @@ def raise_calendar_minute_limit(apps, schema_editor):
         logger.warning("google_calendar keeps %s calls a minute, not 0.9.0's %s: its row was edited, so it stays as its admin left it", kept, _NEW["calls_per_minute"])
 
 
+def settle_marks_nothing_delivers(apps, schema_editor):
+    """Clear the push marks on links without auto-sync, which no earlier release would ever have pushed."""
+    TripCalendarLink = apps.get_model("dashboard", "TripCalendarLink")
+    TripCalendarLink.objects.filter(activity__isnull=True, auto_sync=False, push_requested_at__isnull=False).update(push_requested_at=None, push_attempts=0)
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("dashboard", "0066_smart_list_sync_requests"),
@@ -66,4 +78,5 @@ class Migration(migrations.Migration):
             field=models.CharField(blank=True, default="", max_length=64),
         ),
         migrations.RunPython(code=raise_calendar_minute_limit, reverse_code=migrations.RunPython.noop),
+        migrations.RunPython(code=settle_marks_nothing_delivers, reverse_code=migrations.RunPython.noop),
     ]

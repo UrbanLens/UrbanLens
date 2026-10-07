@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest import mock
 import uuid
 
@@ -47,6 +47,9 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
 )
 from urbanlens.dashboard.tasks import MAX_CALENDAR_PUSH_ATTEMPTS, push_trip_to_calendar, requeue_pending_calendar_pushes
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 SERVICE = "google_calendar"
 _EVENT_PATH = re.compile(r"/calendars/[^/]+/events(?:/(?P<event_id>[^/?]+))?$")
 _BASE32HEX = re.compile(r"^[a-v0-9]{5,1024}$")
@@ -69,17 +72,30 @@ class FakeGoogleCalendar:
     Attributes:
         events: Event resources by id, cancelled ones included.
         requests: ``(method, event id or None, json body)`` for every request that reached the calendar.
-        lose_next_create_response: Store the next created event, then raise as if its response were lost.
+        lose_next_response_to: Apply the next request with this method, then raise as if its response were lost.
         fail_after: Answer 500 to every request after this many.
+        meanwhile: Called once, after the request numbered by its first element has been applied.
     """
 
     def __init__(self) -> None:
         self.events: dict[str, dict[str, Any]] = {}
         self.requests: list[tuple[str, str | None, dict[str, Any] | None]] = []
-        self.lose_next_create_response = False
+        self.lose_next_response_to: str | None = None
         self.fail_after: int | None = None
+        self.meanwhile: tuple[int, Callable[[], object]] | None = None
 
     def __call__(self, _session: requests.Session, method: str, url: str, **kwargs: Any) -> requests.Response:
+        response = self._answer(method, url, **kwargs)
+        if self.meanwhile is not None and len(self.requests) == self.meanwhile[0]:
+            _count, action = self.meanwhile
+            self.meanwhile = None
+            action()
+        if method == self.lose_next_response_to:
+            self.lose_next_response_to = None
+            raise requests.ConnectionError("connection reset after the request was sent")
+        return response
+
+    def _answer(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         match = _EVENT_PATH.search(url.split("?", 1)[0])
         if match is None:
             raise AssertionError(f"unexpected Google Calendar request {method} {url}")
@@ -110,9 +126,6 @@ class FakeGoogleCalendar:
             return _response(409, {"error": {"message": "The requested identifier already exists."}})
         event = {"status": "confirmed", **body, "id": event_id}
         self.events[event_id] = event
-        if self.lose_next_create_response:
-            self.lose_next_create_response = False
-            raise requests.ConnectionError("connection reset after the request was sent")
         return _response(200, event)
 
     def live_events(self) -> list[dict[str, Any]]:
@@ -263,7 +276,7 @@ class ClientAssignedEventIdTests(_CalendarExportCase):
         # The trip event is linked; take the activity's link away and lose the answer to its re-create.
         TripCalendarLink.objects.filter(activity=activity).delete()
         del self.google.events[expected_id]
-        self.google.lose_next_create_response = True
+        self.google.lose_next_response_to = "POST"
 
         with self.assertRaises(GatewayRequestError):
             export_trip_to_calendar(self.account, trip)
@@ -307,6 +320,64 @@ class ClientAssignedEventIdTests(_CalendarExportCase):
         for event_id in ids:
             self.assertRegex(event_id, _BASE32HEX)
         self.assertEqual(trip_event_id(trip, self.profile, first), trip_event_id(trip, self.profile, first))
+
+
+class AWriteWhoseAnswerIsLostIsRedoneTests(_CalendarExportCase):
+    def test_a_lost_update_is_not_trusted_even_when_the_trip_changes_back(self) -> None:
+        """The update reached Google, its answer did not: the link must not keep vouching for the old body."""
+        trip = self._trip(1)
+        activity = trip.activities.get()
+        export_trip_to_calendar(self.account, trip)
+        event_id = TripCalendarLink.objects.get(activity=activity).google_event_id
+
+        activity.title = "Changed"
+        activity.save(update_fields=["title", "updated"])
+        self.google.lose_next_response_to = "PATCH"
+        with self.assertRaises(GatewayRequestError):
+            export_trip_to_calendar(self.account, trip)
+        self.assertEqual(self.google.events[event_id]["summary"], "Long weekend: Changed")
+
+        activity.title = "Stop 0"
+        activity.save(update_fields=["title", "updated"])
+        result = export_trip_to_calendar(self.account, trip)
+
+        self.assertEqual(result.written, 1)
+        self.assertEqual(self.google.events[event_id]["summary"], "Long weekend: Stop 0")
+
+
+class TakenOffTheCalendarDuringAnExportTests(_CalendarExportCase):
+    def test_a_push_stops_writing_once_the_trip_is_removed_from_the_calendar(self) -> None:
+        """The write in flight when the trip is removed lands; none after it does, where every remaining one used to."""
+        self._limit(3)
+        trip = self._trip(4)
+        export_trip_to_calendar(self.account, trip)
+        self._let_the_minute_pass()
+        self._limit(120)
+        in_flight = len(self.google.requests) + 1
+        self.google.meanwhile = (in_flight, lambda: remove_trip_from_calendar(self.account, trip))
+
+        push_auto_synced_trip_changes(trip)
+
+        writes_after_removal = [method for method, _id, _body in self.google.requests[in_flight:] if method != "DELETE"]
+        self.assertEqual(writes_after_removal, [])
+        self.assertEqual(len(self.google.live_events()), 1)
+        self.assertFalse(TripCalendarLink.objects.filter(trip=trip, activity__isnull=True).exists())
+
+    def test_an_activity_deleted_during_the_export_is_skipped_and_the_rest_written(self) -> None:
+        trip = self._trip(3)
+        export_trip_to_calendar(self.account, trip)
+        first, second, third = trip.activities.all()
+        TripActivity.objects.filter(trip=trip).update(notes="Bring the tripod.")
+        self.google.meanwhile = (len(self.google.requests) + 1, third.delete)
+        writes_before = len(self.google.requests)
+
+        result = export_trip_to_calendar(self.account, trip)
+
+        self.assertTrue(result.complete)
+        self.assertEqual(len(self.google.requests) - writes_before, 2)
+        for activity in (first, second):
+            link = TripCalendarLink.objects.get(activity=activity)
+            self.assertIn("tripod", self.google.events[link.google_event_id]["description"])
 
 
 class ClientEventIdTests(SimpleTestCase):

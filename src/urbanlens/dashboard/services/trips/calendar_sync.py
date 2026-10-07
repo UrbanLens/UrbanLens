@@ -777,12 +777,18 @@ class CalendarExportResult:
     complete: bool
 
 
+class _TripUnlinkedError(Exception):
+    """The trip was taken off this calendar (removed, or its member left) while an export of it ran."""
+
+
 class _TripCalendarExport:
     """One attempt at mirroring a trip onto one calendar.
 
     An event whose link's fingerprint matches its new body is skipped, so an attempt the budget cut short is resumed,
-    not restarted, by the next. A create carries an id derived from the trip, activity and profile, so a create whose
-    answer was lost is met with 409 on the retry rather than making a second event.
+    not restarted, by the next. A link's fingerprint is cleared before its event is written and set again once Google
+    answers, so a write whose answer was lost is redone rather than trusted. A create carries an id derived from the
+    trip, activity and profile, so a create whose answer was lost is met with 409 on the retry rather than making a
+    second event.
 
     Attributes:
         account: The calendar written to.
@@ -795,6 +801,7 @@ class _TripCalendarExport:
         self.trip = trip
         self.written = 0
         self._gateway = GoogleCalendarGateway(account=account)
+        self._trip_link_pk: int | None = None
 
     def run(self) -> CalendarExportResult:
         """Write whatever on the calendar does not yet match the trip, in trip-event-then-activity order.
@@ -813,6 +820,7 @@ class _TripCalendarExport:
         hidden_activity_ids = _hidden_activity_ids_for(self.trip, profile)
         trip_body = trip_to_event_body(self.trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids)
         trip_link = TripCalendarLink.objects.trip_level_link(self.trip, profile)
+        self._trip_link_pk = trip_link.pk if trip_link is not None else None
         activity_links = TripCalendarLink.objects.activity_links_by_activity_id(self.trip, profile)
 
         # The trip's all-day event first, then each scheduled activity's, in TripActivity order.
@@ -830,8 +838,9 @@ class _TripCalendarExport:
         try:
             for index, (body, link, activity) in enumerate(plan):
                 synced_link = self._sync_event(body, link, activity=activity)
-                if activity is None:
+                if activity is None and synced_link is not None:
                     trip_link = synced_link
+                    self._trip_link_pk = synced_link.pk
                 matched[index] = True
             for link in unscheduled:
                 self._gateway.delete_event(link.google_event_id)
@@ -847,6 +856,12 @@ class _TripCalendarExport:
             for index in range(stopped_at + 1, len(plan)):
                 body, link, _activity = plan[index]
                 matched[index] = self._matches(body, link)
+        except _TripUnlinkedError:
+            # Nothing is owed: the person took the trip off this calendar, and writing on would put events back.
+            logger.info("Trip %s left profile %s's calendar during its export after %d writes; stopped.", self.trip.uuid, profile.pk, self.written)
+            if trip_link is None:
+                raise AssertionError("only a trip with a link can lose it") from None
+            complete = False
         return CalendarExportResult(
             trip_link=trip_link,
             events_total=len(plan),
@@ -870,7 +885,7 @@ class _TripCalendarExport:
             updates["push_attempts"] = 0
         TripCalendarLink.objects.filter(pk=trip_link.pk).update(**updates)
 
-    def _sync_event(self, body: dict[str, Any], link: TripCalendarLink | None, *, activity: TripActivity | None) -> TripCalendarLink:
+    def _sync_event(self, body: dict[str, Any], link: TripCalendarLink | None, *, activity: TripActivity | None) -> TripCalendarLink | None:
         """Bring one event in line with *body*, unless its link shows it already is.
 
         Args:
@@ -879,10 +894,15 @@ class _TripCalendarExport:
             activity: The activity mirrored, or None for the trip-level all-day event.
 
         Returns:
-            The up-to-date link.
+            The up-to-date link, or None when the activity was deleted during the export and its event is not wanted.
+
+        Raises:
+            _TripUnlinkedError: The trip was taken off this calendar during the export.
         """
         if link is not None and self._matches(body, link):
             return link
+        if not self._claim(link):
+            return None
         fingerprint = _event_fingerprint(body, self.account)
         event: dict[str, Any] | None = None
         if link is not None and link.google_event_id:
@@ -895,6 +915,28 @@ class _TripCalendarExport:
         else:
             self.written += 1
         return self._record_link(link, event_id=event["id"], fingerprint=fingerprint, activity=activity)
+
+    def _claim(self, link: TripCalendarLink | None) -> bool:
+        """Clear *link*'s fingerprint before its event is written, and make sure the trip is still on this calendar.
+
+        Returns:
+            False when *link* is gone but the trip's link is not: its activity was deleted during the export.
+
+        Raises:
+            _TripUnlinkedError: The trip's own link is gone.
+        """
+        if link is not None and link.pk is not None:
+            if TripCalendarLink.objects.filter(pk=link.pk).update(event_fingerprint=""):
+                link.event_fingerprint = ""
+                return True
+            if link.activity_id is None:
+                raise _TripUnlinkedError
+        elif self._trip_link_pk is None:
+            # The trip's first export, writing its own event: there is no link to lose yet.
+            return True
+        if not TripCalendarLink.objects.filter(pk=self._trip_link_pk).exists():
+            raise _TripUnlinkedError
+        return link is None
 
     def _create_event(self, body: dict[str, Any], *, activity: TripActivity | None) -> dict[str, Any]:
         """Create the event under its deterministic id, taking over the event already holding that id.

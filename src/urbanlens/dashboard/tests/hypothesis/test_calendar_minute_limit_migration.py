@@ -1,5 +1,7 @@
 """Migration 0067 raises ``google_calendar`` to 120 calls a minute in a row nobody edited, and leaves an edited row alone.
 
+It also clears push marks on links without auto-sync, which no earlier release would have delivered and this one would.
+
 ``get_limit_config`` never rewrites a row holding a service's own defaults, so without the migration a deployment
 that upgraded would keep 30 a minute, and a trip with 30 or more scheduled activities would need a push to finish
 every export (P334).
@@ -7,13 +9,18 @@ every export (P334).
 
 from __future__ import annotations
 
+import datetime
 import importlib
 from typing import Any
 
 from django.apps import apps
+from django.contrib.auth.models import User
+from django.utils import timezone
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, TripCalendarLink
+from urbanlens.dashboard.models.trips.model import Trip
 from urbanlens.dashboard.plugins.builtin.google_calendar import GoogleCalendarPlugin
 from urbanlens.dashboard.services.core import rate_limiter
 
@@ -76,3 +83,28 @@ class CalendarMinuteLimitMigrationTests(TestCase):
 
         self.assertFalse(ApiRateLimit.objects.filter(service=_SERVICE).exists())
         self.assertEqual(rate_limiter.get_limit_config(_SERVICE).calls_per_minute, 120)
+
+
+class StrandedPushMarkTests(TestCase):
+    def test_a_mark_on_a_link_without_auto_sync_is_cleared_and_one_with_it_is_kept(self) -> None:
+        profile = User.objects.create_user(username="stranded-mark").profile
+        marked = timezone.now() - datetime.timedelta(days=3)
+        links = {}
+        for auto_sync in (False, True):
+            trip = Trip.objects.create(name=f"auto_sync={auto_sync}", creator=profile)
+            links[auto_sync] = TripCalendarLink.objects.create(
+                trip=trip,
+                profile=profile,
+                google_event_id=f"evt-{auto_sync}",
+                direction=CalendarSyncDirection.EXPORTED,
+                auto_sync=auto_sync,
+                push_requested_at=marked,
+                push_attempts=2,
+            )
+
+        _MIGRATION.settle_marks_nothing_delivers(apps, None)
+
+        for link in links.values():
+            link.refresh_from_db()
+        self.assertEqual((links[False].push_requested_at, links[False].push_attempts), (None, 0))
+        self.assertEqual((links[True].push_requested_at, links[True].push_attempts), (marked, 2))
