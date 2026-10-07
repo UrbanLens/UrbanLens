@@ -1035,7 +1035,7 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
                 logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
                 error = "This check-in already has as many partners as it can hold."
             except PartnerNotFoundError as exc:
-                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
                 error = f'No user found with username "{username}".'
             except CannotInviteSelfError as exc:
                 logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)

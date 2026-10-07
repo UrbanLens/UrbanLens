@@ -616,7 +616,7 @@ def send_message_email_now(message: DirectMessage) -> None:
         msg.attach_alternative(html_body, "text/html")
         msg.send()
     except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send new-message email to %s", recipient_email)
+        logger.exception("Failed to send new-message email to profile %s", message.recipient.pk)
 
 
 def resolve_attachment_ids(sender: Profile, *, image_ids: list[int] | None = None, image_uuids: list[UUID] | None = None) -> list[int]:

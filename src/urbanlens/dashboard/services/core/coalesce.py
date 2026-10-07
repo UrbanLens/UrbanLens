@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+from urbanlens.dashboard.services.security.redact import redact_cache_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -88,11 +89,11 @@ def coalesced[T](key: str, compute: Callable[[], T], *, ttl: int | Callable[[T],
         try:
             cache.set(key, (computed,), ttl(computed) if callable(ttl) else ttl)
         except _CACHE_ERRORS:
-            logger.warning("Could not share the answer to %s", key, exc_info=True)
+            logger.warning("Could not share the answer to %s", redact_cache_key(key), exc_info=True)
         return computed
     finally:
         if token is not None:
             try:
                 release_lock(flight, token)
             except _CACHE_ERRORS:
-                logger.warning("Could not release %s; it will expire", flight, exc_info=True)
+                logger.warning("Could not release %s; it will expire", redact_cache_key(flight), exc_info=True)

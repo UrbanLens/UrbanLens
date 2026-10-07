@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.core import counters
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, json_body, posted_json_object
 from urbanlens.dashboard.services.security.client_ip import client_ip
+from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
@@ -118,6 +119,15 @@ def _raw_lockout_key(identifier: str) -> str:
     return f"raw:{canonical_identifier(identifier)}"
 
 
+def _loggable_lockout_key(key: str) -> str:
+    """Return *key* with a user-typed identifier redacted, for logging.
+
+    Only ``uid:<pk>`` keys name an account; any other kind (``raw:<identifier>``) carries what the visitor typed, which may be a username or an email address.
+    """
+    kind, _, value = key.partition(":")
+    return key if kind == "uid" else f"{kind}:{redact_text(value)}"
+
+
 def _lockout_key_for_identifier(identifier: str) -> str:
     """Resolve a raw submitted login identifier to its lockout-counter key.
 
@@ -161,7 +171,7 @@ def _record_failed_attempt(key: str) -> int:
     if attempts >= max_attempts:
         _set_lockout(_lockout_key(key), lockout_seconds)
         counters.clear(attempts_key)
-        logger.warning("Login locked out for key %r after %d failed attempts", key, attempts)
+        logger.warning("Login locked out for key %r after %d failed attempts", _loggable_lockout_key(key), attempts)
 
     return attempts
 

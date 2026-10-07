@@ -98,7 +98,7 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
     # every caller holding this user - the login view included - reads stale settings back, and the
     # external-API switches above look as though they never applied.
     user.profile = profile
-    logger.debug("demo: prepared profile %s (expires %s)", user.username, expires_at)
+    logger.debug("demo: prepared profile %s (expires %s)", profile.pk, expires_at)
     return profile
 
 
@@ -196,11 +196,11 @@ def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str 
         social.seed_safety_checkins([owner, *personas])
         social.seed_achievements_and_activity([owner, *personas])
 
-        logger.info("demo: seeded account %s with %d pins and %d personas", owner_user.username, len(owner_pins), len(personas))
+        logger.info("demo: seeded profile %s with %d pins and %d personas", owner.pk, len(owner_pins), len(personas))
         if not owner_pins:
             # Expected until public locations have been imported. Logged rather
             # than raised: a demo instance must still come up and sign people in.
-            logger.warning("demo: the location pool is empty - seeded %s with no pins", owner_user.username)
+            logger.warning("demo: the location pool is empty - seeded profile %s with no pins", owner.pk)
 
     return owner_user
 

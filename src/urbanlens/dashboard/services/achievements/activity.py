@@ -52,7 +52,7 @@ def record_activity(profile: Profile | int, kind: str, day: datetime.date | None
         return False
 
     streak = _advance_streak(profile, kind, day)
-    logger.debug("Activity %s recorded for profile %s on %s (streak now %s)", kind, profile, day, streak.current_length)
+    logger.debug("Activity %s recorded for profile %s on %s (streak now %s)", kind, getattr(profile, "pk", profile), day, streak.current_length)
     return True
 
 
