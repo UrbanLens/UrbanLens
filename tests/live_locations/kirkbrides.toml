@@ -13,7 +13,11 @@
 # tier = "primary": anchor verified by hand; every check must pass.
 # status says whether buildings stand at the point, not whether the campus's own Kirkbride
 # survives (Central State IN, Mendocino and others lost theirs). "demolished" skips the building,
-# footprint and build-date checks; "standing" runs them.
+# footprint and build-date checks; "standing" runs them. The nine campuses first marked
+# "demolished" from Wikipedia's status column were rechecked 2026-10-07 against OSM building
+# footprints (50 m2 or more) within 100 m of the point and an Esri aerial (2023-2025); only
+# Dixmont and Clinton Valley have none, and each entry's comment gives the distances. The
+# "standing" entries were not rechecked.
 # known_issues maps a check name to the problem id tracking why it fails today; the test
 # for that check is marked xfail(strict=True), so a fix turns it red until the entry goes.
 
@@ -80,8 +84,10 @@ state = "MA"
 lat = 41.911886
 lng = -71.100561
 built = 1853
-status = "demolished"
+status = "standing"
 nrhp = "93001484"
+# The Kirkbride's last historic sections went in 2009, but newer buildings remain and the hospital is open
+# (Wikipedia). OSM has a 1,459 m2 building 34 m from the point and six within 200 m (Esri aerial, 2025-03-18).
 
 [[site]]
 key = "western-state-hospital-kentucky"
@@ -164,8 +170,11 @@ state = "MA"
 lat = 42.311
 lng = -72.649
 built = 1858
-status = "demolished"
+status = "standing"
 nrhp = "94000696"
+# Old Main, the Kirkbride, was demolished in 2006. The Haskell building (1959), still a Department of Mental Health
+# office, is 25 m from the point (2,114 m2 in OSM) and 57 buildings stand within 200 m (Wikipedia; Esri aerial,
+# 2025-03-18).
 
 [[site]]
 key = "mendota-mental-health-institute"
@@ -232,6 +241,8 @@ lng = -80.112222
 built = 1862
 status = "demolished"
 nrhp = "80003401"
+# Demolished in 2006 (Wikipedia). The Esri aerial (2025-08-03) shows an open field at the point, and OSM has no
+# building within 200 m.
 
 [[site]]
 key = "trans-allegheny-lunatic-asylum"
@@ -309,9 +320,12 @@ state = "KY"
 lat = 38.278056
 lng = -85.555
 built = 1869
-status = "demolished"
+status = "standing"
 nrhp = "83002646"
 known_issues = { incidents = "louisville_fire, the one covering feed, has nothing within 2 km (2026-10-07)" }
+# The old campus was demolished in 1996 and is now E.P. "Tom" Sawyer State Park (Kentucky Historical Society marker
+# 2308). Borderline: the nearest buildings are park ones, an 841 m2 building 88 m from the point (OSM, Esri aerial
+# 2025-04-18) and a 24 m2 structure at 62 m, not counted.
 
 [[site]]
 key = "danville-state-hospital"
@@ -359,7 +373,9 @@ state = "MD"
 lat = 39.264722
 lng = -76.7225
 built = 1872
-status = "demolished"
+status = "standing"
+# The Kirkbride buildings were demolished in 1963 and replaced by more modern ones (Wikipedia). OSM's Foster Wade
+# Building (1,853 m2) is on the point and 19 buildings stand within 200 m (Esri aerial, 2025-02-23).
 
 [[site]]
 key = "elgin-mental-health-center"
@@ -382,7 +398,10 @@ state = "KS"
 lat = 39.064722
 lng = -95.710973
 built = 1872
-status = "demolished"
+status = "standing"
+# The Kirkbride's centre building went in June 2010 (Wikipedia). A new multi-wing residential-type building with
+# outbuildings stands on the point, under construction in the Esri aerial of 2023-10-21; OSM does not have it yet
+# (its nearest building is 163 m).
 
 [[site]]
 key = "winnebago-mental-health-institute"
@@ -468,9 +487,12 @@ state = "OH"
 lat = 39.958333
 lng = -83.055556
 built = 1877
-status = "demolished"
+status = "standing"
 nrhp = "86000851"
 known_issues = { register = "NPS places NRHP 86000851 (Central Ohio Lunatic Asylum) 1.06 km from the site, with no polygon (2026-10-07)" }
+# The asylum building was demolished between 1991 and 1996 (Wikipedia). The point is a car park of the Ohio
+# Departments of Transportation and Public Safety, whose two buildings (5,502 and 5,448 m2 in OSM) stand 79 and
+# 103 m away on the hospital's land (Esri aerial, 2024-03-11). Borderline: neither is a hospital building.
 
 [[site]]
 key = "worcester-state-hospital"
@@ -493,8 +515,11 @@ state = "MA"
 lat = 42.581234
 lng = -70.974394
 built = 1878
-status = "demolished"
+status = "standing"
 nrhp = "84002436"
+# Demolition of the hospital, the Kirkbride included, began in 2006; only the shells of its administration block and
+# two wings were kept, inside AvalonBay's apartments (Wikipedia). OSM's Building 1 (3,107 m2) is on the point and 28
+# buildings stand within 200 m (Esri aerial, 2025-03-18).
 
 [[site]]
 key = "clinton-valley-center"
@@ -507,6 +532,8 @@ lng = -83.322389
 built = 1878
 status = "demolished"
 nrhp = "81000315"
+# Demolished in 2000 and a subdivision built on the site (Wikipedia). The point is an open field in the Esri aerial
+# (2025-06-14); OSM's nearest buildings are the subdivision's houses, 136 m away. Borderline.
 
 [[site]]
 key = "kankakee-state-hospital"

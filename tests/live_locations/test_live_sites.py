@@ -68,8 +68,26 @@ class TestCatalogue:
         assert site.nrhp == ""
         assert "removed" in site.known_issues["register"]
 
-    def test_a_campus_whose_kirkbride_was_razed_but_whose_buildings_stand_is_standing(self) -> None:
-        assert _catalogued("mendocino-state-hospital").standing
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "mendocino-state-hospital",
+            "spring-grove-hospital-center",
+            "danvers-state-hospital",
+            "taunton-state-hospital",
+            "northampton-state-hospital",
+            "central-state-hospital-kentucky",
+            "columbus-state-hospital",
+            "topeka-state-hospital",
+        ],
+    )
+    def test_a_campus_that_lost_its_kirkbride_but_has_buildings_at_its_point_is_standing(self, key: str) -> None:
+        assert _catalogued(key).standing
+
+    def test_only_a_campus_with_no_building_at_its_point_is_demolished(self) -> None:
+        demolished = {site.key for site in load_sites() if not site.standing}
+
+        assert demolished == {"dixmont-state-hospital", "clinton-valley-center"}
 
 
 class TestMentions:
