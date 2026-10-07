@@ -266,6 +266,46 @@ class TheProbeDeadlineTests(TestCase):
         self.assertEqual(after, before, "the probe's deadline outlived the transaction that set it")
 
 
+class TheDeadlineEndsWithTheProbeTests(_FreshProbesTestCase):
+    """Inside an enclosing transaction - every test case's, or a caller's - the probe's ``atomic()`` is a savepoint,
+    and releasing one leaves a transaction-scoped setting in force. The deadline stayed, so every request after a
+    readiness probe in one test ran under two seconds, and on a loaded host ``test_write_route_smoke`` saw the safety
+    page cancelled by it. The rolled-back case above never reached that."""
+
+    _READS_THE_DEADLINE = "SELECT setting::int FROM pg_settings WHERE name = 'statement_timeout'"
+
+    def _deadline(self) -> int:
+        with connection.cursor() as cursor:
+            cursor.execute(self._READS_THE_DEADLINE)
+            return cursor.fetchone()[0]
+
+    def test_each_probe_that_answers_leaves_the_deadline_it_found(self) -> None:
+        before = self._deadline()
+        for name, probe in (
+            ("database", health.HealthController()._probe_database),
+            ("connections", health.HealthController._probe_connections),
+        ):
+            with self.subTest(probe=name):
+                self.assertIsNotNone(probe(), "the premise failed: the probe did not reach the database")
+                self.assertEqual(self._deadline(), before)
+
+    def test_a_request_after_the_readiness_probe_runs_without_its_deadline(self) -> None:
+        before = self._deadline()
+
+        response = Client().get("/health/ready")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self._deadline(), before)
+
+    def test_an_earlier_deadline_of_the_enclosing_transaction_is_put_back(self) -> None:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('statement_timeout', '45s', true)")
+
+        health.HealthController()._probe_database()
+
+        self.assertEqual(self._deadline(), 45_000)
+
+
 class TheProbesReuseTheirCostlyAnswersTests(_FreshProbesTestCase):
     """G4-9: an unauthenticated poll built the migration graph and counted pg_stat_activity every time."""
 
