@@ -25,8 +25,10 @@ from urbanlens.dashboard.models.safety.model import (
 )
 from urbanlens.dashboard.services.visits import safety as safety_service
 from urbanlens.dashboard.services.visits.safety import (
+    _tell_alerted_contacts_it_is_over,
     cancel_checkin,
     check_in,
+    delete_checkin,
     escalate_checkin,
     mark_found_safe_by_partner,
     record_contact_opt_out,
@@ -198,3 +200,49 @@ class AllClearDuringEscalationTests(_AllClearTestCase):
         self.assertEqual(len(subjects), 2)
         self.assertIn("hasn't checked in", subjects[0])
         self.assertIn("stop looking", subjects[1])
+
+
+class AllClearOnceTests(_AllClearTestCase):
+    def test_a_second_pass_over_a_contact_already_told_sends_nothing(self) -> None:
+        """The escalation's own catch and the resolver's pass can both see a contact alerted in the same instant."""
+        self._alert(self.by_account, self.by_email)
+
+        with notification_emails_sent():
+            check_in(self.checkin, self.owner)
+            _tell_alerted_contacts_it_is_over(
+                SafetyCheckin.objects.get(pk=self.checkin.pk), SafetyCheckinContact.objects.filter(checkin=self.checkin)
+            )
+
+        self.assertEqual(len(self._messages_to("rescuer@example.com")), 1)
+        self.assertEqual(self._resolution_notices(self.friend), 1)
+
+    def test_one_contact_s_failure_neither_stops_the_others_nor_archival(self) -> None:
+        self._alert(self.by_account, self.by_email)
+        real_notify = NotificationLog.objects.notify
+
+        def notify(**kwargs):
+            if kwargs.get("profile") == self.friend:
+                raise RuntimeError("notification store down")
+            return real_notify(**kwargs)
+
+        with notification_emails_sent(), mock.patch.object(NotificationLog.objects, "notify", side_effect=notify):
+            check_in(self.checkin, self.owner)
+
+        self.assertEqual(len(self._messages_to("rescuer@example.com")), 1)
+        self.checkin.refresh_from_db()
+        self.assertIsNotNone(self.checkin.archive_scheduled_at)
+
+
+class AllClearOnDeletionTests(_AllClearTestCase):
+    def test_deleting_an_escalated_checkin_says_it_ended_without_claiming_a_check_in(self) -> None:
+        self._alert(self.by_email)
+
+        with notification_emails_sent():
+            delete_checkin(self.checkin, self.owner)
+
+        (message,) = self._messages_to("rescuer@example.com")
+        self.assertIn("stop looking", message.subject.lower())
+        html = self._html(message).lower()
+        self.assertNotIn("checked in", html)
+        self.assertNotIn("is safe", html)
+        self.assertNotIn("view check-in", html)

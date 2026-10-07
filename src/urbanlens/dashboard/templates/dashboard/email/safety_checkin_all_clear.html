@@ -23,6 +23,7 @@
         behalf, you can stop and let them know. No further action is needed.
       </p>
 
+      {% if checkin_url %}
       <div style="text-align:center;margin:28px 0">
         <a href="{{ checkin_url }}"
            style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;
@@ -31,10 +32,11 @@
           View check-in
         </a>
       </div>
+      {% endif %}
     </td>
   </tr>
 
-  {% include "dashboard/email/_safety_contact_footer.html" %}
+  {% if optout_checkin_url %}{% include "dashboard/email/_safety_contact_footer.html" %}{% endif %}
 
 </table>
 </td></tr>

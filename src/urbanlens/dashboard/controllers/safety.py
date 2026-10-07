@@ -909,9 +909,9 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
     POST /safety/<slug:checkin_slug>/delete/
 
     If the check-in hasn't been resolved yet, it's routed through the normal self-check-in flow first
-    (``services.visits.safety.check_in``) so any side effects that flow carries - today, resolving the
-    check-in and raising a visit suggestion; it does not itself email already-notified contacts - happen
-    before the row disappears, rather than silently vanishing out from under an in-progress escalation.
+    (``services.visits.safety.check_in``) so any side effects that flow carries - resolving the check-in,
+    raising a visit suggestion, and telling already-alerted contacts it has ended - happen before the row
+    disappears, rather than silently vanishing out from under an in-progress escalation.
     """
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:

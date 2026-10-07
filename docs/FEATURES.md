@@ -1146,10 +1146,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   photos, and every magic-link token route (portal, photo, route map, chat, mark-safe, opt-out) reach only a
   contact with `notified_at` set (`SafetyCheckinContact.objects.alerted`, `by_token`). The "found safe" and
   "plan updated" notices go to those contacts only, so a partner resolving it early tells no one else
-- When an escalated check-in ends, every alerted contact is told, once, through the alert's channels and behind
-  the opt-out gate: "found" when someone reported the owner safe, otherwise an all-clear ("you can stop
-  looking") for the owner checking in late or cancelling. A contact alerted while the owner was checking in
-  gets it from the escalation itself (`_tell_alerted_contacts_it_is_over`)
+- When an escalated check-in ends, every alerted contact is told, once (`resolution_notified_at` is claimed
+  before sending), through the alert's channels and behind the opt-out gate: "found" when someone reported the
+  owner safe, otherwise an all-clear ("you can stop looking") for the owner checking in late, cancelling or
+  deleting it. A contact alerted while the owner was checking in gets it from the escalation itself
+  (`_tell_alerted_contacts_it_is_over`)
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
