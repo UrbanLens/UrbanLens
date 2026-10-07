@@ -3044,3 +3044,224 @@ No Stripe-retry/CRIS-retry/DM-geocode entries in either PROBLEMS file. Appears n
 Found by spark-audit services batch 3 (facts), coordinator-confirmed: `_recompute_locked` sets `fact.needs_recompute = False` under `select_for_update` then bare `fact.save()` (`services/facts/confidence.py:234`), while the writer path does `evidence.save()` + `Fact.objects.filter(pk=...).update(needs_recompute=True, ...)` (`services/facts/evidence.py:142-145`). Evidence committed after the recompute read but before its save gets its flag overwritten back to `False`, and the new evidence waits until something else sets the flag (bounded by the 10-min `sweep_stale_fact_confidence`, `tasks.py:4645`). Medium (stale confidence/status up to 10 min).
 
 No fact-confidence lost-update entry in either file. Appears new.
+
+## P375 — Friendship block/pending state-machine gaps: `block()` keeps the wrong orientation, `PENDING` can never be accepted
+
+`id: P375` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M2), verified by reading the methods. One entry, two defects in one state machine.
+
+1. `Friendship.block()` (`models/friendship/model.py:249-255`) reuses the existing row via `between()` then `_set_status(BLOCKED)` without re-orienting — unlike `request()` (`:119-131`), which explicitly swaps direction to match who asked. A block placed on an inbound request leaves the *blocked* party as `from_profile`, so `Profile.has_blocked` (`profile/model.py:933-944`, filters `from_profile=self`) returns False for the true blocker and `_barred_subject_pks` (`:964`) misses the inverted row. High.
+2. `accept()` (`model.py:206-211`) re-reads status and refuses anything but `REQUESTED`, while `has_pending_request_to` (`profile/model.py:980-984`) treats `(REQUESTED, PENDING)` as pending (opening visibility via `allow_pending_request`), `can_request` (`friendship/meta.py:29-31`) excludes `PENDING` from re-requestable states, and decline/ignore/remove transition unconditionally. A `PENDING` row opens gates as "unanswered" yet can only be declined, never accepted. Medium.
+
+P279 covers only *legacy* rows and claims direction "normalises now" — this path still does not. Appears new.
+
+## P376 — Safety escalation gaps: a missed sweep skips the final warning, and opt-out identity matching disagrees with notify targeting
+
+`id: P376` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M2), verified by reading both querysets. One entry, two safety-notify defects.
+
+1. `overdue()` (`models/safety/queryset.py:36-50`) deliberately includes `SCHEDULED` rows "so a missed or failed `send_due_checkin_reminders` run can't prevent escalation" — but `due_for_final_warning()` (`:52-69`) requires `status=AWAITING_CHECKIN`, and `due_for_reminder()` (`:22-34`) excludes rows past `overdue_at`. One beat tick missed past the grace point jumps SCHEDULED → escalated with `final_warning_sent_at` never set: zero owner notice before emergency contacts. High.
+2. `blocks_notification()` (`:253`) matches `Q(contact_profile=...) if contact_profile else Q(email__iexact=email)` while `reaching()` (`:180-189`) matches profile OR `email_normalized__in=verified_addresses`. A profile-linked row never matches an email-scoped opt-out by the same human, and the raw-`email__iexact` branch compares against the *normalized* column (`normalize_email` strips Gmail dots/`+`), so `j.ohn+tag@gmail.com` notifies despite opting out as `john@gmail.com`. `DATA_ENCRYPTION.md:266` confirms `email__iexact` "is the entire suppression mechanism". High.
+
+No entry on either interaction; archive opt-out hits concern magic-link double-clicks. Appears new.
+
+## P377 — `Article.editable_by()` grants every wiki article to every profile at model level
+
+`id: P377` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M3), verified: `models/article/model.py:94-105` — pin branch checks `pin.profile_id == profile.id`; wiki branch is bare `return self.wiki is not None`. No wiki-access check (`_domains_given_pins`), no trip/concealment check — despite the module docstring (`:1-3`) promising "anyone **with access** may edit it". Any caller trusting this method as the permission gate lets strangers write community pages. High.
+
+`editable_by` appears in `PROBLEMS.md`/archive only on an unrelated audit-report path. Appears new.
+
+## P378 — Location mentions derive only in `save()`, so bulk writes silently desync a visibility gate
+
+`id: P378` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M3), verified: `LocationMentioningModel.save()` (`models/comments/location_mention.py:60-72`) re-derives mentions (correctly skipping when `update_fields` lacks `text`), with no `bulk_create`/`bulk_update` override and no `QuerySet.update()` interception. The visibility gate reads these rows (`comments/queryset.py:65-70`, `trips/queryset.py:369-374`), so any bulk write of `text` (import, moderation, backfill) leaves stale `location_uuid` rows: a comment naming an unpinned place stays visible to all (leak), or a removed mention keeps hiding it (over-hide) — failing silently either way. The in-repo correct pattern exists (`LabelQuerySet.bulk_create/bulk_update` repeat coercion, `labels/queryset.py:34-73`, precisely because "bulk_create does not call save()"). High (privacy gate).
+
+No mention/`sync_location_mentions` hit in `PROBLEMS.md`/archive. Appears new.
+
+## P379 — Five voting-integrity gaps: trivia event-log contradiction, cross-round consensus FK, unvalidated stat votes, service-only public-vote eligibility, reaction toggle race
+
+`id: P379` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M6), coordinator-verified per site. One entry, one theme (votes counted wrong), five models.
+
+1. `TriviaQuestionVote` docstring promises an event log — "the same profile can be asked the same question again … fresh `NO_REACTION` backfill each time" (`models/trivia/model.py:153-156`) — but `Meta` enforces `UniqueConstraint(question, profile)` (`:182-184`). The second impression cannot be recorded; one of the two statements is wrong. High. (Nearest neighbor P326 is a different defect in the same file.)
+2. `ConsensusVote.chosen_answer` (`models/consensus/model.py:408-413`) has no constraint tying `chosen_answer.round` to the vote's round; the guard is application-only (`services/consensus/voting.py:57-58`). A cross-round vote tallies against a foreign answer. Medium.
+3. `WikiStatVote.cast()` (`models/wiki_stat_vote/queryset.py:123-130`) `update_or_create`s caller-supplied `field`/`value` although the docstring says callers validate — validators (`model.py:31`, 1–5) never run without `full_clean`, so garbage fields and out-of-range votes feed `composite()`'s `Avg`. Medium.
+4. `PublicPinVote` eligibility ("only profiles with a root pin at the candidate's location", `models/public_pins/model.py:79-80`) lives entirely in `services.pins.public_pins`; the model has only the `(candidate, profile)` unique pair (`:109`). Stale/ineligible/post-decision ballots inserted via ORM/admin count in `tally()` (`queryset.py:68-74`). Medium — the protected action is the site's strictest gate by design.
+5. Reaction toggle (`services/comments/comments.py:303-308`) reads `existing()` then deletes-or-creates; two concurrent double-taps both read `None`, both create, and the per-target unique constraints (`reactions/model.py:71-90`) turn the loser into an unhandled 500 instead of one toggle winning. Medium.
+
+None in `PROBLEMS.md`/archive (archive `:734` notes the reaction constraints exist, not the race). Appears new.
+
+## P380 — Three lookup-cache losses and races: `record_search_result` drops longitude, `SearchHistory`/`ScannedDevice` `get_or_create` races
+
+`id: P380` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M5), coordinator-verified. One entry, one file family (idempotent lookup caches), three defects.
+
+1. `EpaFacility.record_search_result` (`models/epa_facility/model.py:67-88`) takes `latitude` but no `longitude` — unlike sibling `record_detail_result` (`:91`) — so a search-sourced sighting can never populate the `longitude` column that `idxdb_epafac_lat_lng` (`:46`) and nearby-facility geo queries read. A never-DFR-enriched facility stays longitude-less permanently. Medium. (P327 covers the `data`-merge race in these methods, not the missing coordinate.)
+2. `SearchHistoryManager.record` (`models/search_history/queryset.py:69`) is a bare `get_or_create` against `uniq_search_history_profile_query` (`models/search_history/model.py:39`) — two concurrent first-time searches 500 on `IntegrityError`, where `EpaFacility._get_or_create_row` (`:124-137`) shows the hardened pattern. Low-medium. (P328 is the case-dedup gap, different defect.)
+3. `ScannedDeviceManager.get_or_create_for_mac` (`models/device_scan/queryset.py:44`) races on the unique MAC column (`models/device_scan/model.py:87`), called per device per upload in the ingestion loop — exactly where concurrent uploads of the same new device collide. Medium (request-path 500). (P338 covers marker indexes/transactions, not this race.)
+
+No race entries for any of the three in `PROBLEMS.md`/archive. Appears new.
+
+## P381 — Two caches without freshness: `RemoteImageCopy` can never refresh, `GooglePlace` rows are immortal
+
+`id: P381` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M5), coordinator-verified. One entry, one theme (cached rows that cannot go stale gracefully), two models.
+
+1. `RemoteImageCopy` docstring: "It has no expiry: once stored, the source is never fetched again" (`models/remote_image_copy/model.py:22`), keyed by `url_digest` unique (`:25`) — while `edition` (`:27`, "which edition of a changing picture this is, e.g. the month of a current-imagery export") is in no uniqueness or lookup key. A second edition under the same URL collides with the first, and either way the bytes freeze at first fetch — the named "current-imagery export" case serves a permanently stale month. Medium. (P330 covers the view's anonymous access, not staleness.)
+2. `GooglePlace` (`models/google_place/model.py:12-42`) is coordinates + `cached_place_name`/`cid`/`place_id` with no `fresh_since`/`stale_after`/invalidation — contrast `LocationCache` (`fresh_since`/`get_fresh`/`is_stale`, per-source `max_age`). A renamed place, corrected CID, or superseded `place_id` serves forever, and the `(latitude, longitude)` unique pair mints duplicate immortal rows for near-identical coordinates instead of refreshing one. Medium. (P13 is the pin-detail TTL knob, adjacent but different claim.)
+
+No edition/TTL/expiry entries for either in `PROBLEMS.md`/archive. Appears new.
+
+## P382 — Four markup bookkeeping gaps: `unattached()` misses relations, visits lack the map-removal tombstone, labels unsanitized, overlays can belong to nothing
+
+`id: P382` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M5), coordinator-verified. One entry, one feature area (markup/map attachments), four gaps.
+
+1. `MarkupMapQuerySet.unattached()` (`models/markup/queryset.py:71-84`) filters four relations null, but `MarkupMap.attachments` (`models/markup/model.py:234-242`) enumerates six — maps attached only via the secondary safety-check-in M2M or a DM read as "unattached (drafts/leftovers)", eligible for draft-sweep deletion. Medium-low (silent map+items loss).
+2. The delete signal tombstones comments/trip-comments/DMs (`models/markup/signals.py:72-83`) but not visits: `PinVisit.markup_map` is `SET_NULL` (`models/visits/model.py:46-52`) with no `map_removed` field (comments `:68` and DMs have one), so a visit whose map is deleted renders "no map" instead of "map removed". Low-medium.
+3. `PinMarkup.label` is truncated (`map_snapshot.py:122-124`) but never sanitized: model `save()` (`models/markup/model.py:485-490`) never runs `full_clean()`, so `MaxLengthValidator` (`:419`) never fires and the `TextField` is unbounded; `to_json()` (`:492-511`) emits it verbatim and search indexes it. Mitigated today (renderer escapes via `escHtml`, `markup-toolbar.ts:230-337`) — defense-in-depth for API/search-snippet consumers. Low. (P332 is CSV injection, different surface.)
+4. `MapImageOverlay.parent_pin/parent_wiki` are both nullable (`models/map_overlay/model.py:102-115`) with constraints covering only the image-vs-tile invariant (`:137-142`) — unlike `CustomLayer`, which at least documents its exactly-one expectation. A controller bug or direct write leaves an ownerless overlay: storage + `Image` rows leaked with nothing to display or delete them. Low-medium.
+
+No overlay-parent/`unattached`-completeness entries in `PROBLEMS.md`/archive. Appears new.
+
+## P383 — Four unenforced model invariants: comment hosts, safety senders, contact emails, boundary votes
+
+`id: P383` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M2/M3/M5), coordinator-verified per site. One entry, one bug class (documented invariants the DB does not hold).
+
+1. `Comment` documents "exactly one of pin or wiki" (`models/comments/model.py:17-20`), both FKs nullable (`:31-44`), `Meta` (`:98-101`) constraint-free — orphans (invisible everywhere) and double-hosted rows (double-rendered/counted) are storable. Siblings enforce it (`Article.article_exactly_one_host`, `CommentLocationMention.ck_cmtloc_exactly_one_owner`). Medium.
+2. `SafetyCheckinMessage` documents exactly-one-sender (`models/safety/model.py:618-627`) with no `CheckConstraint` (`Meta :655-657` is ordering only) — both-null and both-set rows insertable, where `EmergencyContactDefault` (`:139-144`), `SafetyCheckinContact` (`:471-476`), and `SafetyContactOptOut` (`:519-545`) all enforce their XORs. Medium.
+3. Those XORs accept `email=""`: `Q(contact_profile__isnull=False) ^ Q(email__isnull=False)` (`safety/model.py:140-144`, same shape `:472-476`, `:520-523`) passes an empty address with no profile — a contact reaching nobody and matching nothing, given `EmailField(null=True, blank=True)`. Low.
+4. `BoundaryVote.boundary` "must be one of the place's own candidates — enforced at the endpoint, since a CHECK constraint can't join" (`models/boundary_vote/model.py:24-27`); the unique pair (`:60`) scopes the voter, not the choice. Any non-endpoint writer records place A's voter endorsing place B's geometry into the recency-weighted tally. Low-medium, latent (endpoint is the only writer today). (P360 is the re-resolution *cost*, not tally correctness.)
+
+None in `PROBLEMS.md`/archive. Appears new.
+
+## P384 — Sharing/suggestion integrity gaps: `PinShare` dedup holes, merge-suggestion races, suggestion CASCADE, cross-profile list items
+
+`id: P384` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M3), coordinator-verified. One entry, one feature family (sharing/suggestions/queues), four gaps.
+
+1. `PinShare`'s only backstops are pending + map-detected `(pin, to_profile)` uniques (`models/pin_share/model.py:239-253`): concurrent DM detections (`origin="dm_detected"`) both insert; location-only shares (`pin=None`, `:63`) are NULL-keyed so constraints never fire — repeat detections of one address duplicate unboundedly; accepted/rejected rows re-share without limit. `reusable_for()` (`queryset.py:91-104`) is read-then-create in services, not a constraint. Medium.
+2. `PinMergeSuggestion`: order-independent pending check-then-create (`queryset.py:106` + `create`) with no constraint behind it, so a repeated trigger (the docstring's own re-import example) races into duplicates; nothing ties pins to `profile` or requires `suggested_survivor ∈ {pin_a, pin_b}`; `status` (`:48`) transitions freely while `is_actionable` (`:68-75`) is advisory. The sole constraint (`~Q(pin_a=F("pin_b"))`, `:85-92`) is not a dedup. Medium-high.
+3. `PinSuggestion.pin` is `CASCADE` (`models/pin_suggestions/model.py:106`) while both sibling queues use `SET_NULL` with surviving-row comments — deleting the matched pin erases the review-queue row and its audit trail; no `pin.profile == profile` invariant and no accept-transition guard (double accept re-runs creation in services). Medium.
+4. `PinListItem` uniqueness (`models/pin_list/model.py:116-120`) stops double-adds but nothing ties `pin.profile` to `pin_list.profile` (`:21-26` documents "their own Pins") — cross-profile rows reference (and thereby leak the existence of) another user's pin id, and smart-list sync (`pin_list/signals.py`) assumes single ownership. Medium. Plus `LocationExposureManager.record()` check-then-`get_or_create` with no `IntegrityError` retry (`models/pin_share/queryset.py:51-69` vs the in-repo label pattern `labels/queryset.py:99-162`) — concurrent share-accept propagations 500 on the accept path. Low-medium.
+
+No `dm_detected`/merge-suggestion/`PinSuggestion`/cross-profile-list entries in `PROBLEMS.md`. Appears new.
+
+## P385 — Five more P5 instances: `Image`, `Place`, `TripInvitation`, `ProfileEmail`, and `NotificationLog` saves ignore `update_fields`
+
+`id: P385` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M1/M2/M3), coordinator-verified per method. One entry, five instances of the P5 class; none in P5's table, P326, P345, or P358.
+
+1. `Image.save()` (`models/images/model.py:357-366`) computes `original_filename`/`filename_taken_at` in memory then bare `super().save()` — a scoped `save(update_fields=["caption"])` with a newly attached file silently drops the captured filename metadata (lost write, not just stale). Medium-low.
+2. `Place.save()` (`models/place/model.py:209-219`) full-row-writes then unconditionally second-`UPDATE`s the self-anchor on every root insert even when the caller set `domain_root` — and scoped saves stomp `geometry`/`building_child_count` maintained by background writers. Low-medium.
+3. `TripInvitation.save()` (`models/trips/invitation.py:93-96`) bare-saves after defaulting `expires_at` — answering one question via `save(update_fields=["trip_response"])` whole-row-writes, so the two independent answers (`trip_response` vs `friend_response`) last-writer-win. Medium.
+4. `ProfileEmail.save()` (`models/profile/email.py:54-56`) recomputes `normalized_email` then bare-saves — scoped saves write without the match/dedup companion (stale) or pay full-row writes excluding `email`. Medium. (P326's `FriendInvitation` sibling; the in-repo correct pattern is `safety/model.py:448-455`.)
+5. `NotificationLog.save()` (`models/notifications/model.py:90-105`) clips `title`/drops unsafe `url` in memory then bare-saves — a scoped `save(update_fields=["status"])` leaves DB and instance diverged, and an "unsafe URL dropped" still stored. Low.
+
+P5 (open) is the umbrella; P326/P345/P358 are siblings. Cite all five — `see P5, P326, P345, P358 and P385 in docs/PROBLEMS.md`.
+
+## P386 — Three missing composite indexes: media-relevance aggregates, memory "needs attention", pin-note ordering
+
+`id: P386` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M1), coordinator-verified. One entry, one theme (query-shaped indexes Django's FK defaults do not cover), three sites.
+
+1. `MediaRelevance.vote_scores()` filters `(location, source, is_vote)` and aggregates every voter's rows (`models/images/queryset.py:477`), but the only index starts at `profile` (`idxdb_medrel_profile_loc`, `models/images/relevance.py:58-66`; the 4-column unique serves `for_gallery`'s profile-led path). Runs per provider gallery per wiki render. Low-medium. (`Index(fields=["location", "source"])`, optionally vote-conditioned, matches the `idxdb_place_exttag_placesrc` pattern.)
+2. `ImageQuerySet.needs_attention()` (`models/images/queryset.py:410-427`) filters `profile` + five NULL/boolean conditions (`visit__isnull`, `organize_dismissed`, `pin__isnull`, `wiki__isnull`, `pin_suggestion__isnull`) ordered by `-created` — rendered per login (Memories queue) — with no covering index (`Image.Meta :527-535` indexes other profile-led shapes). A partial composite on the all-unfiled shape fits the file's partial-index idiom. Low-medium.
+3. `PinNote` orders by `(-created, -pk)` (`models/pin/note.py:36-40`, tie-break load-bearing for display) with `indexes = []` — only the default FK B-tree exists, so every note list sorts at read time. `Index(fields=["pin", "-created", "-pk"])` is the standard fix. Low.
+
+No `PROBLEMS.md`/archive entries on these access paths. Appears new.
+
+## P387 — Three `Location` model smells: shared mutable `Point(0, 0)` default, double-query nondeterministic nearby pick, DB-writing property setters
+
+`id: P387` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M1), coordinator-verified. One entry, one file, three smells.
+
+1. `point = PointField(geography=True, default=Point(0, 0))` (`models/location/model.py:60`) evaluates once at import — every default-constructed `Location` shares one mutable GEOSGeometry. `save()` (`:491-494`) overwrites from lat/lon in practice, which is why it hasn't bitten; any in-place `loc.point.x = …` corrupts the process-wide default. `default=lambda: Point(0, 0)` removes it. Low.
+2. `get_nearby_or_create` (`models/location/queryset.py:196-203`) runs `exists()` then `first()` — two spatial queries for one question — unordered (two callers can snap to different rows, undermining the dedup) and a row deleted between the calls yields an unexpected `(None, False)`. Single ordered `.first()` fixes all three. Low. (Archive `:2409-2413` covered only the IntegrityError guard, now fixed at `:217-224`.)
+3. `cached_place_name`/`cid` property setters (`models/location/model.py:168-202`) run `GooglePlaceService` get-or-create plus a raw `queryset.update()` bypassing `save()`, slug sync, and versioning — invisible at the assignment site, and the `value=None` path passes `fetch_if_missing=True` (a hidden synchronous request, the class the getter's own docstring `:205-210` warns against). Low-medium.
+
+No `PROBLEMS.md`/archive entries on any of the three. Appears new.
+
+## P388 — Subscription/billing model gaps: unvalidated duration crashes redemption, join-email uniqueness is check-then-act, trial grants on a permissive default
+
+`id: P388` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M4), coordinator-verified. One entry, one subsystem (subscriptions/billing/email), three gaps.
+
+1. `duration_months` is a free `CharField` (`models/subscriptions/model.py:261`) and `duration_as_int` (`:273-276`) is bare `int(...)` — the writer passes the POST value through raw (`services/social/friendship.py:696` ← `controllers/friendship.py:550`, no numeric check) and redemption calls it unguarded (`services/social/friend_invitations.py:228`). Any non-numeric string stored → 500 at accept-time, not invite-time. Medium.
+2. "One join email per address ever" (`models/email_log/model.py:30-32`) has indexes but no `UniqueConstraint` (`:63-68`); enforcement is `exists()` pre-check (`services/security/email_safety.py:142-155`) then send-then-`create` (`:205-215`). Concurrent invites both pass and both send. Low-medium. (P355 is the reservation leak in `userprofile.py`, different defect.)
+3. `threshold_met` defaults `True` (`models/billing/model.py:52`) and is recomputed only at each successful Stripe charge (`subscriptions/model.py:281`), while `is_billable` includes `TRIALING` and `grants_access = (is_billable and threshold_met) or banked` (`:89-106`). A $0-pledge trial grants below the role's minimum until the first charge. Medium-low.
+
+Archive mentions cover `granted_by` CASCADE, absolute-expiry non-stacking, and webhook idempotency — none of these three. Appears new.
+
+## P389 — Four reputation/achievement/cost integrity notes: unconstrained weights, deferred-field backfill lie, future streak day, validator-only cost bounds
+
+`id: P389` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M4), coordinator-verified. One entry, one theme (computed standing/cost the DB does not defend), four notes. All low; filed jointly so the pattern is on record.
+
+1. `ReputationEvent.weight` (`models/reputation/model.py:86,102-107`) is an unconstrained `DecimalField` feeding `total_value()`'s `F("value") * F("weight")` sum (`reputation/queryset.py:68-69`) — writers today pass only `0.9`/`1`, nothing enforces the range, so a shell/admin `-5` silently moves standing. (D9 describes the mechanism, not a bound.)
+2. `Achievement.qualifying_change()` compares `getattr(self, f"_loaded_{field}", None) != getattr(self, field)` (`models/achievements/model.py:127-143`) but `from_db` (`:163-171`) only records loaded fields — a deferred qualifying field reads as changed, enqueueing a spurious full-catalog backfill (`signals.py:249-264`; grants are idempotent, so wasted work only).
+3. `current_length_as_of` (`models/achievements/model.py:349-364`) returns the stored length when `(today - last_day).days <= 1` — a future `last_day` (bare `DateField`, `model.py:291`, no past-or-today guard; clock skew/backfill) yields negative days and a phantom live streak while `is_active_today` correctly reads False.
+4. Cost models carry validators but zero DB constraints (`models/costs/model.py:40-45,70-72` vs `SiteSettings.Meta`'s ~30 checks, `site_settings/model.py:724-758`): `deprecation_years=0` via ORM persists past the `MinValueValidator(0.1)` (validators need `full_clean()`) and `monthly_amortized_cost` then divides by zero. Same shape on `OperatingCost`.
+
+No `PROBLEMS.md`/archive entries on any of the four. Appears new.
+
+## P390 — Two E2EE model notes: group-key uniqueness voids on holder deletion, bundle-version pinning exists only in a comment
+
+`id: P390` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M4), coordinator-verified. One entry, two low notes on key bookkeeping.
+
+1. `GroupKeyEnvelope` uniqueness is `(key, profile)` (`models/e2ee/group_key.py:89-93`) but `profile` nulls on holder deletion (`SET_NULL`, `:68-75`). Postgres treats NULLs as distinct (cf. `Label`'s explicit `nulls_distinct=False`), so two deleted members leave two indistinguishable `(key, NULL)` rows — "one envelope per holder" and holder auditability degrade per deletion. Fail-safe direction (`with_outside_holders`, `e2ee/queryset.py:123-136`, errs toward flagged); residue is duplicates + lost attribution. Low.
+2. `key_bundle.py:56-58` claims "Conversation keys record which bundle version they were sealed to" — no such field exists (`ConversationKey :21-44` carries the rotation counter `version`, not a bundle pin; neither do `GroupKey`/`GroupKeyEnvelope`). Only `E2EEPasskeyWrap.bundle_version` + `usable_for_bundle` (`queryset.py:62-72`) embodies the backstop the comment implies generally. Low (reset flow may handle rotation in views; the model layer does not).
+
+Archive E2EE entries cover version-vs-membership, history destruction, and rewrap defects — not these. Appears new.
+
+## P391 — Two DM/group parity gaps: no disappearing messages in groups, group shares carry pins only
+
+`id: P391` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M2), verified against the models. One entry, two concrete parity gaps (not vibes).
+
+1. DMs have `read_at` (`direct_messages/model.py:27`), `deleted_by_recipient_at` (`:60-61`), `sender_delete_after` (`:66-70`), `is_expired_for_recipient` (`:117-137`), and a `due_for_hard_delete()` sweep (`direct_messages/queryset.py:97-109`). Groups have only for-everyone `deleted_at` (`group_chats/model.py:197-198`) plus a `last_read_at` watermark (`:118-120`); `tombstone_text_for` (`:239-253`) has no expiry branch. A sender's disappearing-message choice does not propagate to groups, and a member cannot remove a message from their own view. Medium.
+2. `GroupMessageShare` is message + recipient + `pin_share` only (`group_chats/model.py:288-310`); `DirectMessageShare` carries PIN/TRIP/FRIEND kinds with trip membership and profile recommendation (`direct_messages/share.py:21-61`, `meta.py:34-39`) including `revoke()`/expiry semantics. Trip invites and friend recommendations cannot be shared into groups. Low.
+
+P19's parity list is images/`markup_map`/`location_mentions`/`reply_to` (`PROBLEMS.md:413-416`) — neither of these. Appears new.
+
+## P392 — `Wiki.versioned_fields` omits relations and presentation, and deleting a wiki vaporizes its revision trail
+
+`id: P392` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M3), verified: `versioned_fields` (`models/wiki/model.py:135-150`) lists scalar content/security/date/type fields only — `cover_photo` (`:158-164`), `parent_wiki` (`:103-109`), the `labels` M2M (`:75-79`), `place`/`location` (`:83-98`), and `color`/`icon`/`detail_*` (`:64-72`) bypass `WikiFieldRevision` entirely, so nesting moves, banner swaps, and retags leave no field revision while superseded values become unrecoverable. Paired with `WikiFieldRevision.target = FK(Wiki, CASCADE)` (`wiki/revision.py:19`) and no retention rule, deleting the wiki vaporizes the whole trail. Medium.
+
+Not P170 (article full-copy revisions never deleted); no `versioned_fields` hit in `PROBLEMS.md`. Appears new.
+
+## P393 — Five misc model/task gaps: calendar sync silently drops, upload retry never gives up, Immich credential rot invisible, tombstone URL bypass, rating-0 deletion
+
+`id: P393` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit models batch 5 (M6), coordinator-verified per site. One entry, five lows from the long tail.
+
+1. Calendar auto-sync abandons a trip change after 5 failed pushes (`tasks.py:446,463-464`: clears `push_requested_at`, resets `push_attempts` to 0, log warning only) — never delivered, never retried, user never told; the counter reset erases the evidence (`calendar_sync/model.py:132-133`). Contrast `UploadRetry`, which at least notifies admins. Medium.
+2. `UploadRetry` has no automatic give-up for persistent non-gone failures: no cap/max-age on the model (`upload_retry/model.py:19-24`), sweep backs off to a 1-day cap (`services/media/upload_retry.py:32,258`) with explicit stay-pending policy (`:325-326`); the only non-gone exit is manual `give_up()` from the admin action (`:231`, `admin.py:348-356`). Low (arguably the P119 "wait rather than drop" design; filed because the model cannot express a bound if that changes).
+3. `ImmichAccount.last_verified` (`models/immich/model.py:31`) is written once at connect (`controllers/immich.py:146`) and never refreshed — no sweep, gateway call, or import updates it, while Flickr has a token-verify method and Google accounts handle refresh. A revoked key reads healthy until use fails. Low.
+4. Auto-removal tombstones match links by exact URL modulo trim (`models/auto_removals/queryset.py:14-17`, `model.py:28` "case-sensitive by nature") — trailing slash, scheme/host case, UTM/ref, or fragment variants miss the tombstone and resurrect user-deleted auto-links through the shared `was_removed` check (`:44-52`). Medium.
+5. Rating 0 is legal (`models/reviews/model.py:16`, 0–5) but the pin-edit path treats it as clear: `if rating and 1 <= rating <= 5` (`controllers/pin_edit.py:313-314`) falls a submitted `0` through to `elif clear_rating:` (`:319`), *deleting* the review — while viewset/service paths accept 0–5. The paths disagree on what 0 means. Low-medium.
+
+None in `PROBLEMS.md`/archive. Appears new.

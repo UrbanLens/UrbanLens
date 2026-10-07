@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P375` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P394` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -274,3 +274,22 @@ still resolves after it is fixed, and the id is never handed out again.
 | P372 | open | 2026-10-06 | Three N+1 leftovers: enrichment density counts, scan-ingestion device lookups, floorplan per-row saves | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P373 | open | 2026-10-06 | Three task retry gaps: Stripe sync retries hot, CRIS extraction is soft-only with no retry, DM geocode swallows retryable failures | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P374 | open | 2026-10-06 | Fact recompute's bare `save()` can clear a concurrently-set `needs_recompute` (lost recompute) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P375 | open | 2026-10-06 | Friendship block/pending state-machine gaps: `block()` keeps the wrong orientation, `PENDING` can never be accepted | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P376 | open | 2026-10-06 | Safety escalation gaps: a missed sweep skips the final warning, and opt-out identity matching disagrees with notify targeting | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P377 | open | 2026-10-06 | `Article.editable_by()` grants every wiki article to every profile at model level | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P378 | open | 2026-10-06 | Location mentions derive only in `save()`, so bulk writes silently desync a visibility gate | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P379 | open | 2026-10-06 | Five voting-integrity gaps: trivia event-log contradiction, cross-round consensus FK, unvalidated stat votes, service-only public-vote eligibility, reaction toggle race | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P380 | open | 2026-10-06 | Three lookup-cache losses and races: `record_search_result` drops longitude, `SearchHistory`/`ScannedDevice` `get_or_create` races | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P381 | open | 2026-10-06 | Two caches without freshness: `RemoteImageCopy` can never refresh, `GooglePlace` rows are immortal | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P382 | open | 2026-10-06 | Four markup bookkeeping gaps: `unattached()` misses relations, visits lack the map-removal tombstone, labels unsanitized, overlays can belong to nothing | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P383 | open | 2026-10-06 | Four unenforced model invariants: comment hosts, safety senders, contact emails, boundary votes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P384 | open | 2026-10-06 | Sharing/suggestion integrity gaps: `PinShare` dedup holes, merge-suggestion races, suggestion CASCADE, cross-profile list items | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P385 | open | 2026-10-06 | Five more P5 instances: `Image`, `Place`, `TripInvitation`, `ProfileEmail`, and `NotificationLog` saves ignore `update_fields` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P386 | open | 2026-10-06 | Three missing composite indexes: media-relevance aggregates, memory "needs attention", pin-note ordering | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P387 | open | 2026-10-06 | Three `Location` model smells: shared mutable `Point(0, 0)` default, double-query nondeterministic nearby pick, DB-writing property setters | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P388 | open | 2026-10-06 | Subscription/billing model gaps: unvalidated duration crashes redemption, join-email uniqueness is check-then-act, trial grants on a permissive default | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P389 | open | 2026-10-06 | Four reputation/achievement/cost integrity notes: unconstrained weights, deferred-field backfill lie, future streak day, validator-only cost bounds | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P390 | open | 2026-10-06 | Two E2EE model notes: group-key uniqueness voids on holder deletion, bundle-version pinning exists only in a comment | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P391 | open | 2026-10-06 | Two DM/group parity gaps: no disappearing messages in groups, group shares carry pins only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P392 | open | 2026-10-06 | `Wiki.versioned_fields` omits relations and presentation, and deleting a wiki vaporizes its revision trail | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P393 | open | 2026-10-06 | Five misc model/task gaps: calendar sync silently drops, upload retry never gives up, Immich credential rot invisible, tombstone URL bypass, rating-0 deletion | [`docs/PROBLEMS.md`](PROBLEMS.md) |
