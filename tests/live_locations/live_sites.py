@@ -12,9 +12,12 @@ from pathlib import Path
 import re
 import time
 import tomllib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 CATALOGUE = Path(__file__).with_name("kirkbrides.toml")
 
@@ -89,28 +92,81 @@ class Site:
             found.append(_normalized(match.group(1)))
         return tuple(phrase for phrase in found if phrase)
 
+    def needs_qualifier(self, label: str) -> bool:
+        """Whether a text naming ``label`` could be about another place: the label does not say it is an institution
+        ("The Ridges"), or other campuses share it (this site's wikipedia title is disambiguated in parentheses).
+        """
+        return "(" in self.wikipedia or _INSTITUTION_WORDS.isdisjoint(_normalized(_undisambiguated(label)).split())
+
+    @property
+    def news_queries(self) -> tuple[str, ...]:
+        """One news search per distinct name, each carrying the town and state when the name needs a qualifier.
+
+        A search for "Central State Hospital" alone is answered with whichever campus of that name is in the news.
+        """
+        queries: dict[str, str] = {}
+        for label in self.labels:
+            phrase = " ".join(_undisambiguated(label).split())
+            query = f'"{phrase}"'
+            if self.needs_qualifier(phrase):
+                query = f"{query} {self.place.replace(',', '')}"
+            queries.setdefault(_normalized(phrase), query)
+        return tuple(queries.values())
+
     def mentions(self, *texts: Any) -> bool:
         """Whether any text names this site.
 
-        One of its names must appear as a whole phrase. A name that does not say it is an institution
-        ("The Ridges"), or that other campuses share (a wikipedia title disambiguated in parentheses),
-        also needs the town or the disambiguator somewhere in the same texts - not necessarily next to it,
-        so "Athens, Georgia ... the ridges" still counts for Athens, Ohio.
+        One of its names must appear as a whole phrase. A name that ``needs_qualifier`` also needs the town or
+        the disambiguator somewhere in the same texts - not necessarily next to it, so "Athens, Georgia ...
+        the ridges" still counts for Athens, Ohio.
         """
         haystack = f" {_normalized(' '.join(str(text) for text in texts if text))} "
         qualified = any(f" {phrase} " in haystack for phrase in self.qualifiers)
-        shared = "(" in self.wikipedia
         for label in self.labels:
-            phrase = _normalized(re.sub(r"\([^)]*\)", "", label))
+            phrase = _normalized(_undisambiguated(label))
             if not phrase or f" {phrase} " not in haystack:
                 continue
-            if qualified or not (shared or _INSTITUTION_WORDS.isdisjoint(phrase.split())):
+            if qualified or not self.needs_qualifier(label):
                 return True
         return False
+
+    def register_listings(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The ``cultural-resources/lookup/`` rows that list this campus.
+
+        A row does when its NRHP reference is the catalogue's (in ``external_id``, or in any attribute) or it names
+        the campus: in its ``name``, or in an attribute naming a historic district. A state register that records a
+        campus as a district does so on each building's row, whose own name is the building's: New Jersey's puts
+        Trenton's in ``attributes.HD_NAME``.
+        """
+        return [row for row in rows if self._lists(row)]
+
+    def _lists(self, row: dict[str, Any]) -> bool:
+        attributes = list(_scalars(row.get("attributes")))
+        if self.nrhp and any(value.startswith(self.nrhp) for value in [str(row.get("external_id", "")), *attributes]):
+            return True
+        districts = [value for value in attributes if re.search(r"\bdistricts?\b", value, re.IGNORECASE)]
+        return self.mentions(row.get("name"), *districts)
 
 
 def _normalized(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _undisambiguated(label: str) -> str:
+    """``label`` without a parenthetical disambiguator, which no article or headline contains."""
+    return re.sub(r"\([^)]*\)", "", label)
+
+
+def _scalars(value: Any) -> Iterator[str]:
+    """Every string and number nested in a row's ``attributes``, as text."""
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _scalars(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _scalars(item)
+    elif isinstance(value, str | int | float) and not isinstance(value, bool):
+        yield str(value)
 
 
 def load_sites(path: Path = CATALOGUE) -> list[Site]:
