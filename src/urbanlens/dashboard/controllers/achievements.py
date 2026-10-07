@@ -216,10 +216,9 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> list[str]:
     achievement.is_secret = request.POST.get("is_secret") == "on"
 
     if uploaded := _uploaded_custom_icon(request):
-        from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.media.images import image_upload_error
+        from urbanlens.dashboard.services.media.held_upload import icon_upload_error
 
-        upload_error = image_upload_error(uploaded, MediaKind.PHOTO)
+        upload_error = icon_upload_error(uploaded)
         if upload_error:
             raise ValidationError({"custom_icon": upload_error[0]})
         achievement.full_clean(exclude=["slug", "uuid"])

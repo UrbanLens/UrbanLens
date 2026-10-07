@@ -79,8 +79,7 @@ EGRESS_ENVIRONMENT = policy_environment(ENVIRONMENT_NAME, testing=TESTING)
 DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 if DEBUG and _deployment:
     raise ImproperlyConfigured(
-        f"DJANGO_DEBUG is on while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Debug pages publish settings, SQL and "
-        "tracebacks to anyone who triggers an error; it is only allowed in local, development and testing.",
+        f"DJANGO_DEBUG is on while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Debug pages publish settings, SQL and tracebacks to anyone who triggers an error; it is only allowed in local, development and testing.",
     )
 
 # AppSettings owns ALLOWED_HOSTS (UL_ALLOWED_HOSTS); local defaults allow immediate access.
@@ -275,10 +274,7 @@ DRAGONFLY_URL = require_deployment_setting(
     os.getenv("UL_DRAGONFLY_URL") or os.getenv("UL_VALKEY_URL") or os.getenv("UL_REDIS_URL"),
     environment=ENVIRONMENT_NAME,
     fallback="",
-    reason=(
-        "Without a shared store the cache falls back to per-process memory, so every lock, throttle and "
-        "single-flight guard only holds within one worker, and there is no Channels layer for live updates."
-    ),
+    reason=("Without a shared store the cache falls back to per-process memory, so every lock, throttle and single-flight guard only holds within one worker, and there is no Channels layer for live updates."),
 )
 
 #: Cache alias for bytes proxied from somewhere else - map tiles, Immich thumbnails, Google Photos
@@ -779,6 +775,7 @@ IMMICH_MAX_THUMBNAIL_BYTES = _app_settings.immich_max_thumbnail_bytes
 IMMICH_MAX_JSON_BYTES = _app_settings.immich_max_json_bytes
 IMMICH_THUMBNAIL_DEADLINE_SECONDS = _app_settings.immich_thumbnail_deadline_seconds
 AVATAR_MAX_UPLOAD_BYTES = _app_settings.avatar_max_upload_bytes
+ICON_MAX_UPLOAD_BYTES = _app_settings.icon_max_upload_bytes
 LABEL_BULK_EDIT_MAX_IDS = _app_settings.label_bulk_edit_max_ids
 LABEL_REORDER_MAX_IDS = _app_settings.label_reorder_max_ids
 ORGANIZE_ROWS_PAGE_SIZE = _app_settings.organize_rows_page_size
@@ -1259,8 +1256,7 @@ SITE_URL = _site_url_from_env(
 )
 if _deployment and is_loopback_host(urlparse(SITE_URL).hostname):
     raise ImproperlyConfigured(
-        f"UL_SITE_URL is {SITE_URL!r} while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Every emailed link would point at "
-        "the recipient's own machine; set it to this deployment's public URL.",
+        f"UL_SITE_URL is {SITE_URL!r} while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Every emailed link would point at the recipient's own machine; set it to this deployment's public URL.",
     )
 SMITHSONIAN_API_KEY = os.getenv("UL_SMITHSONIAN_API_KEY", "")
 GOOGLE_UNRESTRICTED_API_KEY = os.getenv("UL_GOOGLE_UNRESTRICTED_API_KEY", "")

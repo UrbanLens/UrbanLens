@@ -226,10 +226,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             color = clean_color(request.POST.get("color"))
             custom_icon = request.FILES.get("custom_icon") or None
             if custom_icon:
-                from urbanlens.dashboard.models.images.model import MediaKind
-                from urbanlens.dashboard.services.media.images import image_upload_error
+                from urbanlens.dashboard.services.media.held_upload import icon_upload_error
 
-                upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+                upload_error = icon_upload_error(custom_icon)
                 if upload_error:
                     message, status = upload_error
                     return HttpResponse(f"Error: {message}", status=status)
@@ -779,10 +778,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         color = clean_color(request.POST.get("color"))
         custom_icon = request.FILES.get("custom_icon") or None
         if custom_icon:
-            from urbanlens.dashboard.models.images.model import MediaKind
-            from urbanlens.dashboard.services.media.images import image_upload_error
+            from urbanlens.dashboard.services.media.held_upload import icon_upload_error
 
-            upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+            upload_error = icon_upload_error(custom_icon)
             if upload_error:
                 message, status = upload_error
                 return JsonResponse({"error": message}, status=status)
