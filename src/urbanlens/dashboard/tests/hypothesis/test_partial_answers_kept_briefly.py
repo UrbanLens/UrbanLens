@@ -241,3 +241,114 @@ class MediaTests(_Case):
             fetch_redata_temporal_features(self.location, 41.733, -73.93)
 
         self.assert_partial_and_brief(REDATA_FEATURES_CACHE_SOURCE)
+
+
+def _complete(rows: list[dict[str, Any]]) -> LocationContextEnvelope:
+    return LocationContextEnvelope(count=len(rows), complete=True, results=rows)
+
+
+class OwnFetchPanelTests(_Case):
+    """Panels that make their REData calls themselves rather than through ``RedataInfoPanelSource``."""
+
+    _GATEWAYS = "urbanlens.dashboard.services.apis.locations"
+
+    def assert_kept_for_the_window(self, source: str) -> None:
+        row = self.row(source)
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNotNone(LocationCache.get_fresh(self.location, source))
+
+    def _hazards(self, envelope: LocationContextEnvelope) -> str:
+        from urbanlens.dashboard.plugins.builtin.hazard_history import HazardHistoryPanelSource
+
+        source = HazardHistoryPanelSource()
+        with mock.patch(
+            f"{self._GATEWAYS}.redata_hazards_gateway.RedataHazardsGateway.get_hazard_events", return_value=envelope
+        ):
+            source.fetch(self.pin)
+        return source.cache_source
+
+    def test_fire_history_with_a_provider_unanswered_is_kept_briefly(self) -> None:
+        source = self._hazards(_partial([{"provider": "nifc_wildfires", "occurred_at": "2003-08-01"}]))
+
+        self.assert_partial_and_brief(source)
+        self.assertEqual(len(self.row(source).data["events"]), 1)
+
+    def test_complete_fire_history_keeps_the_window(self) -> None:
+        self.assert_kept_for_the_window(
+            self._hazards(_complete([{"provider": "nifc_wildfires", "occurred_at": "2003-08-01"}]))
+        )
+
+    def _elevation(self, envelope: LocationContextEnvelope) -> str:
+        from urbanlens.dashboard.plugins.builtin.open_elevation import ElevationPanelSource
+
+        source = ElevationPanelSource()
+        with mock.patch(
+            f"{self._GATEWAYS}.redata_elevation_gateway.RedataElevationGateway.get_elevation", return_value=envelope
+        ):
+            source.fetch(self.pin)
+        return source.cache_source
+
+    def test_a_coarser_elevation_while_a_finer_model_is_unanswered_is_kept_briefly(self) -> None:
+        source = self._elevation(_partial([{"provider": "srtm", "elevation_meters": 52.0}]))
+
+        self.assert_partial_and_brief(source)
+        self.assertEqual(self.row(source).data["elevation_m"], 52.0)
+
+    def test_a_complete_elevation_keeps_the_window(self) -> None:
+        self.assert_kept_for_the_window(
+            self._elevation(_complete([{"provider": "usgs_3dep", "elevation_meters": 51.0}]))
+        )
+
+    def _site_conditions(self, *, land_cover: object, walkability: object, soil: object) -> str:
+        from urbanlens.dashboard.plugins.builtin.redata_site_conditions import SiteConditionsPanelSource
+
+        def answer(outcome: object) -> dict[str, Any]:
+            return {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
+
+        source = SiteConditionsPanelSource()
+        with (
+            mock.patch(
+                f"{self._GATEWAYS}.redata_land_cover_gateway.RedataLandCoverGateway.get_land_cover",
+                **answer(land_cover),
+            ),
+            mock.patch(
+                f"{self._GATEWAYS}.redata_walkability_gateway.RedataWalkabilityGateway.get_walkability",
+                **answer(walkability),
+            ),
+            mock.patch(f"{self._GATEWAYS}.redata_soil_gateway.RedataSoilGateway.get_soil_components", **answer(soil)),
+        ):
+            source.fetch(self.pin)
+        return source.cache_source
+
+    def test_site_conditions_with_a_domain_unreachable_are_kept_briefly(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+
+        source = self._site_conditions(
+            land_cover=_complete([{"class_name": "Developed, Low Intensity"}]),
+            walkability=_complete([{"index": 9.5}]),
+            soil=LocationContextUnavailableError("all_providers_unavailable", "ssurgo down"),
+        )
+
+        self.assert_partial_and_brief(source)
+        self.assertEqual(self.row(source).data[UNANSWERED_SOURCES_KEY], ["soil"])
+        self.assertIn("land_cover", self.row(source).data)
+
+    def test_site_conditions_with_a_domain_redata_says_is_incomplete_are_kept_briefly(self) -> None:
+        source = self._site_conditions(
+            land_cover=_complete([{"class_name": "Developed, Low Intensity"}]),
+            walkability=_complete([{"index": 9.5}]),
+            soil=_partial([{"component_name": "Hudson"}]),
+        )
+
+        self.assert_partial_and_brief(source)
+
+    def test_complete_site_conditions_keep_the_window(self) -> None:
+        source = self._site_conditions(
+            land_cover=_complete([{"class_name": "Developed, Low Intensity"}]),
+            walkability=_complete([{"index": 9.5}]),
+            soil=_complete([{"component_name": "Hudson"}]),
+        )
+
+        self.assert_kept_for_the_window(source)

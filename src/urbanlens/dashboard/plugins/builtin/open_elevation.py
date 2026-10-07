@@ -56,7 +56,9 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
         envelope = RedataElevationGateway().get_elevation(lat, lng)
-        LocationCache.set(pin.location, self.cache_source, {"elevation_m": _pick_elevation(envelope.results), "readings": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
+        # A coarser model's reading while a finer one did not answer is kept only briefly.
+        data = envelope.marked({"elevation_m": _pick_elevation(envelope.results), "readings": envelope.results})
+        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
 
     #: A lookup outside every model's coverage caches a row with no reading,
     #: which rendered an empty tab.
