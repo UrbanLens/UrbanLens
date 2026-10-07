@@ -35,6 +35,8 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.trips.trip_crud import ensure_upcoming_trip_quota
+from urbanlens.dashboard.services.trips.trip_errors import TripQuotaError
 from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, viewer_hidden_activity_ids
 
 if TYPE_CHECKING:
@@ -686,6 +688,9 @@ def import_events_as_trips(
         except IntegrityError:
             skipped.append("An event was skipped because it is already linked to a trip.")
             continue
+        except TripQuotaError as exc:
+            skipped.append(f'"{event.get("summary") or "Untitled"}" was skipped. {exc}')
+            continue
 
         invited_total += _invite_participants(trip, profile, list(selection.get("invite_profile_ids") or []), skipped)
         created.append(trip)
@@ -779,7 +784,9 @@ def _create_trip_from_event(
         The created trip.
 
     Raises:
-        IntegrityError: If this profile already has a link for ``event_id``."""
+        IntegrityError: If this profile already has a link for ``event_id``.
+        TripQuotaError: The profile is at ``max_upcoming_trips_per_user``."""
+    ensure_upcoming_trip_quota(profile)
     trip = Trip.objects.create(creator=profile, **kwargs)
     TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": TripMembership.RSVP_YES})
 

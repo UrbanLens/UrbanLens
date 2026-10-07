@@ -252,7 +252,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
-  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
+  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV (a CSV text cell that opens with `=`, `+`,
+  `-`, `@`, a tab or a carriage return gets a leading `'` so a spreadsheet reads it as text)
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups. The archive
   carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
   profile's contact/social fields - all importable, with deliberate exceptions: live-status
@@ -1067,7 +1068,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
-  when more exist; the import runs in the `import_calendar_events` task behind a progress poll.
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll, and skips
+  an event once the profile is at `max_upcoming_trips_per_user`, saying how many were skipped.
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
   (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
@@ -1639,7 +1641,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   `settings.PROXIED_BYTES_CACHE` that treat an unreachable or full cache as a miss rather than an error,
   and `set_if_small` to refuse bodies over a ceiling while still serving them.
 - **`read_capped`** (`services/core/gateway.py`) - read a `stream=True` response up to a byte ceiling,
-  refusing (not truncating) anything larger and refusing a response that was not streamed.
+  refusing (not truncating) anything larger and refusing a response that was not streamed. A read that
+  fails midway raises `GatewayRequestError` like a refusal does, and a response refused for its size is closed.
 - **`reorder_id_ceiling`** (`services/core/reorder_limits.py`) - the most ids a drag-and-drop reorder may
   name: the container's own item limit, or that setting's validator maximum when it is unlimited.
 - **`UpstreamBreaker`** (`services/core/upstream_breaker.py`) - an upstream that tells this deployment

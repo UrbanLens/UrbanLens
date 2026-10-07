@@ -247,31 +247,6 @@ class Friendship(DashboardModel):
         """
         self._set_status(FriendshipStatus.REMOVED)
 
-    @classmethod
-    def block(cls, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
-        """
-        Block a profile.
-        """
-        if friendship := cls.objects.all().between(from_profile, to_profile):
-            friendship._set_status(FriendshipStatus.BLOCKED)  # noqa: SLF001 - same class
-            return friendship
-
-        # Create a new friendship with status blocked
-        if isinstance(from_profile, int):
-            from_profile = Profile.objects.get(pk=from_profile)
-        if isinstance(to_profile, int):
-            to_profile = Profile.objects.get(pk=to_profile)
-
-        if not from_profile or not to_profile:
-            logger.warning("Could not find profiles")
-            raise ValueError("Could not find profiles")
-
-        return cls.objects.create(
-            from_profile=from_profile,
-            to_profile=to_profile,
-            status=FriendshipStatus.BLOCKED,
-        )
-
     def _mute_field_for(self, viewer: Profile | int) -> str:
         """Mute column belonging to ``viewer``.
 

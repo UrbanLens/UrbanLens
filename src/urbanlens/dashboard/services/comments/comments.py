@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from django.db import IntegrityError, transaction
 from django.db.models import Prefetch, QuerySet
 
 from urbanlens.dashboard.models.comments.model import Comment
@@ -293,7 +294,7 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         emoji: One of :data:`ALLOWED_EMOJIS`.
 
     Returns:
-        True when the reaction was added, False when an existing one was removed.
+        True when the reaction was added (or a concurrent request for the same reaction already did), False when an existing one was removed.
 
     Raises:
         UnsupportedReactionEmojiError: *emoji* is not in :data:`ALLOWED_EMOJIS`."""
@@ -305,7 +306,12 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         existing.delete()
         return False
 
-    Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
+    try:
+        with transaction.atomic():
+            Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
+    except IntegrityError:
+        # A concurrent double-tap stored it first; that request notifies, so this one stays silent.
+        return True
     # The internal HTMX panel has always notified here; the external API's reaction endpoints route
     # through this service instead of the panel, so without this line reacting from the mobile
     # client silently notified nobody - the same reaction produced a notification on the web and
