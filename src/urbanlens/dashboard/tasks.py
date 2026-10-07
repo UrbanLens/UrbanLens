@@ -5414,17 +5414,48 @@ def fan_out_wiki_alias_to_pins(alias_id: int) -> int:
 def sync_pin_against_smart_lists_task(pin_id: int) -> None:
     """Re-evaluate one pin against every smart list its owner has.
 
-    The hand-off for a profile with more smart lists than a request should walk.
+    Nothing queues this any more; it stays so messages queued before :func:`sync_requested_smart_lists` replaced it
+    are still applied.
 
     Args:
         pin_id: Primary key of the pin that was created or edited.
     """
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.pins.pin_list_membership import sync_pin_against_smart_lists
+    from urbanlens.dashboard.services.pins.pin_list_membership import sync_pins_against_smart_lists
 
-    pin = Pin.objects.filter(pk=pin_id).first()
-    if pin is not None:
-        sync_pin_against_smart_lists(pin, deferred=True)
+    profile_id = Pin.objects.filter(pk=pin_id).values_list("profile_id", flat=True).first()
+    if profile_id is not None:
+        sync_pins_against_smart_lists(profile_id, [pin_id])
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def sync_requested_smart_lists(profile_id: int) -> int | None:
+    """Apply an account's outstanding smart-list sync requests (``services.pins.smart_list_sync``).
+
+    Interactive by default, since the account's lists say they are catching up until it runs;
+    ``queue_smart_list_sync`` routes an account past ``MAX_SMART_LISTS_PER_SYNC`` smart lists to the bulk queue.
+
+    Args:
+        profile_id: The account whose pins changed.
+
+    Returns:
+        How many pins were evaluated, or None when another sync held the account and this one was put off.
+    """
+    from urbanlens.dashboard.services.pins.smart_list_sync import drain_smart_list_sync_requests
+
+    return drain_smart_list_sync_requests(profile_id)
+
+
+@shared_task(queue=Queue.MAINTENANCE)
+def sweep_smart_list_sync_requests() -> int:
+    """Queue a smart-list sync for every account whose requests its own sync never drained.
+
+    Returns:
+        How many syncs were queued.
+    """
+    from urbanlens.dashboard.services.pins.smart_list_sync import queue_stale_requests
+
+    return queue_stale_requests()
 
 
 @shared_task(queue=Queue.INTERACTIVE)

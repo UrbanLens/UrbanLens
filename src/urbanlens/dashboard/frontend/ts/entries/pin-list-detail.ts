@@ -138,6 +138,10 @@ class PinListPage {
     private replaceItems(html: string): void {
         const current = byId("pin-list-items", HTMLElement);
         if (current) current.outerHTML = html;
+        // A smart list that is catching up carries a notice that polls for the settled panel, and htmx only wires
+        // an element it has processed.
+        const replaced = byId("pin-list-items", HTMLElement);
+        if (replaced && window.htmx) window.htmx.process(replaced);
         this.itemsChanged();
     }
 

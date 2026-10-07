@@ -9,7 +9,7 @@ from django.db.models import Count, Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem  # noqa: F401 - mypy needs these; ruff does not
+    from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem, SmartListSyncRequest  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
 
 
@@ -93,3 +93,25 @@ _PinListItemManagerBase = abstract.DashboardManager.from_queryset(PinListItemQue
 
 class PinListItemManager(_PinListItemManagerBase):
     """Custom query manager for PinListItem models."""
+
+
+class SmartListSyncRequestQuerySet(abstract.DashboardQuerySet["SmartListSyncRequest"]):
+    """Custom queryset for SmartListSyncRequest models."""
+
+    def for_profile(self, profile: Profile | int) -> SmartListSyncRequestQuerySet:
+        """Every outstanding request for one account's pins.
+
+        Args:
+            profile: The owning profile (a Profile instance or a raw pk).
+
+        Returns:
+            Matching requests, unordered.
+        """
+        return self.filter(profile=profile)
+
+
+_SmartListSyncRequestManagerBase = abstract.DashboardManager.from_queryset(SmartListSyncRequestQuerySet)
+
+
+class SmartListSyncRequestManager(_SmartListSyncRequestManagerBase):
+    """Custom query manager for SmartListSyncRequest models."""

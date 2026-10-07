@@ -3,19 +3,18 @@
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 
-from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Collection, Sequence
 
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.pin.queryset import PinQuerySet
     from urbanlens.dashboard.models.pin_list.model import PinList
     from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
@@ -34,63 +33,58 @@ class ListAddResult:
     max_pins: int
 
 
-def sync_pin_against_smart_lists(pin: Pin, *, deferred: bool = False) -> None:
-    """Evaluate one pin against every smart list owned by the same profile.
+def sync_pins_against_smart_lists(profile_id: int, pin_ids: Collection[int]) -> None:
+    """Evaluate some of one account's pins against every smart list it has.
 
-    Each list deserialises its criteria and runs its own query, and nothing caps
-    how many smart lists a profile creates - so a bulk edit multiplied the two
-    together inside one request. Past ``settings.MAX_SMART_LISTS_PER_SYNC`` the
-    whole sync is handed to the bulk queue instead: nothing is dropped, it just
-    stops holding a request and a database connection while it runs.
+    One query per rule per list, however many pins: each list's filter and boundary are run over the pins together,
+    and their memberships are read once. A pin that matches is added with the rule that matched (the filter ahead of
+    the boundary); one that stopped matching leaves, unless it was added by hand. Pins no longer the account's, or
+    gone, are skipped.
 
     Args:
-        pin: The pin that was just created/edited.
-        deferred: True when already running on the queue, so the ceiling is not
-            applied a second time and the hand-off cannot recurse.
+        profile_id: The account whose lists and pins these are.
+        pin_ids: The pins to evaluate.
     """
-    from django.conf import settings
-
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 
-    active = PinList.objects.active_smart_lists(pin.profile_id)
-    smart_lists: Iterable[PinList] = active
-    if not deferred:
-        ceiling = settings.MAX_SMART_LISTS_PER_SYNC
-        # One past the ceiling, so "there are more" comes from the same read.
-        bounded = list(active[: ceiling + 1])
-        if len(bounded) > ceiling:
-            from urbanlens.dashboard.tasks import sync_pin_against_smart_lists_task
+    pin_lists = list(PinList.objects.active_smart_lists(profile_id).select_related("profile"))
+    if not pin_lists or not pin_ids:
+        return
+    among = Pin.objects.filter(profile_id=profile_id, pk__in=list(pin_ids))
+    live_ids = sorted(among.values_list("pk", flat=True))
+    if not live_ids:
+        return
+    among = Pin.objects.filter(pk__in=live_ids)
+    memberships = {(item.pin_list_id, item.pin_id): item for item in PinListItem.objects.filter(pin_list__in=pin_lists, pin_id__in=live_ids).only("pk", "pin_list_id", "pin_id", "added_via")}
 
-            safely_enqueue_task(sync_pin_against_smart_lists_task, pin.pk)
-            return
-        smart_lists = bounded
-
-    for pin_list in smart_lists:
-        # One evaluation, not two: deciding membership and deciding which rule
-        # to record used to be separate passes over the same filter.
-        rule = _matching_rule(pin, pin_list)
-        existing = PinListItem.objects.membership(pin_list, pin)
-        if rule is not None and existing is None:
-            # Overlapping Pin.save() transactions can both see "no existing
-            # membership" and race to create one - the table has a
-            # UniqueConstraint(pin_list, pin), so the loser here just means
-            # the concurrent path already added it; treat that as a no-op
-            # rather than letting IntegrityError bubble up as a 500.
-            with contextlib.suppress(IntegrityError):
-                PinListItem.objects.create(
-                    pin_list=pin_list,
-                    pin=pin,
-                    order=pin_list.items.count(),
-                    added_via=rule,
-                )
-        elif rule is None and existing is not None and existing.added_via != PinListItem.ADDED_MANUAL:
-            existing.delete()
-        # matches + manual, or not-matches + manual: no-op either way - manual always wins.
+    for pin_list in pin_lists:
+        by_filter = filter_matching_ids(pin_list, among=among)
+        by_boundary = _boundary_matching_ids(pin_list, among=among)
+        to_add: list[tuple[int, str]] = []
+        to_remove: list[int] = []
+        for pin_id in live_ids:
+            rule = PinListItem.ADDED_SMART_FILTER if pin_id in by_filter else PinListItem.ADDED_BOUNDARY if pin_id in by_boundary else None
+            existing = memberships.get((pin_list.pk, pin_id))
+            if rule is not None and existing is None:
+                to_add.append((pin_id, rule))
+            elif rule is None and existing is not None and existing.added_via != PinListItem.ADDED_MANUAL:
+                to_remove.append(existing.pk)
+            # matches + present, or not-matches + manual: no-op either way - manual always wins.
+        if to_remove:
+            PinListItem.objects.filter(pk__in=to_remove).delete()
+        if to_add:
+            base_order = pin_list.items.count()
+            # ignore_conflicts: a manual add or a full resync can insert the same row meanwhile, and either one is right.
+            PinListItem.objects.bulk_create(
+                [PinListItem(pin_list=pin_list, pin_id=pin_id, order=base_order + i, added_via=rule) for i, (pin_id, rule) in enumerate(to_add)],
+                ignore_conflicts=True,
+            )
 
 
 def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) -> None:
     """Fully recompute one list's membership against its current smart_filter/smart_boundary rules.
-    ``is_smart`` only gates whether *future* pin edits keep re-triggering this (see ``sync_pin_against_smart_lists``, wired to Pin's post_save/labels-m2m signals).
+    ``is_smart`` only gates whether *future* pin edits keep re-triggering this (see ``services.pins.smart_list_sync``, fed by Pin's post_save/labels-m2m signals).
 
     Args:
         pin_list: The list whose ``smart_filter``/``smart_boundary`` just changed.
@@ -133,53 +127,12 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
     )
 
 
-def _matching_rule(pin: Pin, pin_list: PinList) -> str | None:
-    """Which smart rule puts this pin on this list, or None if neither does.
-
-    Returns:
-        The ``PinListItem.ADDED_*`` provenance to record, or None.
-    """
-    from urbanlens.dashboard.models.pin_list.model import PinListItem
-
-    if pin_list.smart_filter and _pin_matches_filter(pin, pin_list):
-        return PinListItem.ADDED_SMART_FILTER
-    if pin_list.smart_boundary and _pin_in_boundary(pin, pin_list):
-        return PinListItem.ADDED_BOUNDARY
-    return None
-
-
-def _pin_matches_filter(pin: Pin, pin_list: PinList) -> bool:
-    smart_filter = pin_list.smart_filter
-    if not smart_filter:
-        return False
-    from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
-
-    criteria = deserialize_criteria(smart_filter, pin_list.profile)
-    # root_pins(): every saved-filter preview call site (controllers/saved_filters.py) excludes
-    # detail/child pins before matching criteria - omitting it here let a child pin enter smart-list
-    # membership when its own filter preview would not have shown it.
-    # See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
-    return Pin.objects.filter(pk=pin.pk).root_pins().filter_by_criteria(criteria).exists()
-
-
-def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
-    if pin.location_id is None:
-        return False
-    from urbanlens.dashboard.models.location.model import Location
-
-    # Split at the antimeridian for the same reason filter_by_criteria's include_regions does: a
-    # boundary drawn across the date line arrives with unwrapped coordinates, and a planar __within
-    # against it matches nothing on the far side.
-    # Both boundary paths need it - this one decides a single pin's membership,
-    return Location.objects.filter(pk=pin.location_id, point__within=split_at_antimeridian(pin_list.smart_boundary)).exists()
-
-
-def filter_matching_ids(pin_list: PinList) -> set[int]:
+def filter_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) -> set[int]:
     """Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
 
     Args:
         pin_list: The list whose ``smart_filter`` to resolve.
+        among: Only these pins, rather than all of the list owner's.
 
     Returns:
         Set of matching pin ids, or an empty set when there's no smart_filter."""
@@ -189,9 +142,11 @@ def filter_matching_ids(pin_list: PinList) -> set[int]:
     from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
 
     criteria = deserialize_criteria(pin_list.smart_filter, pin_list.profile)
-    # root_pins(): same exclusion every saved-filter preview call site applies - see the
-    # matching comment in _pin_matches_filter above.
-    return set(Pin.objects.filter(profile=pin_list.profile).root_pins().filter_by_criteria(criteria).values_list("pk", flat=True))
+    pins = Pin.objects.all() if among is None else among
+    # root_pins(): every saved-filter preview call site (controllers/saved_filters.py) excludes detail/child pins
+    # before matching criteria, so a child pin never joins a list its filter's preview would not have shown it on.
+    # See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
+    return set(pins.filter(profile=pin_list.profile_id).root_pins().filter_by_criteria(criteria).values_list("pk", flat=True))
 
 
 def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str | None = None) -> ListAddResult:
@@ -305,11 +260,23 @@ def resync_lists_for_saved_filter(saved_filter: SavedFilter) -> int:
     return resynced
 
 
-def _boundary_matching_ids(pin_list: PinList) -> set[int]:
+def _boundary_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) -> set[int]:
+    """The ids of the list owner's pins inside ``pin_list.smart_boundary``.
+
+    Split at the antimeridian for the same reason ``filter_by_criteria``'s ``include_regions`` is: a boundary drawn
+    across the date line arrives with unwrapped coordinates, and a planar ``__within`` against it matches nothing on
+    the far side.
+
+    Args:
+        pin_list: The list whose boundary to test.
+        among: Only these pins, rather than all of the list owner's.
+
+    Returns:
+        Set of matching pin ids, or an empty set when there's no boundary.
+    """
     if not pin_list.smart_boundary:
         return set()
     from urbanlens.dashboard.models.pin.model import Pin
 
-    return set(
-        Pin.objects.filter(profile=pin_list.profile, location__point__within=split_at_antimeridian(pin_list.smart_boundary)).values_list("pk", flat=True),
-    )
+    pins = Pin.objects.all() if among is None else among
+    return set(pins.filter(profile=pin_list.profile_id, location__point__within=split_at_antimeridian(pin_list.smart_boundary)).values_list("pk", flat=True))

@@ -1,6 +1,14 @@
 {% comment %}Pin List items panel - sortable rows, swapped in after add/remove/reorder.{% endcomment %}
 <div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}">
     {{ items_map_data|json_script:"pin-list-items-map-data" }}
+    {% if membership_pending %}
+    <p class="pin-list-sync-pending settings-help" id="pin-list-sync-pending" role="status"
+       hx-get="{% url 'lists.items' pin_list.slug %}?poll={{ sync_poll_next }}" hx-trigger="load delay:{{ sync_poll_delay }}s"
+       hx-target="#pin-list-items" hx-swap="outerHTML">
+        <i class="material-symbols-outlined" aria-hidden="true">sync</i>
+        Recent pin changes are still being applied to this smart list, so it may be missing pins that now match or show ones that no longer do. It updates by itself.
+    </p>
+    {% endif %}
     {% if items_map_truncated %}
     <p class="pin-list-map-truncated settings-help">
         <i class="material-symbols-outlined">info</i>

@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pin_ids_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
+from urbanlens.dashboard.services.pins.smart_list_sync import membership_pending
 from urbanlens.dashboard.services.trips.trip_errors import TripPermissionError, TripQuotaError
 from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -59,6 +60,9 @@ _ITEMS_PAGE_SIZE = 50
 #: Cap on markers drawn for the list's overview map, matching
 #: ``saved_filters._PREVIEW_MAP_PIN_LIMIT`` - the same map, over the same pins.
 _MAP_PIN_LIMIT = 500
+
+#: Seconds a smart list that is catching up waits before asking for its panel again, by how often it has asked.
+_SYNC_POLL_DELAYS = (2, 3, 5, 10, 20, 30, 60)
 
 
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
@@ -169,8 +173,24 @@ def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[st
     }
 
 
+def _membership_sync_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
+    """Whether the panel must say the list is catching up, and when its notice asks again.
+
+    Pin changes reach smart lists through a queued sync (``services.pins.smart_list_sync``), so a panel rendered
+    before it runs shows the list as it was. The notice reloads the panel, backing off, until the sync has run.
+    """
+    if not membership_pending(pin_list):
+        return {"membership_pending": False}
+    try:
+        polls = max(0, int(request.GET.get("poll", 0)))
+    except ValueError:
+        polls = 0
+    return {"membership_pending": True, "sync_poll_delay": _SYNC_POLL_DELAYS[min(polls, len(_SYNC_POLL_DELAYS) - 1)], "sync_poll_next": polls + 1}
+
+
 def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse:
-    return render(request, _ITEMS_PANEL_TEMPLATE, {"pin_list": pin_list, **_paginated_items_context(request, pin_list)})
+    context = {"pin_list": pin_list, **_paginated_items_context(request, pin_list), **_membership_sync_context(request, pin_list)}
+    return render(request, _ITEMS_PANEL_TEMPLATE, context)
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
@@ -286,6 +306,7 @@ class PinListDetailView(LoginRequiredMixin, View):
             {
                 "pin_list": pin_list,
                 **_paginated_items_context(request, pin_list),
+                **_membership_sync_context(request, pin_list),
                 "saved_filters": saved_filters,
                 **profile.get_map_center_template_context(),
                 # The pins overview map uses the shared layers component, whose base layer (and therefore

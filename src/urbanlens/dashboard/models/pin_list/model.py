@@ -8,11 +8,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, IntegerField, JSONField, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, Index, IntegerField, JSONField, TextField
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.pin_list.queryset import PinListItemManager, PinListManager
+from urbanlens.dashboard.models.pin_list.queryset import PinListItemManager, PinListManager, SmartListSyncRequestManager
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
 logger = logging.getLogger(__name__)
@@ -118,3 +118,30 @@ class PinListItem(abstract.DashboardModel):
         ordering = ["order", "created"]
         constraints = [UniqueConstraint(fields=["pin_list", "pin"], name="uq_pin_list_item")]
         indexes = []
+
+
+class SmartListSyncRequest(abstract.DashboardModel):
+    """A pin whose smart-list membership is owed a re-evaluation.
+
+    Written in the transaction that changed the pin, so it rolls back with that change, and drained by
+    ``tasks.sync_requested_smart_lists``. Rows are only inserted and deleted: a pin changed again while a sync runs
+    gets a second row, which the run that read the first does not delete. While any exist for an account, its
+    smart lists say they are catching up.
+    """
+
+    # Not indexed alone: idx_smart_list_sync_profile leads with it.
+    profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="+", db_index=False)
+    pin = ForeignKey("dashboard.Pin", on_delete=CASCADE, related_name="+")
+
+    if TYPE_CHECKING:
+        profile_id: int
+        pin_id: int
+
+    objects = SmartListSyncRequestManager()
+
+    def __str__(self) -> str:
+        return f"{self.profile_id}:{self.pin_id}"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_smart_list_sync_requests"
+        indexes = [Index(fields=["profile", "id"], name="idx_smart_list_sync_profile")]

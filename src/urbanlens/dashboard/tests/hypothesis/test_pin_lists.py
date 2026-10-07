@@ -11,6 +11,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from hypothesis import HealthCheck, given, settings, strategies as st
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers import pin_lists
@@ -20,6 +21,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.search.filter_criteria import serialize_form_criteria
+from urbanlens.dashboard.tasks import sync_requested_smart_lists
 
 _db_settings = settings(
     max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much]
@@ -426,6 +428,8 @@ class SmartListLabelChangeResyncTests(TestCase):
     """A smart list must re-sync membership when a pin's labels change, not only when the pin itself is saved."""
 
     def setUp(self) -> None:
+        # Smart-list membership is applied by the queued sync (services.pins.smart_list_sync); run it here.
+        self.enterContext(tasks_run_inline(sync_requested_smart_lists))
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.exclude_label = ensure_label(kind=KIND_TAG, profile=self.profile, name="Demolished")

@@ -311,7 +311,7 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 `POST /lists/` — `lists:write` — request: name, description(≤50000), is_smart, smart_filter(JSON, ownership-validated against caller's own labels/custom fields), smart_boundary(GeoJSON, ≤20000 vertices), source_saved_filter_uuid(copies criteria in) — response 201 (includes full boundary geometry) — 400 duplicate name/unowned criteria reference — resyncs membership immediately if rules were given.
 
-`GET /lists/{list_slug}/` — `lists:read` — resolves by slug or uuid.
+`GET /lists/{list_slug}/` — `lists:read` — resolves by slug or uuid. `membership_pending` is true while pin changes are still queued for a smart list's sync, so its items may not match its rules yet; read the items again once it is false.
 `PATCH /lists/{list_slug}/` — `lists:write` — resyncs membership **only** when `is_smart`/`smart_filter`/`smart_boundary` actually changed (not on a plain rename).
 `DELETE /lists/{list_slug}/` — `lists:write` — 204; member pins untouched.
 

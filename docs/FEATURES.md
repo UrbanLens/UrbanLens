@@ -305,7 +305,9 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   map filter); create a trip from a list, add a list's pins to an existing trip, or generate a
   markup map from one
 - **Smart lists** — lists auto-populated from saved-filter criteria and resynced automatically
-  as pins and labels change
+  as pins and labels change. A change records a `SmartListSyncRequest` and one queued sync per
+  account applies it (`services/pins/smart_list_sync.py`); until it runs, the list's page and the
+  external API's `membership_pending` say the list is catching up
 - **Saved filters** — reusable filter configurations with full CRUD (managed alongside lists at
   `/lists/`), name suggestion, live match counts, and geographic include/exclude polygon
   regions selected via boundary search; usable from the map's filter sidebar and as smart-list
