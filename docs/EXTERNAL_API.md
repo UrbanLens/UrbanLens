@@ -311,7 +311,7 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 `POST /lists/` — `lists:write` — request: name, description(≤50000), is_smart, smart_filter(JSON, ownership-validated against caller's own labels/custom fields), smart_boundary(GeoJSON, ≤20000 vertices), source_saved_filter_uuid(copies criteria in) — response 201 (includes full boundary geometry) — 400 duplicate name/unowned criteria reference — resyncs membership immediately if rules were given.
 
-`GET /lists/{list_slug}/` — `lists:read` — resolves by slug or uuid.
+`GET /lists/{list_slug}/` — `lists:read` — resolves by slug or uuid. `membership_pending` is true while pin changes are still queued for a smart list's sync, so its items may not match its rules yet; read the items again once it is false.
 `PATCH /lists/{list_slug}/` — `lists:write` — resyncs membership **only** when `is_smart`/`smart_filter`/`smart_boundary` actually changed (not on a plain rename).
 `DELETE /lists/{list_slug}/` — `lists:write` — 204; member pins untouched.
 
@@ -498,7 +498,7 @@ All trip views map service exceptions uniformly: not-found→404, permission→4
 ### Trip Calendar Export
 
 - `POST /trips/{trip_slug}/calendar-sync/` — toggle **auto-sync** on an already-exported trip — request: `{enabled}` — **400** (not 409) when no export link exists yet, with a pointer to the export endpoint.
-- `POST /trips/{trip_slug}/calendar/` — mirror onto the **caller's own** Google Calendar (each member exports independently; per-exporter visibility setting filters which stops leave the site) — request: `auto_sync?`(presence-keyed) — response: `{calendar: {...}, activities_exported: int}` — own extra throttle bucket (`CalendarExportThrottle`) on top of the standard three — **409** `{error, error_code, authorization_url}` for `calendar_not_connected`/`calendar_reauthorization_required`; `authorization_url` is always the **site's own** connect route, never a raw Google URL — 400 if trip has no dates; 502/503 upstream failures.
+- `POST /trips/{trip_slug}/calendar/` — mirror onto the **caller's own** Google Calendar (each member exports independently; per-exporter visibility setting filters which stops leave the site) — request: `auto_sync?`(presence-keyed) — response: `{calendar: {...}, activities_exported: int, complete: bool, events_synced: int, events_total: int}` — only events that changed are rewritten, so a repeat export resumes rather than restarts; `complete=false` means the calendar budget (ours, or Google's rate limit) ran out partway and the server finishes the rest by itself (no retry needed); a stop whose location the caller may not see is exported with an empty location and the title "Secret Location" — own extra throttle bucket (`CalendarExportThrottle`) on top of the standard three — **409** `{error, error_code, authorization_url}` for `calendar_not_connected`/`calendar_reauthorization_required`; `authorization_url` is always the **site's own** connect route, never a raw Google URL — 400 if trip has no dates; 503 + `Retry-After` when the budget ran out (or Google rate-limited the call) before anything was written; a Google rate limit never answers `calendar_reauthorization_required` (a failed token refresh still can, P337); 502/503 other upstream failures.
 - `DELETE /trips/{trip_slug}/calendar/` — remove exported events — response: `{calendar: {...}, removed: bool}` (`removed=false` is **not an error** — idempotent no-op).
 
 ---

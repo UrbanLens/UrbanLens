@@ -40,7 +40,9 @@ def _point_gdal_at_wheel_data() -> None:
 
 
 def _windows_overrides() -> dict[str, str]:
-    if os.getenv("UL_ENVIRONMENT", "local").lower() != "local":
+    # A developer's own machine, or the suite run on one: settings.base names a test run with no UL_ENVIRONMENT
+    # "testing", which is what this used to see as unset and so local.
+    if os.getenv("UL_ENVIRONMENT", "").strip().lower() not in {"local", "testing"}:
         return {}
 
     overrides: dict[str, str] = {}

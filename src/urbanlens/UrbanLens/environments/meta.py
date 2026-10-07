@@ -30,10 +30,11 @@ EPHEMERAL_ENVIRONMENTS = frozenset({EnvironmentTypes.LOCAL, EnvironmentTypes.DEV
 
 
 def environment_from_env(environ: Mapping[str, str] | None = None) -> EnvironmentTypes:
-    """Resolve ``UL_ENVIRONMENT``, treating unset or blank as production.
+    """Resolve ``UL_ENVIRONMENT``, refusing a process that does not say which environment it is.
 
-    Compose, the entrypoint and the Dockerfile all default to production, so a process started without the
-    variable is assumed to be a deployment and must be configured like one.
+    Unset or blank used to mean production, so a deployment that lost the variable spent production's budgets and
+    sent real mail. Since Jess's ruling of 2026-10-07 it refuses to start instead, as an unknown name always has.
+    A test run that names none is the exception, and ``settings.base`` decides it before calling this.
 
     Args:
         environ: Environment to read; defaults to this process's own.
@@ -42,13 +43,12 @@ def environment_from_env(environ: Mapping[str, str] | None = None) -> Environmen
         The named environment.
 
     Raises:
-        ImproperlyConfigured: When the name is not a known environment, rather than guessing which one a typo meant.
+        ImproperlyConfigured: When the name is unset, blank or not a known environment, rather than guessing.
     """
     raw = (os.environ if environ is None else environ).get("UL_ENVIRONMENT", "").strip().lower()
-    if not raw:
-        return EnvironmentTypes.PRODUCTION
     try:
         return EnvironmentTypes(raw)
     except ValueError:
         known = ", ".join(sorted(EnvironmentTypes))
-        raise ImproperlyConfigured(f"UL_ENVIRONMENT={raw!r} is not a known environment; use one of: {known}.") from None
+        problem = "UL_ENVIRONMENT is not set" if not raw else f"UL_ENVIRONMENT={raw!r} is not a known environment"
+        raise ImproperlyConfigured(f"{problem}; use one of: {known}.") from None
