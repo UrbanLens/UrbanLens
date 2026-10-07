@@ -2,8 +2,8 @@
 record GPS telemetry in a track of its own. A stored video keeps its pictures and sound and none of those tracks.
 
 DJI writes an SRT subtitle track (``[latitude: ...] [longitude: ...]`` per frame); GoPro writes GPMF in a ``gpmd``
-data track. Neither was looked at, so a video carrying only those was stored as uploaded, and a rewrite copied the
-subtitle track across.
+data track. Neither was looked at, so a video carrying only those was stored as uploaded, and nothing kept a rewrite
+from carrying one across.
 """
 
 from __future__ import annotations
@@ -139,13 +139,13 @@ class GeneratedDroneAndActionCameraFootageTests(TestCase):
         self.addCleanup(overrides.disable)
         self.work = Path(tempfile.mkdtemp(dir=self._media_root))
 
-    def _stored(self, source: Path) -> Path:
+    def _stored(self, source: Path, max_height: int | None = None) -> Path:
         image = baker.make(Image, image=None)
         image.image.save(source.name, ContentFile(source.read_bytes()), save=True)
-        process_uploaded_video(image, None)
+        process_uploaded_video(image, max_height)
         return Path(image.image.path)
 
-    def test_a_drones_flight_captions_are_dropped(self) -> None:
+    def _drone_footage(self) -> Path:
         captions = self.work / "flight.srt"
         captions.write_text(_DJI_CAPTION)
         source = self.work / "DJI_0001.mp4"
@@ -165,11 +165,22 @@ class GeneratedDroneAndActionCameraFootageTests(TestCase):
             str(source),
         )
         self.assertIn(b"42.6526", source.read_bytes(), "fixture must carry the caption")
+        return source
 
-        stored = self._stored(source)
+    def test_a_drones_flight_captions_are_dropped(self) -> None:
+        stored = self._stored(self._drone_footage())
 
         self.assertNotIn(b"42.6526", stored.read_bytes())
         self.assertEqual([stream["codec_type"] for stream in _streams(stored)], ["video"])
+
+    def test_a_downscaled_drones_flight_captions_are_dropped(self) -> None:
+        """A video over the height cap is re-encoded rather than remuxed; that path keeps the same streams."""
+        stored = self._stored(self._drone_footage(), max_height=120)
+
+        self.assertNotIn(b"42.6526", stored.read_bytes())
+        streams = _streams(stored)
+        self.assertEqual([stream["codec_type"] for stream in streams], ["video"])
+        self.assertEqual(streams[0]["height"], 120, "the fixture was not re-encoded")
 
     def test_an_action_cameras_telemetry_track_is_dropped(self) -> None:
         """ffmpeg cannot write GPMF, so the fixture is a timecode track relabelled ``gpmd``, as GoPro labels its own."""
