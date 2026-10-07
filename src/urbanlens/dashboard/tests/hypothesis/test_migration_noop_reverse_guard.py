@@ -137,6 +137,10 @@ REVIEWED: dict[str, str] = {
         "generator's withdrawn reason. A reverse leaves them so: one the generator withdrew since cannot be told apart, "
         "and older code reads an ordinary rejected question, which it never serves and never re-approves - lossy, valid."
     ),
+    "0071_safety_opt_out_email_normalized.py": (
+        "_backfill only fills SafetyContactOptOut.email_normalized, the column this migration adds; reversing the "
+        "AddField drops it, and the raw email it was derived from is untouched, so there is nothing left to undo."
+    ),
 }
 
 

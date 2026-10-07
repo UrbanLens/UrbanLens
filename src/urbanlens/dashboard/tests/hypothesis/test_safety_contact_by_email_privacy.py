@@ -84,6 +84,8 @@ class EmergencyContactByEmailTests(TestCase):
     def test_the_account_that_verified_the_address_is_told_when_the_owner_is_found(self) -> None:
         set_checkin_contacts(self.checkin, [(None, "member@example.com", ""), (None, "reporter@example.com", "")])
         reporter = self.checkin.contacts.get(email="reporter@example.com")
+        # Only contacts already alerted hear the owner was found.
+        self.checkin.contacts.update(notified_at=timezone.now())
 
         with notification_emails_sent():
             mark_found_safe(reporter)

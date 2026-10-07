@@ -50,6 +50,15 @@ DEFAULT_GRACE_PERIOD = timedelta(hours=1)
 # realistically be tightened further without also tightening
 FINAL_WARNING_LEAD_TIME = timedelta(minutes=5)
 
+# The least time escalation leaves the owner after their final warning, for a warning that went out late (a missed
+# or backed-up beat tick). Under the 5-minute beat interval, so the tick after a late warning escalates, keeping the
+# warning's "about 5 minutes".
+FINAL_WARNING_MIN_NOTICE = timedelta(minutes=4)
+
+# How long past its overdue point a check-in waits for a final warning that has not gone out before escalating
+# without one. A broken warning path may delay the emergency contacts by this much, but never stop them.
+FINAL_WARNING_MAX_WAIT = timedelta(minutes=10)
+
 # How often the owner editing the trip plan, destination, or route markup after contacts have
 # already been notified is allowed to trigger another "plan updated" notification - keeps rapid,
 # incremental edits (e.g. drawing several map annotations in a row) from spamming contacts with one
@@ -206,6 +215,15 @@ class SafetyCheckinStatus(abstract.TextChoices):
         """
         return (cls.CHECKED_IN, cls.FOUND_SAFE, cls.CANCELLED)
 
+    @classmethod
+    def unescalated_statuses(cls) -> tuple[str, ...]:
+        """Return the statuses of a check-in still heading toward escalation.
+
+        Returns:
+            Tuple of the statuses before OVERDUE that are not terminal.
+        """
+        return (cls.SCHEDULED, cls.AWAITING_CHECKIN)
+
 
 class SafetyCheckin(abstract.PublicDashboardModel):
     """A planned trip with an expected check-in time and emergency contacts.
@@ -229,8 +247,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         destination_latitude: Destination latitude, used for the concluding VisitSuggestion.
         destination_longitude: Destination longitude, used for the concluding VisitSuggestion.
         reminder_sent_at: When the check-in-due reminder was sent, if at all.
-        final_warning_sent_at: When the owner's last "check in now" warning was sent, if at all.
-        escalated_at: When emergency contacts were notified, if at all.
+        final_warning_sent_at: When the owner's last "check in now" warning was claimed for sending, if at all.
+        escalated_at: When escalation to the emergency contacts began, if it has.
         resolved_at: When the check-in concluded, if at all.
         plan_update_notified_at: When contacts were last re-notified of a trip plan/destination/
             route change made after escalation, if at all.
@@ -490,6 +508,8 @@ class SafetyContactOptOut(abstract.DashboardModel):
     """
 
     email = EmailField(null=True, blank=True)
+    # What opt-outs are matched on, so any spelling of the mailbox stays opted out.
+    email_normalized = CharField(max_length=254, blank=True, default="", db_default="")
     scope = CharField(max_length=10, choices=SafetyContactOptOutScope.choices)
     owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="+")
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, null=True, blank=True, related_name="contact_opt_outs")
@@ -501,6 +521,15 @@ class SafetyContactOptOut(abstract.DashboardModel):
         checkin_id: int | None
 
     objects = SafetyContactOptOutManager()
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+        self.email_normalized = normalize_email(self.email) if self.email else ""
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None and "email" in update_fields:
+            kwargs["update_fields"] = {*update_fields, "email_normalized"}
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         """Return a human-readable description of this opt-out.
@@ -514,7 +543,7 @@ class SafetyContactOptOut(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_opt_outs"
         indexes = [
-            Index(fields=["email"], name="idxdb_scoo_email"),
+            Index(fields=["email_normalized"], name="idxdb_scoo_email_normalized"),
         ]
         constraints = [
             CheckConstraint(
