@@ -1,6 +1,7 @@
 {% comment %}Pin List items panel - sortable rows, swapped in after add/remove/reorder.{% endcomment %}
-<div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}">
+<div class="pin-list-items" id="pin-list-items" data-save-url="{% url 'lists.items.reorder' pin_list.slug %}" data-page-size="{{ page_obj.paginator.per_page }}">
     {{ items_map_data|json_script:"pin-list-items-map-data" }}
+    {% include "dashboard/partials/pin_lists/_sync_status.html" %}
     {% if items_map_truncated %}
     <p class="pin-list-map-truncated settings-help">
         <i class="material-symbols-outlined">info</i>

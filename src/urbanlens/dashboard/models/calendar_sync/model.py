@@ -104,8 +104,9 @@ class TripCalendarLink(abstract.DashboardModel):
         related_name="calendar_links",
     )
     # Set when this link mirrors a single scheduled activity rather than the
-    # whole trip. Deleting the activity cascades away its event link (the
-    # orphaned Google event is cleaned up on the next export/removal sync).
+    # whole trip. Deleting the activity cascades away its event link, and nothing
+    # deletes the Google event: see P336 ("a deleted activity's event is orphaned")
+    # in docs/PROBLEMS.md.
     activity = ForeignKey(
         "dashboard.TripActivity",
         on_delete=CASCADE,
@@ -123,13 +124,18 @@ class TripCalendarLink(abstract.DashboardModel):
     google_event_id = CharField(max_length=1024)
     direction = CharField(max_length=10, choices=CalendarSyncDirection.choices)
     last_synced = DateTimeField(null=True, blank=True)
+    #: SHA-256 of the event body last written and the calendar it went to; blank when nothing UrbanLens wrote is
+    #: known to be there. An export skips an event whose new body hashes the same, so a retry resumes where the
+    #: last attempt stopped.
+    event_fingerprint = CharField(max_length=64, blank=True, default="")
     auto_sync = BooleanField(
         default=False,
         help_text="Push future changes to this trip and its activities to the linked calendar event automatically. One-way only - edits made on Google Calendar are never pulled back.",
     )
-    #: The latest trip change an auto-sync push has not yet delivered; cleared only by a push that read it.
+    #: The latest trip change a push has not yet delivered: an auto-sync change, or the rest of an export the
+    #: calendar budget cut short. Cleared only by a push that read it.
     push_requested_at = DateTimeField(null=True, blank=True)
-    #: Failed pushes since the last request; ``tasks.requeue_pending_calendar_pushes`` gives up past a cap.
+    #: Pushes since the last request that wrote nothing; ``tasks.requeue_pending_calendar_pushes`` gives up past a cap.
     push_attempts = PositiveSmallIntegerField(default=0)
 
     if TYPE_CHECKING:

@@ -1,0 +1,14 @@
+{% comment %}Whether a smart list is still catching up on its owner's pin changes. It polls itself, never the items, so rows scrolled in past the first page and a drag in progress survive; PinListSyncStatusView answers.{% endcomment %}
+{% if membership_pending %}
+<p class="pin-list-sync-pending settings-help" id="pin-list-sync-pending" role="status"
+   hx-get="{% url 'lists.sync_status' pin_list.slug %}?poll={{ sync_poll_next }}" hx-trigger="load delay:{{ sync_poll_delay }}s" hx-swap="outerHTML">
+    <i class="material-symbols-outlined" aria-hidden="true">sync</i>
+    Recent pin changes are still being applied to this smart list, so it may be missing pins that now match or show ones that no longer do.
+</p>
+{% elif membership_settled %}
+<p class="pin-list-sync-settled settings-help" id="pin-list-sync-settled" role="status">
+    <i class="material-symbols-outlined" aria-hidden="true">check_circle</i>
+    Recent pin changes have been applied to this smart list.
+    <button type="button" class="btn btn--ghost btn--sm" hx-get="{% url 'lists.items' pin_list.slug %}" hx-target="#pin-list-items" hx-swap="outerHTML">Show them</button>
+</p>
+{% endif %}

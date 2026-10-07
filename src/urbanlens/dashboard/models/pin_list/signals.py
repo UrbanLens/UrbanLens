@@ -11,15 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def _resync_pin_against_smart_lists(instance: Pin) -> None:
-    if not instance.profile_id:
-        return
+    """Record the pin for its account's next smart-list sync, which runs on the queue once this commits."""
+    from urbanlens.dashboard.services.pins.smart_list_sync import request_smart_list_sync
 
-    def _run() -> None:
-        from urbanlens.dashboard.services.pins.pin_list_membership import sync_pin_against_smart_lists
-
-        sync_pin_against_smart_lists(instance)
-
-    transaction.on_commit(_run)
+    request_smart_list_sync(instance)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_smart_list_membership_sync")
