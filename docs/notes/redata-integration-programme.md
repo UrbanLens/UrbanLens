@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: PL9` · `status: live` · `updated: 2026-10-06`
+`id: PL9` · `status: live` · `updated: 2026-10-07`
 
 ## What done means
 
@@ -20,50 +20,64 @@
 - `tests/live_locations/` checks all of that against a real REData for the four primary campuses (HRSH,
   St. Lawrence, Harlem Valley, Athens) and the rest of the 57 in `kirkbrides.toml`. See `LOCATION_DATA_TESTS.md`.
 
-## Where it stands (2026-10-06, REData staging on v0.3.5)
+## Where it stands (2026-10-07, REData production on v0.3.5)
 
-`bin/run_live_location_tests.sh` against REData staging 0.3.5, 2026-10-06 23:35-23:54Z: 51 of the 64 endpoint
-checks on the four primary campuses pass, 10 fail and 3 are inconclusive, against 43, 15 and 6 on 0.3.0 the day
-before. Pytest reads the same run as 50 passed, 9 known issues and 5 failed. The five are Athens's web search,
-which now passes against its `known_issues` entry, St. Lawrence's image search, and the three inconclusive.
+`bin/run_live_location_tests.sh` against REData production (`https://redata.urbanlens.org`, v0.3.5) with
+UrbanLens production's own key, 2026-10-07 01:09-01:15Z. Production was chosen so the answers are cached for real
+requests, and staging's share stays where it is. The run used one pytest session per campus, 60 s apart, and
+`UL_LIVE_MAX_WAIT_SECONDS=0`, so no refusal was retried. It stopped at the first REData refusal.
 
-**The other 53 campuses were not run.** The primaries batch already drew refusals from REData staging's own budgets
-(`rate_limited` on library_of_congress, chronicling_america, gdelt, searxng, searxng_media, flickr, instagram and
-wikimedia_commons), and the run stopped there, as a batch with budget refusals ends it. Waiting for the next day
-would not help. Since REData 0.3.4, staging spends 0.05 of every external budget (REData `docs/BILLED_APIS.md`,
-R20), which rounds the per-minute budgets of library_of_congress, chronicling_america, gdelt, internet_archive and
-wikidata down to 0. Staging therefore never calls them, and it gets one call a minute for searxng, searxng_media
-and wikimedia_commons, with 50, 150 and 100 a day. A campus needs several SearXNG searches and a SearXNG-media
-fan-out, so on staging the 53 would take days, and documents and news would be decided only from the few sources
-still open there. Running them needs a decision: an `RD_ENVIRONMENT_SHARE_OVERRIDES` window on staging for those
-services, or a run against production with a key of its own. The run saw no `key_budget_exhausted` and no `429`. It
-made 130 REData requests. 65 were `503`s from REData's own limiter, which the suite retried and which never left
-REData. 2 were SearXNG news searches that came back empty while engines were throttled.
+| Group | Run | Passed | Failed | Inconclusive |
+|---|---|---|---|---|
+| HRSH and Athens, production 0.3.5 | 32 checks | 26 | 6 | 0 |
+| the same two, staging 0.3.5 (2026-10-06) | 32 checks | 28 | 4 | 0 |
+| all four primaries, staging 0.3.5 (2026-10-06) | 64 checks | 51 | 10 | 3 |
+| all four primaries, staging 0.3.0 (2026-10-05) | 64 checks | 43 | 15 | 6 |
+| St. Lawrence and Harlem Valley, production | not run | | | |
+| the other 53 campuses, production | not run | | | |
 
-What still fails or is undecided:
+HRSH matches staging: 14 passed, and its two failures are its `known_issues` entries. Athens drops from 14 to 12. Its
+`build_dates` and `incidents` failures are `known_issues` entries, as on staging. `ownership` and `historic_maps`
+are new: both passed on staging, and both are production's REData data, not UrbanLens. No `known_issues` entry
+passed, so `kirkbrides.toml` is unchanged.
 
-| Check | Sites | Why | Tracked |
+**Why it stopped.** At Athens, the second campus, production answered `media/lookup/` with flickr and instagram
+`rate_limited`. The message was "Media metasearch budget is exhausted right now ... `searxng_media`" (request
+`05a44f075d554675b217fa71df6398b4`). It answered `imagery/` with map_warper `rate_limited` (request
+`760d5d7884734bfa8aefa0315f9b82e3`). Both answers were partial, and Athens's photos and imagery checks still passed on
+the other providers. HRSH's media lookup came from cache in 0.4 s, so Athens's was the run's only `searxng_media`
+fan-out. Its default production window is 30 a minute and 3,000 a day, times 0.9. This run's share of it was that one
+lookup, so what spent it was production's background media sweeps (REData P108), UrbanLens production, or the
+lookup's own page-walk, which is tens of calls a platform.
+The message does not say which window ran out, and production's rate-limit state was not read. There was no `429`,
+no `key_budget_exhausted` and no `503`. The run made 33 REData requests, plus 4 diagnostic ones: `capabilities/`,
+`schema/` and two reads of the Athens parcel.
+
+What still fails on production:
+
+| Check | Site | Why | Tracked |
 |---|---|---|---|
-| footprints | HRSH 35% (27 of 78), St. Lawrence 61% (88 of 144), Harlem Valley 76% (66 of 87) of on-property buildings outlined | Every building left without an outline is a CRIS roster row that no footprint matches. Harlem Valley's answer also carried `X-REData-Unanswered-Sources: overpass`, which the suite does not read | REData P114, P103 |
-| incidents | all four | `count: 0`, with all 148 providers `not_applicable` | REData P110 |
-| build_dates | Athens | none of the 30 on-property buildings carries a year | REData P111 |
-| historic_maps | Harlem Valley | five volumes, all `same_county` at 27 km (Poughkeepsie's) | REData P112 |
-| web_photos | St. Lawrence | SearXNG image search answered `200` with no result for `"St. Lawrence State Hospital" Ogdensburg` (request `e723591f5ecc436fb2750ec2fec3a12e`), where the same query's web search found 10; it passed on 0.3.0. An image search whose engines failed for any reason but a block is returned as an empty answer (REData `core/services/search.py`, `_search` and `_blocked_engines`), so it may be the engines rather than the web | not yet |
-| photos | St. Lawrence, inconclusive | nothing near the point, with flickr and instagram refused: the media fan-out asks SearXNG once per platform, and staging allows one a minute | staging share (REData R20) |
-| documents | Harlem Valley, inconclusive | the Internet Archive's results do not name the campus, and staging never asks library_of_congress or chronicling_america | staging share (REData R20) |
-| news | Harlem Valley, inconclusive | staging never asks GDELT; SearXNG news came back empty with brave.news and google news throttled | staging share (REData R20), REData P116 |
+| ownership | Athens | `owners/` and `assessments/` are empty. The point resolves to the cached parcel `39009-A029050100100` ("0 West Circle Dr"), created 2026-08-12 and last retrieved 2026-10-05 00:02Z. That parcel comes from Ohio's statewide view, which has no owner field (REData `parcels/services/property_records/known_endpoints.py:278`). Production's Athens County jurisdiction row was last updated 2026-09-25, so REData dcbc9080 (0.3.4) never re-pointed it at the County Auditor's layer: that commit ships `seed_known_jurisdictions --replace-statewide` (`parcels/management/commands/seed_known_jurisdictions.py:101`), and the command has not been run there. Staging resolves the point to `A029050103001`, `own1` STATE OF OHIO. The cached polygon still contains the point (it lies 96% inside the Auditor's parcel), so the old parcel may keep answering after a re-point until it is re-resolved | not yet (REData) |
+| historic_maps | Athens | `maps/` and `maps/volumes/` are empty (request `ed005e3f4f3a4013a17b65982e670c84`). Staging's `maps/volumes/` has 10, including six Athens volumes at 0 m. The atlas exists: production's own `imagery/` found six Athens Sanborn sheets, 1885-1914, through `loc_sanborn`. Production's volume catalogue (`parcels/services/historical_maps/lookup.py:246`) lacks what the targeted harvest stored on staging | REData P112 |
+| footprints | HRSH | 27 of 84 on-property buildings outlined, 32% (staging: 27 of 78). The answer carried `X-REData-Unanswered-Sources: overpass`, which the suite does not read | REData P114, P103 |
+| build_dates | Athens | none of 19 on-property buildings carries a year | REData P111, being fixed for 0.3.6 |
+| incidents | HRSH, Athens | `count: 0`, every provider `not_applicable` | REData P110 |
 
-Fixed since 0.3.0: web search for Athens (10 results that name it, the Wikipedia article first), and photos, now
-found for HRSH, Athens and Harlem Valley where three of the four were inconclusive on 0.3.0. Athens's `web_search`
-entry in `kirkbrides.toml` now fails the run as a strict xpass and should go. The footprints, incidents,
-build_dates and historic_maps rows are `known_issues` there, the same as on 0.3.0, so each turns red when fixed.
-The last four rows are new since 0.3.0 and are not.
+Athens's buildings answer also came without Overpass: 19 on-property buildings, against 30 on staging. Its
+`buildings` and `footprints` checks pass anyway. The image-search fault being fixed for REData 0.3.6 (an all-timed-out
+answer read as empty, `core/services/search.py:858`) did not occur: both campuses' image searches passed.
 
-The pipeline layer (`test_pipeline.py`: one pin dropped on the campus, UrbanLens's own bootstrap run against the
-same REData) was not re-run on 0.3.5. On 0.3.0 on 2026-10-05 it passed for all four primary campuses: the parcel
-under the top pin and its wiki, a child pin per building with at least 80% outlined, each resolving to a building
-wiki under the campus wiki, and the property records, register listings and image search cached. The one gap was
-Athens's build date, which waits on REData P111.
+St. Lawrence and Harlem Valley still stand at staging 0.3.5. St. Lawrence fails footprints (P114) and image search
+(an empty answer, the fault being fixed for 0.3.6), and photos are inconclusive. Harlem Valley fails footprints (P114) and historic_maps (P112), and documents and news
+are inconclusive under staging's share. Both fail incidents (P110). The pipeline layer (`test_pipeline.py`) was last
+run on 0.3.0, on 2026-10-05, and passed for all four apart from Athens's build date (P111).
+
+**Running the rest needs a decision.** The first question is whether a provider's `rate_limited` inside an
+otherwise-answered response should end the run. REData refuses that source without calling it, so nothing billed
+is spent. This run treated it as a refusal, as it would a key's `key_budget_exhausted` or a `429`. If it should keep ending the
+run, production's `searxng_media` and `map_warper` budgets need headroom for live requests (REData P108). Otherwise
+any campus whose media lookup is not cached can stop it. What is left: St. Lawrence, Harlem Valley, and the 53 in
+six batches of eight or nine. At about 17 requests a campus, that is near 950 requests, at least two hours at under 600 an hour.
 
 ## Priorities
 
@@ -71,11 +85,13 @@ Athens's build date, which waits on REData P111.
 
 1. Deploy UrbanLens 0.9.0 (Jess approved it and REData 0.3.0's deploy on 2026-10-05). REData's half is done:
    releases 0.3.0 to 0.3.4 are all ancestors of its `v0.3.4` tag, which has run in production since 2026-10-06
-   15:21Z, so what had been fixed only on staging (NY parcels by polygon, campus footprints beyond the parcel
-   box, Athens County's owner, web and news search, the cultural-resource cache, Chronicling America
-   descriptions, per-provider `limit`, the loc.gov walk) is in REData's production code. UrbanLens's own half of those
-   ships with 0.9.0 (`release/v_0_9_0`; production runs 0.8.0), and the live-locations run above was against staging,
-   not re-run on production. The order was required, not only preferred: inside the US 0.9.0 reads Overture only
+   15:21Z, and production ran v0.3.5 for the live-locations run above. So what had been fixed only on staging (NY
+   parcels by polygon, campus footprints beyond the parcel box, Athens County's owner, web and news search, the
+   cultural-resource cache, Chronicling America descriptions, per-provider `limit`, the loc.gov walk) is in REData's
+   production code. Two of those have not reached production's data: Athens County's jurisdiction row was never
+   re-pointed (`seed_known_jurisdictions --replace-statewide`), and the loc.gov volumes for Athens were never
+   harvested there (see above). UrbanLens's own half ships with 0.9.0 (`release/v_0_9_0`; production runs 0.8.0).
+   The live-locations run above reached two of the four primaries on production before a refusal stopped it. The order was required, not only preferred: inside the US 0.9.0 reads Overture only
    from REData (P110), whose lookups timed out before the index-backed ones (P240); that order is now met.
 2. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
    (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
