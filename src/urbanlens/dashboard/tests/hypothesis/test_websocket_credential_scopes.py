@@ -101,6 +101,8 @@ class SafetyChatCredentialScopeTests(TransactionTestCase):
             checkin=self.checkin,
             contact_profile=None,
             email="contact@example.com",
+            # Alerted: a token is only ever emailed with the alert, and resolves only after it.
+            notified_at=timezone.now(),
         )
 
     def _owner_route(self, *, raw_key: str | None = None, user=None) -> WebsocketCommunicator:

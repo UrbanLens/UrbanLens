@@ -24,6 +24,26 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
 
+#: First characters a spreadsheet reads as the start of a formula (OWASP CSV injection).
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_text_cell(value: str | None) -> str:
+    """Return user-supplied text safe to write into a CSV cell.
+
+    A cell starting with ``=``, ``+``, ``-``, ``@``, tab or CR is evaluated as a formula when the file is opened in a
+    spreadsheet, so it gets a leading single quote, which the spreadsheet shows as plain text.
+
+    Args:
+        value: The user-supplied text, or ``None`` for an empty cell.
+
+    Returns:
+        The text, quoted if it could be read as a formula. Numbers go to the writer unchanged rather than through here.
+    """
+    text = value or ""
+    return f"'{text}" if text.startswith(_CSV_FORMULA_PREFIXES) else text
+
+
 def pins_to_geojson(pins: Iterable[_ExportablePin]) -> str:
     """Serialize pins as a GeoJSON FeatureCollection of Point features."""
     import json
@@ -88,7 +108,7 @@ def pins_to_csv(pins: Iterable[_ExportablePin]) -> str:
     writer = csv.writer(buf)
     writer.writerow(["name", "latitude", "longitude", "description"])
     for pin in pins:
-        writer.writerow([pin.effective_name, pin.effective_latitude, pin.effective_longitude, pin.description or ""])
+        writer.writerow([csv_text_cell(pin.effective_name), pin.effective_latitude, pin.effective_longitude, csv_text_cell(pin.description)])
     return buf.getvalue()
 
 

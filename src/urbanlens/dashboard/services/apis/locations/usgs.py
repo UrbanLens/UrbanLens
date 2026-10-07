@@ -7,9 +7,10 @@ import logging
 from typing import Any, ClassVar
 
 from django.core.cache import cache
+import requests
 
 from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
-from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ class UsgsGateway(Gateway):
 
         Returns:
             Session token string, or ``None`` when credentials are not configured.
+
+        Raises:
+            GatewayRequestError: The credentials are configured but USGS could not be reached, refused them, or answered without a token.
         """
         token = cache.get(_M2M_SESSION_CACHE_KEY)
         if token:
@@ -52,14 +56,13 @@ class UsgsGateway(Gateway):
             )
             resp.raise_for_status()
             data = resp.json()
-            token = data.get("data")
-            if token:
-                cache.set(_M2M_SESSION_CACHE_KEY, token, _M2M_SESSION_TTL)
-            return token
-        except Exception:
-            # TODO: Catch specific exception
-            logger.exception("USGS M2M login-token exchange failed")
-            return None
+        except (requests.RequestException, ValueError) as exc:
+            raise GatewayRequestError(f"USGS M2M login failed: {type(exc).__name__}") from exc
+        token = data.get("data") if isinstance(data, dict) else None
+        if not token:
+            raise GatewayRequestError("USGS M2M login answered without a session token.")
+        cache.set(_M2M_SESSION_CACHE_KEY, token, _M2M_SESSION_TTL)
+        return token
 
     def m2m_request(self, endpoint: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send a POST request to the M2M API.
@@ -72,7 +75,8 @@ class UsgsGateway(Gateway):
             Parsed JSON response.
 
         Raises:
-            ValueError: When no credentials are configured and authentication is needed.
+            GatewayRequestError: Credentials are configured but the login failed; the request is not sent without a session.
+            requests.HTTPError: The endpoint answered with an error status.
         """
         session_token = self._session_token()
         headers = {"X-Auth-Token": session_token} if session_token else None

@@ -276,6 +276,7 @@ class TripCalendarExportView(TripScopedApiView):
                 "complete": result.complete,
                 "events_synced": result.events_synced,
                 "events_total": result.events_total,
+                "events_refused": result.refused,
             },
         )
 
@@ -314,4 +315,4 @@ class TripCalendarExportView(TripScopedApiView):
         except (GoogleAuthExpiredError, CalendarNotConfiguredError, GatewayRequestError) as exc:
             return self._gateway_failure(request, account, exc)
 
-        return self._status_response(trip, profile, {"removed": removed})
+        return self._status_response(trip, profile, {"removed": bool(removed.unlinked), "events_kept": removed.kept})

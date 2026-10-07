@@ -12,6 +12,8 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.safety.model import EmergencyContactDefault, SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyContactOptOut  # noqa: F401 - mypy needs these; ruff does not
 
@@ -45,27 +47,44 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
         return self.annotate(
             overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
         ).filter(
-            status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN),
+            status__in=SafetyCheckinStatus.unescalated_statuses(),
             overdue_at__lte=timezone.now(),
         )
 
     def due_for_final_warning(self) -> Self:
-        """Return awaiting check-ins about to escalate to emergency contacts.
-        Catches check-ins within ``FINAL_WARNING_LEAD_TIME`` of their overdue point that haven't already gotten a final warning - once escalated, ``overdue()`` takes over and this no longer matches (status moves off AWAITING_CHECKIN).
+        """Return unescalated check-ins owed the owner's last "check in now" warning.
+        Due from ``FINAL_WARNING_LEAD_TIME`` before the overdue point. A check-in already past it still matches, so a missed beat tick sends the warning late rather than never - ``due_for_escalation`` holds escalation until it has gone out. Stops matching once escalation begins, and ``FINAL_WARNING_MAX_WAIT`` past the overdue point, when escalation stops waiting for it.
+        Includes SCHEDULED, so a reminder that never went out does not cost the owner this warning too.
 
         Returns:
             Filtered queryset.
         """
-        from urbanlens.dashboard.models.safety.model import FINAL_WARNING_LEAD_TIME, SafetyCheckinStatus
+        from urbanlens.dashboard.models.safety.model import FINAL_WARNING_LEAD_TIME, FINAL_WARNING_MAX_WAIT, SafetyCheckinStatus
 
         now = timezone.now()
         return self.annotate(
             overdue_at=ExpressionWrapper(F("checkin_by") + F("grace_period"), output_field=DateTimeField()),
         ).filter(
-            status=SafetyCheckinStatus.AWAITING_CHECKIN,
+            status__in=SafetyCheckinStatus.unescalated_statuses(),
             final_warning_sent_at__isnull=True,
-            overdue_at__gt=now,
+            escalated_at__isnull=True,
+            overdue_at__gt=now - FINAL_WARNING_MAX_WAIT,
             overdue_at__lte=now + FINAL_WARNING_LEAD_TIME,
+        )
+
+    def due_for_escalation(self) -> Self:
+        """Return overdue check-ins whose owner has had their final warning, or has waited too long for it.
+        An overdue check-in escalates ``FINAL_WARNING_MIN_NOTICE`` after its final warning went out; one whose warning never went out escalates ``FINAL_WARNING_MAX_WAIT`` past its overdue point regardless.
+        Also matches a check-in whose escalation began and stopped part-way, so a retry reaches the contacts it missed.
+
+        Returns:
+            Filtered queryset.
+        """
+        from urbanlens.dashboard.models.safety.model import FINAL_WARNING_MAX_WAIT, FINAL_WARNING_MIN_NOTICE
+
+        now = timezone.now()
+        return self.overdue().filter(
+            Q(escalated_at__isnull=False) | Q(final_warning_sent_at__lte=now - FINAL_WARNING_MIN_NOTICE) | Q(final_warning_sent_at__isnull=True, overdue_at__lte=now - FINAL_WARNING_MAX_WAIT),
         )
 
     def due_for_auto_delete(self) -> Self:
@@ -112,8 +131,8 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
         return self.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
 
     def shared_with(self, profile: Profile) -> Self:
-        """Return other profiles' check-ins where ``profile`` is a registered emergency contact.
-        Powers the safety overview's "Shared with you" section - a logged-in emergency contact gets a read-only view of the check-in (see ``SafetyCheckinDetailView._render_shared_view``) even before/without the owner ever posting it to a community wiki.
+        """Return other profiles' check-ins where ``profile`` is an emergency contact who has been alerted.
+        Powers the safety overview's "Shared with you" section and a contact's reach to a check-in's photos. Before that alert a contact sees nothing of the check-in: GOALS.md ("Safety check-ins") gives contacts the plan "only if the user fails to check in on time", and earlier access to someone the owner explicitly chose - the accepted partner tier, ``partnered_with``.
 
         Args:
             profile: The viewing profile.
@@ -124,7 +143,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
         """
         from urbanlens.dashboard.models.safety.model import SafetyCheckinContact
 
-        return self.filter(pk__in=SafetyCheckinContact.objects.reaching(profile).values("checkin_id")).exclude(profile=profile)
+        return self.filter(pk__in=SafetyCheckinContact.objects.reaching(profile).alerted().values("checkin_id")).exclude(profile=profile)
 
     def partnered_with(self, profile: Profile) -> Self:
         """Return other profiles' check-ins where ``profile`` is an accepted safety check-in partner.
@@ -164,8 +183,9 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet["SafetyCheckinCont
     """QuerySet for SafetyCheckinContact records."""
 
     def by_token(self, token: str) -> Self:
-        """Resolve a contact by their magic-link token.
+        """Resolve a contact by their magic-link token, once that contact has been alerted.
         A contact identified only by email has no account to log into, so the public contact portal (and the check-in/markup-map views it links to) all resolve the requesting contact this same way - see the model's own docstring for why ``token`` is the credential here.
+        The token is only ever emailed with an alert, so one presented before it was leaked or guessed, and resolves to nothing: a contact learns nothing of a check-in, and can do nothing to it, before its owner misses it (GOALS.md, "Safety check-ins").
 
         Args:
             token: The magic-link token from the URL.
@@ -175,7 +195,11 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet["SafetyCheckinCont
             wrap this in ``get_object_or_404`` (optionally after chaining
             their own ``select_related(...)`` first).
         """
-        return self.filter(token=token)
+        return self.alerted().filter(token=token)
+
+    def alerted(self) -> Self:
+        """Contacts an escalation has reached - the only ones a check-in may show itself or send a notice to."""
+        return self.filter(notified_at__isnull=False)
 
     def reaching(self, profile: Profile) -> Self:
         """Contacts that stand for ``profile``: chosen as that connection, or added by an address it has verified."""
@@ -229,28 +253,40 @@ class SafetyContactOptOutManager(_SafetyContactOptOutManagerBase["SafetyContactO
 
     def blocks_notification(
         self,
-        contact_profile: Profile | None,
-        email: str | None,
         *,
         owner: Profile,
+        profile: Profile | None = None,
+        addresses: Collection[str] = (),
+        email: str | None = None,
         checkin: SafetyCheckin | None = None,
     ) -> bool:
-        """Whether a contact identity has opted out of notifications relevant to this owner/check-in.
+        """Whether an opt-out recorded for any of these identities covers this owner/check-in.
 
         Args:
-            contact_profile: The contact's profile, if they have an account.
-            email: The contact's email, used to resolve identity when ``contact_profile`` is None.
             owner: The check-in owner whose notification is about to be sent.
+            profile: An account the contact is, if any - matches opt-outs it recorded as that account.
+            addresses: Normalized addresses the contact is reached at - matches opt-outs recorded from an emailed link.
+            email: The address as typed, if any - matches, as typed, a row written without its normalized copy by
+                code from before ``email_normalized`` existed, still serving during a rolling deploy.
             checkin: The specific check-in being notified about, if any - enables matching a
                 CHECKIN-scoped opt-out in addition to OWNER/GLOBAL-scoped ones.
 
         Returns:
             True if a matching GLOBAL, OWNER, or (when ``checkin`` is given) CHECKIN-scoped
-            opt-out row exists for this contact identity.
+            opt-out row exists for one of these identities.
         """
         from urbanlens.dashboard.models.safety.model import SafetyContactOptOutScope
 
-        identity = Q(contact_profile=contact_profile) if contact_profile else Q(email__iexact=email)
+        identity = Q()
+        if profile is not None:
+            identity |= Q(contact_profile=profile)
+        # A blank address would match every opt-out recorded by account.
+        if real_addresses := {address for address in addresses if address}:
+            identity |= Q(email_normalized__in=real_addresses)
+        if email:
+            identity |= Q(email_normalized="", email__iexact=email)
+        if not identity:
+            return False
         scope = Q(scope=SafetyContactOptOutScope.GLOBAL) | Q(scope=SafetyContactOptOutScope.OWNER, owner=owner)
         if checkin is not None:
             scope |= Q(scope=SafetyContactOptOutScope.CHECKIN, checkin=checkin)

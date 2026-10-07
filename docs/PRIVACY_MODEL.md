@@ -47,7 +47,7 @@ this?", and the container gate has to enumerate all seven:
 | `location` | not a share by itself | n/a |
 | `trip` (via activities) | trip members | **yes** |
 | `direct_message` | the recipient | **no — sending is consent** |
-| `safety_checkin` | anyone who can see the check-in, **including signed-out token contacts** | **no** |
+| `safety_checkin` | anyone who can see the check-in: the owner, accepted partners, and contacts (**including signed-out token holders**) once escalation has alerted them | **no** |
 | `visit` | owner only, as far as verified | n/a |
 | `pin_suggestion` | the suggestion's owner | n/a |
 
@@ -258,7 +258,7 @@ Answers to the questions this document was written to ask. Each names the work i
 2. **Check-ins.** Photos on a safety check-in are **not** subject to `photo_upload_visibility`,
    because it makes no sense for safety contacts who have no account at all. They are visible to
    **anyone who can see the check-in, including signed-out token holders**. Reaching the check-in
-   is the only barrier.
+   is the only barrier, and a contact reaches it only once escalation has alerted them.
    → *Done 2026-08-24:* the portal now lists the check-in's photos, and
    `safety.contact.photo` serves their bytes to a valid magic-link token, scoped to that token's
    own check-in. The nginx hand-off was extracted from `MediaGateView` rather than reimplemented.

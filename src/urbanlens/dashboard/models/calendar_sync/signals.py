@@ -156,9 +156,8 @@ def delete_event_with_what_it_mirrors(sender: type[TripCalendarLink], instance: 
     """
     if _origin_model(kwargs) not in (Trip, TripActivity) or not instance.google_event_id:
         return
-    from urbanlens.dashboard.services.trips.calendar_sync import made_by_urbanlens, queue_calendar_event_deletion
+    from urbanlens.dashboard.services.trips.calendar_sync import queue_calendar_event_deletion
 
     origin = kwargs.get("origin")
     trip_uuid = origin.uuid if isinstance(origin, Trip) and origin.pk == instance.trip_id else Trip.objects.filter(pk=instance.trip_id).values_list("uuid", flat=True).first()
-    if made_by_urbanlens(instance, trip_uuid=trip_uuid):
-        queue_calendar_event_deletion(instance)
+    queue_calendar_event_deletion(instance, trip_uuid=trip_uuid)

@@ -23,7 +23,7 @@
     {% include "dashboard/partials/safety/_archive_countdown.html" %}
     {% endif %}
 
-    <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved or not checkin.escalated_at %}hidden{% endif %}>
+    <div class="safety-toolbar" id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
         <form method="post" action="{% url 'safety.contact.mark_safe' contact.token %}"
               data-safety-resolve data-confirm="Mark {{ checkin.profile.username }} as found/safe?"
               data-confirm-message="Other emergency contacts will be notified." data-confirm-label="Mark safe">
@@ -32,7 +32,6 @@
         </form>
     </div>
 
-    {% if checkin.escalated_at %}
     {% if checkin.contact_message %}
     <div class="card safety-contact-message">
         <div class="card-header">
@@ -72,13 +71,6 @@
             </a>
             {% endfor %}
         </div>
-    </div>
-    {% endif %}
-    {% else %}
-    <div class="card safety-contact-waiting">
-        <p><i class="material-symbols-outlined">schedule</i>
-            You're listed as an emergency contact for {{ checkin.profile.username }}'s upcoming trip.
-            The trip plan, route, and photos only appear here if they don't check in on time.</p>
     </div>
     {% endif %}
 
