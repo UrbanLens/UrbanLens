@@ -51,10 +51,15 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   job; so does a pin past its profile's ten bootstraps an hour, or the site's twenty. `manage.py bootstrap_pin <uuid|slug>`
   queues it for an existing pin
 - **Build dates from records** (`services.pins.build_dates`) — a building pin takes its record's
-  `year_built` when it is created; the root pin takes the year of a register listing drawn around it,
-  else of the building it stands on, else the assessor's, once the bootstrap has fetched them. Only an
-  empty date is filled, stored as January 1st of the year. The same year is recorded as `built_year`
-  evidence (`EXTERNAL_SOURCE`) on the place's wikis, and the wiki's About card shows "Built <year>"
+  `year_built` when it is created, only when REData says the year is the building's own
+  (`year_built_basis: "building"`, REData 0.3.6+; `own_build_year`). The assessor's year is the parcel's,
+  for its principal improvement, and reaches at most the building under the parcel's lookup point; a
+  record without a basis (older REData, a list cached before it) is read as the parcel's, so neither
+  dates a building. The root pin takes the year of a register listing drawn around it, else of the
+  building it stands on, else, unless it reads as a building itself, the assessor's, once the bootstrap
+  has fetched them. Only an empty date is filled, stored as January 1st of the year. The same year is
+  recorded as `built_year` evidence (`EXTERNAL_SOURCE`) on the place's wikis, and the wiki's About card
+  shows "Built <year>"
 - **Every building on a property becomes a child pin and a child wiki automatically**
   (`services.pins.auto_nest`, `services.pins.building_clusters`) — once a top-level pin's property
   outline is known and it holds several buildings, a background sweep creates one `building` sub pin
@@ -65,8 +70,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   within 15 m - collapse into one building, so no two sibling pins stand within 15 m; REData's
   `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take
   the building's public name, else "Building <number>", else its address, else a descriptor such as
-  "Garage (1925) at Hudson River State Hospital" - never the campus's own name or a private pin
-  name, and a later sweep renames one given a placeholder before the campus was named. Each building pin's
+  "Garage (1925) at Hudson River State Hospital", dated only by the building's own year (see Build dates
+  from records) - never the campus's own name or a private pin name. A later sweep renames one given a
+  placeholder before the campus was named, or a descriptor its records now date differently, including
+  one dated before UrbanLens read `year_built_basis`. Each building pin's
   detail boundary is its own footprint, which the floorplan editor seeds as exterior walls. The sweep
   runs when the pin is created, when the building list is fetched or refreshed, when the property
   outline arrives, and when the Buildings panel shows an unpinned building (throttled to once per
@@ -737,8 +744,8 @@ direct-only because REData's contract can't reproduce what they show:
   `overview_summary()` into one unattributed list, then Nominatim, Photon, Elevation and Site
   Conditions. Tabs that settle with nothing to show are removed, and so is a tab whose panel's gate
   refuses the pin, which the Overview never fetches (`PinController._card_overview`)
-- **Property Records** — the parcel's and building's records: an Overview (owner, parcel number, year
-  built, historic status and National Register number), then Parcel, Building Characteristics (not
+- **Property Records** — the parcel's and building's records: an Overview (owner, parcel number, the
+  main building's year built, historic status and National Register number), then Parcel, Building Characteristics (not
   on a parcel, whose buildings carry their own) and Historic Preservation (Historic Registers and
   CRIS). The Overview names an official owner only to a viewer holding `SiteFeature.PROPERTY_OWNERS`,
   as the Parcel tab does, and says "Owner on record - subscribers only" to anyone else. It counts
@@ -760,7 +767,8 @@ direct-only because REData's contract can't reproduce what they show:
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
   that building at any depth - every record of one physical building links to the same pin - or
-  offers to create the ones that have none (`plugins.builtin.parcel_buildings`). On a pin's page it
+  offers to create the ones that have none (`plugins.builtin.parcel_buildings`). A row says when its
+  building was built only from the building's own year, never the parcel's. On a pin's page it
   is also where child pins are listed: a Child pins tab has every direct child of any type, a child
   pin with children of its own gets that list alone, and the header adds a child pin or pulls the
   wiki's in. CRIS's campus buildings are in this list, not repeated on the CRIS tab.
@@ -1972,7 +1980,8 @@ Everything below the line is not yet built.
 - Three question sources, all gated by the same content classifier before reaching a player:
   **deterministic** templates from cached property-records data (year built, building number,
   and building count once a parcel has more than a few buildings - all only for named
-  buildings), **AI-generated** from wiki articles with substantial content (up to 3 per wiki),
+  buildings; a year only when REData says it is the building's own, withdrawn once the records stop
+  saying so), **AI-generated** from wiki articles with substantial content (up to 3 per wiki),
   and **user-submitted** questions about a location the submitter has pinned
 - Content classifier (`services.trivia.classifier`): rejects a question about a specific
   individual - even one only referenced indirectly and never named (e.g. "the year *someone*

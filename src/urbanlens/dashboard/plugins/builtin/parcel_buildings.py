@@ -385,7 +385,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
         boundary_polygon: The property's real (non-circle) boundary, when known.
 
     Returns:
-        One row per building record, sorted by building number then name, each with ``name``, ``building_number``, ``year_built``, ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and... Records describing one physical building share its child."""
+        One row per building record, sorted by building number then name, each with ``name``, ``building_number``, ``year_built`` (the building's own, else ``""``: see ``services.pins.build_dates.own_build_year``), ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and... Records describing one physical building share its child."""
     rows, _unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=boundary_polygon)
     return rows
 
@@ -433,12 +433,16 @@ def match_buildings_to_children(
 
 def _building_row(building: dict[str, Any], record_index: int, child: Any, url_for) -> dict[str, Any]:
     """One building record as a panel row, with the child marker standing for it."""
+    from urbanlens.dashboard.services.pins.build_dates import own_build_year
+
     geometry = building_footprint_geojson(building)
     sources = record_sources(building)
+    year_built = own_build_year(building)
     return {
         "name": building.get("name") or "",
         "building_number": building.get("building_number") or "",
-        "year_built": building.get("year_built") or "",
+        # A parcel's year on a row would read as when this building was built.
+        "year_built": year_built if year_built is not None else "",
         "source": sources[0] if sources else "",
         "source_label": " + ".join(source_chips(sources)),
         "latitude": building.get("latitude"),

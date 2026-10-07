@@ -57,6 +57,7 @@ def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
             name="MAIN/ADMIN",
             building_number="51",
             year_built=MAIN_YEAR,
+            year_built_basis="building",
         ),
         record(
             "osm:way/2",
@@ -66,6 +67,7 @@ def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
             name="LAUNDRY",
             building_number="45",
             year_built=LAUNDRY_YEAR,
+            year_built_basis="building",
         ),
         record("cris:02714.000028", 110, -100, geometry=rect(110, -100, 25, 25), name="CATHOLIC CHAPEL"),
         record(
@@ -76,6 +78,7 @@ def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
             name="GARAGE",
             building_number="166",
             year_built=GARAGE_YEAR,
+            year_built_basis="building",
         ),
         record("cris:02714.000999", 0, 600, is_on_property=False, name="Across the road"),
     ]
