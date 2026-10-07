@@ -8,6 +8,7 @@ to "" rather than removed, so ``load_dotenv`` cannot refill them from a checkout
 from __future__ import annotations
 
 import importlib
+import os
 from types import ModuleType
 from unittest import mock
 
@@ -16,7 +17,6 @@ from django.core.exceptions import ImproperlyConfigured
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes, environment_from_env
-from urbanlens.UrbanLens.environments.prod import Production
 from urbanlens.UrbanLens.settings import _env
 from urbanlens.UrbanLens.settings.app import AppSettings
 import urbanlens.UrbanLens.settings.base as settings_base
@@ -37,6 +37,9 @@ _INPUTS = (
     "UL_EMAIL_BACKEND",
     "UL_UNSAFE_ALLOW_HTTP",
 )
+
+#: Every name ``UL_ENVIRONMENT`` accepts.
+_KNOWN_ENVIRONMENTS = sorted(str(environment) for environment in EnvironmentTypes)
 
 #: A deployment configured completely.
 _CONFIGURED = {
@@ -76,25 +79,44 @@ class _ReloadsSettings(SimpleTestCase):
         return str(caught.exception)
 
 
-class AnUnsetEnvironmentIsProductionTests(SimpleTestCase):
-    """Compose, the entrypoint and the Dockerfile ARG all default to production; the settings used to say local."""
+class AnUnsetEnvironmentRefusesTests(SimpleTestCase):
+    """Jess, 2026-10-07: a process that does not say which environment it is refuses to start. Unset used to mean
+    production (aa4b83003), so a deployment that lost the variable spent production's budgets and sent real mail."""
 
-    def test_unset_and_blank_are_production(self) -> None:
-        for environ in ({}, {"UL_ENVIRONMENT": ""}, {"UL_ENVIRONMENT": "   "}):
+    def _refusal(self, environ: dict[str, str]) -> str:
+        with self.assertRaises(ImproperlyConfigured) as caught:
+            environment_from_env(environ)
+        return str(caught.exception)
+
+    def test_unset_and_blank_refuse_naming_the_variable_and_every_choice(self) -> None:
+        for environ in ({}, {"UL_ENVIRONMENT": ""}, {"UL_ENVIRONMENT": "   "}, {"UL_ENVIRONMENT": "\n"}):
             with self.subTest(environ=environ):
-                self.assertEqual(environment_from_env(environ), EnvironmentTypes.PRODUCTION)
+                message = self._refusal(environ)
+                self.assertIn("UL_ENVIRONMENT is not set", message)
+                for name in _KNOWN_ENVIRONMENTS:
+                    self.assertIn(name, message)
+
+    def test_every_known_name_resolves(self) -> None:
+        for name in _KNOWN_ENVIRONMENTS:
+            with self.subTest(name=name):
+                self.assertEqual(environment_from_env({"UL_ENVIRONMENT": name}), EnvironmentTypes(name))
 
     def test_a_known_name_is_normalised(self) -> None:
         self.assertEqual(environment_from_env({"UL_ENVIRONMENT": " Development\n"}), EnvironmentTypes.DEVELOPMENT)
 
     def test_an_unknown_name_refuses_rather_than_guessing(self) -> None:
-        with self.assertRaisesRegex(ImproperlyConfigured, "prodution"):
-            environment_from_env({"UL_ENVIRONMENT": "prodution"})
+        message = self._refusal({"UL_ENVIRONMENT": "prodution"})
+        self.assertIn("prodution", message)
+        for name in _KNOWN_ENVIRONMENTS:
+            self.assertIn(name, message)
 
-    def test_the_environment_object_agrees(self) -> None:
-        """Site settings and the developer toolbar read this one; unset used to show admins the dev toolbar."""
-        with mock.patch.dict("os.environ", {"UL_ENVIRONMENT": ""}):
-            self.assertIsInstance(select_environment(None), Production)
+    def test_the_environment_object_refuses_too(self) -> None:
+        """Site settings and the developer toolbar read this one at request time; unset used to show them production."""
+        with (
+            mock.patch.dict("os.environ", {"UL_ENVIRONMENT": ""}),
+            self.assertRaisesRegex(ImproperlyConfigured, "UL_ENVIRONMENT is not set"),
+        ):
+            select_environment(None)
 
 
 class TheAppSettingsFieldReadsTheSameVariableTests(SimpleTestCase):
@@ -116,8 +138,9 @@ class TheAppSettingsFieldReadsTheSameVariableTests(SimpleTestCase):
     def test_it_is_parsed_the_same_way(self) -> None:
         self.assertEqual(self._fresh(" Staging ").environment_name, "staging")
 
-    def test_unset_is_production_here_too(self) -> None:
-        self.assertEqual(self._fresh("").environment_name, "production")
+    def test_unset_refuses_here_too(self) -> None:
+        with self.assertRaisesRegex(ImproperlyConfigured, "UL_ENVIRONMENT is not set"):
+            self._fresh("")
 
 
 class RequiredDeploymentSettingsTests(_ReloadsSettings):
@@ -129,12 +152,20 @@ class RequiredDeploymentSettingsTests(_ReloadsSettings):
         self.assertEqual(reloaded.SITE_URL, "https://urbanlens.example")
         self.assertEqual(reloaded.CELERY_BROKER_URL, "amqp://rabbit.example:5672/")
 
-    def test_an_unset_environment_is_held_to_production_rules(self) -> None:
-        """G6-16: an image run without UL_ENVIRONMENT got DEBUG on and a random SECRET_KEY."""
-        self.assertIn("DJANGO_SECRET_KEY", self._refuses(""))
-        reloaded = self._reload("", **_CONFIGURED)
-        self.assertEqual(reloaded.ENVIRONMENT_NAME, "production")
-        self.assertFalse(reloaded.DEBUG)
+    def test_an_unset_environment_refuses_even_when_everything_else_is_configured(self) -> None:
+        """G6-16 held an image run without UL_ENVIRONMENT to production's rules; since 2026-10-07 it does not start."""
+        for environment in ("", "  "):
+            with self.subTest(environment=environment):
+                message = self._refuses(environment, **_CONFIGURED)
+                self.assertIn("UL_ENVIRONMENT is not set", message)
+                self.assertNotIn("DJANGO_SECRET_KEY", message)
+
+    def test_every_known_environment_starts(self) -> None:
+        """The negative control for the refusal: a deployment configured as itself, and a dev one with nothing."""
+        for environment in _KNOWN_ENVIRONMENTS:
+            with self.subTest(environment=environment):
+                configured = _CONFIGURED if environment in {"production", "staging"} else {}
+                self.assertEqual(self._reload(environment, **configured).ENVIRONMENT_NAME, environment)
 
     def test_each_missing_setting_is_named(self) -> None:
         for missing, named in (
@@ -256,6 +287,46 @@ class TheChannelLayerHasItsOwnStoreTests(_ReloadsSettings):
         self.assertEqual(
             self._channel_host(self._reload("production", **_CONFIGURED)), "redis://dragonfly.example:6379/0"
         )
+
+
+class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
+    """A test run is never a deployment, so one started without UL_ENVIRONMENT (a worktree with no .env) runs as
+    ``testing``, CI's name, rather than refusing; xdist workers and subprocesses inherit it from ``os.environ``."""
+
+    def _reload_as(self, argv: list[str], **env: str) -> tuple[str, str]:
+        full = {**dict.fromkeys(_INPUTS, ""), **env}
+        with mock.patch.dict("os.environ", full), mock.patch("sys.argv", argv):
+            reloaded = importlib.reload(settings_base)
+            return reloaded.ENVIRONMENT_NAME, os.environ["UL_ENVIRONMENT"]
+
+    def test_pytest_without_one_runs_as_testing_and_says_so_to_its_children(self) -> None:
+        for blank in ("", "  "):
+            with self.subTest(blank=blank):
+                self.assertEqual(
+                    self._reload_as(["/app/.venv/bin/pytest", "-q"], UL_ENVIRONMENT=blank), ("testing", "testing")
+                )
+
+    def test_an_xdist_worker_is_a_test_run_too_not_just_named_one(self) -> None:
+        """A worker hides pytest from argv. Given only the name, it computed TESTING false and, with HTTP not allowed
+        under ``testing``, redirected every request to HTTPS (301s throughout a ``-n 2`` run with no ``.env``)."""
+        with mock.patch.dict("os.environ", dict.fromkeys(_INPUTS, "")):
+            with mock.patch("sys.argv", ["/app/.venv/bin/pytest", "-n", "2"]):
+                importlib.reload(settings_base)
+            with mock.patch("sys.argv", ["-c"]):
+                worker = importlib.reload(settings_base)
+            self.assertEqual(worker.ENVIRONMENT_NAME, "testing")
+            self.assertTrue(worker.TESTING)
+            self.assertFalse(worker.SECURE_SSL_REDIRECT)
+
+    def test_the_django_test_flag_counts_as_a_test_run(self) -> None:
+        self.assertEqual(self._reload_as(["manage.py", "test"], DJANGO_TESTING="1"), ("testing", "testing"))
+
+    def test_a_test_run_keeps_the_environment_it_names(self) -> None:
+        self.assertEqual(self._reload_as(["pytest"], UL_ENVIRONMENT="development"), ("development", "development"))
+
+    def test_a_server_without_one_still_refuses(self) -> None:
+        with self.assertRaisesRegex(ImproperlyConfigured, "UL_ENVIRONMENT is not set"):
+            self._reload_as(["gunicorn", "urbanlens.UrbanLens.wsgi"], **_CONFIGURED)
 
 
 class TheGuardsStandAsideForTestsTests(SimpleTestCase):

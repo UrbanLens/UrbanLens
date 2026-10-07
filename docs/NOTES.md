@@ -1,7 +1,7 @@
 # UrbanLens Notes
 
 Non-obvious details about how UrbanLens works, gathered from a codebase audit (2026-07-11).
-This complements `docs/FEATURES.md` (what the app does) and `CLAUDE.md` (how to work in the repo).
+This complements `docs/FEATURES.md` (what the app does) and `AGENTS.md` (how to work in the repo).
 These are facts about current behavior, not guarantees — verify against the code before relying
 on specifics that matter (line numbers, exact model fields).
 

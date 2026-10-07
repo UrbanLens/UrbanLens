@@ -715,7 +715,7 @@ that had already happened.
 
 ### Assert on the toast
 
-`CLAUDE.md` states the rule these helpers encode: results and errors surface as
+`AGENTS.md` states the rule these helpers encode: results and errors surface as
 toasts. That makes a toast the most reliable evidence of what the server
 actually decided - more reliable than re-reading the page, because a failed
 action usually leaves the page looking exactly as it did before. Toasts expire

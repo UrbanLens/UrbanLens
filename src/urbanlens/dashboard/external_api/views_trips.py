@@ -48,7 +48,8 @@ from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
 from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError
 from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
-from urbanlens.dashboard.services.trips.calendar_sync import export_trip_to_calendar, remove_trip_from_calendar, trip_calendar_status
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.trips.calendar_sync import CALENDAR_BUSY_MESSAGE, export_trip_to_calendar, remove_trip_from_calendar, trip_calendar_status
 from urbanlens.dashboard.services.trips.trip_crud import set_trip_permissions
 from urbanlens.dashboard.services.trips.trip_errors import TripError
 
@@ -78,6 +79,8 @@ _REAUTHORIZATION_MESSAGE = "Your Google Calendar connection has expired. Reconne
 #: a caller. Never surface it - log it and answer with this fixed message.
 _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."
 _NOT_CONFIGURED_MESSAGE = "Google Calendar integration is not configured on this server."
+#: The calendar budget is a per-minute window.
+_CALENDAR_BUSY_RETRY_AFTER_SECONDS = 60
 
 
 class TripSettingsView(TripScopedApiView):
@@ -176,8 +179,8 @@ class TripCalendarExportView(TripScopedApiView):
             exc: The exception raised by the calendar service.
 
         Returns:
-            409 for a dead grant, 503 when the deployment has no OAuth client configured, 502 for any other
-            upstream failure.
+            409 for a dead grant, 503 when the deployment has no OAuth client configured or the calendar budget
+            is spent, 502 for any other upstream failure.
         """
         if isinstance(exc, GoogleAuthExpiredError):
             account.delete()
@@ -185,6 +188,10 @@ class TripCalendarExportView(TripScopedApiView):
         if isinstance(exc, CalendarNotConfiguredError):
             # A deployment-level omission, not anything the caller did wrong.
             return Response({"error": _NOT_CONFIGURED_MESSAGE}, status=503)
+        if isinstance(exc, RateLimitExceededError):
+            # The calendar budget was spent before anything of the trip was written; an export that got further
+            # answers 200 with complete: false instead.
+            return Response({"error": CALENDAR_BUSY_MESSAGE}, status=503, headers={"Retry-After": str(_CALENDAR_BUSY_RETRY_AFTER_SECONDS)})
         # Only a GatewayRequestError reaches here (the other two members of the except clause above are handled
         # by the isinstance checks).
         logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=exc)
@@ -227,8 +234,9 @@ class TripCalendarExportView(TripScopedApiView):
             trip_slug: The trip's URL slug.
 
         Returns:
-            200 with the status block and the number of activity events written; 400 when the trip has no
-            dates to place on a calendar; 404 for a...
+            200 with the status block and how many of the trip's events are on the calendar, ``complete`` false
+            when the calendar budget ran out partway and the server will finish the rest; 400 when the trip has no
+            dates to place on a calendar; 503 when the budget ran out before anything was written; 404 for a...
         """
         serializer = TripCalendarExportRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -242,11 +250,10 @@ class TripCalendarExportView(TripScopedApiView):
         if isinstance(account, Response):
             return account
 
-        trip_url = request.build_absolute_uri(reverse("trips.detail", kwargs={"trip_slug": trip.slug}))
         try:
             # Deliberately not wrapped in transaction.atomic - see the module docstring. One upstream request
             # per event; a transaction here would hold a connection for all of them.
-            link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
+            result = export_trip_to_calendar(account, trip)
         except ValueError:
             # trip_to_event_body's "no dates" refusal, always this exact message. TripError is also a
             # ValueError, but the trip was resolved before this block, so nothing raised in here can be one.
@@ -255,10 +262,19 @@ class TripCalendarExportView(TripScopedApiView):
             return self._gateway_failure(request, account, exc)
 
         auto_sync = serializer.validated_data.get("auto_sync")
-        if auto_sync is not None and link.auto_sync != auto_sync:
-            TripCalendarLink.objects.set_auto_sync(link.pk, auto_sync)
+        if auto_sync is not None and result.trip_link.auto_sync != auto_sync:
+            TripCalendarLink.objects.set_auto_sync(result.trip_link.pk, auto_sync)
 
-        return self._status_response(trip, profile, {"activities_exported": activity_count})
+        return self._status_response(
+            trip,
+            profile,
+            {
+                "activities_exported": result.activities_synced,
+                "complete": result.complete,
+                "events_synced": result.events_synced,
+                "events_total": result.events_total,
+            },
+        )
 
     @extend_schema(
         responses={

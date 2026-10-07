@@ -67,4 +67,7 @@ if [ "$PIPELINE" = 1 ]; then
     export UL_TEST_DB_NAME="${UL_TEST_DB_NAME:-test_live_locations}"
     exec bash bin/host_pytest.sh "${args[@]}" "${passthrough[@]}"
 fi
-exec uv run --frozen pytest "${args[@]}" --ignore=tests/live_locations/test_pipeline.py "${passthrough[@]}"
+# Without --pipeline there is no test database, so neither test that needs one can run here. test_open_buildings.py
+# asks Google's bucket directly rather than REData and has its own command (docs/LOCATION_DATA_TESTS.md).
+exec uv run --frozen pytest "${args[@]}" --ignore=tests/live_locations/test_pipeline.py \
+    --ignore=tests/live_locations/test_open_buildings.py "${passthrough[@]}"

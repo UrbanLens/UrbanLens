@@ -3,7 +3,7 @@
 - **Status: ANSWERED 2026-10-06; in REData production since v0.3.5 (2026-10-06 22:45Z).** REData #129 reads level-6 shards within a 64 MiB cap, refused on the declared size before any body is read and remembered for 30 days; #132 bounds the Microsoft footprints reader (parts and dataset index) at 256 MiB, above the largest US part. REData's reply is its T13 (`docs/urbanlens-2026-10-05-replies.md`) and P126. One correction to this handoff: not every US level-4 cell 404s - Brownsville's reaches into Mexico and Key West's takes in Cuba (180-561 MiB). Originally SENT 2026-10-05, found while fixing UrbanLens's P319. Read from REData `origin/main` and
   `origin/release/0.3.2` on 2026-10-05; nothing here was run against a REData deployment.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
-- `id: N43` · `status: answered`
+- `id: N43` · `status: current`
 
 ## What REData does
 
