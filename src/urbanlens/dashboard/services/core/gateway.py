@@ -272,5 +272,7 @@ def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MED
         # ``raw.read`` skips the wrapper that turns these into ``requests`` exceptions, so a dropped connection or a read timeout would otherwise escape callers that catch ``GatewayRequestError``.
         raise GatewayRequestError(f"{what} could not be read: {type(exc).__name__}") from exc
     if len(body) > max_bytes:
+        # Unread bytes remain, so the connection cannot go back to the pool.
+        response.close()
         raise GatewayRequestError(f"{what} is larger than the {max_bytes // (1024 * 1024)}MB limit for proxied media")
     return body

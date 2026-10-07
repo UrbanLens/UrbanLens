@@ -78,11 +78,23 @@ class TheCapIsEnforcedTests(SimpleTestCase):
         raw = io.BytesIO(b"x" * 10_000_000)
         response = _streamed(b"")
         response.raw = HTTPResponse(body=raw, headers={}, status=200, preload_content=False)
+        # The refusal closes the response, so the position is taken as it closes.
+        read_before_close: list[int] = []
+        real_close = response.close
+
+        def close() -> None:
+            read_before_close.append(raw.tell())
+            real_close()
+
+        response.close = close  # type: ignore[method-assign]
 
         with pytest.raises(GatewayRequestError):
             read_capped(response, max_bytes=4096, what="photo")
 
-        self.assertLessEqual(raw.tell(), 4096 * 4, "the helper buffered far more than the cap before refusing")
+        self.assertEqual(len(read_before_close), 1, "an over-cap response is closed, not left half-read in the pool")
+        self.assertLessEqual(
+            read_before_close[0], 4096 * 4, "the helper buffered far more than the cap before refusing"
+        )
 
     def test_a_connection_dropped_mid_body_is_a_gateway_error(self) -> None:
         """``raw.read`` bypasses the ``requests`` wrapper that turns urllib3's errors into ``RequestException``, so a
