@@ -44,6 +44,11 @@ jobs:
     name: Python quality and tests
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    # TEMPORARY: measuring worker counts on a 4-vCPU runner; collapses to one value before review.
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: ["auto", "4", "6"]
     services:
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
@@ -144,9 +149,14 @@ jobs:
         run: python3 bin/check_css_variables.py
       - name: No missing migrations
         run: python src/urbanlens/manage.py makemigrations --check --dry-run
+      # pytest-xdist workers, each with its own test database (pytest-django suffixes the name with the worker id,
+      # test_urbanlens_ci_gw0 and so on). --dist loadfile keeps a file's tests on one worker, so a class's
+      # setUpTestData is paid once rather than once per worker. Coverage follows the workers through
+      # `patch = ["subprocess"]` in pyproject.toml; each process writes its own data file, hence the combine.
       - name: Tests with coverage
         run: |
-          coverage run --source=src -m pytest
+          coverage run --source=src -m pytest -n "${{ matrix.workers }}" --dist loadfile --durations=40
+          coverage combine
           coverage xml
           coverage report --fail-under=1
 
@@ -154,7 +164,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: coverage-xml
+          name: coverage-xml-${{ matrix.workers }}
           path: coverage.xml
           if-no-files-found: ignore
 

@@ -477,6 +477,10 @@ markers = [
 
 [tool.coverage.run]
 source = ["."]
+# Measure Python subprocesses too, which is what makes `coverage run -m pytest -n N` count the pytest-xdist workers
+# rather than only the controller (which runs no tests). It implies parallel mode: every process writes its own
+# .coverage.* file, so `coverage combine` has to run before any report.
+patch = ["subprocess"]
 omit = [
     "*/migrations/*",
     "*/tests/*",

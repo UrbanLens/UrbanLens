@@ -55,6 +55,8 @@ src/urbanlens/logs/*
 !.vscode/launch.json
 .favorites.json
 .coverage
+# Parallel-mode data files (one per process, before `coverage combine`).
+.coverage.*
 CLAUDE.local.md
 # Only the per-machine file. `settings.json` registers the hooks that protect
 # AGENTS.md and auto-format Python on write, and `.claude/agents/` holds the
