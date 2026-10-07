@@ -22,6 +22,8 @@ from urbanlens.dashboard.services.import_export.archive_extractor import ZipDire
 from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from django.contrib.gis.geos import LineString
 
 logger = logging.getLogger(__name__)
@@ -1559,11 +1561,10 @@ def _import_photos(
         label_uuid_map: Archive label uuid -> local pk.
         report_progress: Optional throttled progress callback.
         only: 1-based positions of the rows to import, for a run storing an earlier run's deferred photos."""
-    from decimal import Decimal, InvalidOperation
-
     from django.core.files import File
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import coerce_coordinates
     from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, file_size_error_for_upload, reserve_upload
 
     rows = _read_json(data_dir, os.path.join("photos", "metadata.json"))
@@ -1574,13 +1575,12 @@ def _import_photos(
     missing_files = 0
     over_quota = 0
 
-    def _decimal(value: Any) -> Decimal | None:
-        if value in (None, ""):
-            return None
+    def _coordinates(row: dict[str, Any]) -> tuple[Decimal | None, Decimal | None]:
+        # A pair that is missing, non-finite or out of range costs the photo its location, not the import.
         try:
-            return Decimal(str(value))
-        except InvalidOperation:
-            return None
+            return coerce_coordinates(row)
+        except ValueError:
+            return None, None
 
     for idx, row in enumerate(rows, start=1):
         if only is not None and idx not in only:
@@ -1619,14 +1619,15 @@ def _import_photos(
                 pin_pk, wiki, _resolved = _resolve_import_target(profile, row, pin_uuid_map)
 
                 media_type = row.get("media_type") if row.get("media_type") in MediaKind.values else MediaKind.PHOTO
+                latitude, longitude = _coordinates(row)
                 image = Image(
                     profile=profile,
                     pin_id=pin_pk,
                     wiki=wiki,
                     caption=(row.get("caption") or "")[:500] or None,
                     media_type=media_type,
-                    latitude=_decimal(row.get("latitude")),
-                    longitude=_decimal(row.get("longitude")),
+                    latitude=latitude,
+                    longitude=longitude,
                     file_size=size,
                     pending_scan=True,
                 )

@@ -7,8 +7,12 @@ from django.http import HttpRequest, JsonResponse
 from django.views import View
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RateLimitExceededError
 
 _POLYGONAL_TYPES = ("Polygon", "MultiPolygon")
+
+#: Seconds a client is told to wait when the budget refusal names no wait of its own: Nominatim's budget is per minute.
+_BUSY_RETRY_AFTER_SECONDS = 60
 
 
 class RegionBoundarySearchView(LoginRequiredMixin, View):
@@ -29,13 +33,21 @@ class RegionBoundarySearchView(LoginRequiredMixin, View):
 
         Returns:
             A JSON response of the form ``{"results": [{"display_name": str, "geojson": dict}, ...]}``,
-            limited to Polygon/MultiPolygon candidates.
+            limited to Polygon/MultiPolygon candidates; 429 with ``Retry-After`` while Nominatim's budget is spent,
+            503 where this environment does not call it.
         """
         query = (request.GET.get("q") or "").strip()
         if not query:
             return JsonResponse({"results": []})
 
         gateway = NominatimGateway()
-        raw_results = gateway.search(query, limit=5, polygon_geojson=1)
+        try:
+            raw_results = gateway.search(query, limit=5, polygon_geojson=1)
+        except RateLimitExceededError as exc:
+            response = JsonResponse({"error": "Place searches are momentarily rate limited - try again shortly."}, status=429)
+            response["Retry-After"] = str(getattr(exc, "retry_after", _BUSY_RETRY_AFTER_SECONDS))
+            return response
+        except EnvironmentRefusedError:
+            return JsonResponse({"error": "Place search isn't available in this environment."}, status=503)
         results = [{"display_name": result["display_name"], "geojson": result["geojson"]} for result in raw_results if isinstance(result.get("geojson"), dict) and result["geojson"].get("type") in _POLYGONAL_TYPES]
         return JsonResponse({"results": results})

@@ -134,6 +134,7 @@ campuses were covered by the Indianapolis, Dayton, Austin, Philadelphia, DC, Buf
 ## Not REData's
 
 The suite's own gaps are UrbanLens#339 ("news check searches a shared campus name without its town") and
-UrbanLens#340 ("register check reads only each row's name"). Six register misses are UrbanLens's catalogue naming a
-campus differently from its listing, and a seventh (Terrell) may be its coordinate (PL9). Image search is thin everywhere because the engines REData relays to
+UrbanLens#340 ("register check reads only each row's name"). Six register misses were UrbanLens's catalogue naming a
+campus differently from its listing, or expecting one the Register had removed; Terrell's point was right, and the
+THC marker's own coordinates are the ones outside the grounds (PL9). Image search is thin everywhere because the engines REData relays to
 refuse the shared egress IP (P116).
