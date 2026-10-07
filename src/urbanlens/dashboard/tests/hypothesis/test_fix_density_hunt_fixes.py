@@ -104,11 +104,11 @@ class HiddenActivityLocationTests(TestCase):
 
     def _row(self, *, hidden: bool, title: str = "") -> dict:
         from urbanlens.dashboard.models.trips.model import TripActivity
-        from urbanlens.dashboard.services.trips.trip_activities import _masked_activity_title
+        from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title
 
         activity = baker.prepare(TripActivity, title=title, location=self.location, location_hidden=hidden)
         return {
-            "display_title": _masked_activity_title(activity, hidden=hidden),
+            "display_title": masked_activity_title(activity, hidden=hidden),
             "display_location_name": "" if hidden else (activity.location.display_name if activity.location else ""),
             "display_location_ref": "" if hidden else (activity.location.slug if activity.location else ""),
         }
@@ -147,6 +147,7 @@ class HiddenActivityLocationTests(TestCase):
         )
 
         self.assertNotIn("act.effective_title", panel)
+        self.assertNotIn("act.title", panel)
         self.assertNotIn("act.location.", panel)
         self.assertIn("{{ item.display_title }}", panel)
         self.assertIn('data-act-location-name="{{ item.display_location_name }}"', panel)

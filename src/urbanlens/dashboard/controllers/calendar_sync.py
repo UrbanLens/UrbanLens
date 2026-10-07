@@ -26,16 +26,21 @@ from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
+    CalendarUnavailableError,
     build_authorization_url,
     exchange_code_for_tokens,
     revoke_token,
 )
 from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.trips.calendar_sync import (
+    CALENDAR_BUSY_MESSAGE,
+    CALENDAR_UNAVAILABLE_MESSAGE,
     MAX_IMPORTABLE_EVENTS,
     TooManyEventsError,
     build_import_preview,
+    export_progress_message,
     export_trip_to_calendar,
     list_importable_events,
     normalize_event_ids,
@@ -113,8 +118,9 @@ _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try aga
 def _drop_expired_account(account: GoogleCalendarAccount) -> None:
     """Delete a connection Google has already rejected.
 
-    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored tokens are dead, so
-    keeping the row around would just repeat the same failure on every next attempt.
+    Called only when a gateway call raises ``GoogleAuthExpiredError`` - Google refused the grant itself, so
+    keeping the row around would just repeat the same failure on every next attempt. A failure that passes, or one
+    about the site rather than the user, keeps it.
 
     Args:
         account: The connection to discard.
@@ -187,6 +193,7 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
         if tokens.get("refresh_token"):
             account.refresh_token = tokens["refresh_token"]
             account.save(update_fields=["refresh_token", "updated"])
+        TripCalendarLink.objects.forget_written_events(profile)
 
         messages.success(request, "Google Calendar connected. You can now import events and export trips.")
         return redirect(_next_url(next_name))
@@ -262,6 +269,8 @@ class CalendarImportView(LoginRequiredMixin, View):
             _drop_expired_account(account)
             account = None
             error = _RECONNECT_MESSAGE
+        except CalendarUnavailableError:
+            error = CALENDAR_UNAVAILABLE_MESSAGE
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             error = _GATEWAY_FAILURE_MESSAGE
@@ -377,6 +386,8 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return HttpResponse(_RECONNECT_MESSAGE, status=502)
+        except CalendarUnavailableError:
+            return HttpResponse(CALENDAR_UNAVAILABLE_MESSAGE, status=503)
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return HttpResponse(_GATEWAY_FAILURE_MESSAGE, status=502)
@@ -433,23 +444,30 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         if account is None:
             return self._render_button(request, trip, profile, toast=("warning", "Connect your Google Calendar first."), status=200)
 
-        trip_url = request.build_absolute_uri(reverse("trips.detail", kwargs={"trip_slug": trip.slug}))
         try:
-            link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
+            exported = export_trip_to_calendar(account, trip)
         except ValueError as exc:
             logger.info("calendar export rejected for trip %s: %s", trip.pk, exc)
             return self._render_button(request, trip, profile, toast=("warning", "That trip couldn't be exported to your calendar."))
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
+        except RateLimitExceededError:
+            # Nothing of the trip reached the calendar, so there is nothing to finish later.
+            return self._render_button(request, trip, profile, toast=("warning", CALENDAR_BUSY_MESSAGE))
+        except CalendarUnavailableError:
+            return self._render_button(request, trip, profile, toast=("error", CALENDAR_UNAVAILABLE_MESSAGE))
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))
 
         auto_sync = request.POST.get("auto_sync") == "1"
-        if link.auto_sync != auto_sync:
-            TripCalendarLink.objects.set_auto_sync(link.pk, auto_sync)
+        if exported.trip_link.auto_sync != auto_sync:
+            TripCalendarLink.objects.set_auto_sync(exported.trip_link.pk, auto_sync)
 
+        if not exported.complete:
+            return self._render_button(request, trip, profile, toast=("info", export_progress_message(exported)))
+        activity_count = exported.activities_synced
         if activity_count:
             message = f"Trip and {activity_count} activit{'ies' if activity_count != 1 else 'y'} added to your Google Calendar."
         else:
@@ -472,6 +490,10 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
+        except RateLimitExceededError:
+            return self._render_button(request, trip, profile, toast=("warning", CALENDAR_BUSY_MESSAGE))
+        except CalendarUnavailableError:
+            return self._render_button(request, trip, profile, toast=("error", CALENDAR_UNAVAILABLE_MESSAGE))
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))

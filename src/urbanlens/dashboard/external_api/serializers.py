@@ -2688,11 +2688,13 @@ class TripActivitySerializer(serializers.Serializer):
     """
 
     id = serializers.IntegerField(source="activity.id", read_only=True)
-    title = serializers.CharField(source="activity.title", read_only=True, allow_null=True)
+    #: The activity's own title; null when it has none, or when it was taken from a place search (or an imported
+    #: event's location) and the location is hidden from this viewer.
+    title = serializers.CharField(source="display_own_title", read_only=True, allow_null=True)
     #: The label the UI shows: the title, else the linked pin/location's name. source is the row's
     #: already-masked display_title, not activity.effective_title directly - the raw model property has no
     #: location_hidden/viewer-privacy awareness, and reading it here bypassed the masking the internal HTMX
-    #: panel already applies (see trip_activities._masked_activity_title's docstring for the leak this exists
+    #: panel already applies (see trip_visibility.masked_activity_title's docstring for the leak this exists
     effective_title = serializers.CharField(source="display_title", read_only=True)
     notes = serializers.CharField(source="activity.notes", read_only=True, allow_null=True)
     status = serializers.ChoiceField(choices=TripActivity.STATUS_CHOICES, source="activity.status", read_only=True)

@@ -24,6 +24,7 @@ def select_environment(env_type: str | EnvironmentTypes | None = None) -> BaseEn
 
     Raises:
         ValueError: If the environment type is unknown.
+        ImproperlyConfigured: If none is given and ``UL_ENVIRONMENT`` is unset, blank or unknown.
     """
     if isinstance(env_type, str):
         env_type = EnvironmentTypes(env_type)

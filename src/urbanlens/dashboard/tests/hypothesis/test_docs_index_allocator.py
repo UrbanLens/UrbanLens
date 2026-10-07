@@ -1,4 +1,4 @@
-"""The index allocates ids, so archiving one must not hand it out again."""
+"""The index allocates the ids it still holds, and refuses the ones that moved out."""
 
 from __future__ import annotations
 
@@ -26,32 +26,14 @@ def _load_checker():
     return module
 
 
-def _claim(number: int) -> str:
-    """The one-line claim used for `P<number>` in both the index and the entry."""
-    return f"something measurable went wrong in subsystem {number}"
+def _row(ident: str, status: str = "current") -> str:
+    return f"| {ident} | {status} | 2026-10-07 | something measurable about {ident} | [`docs/NOTES.md`](NOTES.md) |"
 
 
-def _index(live: list[int], next_free: int) -> str:
-    """Build an `INDEX.md` listing exactly `live`, declaring `next_free`."""
-    rows = "\n".join(f"| P{n} | open | 2026-09-05 | {_claim(n)} | [`docs/PROBLEMS.md`](PROBLEMS.md) |" for n in live)
-    return f"# INDEX\n\n**Next free id:** `P{next_free}`\n\n| id | status | updated | claim | path |\n|---|---|---|---|---|\n{rows}\n"
-
-
-def _problems(live: list[int]) -> str:
-    """Build a `PROBLEMS.md` holding exactly the `live` entries."""
-    entries = "\n\n".join(
-        f"## P{n} — {_claim(n)}\n\n`id: P{n}` · `status: open` · `updated: 2026-09-05`\n\nBody." for n in live
-    )
-    return f"# PROBLEMS\n\n{entries}\n"
-
-
-def _archive(archived: list[int], *, record_ids: bool = True) -> str:
-    """Build an archive holding `archived`, optionally without their id lines."""
-    entries = []
-    for n in archived:
-        metadata = f"\n\n`id: P{n}` · `status: fixed` · `resolved: 2026-09-05`" if record_ids else ""
-        entries.append(f"## RESOLVED 2026-09-05: {_claim(n)}{metadata}\n\nBody.")
-    return "# Resolved problems (archive)\n\n" + "\n\n".join(entries) + "\n"
+def _index(rows: list[str], next_free: str) -> str:
+    """Build an `INDEX.md` holding `rows`, declaring `next_free`."""
+    body = "\n".join(rows)
+    return f"# INDEX\n\n**Next free id:** {next_free}\n\n| id | status | updated | claim | path |\n|---|---|---|---|---|\n{body}\n"
 
 
 class DocsIndexAllocatorTests(SimpleTestCase):
@@ -61,49 +43,47 @@ class DocsIndexAllocatorTests(SimpleTestCase):
         cls.checker = _load_checker()
 
     def test_a_consistent_index_is_clean(self) -> None:
-        self.assertEqual(self.checker.audit(_index([1, 2, 3], 4), _problems([1, 2, 3]), _archive([])), [])
+        index = _index([_row("N1"), _row("N2"), _row("PL1", "live")], "`N3` · `PL2`")
+        self.assertEqual(self.checker.audit(index, ["0001-a.md", "0002-b.md", "README.md"]), [])
 
-    def test_archiving_the_highest_id_does_not_free_it_for_reuse(self) -> None:
-        """P3 resolved: gone from both live files, still allocated by the archive."""
-        self.assertEqual(self.checker.audit(_index([1, 2], 4), _problems([1, 2]), _archive([3])), [])
+    def test_a_problem_row_is_refused(self) -> None:
+        failures = self.checker.audit(_index([_row("P339", "open")], "`N1`"), [])
+        self.assertTrue(any("P339: problems are GitHub issues" in failure for failure in failures), failures)
 
-    def test_an_archive_that_drops_the_id_line_demands_the_id_back(self) -> None:
-        """Without `id:` in the archive the checker cannot see P3 was ever used."""
-        failures = self.checker.audit(_index([1, 2], 4), _problems([1, 2]), _archive([3], record_ids=False))
-        self.assertTrue(any("next free P is 4" in failure for failure in failures), failures)
+    def test_a_task_or_decision_row_is_refused(self) -> None:
+        failures = self.checker.audit(_index([_row("T4", "open"), _row("D28", "accepted")], "`N1`"), [])
+        self.assertTrue(any("T4: tasks are GitHub issues" in failure for failure in failures), failures)
+        self.assertTrue(any("D28: decisions are ADRs" in failure for failure in failures), failures)
 
-    def test_an_entry_copied_to_the_archive_but_left_live_is_flagged(self) -> None:
-        failures = self.checker.audit(_index([1, 2, 3], 4), _problems([1, 2, 3]), _archive([3]))
-        self.assertTrue(
-            any("P3 is archived but still live in PROBLEMS.md and INDEX.md" in failure for failure in failures),
-            failures,
-        )
+    def test_next_free_naming_a_retired_prefix_is_flagged(self) -> None:
+        failures = self.checker.audit(_index([_row("N1")], "`N2` · `P339`"), [])
+        self.assertTrue(any("next free names P339" in failure for failure in failures), failures)
 
-    def test_an_id_archived_twice_is_flagged(self) -> None:
-        failures = self.checker.audit(_index([1], 4), _problems([1]), _archive([3, 3]))
-        self.assertTrue(any("P3 appears 2 times in the archive" in failure for failure in failures), failures)
+    def test_a_duplicated_id_is_flagged(self) -> None:
+        failures = self.checker.audit(_index([_row("N1"), _row("N1")], "`N2`"), [])
+        self.assertTrue(any("N1 appears 2 times" in failure for failure in failures), failures)
 
-    def test_a_duplicated_heading_in_problems_is_flagged(self) -> None:
-        """`dict(headings)` folds a copy-paste into one; the count must not."""
-        problems = _problems([1, 2]) + f"\n## P2 — {_claim(2)}\n\nBody.\n"
-        failures = self.checker.audit(_index([1, 2], 3), problems, _archive([]))
-        self.assertTrue(any("P2 has 2 headings in PROBLEMS.md" in failure for failure in failures), failures)
+    def test_a_wrong_status_is_flagged(self) -> None:
+        failures = self.checker.audit(_index([_row("N1", "open")], "`N2`"), [])
+        self.assertTrue(any("N1: status 'open'" in failure for failure in failures), failures)
 
-    def test_archiving_a_middle_id_leaves_the_next_free_id_alone(self) -> None:
-        """Archiving a middle id changes nothing: the highest is what allocates."""
-        self.assertEqual(self.checker.audit(_index([1, 3], 4), _problems([1, 3]), _archive([2])), [])
+    def test_two_adrs_sharing_a_number_are_flagged(self) -> None:
+        failures = self.checker.audit(_index([], "`N1`"), ["0003-a.md", "0003-b.md"])
+        self.assertTrue(any("ADR-0003 is used by 0003-a.md, 0003-b.md" in failure for failure in failures), failures)
+
+    def test_a_misnamed_adr_is_flagged(self) -> None:
+        failures = self.checker.audit(_index([], "`N1`"), ["use-postgres.md"])
+        self.assertTrue(any("use-postgres.md: not named" in failure for failure in failures), failures)
 
     @given(st.integers(min_value=1, max_value=12), st.data())
     @settings(max_examples=60, deadline=None)
-    def test_next_free_is_one_past_the_highest_id_ever_allocated(self, highest: int, data: st.DataObject) -> None:
-        """However the ids split between live and archived, the ceiling holds."""
-        allocated = list(range(1, highest + 1))
-        archived = data.draw(st.lists(st.sampled_from(allocated), unique=True, max_size=highest))
-        live = [n for n in allocated if n not in archived]
-        index, problems, archive = _index(live, highest + 1), _problems(live), _archive(archived)
+    def test_next_free_is_one_past_the_highest_id_listed(self, highest: int, data: st.DataObject) -> None:
+        """However many lower ids are missing, the highest one sets the ceiling."""
+        listed = data.draw(st.sets(st.integers(min_value=1, max_value=highest))) | {highest}
+        rows = [_row(f"N{n}") for n in sorted(listed)]
 
-        self.assertEqual(self.checker.audit(index, problems, archive), [])
+        self.assertEqual(self.checker.audit(_index(rows, f"`N{highest + 1}`"), []), [])
 
         wrong = data.draw(st.integers(min_value=1, max_value=highest))
-        failures = self.checker.audit(_index(live, wrong), problems, archive)
-        self.assertTrue(any("next free P" in failure for failure in failures), failures)
+        failures = self.checker.audit(_index(rows, f"`N{wrong}`"), [])
+        self.assertTrue(any("next free N" in failure for failure in failures), failures)

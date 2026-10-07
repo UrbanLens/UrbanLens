@@ -1,4 +1,4 @@
-"""Custom queryset/manager for TripCalendarLink."""
+"""Custom querysets/managers for TripCalendarLink and CalendarEventDeletion."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+    from urbanlens.dashboard.models.calendar_sync.model import CalendarEventDeletion, TripCalendarLink  # noqa: F401 - mypy needs these; ruff does not
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
 
@@ -71,6 +71,20 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         """
         return self.filter(profile=profile, google_event_id=event_id).exists()
 
+    def forget_written_events(self, profile: Profile) -> int:
+        """Stop trusting that this profile's calendar holds what UrbanLens last wrote to it.
+
+        Called when the profile (re)connects a Google account, which may not be the one the events went to: the next
+        export rewrites every event instead of skipping it as current.
+
+        Args:
+            profile: The profile that connected.
+
+        Returns:
+            How many links were reset.
+        """
+        return self.filter(profile=profile).exclude(event_fingerprint="").update(event_fingerprint="")
+
     def set_auto_sync(self, link_pk: int, auto_sync: bool) -> None:
         """Update just the auto_sync flag for one link, by pk.
 
@@ -86,3 +100,27 @@ _TripCalendarLinkManagerBase = abstract.DashboardManager.from_queryset(TripCalen
 
 class TripCalendarLinkManager(_TripCalendarLinkManagerBase):
     """Custom query manager for TripCalendarLink models."""
+
+
+class CalendarEventDeletionQuerySet(abstract.DashboardQuerySet["CalendarEventDeletion"]):
+    """Custom queryset for CalendarEventDeletion models."""
+
+    def queue(self, link: TripCalendarLink) -> bool:
+        """Owe a delete of the event *link* names, once.
+
+        Args:
+            link: A link whose event UrbanLens made, with a Google event id.
+
+        Returns:
+            True when the profile had no delete owed before this one, so nothing is queued to deliver it yet.
+        """
+        first = not self.filter(profile_id=link.profile_id).exists()
+        self.get_or_create(profile_id=link.profile_id, google_calendar_id=link.google_calendar_id or "primary", google_event_id=link.google_event_id)
+        return first
+
+
+_CalendarEventDeletionManagerBase = abstract.DashboardManager.from_queryset(CalendarEventDeletionQuerySet)
+
+
+class CalendarEventDeletionManager(_CalendarEventDeletionManagerBase):
+    """Custom query manager for CalendarEventDeletion models."""

@@ -1,6 +1,6 @@
 # N31 — Decisions agents made without Jess's input, awaiting her review
 
-`id: N31` · `status: current` · `updated: 2026-09-30`
+`id: N31` · `status: current` · `updated: 2026-10-07`
 
 A read-only audit of the 269 commits since the N29 audit (`6d0b7d956`) and of N30's dispositions, made after
 Jess found two agent changes that overrode her direction (reverted as D24 and D25). It lists changes that remove,
@@ -37,7 +37,7 @@ Each row gets a ruling from Jess; until then, nothing here is reverted.
 | 540c39890 | API-key reads logged to the usage trail at most once a minute per key | Write per call |
 | 89ae9d8ca | Server-side password policy skipped for E2EE-derived credentials; a modified client can set a weak password | Derived credentials can't be checked server-side |
 | 8199de5e9 | A password change deletes all OAuth2 tokens (signs out the native app) and closes sockets; API keys revoked only if ticked | G3-35/36 |
-| aa4b83003 | Unset `UL_ENVIRONMENT` means production; deployments refuse to start without required config; CORS/CSRF stop trusting `urbanlens.org` and `localhost` everywhere | Unsafe defaults (G3-6) |
+| aa4b83003 | **Ruled 2026-10-07:** an unset or blank `UL_ENVIRONMENT` refuses to start, naming the variable and the five names it takes (it used to mean production); a test run that names none runs as `testing`. Deployments still refuse to start without required config; CORS/CSRF stop trusting `urbanlens.org` and `localhost` everywhere | Unsafe defaults (G3-6) |
 
 ## Low
 
@@ -130,3 +130,31 @@ Jess answered a numbered list of every open decision:
 - **KML areas:** keep the centroid pin. **Migration 0096:** write the download command.
 - **P167:** deferred. **P49:** the citation check runs manually, as a warning; strip line numbers from the flagged citations.
 - **The caps and throttles tables above:** no objection raised when offered "keep unless named".
+
+## Rulings 2026-10-07
+
+- **Unset `UL_ENVIRONMENT` (aa4b83003):** "sure": a process that does not name its environment refuses to start,
+  rather than running as production. `environments/meta.environment_from_env` raises `ImproperlyConfigured`
+  ("UL_ENVIRONMENT is not set; use one of: development, local, production, staging, testing."), the path an
+  unknown name already took. A pytest run that names none is the suite and runs as `testing`, CI's name;
+  compose passes the operator's value through with no default, and `bin/init.py` refuses too and hands the
+  name it resolved to its `manage.py` children. Every start-up was checked first, including the k3s sites and
+  staging in the infrastructure repo, which name it on every workload.
+- **Trivia generation caps:** "that's fine for now": `trivia_generation` keeps 5 calls a minute and 200 a day
+  (`SERVICE_REGISTRY` in `services/core/rate_limiter.py`), as D26 records. Kept as is.
+- **A hidden stop's calendar title (633a4819f, UrbanLens#303):** decided by the owner 2026-10-07
+  ([ADR-0029](../adr/0029-place-derived-stop-titles-hidden-with-the-location.md)): a hidden stop must never show a
+  place-derived name to someone who may not see it, and a title its author genuinely typed may still be shown; the
+  panel, the external API and the calendar export agree. `TripActivity.title_from_place` records a title taken from
+  a place search or an imported event's location, and every masking surface withholds it with the location; a typed
+  title is shown on all of them, the calendar included. Migration 0069 marks every located stop's stored title and
+  every imported stop's, since none of those can be shown to have been typed.
+- **Calendar follow-ups UrbanLens#301 and UrbanLens#302:** decided by the owner 2026-10-07
+  ([ADR-0028](../adr/0028-calendar-connection-dropped-only-for-a-refused-grant.md),
+  [ADR-0030](../adr/0030-calendar-writes-reach-hidden-locations.md)). A transient failure (a token refresh that
+  gets a 5xx, a timeout or no answer) keeps the connection and answers "busy"; only Google's refusal of the grant
+  drops it, and a refusal of the site's Google project or OAuth client is logged at ERROR and reported as calendar
+  sync being unavailable. A visibility change on an auto-synced trip queues the push an edit would; a deleted stop's
+  event is deleted (queued, through the calendar budget), never an event an import linked; exports without
+  auto-sync are not pushed, and `manage.py clear_withheld_calendar_locations` cleans them once at the 0.9.0 rollout
+  (N46).

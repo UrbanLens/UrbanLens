@@ -87,9 +87,16 @@ class TripCalendarExportResponseSerializer(serializers.Serializer):
     """The result of an export: the refreshed status plus what was written."""
 
     calendar = TripCalendarStatusSerializer(read_only=True)
-    #: How many scheduled activities were mirrored as their own timed events. Zero is normal - a trip with no
+    #: How many scheduled activities are mirrored as their own timed events. Zero is normal - a trip with no
     #: scheduled stops still exports its own all-day event.
     activities_exported = serializers.IntegerField(read_only=True)
+    #: False when the calendar budget ran out partway. What was written stays, and the rest follows without
+    #: another request: the server finishes it in the background.
+    complete = serializers.BooleanField(read_only=True)
+    #: How many of the trip's events are on the calendar and up to date, from this request or an earlier one.
+    events_synced = serializers.IntegerField(read_only=True)
+    #: How many events the trip needs: its all-day event plus one per scheduled activity.
+    events_total = serializers.IntegerField(read_only=True)
 
 
 class TripCalendarRemovalResponseSerializer(serializers.Serializer):

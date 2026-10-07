@@ -655,7 +655,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
         """Return the active environment type, honoring admin override when set.
-        When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT`` (production when unset).
+        When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT``, which startup has already required.
 
         Returns:
             The resolved ``EnvironmentTypes`` value for this site.

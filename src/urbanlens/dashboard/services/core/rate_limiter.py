@@ -617,7 +617,8 @@ def get_limit_config(service: str) -> Any:
     """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
     A row still holding the generic fallback takes the service's registered defaults once there are some; ``enabled`` is never touched.
     A row holding a service's own defaults is never rewritten here, since an admin may have chosen them: a changed default
-    reaches existing rows only through a data migration that touches rows still holding the old values exactly (0064).
+    reaches existing rows only through a data migration that touches rows still holding an old default exactly (0064 for 0.8.0's,
+    0068 for every earlier release's).
 
     Args:
         service: The service key (e.g. ``"nps"``).

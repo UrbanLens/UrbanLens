@@ -83,7 +83,7 @@ ENVIRONMENT_SHARE_DEFAULTS: Mapping[str, float] = {
     EnvironmentTypes.LOCAL: 0.0,
     EnvironmentTypes.TESTING: 1.0,
 }
-#: The share of an environment the table does not name. Startup already refuses an unknown ``UL_ENVIRONMENT``.
+#: The share of an environment the table does not name. Startup already refuses an unknown or unset ``UL_ENVIRONMENT``.
 UNKNOWN_ENVIRONMENT_SHARE = 0.0
 
 #: Environments that call every category, at production's terms or better.

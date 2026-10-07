@@ -124,11 +124,14 @@ def _render_building_attributes(data: dict[str, Any]) -> dict[str, Any] | None:
     if not data:
         return None
 
+    from urbanlens.dashboard.services.pins.build_dates import own_build_year
+
     meta = []
     if data.get("building_number"):
         meta.append({"label": "Building Number", "value": data["building_number"]})
-    if data.get("year_built"):
-        meta.append({"label": "Year Built", "value": data["year_built"]})
+    # The parcel's year, which Property Records shows as such, would read here as this building's.
+    if (year_built := own_build_year(data)) is not None:
+        meta.append({"label": "Year Built", "value": year_built})
 
     heading_name = data.get("name") or None
     if not heading_name and not meta:

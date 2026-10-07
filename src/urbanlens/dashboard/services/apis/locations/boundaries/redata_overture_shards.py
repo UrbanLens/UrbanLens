@@ -1,6 +1,6 @@
 """The boxes REData shards its Overture sync by, so UrbanLens knows where REData's mirror holds anything.
 
-A copy of REData's ``parcels.services.overture.shards.US_STATE_BBOXES`` at release/0.3.1 84b3c436. REData syncs
+A copy of REData's ``parcels.services.overture.shards.US_STATE_BBOXES`` at v0.3.6 91bb40d2. REData syncs
 each theme by these boxes, padded beyond each state and territory, and serves Overture only where its own
 ``is_usa_coordinates`` also holds. Alaska's box stops at -179.9, so the western Aleutians are in no shard.
 

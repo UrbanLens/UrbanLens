@@ -25,7 +25,7 @@ from django.db.models import (
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.calendar_sync.queryset import TripCalendarLinkManager
+from urbanlens.dashboard.models.calendar_sync.queryset import CalendarEventDeletionManager, TripCalendarLinkManager
 from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
@@ -103,9 +103,9 @@ class TripCalendarLink(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="calendar_links",
     )
-    # Set when this link mirrors a single scheduled activity rather than the
-    # whole trip. Deleting the activity cascades away its event link (the
-    # orphaned Google event is cleaned up on the next export/removal sync).
+    # Set when this link mirrors a single scheduled activity rather than the whole trip. Deleting the activity (or
+    # the trip) cascades away its link; an event UrbanLens made is queued for deletion first, as a
+    # CalendarEventDeletion (models/calendar_sync/signals.py).
     activity = ForeignKey(
         "dashboard.TripActivity",
         on_delete=CASCADE,
@@ -123,13 +123,18 @@ class TripCalendarLink(abstract.DashboardModel):
     google_event_id = CharField(max_length=1024)
     direction = CharField(max_length=10, choices=CalendarSyncDirection.choices)
     last_synced = DateTimeField(null=True, blank=True)
+    #: SHA-256 of the event body last written and the calendar it went to; blank when nothing UrbanLens wrote is
+    #: known to be there. An export skips an event whose new body hashes the same, so a retry resumes where the
+    #: last attempt stopped.
+    event_fingerprint = CharField(max_length=64, blank=True, default="")
     auto_sync = BooleanField(
         default=False,
         help_text="Push future changes to this trip and its activities to the linked calendar event automatically. One-way only - edits made on Google Calendar are never pulled back.",
     )
-    #: The latest trip change an auto-sync push has not yet delivered; cleared only by a push that read it.
+    #: The latest trip change a push has not yet delivered: an auto-sync change, or the rest of an export the
+    #: calendar budget cut short. Cleared only by a push that read it.
     push_requested_at = DateTimeField(null=True, blank=True)
-    #: Failed pushes since the last request; ``tasks.requeue_pending_calendar_pushes`` gives up past a cap.
+    #: Pushes since the last request that wrote nothing; ``tasks.requeue_pending_calendar_pushes`` gives up past a cap.
     push_attempts = PositiveSmallIntegerField(default=0)
 
     if TYPE_CHECKING:
@@ -166,4 +171,41 @@ class TripCalendarLink(abstract.DashboardModel):
         indexes = [
             Index(fields=["profile", "google_event_id"], name="idxdb_tcl_profile_event"),
             Index(fields=["push_requested_at"], condition=Q(push_requested_at__isnull=False), name="idxdb_tcl_push_requested"),
+        ]
+
+
+class CalendarEventDeletion(abstract.DashboardModel):
+    """A Google Calendar event UrbanLens made, owed a delete because the trip or activity it mirrored is gone.
+
+    The link that named the event goes with what it mirrored, so this row is the only record of the event left.
+    ``tasks.delete_orphaned_calendar_events`` deletes it through the calendar budget, and the push sweep
+    (``tasks.requeue_pending_calendar_pushes``) queues again what a refusal or a failure left. An event Google no
+    longer has counts as deleted.
+    """
+
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="calendar_event_deletions",
+    )
+    google_calendar_id = CharField(max_length=255, default="primary")
+    google_event_id = CharField(max_length=1024)
+    #: Deletes Google refused for a reason that may not pass; the sweep drops the row past a cap.
+    attempts = PositiveSmallIntegerField(default=0)
+
+    if TYPE_CHECKING:
+        profile_id: int
+
+    objects = CalendarEventDeletionManager()
+
+    def __str__(self) -> str:
+        return f"Delete event {self.google_event_id} from {self.profile}'s calendar"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_calendar_event_deletions"
+        constraints = [
+            UniqueConstraint(
+                fields=("profile", "google_calendar_id", "google_event_id"),
+                name="db_ced_profile_event_unique",
+            ),
         ]
