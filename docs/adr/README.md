@@ -1,6 +1,6 @@
 # Architecture decision records
 
-Decisions live here, one file each, numbered sequentially: `NNNN-<slug>.md`. The next number is `0028`.
+Decisions live here, one file each, numbered sequentially: `NNNN-<slug>.md`. The next number is `0031`.
 
 ADR-NNNN for N ≤ 27 is the former decision record `D`N in [`docs/INDEX.md`](../INDEX.md), so `D8` is [ADR-0008](0008-storage-quotas-enforced-generally.md).
 

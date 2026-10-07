@@ -271,6 +271,9 @@ class TripActivity(abstract.DashboardModel):
     ]
 
     title = CharField(max_length=255, null=True, blank=True)
+    #: The title was filled in from the place (a place search's name, an imported event's location) rather than typed,
+    #: so it names the place and is withheld wherever the location is (``trip_visibility.masked_activity_title``).
+    title_from_place = BooleanField(default=False)
     notes = TextField(null=True, blank=True, max_length=MAX_TRIP_ACTIVITY_NOTES_LENGTH, validators=[MaxLengthValidator(MAX_TRIP_ACTIVITY_NOTES_LENGTH)])
     scheduled_at = DateTimeField(null=True, blank=True)
     scheduled_end = DateTimeField(null=True, blank=True)
