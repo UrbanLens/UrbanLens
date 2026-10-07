@@ -5585,6 +5585,29 @@
     ],
     "type": "object"
    },
+   "ParcelAnswerPending": {
+    "properties": {
+     "error": {
+      "enum": [
+       "refresh_queued",
+       "compute_timeout"
+      ],
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "retry_after": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "error",
+     "message",
+     "retry_after"
+    ],
+    "type": "object"
+   },
    "ParcelAssessment": {
     "properties": {
      "administrative_area": {
@@ -9630,7 +9653,7 @@
  "info": {
   "title": "REData API",
   "version": "1.0.0",
-  "x-redata-revision": "release/0.3.7 d1f1bbcb"
+  "x-redata-revision": "release/0.3.7 c4e0de94"
  },
  "openapi": "3.0.3",
  "paths": {
@@ -11182,6 +11205,15 @@
         }
        }
       }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParcelAnswerPending"
+        }
+       }
+      }
      }
     }
    }
@@ -11239,6 +11271,15 @@
           }
          },
          "type": "object"
+        }
+       }
+      }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ParcelAnswerPending"
         }
        }
       }

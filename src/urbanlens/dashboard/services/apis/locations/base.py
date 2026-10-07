@@ -233,12 +233,15 @@ class BoundaryProviderDeferredError(Exception):
     Attributes:
         service_key: The provider that declined.
         retry_after: Seconds the provider asked callers to wait, when it said.
+        computing: The provider is computing its answer and will have it after ``retry_after``, so asking again then
+            is not a retry of a failure and needs no back-off.
     """
 
-    def __init__(self, service_key: str, *, retry_after: int | None = None) -> None:
+    def __init__(self, service_key: str, *, retry_after: int | None = None, computing: bool = False) -> None:
         super().__init__(f"{service_key} deferred")
         self.service_key = service_key
         self.retry_after = retry_after
+        self.computing = computing
 
 
 class BoundaryProvider(Service, ABC):

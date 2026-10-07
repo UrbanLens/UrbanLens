@@ -471,6 +471,28 @@ class InFlightDeduplicationTests(_BootstrapCase):
         self.assertEqual(retry[0].kwargs["stage"], bootstrap.BootstrapStage.BUILDINGS)
         self.assertGreater(retry[0].kwargs["countdown"], 0)
 
+    def test_a_building_list_redata_is_still_computing_is_asked_for_again_after_its_wait(self) -> None:
+        """REData 0.3.7 answers a cold parcel ``503 refresh_queued`` with its wait in the body: the bootstrap sits that
+        out rather than nesting the campus from a fallback list, or from none."""
+        self.upstreams = HrshUpstreams(pending_parcel_answers=1)
+
+        self.run_stage(bootstrap.BootstrapStage.BUILDINGS)
+
+        (retry,) = self.enqueued(tasks.bootstrap_location)
+        self.assertEqual(retry.kwargs["stage"], bootstrap.BootstrapStage.BUILDINGS)
+        self.assertGreaterEqual(retry.kwargs["countdown"], 60)
+        self.assertFalse(self.upstreams.other_hosts, "no fallback stands in for the answer REData is computing")
+        rows = LocationCache.objects.filter(location=self.pin.location, source=PARCEL_BUILDINGS_CACHE_SOURCE)
+        self.assertFalse(rows.exists())
+
+        source = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
+        assert source is not None
+        cache.delete(source.skip_key(self.pin))  # REData's wait is over
+        self.run_stage(bootstrap.BootstrapStage.BUILDINGS, attempt=retry.kwargs["attempt"])
+
+        self.assertTrue(rows.exists())
+        self.assertEqual(self.enqueued(tasks.bootstrap_location)[0].kwargs["stage"], bootstrap.BootstrapStage.NEST)
+
     def test_after_enough_waiting_the_chain_moves_on(self) -> None:
         source = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
         acquire_lock(source.flight_key(self.pin), 150)

@@ -24,7 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from django.core.cache import cache
 from django.db import transaction
@@ -83,6 +83,11 @@ _SITE_ALLOWANCE_KEY = "ul:pin-bootstrap:site"
 MAX_FLIGHT_WAITS = 5
 #: Seconds between those waits; five of them outlast a panel fetch task's hard time limit.
 FLIGHT_WAIT_SECONDS = 30
+#: The longest wait a source may name for a stage to sit it out and ask again, such as REData's while it computes a
+#: cold parcel's buildings; past it the stage moves on, and a page view or the enrichment job asks later.
+MAX_DEFERRAL_WAIT_SECONDS = 300
+#: Added to a source's wait, so the stage asks once the fetch's own suppression has lapsed.
+_DEFERRAL_MARGIN_SECONDS = 5
 #: How long the bootstrap's own flight marker stands: past ``tasks.bootstrap_location``'s hard time limit, so a killed
 #: run's marker expires soon after it, and a page's poll resumes fetching.
 _INLINE_FLIGHT_TTL_SECONDS = 300
@@ -108,6 +113,15 @@ class FetchOutcome(StrEnum):
     LANDED = "landed"
     IN_FLIGHT = "in_flight"
     SKIPPED = "skipped"
+    #: The source named a wait before it can answer.
+    DEFERRED = "deferred"
+
+
+class Fetched(NamedTuple):
+    """What asking for one panel's data inline came to, and the wait a deferring source named."""
+
+    outcome: FetchOutcome
+    wait: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,10 +254,13 @@ def _after(stage: BootstrapStage) -> NextStep | None:
     return NextStep(order[position + 1]) if position + 1 < len(order) else None
 
 
-def _waited(stage: BootstrapStage, attempt: int, outcome: FetchOutcome) -> NextStep | None:
-    """Wait for another caller's fetch to land, or move on once waiting has outlasted it."""
-    if outcome is FetchOutcome.IN_FLIGHT and attempt < MAX_FLIGHT_WAITS:
-        return NextStep(stage, attempt + 1, FLIGHT_WAIT_SECONDS)
+def _waited(stage: BootstrapStage, attempt: int, fetched: Fetched) -> NextStep | None:
+    """Wait for another caller's fetch to land, or out a short wait the source named, or move on once waiting has outlasted it."""
+    if attempt < MAX_FLIGHT_WAITS:
+        if fetched.outcome is FetchOutcome.IN_FLIGHT:
+            return NextStep(stage, attempt + 1, FLIGHT_WAIT_SECONDS)
+        if fetched.outcome is FetchOutcome.DEFERRED and fetched.wait is not None and fetched.wait <= MAX_DEFERRAL_WAIT_SECONDS:
+            return NextStep(stage, attempt + 1, fetched.wait + _DEFERRAL_MARGIN_SECONDS)
     return _after(stage)
 
 
@@ -291,7 +308,7 @@ _STAGES = {
 }
 
 
-def fetch_inline(pin: Pin, source_key: str) -> FetchOutcome:
+def fetch_inline(pin: Pin, source_key: str) -> Fetched:
     """Run one panel's fetch in this task, under the flight marker a page's scheduling uses.
 
     Args:
@@ -299,23 +316,26 @@ def fetch_inline(pin: Pin, source_key: str) -> FetchOutcome:
         source_key: A ``panel_sources()`` key.
 
     Returns:
-        What happened: fetched, already landed, in flight elsewhere, or not applicable.
+        What happened: fetched, already landed, in flight elsewhere, deferred by the source for a wait it named, or
+        not applicable.
     """
     from urbanlens.dashboard.services.core.locks import acquire_lock
     from urbanlens.dashboard.services.pins.external_data import fetch_blocked, gate_allows, get_panel_source, run_panel_fetch
 
     source = get_panel_source(source_key)
     if source is None or not gate_allows(source, pin):
-        return FetchOutcome.SKIPPED
+        return Fetched(FetchOutcome.SKIPPED)
     if source.has_landed(pin):
-        return FetchOutcome.LANDED
+        return Fetched(FetchOutcome.LANDED)
     if fetch_blocked(source, pin):
-        return FetchOutcome.SKIPPED
+        return Fetched(FetchOutcome.SKIPPED)
     token = acquire_lock(source.flight_key(pin), _INLINE_FLIGHT_TTL_SECONDS)
     if token is None:
-        return FetchOutcome.IN_FLIGHT
-    run_panel_fetch(source_key, pin, token)
-    return FetchOutcome.FETCHED
+        return Fetched(FetchOutcome.IN_FLIGHT)
+    wait = run_panel_fetch(source_key, pin, token)
+    if wait is not None and not source.has_landed(pin):
+        return Fetched(FetchOutcome.DEFERRED, wait)
+    return Fetched(FetchOutcome.FETCHED)
 
 
 def schedule_site_panels(pin: Pin) -> list[str]:

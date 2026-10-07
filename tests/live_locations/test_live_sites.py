@@ -458,6 +458,47 @@ class TestLiveRedataGet:
         assert client.get("parcels/").status == 500
         assert client.get("parcels/").status == 200
 
+    @pytest.mark.parametrize(("error", "wait"), [("refresh_queued", 60), ("compute_timeout", 120)])
+    def test_a_parcel_redata_is_computing_is_waited_out_once(
+        self, client: LiveRedata, get: mock.Mock, error: str, wait: int
+    ) -> None:
+        """REData 0.3.7 names the wait in the body, with no Retry-After header (its P62)."""
+        client.max_wait_seconds = 300
+        get.side_effect = [
+            _response(503, {"error": error, "message": "computing", "retry_after": wait}),
+            _response(200, []),
+        ]
+
+        with mock.patch("live_sites.time.sleep") as sleep:
+            assert client.get("parcels/p/buildings/").status == 200
+
+        sleep.assert_called_once_with(wait)
+
+    def test_a_parcel_still_computing_after_its_wait_is_inconclusive_and_not_asked_again(
+        self, client: LiveRedata, get: mock.Mock
+    ) -> None:
+        client.max_wait_seconds = 300
+        get.return_value = _response(503, {"error": "refresh_queued", "message": "computing", "retry_after": 60})
+
+        with pytest.raises(InconclusiveError):
+            client.get("parcels/p/boundaries/")
+        with pytest.raises(InconclusiveError):
+            client.get("parcels/p/boundaries/")
+
+        assert get.call_count == 2
+
+    def test_a_computing_wait_past_the_deadline_is_inconclusive_without_waiting(
+        self, client: LiveRedata, get: mock.Mock
+    ) -> None:
+        client.max_wait_seconds = 30
+        get.return_value = _response(503, {"error": "refresh_queued", "message": "computing", "retry_after": 60})
+
+        with mock.patch("live_sites.time.sleep") as sleep, pytest.raises(InconclusiveError):
+            client.get("parcels/p/buildings/")
+
+        sleep.assert_not_called()
+        assert get.call_count == 1
+
     def test_a_503_redata_decided_is_remembered(self, client: LiveRedata, get: mock.Mock) -> None:
         get.return_value = _response(503, {"error": "no_data_found", "message": "Every configured source ..."})
 

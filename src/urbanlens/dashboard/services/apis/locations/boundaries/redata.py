@@ -10,7 +10,7 @@ from django.contrib.gis.geos import MultiPoint, MultiPolygon, Point, Polygon
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, BoundaryProviderDeferredError, geojson_polygon_to_geos, polygon_from_wire
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway, unanswered_tiers
+from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsComputingError, PropertyRecordsUnavailableError, RedataGateway, unanswered_tiers
 from urbanlens.dashboard.services.geo.distance import haversine_meters
 
 logger = logging.getLogger(__name__)
@@ -162,9 +162,13 @@ class RedataBoundaryProvider(BoundaryProvider):
         return suggested_boundary(candidates)
 
     def _defer_if_transient(self, exc: PropertyRecordsUnavailableError) -> None:
-        """Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback."""
+        """Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback.
+
+        A parcel REData is still computing is deferred for exactly the wait it named.
+        """
         if exc.is_outage:
-            raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None)) from exc
+            computing = isinstance(exc, PropertyRecordsComputingError)
+            raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None), computing=computing) from exc
 
     def _buildings_convex_hull(self, gateway: RedataGateway, parcel_uuid: str | None, latitude: float, longitude: float) -> Polygon | None:
         """Approximate the property boundary as the convex hull of the parcel's own buildings.

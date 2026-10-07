@@ -89,6 +89,17 @@ REASON_DETAIL_UNRESOLVED = "detail_unresolved"
 #: The ``detail_status`` of that answer.
 _DETAIL_UNRESOLVED = "unresolved"
 
+#: REData is computing a cold parcel's unfiltered boundaries, buildings and related buildings in the background (its
+#: P62, 0.3.7): ask again after the ``retry_after`` its 503 body names. The wait is the parcel's, so it carries no
+#: ``Retry-After`` header, which would hold off every parcel's calls.
+REASON_REFRESH_QUEUED = "refresh_queued"
+#: The same, when the computation outran the request and could not be queued, or failed in the background lately.
+REASON_COMPUTE_TIMEOUT = "compute_timeout"
+#: The 503 reasons that mean REData will have the parcel's answer after the body's ``retry_after``.
+COMPUTING_REASONS: frozenset[str] = frozenset({REASON_REFRESH_QUEUED, REASON_COMPUTE_TIMEOUT})
+#: The wait for a computing answer whose body names none.
+_COMPUTING_DEFAULT_SECONDS = 60
+
 #: Reasons that mean "we could not ask", never "there is nothing here".
 #: The existence of a ``LocationCache`` row is what marks a source as fetched, so a caller that
 #: stores a payload for one of these turns a passing outage into a blank card for the whole
@@ -123,6 +134,30 @@ class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyErro
     def __init__(self, reason: str, message: str, *, retry_after: int, links: dict[str, str] | None = None) -> None:
         super().__init__(reason, message, links=links, retry_later=True)
         self.retry_after = retry_after
+
+
+class PropertyRecordsComputingError(PropertyRecordsBusyError):
+    """REData is computing this parcel's answer in the background and will have it after ``retry_after`` seconds.
+
+    Not an outage of REData or a source: a caller neither caches the silence nor settles for a fallback's answer, and
+    asks again once the wait is over.
+    """
+
+
+def _computing_wait(body: Mapping[str, Any]) -> int:
+    """The wait a computing 503's body names, in seconds.
+
+    Args:
+        body: REData's 503 body.
+
+    Returns:
+        Seconds, at least 1 and at most :data:`UPSTREAM_BUSY_MAX_SECONDS`; :data:`_COMPUTING_DEFAULT_SECONDS` when the
+        body names none.
+    """
+    seconds = _seconds_from_now(body.get("retry_after"))
+    if seconds is None or not math.isfinite(seconds):
+        return _COMPUTING_DEFAULT_SECONDS
+    return max(1, min(math.ceil(seconds), UPSTREAM_BUSY_MAX_SECONDS))
 
 
 def _refused(response: requests.Response) -> PropertyRecordsBusyError:
@@ -372,6 +407,8 @@ class RedataGateway(Gateway):
             # REData answers 404 for a permanent reason and 503 for one worth asking about again.
             if response.status_code == 404:
                 raise PropertyRecordsUnavailableError(reason, message, links=links)
+            if reason in COMPUTING_REASONS:
+                raise PropertyRecordsComputingError(reason, message, retry_after=_computing_wait(body), links=links)
             if (wait := _named_wait(response)) is not None:
                 raise PropertyRecordsBusyError(reason, message, retry_after=wait, links=links)
             raise PropertyRecordsUnavailableError(reason, message, links=links, retry_later=True)

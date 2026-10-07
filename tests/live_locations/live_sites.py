@@ -45,6 +45,10 @@ _RETRYABLE_ERRORS = frozenset(
     }
 )  # fmt: skip
 _UNANSWERED_STATUSES = frozenset({"rate_limited", "key_budget_exhausted", "unavailable", "not_cached"})
+#: REData 0.3.7's 503s for a parcel whose answers it is still computing (its P62). The wait is that parcel's, named in
+#: the body's ``retry_after`` and never in a header, so it is waited out once and the parcel asked once more.
+_COMPUTING_ERRORS = frozenset({"refresh_queued", "compute_timeout"})
+_COMPUTING_DEFAULT_SECONDS = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -308,6 +312,7 @@ class LiveRedata:
         if key in self._unanswered:
             raise InconclusiveError(self._unanswered[key])
         deadline = time.monotonic() + self.max_wait_seconds
+        waited_for_computation = False
         while True:
             started = time.monotonic()
             response = self.session.get(self.base_url + path, params=params, timeout=300)
@@ -320,6 +325,19 @@ class LiveRedata:
                 {"path": path, "params": params, "status": response.status_code, "seconds": round(seconds, 2)}
             )
             error = body.get("error") if isinstance(body, dict) else None
+            if response.status_code == 503 and error in _COMPUTING_ERRORS:
+                wait = _computing_wait(body)
+                if waited_for_computation or time.monotonic() + wait > deadline:
+                    why = (
+                        "still computing after the wait REData named"
+                        if waited_for_computation
+                        else f"a {wait:.0f}s wait"
+                    )
+                    self._unanswered[key] = f"{path}: {error}, {why} (asked again at most once)"
+                    raise InconclusiveError(self._unanswered[key])
+                waited_for_computation = True
+                time.sleep(wait)
+                continue
             if _asks_again_later(response, error):
                 wait = _retry_after(response, body)
                 if time.monotonic() + wait > deadline:
@@ -343,6 +361,13 @@ def _asks_again_later(response: requests.Response, error: Any) -> bool:
     return response.status_code in {502, 503, 504} and (
         error in _RETRYABLE_ERRORS or "Retry-After" in response.headers or not isinstance(error, str)
     )
+
+
+def _computing_wait(body: dict[str, Any]) -> float:
+    wait = body.get("retry_after")
+    if isinstance(wait, int | float) and not isinstance(wait, bool) and wait > 0:
+        return float(wait)
+    return _COMPUTING_DEFAULT_SECONDS
 
 
 def _retry_after(response: requests.Response, body: Any) -> float:

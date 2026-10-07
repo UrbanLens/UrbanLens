@@ -177,12 +177,19 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         reached, whatever is returned carries ``"unanswered_sources"``, so the cache keeps it only briefly.
 
     Raises:
+        PropertyRecordsComputingError: REData is computing the parcel's list and named when it will have it, so no
+            fallback stands in for it and the caller asks again after the wait.
         Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
             ``is_source_outage``).
     """
     from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBuildings, PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+        ParcelBuildings,
+        PropertyRecordsComputingError,
+        PropertyRecordsUnavailableError,
+        RedataGateway,
+    )
 
     latitude = float(location.latitude or 0)
     longitude = float(location.longitude or 0)
@@ -194,6 +201,8 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
             gateway = RedataGateway()
             parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
             answer = gateway.lookup_parcel_buildings(parcel_uuid) if parcel_uuid else answer
+        except PropertyRecordsComputingError:
+            raise
         except PropertyRecordsUnavailableError as exc:
             # handful of candidates, and exc_info would re-leak the exact coordinate
             # from the failed request's own URL. See services/security/redact.py.
