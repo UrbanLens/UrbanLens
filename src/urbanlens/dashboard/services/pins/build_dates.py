@@ -115,9 +115,7 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
         The year and its source, or None when nothing cached says.
     """
     from urbanlens.dashboard.models.cache.location_cache import LocationCache
-    from urbanlens.dashboard.models.pin.model import PinType
     from urbanlens.dashboard.services.locations.register_names import CONTAINS_POINT_KEY
-    from urbanlens.dashboard.services.places.scope import effective_pin_type
 
     location = pin.location
     registers = LocationCache.get_fresh(location, "redata_historic_registers")
@@ -128,12 +126,30 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
     if (year := next((found for cluster in standing_on(pin, nester) if (found := cluster_build_year(cluster)) is not None), None)) is not None:
         return BuildYear(year, SOURCE_BUILDING_RECORD)
 
-    if effective_pin_type(pin) == PinType.BUILDING:
+    if not parcel_year_may_date(pin):
         return None
     record = LocationCache.get_fresh(location, "property_records")
     if record and isinstance(record.data, dict) and record.data.get("available") and (year := plausible_year(record.data.get("year_built"))) is not None:
         return BuildYear(year, SOURCE_PROPERTY_RECORD)
     return None
+
+
+def parcel_year_may_date(marker: Pin | Wiki) -> bool:
+    """Whether the parcel record's year may date a pin or wiki: not one that reads as a building.
+
+    A campus pin standing on its main building's place reads as that building, and the assessor's year for the
+    parcel's principal improvement is not known to be that building's.
+
+    Args:
+        marker: The pin or wiki.
+
+    Returns:
+        False when ``marker`` reads as a building.
+    """
+    from urbanlens.dashboard.models.pin.model import PinType
+    from urbanlens.dashboard.services.places.scope import effective_pin_type
+
+    return effective_pin_type(marker) != PinType.BUILDING
 
 
 def standing_on(pin: Pin, nester: BuildingNester) -> list[BuildingCluster]:
@@ -203,7 +219,7 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
     campus = Wiki.objects.filter(location_id=pin.location_id).first()
     if campus is None:
         return
-    if site_year is not None:
+    if site_year is not None and (site_year.source != SOURCE_PROPERTY_RECORD or parcel_year_may_date(campus)):
         record_wiki_build_year(campus, site_year)
     matched, _unmatched = match_clusters(nester.clusters, building_markers(campus.descendants().select_related("location")))
     for index, wiki in matched.items():

@@ -40,6 +40,7 @@ from urbanlens.dashboard.services.pins.external_data import (
 )
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 from urbanlens.dashboard.services.pins.pin_restructure import enclosing_parcel
+from urbanlens.dashboard.services.places.scope import effective_pin_type
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import CAMPUS_LAT, CAMPUS_LNG, offset, parcel_square
 from urbanlens.dashboard.tests.hypothesis.hrsh_upstreams import (
     ASSESSOR_YEAR,
@@ -558,7 +559,11 @@ class BuildDateTests(_BootstrapCase):
         self.assertIsNone(main.date_built)
         self.assertIsNone(wiki_build_year(Wiki.objects.get_for_location(main.location)))
         self.assertEqual(Pin.objects.get(name="LAUNDRY").date_built, _year(LAUNDRY_YEAR))
-        self.assertEqual(pin.date_built, _year(ASSESSOR_YEAR), "the property still takes the parcel's year")
+        # The campus pin stands on the main building's place, so it reads as that building, and the parcel's year is
+        # not known to be that building's either. Off every building, it takes the parcel's year (the test above).
+        self.assertEqual(effective_pin_type(pin), PinType.BUILDING)
+        self.assertIsNone(pin.date_built)
+        self.assertIsNone(wiki_build_year(Wiki.objects.get(location=pin.location)))
 
     def test_a_year_older_redata_does_not_explain_dates_no_building(self) -> None:
         buildings = self._main_dated_by_the_parcel()
@@ -569,7 +574,7 @@ class BuildDateTests(_BootstrapCase):
         pin = self.create_pin()
 
         self.assertEqual({child.date_built for child in self.children(pin)}, {None})
-        self.assertEqual(pin.date_built, _year(ASSESSOR_YEAR))
+        self.assertIsNone(pin.date_built)
 
     def test_with_nothing_known_the_date_stays_empty(self) -> None:
         self.upstreams = HrshUpstreams(buildings=[], parcel_year=None)
