@@ -83,6 +83,17 @@ class GatewayTests(SimpleTestCase):
 
         self.assertGreater(raised.exception.retry_after, 0)
 
+    def test_a_parcel_being_computed_trips_no_breaker(self) -> None:
+        """The wait is one parcel's, so REData sends it in the body; every other parcel is still asked."""
+        from urbanlens.dashboard.services.core.upstream_breaker import RedataBreaker
+
+        url = "https://redata.example.test/api/v1/parcels/parcel-uuid/buildings/"
+        for error, wait in _PENDING:
+            with self.subTest(error=error):
+                answer = _response(503, {"error": error, "message": "computing", "retry_after": wait})
+
+                self.assertIsNone(RedataBreaker().scope_tripped_by(url, None, answer))
+
     def test_another_503_is_not_taken_for_a_computation(self) -> None:
         session = mock.Mock()
         session.get.return_value = _response(
