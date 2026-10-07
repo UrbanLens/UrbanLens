@@ -3344,3 +3344,97 @@ None in `PROBLEMS.md`/archive. Appears new.
 Found by spark-audit controllers batch 6 (C3/C5) via the P331 import-reference check (`controllers.<module>` refs in `dashboard/tests/` + `tests/`), coordinator-confirmed for the class. Seven modules, all wired, zero refs: `trip_invitations` (`urls.py:1761-1763,1849` answer/cancel), `two_factor` (`urls.py:1239-1244` TOTP/backup-code flows; `test_two_factor.py` tests the service, never the controller), `ui` (icon grid), `vault_media` (`urls.py:2152-2157,2184-2186`; only `vault_photos` is referenced), `visit_suggestions` (`urls.py:1957`), `wiki_share` (`urls.py:473`), and `MarkupMapShareDetailView`/dialog (`controllers/map_sharing.py:85-104` — the recipient-scope check at `:99-103` is the view's entire authorization property, unpinned by any regression test; sibling send route is covered). Controls from the same run are non-zero (`spotguessr`, `trivia`, `webauthn`, `userprofile`, `vault_photos`, `wiki_media`). Low-medium (trip-invitation answer/cancel and TOTP flows highest value).
 
 P331 names only the OAuth pair; no entry names these seven. Natural home is PL6 batches.
+
+## P400 — Five operator-command guard gaps: negative TTL mass-deletes demos, arbitrary OAuth redirects, file/DB split-brain, stdout credentials, unbounded tile seeding
+
+`id: P400` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (management/), coordinator-verified. One entry, one theme (operator commands that trust their argv), five commands.
+
+1. `purge_demo_accounts --ttl-hours` (`management/commands/purge_demo_accounts.py:27,49-50`) has no `>= 0` check: `--ttl-hours -24` puts the cutoff in the future so *every* demo account matches, and `--execute` deletes them all via `hard_delete_profile`. A `--allow-non-demo` gate exists for the wrong database, not the wrong sign. High (one-character typo = mass delete).
+2. `provision_mobile_oauth_client --redirect-uri` (`:36-41,53`) `update_or_create`s with `" ".join(redirect_uris)` and no scheme/host validation — operator typo or malicious invocation registers an attacker-controlled redirect on the first-party public (PKCE-only, no secret) client. Medium-high.
+3. `anonymize_stored_photo_filenames` (`:108-116`, same in `_rename_derived :159-166`) moves the file then updates the DB with no reconciliation pass — the `DatabaseError` branch honestly reports "moved but the DB update failed", leaving rows pointing at the old name. No `atomic` can span filesystem+DB; the missing piece is a verify/repair pass. Medium-high (orphaned/missing files on partial failure).
+4. `provision_integration_env` prints the full credential manifest to stdout by default (`:150-154` `self.stdout.write(payload)`; `:334-335` exports `PASSWORD`/`API_KEY`) — while `_provision_population` in the same file *refuses* stdout (`:198-200`, "pass --out so they go to a file"). Scrollback/CI-log leak. Medium.
+5. `seed_basemap_tile_cache --size` (`:44,66-76`) validates only `size >= 1` — `--size 100000` is 10B cache writes; `--zoom`/origins/`--layer` likewise unvalidated. Medium (staging/dev DoS; production has a guard).
+
+No `PROBLEMS.md`/archive entries on any of the five. Appears new.
+
+## P401 — Five command robustness gaps: full-table loads, silent-zero exits, non-idempotent re-encode
+
+`id: P401` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (management/), coordinator-verified. One entry, one theme (commands that misbehave at scale or in automation), five commands.
+
+1. `backfill_redata_labels` (`:28`) does `list(Profile.objects.all())` — whole table in memory, no `.iterator()`. Medium.
+2. `rotate_field_encryption` (`:157-161`) `cursor.fetchall()`s each encrypted column client-side inside the outer `atomic()` (`:106`) — no server-side cursor/chunking; OOM on large encrypted tables. Medium. (The DATA_ENCRYPTION audit covered only the `--skip-undecryptable` regression.)
+3. `diagnose_places_api` (`:95-101`) prints `[FAIL]` but never raises `CommandError` — total failure exits 0, so CI/scheduling sees success. Low-medium.
+4. `backfill_location_country` (`:30-32`) aborts without a key via bare `return` — a misconfigured scheduled run reports success having updated nothing. Medium (silent no-op backfill). (The 2026-08-11 audit called this command "otherwise solid" without mentioning the exit code.)
+5. `strip_exif_from_stored_photos` (`:3`) declares itself TEMPORARY, run-once, explicitly non-idempotent ("each run re-encodes again") — a second run re-encodes clean files (lossy quality loss + waste). Has `--dry-run`/`--limit` but no already-clean skip. Medium.
+
+No `PROBLEMS.md`/archive entries on these aspects. Appears new.
+
+## P402 — Migration scale hazards: unresumable 0027, unbounded accumulations, per-row updates, unbatched mass DELETEs
+
+`id: P402` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (migrations), verified against the cited lines. One entry, one theme (migrations that assume small tables), seven sites. (The noop-reverse guard justifies reverse direction only, not forward scale.)
+
+1. `0027_places_backfill.py:114-115`: `if Place.objects.exists(): return` — a retry after mid-migration failure exits silently with half-resolved Locations, half-nested wikis, deleted boundary copies behind — despite the module docstring claiming idempotence (`:26-27`). Early-return-on-any-row is the opposite of resumable. Same file loads every pin point (`:123`), full boundary tables (`:142,153`), O(n²) GEOS clustering (`:64-79`), and iterates `BoundaryVote.objects.all()`/`Place.objects.all()` as full instances (`:214,248`). High.
+2. `0032_v0_8_0.py:332-347`: the weather-cache move `.iterator()`s entries but accumulates *every* day×cell record (keyed by JSON payloads) into one `rows` dict before a single `bulk_create` — the exact OOM shape on a production-size `LocationCache` (P206: 81% of prod DB) — then one mass `.delete()` of every `redata_weather_history` row (one long lock). High.
+3. `0043_media_keys_without_tracking_params.py:38-40`: `sorted(set(marked) | set(copied))` fully evaluates two `values_list` querysets before the (correctly chunked, `_CHUNK = 500`) downstream begins. Medium-high.
+4. `0041_location_slug_remint.py:154` and `0054_location_slug_follows_name.py:77`: `list()` of the whole `Wiki` table, then per-wiki `unique_slug` `exists()` queries (N+1) — locations are chunked, wikis are not. Medium.
+5. `0032` dedupe (`:298-322`): `seen` set of *every* key plus `extra` ids — `.iterator()` streams rows but memory grows with the event-scale `PinVisit` table; plus four full-table `list()`s in `_refold_googlemail` (`:231,236,238,241`). Medium.
+6. Per-row updates: `_0062_backfill_username_keys` (`0032:219-221`, one `UPDATE` per `Profile` row where sibling `_0065_backfill` `:285` shows `bulk_update` batch-1000), `_repair_owned_links` (`:385-400`), `0034:22-26` (per-location update + delete). Medium.
+7. Unbatched mass single-statement DELETEs on `dashboard_location_cache`: `0038:26` (10 sources at once), `0042:10`, `0046:10`, `0047:14-16` — each one long write lock / statement-timeout risk at deploy on the DB's dominant table; pk-chunked deletes would do. Medium, operational (rows refetch).
+
+Archive mentions of these migrations are deploy-context/design notes, never scale defects. Appears new.
+
+## P403 — Migrations read live code and ship constraint-without-cleanup: 0034's current-model imports, service-layer imports, 0010's CHECK
+
+`id: P403` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (migrations), coordinator-verified. One entry, one theme (already-shipped migrations whose behavior drifts with later code), three sites.
+
+1. `0034_reresolve_fiat_building_places.py:5-6,19-20` imports `PlaceKind, PlaceStatus, implausible_area_q` from the live model module and `PARCEL_BUILDINGS_CACHE_SOURCE` from live services, evaluating them against historical models at migrate time. Any later retune of the threshold, enum, or source name silently changes — or crashes — this old migration. High/medium. (P242 filed this class for 0033's operator command only.)
+2. Same class via service-layer imports: `0041:15`, `0054:13`, `0049:25-27` (slug-mint rules + `site_scope`), `0043:12` (tracking-param stripping), `0032:28-29,189,364,383` (email normalization, mention/link cleaning). Each legitimate retune changes what late-upgrading installs execute. `0027:32-35` shows the correct pattern (vendored constant with a "must keep behaving the same" comment). Medium.
+3. `0010_v0_6_0.py:1460-1463` adds the facts exactly-one-subject `CHECK` via raw `RunSQL` with no preceding repair/delete of violating rows (plus bare `UniqueConstraint`s at `:1468-1499`) — one dirty row aborts the migration at `ALTER TABLE`. Contrast 0008, which DELETEs duplicates (`:1187-1194`) before its constraints. Medium-low.
+
+Not filed elsewhere. Appears new.
+
+## P404 — Five settings/config gaps: OAuth `http` redirect scheme, log-redaction scope, bool-parsing split, warn-only key check, Daphne frame-cap log-only
+
+`id: P404` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (settings), verified against the cited lines. Ruled out first (not filed): prod `DEBUG`/`SECRET_KEY` fail-closed, `ALLOWED_HOSTS` sane, no checked-in secret defaults, no `CORS_ALLOW_ALL`; `/metrics` fail-open and staging guard are P330; COEP report-only is P56.
+
+1. `ALLOWED_REDIRECT_URI_SCHEMES` (`settings/base.py:1332-1333`) admits plain `http` — code/token to a cleartext redirect. Native loopback needs `http://127.0.0.1`, but blanket `http` also allows non-loopback. Medium-low. New.
+2. `SecretRedactionFilter` covers URLs/mapping entries only (`logging_filters.py:65,71,75` → `redact_urls`; `redact.py:303-315` explicitly leaves "everything else ... as it was") — bare `Authorization: Bearer`, `sk_/whsec_`, header secrets pass through. Low-medium. Related-but-new vs fixed P203 (URL-shaped scope only); P330 notes the same boundary.
+3. Split bool parsing: `base._env_bool` (`base.py:59-60`) coerces typos to `False`, `_env.env_bool` (`_env.py:26-34`) falls back to default — affecting `DEBUG`, `UNSAFE_ALLOW_HTTP`, cookie-secure flags, `CELERY_TASK_ALWAYS_EAGER`, `UL_BACKUP_ENABLED`. `UL_HSTS_INCLUDE_SUBDOMAINS=ture` silently disables instead of keeping default. Low. New.
+4. Provider keys on the app tier only warn (`dashboard.W001`, `checks.py:236-270`) — boot continues with DB + inference creds colocated. Low-medium. New.
+5. Daphne transport-vs-app frame-cap mismatch is logged, never raised (`asgi.py:20-23`, "refusing to start would take down the socket tier"); the conflict detector (`checks.py:407-431`) is not even registered as a check — sockets then drop silently per the message text. Low. New.
+
+## P405 — Middleware defects: `Vary` deletion 500s headerless responses, NUL refusal misses non-POST form bodies
+
+`id: P405` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (middleware), coordinator-verified. One entry, two defects in one file.
+
+1. `middleware.py:190-194`: when no `Accept-Encoding` part survives filtering, `del response.headers["Vary"]` runs unconditionally — on a `mark_viewer_independent` response carrying no `Vary` (Django's `SessionMiddleware` adds `Vary: Cookie` only when the session was touched), the `del` raises `KeyError`, turning the response into a 500. Medium — reachable, not theoretical.
+2. `middleware.py:441-442`: the NUL-guard reads `request.POST` only `if request.method == "POST" and form_is_read` — but `request.POST` is populated for PUT/PATCH/DELETE with form content-types too, so a NUL there reaches the view and fails as a Postgres 500: the exact 500 the class exists to prevent. (`csrf_exempt` multipart views are likewise documented-uncovered.) Low-medium.
+
+Archive mentions the middleware's placement only, never these behaviors. Appears new.
+
+## P406 — Socket/validator/provider misc: group-thread open without membership, whitespace-as-symbol passwords, unhandled street-view heading, per-page chrome queries, two test-data nits
+
+`id: P406` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit remainder batch (consumers/validators/tags), coordinator-verified. One entry, six smalls.
+
+1. `consumers.py:771-784` `_mark_group_thread_open` accepts any `{"type":"open","group":<uuid>}` frame and writes read-state with no membership check — while the DM sibling (`:811-823`) resolves via relationship-aware `reachable_partner_by_slug`. Group UUIDs are enumerable via other surfaces; the frame answers silence either way (blind probe). Medium.
+2. `ComplexityValidator` (`validators/password.py:28-39`): `has_symbol = any(not c.isalnum())` counts whitespace — `"Password "` passes "a digit or a symbol". Low-medium. (P365 covers only this file's HIBP half.)
+3. Street-view provider (`services/apis/locations/redata_media_gateway.py:178`) `float()`s REData-supplied `heading_degrees` outside every handled exception (`base.py:108-126` catches request/transport errors only) — a non-numeric string 500s the pin-detail carousel. Low-medium.
+4. Every full-page render pays header-chrome queries (`context_processors.py:253-320`: key-bundle check, friend/message/badge/check-in queries; plus `assistant_available` per `base.html` render via `dashboard_tags.py:490-514`) — `@deferred` helps only fragments, and `base.html` reads all keys. A measured 24-query map request attributes a `safety_checkins` query here (`notes/map-request-redundant-sql-measured.md:41`). Low-medium perf. (P359/P372 cover other N+1s.)
+5. `_redata_host_is_local` (`checks.py:301`) lists `172.16.–172.20.` but RFC 1918 reserves through `172.31.` — a dev REData on 172.21.x (routine for custom Docker networks) raises a spurious budget warning, training devs to ignore W003. Low.
+6. `baker_recipes.py:183-186` `takeout_visit` uses `source="takeout"`, not a `VisitSource` member (`MANUAL/HISTORY/TRIP/USER/PHOTO/GEOLOCATION/SAFETY_CHECKIN`) — seeding tests with data production paths never produce. Low.
+
+None in `PROBLEMS.md`/archive. Appears new.

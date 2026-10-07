@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P400` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P407` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -299,3 +299,10 @@ still resolves after it is fixed, and the id is never handed out again.
 | P397 | open | 2026-10-06 | Write-semantics inconsistencies with destructive defaults: invite decline-by-default, rating-0 clears, future visits, label parents, icon/name/bbox validation | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P398 | open | 2026-10-06 | View-layer scoping gaps: trivia join gates, unscoped gallery lookup, partner-triggered GET writes, notification profile 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P399 | open | 2026-10-06 | Seven wired view modules with zero test references (P331 class, new instances) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P400 | open | 2026-10-06 | Five operator-command guard gaps: negative TTL mass-deletes demos, arbitrary OAuth redirects, file/DB split-brain, stdout credentials, unbounded tile seeding | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P401 | open | 2026-10-06 | Five command robustness gaps: full-table loads, silent-zero exits, non-idempotent re-encode | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P402 | open | 2026-10-06 | Migration scale hazards: unresumable 0027, unbounded accumulations, per-row updates, unbatched mass DELETEs | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P403 | open | 2026-10-06 | Migrations read live code and ship constraint-without-cleanup: 0034's current-model imports, service-layer imports, 0010's CHECK | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P404 | open | 2026-10-06 | Five settings/config gaps: OAuth `http` redirect scheme, log-redaction scope, bool-parsing split, warn-only key check, Daphne frame-cap log-only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P405 | open | 2026-10-06 | Middleware defects: `Vary` deletion 500s headerless responses, NUL refusal misses non-POST form bodies | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P406 | open | 2026-10-06 | Socket/validator/provider misc: group-thread open without membership, whitespace-as-symbol passwords, unhandled street-view heading, per-page chrome queries, two test-data nits | [`docs/PROBLEMS.md`](PROBLEMS.md) |
