@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import sys
 from typing import TYPE_CHECKING
@@ -273,6 +274,9 @@ def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig]
 #: Hosts a dev deployment may point REData at without warning.
 _LOCAL_REDATA_HOSTS = ("localhost", "127.0.0.1", "::1")
 
+#: The private IPv4 ranges of RFC 1918.
+_RFC_1918_NETWORKS = (ipaddress.ip_network("10.0.0.0/8"), ipaddress.ip_network("172.16.0.0/12"), ipaddress.ip_network("192.168.0.0/16"))
+
 #: Host fragments that identify a non-production REData.
 _LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
 
@@ -298,7 +302,11 @@ def _redata_host_is_local(url: str) -> bool:
         return True
     if "." not in host:
         return True
-    return host.startswith(("10.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20."))
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(address in network for network in _RFC_1918_NETWORKS)
 
 
 @register()

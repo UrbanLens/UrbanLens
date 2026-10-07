@@ -20,7 +20,7 @@ import shutil
 from typing import TYPE_CHECKING, Any
 
 from django.core.management.base import BaseCommand, CommandParser
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 
 from urbanlens.dashboard.models.images.model import Image, anonymized_media_stem
 from urbanlens.dashboard.services.media.images import extract_filename_taken_at
@@ -29,17 +29,20 @@ if TYPE_CHECKING:
     from django.core.files.storage import Storage
 
 
-def _move_stored_file(storage: Storage, old_name: str, new_name: str) -> None:
-    """Move one stored file to *new_name* within the same storage backend.
+def _copy_stored_file(storage: Storage, old_name: str, new_name: str) -> str:
+    """Copy one stored file to *new_name* within the same storage backend, leaving the original in place.
 
-    Uses a real filesystem move when the backend exposes local paths (true for this project's
-    ``FileSystemStorage``), falling back to a streamed copy-then-delete for any backend that doesn't - a
-    generic ``Storage`` has no rename primitive of its own.
+    A real filesystem copy when the backend exposes local paths (true for this project's ``FileSystemStorage``),
+    falling back to a streamed save for any backend that doesn't. The caller repoints the rows and only then removes
+    the original, so a crash at any step leaves every row naming a file that exists.
 
     Args:
         storage: The field's storage backend.
         old_name: The file's current stored name.
-        new_name: The name to move it to.
+        new_name: The name to copy it to.
+
+    Returns:
+        The name the copy was stored under, which a backend that avoids collisions may have changed.
 
     Raises:
         OSError: The file cannot be read from or written to storage.
@@ -49,11 +52,10 @@ def _move_stored_file(storage: Storage, old_name: str, new_name: str) -> None:
         new_path = storage.path(new_name)
     except NotImplementedError:
         with storage.open(old_name, "rb") as handle:
-            storage.save(new_name, handle)
-        storage.delete(old_name)
-        return
+            return storage.save(new_name, handle)
     os.makedirs(os.path.dirname(new_path), exist_ok=True)
-    shutil.move(old_path, new_path)
+    shutil.copy2(old_path, new_path)
+    return new_name
 
 
 class Command(BaseCommand):
@@ -105,18 +107,47 @@ class Command(BaseCommand):
                 count += 1
                 continue
 
-            try:
-                _move_stored_file(representative.image.storage, old_name, new_name)
-            except OSError as exc:
-                self.stderr.write(f"  [image] FAILED to move {old_name}: {type(exc).__name__}: {exc}")
-                continue
-            try:
-                Image.objects.filter(image=old_name).update(image=new_name, original_filename=basename, filename_taken_at=filename_taken_at)
-            except DatabaseError as exc:
-                self.stderr.write(f"  [image] moved but the DB update failed for {old_name} -> {new_name}: {exc}")
-                continue
-            count += 1
+            if self._rename(representative.image.storage, "image", old_name, new_name, original_filename=basename, filename_taken_at=filename_taken_at):
+                count += 1
         return count
+
+    def _rename(self, storage: Storage, field_name: str, old_name: str, new_name: str, **extra: Any) -> bool:
+        """Rename one stored file and repoint every row naming it, without a moment where a row names a missing file.
+
+        Copies first, repoints the rows in one transaction, and only then removes the original: a failure before the
+        commit leaves the rows on the original file, one after it leaves them on the copy, and either way the worst
+        outcome is a stray file.
+
+        Args:
+            storage: The field's storage backend.
+            field_name: The ``ImageField`` the name belongs to.
+            old_name: The file's current stored name.
+            new_name: The name to give it.
+            **extra: Further column values to write alongside the new name.
+
+        Returns:
+            Whether the rows now name the renamed file.
+        """
+        try:
+            stored_name = _copy_stored_file(storage, old_name, new_name)
+        except OSError as exc:
+            self.stderr.write(f"  [{field_name}] FAILED to copy {old_name}: {type(exc).__name__}: {exc}")
+            return False
+        try:
+            with transaction.atomic():
+                Image.objects.filter(**{field_name: old_name}).update(**{field_name: stored_name}, **extra)
+        except DatabaseError as exc:
+            self.stderr.write(f"  [{field_name}] DB update failed for {old_name} -> {stored_name}, so it was left where it was: {exc}")
+            try:
+                storage.delete(stored_name)
+            except OSError:
+                self.stderr.write(f"  [{field_name}] the copy at {stored_name} could not be removed either; delete it by hand.")
+            return False
+        try:
+            storage.delete(old_name)
+        except OSError as exc:
+            self.stderr.write(f"  [{field_name}] renamed, but the original {old_name} could not be removed: {type(exc).__name__}: {exc}")
+        return True
 
     def _rename_derived(self, field_name: str, suffix: str, *, dry_run: bool, limit: int | None) -> int:
         """Anonymize every distinct derived-file name (currently just ``thumbnail``).
@@ -154,16 +185,6 @@ class Command(BaseCommand):
                 count += 1
                 continue
 
-            derived_file = getattr(representative, field_name)
-            try:
-                _move_stored_file(derived_file.storage, old_name, new_name)
-            except OSError as exc:
-                self.stderr.write(f"  [{field_name}] FAILED to move {old_name}: {type(exc).__name__}: {exc}")
-                continue
-            try:
-                Image.objects.filter(**{field_name: old_name}).update(**{field_name: new_name})
-            except DatabaseError as exc:
-                self.stderr.write(f"  [{field_name}] moved but the DB update failed for {old_name} -> {new_name}: {exc}")
-                continue
-            count += 1
+            if self._rename(getattr(representative, field_name).storage, field_name, old_name, new_name):
+                count += 1
         return count
