@@ -1155,9 +1155,11 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   could not send is marked (`resolution_email_failed_at`), so the escalation sweep sends it again, the email alone
   if the in-app half already went out (`retry_resolution_notices`). The sweep retries only between two minutes and
   an hour after the resolution: the request that resolved it finishes first, and after the hour the check-in is
-  archived. It sweeps only check-ins this site resolved, never an imported one. A deleted check-in leaves nothing
-  to sweep, so there an email that fails to build goes out as plain text, and one that fails to send is re-queued
-  by its own task, five times over about half an hour (`send_resolution_email`)
+  archived. It sweeps only check-ins this site resolved, never an imported one: every resolution schedules
+  archival before anything that can fail, and an import never does. A deleted check-in leaves nothing to sweep, so
+  deleting one first sends any notice its resolution still owes, an email that fails to build there goes out as
+  plain text, and one that fails to send is re-queued by its own task, five times over about half an hour
+  (`send_resolution_email`)
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts

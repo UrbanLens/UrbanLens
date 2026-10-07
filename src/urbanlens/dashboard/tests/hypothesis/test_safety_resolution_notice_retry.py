@@ -8,7 +8,9 @@ contact for the next sweep - without a second email, or a second in-app notice, 
 from __future__ import annotations
 
 import datetime
+import shutil
 import smtplib
+import tempfile
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -25,9 +27,15 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus
 from urbanlens.dashboard.models.undo.model import UndoAction
+from urbanlens.dashboard.services.import_export import import_data
 from urbanlens.dashboard.services.undo.service import undo_latest
 from urbanlens.dashboard.services.visits import safety as safety_service
-from urbanlens.dashboard.services.visits.safety import check_in, delete_checkin
+from urbanlens.dashboard.services.visits.safety import (
+    check_in,
+    delete_checkin,
+    mark_found_safe_by_partner,
+    send_resolution_email,
+)
 from urbanlens.dashboard.tasks import escalate_overdue_checkins
 
 _ALL_CLEAR = "dashboard/email/safety_checkin_all_clear.html"
@@ -177,6 +185,33 @@ class DeletionTests(_RetryTestCase):
         self.assertIn("removed their check-in", message.body)
         self.assertEqual(getattr(message, "alternatives", []), [])
 
+    def test_a_refused_send_re_queues_itself_even_while_the_row_is_still_there(self) -> None:
+        """The worker can fail before the delete commits; the row it would mark is about to go with it."""
+        with (
+            mock.patch.object(EmailMultiAlternatives, "send", side_effect=smtplib.SMTPServerDisconnected("down")),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
+        ):
+            send_resolution_email(
+                self.by_email.pk, to="rescuer@example.com", subject="s", text_body="t", html_body="", removed=True
+            )
+
+        enqueue.assert_called_once()
+        self.by_email.refresh_from_db()
+        self.assertIsNone(self.by_email.resolution_email_failed_at)
+
+    def test_deleting_a_resolved_checkin_whose_notice_is_still_owed_sends_it_first(self) -> None:
+        now = timezone.now()
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(
+            status=SafetyCheckinStatus.CHECKED_IN, resolved_at=now, archive_scheduled_at=now
+        )
+
+        with notification_emails_sent():
+            delete_checkin(SafetyCheckin.objects.get(pk=self.checkin.pk), self.owner)
+
+        (message,) = [message for message in mail.outbox if "rescuer@example.com" in message.to]
+        self.assertIn("removed their check-in", message.body)
+        self.assertEqual(self._in_app(self.friend), 1)
+
     def test_a_refused_send_is_retried_by_the_email_task_itself(self) -> None:
         refused: list[str] = []
 
@@ -235,6 +270,86 @@ class SweepBoundsTests(_RetryTestCase):
 
         self.assertEqual(self._emails_to("rescuer@example.com"), 0)
         self.assertEqual(self._emails_to("friend@example.com"), 1)
+
+
+class FailureBeforeTheNoticesTests(_RetryTestCase):
+    """A resolution that fails part-way, before its own request told anyone, is still finished by the sweep."""
+
+    def test_a_check_in_whose_visit_suggestion_fails_still_gets_its_contacts_told(self) -> None:
+        with (
+            notification_emails_sent(),
+            mock.patch.object(safety_service, "_conclude_checkin", side_effect=RuntimeError("geocoder down")),
+            self.assertRaises(RuntimeError),
+        ):
+            check_in(self.checkin, self.owner)
+        self.assertEqual(self._emails_to("rescuer@example.com"), 0)
+
+        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._sweep()
+
+        self.assertEqual(self._emails_to("rescuer@example.com"), 1)
+        self.assertEqual(self._in_app(self.friend), 1)
+
+    def test_a_found_safe_whose_owner_notice_fails_still_gets_the_others_told(self) -> None:
+        partner = baker.make(User, username="partner").profile
+        baker.make(
+            "dashboard.SafetyCheckinPartner",
+            checkin=self.checkin,
+            profile=partner,
+            invited_by=self.owner,
+            status="accepted",
+        )
+        real_notify = NotificationLog.objects.notify
+
+        def notify(**kwargs):
+            if kwargs.get("profile") == self.owner:
+                raise RuntimeError("notification store down")
+            return real_notify(**kwargs)
+
+        with (
+            notification_emails_sent(),
+            mock.patch.object(NotificationLog.objects, "notify", side_effect=notify),
+            self.assertRaises(RuntimeError),
+        ):
+            mark_found_safe_by_partner(self.checkin, partner)
+        self.assertEqual(self._emails_to("rescuer@example.com"), 0)
+
+        self._resolved(ago=datetime.timedelta(minutes=10))
+        self._sweep()
+
+        self.assertEqual(self._emails_to("rescuer@example.com"), 1)
+        self.assertEqual(self._in_app(self.friend), 1)
+
+
+class ImportedCheckinTests(TestCase):
+    """The importer restores a check-in resolved, with its contacts' alert times; nothing may mail them for it."""
+
+    def test_the_sweep_never_mails_the_contacts_of_an_imported_checkin(self) -> None:
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        profile = baker.make(User, username="importer").profile
+        data_dir = tempfile.mkdtemp(prefix="ul_safety_import_")
+        self.addCleanup(shutil.rmtree, data_dir, ignore_errors=True)
+        ctx = import_data.ImportContext(
+            profile=profile, data_dir=data_dir, result=import_data.ImportResult(), pin_uuid_map={}, label_uuid_map={}
+        )
+        ten_minutes_ago = (timezone.now() - datetime.timedelta(minutes=10)).isoformat()
+        row = {
+            "title": "Imported walk",
+            "checkin_by": (timezone.now() - datetime.timedelta(hours=2)).isoformat(),
+            "status": SafetyCheckinStatus.CHECKED_IN,
+            "escalated_at": ten_minutes_ago,
+            "resolved_at": ten_minutes_ago,
+            "contacts": [{"email": "imported@example.com", "notified_at": ten_minutes_ago}],
+        }
+
+        self.assertTrue(import_data.SafetyCheckinsImport().import_row(row, ctx))
+        self.assertTrue(
+            SafetyCheckinContact.objects.filter(email="imported@example.com", notified_at__isnull=False).exists()
+        )
+        with notification_emails_sent():
+            escalate_overdue_checkins()
+
+        self.assertEqual(len(mail.outbox), 0)
 
 
 class UndoneDeletionTests(_RetryTestCase):

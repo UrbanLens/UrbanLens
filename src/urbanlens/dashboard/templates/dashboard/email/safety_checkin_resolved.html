@@ -20,6 +20,7 @@
         "<strong>{{ checkin.title }}</strong>".
       </p>
 
+      {% if checkin_url %}
       <div style="text-align:center;margin:28px 0">
         <a href="{{ checkin_url }}"
            style="display:inline-block;background:#16a34a;color:#fff;text-decoration:none;
@@ -28,6 +29,7 @@
           View check-in
         </a>
       </div>
+      {% endif %}
     </td>
   </tr>
 
