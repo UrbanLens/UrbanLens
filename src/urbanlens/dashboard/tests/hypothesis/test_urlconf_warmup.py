@@ -28,6 +28,7 @@ import pathlib
 import subprocess
 import sys
 
+from urbanlens.core.tests.environment import probe_environ
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
@@ -55,7 +56,13 @@ def _run(body: str) -> str:
     """Report both halves' state in a fresh interpreter, after running `body`."""
     source = _PRELUDE.format(src=str(REPO_ROOT / "src")) + body + "\n" + _STATE
     result = subprocess.run(
-        [sys.executable, "-c", source], capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT), check=False
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=str(REPO_ROOT),
+        env=probe_environ(),
+        check=False,
     )
     if result.returncode != 0:
         raise AssertionError(f"probe failed:\n{result.stderr[-2500:]}")
@@ -122,6 +129,7 @@ class FreezingTheWarmHeapTests(SimpleTestCase):
             text=True,
             timeout=300,
             cwd=str(REPO_ROOT),
+            env=probe_environ(),
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr[-2500:])
