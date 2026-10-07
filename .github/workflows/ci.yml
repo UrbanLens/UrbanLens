@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        workers: ["4", "6", "8"]
+        workers: ["4", "8", "12"]
     services:
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
@@ -84,12 +84,15 @@ jobs:
       # The deployment's own image (PostGIS and pgvector), which a service container cannot be built from.
       # Installing pgvector into a running stock image upgraded the server package underneath it, and every
       # extension the old binary loaded afterwards failed on a missing symbol.
+      #
+      # Without durability: nothing here outlives the job, and every pytest-xdist worker migrates its own database
+      # and commits on every TransactionTestCase flush, so waiting on fsync is time spent protecting nothing.
       - name: Start Postgres
         run: |
           docker build -t urbanlens-postgres src/urbanlens/config/postgres
           docker run -d --name postgres -p 5432:5432 \
             -e POSTGRES_DB=urbanlens_ci -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-            urbanlens-postgres
+            urbanlens-postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
           timeout 120 sh -c 'until docker exec postgres pg_isready -h 127.0.0.1 -U postgres -d urbanlens_ci; do sleep 2; done'
 
       - name: Set up uv

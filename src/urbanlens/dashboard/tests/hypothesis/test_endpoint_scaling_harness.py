@@ -188,6 +188,9 @@ class ThePayloadCeilingIsCheckedTests(_AchievementSeedMixin, TestCase):
                 return None
 
         case = _NoCounter("test_a_projection_endpoint_is_within_every_budget")
+        # Driven directly, so Django's _pre_setup never runs for it; the client it inherited was a class attribute
+        # left by ABoundedEndpointPassesTests running first in the same process, which pytest-xdist does not promise.
+        case.client = case.client_class()
         case.setUp()
         self.addCleanup(case.doCleanups)
 
