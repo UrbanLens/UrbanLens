@@ -62,6 +62,7 @@ def _campus_records() -> list[dict]:
             -120,
             -120,
             year_built=1925,
+            year_built_basis="building",
             sources=[
                 {"source": "cris", "attributes": {}},
                 {"source": "overpass", "attributes": {"building": "garage"}},
@@ -376,6 +377,51 @@ class SweepGateTests(CampusTestCase):
         self.assertIsNone(Boundary.objects.effective_polygon_for_pin(self.pin, BoundaryType.PROPERTY))
 
         self.assertEqual(auto_nest_pin(self.pin), 6)
+
+
+class BuildingYearNameTests(CampusTestCase):
+    """A nameless building's wiki is dated only by its own year, and a sweep follows what the records say (UrbanLens#321)."""
+
+    DATED = "Garage (1925) at Hudson River State Hospital"
+    UNDATED = "Garage at Hudson River State Hospital"
+
+    def sweep(self, basis: str | None) -> None:
+        records = _campus_records()
+        garage = next(building for building in records if building["ref"] == "cris:4")
+        garage.pop("year_built_basis")
+        if basis is not None:
+            garage["year_built_basis"] = basis
+        self.cache(records)
+        auto_nest_pin(self.pin)
+
+    def test_a_name_dated_by_a_year_that_is_not_the_buildings_own_loses_the_date(self) -> None:
+        self.sweep("building")
+        wiki = Wiki.objects.get(name=self.DATED)
+
+        for label, basis in (("parcel", "parcel"), ("unexplained", None)):
+            with self.subTest(label):
+                self.sweep("building")
+                self.sweep(basis)
+
+                wiki.refresh_from_db()
+                self.assertEqual(wiki.name, self.UNDATED)
+
+    def test_the_date_returns_once_the_records_say_the_year_is_the_buildings(self) -> None:
+        self.sweep(None)
+        wiki = Wiki.objects.get(name=self.UNDATED)
+
+        self.sweep("building")
+
+        wiki.refresh_from_db()
+        self.assertEqual(wiki.name, self.DATED)
+
+    def test_a_name_somebody_chose_is_kept(self) -> None:
+        self.sweep("building")
+        Wiki.objects.filter(name=self.DATED).update(name="The Old Motor Pool")
+
+        self.sweep(None)
+
+        self.assertTrue(Wiki.objects.filter(name="The Old Motor Pool").exists())
 
 
 class ChildWikiRaceTests(CampusTestCase):
