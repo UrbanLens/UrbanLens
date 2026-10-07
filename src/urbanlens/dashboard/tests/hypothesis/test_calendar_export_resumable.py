@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import client_event_id
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.google_oauth import GOOGLE_TOKEN_URL
 from urbanlens.dashboard.services.core import rate_limiter
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
@@ -75,7 +76,11 @@ class FakeGoogleCalendar:
         lose_next_response_to: Apply the next request with this method, then raise as if its response were lost.
         fail_after: Answer ``failure`` to every request after this many.
         failure: ``(status, json body)`` of the answer ``fail_after`` gives; a 500 unless a test sets another.
+        refuse_next: ``(status, json body)`` answers given, in order, to the next requests, before anything is applied.
         meanwhile: Called once, after the request numbered by its first element has been applied.
+        token_answer: What Google's token endpoint answers a refresh with: ``(status, json body)``, or an exception
+            to raise as if no answer came.
+        token_requests: How many refreshes reached the token endpoint; not counted in ``requests``.
     """
 
     def __init__(self) -> None:
@@ -84,9 +89,17 @@ class FakeGoogleCalendar:
         self.lose_next_response_to: str | None = None
         self.fail_after: int | None = None
         self.failure: tuple[int, dict[str, Any]] = (500, {"error": {"message": "backend error"}})
+        self.refuse_next: list[tuple[int, dict[str, Any]]] = []
         self.meanwhile: tuple[int, Callable[[], object]] | None = None
+        self.token_answer: tuple[int, dict[str, Any]] | Exception = (
+            200,
+            {"access_token": "refreshed", "expires_in": 3599},
+        )
+        self.token_requests = 0
 
     def __call__(self, _session: requests.Session, method: str, url: str, **kwargs: Any) -> requests.Response:
+        if url == GOOGLE_TOKEN_URL:
+            return self._refresh()
         response = self._answer(method, url, **kwargs)
         if self.meanwhile is not None and len(self.requests) == self.meanwhile[0]:
             _count, action = self.meanwhile
@@ -104,6 +117,8 @@ class FakeGoogleCalendar:
         event_id = match.group("event_id")
         body = kwargs.get("json")
         self.requests.append((method, event_id, body))
+        if self.refuse_next:
+            return _response(*self.refuse_next.pop(0))
         if self.fail_after is not None and len(self.requests) > self.fail_after:
             return _response(*self.failure)
         if method == "POST":
@@ -121,6 +136,12 @@ class FakeGoogleCalendar:
             event["status"] = "cancelled"
             return _response(204)
         raise AssertionError(f"unexpected method {method}")
+
+    def _refresh(self) -> requests.Response:
+        self.token_requests += 1
+        if isinstance(self.token_answer, Exception):
+            raise self.token_answer
+        return _response(*self.token_answer)
 
     def _insert(self, body: dict[str, Any]) -> requests.Response:
         event_id = body.get("id") or uuid.uuid4().hex
@@ -161,6 +182,13 @@ class _CalendarExportCase(TestCase):
         patcher = mock.patch.object(requests.Session, "request", autospec=True, side_effect=self.google)
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The site's OAuth client, which a token refresh sends to the fake token endpoint.
+        oauth_client = mock.patch(
+            "urbanlens.dashboard.services.apis.calendar.google._oauth_client",
+            return_value=("client-id", "client-secret"),
+        )
+        oauth_client.start()
+        self.addCleanup(oauth_client.stop)
         # Continuations are queued by the sweep; capture them rather than run Celery.
         enqueue = mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
         self.enqueue = enqueue.start()
@@ -394,6 +422,10 @@ class ClientEventIdTests(SimpleTestCase):
 
 
 class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
+    """A push that wrote resets the count; one that wrote nothing adds to it only when Google refused it for a reason
+    of its own. The budget, Google's rate limit or failure, and a refusal of the site pass, and a push held up by
+    one waits for the sweep however long it takes, up to ``MAX_OWED_CALENDAR_WRITE_AGE``."""
+
     def setUp(self) -> None:
         super().setUp()
         self._limit(30)
@@ -412,29 +444,30 @@ class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
         self.link.refresh_from_db()
         return self.link.push_attempts
 
-    def test_a_push_that_wrote_events_resets_the_count_and_one_that_wrote_none_adds_to_it(self) -> None:
+    def test_a_push_that_wrote_events_resets_the_count_and_one_the_budget_stopped_leaves_it(self) -> None:
         self.assertEqual(push_auto_synced_trip_changes(self.trip), 0)
         self.assertEqual(len(self.google.requests), 30)
         self.assertEqual(self._attempts(), 0)
 
-        # The minute is still spent: the next push writes nothing.
+        # The minute is still spent: the next push writes nothing, and is not counted for it.
         self.assertEqual(push_auto_synced_trip_changes(self.trip), 0)
         self.assertEqual(len(self.google.requests), 30)
-        self.assertEqual(self._attempts(), 1)
+        self.assertEqual(self._attempts(), 0)
         self.assertIsNotNone(self.link.push_requested_at)
 
-    def test_pushes_that_go_nowhere_reach_the_cap_and_the_sweep_drops_the_request(self) -> None:
+    def test_a_push_the_budget_stops_is_never_dropped_for_it(self) -> None:
         ApiCallLog.objects.bulk_create([ApiCallLog(service=SERVICE, success=True) for _ in range(30)])
 
         push_auto_synced_trip_changes(self.trip)
 
         self.assertEqual(self.google.requests, [])
-        self.assertEqual(self._attempts(), MAX_CALENDAR_PUSH_ATTEMPTS)
-        self.assertEqual(requeue_pending_calendar_pushes(), 0)
+        self.assertEqual(self._attempts(), MAX_CALENDAR_PUSH_ATTEMPTS - 1)
+        self.assertEqual(requeue_pending_calendar_pushes(), 1)
         self.link.refresh_from_db()
-        self.assertIsNone(self.link.push_requested_at)
+        self.assertIsNotNone(self.link.push_requested_at)
 
-    def test_a_failure_after_some_writes_does_not_count_and_one_before_any_does(self) -> None:
+    def test_a_refusal_after_some_writes_does_not_count_and_one_before_any_does(self) -> None:
+        self.google.failure = (400, {"error": {"code": 400, "errors": [{"reason": "invalid"}]}})
         self.google.fail_after = 5
 
         push_auto_synced_trip_changes(self.trip)
