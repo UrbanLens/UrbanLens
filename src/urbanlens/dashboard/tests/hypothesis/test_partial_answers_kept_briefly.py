@@ -14,7 +14,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import (
     PARTIAL_ANSWER_STALE_AFTER,
     UNANSWERED_SOURCES_KEY,
@@ -352,3 +352,210 @@ class OwnFetchPanelTests(_Case):
         )
 
         self.assert_kept_for_the_window(source)
+
+
+_RECORD_GATEWAY = "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway"
+_APN = "12-34-567"
+_ASSESSMENT = {"parcel_identifier": _APN, "tax_year": 2025, "total_value": "250000", "value_stage": "final"}
+_TIER_UNANSWERED = [
+    {"tier": 1, "status": "unavailable", "host": "gis.example.gov", "http_status": 503, "message": "down"}
+]
+
+
+def _outage() -> Exception:
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+        REASON_SOURCE_ERROR,
+        PropertyRecordsUnavailableError,
+    )
+
+    return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "upstream timed out", retry_later=True)
+
+
+class PropertyRecordTests(_Case):
+    """The sections asked for beside the parcel record: liens, tax, owners, sales, assessments, demographics, parks.
+
+    The record itself was already kept briefly when REData answered it in part. A section REData could not answer was
+    left out and the record cached for the whole window, so the liens or tax history it lacked stayed hidden for days.
+    """
+
+    def _gateway(self, gateway_cls: mock.Mock) -> mock.Mock:
+        gateway = gateway_cls.return_value
+        gateway.lookup_parcel.return_value = {"uuid": "parcel-1", "apn": _APN}
+        gateway.lookup_coverage.return_value = {}
+        gateway.lookup_assessments.return_value = _complete([_ASSESSMENT])
+        gateway.lookup_sale_records.return_value = _complete([])
+        gateway.lookup_liens.return_value = [
+            {"lien_type": "code", "amount": "500", "filed_date": "2024-01-02", "status": "open"}
+        ]
+        gateway.lookup_tax_payments.return_value = [{"tax_year": 2025, "paid": False, "delinquent": True}]
+        gateway.lookup_owners.return_value = []
+        gateway.lookup_sales.return_value = []
+        gateway.lookup_demographics.return_value = {"population": 1000}
+        gateway.lookup_national_parks.return_value = {}
+        return gateway
+
+    def _cached(self, **lookups: object) -> dict[str, Any]:
+        from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsPanelSource
+
+        with mock.patch(_RECORD_GATEWAY) as gateway_cls:
+            gateway = self._gateway(gateway_cls)
+            for name, answer in lookups.items():
+                lookup = getattr(gateway, f"lookup_{name}")
+                if isinstance(answer, Exception):
+                    lookup.side_effect = answer
+                else:
+                    lookup.return_value = answer
+            PropertyRecordsPanelSource().fetch(self.pin)
+        return self.row("property_records").data
+
+    def test_a_section_redata_could_not_answer_is_asked_for_again_within_the_hour(self) -> None:
+        data = self._cached(liens=_outage())
+
+        self.assertIn("liens", data[UNANSWERED_SOURCES_KEY])
+        self.assertNotIn("liens", {key for key in data if key != UNANSWERED_SOURCES_KEY})
+        self.assertTrue(data["available"])
+        self.assertIn("tax_status", data, "the sections that did come back are still shown")
+        self.assertIn("assessment_history", data)
+        self.assert_partial_and_brief("property_records")
+
+    def test_every_section_redata_could_not_answer_is_named(self) -> None:
+        data = self._cached(
+            tax_payments=_outage(), owners=_outage(), sales=_outage(), national_parks=_outage(), demographics=_outage()
+        )
+
+        self.assertEqual(
+            sorted(data[UNANSWERED_SOURCES_KEY]), ["demographics", "national-parks", "owners", "sales", "tax-payments"]
+        )
+        self.assertIn("liens", data)
+
+    def test_a_section_redata_refused_for_good_keeps_the_window(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_FORBIDDEN,
+            PropertyRecordsUnavailableError,
+        )
+
+        self._cached(liens=PropertyRecordsUnavailableError(REASON_FORBIDDEN, "This key may not read liens."))
+
+        self.assert_kept_for_the_window("property_records")
+
+    def test_demographics_redata_is_not_configured_for_keeps_the_window(self) -> None:
+        """REData without a Census key refuses every parcel alike, and asking again within the hour changes nothing."""
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+        refusal = PropertyRecordsUnavailableError("census_data_api_not_configured", "No Census key.", retry_later=True)
+        self._cached(demographics=refusal)
+
+        self.assert_kept_for_the_window("property_records")
+
+    def test_an_assessment_answer_missing_a_provider_keeps_its_rows_briefly(self) -> None:
+        partial = LocationContextEnvelope(
+            count=1, complete=False, results=[_ASSESSMENT], providers=[{"provider": "ny_orps", "status": "unavailable"}]
+        )
+
+        data = self._cached(assessments=partial)
+
+        self.assertEqual([row["tax_year"] for row in data["assessment_history"]], [2025])
+        self.assertIn("assessments:ny_orps", data[UNANSWERED_SOURCES_KEY])
+        self.assert_partial_and_brief("property_records")
+
+    def test_a_sale_record_answer_missing_a_provider_is_asked_for_again(self) -> None:
+        partial = LocationContextEnvelope(
+            count=0, complete=False, results=[], providers=[{"provider": "ct_opm", "status": "rate_limited"}]
+        )
+
+        data = self._cached(sale_records=partial)
+
+        self.assertIn("sale-records:ct_opm", data[UNANSWERED_SOURCES_KEY])
+        self.assert_partial_and_brief("property_records")
+
+    def test_a_complete_record_keeps_the_window(self) -> None:
+        data = self._cached()
+
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, data)
+        self.assert_kept_for_the_window("property_records")
+
+    def assert_kept_for_the_window(self, source: str) -> None:
+        row = self.row(source)
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNotNone(LocationCache.get_fresh(self.location, source))
+
+
+class ProviderResultsGatewayTests(SimpleTestCase):
+    """``/assessments/`` and ``/sale-records/`` answer REData's provider envelope; its ``complete`` was dropped."""
+
+    def _answer(self, read: str, body: dict[str, Any]) -> LocationContextEnvelope:
+        session = mock.Mock()
+        response = mock.Mock(status_code=200, headers={}, text="")
+        response.json.return_value = body
+        session.get.return_value = response
+        gateway = RedataGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
+        answer = getattr(gateway, read)("parcel-1")
+        assert isinstance(answer, LocationContextEnvelope)
+        return answer
+
+    def test_an_answer_missing_a_provider_says_which(self) -> None:
+        body = {
+            "count": 1,
+            "complete": False,
+            "results": [_ASSESSMENT],
+            "providers": [{"provider": "ny_orps", "status": "unavailable"}, {"provider": "ok", "status": "ok"}],
+        }
+        for read in ("lookup_assessments", "lookup_sale_records"):
+            with self.subTest(read=read):
+                answer = self._answer(read, body)
+
+                self.assertEqual((answer.results, answer.unanswered_sources), ([_ASSESSMENT], ["ny_orps"]))
+
+    def test_an_older_redata_that_sends_no_complete_is_taken_as_complete(self) -> None:
+        for read in ("lookup_assessments", "lookup_sale_records"):
+            with self.subTest(read=read):
+                answer = self._answer(read, {"results": [_ASSESSMENT]})
+
+                self.assertEqual((answer.results, answer.complete), ([_ASSESSMENT], True))
+
+
+class OfficialOwnerTests(_Case):
+    """A record REData answered in part may name today's owner; it is not evidence that anyone else stopped owning."""
+
+    def _linked(self) -> set[str]:
+        return set(self.location.owners.values_list("name", flat=True))
+
+    def test_a_partial_record_links_its_owner_and_unlinks_nobody(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["New Owner LLC"], UNANSWERED_SOURCES_KEY: _TIER_UNANSWERED}
+        )
+
+        self.assertEqual(self._linked(), {"Old Owner LLC", "New Owner LLC"})
+
+    def test_a_record_that_names_its_gaps_only_vaguely_is_partial_too(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["New Owner LLC"], UNANSWERED_SOURCES_KEY: ["unknown"]}
+        )
+
+        self.assertEqual(self._linked(), {"Old Owner LLC", "New Owner LLC"})
+
+    def test_a_record_missing_only_a_section_still_settles_who_owns_it(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["New Owner LLC"], UNANSWERED_SOURCES_KEY: ["liens", "assessments:ny_orps"]}
+        )
+
+        self.assertEqual(self._linked(), {"New Owner LLC"})
+
+    def test_a_complete_record_unlinks_the_owner_it_no_longer_names(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(self.location, {"owner_name": ["New Owner LLC"]})
+
+        self.assertEqual(self._linked(), {"New Owner LLC"})

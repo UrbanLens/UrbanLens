@@ -19,9 +19,13 @@ from urbanlens.dashboard.services.pins.redata_panel import RedataBackedSource
 from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.property_owner.model import WikiOwner
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.pins.external_data import PanelSource
@@ -42,6 +46,31 @@ YEAR_BUILT_LABEL = "Year built (main building)"
 #: interesting, but the card is a summary - the full list belongs to whoever
 #: goes looking in the county records.
 _MAX_LIEN_ROWS = 8
+
+
+#: The parcel's sections asked for beside its record, by REData's own path segment. One REData could not answer is named
+#: under the record's ``unanswered_sources``, so the cache keeps the record only briefly (``LocationCache.set``); an
+#: incomplete assessments or sale-records answer names each provider missing, as ``assessments:<provider>``.
+_SECTIONS = frozenset({"assessments", "sale-records", "liens", "tax-payments", "owners", "sales", "demographics", "national-parks"})
+#: Refusals REData answers every parcel alike until its operator acts, which asking again within the hour cannot change.
+_SETTLED_SECTION_REFUSALS = frozenset({"census_data_api_not_configured"})
+
+
+def _record_settles_owners(payload: dict[str, Any]) -> bool:
+    """Whether a record says who owns the parcel now, not just who some of its sources name.
+
+    Only a missing section leaves the record itself whole; any other unanswered source is one of the record's own tiers.
+
+    Args:
+        payload: A successful ``_fetch_payload`` result.
+
+    Returns:
+        False when REData answered the record itself in part.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
+    unanswered = payload.get(UNANSWERED_SOURCES_KEY)
+    return all(isinstance(source, str) and source.partition(":")[0] in _SECTIONS for source in unanswered or [])
 
 
 def _coverage_worth_calling(coverage: dict[str, Any], domain: str) -> bool:
@@ -85,94 +114,100 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
     payload["available"] = True
 
     if payload.get("uuid"):
-        parcel_uuid = payload["uuid"]
-        gateway = RedataGateway()
-
-        # Cheap local precheck for the two supplementary calls below that *are* coverage-registry
-        # domains (assessments, sale_records) - see RedataGateway.lookup_coverage.
-        try:
-            coverage = gateway.lookup_coverage(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            coverage = {}
-
-        if _coverage_worth_calling(coverage, "assessments"):
-            try:
-                rows = gateway.lookup_assessments(parcel_uuid)
-            except PropertyRecordsUnavailableError:
-                rows = []
-            history = _assessment_history(rows, payload.get("apn") or "")
-            if history:
-                payload["assessment_history"] = history
-
-        # Supplementary recorded sales (CT OPM, Cook County) - same
-        # best-effort stance. Matched rows are appended to sales_history so
-        # the existing OFFICIAL-sale pipeline ingests them unchanged.
-        if _coverage_worth_calling(coverage, "sale_records"):
-            try:
-                sale_rows = gateway.lookup_sale_records(parcel_uuid)
-            except PropertyRecordsUnavailableError:
-                sale_rows = []
-            supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
-            if supplementary:
-                payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
-
-        # Encumbrances and unpaid tax.
-        # For this application these are the most telling records on the card: an open
-        # code-enforcement lien and years of delinquent tax are what "abandoned" looks like in
-        # public records, long before anything says so in words.
-        try:
-            lien_rows = gateway.lookup_liens(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            lien_rows = []
-        if lien_rows:
-            payload["liens"] = _lien_rows(lien_rows)
-
-        try:
-            tax_rows = gateway.lookup_tax_payments(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            tax_rows = []
-        if tax_rows:
-            payload["tax_status"] = _tax_status(tax_rows)
-
-        # The record names only today's owner; REData's owner rows add former owners, contact details and how
-        # many other parcels each holds, and its recorded sales outlast the one retrieval behind this record.
-        try:
-            owner_rows = gateway.lookup_owners(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            owner_rows = []
-        if owners := _owner_records(owner_rows):
-            payload["owners"] = owners
-
-        try:
-            recorded_sales = gateway.lookup_sales(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            recorded_sales = []
-        if recorded := _recorded_sales(recorded_sales):
-            payload["sales_history"] = _merged_sales(payload.get("sales_history") or [], recorded)
-
-        # Neighbourhood demographics (census tract population/income/home value/rent/owner-renter
-        # split) - genuinely useful context for someone researching a site.
-        # Best-effort: the endpoint 503s wholesale without REData's own Census API key configured
-        # server-side, and that is no different from any other supplementary source being down.
-        try:
-            demographics = gateway.lookup_demographics(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            demographics = None
-        if demographics:
-            payload["demographics"] = demographics
-
-        # The park containing this parcel, if any - a real point-in-boundary check, unlike
-        # plugins.builtin.nps's nearest-by-coordinate panel elsewhere on the same pin (see that
-        # plugin's own docstring for the precision tradeoff it accepts). nearby_parks duplicates
-        # that existing panel, so it is read and discarded here rather than shown twice.
-        try:
-            national_parks = gateway.lookup_national_parks(parcel_uuid)
-        except PropertyRecordsUnavailableError:
-            national_parks = {}
-        if containing_park := national_parks.get("containing_park"):
-            payload["containing_park"] = containing_park
+        _add_sections(payload, RedataGateway(), payload["uuid"])
 
     return payload
+
+
+def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: str) -> None:
+    """Add the parcel's sections asked for beside its record, each best-effort.
+
+    A section REData could not answer for now is left out and named under the payload's ``unanswered_sources`` (see
+    :data:`_SECTIONS`); a section REData refused for good is left out silently, as before.
+
+    Args:
+        payload: The record payload, updated in place.
+        gateway: The REData gateway.
+        parcel_uuid: The parcel's REData uuid.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+    unanswered: list[str] = []
+
+    def asked[T](section: str, lookup: Callable[[str], T]) -> T | None:
+        try:
+            return lookup(parcel_uuid)
+        except PropertyRecordsUnavailableError as exc:
+            if exc.is_outage and exc.reason not in _SETTLED_SECTION_REFUSALS:
+                unanswered.append(section)
+            return None
+
+    def rows(section: str, answer: LocationContextEnvelope | None) -> list[dict[str, Any]]:
+        if answer is None:
+            return []
+        unanswered.extend(f"{section}:{provider}" for provider in answer.unanswered_sources)
+        return answer.results
+
+    # Cheap local precheck for the two supplementary calls below that *are* coverage-registry
+    # domains (assessments, sale_records) - see RedataGateway.lookup_coverage. A failed precheck
+    # calls both, so it leaves nothing unanswered itself.
+    try:
+        coverage = gateway.lookup_coverage(parcel_uuid)
+    except PropertyRecordsUnavailableError:
+        coverage = {}
+
+    if _coverage_worth_calling(coverage, "assessments"):
+        assessments = rows("assessments", asked("assessments", gateway.lookup_assessments))
+        history = _assessment_history(assessments, payload.get("apn") or "")
+        if history:
+            payload["assessment_history"] = history
+
+    # Supplementary recorded sales (CT OPM, Cook County) - same
+    # best-effort stance. Matched rows are appended to sales_history so
+    # the existing OFFICIAL-sale pipeline ingests them unchanged.
+    if _coverage_worth_calling(coverage, "sale_records"):
+        sale_rows = rows("sale-records", asked("sale-records", gateway.lookup_sale_records))
+        supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
+        if supplementary:
+            payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
+
+    # Encumbrances and unpaid tax.
+    # For this application these are the most telling records on the card: an open
+    # code-enforcement lien and years of delinquent tax are what "abandoned" looks like in
+    # public records, long before anything says so in words.
+    if lien_rows := asked("liens", gateway.lookup_liens):
+        payload["liens"] = _lien_rows(lien_rows)
+
+    if tax_rows := asked("tax-payments", gateway.lookup_tax_payments):
+        payload["tax_status"] = _tax_status(tax_rows)
+
+    # The record names only today's owner; REData's owner rows add former owners, contact details and how
+    # many other parcels each holds, and its recorded sales outlast the one retrieval behind this record.
+    if owners := _owner_records(asked("owners", gateway.lookup_owners) or []):
+        payload["owners"] = owners
+
+    if recorded := _recorded_sales(asked("sales", gateway.lookup_sales) or []):
+        payload["sales_history"] = _merged_sales(payload.get("sales_history") or [], recorded)
+
+    # Neighbourhood demographics (census tract population/income/home value/rent/owner-renter
+    # split) - genuinely useful context for someone researching a site.
+    # Best-effort: the endpoint 503s wholesale without REData's own Census API key configured
+    # server-side, which is settled until REData's operator configures one (_SETTLED_SECTION_REFUSALS).
+    if demographics := asked("demographics", gateway.lookup_demographics):
+        payload["demographics"] = demographics
+
+    # The park containing this parcel, if any - a real point-in-boundary check, unlike
+    # plugins.builtin.nps's nearest-by-coordinate panel elsewhere on the same pin (see that
+    # plugin's own docstring for the precision tradeoff it accepts). nearby_parks duplicates
+    # that existing panel, so it is read and discarded here rather than shown twice.
+    national_parks = asked("national-parks", gateway.lookup_national_parks) or {}
+    if containing_park := national_parks.get("containing_park"):
+        payload["containing_park"] = containing_park
+
+    if unanswered:
+        own = payload.get(UNANSWERED_SOURCES_KEY)
+        payload[UNANSWERED_SOURCES_KEY] = [*(own if isinstance(own, list) else []), *unanswered]
 
 
 def _lien_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -509,7 +544,7 @@ def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]
 
     A location's linked owners are its current ones, as the community Sale History form treats them: the record's
     owners are linked, an official owner it no longer names is unlinked, and a sale's parties are recorded on the sale
-    only. A record naming no owner changes nobody.
+    only. A record naming no owner changes nobody, and one REData answered in part unlinks nobody.
 
     Args:
         location: The Location the record belongs to.
@@ -521,7 +556,8 @@ def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]
 
     with transaction.atomic():
         current = [_current_official_owner(location, details) for details in _current_owner_details(payload)]
-        if current:
+        # A record REData answered in part may name today's owner, but leaving one out is no sign they sold.
+        if current and _record_settles_owners(payload):
             superseded = WikiOwner.objects.for_location(location).filter(source=OwnerSource.OFFICIAL).exclude(pk__in=[owner.pk for owner in current])
             location.owners.remove(*superseded)
 

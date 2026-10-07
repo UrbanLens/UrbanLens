@@ -659,11 +659,17 @@ READS: tuple[Read, ...] = (
         _PROPERTY,
         "/api/v1/parcels/{parcel_uuid}/assessments/",
         *_within("results[].", ("parcel_identifier", "total_value", "tax_year", "value_stage")),
+        "complete",
+        "providers[].provider",
+        "providers[].status",
     ),
     _get(
         _PROPERTY,
         "/api/v1/parcels/{parcel_uuid}/sale-records/",
         *_within("results[].", ("situs_address", "sale_date", "sale_price", "attributes.*")),
+        "complete",
+        "providers[].provider",
+        "providers[].status",
     ),
     _get(
         _PROPERTY,

@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
     import requests
 
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
 logger = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30
@@ -290,6 +292,26 @@ def _parcel_lookup_share_seconds(body: Mapping[str, Any]) -> int:
 
 #: Names the sources REData asked and could not hear from, on an answer that is therefore partial.
 UNANSWERED_SOURCES_HEADER = "X-REData-Unanswered-Sources"
+
+
+def _provider_results(body: Any) -> LocationContextEnvelope:
+    """A near-a-parcel answer in REData's provider envelope, keeping whether every provider answered.
+
+    Args:
+        body: REData's ``{count, complete, results, providers}`` body.
+
+    Returns:
+        The rows and per-provider outcomes. A body without ``complete`` (an older REData) is taken as complete.
+    """
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+
+    if not isinstance(body, dict):
+        return LocationContextEnvelope(count=0, complete=True)
+    results = body.get("results")
+    rows = [row for row in results if isinstance(row, dict)] if isinstance(results, list) else []
+    outcomes = body.get("providers")
+    providers = [entry for entry in outcomes if isinstance(entry, dict)] if isinstance(outcomes, list) else []
+    return LocationContextEnvelope(count=len(rows), complete=body.get("complete") is not False, results=rows, providers=providers)
 
 
 @dataclass(slots=True, frozen=True)
@@ -568,20 +590,20 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/national-parks/")
         return dict(body) if isinstance(body, dict) else {}
 
-    def lookup_assessments(self, parcel_uuid: str) -> list[dict[str, Any]]:
+    def lookup_assessments(self, parcel_uuid: str) -> LocationContextEnvelope:
         """Return annual assessor valuations near a parcel.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
 
         Returns:
-            The raw assessment rows; empty outside covered counties.
+            The raw assessment rows (none outside covered counties), and whether every provider covering the parcel
+            answered: an incomplete answer's rows are a floor.
 
         Raises:
-            PropertyRecordsUnavailableError: The request to REData failed.
+            PropertyRecordsUnavailableError: The request to REData failed, or no provider covering the parcel answered.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/") or {}
-        return list(body.get("results") or [])
+        return _provider_results(self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/"))
 
     def lookup_liens(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return recorded liens and fines against a parcel.
@@ -641,7 +663,7 @@ class RedataGateway(Gateway):
         """
         return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/tax-payments/")
 
-    def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
+    def lookup_sale_records(self, parcel_uuid: str) -> LocationContextEnvelope:
         """Return supplementary recorded sales near a parcel.
         Rows are **near-parcel** - ``parcel`` is null and nothing links a row to a specific parcel - so callers must match by address (or a raw PIN in ``attributes``) before attributing a sale to a property.
 
@@ -649,13 +671,13 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
 
         Returns:
-            The raw sale rows; empty outside covered areas.
+            The raw sale rows (none outside covered areas), and whether every provider covering the parcel answered:
+            an incomplete answer's rows are a floor.
 
         Raises:
-            PropertyRecordsUnavailableError: The request to REData failed.
+            PropertyRecordsUnavailableError: The request to REData failed, or no provider covering the parcel answered.
         """
-        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/") or {}
-        return list(body.get("results") or [])
+        return _provider_results(self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/"))
 
     def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
         """Return cached LoopNet commercial listings for a parcel.
