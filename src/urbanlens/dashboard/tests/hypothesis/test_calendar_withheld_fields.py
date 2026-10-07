@@ -44,6 +44,7 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
     export_trip_to_calendar,
     push_auto_synced_trip_changes,
 )
+from urbanlens.dashboard.services.trips.trip_activities import create_activity
 from urbanlens.dashboard.services.trips.trip_visibility import HIDDEN_ACTIVITY_TITLE
 from urbanlens.dashboard.tasks import push_trip_to_calendar
 from urbanlens.dashboard.tests.hypothesis.test_calendar_export_resumable import _CalendarExportCase
@@ -262,6 +263,23 @@ class AWithheldLocationIsRemovedFromTheEventTests(_TripWithAMateCase):
         self.assertEqual(self._event(activity)["location"], "")
         self.assertEqual(self._event(None)["location"], "")
 
+    def test_a_stop_picked_from_a_place_search_is_not_named_by_the_title_it_was_given(self) -> None:
+        """An untitled stop added from a place search stores the place's name as its title (P186, P338)."""
+        self._set_mate_visibility(VisibilityChoice.NO_ONE)
+        activity = create_activity(
+            self.trip,
+            self.mate,
+            place={"geocoded_lat": "42.380", "geocoded_lng": "-83.035", "geocoded_name": _PLACE_NAME},
+            scheduled_at=datetime.datetime(2026, 11, 6, 9, 0, tzinfo=datetime.UTC),
+        )
+        self.assertEqual(activity.title, _PLACE_NAME)
+
+        export_trip_to_calendar(self.account, self.trip)
+
+        event = self._event(activity)
+        self.assertEqual((event["summary"], event["location"]), (f"Long weekend: {HIDDEN_ACTIVITY_TITLE}", ""))
+        self._assert_nothing_names_the_place(event)
+
 
 class AnImportedEventKeepsALocationItCameWithTests(_TripWithAMateCase):
     """An imported trip's link points at the user's own event, whose location UrbanLens never had as a location."""
@@ -324,7 +342,7 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
         latitude=st.floats(min_value=-89, max_value=89, allow_nan=False).filter(lambda value: abs(value) > 0.01),
         longitude=st.floats(min_value=-179, max_value=179, allow_nan=False).filter(lambda value: abs(value) > 0.01),
         overridden=st.booleans(),
-        title=st.sampled_from([None, "", "Meet at the gate"]),
+        title=st.one_of(st.none(), st.just(""), _token),
     )
     def test_a_hidden_stop_sends_an_empty_location_and_a_masked_title(
         self,
@@ -351,7 +369,8 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
 
         assert body is not None
         self.assertEqual(body["location"], "")
-        self.assertEqual(body["summary"], f"Mill weekend: {title or HIDDEN_ACTIVITY_TITLE}")
+        # A title may be the place's own name (a place search's), so a hidden stop's title is never sent.
+        self.assertEqual(body["summary"], f"Mill weekend: {HIDDEN_ACTIVITY_TITLE}")
         text = json.dumps(body)
         self.assertNotIn("Zq", text)
         for coordinate in (latitude, longitude):
@@ -393,9 +412,19 @@ class RateLimitRefusalTests(SimpleTestCase):
             b"[]",
             b'{"error": "forbidden"}',
             b'{"error": {"errors": "x"}}',
+            b'{"error": {"errors": [{"reason": ["rateLimitExceeded"]}]}}',
         ):
             with self.subTest(content=content):
                 self.assertFalse(is_rate_limit_refusal(_raw_response(403, content)))
+
+    def test_a_disabled_api_shares_the_usage_limits_domain_but_is_not_a_rate_limit(self) -> None:
+        message = (
+            "Access Not Configured. Google Calendar API has not been used in project 123456789012 before or it is "
+            "disabled."
+        )
+        body = _google_error(403, "accessNotConfigured", message)
+
+        self.assertFalse(is_rate_limit_refusal(_raw_response(403, json.dumps(body).encode())))
 
 
 class GoogleRateLimitIsNotADeadGrantTests(_TripWithAMateCase):

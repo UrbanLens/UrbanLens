@@ -44,8 +44,9 @@ ACTIVITY_ID_EVENT_PROPERTY = "urbanlens_activity_id"
 #: Google's own ceiling on ``maxResults`` for ``events.list``.
 EVENTS_PAGE_SIZE = 250
 
-#: Error ``reason`` values for a rate or usage limit, which Google answers with 403 as well as 429. The first four are
-#: the legacy ``errors[].reason`` values; ``RATE_LIMIT_EXCEEDED`` is the ``details[].reason`` of the newer envelope.
+#: Error ``reason`` values for a rate or usage limit, which Google answers with 403 as well as 429. The Calendar API's
+#: error guide names ``rateLimitExceeded``, ``userRateLimitExceeded`` and ``quotaExceeded``; ``dailyLimitExceeded`` is
+#: Google's general daily-quota reason, and ``RATE_LIMIT_EXCEEDED`` the ``details[].reason`` of its newer envelope.
 RATE_LIMIT_REASONS = frozenset({"rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded", "dailyLimitExceeded", "RATE_LIMIT_EXCEEDED"})
 
 
@@ -108,7 +109,7 @@ def is_rate_limit_refusal(response: requests.Response) -> bool:
         listed = error.get(key)
         if isinstance(listed, list):
             entries.extend(listed)
-    return any(isinstance(entry, dict) and entry.get("reason") in RATE_LIMIT_REASONS for entry in entries)
+    return any(isinstance(entry, dict) and isinstance(entry.get("reason"), str) and entry["reason"] in RATE_LIMIT_REASONS for entry in entries)
 
 
 class CalendarRateLimitedError(RateLimitExceededError, UpstreamBusyError, GatewayRateLimitedError):

@@ -32,7 +32,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
-from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, viewer_hidden_activity_ids
+from urbanlens.dashboard.services.trips.trip_visibility import HIDDEN_ACTIVITY_TITLE, viewer_hidden_activity_ids
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Sequence
@@ -224,8 +224,10 @@ def activity_to_event_body(
     """Convert one scheduled trip activity into a timed calendar event payload.
     Activities without a scheduled start cannot be placed on a calendar and yield None.
 
-    A location withheld from the exporting viewer is sent as ``""``, so an update clears it (P335), and the title is
-    masked the way the activities panel masks it, since ``effective_title`` falls back to the place's name or address.
+    A location withheld from the exporting viewer is sent as ``""``, so an update clears it (P335), and the title as
+    :data:`HIDDEN_ACTIVITY_TITLE`. Stricter than the activities panel, which keeps a title of the stop's own: an
+    untitled stop picked from a place search stores the place's name as its title (P338), and a calendar event is a
+    copy UrbanLens cannot mask later.
 
     Args:
         activity: The TripActivity to export (with ``trip`` loaded).
@@ -246,7 +248,7 @@ def activity_to_event_body(
     if trip_url:
         description = f"{description}\n\n{trip_url}".strip()
 
-    title = masked_activity_title(activity, hidden=_location_withheld(activity, hidden_activity_ids))
+    title = HIDDEN_ACTIVITY_TITLE if _location_withheld(activity, hidden_activity_ids) else activity.effective_title
     body: dict[str, Any] = {
         "summary": f"{activity.trip.name}: {title}",
         "description": description,

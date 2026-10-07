@@ -2487,13 +2487,21 @@ only the local scratch subtrees, so the admin panel's media size reads near zero
 **Still open until 0.9.0 is deployed.** Production keeps failing these exports until an image built from
 `release/v_0_9_0` replaces `sha-d1fb1bf`. Close this entry when that happens.
 
-## P336 — A location hidden or deleted without a trip edit stays on exported Google Calendar events: no push is queued, and a deleted activity's event is orphaned
+## P336 — A location hidden after export stays on a calendar no push reaches: exports without auto-sync, visibility changes with no trip edit, and a deleted activity's orphaned event
 
 `id: P336` · `status: open` · `updated: 2026-10-07` · `found by: P335's fix, reading what triggers a push`
 
-Since P335, an export or push clears a location it withholds. Two ways a location leaves a trip still reach no export.
+Since P335, an export or push clears a location it withholds. Three ways a location leaves a trip still reach no
+export.
 
-**Visibility changes that do not touch the trip queue no push.** A push is queued only by a save of the `Trip` or a
+**An export without auto-sync is never pushed.** `queue_calendar_push` marks only `auto_sync=True` links, and the
+sweep pushes only links that owe one. A member who exported without auto-sync (the default) keeps a hidden stop's
+address and place name on their calendar until they export again. Once a trip is linked, the trip page offers only
+auto-sync and remove, so in practice that means the external API or never. The adversarial review of P335 reproduced
+this against the fake calendar. Clearing it means writing to a calendar whose owner did not ask for updates. A push
+that only clears withheld fields would do that, which is a policy call.
+
+**Visibility changes that do not touch the trip queue no push, even with auto-sync.** A push is queued only by a save of the `Trip` or a
 `TripActivity` (`models/trips/signals.py`, `queue_calendar_push`), and by the two services that call it directly.
 What a member may see of a trip-mate's stop also depends on the trip-mate's `trip_pin_location_visibility`
 (`services/trips/trip_visibility.py`), on friendships (FRIENDS, COMMON_FRIEND) and on the member's own pins
@@ -2524,3 +2532,24 @@ P335 stopped a rate-limit 403 from being read as a revoked grant. Two refusals s
   user who tries an export then loses their connection to a fault that is not theirs.
 
 Read from the code, not reproduced against Google.
+
+## P338 — A hidden stop added from a place search still shows the place's name to members who may not see it, because the name is stored as its title
+
+`id: P338` · `status: open` · `updated: 2026-10-07` · `found by: the adversarial review of P335`
+
+Since P186, `create_activity` (`services/trips/trip_activities.py`) stores the picked place's `geocoded_name` as the
+activity's `title` when the member types none. `masked_activity_title` (`services/trips/trip_visibility.py`) keeps a
+stop's own title when its location is hidden, so the panel and the external API's `effective_title` show
+"Packard Plant" to exactly the members who may not see the place. That keeps "Meet at the gate", which
+`test_fix_density_hunt_fixes.py::HiddenActivityLocationTests::test_a_hidden_activity_keeps_a_title_its_author_typed`
+pins as written for the other members. The review reproduced it: a trip-mate at `NO_ONE` adds a stop from a place
+search, and the exporter's panel row reads `display_title: "Packard Plant"` with `effective_location_hidden: True`.
+
+The calendar export no longer sends any hidden stop's title (P335). The panel and API cannot tell a typed title from a
+place search's name: nothing records where the title came from. Options:
+
+- Record it (a `title_from_place` flag, or keep the place's name in a field of its own) and mask that. This needs a
+  migration. Existing rows cannot be told apart, so a backfill would have to guess.
+- Mask every hidden stop's title, as the calendar now does, reversing the decision that test pins.
+
+Either is Jess's call.
