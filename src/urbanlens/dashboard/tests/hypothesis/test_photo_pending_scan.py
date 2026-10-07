@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase as DjangoTestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 from PIL import Image as PILImage
 
@@ -340,8 +341,13 @@ class SafetyContactPortalRespectsPendingScanTests(TestCase):
         self.owner: Profile = self.user.profile
         self.checkin = baker.make(SafetyCheckin, profile=self.owner)
         # exactly one of contact_profile/email must be set (db_safety_checkin_contact_exactly_one_target)
+        # Alerted: a token is only ever emailed with the alert, and resolves only after it.
         self.contact = baker.make(
-            SafetyCheckinContact, checkin=self.checkin, email="contact@example.com", contact_profile=None
+            SafetyCheckinContact,
+            checkin=self.checkin,
+            email="contact@example.com",
+            contact_profile=None,
+            notified_at=timezone.now(),
         )
         self.pending = baker.make(
             Image, safety_checkin=self.checkin, profile=self.owner, image="pin_images/raw.jpg", pending_scan=True

@@ -12,11 +12,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.comments import Comment
-from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 from urbanlens.dashboard.models.trips.model import TripComment
 from urbanlens.dashboard.services.comments.comments import comment_is_visible
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
+from urbanlens.dashboard.services.social.friendship import block_profile
 from urbanlens.dashboard.services.trips.trip_comments import trip_comment_is_visible
 
 TEXT = "sealed boiler room"
@@ -63,7 +63,7 @@ class _Gates:
 
     def test_an_author_who_blocked_the_viewer(self) -> None:
         comment = self.make_comment()
-        Friendship.block(self.author, self.viewer)
+        block_profile(self.author, self.viewer)
 
         self.assertHidden(comment)
 

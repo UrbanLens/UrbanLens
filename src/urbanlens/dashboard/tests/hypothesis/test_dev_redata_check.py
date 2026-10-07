@@ -81,6 +81,31 @@ class ItStaysQuietWhereItShouldTests(TestCase):
         with _deployment("development", "http://10.2.0.244:8001"):
             self.assertEqual(check_dev_is_not_pointed_at_a_real_redata(), [])
 
+    def test_every_rfc_1918_address_is_local(self) -> None:
+        """The check stopped at 172.20., so 172.21-172.31 (all inside 172.16.0.0/12) warned as if public."""
+        for host in (
+            "10.0.0.1",
+            "10.255.255.254",
+            "172.16.0.1",
+            "172.20.1.1",
+            "172.21.0.1",
+            "172.31.255.254",
+            "192.168.0.1",
+            "192.168.255.254",
+        ):
+            with self.subTest(host=host), _deployment("development", f"http://{host}:8001"):
+                self.assertEqual(check_dev_is_not_pointed_at_a_real_redata(), [])
+
+    def test_a_public_address_next_to_a_private_range_is_not(self) -> None:
+        for host in ("172.15.255.255", "172.32.0.1", "11.0.0.1", "192.169.0.1", "9.255.255.255", "8.8.8.8"):
+            with self.subTest(host=host), _deployment("development", f"http://{host}:8001"):
+                self.assertEqual(_ids(check_dev_is_not_pointed_at_a_real_redata()), ["dashboard.W003"])
+
+    def test_a_hostname_that_merely_starts_like_a_private_range_is_not(self) -> None:
+        """ "10.example.org" is a name somebody registered, not an address in 10.0.0.0/8."""
+        with _deployment("development", "https://10.example.org"):
+            self.assertEqual(_ids(check_dev_is_not_pointed_at_a_real_redata()), ["dashboard.W003"])
+
     def test_a_dev_environment_is_local(self) -> None:
         """`dev_env.py --own-redata` puts one behind a *.dev. hostname."""
         with _deployment("development", "https://a1b2c3-redata.dev.urbanlens.org"):

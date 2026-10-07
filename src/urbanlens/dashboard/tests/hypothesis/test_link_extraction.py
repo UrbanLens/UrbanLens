@@ -45,6 +45,18 @@ def _grant_ai_to_everyone() -> None:
     SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=SiteFeature.AI)
 
 
+#: A public address for the link's host. Starting an extraction resolves the host to refuse a private one, and the
+#: network guard now refuses a real lookup.
+_PUBLIC_DNS = [(2, 1, 6, "", ("93.184.216.34", 0))]
+
+
+def _stub_public_dns(case: TestCase) -> None:
+    """Resolve every host to a public address for the length of ``case``'s test."""
+    patcher = patch("socket.getaddrinfo", return_value=_PUBLIC_DNS)
+    patcher.start()
+    case.addCleanup(patcher.stop)
+
+
 class ParseHelpersTests(SimpleTestCase):
     """Deterministic parsing/sanitization of untrusted AI values (no DB writes)."""
 
@@ -281,6 +293,7 @@ class AvailabilityAndLimitTests(TestCase):
     """Feature gating and the admin-settable per-user daily limit."""
 
     def setUp(self) -> None:
+        _stub_public_dns(self)
         baker.make("auth.User")  # bootstrap admin
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
@@ -485,6 +498,7 @@ class RecentlyRequestedButtonRenderingTests(TestCase):
     """The button itself hides only for the specific link just requested."""
 
     def setUp(self) -> None:
+        _stub_public_dns(self)
         baker.make("auth.User")
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)
@@ -519,6 +533,7 @@ class EndpointTests(TestCase):
     """The start endpoint and the (unlinked) review page."""
 
     def setUp(self) -> None:
+        _stub_public_dns(self)
         baker.make("auth.User")
         self.user = baker.make("auth.User")
         self.profile = Profile.objects.get(user=self.user)

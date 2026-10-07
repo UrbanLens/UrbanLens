@@ -13,3 +13,5 @@ On a trip with auto-sync, any change to what a member may see queues the push an
 
 - `manage.py clear_withheld_calendar_locations` cleans what 0.8.0 exports left on calendars nothing pushes to, once, at the 0.9.0 rollout (N46).
 - After that, a location hidden after an export without auto-sync stays on that calendar until its owner exports again.
+- "Never deleted" holds on every path, the user's own "remove from calendar" included: an imported event is only unlinked (UrbanLens#330).
+- The command rewrites an imported event only when its fingerprint shows UrbanLens wrote what is now withheld (UrbanLens#333). Writes from before 0.9.0 have no fingerprint, so a location 0.8.0 wrote onto a user's own event cannot be told from the user's and stays; the command counts those.

@@ -14,9 +14,6 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.article.queryset import ArticleManager, ArticleRevisionManager
 from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-
 EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA = "Seeded from Wikipedia"
 SYSTEM_EDIT_SUMMARIES = frozenset({EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA})
 #: ``localize_article_images``'s rewrite of whatever text an article held, a person's included, so not a system summary.
@@ -90,19 +87,6 @@ class Article(abstract.DashboardModel):
         if self.wiki is not None:
             return self.wiki.name or "Unnamed wiki"
         return "Article"
-
-    def editable_by(self, profile: Profile) -> bool:
-        """Whether ``profile`` may edit this article. Pin articles: only the pin's owner.
-
-        Args:
-            profile: The profile attempting the edit.
-
-        Returns:
-            True when the edit is allowed.
-        """
-        if self.pin is not None:
-            return self.pin.profile_id == profile.id
-        return self.wiki is not None
 
     def word_count(self) -> int:
         """Approximate word count of the Markdown source."""

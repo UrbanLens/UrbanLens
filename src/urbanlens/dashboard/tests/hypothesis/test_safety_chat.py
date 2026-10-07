@@ -10,6 +10,7 @@ from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
@@ -40,6 +41,8 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
             checkin=self.checkin,
             contact_profile=None,
             email="contact@example.com",
+            # Alerted: a token is only ever emailed with the alert, and resolves only after it.
+            notified_at=timezone.now(),
         )
 
     def _owner_communicator(self) -> WebsocketCommunicator:
@@ -84,6 +87,23 @@ class SafetyCheckinChatConsumerTests(TransactionTestCase):
 
     async def _invalid_token_is_rejected(self):
         comm = self._contact_communicator(uuid.uuid4())
+        connected, close_code = await comm.connect()
+        self.assertFalse(connected)
+        self.assertEqual(close_code, 4404)
+
+    def test_a_token_whose_contact_was_never_alerted_is_rejected(self):
+        """A token is emailed only with the alert; one used earlier was leaked and must reach no chat."""
+        _run(self._a_token_whose_contact_was_never_alerted_is_rejected())
+
+    async def _a_token_whose_contact_was_never_alerted_is_rejected(self):
+        unalerted = await database_sync_to_async(baker.make)(
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            contact_profile=None,
+            email="later@example.com",
+            notified_at=None,
+        )
+        comm = self._contact_communicator(unalerted.token)
         connected, close_code = await comm.connect()
         self.assertFalse(connected)
         self.assertEqual(close_code, 4404)

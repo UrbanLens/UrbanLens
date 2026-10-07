@@ -36,7 +36,7 @@ class Command(BaseCommand):
         """Find and optionally delete expired demo accounts.
 
         Raises:
-            CommandError: Not a demo instance and not explicitly overridden.
+            CommandError: Not a demo instance and not explicitly overridden, or a negative TTL.
         """
         from urbanlens.dashboard.services.profile.account_deletion import hard_delete_profile
         from urbanlens.UrbanLens.settings.app import settings as app_settings
@@ -45,6 +45,9 @@ class Command(BaseCommand):
             raise CommandError(
                 "UL_DEMO_MODE is off. Refusing to delete accounts by username prefix on an instance that is not the demo. Pass --allow-non-demo only for a database you know holds no real data.",
             )
+
+        if options["ttl_hours"] < 0:
+            raise CommandError("--ttl-hours cannot be negative: it would put the cutoff in the future and select every demo account.")
 
         cutoff = timezone.now() - timedelta(hours=options["ttl_hours"])
         expired = User.objects.filter(username__startswith=DEMO_USERNAME_PREFIX, date_joined__lt=cutoff).order_by("pk")
