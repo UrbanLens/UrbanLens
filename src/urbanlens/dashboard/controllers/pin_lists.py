@@ -51,6 +51,7 @@ _BULK_ADD_CONFIRM_THRESHOLD = 100
 
 _ITEMS_PANEL_TEMPLATE = "dashboard/partials/pin_lists/_items_panel.html"
 _ITEMS_ROWS_TEMPLATE = "dashboard/partials/pin_lists/_items_rows.html"
+_SYNC_STATUS_TEMPLATE = "dashboard/partials/pin_lists/_sync_status.html"
 
 #: Rows rendered per page of the items list - matches the height-based "revealed" HTMX pagination the Vault
 #: gallery uses (see controllers.vault_media.VaultMediaView/_GALLERY_PAGE_SIZE), reused here rather than
@@ -177,7 +178,8 @@ def _membership_sync_context(request: HttpRequest, pin_list: PinList) -> dict[st
     """Whether the panel must say the list is catching up, and when its notice asks again.
 
     Pin changes reach smart lists through a queued sync (``services.pins.smart_list_sync``), so a panel rendered
-    before it runs shows the list as it was. The notice reloads the panel, backing off, until the sync has run.
+    before it runs shows the list as it was. The notice asks :class:`PinListSyncStatusView`, backing off, until the
+    sync has run.
     """
     if not membership_pending(pin_list):
         return {"membership_pending": False}
@@ -431,6 +433,27 @@ class PinListItemsView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
         return _render_items_panel(request, pin_list)
+
+
+class PinListSyncStatusView(LoginRequiredMixin, View):
+    """Whether a smart list is still catching up on its owner's pin changes.
+
+    GET /lists/<slug>/sync-status/?poll=N
+
+    While it is, the answer is the notice again, asking later. Once it has caught up, the answer says so with a
+    reload button and fires ``pinListMembershipSettled``, on which the page reloads the items itself unless the
+    reader has scrolled past the first page or is dragging a row.
+    """
+
+    def get(self, request: HttpRequest, list_slug: str) -> HttpResponse:
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        pin_list = _get_pin_list_or_404(list_slug, profile)
+        context = _membership_sync_context(request, pin_list)
+        if context["membership_pending"]:
+            return render(request, _SYNC_STATUS_TEMPLATE, {"pin_list": pin_list, **context})
+        response = render(request, _SYNC_STATUS_TEMPLATE, {"pin_list": pin_list, "membership_settled": True})
+        response["HX-Trigger"] = json.dumps({"pinListMembershipSettled": {}})
+        return response
 
 
 class PinListItemsPageView(LoginRequiredMixin, View):

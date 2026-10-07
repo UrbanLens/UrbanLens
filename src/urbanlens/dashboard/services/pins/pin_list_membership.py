@@ -114,6 +114,8 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
     if not to_add:
         return
 
+    # ignore_conflicts: a queued sync (services.pins.smart_list_sync) can add one of these rows after `current` was
+    # read, and either insert is right.
     PinListItem.objects.bulk_create(
         [
             PinListItem(
@@ -124,15 +126,20 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
             )
             for i, pk in enumerate(to_add)
         ],
+        ignore_conflicts=True,
     )
 
 
 def filter_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) -> set[int]:
     """Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
 
+    The filter always runs over all of the owner's root pins, and *among* only narrows what it reports: a criterion
+    such as ``overlapping_pins`` compares each pin with the rest, so evaluating it over a few pins would change
+    the answer. For every other criterion the narrowing is one more condition in the same query.
+
     Args:
         pin_list: The list whose ``smart_filter`` to resolve.
-        among: Only these pins, rather than all of the list owner's.
+        among: Only report these pins, rather than all of the list owner's.
 
     Returns:
         Set of matching pin ids, or an empty set when there's no smart_filter."""
@@ -142,11 +149,13 @@ def filter_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) 
     from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria
 
     criteria = deserialize_criteria(pin_list.smart_filter, pin_list.profile)
-    pins = Pin.objects.all() if among is None else among
     # root_pins(): every saved-filter preview call site (controllers/saved_filters.py) excludes detail/child pins
     # before matching criteria, so a child pin never joins a list its filter's preview would not have shown it on.
     # See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
-    return set(pins.filter(profile=pin_list.profile_id).root_pins().filter_by_criteria(criteria).values_list("pk", flat=True))
+    matches = Pin.objects.filter(profile=pin_list.profile_id).root_pins().filter_by_criteria(criteria)
+    if among is not None:
+        matches = matches.filter(pk__in=among.values("pk"))
+    return set(matches.values_list("pk", flat=True))
 
 
 def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str | None = None) -> ListAddResult:
@@ -269,7 +278,7 @@ def _boundary_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = Non
 
     Args:
         pin_list: The list whose boundary to test.
-        among: Only these pins, rather than all of the list owner's.
+        among: Only report these pins, rather than all of the list owner's.
 
     Returns:
         Set of matching pin ids, or an empty set when there's no boundary.
@@ -278,5 +287,7 @@ def _boundary_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = Non
         return set()
     from urbanlens.dashboard.models.pin.model import Pin
 
-    pins = Pin.objects.all() if among is None else among
-    return set(pins.filter(profile=pin_list.profile_id, location__point__within=split_at_antimeridian(pin_list.smart_boundary)).values_list("pk", flat=True))
+    matches = Pin.objects.filter(profile=pin_list.profile_id, location__point__within=split_at_antimeridian(pin_list.smart_boundary))
+    if among is not None:
+        matches = matches.filter(pk__in=among.values("pk"))
+    return set(matches.values_list("pk", flat=True))

@@ -24,7 +24,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.services.core import single_flight
-from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.celery import follow_on_queue, safely_enqueue_task
 from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 from urbanlens.dashboard.services.pins.pin_list_membership import sync_pins_against_smart_lists
 from urbanlens.dashboard.services.sandbox.queues import Queue
@@ -85,8 +85,9 @@ def request_smart_list_sync(pin: Pin) -> None:
 def queue_smart_list_sync(profile_id: int, *, countdown: int | None = None) -> bool:
     """Queue *profile_id*'s sync, unless one is already queued and has not started.
 
-    Past ``settings.MAX_SMART_LISTS_PER_SYNC`` smart lists the sync runs on the bulk queue, where an account's size
-    cannot become anyone else's wait.
+    A change made inside a batch task (an import, an enrichment pass) syncs on the bulk queue, as every signal's
+    follow-on work does (``follow_on_queue``). So does an account past ``settings.MAX_SMART_LISTS_PER_SYNC`` smart
+    lists, where its size cannot become anyone else's wait.
 
     Args:
         profile_id: The account whose pins have outstanding requests.
@@ -99,7 +100,7 @@ def queue_smart_list_sync(profile_id: int, *, countdown: int | None = None) -> b
         return False
     from urbanlens.dashboard.tasks import sync_requested_smart_lists
 
-    safely_enqueue_task(sync_requested_smart_lists, profile_id, countdown=countdown, queue=_queue_for(profile_id))
+    safely_enqueue_task(sync_requested_smart_lists, profile_id, countdown=countdown, queue=follow_on_queue() or _queue_for(profile_id))
     return True
 
 

@@ -128,6 +128,19 @@ class PinListPage {
             const target = (e as CustomEvent<{ target?: Element }>).detail?.target;
             if (target?.id === "pin-list-items") this.itemsChanged();
         });
+        document.body.addEventListener("pinListMembershipSettled", () => this.membershipSettled());
+    }
+
+    /** A queued smart-list sync has caught up: show its result, unless that would lose the reader's place. */
+    private membershipSettled(): void {
+        const list = byId("pin-list-items", HTMLElement);
+        if (!list) return;
+        // A reload renders the first page alone, so rows scrolled in past it, or a drag in progress, would be lost;
+        // the notice's own button reloads instead.
+        const pageSize = Number(list.dataset.pageSize || 0);
+        const rows = list.querySelectorAll(".pin-list-item[data-id]").length;
+        if (list.querySelector(".sortable-chosen, .pin-list-item--ghost") || (pageSize > 0 && rows > pageSize)) return;
+        this.refreshItems();
     }
 
     private itemsChanged(): void {
@@ -138,8 +151,8 @@ class PinListPage {
     private replaceItems(html: string): void {
         const current = byId("pin-list-items", HTMLElement);
         if (current) current.outerHTML = html;
-        // A smart list that is catching up carries a notice that polls for the settled panel, and htmx only wires
-        // an element it has processed.
+        // A smart list that is catching up carries a notice that polls for its status, and htmx only wires an
+        // element it has processed.
         const replaced = byId("pin-list-items", HTMLElement);
         if (replaced && window.htmx) window.htmx.process(replaced);
         this.itemsChanged();

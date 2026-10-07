@@ -222,6 +222,47 @@ class TheSyncAppliesEveryRequestTests(_SmartListCase):
 
         self.assertEqual(many, few, f"60 pins cost the sync {many} queries where 5 cost {few}")
 
+    def test_a_rule_that_compares_pins_sees_all_of_them(self) -> None:
+        """``overlapping_pins`` asks whether a pin overlaps any other; one changed pin overlaps nothing on its own."""
+        from urbanlens.dashboard.models.boundary.model import Boundary
+        from urbanlens.dashboard.services.pins.pin_list_membership import resync_smart_list
+
+        pin_list = self._smart_lists(1, smart_filter={"overlapping_pins": True})[0]
+        first, second = self._pins(2)
+        lot = Polygon(((0, 0), (1, 0), (1, 1), (0, 1), (0, 0)), srid=4326)
+        with mock.patch.object(Boundary.objects, "effective_polygon_for_pin", return_value=lot):
+            resync_smart_list(pin_list)
+            self.assertEqual(set(pin_list.items.values_list("pin_id", flat=True)), {first.pk, second.pk})
+
+            SmartListSyncRequest.objects.create(profile=self.profile, pin=first)
+            smart_list_sync.drain_smart_list_sync_requests(self.profile.pk)
+
+        self.assertEqual(
+            set(pin_list.items.values_list("pin_id", flat=True)),
+            {first.pk, second.pk},
+            "a pin that overlaps one outside its sync was dropped",
+        )
+
+    def test_a_full_resync_tolerates_a_sync_adding_the_same_row(self) -> None:
+        """The sync now runs beside requests, so a list edit's resync can meet a row it did not read."""
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+        from urbanlens.dashboard.services.pins.pin_list_membership import resync_smart_list
+
+        pin_list = self._smart_lists(1)[0]
+        pin = self._pins(1)[0]
+        settings_row = SiteSettings.get_current()
+
+        def sync_lands_meanwhile() -> SiteSettings:
+            PinListItem.objects.get_or_create(
+                pin_list=pin_list, pin=pin, defaults={"added_via": PinListItem.ADDED_SMART_FILTER}
+            )
+            return settings_row
+
+        with mock.patch.object(SiteSettings, "get_current", side_effect=sync_lands_meanwhile):
+            resync_smart_list(pin_list)
+
+        self.assertEqual(pin_list.items.filter(pin=pin).count(), 1)
+
     def test_a_pin_deleted_before_the_sync_runs_is_skipped(self) -> None:
         self._smart_lists(1)
         pin = self._pins(1)[0]
@@ -354,6 +395,26 @@ class OneSyncPerAccountAtATimeTests(_SmartListCase):
 
         self.assertEqual(enqueue.call_args.kwargs["queue"], tasks.Queue.BULK)
 
+    def test_a_change_made_inside_a_batch_task_syncs_on_the_bulk_queue(self) -> None:
+        """An import saves pins from a bulk task; their syncs follow it there, as every other signal's work does."""
+        from urbanlens.dashboard.services.pins import confirmed_import
+        from urbanlens.dashboard.tasks import run_confirmed_pin_import
+
+        self._smart_lists(1)
+        pin = self._pins(1)[0]
+
+        def save_inside_the_task(*_args) -> None:
+            with self.captureOnCommitCallbacks(execute=True):
+                self._rename(pin, "Anything imported")
+
+        with (
+            mock.patch.object(smart_list_sync, "safely_enqueue_task") as enqueue,
+            mock.patch.object(confirmed_import, "run_confirmed_import", side_effect=save_inside_the_task),
+        ):
+            run_confirmed_pin_import.apply(args=(1, "job")).get()
+
+        self.assertEqual(enqueue.call_args.kwargs["queue"], tasks.Queue.BULK)
+
     @override_settings(MAX_SMART_LISTS_PER_SYNC=3)
     def test_an_account_within_the_ceiling_syncs_on_the_interactive_queue(self) -> None:
         self._smart_lists(3)
@@ -411,15 +472,40 @@ class TheListSaysWhenItIsCatchingUpTests(_SmartListCase):
         response = self.client.get(reverse("lists.detail", args=[self.smart.slug]))
 
         self.assertContains(response, 'id="pin-list-sync-pending"')
-        self.assertContains(response, reverse("lists.items", args=[self.smart.slug]))
+        self.assertContains(response, reverse("lists.sync_status", args=[self.smart.slug]))
 
-    def test_the_items_panel_keeps_saying_so_until_it_settles(self) -> None:
+    def test_the_notice_polls_itself_not_the_items(self) -> None:
+        """Swapping the whole panel would drop rows scrolled in past the first page and any drag in progress."""
         self._pending()
-        url = reverse("lists.items", args=[self.smart.slug])
 
-        self.assertContains(self.client.get(url), 'id="pin-list-sync-pending"')
+        response = self.client.get(reverse("lists.items", args=[self.smart.slug]))
+
+        notice = response.content.decode().split('id="pin-list-sync-pending"', 1)[1].split(">", 1)[0]
+        self.assertNotIn('hx-target="#pin-list-items"', notice)
+        self.assertIn(reverse("lists.sync_status", args=[self.smart.slug]), notice)
+
+    def test_the_status_keeps_saying_so_until_it_settles(self) -> None:
+        self._pending()
+        url = reverse("lists.sync_status", args=[self.smart.slug])
+
+        pending = self.client.get(url, {"poll": 3})
+        self.assertContains(pending, 'id="pin-list-sync-pending"')
+        self.assertContains(pending, "poll=4")
+        self.assertNotIn("HX-Trigger", pending.headers)
+
         SmartListSyncRequest.objects.all().delete()
-        self.assertNotContains(self.client.get(url), 'id="pin-list-sync-pending"')
+        settled = self.client.get(url, {"poll": 4})
+        self.assertNotContains(settled, 'id="pin-list-sync-pending"')
+        self.assertContains(settled, 'id="pin-list-sync-settled"')
+        self.assertContains(settled, reverse("lists.items", args=[self.smart.slug]))
+        self.assertIn("pinListMembershipSettled", settled.headers["HX-Trigger"])
+
+    def test_the_status_is_the_owners_alone(self) -> None:
+        self.client.force_login(baker.make("auth.User"))
+
+        response = self.client.get(reverse("lists.sync_status", args=[self.smart.slug]))
+
+        self.assertEqual(response.status_code, 404)
 
     def test_a_settled_list_says_nothing(self) -> None:
         response = self.client.get(reverse("lists.detail", args=[self.smart.slug]))
