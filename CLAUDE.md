@@ -23,19 +23,14 @@ truly belongs here, propose the exact wording and let Jess apply it.
 evidence, not authority. Re-measure before relying on a figure, and rewrite the doc when you find
 it wrong.
 
-**Start at `docs/INDEX.md`** - one greppable line per record. `grep -E '^\| P7 ' docs/INDEX.md`
-finds one. IDs (`P` problem, `I` idea, `D` decision, `X` experiment, `T` task, `PL` plan,
-`R` reference, `N` note) are allocated there and never reused. `docs/README.md` has the house
-style; resolved problems live in `docs/archive/`.
-
-Read before touching dangerous code:
+Work to do is a GitHub issue; a decision is an ADR in `docs/adr/`. `docs/INDEX.md` indexes
+the rest (`PL` plan, `I` idea, `X` experiment, `R` reference, `N` note), one greppable line per
+record: `grep -E '^\| N7 ' docs/INDEX.md`. A former `P#`/`T#` maps to its issue in
+`docs/PROBLEMS.md`; former `D#` is the ADR with the same number; resolved problems live in `docs/archive/`.
 
 - `docs/FEATURES.md` - what already exists. Reuse infrastructure rather than rebuilding it.
 - `docs/MEDIA_PIPELINE.md` - before touching anything that parses user-supplied bytes.
 - `docs/DATA_ENCRYPTION.md` - before touching an encrypted field or rotating a key.
-
-`CLAUDE.local.md` holds environment-specific info. Subdirectories carry their own `CLAUDE.md` with
-the rules for that subtree - read the one nearest the code you are changing.
 
 ## Layout
 

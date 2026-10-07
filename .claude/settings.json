@@ -41,9 +41,6 @@
       "Bash(ruff check --fix)",
       "Bash(dart format)"
     ]
-  }
-}
-    ]
   },
   "hooks": {
     "PreToolUse": [
