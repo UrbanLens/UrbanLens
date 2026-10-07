@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.utils import timezone
 
 from urbanlens.dashboard.services.auth import google_oauth
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import MAX_PROXIED_MEDIA_BYTES, Gateway, GatewayRequestError, read_capped
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -303,13 +303,16 @@ class GooglePhotosGateway(Gateway):
             The file bytes.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
+            GatewayRequestError: On a network error or non-2xx response, or a file larger than the site's upload limit (an original) or the proxied-media ceiling (a preview).
         """
+        from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+
         suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
-        response = self._send(self.session.get, f"{base_url}{suffix}", what="download an item")
+        response = self._send(self.session.get, f"{base_url}{suffix}", what="download an item", stream=True)
         if not response.ok:
             raise GatewayRequestError(f"Downloading the Google Photos item failed (status {response.status_code}).")
-        return response.content
+        # An original is about to be stored, so the upload limit bounds it; a preview is only proxied to the browser.
+        return read_capped(response, max_bytes=max_upload_file_size_bytes() if original else MAX_PROXIED_MEDIA_BYTES, what="Google Photos item")
 
 
 def session_items_cache_key(session_id: str) -> str:

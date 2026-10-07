@@ -20,6 +20,7 @@ production.
 from __future__ import annotations
 
 import io
+from unittest import mock
 
 import pytest
 import requests
@@ -82,6 +83,20 @@ class TheCapIsEnforcedTests(SimpleTestCase):
             read_capped(response, max_bytes=4096, what="photo")
 
         self.assertLessEqual(raw.tell(), 4096 * 4, "the helper buffered far more than the cap before refusing")
+
+    def test_a_connection_dropped_mid_body_is_a_gateway_error(self) -> None:
+        """``raw.read`` bypasses the ``requests`` wrapper that turns urllib3's errors into ``RequestException``, so a
+        caller catching ``GatewayRequestError`` (every download loop does) would otherwise see a raw ``ProtocolError``."""
+        from urllib3.exceptions import ProtocolError, ReadTimeoutError
+
+        for failure in (ProtocolError("reset"), ReadTimeoutError(None, "https://x", "slow")):
+            response = _streamed(b"")
+            response.raw = mock.Mock(read=mock.Mock(side_effect=failure))
+            with (
+                self.subTest(failure=type(failure).__name__),
+                pytest.raises(GatewayRequestError, match="could not be read"),
+            ):
+                read_capped(response, max_bytes=4096, what="photo")
 
 
 class TheNonStreamedMistakeIsLoudTests(SimpleTestCase):
@@ -181,12 +196,19 @@ class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
         import inspect
         import re
 
+        from urbanlens.dashboard.services.apis.flickr import gateway as flickr_gateway, public as flickr_public
         from urbanlens.dashboard.services.apis.locations import (
             redata_basemap_tiles_gateway,
             redata_historical_maps_gateway,
             redata_imagery_gateway,
         )
-        from urbanlens.dashboard.services.apis.locations.google import places, redata_cid_gateway, redata_places_gateway
+        from urbanlens.dashboard.services.apis.locations.google import (
+            maps,
+            places,
+            redata_cid_gateway,
+            redata_places_gateway,
+        )
+        from urbanlens.dashboard.services.apis.photos import google as google_photos
         from urbanlens.dashboard.services.apis.property_records import redata_gateway
 
         for module in (
@@ -197,6 +219,10 @@ class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
             places,
             redata_places_gateway,
             redata_cid_gateway,
+            flickr_gateway,
+            flickr_public,
+            google_photos,
+            maps,
         ):
             source = inspect.getsource(module)
             for call in re.findall(r"read_capped\(\s*response[^)]*\)", source):

@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.core.input_validation import ImpossibleInputError, InputRejection
+from urbanlens.dashboard.tests.hypothesis.test_proxied_media_is_capped import _streamed
 
 
 class GooglePlacesTests(TestCase):
@@ -219,7 +220,7 @@ class GoogleStaticSatelliteTests(TestCase):
         from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
         session = mock.Mock()
-        session.get.return_value = mock.Mock(content=b"jpeg")
+        session.get.return_value = _streamed(b"jpeg")
         self.assertEqual(
             GoogleMapsGateway(api_key="test-key", session=session).get_satellite_image_bytes(0.0, 0.0), b"jpeg"
         )
