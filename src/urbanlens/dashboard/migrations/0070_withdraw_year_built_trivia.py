@@ -27,7 +27,7 @@ def withdraw_year_built_questions(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0068_rate_limit_rows_from_any_release_take_0_9_0_defaults"),
+        ("dashboard", "0069_calendar_privacy_followups"),
     ]
 
     operations = [

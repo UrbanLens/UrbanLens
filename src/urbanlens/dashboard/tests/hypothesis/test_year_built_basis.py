@@ -31,7 +31,7 @@ from urbanlens.dashboard.services.pins.pin_restructure import BuildingNester, bu
 from urbanlens.dashboard.services.trivia.deterministic import YEAR_BUILT_WITHDRAWN, generate_deterministic_questions
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import CAMPUS_LAT, CAMPUS_LNG, rect
 
-_MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0069_withdraw_year_built_trivia")
+_MIGRATION = importlib.import_module("urbanlens.dashboard.migrations.0070_withdraw_year_built_trivia")
 
 _LATITUDE, _LONGITUDE = CAMPUS_LAT, CAMPUS_LNG
 
@@ -278,7 +278,7 @@ class TriviaYearBuiltTests(TestCase):
 
 
 class WithdrawLegacyYearQuestionsMigrationTests(TestCase):
-    """0069 withdraws every year-built question generated before UrbanLens read ``year_built_basis``."""
+    """0070 withdraws every year-built question generated before UrbanLens read ``year_built_basis``."""
 
     def test_every_approved_deterministic_year_question_is_withdrawn(self) -> None:
         location = baker.make(Location)

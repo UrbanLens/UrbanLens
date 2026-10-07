@@ -24,7 +24,7 @@ BUILDING_COUNT_QUESTION_THRESHOLD = 4
 YEAR_BUILT_KEY = "year_built:"
 #: ``rejection_reason`` of a year-built question withdrawn because the building records no longer date its building.
 #: Such a question is approved again once they do; a question rejected for any other reason is left as it is.
-#: Migration 0069 writes the same text.
+#: Migration 0070 writes the same text.
 YEAR_BUILT_WITHDRAWN = "The building records do not date this building itself."
 
 
