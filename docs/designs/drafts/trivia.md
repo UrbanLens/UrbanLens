@@ -74,7 +74,10 @@ classifier exists to catch, so it skips classification entirely.
 
 Generators built:
 
-- **Year built** — one question per named building with a known `year_built`.
+- **Year built** — one question per named building whose `year_built` REData says is the building's own
+  (`year_built_basis: "building"`). The assessor's year is the parcel's and dates no one building, and a
+  year with no basis may be either, so neither is asked; a question the records stop supporting is
+  withdrawn (`REJECTED` with `YEAR_BUILT_WITHDRAWN`) and approved again once they do.
 - **Building number** — one question per named building with a known `building_number`.
 - **Building count** — "how many buildings are on this parcel," only once the count itself is
   a genuinely interesting fact (`BUILDING_COUNT_QUESTION_THRESHOLD = 4` — deliberately stricter
