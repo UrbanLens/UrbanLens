@@ -2356,24 +2356,50 @@ upload."
 disk as they are read, which bounds memory but not time, so it only helps together with a longer limit. Leaving it as
 it is refuses the rare multi-year export.
 
-## P316 — Nine tests fail under `bin/host_pytest.sh` on `release/v_0_9_0`, from three causes
+## P316 — Tests failing on `release/v_0_9_0` in CI and under `bin/host_pytest.sh`; every cause found has a fix PR, open until they merge
 
-`id: P316` · `status: open` · `updated: 2026-10-05`
+`id: P316` · `status: open` · `updated: 2026-10-07`
 
-Measured on 2026-10-05 against `release/v_0_9_0` (`8ff61612f`) and `integ/merge2`, with the same nine failing on
-both. Not run in a test-runner container (`bin/run_tests.sh`), so whether each is host-only is not known.
+Measured 2026-10-06/07 at `3ee8570e7`, then rechecked at `b114a4329`. A full run under CI's environment (ci.yml's
+variables plus `CI=true`, no `.env`, `host_pytest.sh -n 4 --dist loadfile`) had 15 failed, 22,567 passed, 12 skipped
+and 3 xfailed in 1:01:56. A full run in a bare worktree (no `.env`, no variables, four serial shards) had 52 failed.
+CI's own run on the v0.9.0 PR (37316297968, `02b6567f5`, serial) had 6 failed. Each cause and its PR into
+`release/v_0_9_0`:
 
-- `test_basemap_tile_cost` (3) and `test_basemap_tile_authorisation` (1) count statements, and under
-  `host_pytest.sh` every request reads its session from the database (`expire_date > '<now>'`), which those
-  budgets do not allow for. `test_slug_existence_side_channel` failed 443 cases the same way until its shapes
-  ignored that timestamp.
-- `test_import_parse_memory` (4) peaks near 8.4 MB for a 12 MB and a 16 MB archive alike, against budgets of
-  1.5-2 MB. The peak does not grow with the file, so something fixed is allocated inside the measured window.
-- `test_geolocation_ping_batches_boundaries::test_a_pin_with_no_boundary_counts_only_near_its_marker` finds a
-  boundary polygon where its fixture expects none.
+- **Parse memory (4 tests): a regression in 41ddb3641.** `archive_extractor._DirectoryReadBound` answered
+  `zipfile`'s read-to-end of the end record by asking the file for 8 MiB + 1. A buffered `read(n)` allocates `n` before
+  it reads, so every ZIP cost 8 MiB to open, which is the fixed ~8.4 MB peak. #245 fixes it, and the peaks are now
+  1.10-1.39 MB against budgets of 1.57-2.10 MB.
+- **`test_geolocation_ping_batches_boundaries` (1): outdated by P264 (a82caf1a4).** A footprintless lone building now
+  falls through to its wiki's outline and then to the 50 m circle, so the fixture never reached the marker fallback.
+  #247 builds the unbounded pin on a multi-building parcel instead.
+- **`test_nul_character_refusal` anti-vacuity check (1): a flake.** The JSON strategy almost never drew a NUL. The
+  check passed only when Hypothesis's pool of string literals from loaded modules, or the host's example store,
+  supplied one. #248 fixes it.
+- **`test_migration_noop_reverse_guard` (1).** 0064, 0067 and 0068 each reverse to `noop` without a REVIEWED entry.
+  #252 adds them.
+- **`test_vendor_assets` live-policy check (1): order-dependent.** It compared the served CSP dict, by identity,
+  against `settings.base._CSP_DIRECTIVES`. `test_config_fails_closed` and
+  `test_celery_broker_is_not_shared_with_dragonfly` reload that module and sort first, so it fails on every serial run.
+  #253 fixes it.
+- **`test_site_admin_subscription_roles` (8): fails only under xdist.** A TransactionTestCase truncated the
+  migration-seeded `vip` row in the middle of a worker's run, because `--dist loadfile` hands a worker a whole file.
+  #255 fixes it.
+- **`test_write_route_smoke` (1): a load flake.** The readiness probe's transaction-scoped 2 s `statement_timeout`
+  outlived its savepoint inside the test's transaction, so every route swept after `/health/ready` ran under that
+  deadline. #261 fixes it.
+- **Bare worktree only (44).** 43 tests read an unset `UL_ENVIRONMENT` as production, either in-process or in a probe
+  subprocess. #260 (merged) fixed that at the root, and the tile-seeder pair is also pinned in #246. The 44th,
+  `test_pin_page_reads_names_once`, needs REData configured, which #246 also covers. The four basemap budget tests had
+  already been pinned to `cached_db` sessions by 5d894be93.
 
-`test_write_route_smoke` and `test_websocket_credential_scopes` each failed once in a full run under load
-and pass alone, on both branches.
+CI's docs-index step also failed on `3ee8570e7` (N43's status). #256 fixed it.
+
+**Running the suite locally.** Give each full run a new `UL_TEST_DB_NAME`. With `--reuse-db`, a database that has run
+a TransactionTestCase has lost its migration-seeded rows. `--dist loadfile` can flush mid-run on a worker, so a test
+that reads seeded rows can pass serially, as in CI, and fail in parallel.
+
+`test_websocket_credential_scopes`, which failed once under load on 2026-10-05, passed in every run since.
 
 ## P318 — The import wizard sent each Google Maps CID through the browser as a JSON number, zeroing its low digits; fixed, but stored rounded CIDs in import failures need `fix_float_rounded_cids`
 

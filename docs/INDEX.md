@@ -208,7 +208,7 @@ still resolves after it is fixed, and the id is never handed out again.
 | P279 | open | 2026-10-04 | Legacy `BLOCKED` friendship rows may still record the wrong blocker | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P286 | open | 2026-10-06 | A campus pin could lose its own National Register listing, because REData answered a point with the rows last found from it; fixed in REData v0.3.4, not yet seen on production | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P304 | open | 2026-10-05 | A Location History file over about 180 MB, or a GPX file over about 60 MB, fails its preview on the time limit | [`docs/PROBLEMS.md`](PROBLEMS.md) |
-| P316 | open | 2026-10-05 | Nine tests fail under `bin/host_pytest.sh` on `release/v_0_9_0`, from three causes | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P316 | open | 2026-10-07 | Tests failing on `release/v_0_9_0` in CI and under `bin/host_pytest.sh`; every cause found has a fix PR, open until they merge | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P318 | open | 2026-10-05 | The import wizard sent each Google Maps CID through the browser as a JSON number, zeroing its low digits; fixed, but stored rounded CIDs in import failures need `fix_float_rounded_cids` | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P321 | open | 2026-10-06 | A data export that includes photos or image overlays fails outright on object storage, which production 0.8.0 uses; fixed on `release/v_0_9_0`, live until 0.9.0 deploys | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P335 | open | 2026-10-07 | A calendar event keeps a location the trip no longer exports, because an update is a PATCH and the body leaves `location` out | [`docs/PROBLEMS.md`](PROBLEMS.md) |
