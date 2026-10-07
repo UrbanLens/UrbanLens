@@ -110,6 +110,12 @@ REVIEWED: dict[str, str] = {
         "Sets database defaults on columns 0036-0053 added. A reverse leaves them; no release reads a column's default, "
         "and reversing those migrations drops the columns with their defaults."
     ),
+    "0064_rate_limit_rows_take_0_9_0_defaults.py": (
+        "apply_0_9_0_defaults writes 0.9.0's limits and notes into ApiRateLimit rows that still hold exactly 0.8.0's. "
+        "A reverse leaves them: a row with 0.9.0's values cannot be told from one an admin set the same, so restoring "
+        "0.8.0's could lift a cap somebody chose. The values are ordinary integers and text, and 0.8.0 runs with "
+        "REData Places held to 40 a day."
+    ),
 }
 
 
@@ -134,7 +140,12 @@ def _noop_reverse_files() -> dict[str, list[str]]:
             if not reverse and len(node.args) >= 2:
                 reverse = ast.unparse(node.args[1])
             if "noop" in reverse:
-                forward = ast.unparse(node.args[0]) if node.args else "?"
+                code = (
+                    node.args[0]
+                    if node.args
+                    else next((kw.value for kw in node.keywords if kw.arg in {"code", "sql"}), None)
+                )
+                forward = ast.unparse(code) if code is not None else "?"
                 found.setdefault(path.name, []).append(forward)
     return found
 
