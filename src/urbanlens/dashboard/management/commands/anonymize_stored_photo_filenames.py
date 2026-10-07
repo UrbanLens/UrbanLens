@@ -20,7 +20,7 @@ import shutil
 from typing import TYPE_CHECKING, Any
 
 from django.core.management.base import BaseCommand, CommandParser
-from django.db import DatabaseError, transaction
+from django.db import Error as DbError, transaction
 
 from urbanlens.dashboard.models.images.model import Image, anonymized_media_stem
 from urbanlens.dashboard.services.media.images import extract_filename_taken_at
@@ -111,12 +111,21 @@ class Command(BaseCommand):
                 count += 1
         return count
 
+    @staticmethod
+    def _rows_naming(field_name: str, name: str) -> bool | None:
+        """Whether any row's ``field_name`` is *name*, or None when the database cannot say."""
+        try:
+            return Image.objects.filter(**{field_name: name}).exists()
+        except DbError:
+            return None
+
     def _rename(self, storage: Storage, field_name: str, old_name: str, new_name: str, **extra: Any) -> bool:
         """Rename one stored file and repoint every row naming it, without a moment where a row names a missing file.
 
         Copies first, repoints the rows in one transaction, and only then removes the original: a failure before the
         commit leaves the rows on the original file, one after it leaves them on the copy, and either way the worst
-        outcome is a stray file.
+        outcome is a stray file. A database error is not taken to mean the commit failed - the connection can be lost
+        after the server committed - so the rows are read back before either file is removed.
 
         Args:
             storage: The field's storage backend.
@@ -136,13 +145,19 @@ class Command(BaseCommand):
         try:
             with transaction.atomic():
                 Image.objects.filter(**{field_name: old_name}).update(**{field_name: stored_name}, **extra)
-        except DatabaseError as exc:
-            self.stderr.write(f"  [{field_name}] DB update failed for {old_name} -> {stored_name}, so it was left where it was: {exc}")
-            try:
-                storage.delete(stored_name)
-            except OSError:
-                self.stderr.write(f"  [{field_name}] the copy at {stored_name} could not be removed either; delete it by hand.")
-            return False
+        except DbError as exc:
+            on_the_copy = self._rows_naming(field_name, stored_name)
+            if on_the_copy is None:
+                self.stderr.write(f"  [{field_name}] DB update for {old_name} -> {stored_name} failed ({exc}) and the rows could not be read back; both files were left, and the rows name one of them.")
+                return False
+            if not on_the_copy:
+                self.stderr.write(f"  [{field_name}] DB update failed for {old_name} -> {stored_name}, so it was left where it was: {exc}")
+                try:
+                    storage.delete(stored_name)
+                except OSError:
+                    self.stderr.write(f"  [{field_name}] the copy at {stored_name} could not be removed either; delete it by hand.")
+                return False
+            # The server did commit; only its acknowledgement was lost.
         try:
             storage.delete(old_name)
         except OSError as exc:
