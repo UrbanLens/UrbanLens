@@ -13,9 +13,11 @@ steps, after migrations (0069 included) and after the new image serves.
 Under 0.8.0 a calendar export left a stop's address on the Google event, and the place's name in its title, after the
 stop was hidden or its adder restricted who may see it (P335). 0.9.0 clears them on the next export or auto-sync push,
 but an export without auto-sync is never pushed. The command rewrites, once, each event UrbanLens made that may hold a
-location or title its calendar's owner may no longer see. Nothing else is written: an event with nothing withheld is
-skipped, an event the user deleted is not recreated, and an event an import linked from the user's own calendar is
-left alone.
+location or title its calendar's owner may no longer see, an unscheduled stop's included. Nothing else is written: an
+event with nothing withheld is skipped, an event the user deleted is not recreated, and an event an import linked from
+the user's own calendar is left alone unless its fingerprint shows UrbanLens wrote what is now withheld. None written
+under 0.8.0 has one, so at this rollout every such event is left alone and counted ("Left N imported events alone");
+please send that count back too.
 
 ## The run
 
@@ -32,4 +34,5 @@ python manage.py clear_withheld_calendar_locations --apply   # "Rewrote N events
   skips every event already rewritten, so it can be interrupted and started again.
 - If Google refuses the site (Calendar API disabled on the project, or the OAuth client refused) it stops with a
   `CommandError` and writes nothing more; that is the operator's to fix, and the run is repeated after.
-- Please send back the two counts (dry run, `--apply`), so UrbanLens#301 can record them.
+- Please send back the counts (dry run, `--apply`, and any "Left N imported events alone"), so UrbanLens#301 and
+  UrbanLens#333 can record them.

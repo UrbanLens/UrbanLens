@@ -84,18 +84,18 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
 | Owner in fields REData does not read: PA's `OWNER_LAST_NAME`/`OWNER_FIRST_NAME` (`parcels/services/property_records/known_endpoints.py:426`); Philadelphia's OPA not read | b | ownership | Harrisburg; the Institute of the Pennsylvania Hospital |
 | Athens's row not re-pointed at the County Auditor, so a cached statewide parcel with no owner answered (fixed on 0.3.6 by the re-point and REData P128) | b | ownership | Athens on 0.3.5 |
 | The statewide layer REData reads has no owner name (CA, ME, VA, WA) or a blank one (NJ, MD); county sources not researched | c? | ownership | Napa, Agnews, Mendocino, Augusta, Central State VA, Eastern State WA, Trenton, Greystone, Spring Grove, Sheppard Pratt |
-| No National Register listing within reach, and no register provider for the state | c | register (now known issues) | Anna, Arkansas, Cherokee, Clarinda, Danville, Eastern Oregon, Elgin, Independence, Jacksonville (its NRHP 75000669 was removed in 1984), Mendocino, Mississippi, Napa, Osawatomie, Patton, Warren, Winnebago |
+| No National Register listing within reach, and no register provider for the state | c | register (now known issues) | Anna, Arkansas, Cherokee, Clarinda, Danville, Eastern Oregon, Elgin, Independence, Jacksonville (its NRHP 75000669 was removed 1984-04-18, so the catalogue no longer expects it), Mendocino, Mississippi, Napa, Osawatomie, Patton, Warren, Winnebago |
+| No current listing within 500 m: Central State VA's only one, the Chapel (10000794), was removed 2017-02-07 after it collapsed, and Mayfield Cottage (69000236) is 616 m away; Terrell has none, and THC marker 8556 is published 542 m from the catalogue point, outside the grounds, past the radius | c | register (known issues) | Central State VA, Terrell |
 | NPS places the campus's listing (86000851) 1.06 km from it | c | register (known issue) | Columbus |
-| Listed under a name or number the catalogue lacks | e | register | Central State IN (`nrhp = "72000011"`), Central State VA (`"10000794"`, delisted 2017), Eastern State WA (`"97001084"`), Kalamazoo (`"72000624"` or alias "Kalamazoo State Hospital"), Mendota (`"88002183"`), St. Peter (`"86002117"`) |
-| The THC marker is 542 m from the catalogue point (datum unverified) | e? | register | Terrell |
-| A historic district named only in the rows' `attributes` | a | register | Trenton: UrbanLens#340 ("register check reads only each row's name") |
+| Listed under a number the catalogue lacked, because the listing is one of the campus's buildings or its district (NPS, cross-checked against Wikipedia's NRHP lists; corrected in `kirkbrides.toml`) | e | register | Central State IN (`72000011`, Old Pathology Building), Eastern State WA (`97001084`, Roosevelt Hall), Kalamazoo (`72000624`, Water Tower), Mendota (`88002183`, the Wisconsin Memorial Hospital Historic District), St. Peter (`86002117`, Center Building) |
+| A historic district named only in the rows' `attributes` (New Jersey's `HD_NAME`; SHPO-eligible, with no NRHP listing): the check read only names, and now also reads a district named in an attribute, and says in its result when the match is an eligible record, not a listing (UrbanLens#340, "register check reads only each row's name") | a | register | Trenton |
 | A listed NRHP property within 500 m not returned; REData's cultural-resource cache may ignore the radius | b | register | Greystone (00000653) |
 | The article has no coordinates | c | wikipedia (known issues) | Central State VA, Kalamazoo |
 | The article's coordinates are not marked primary, and REData's geosearch reads primary ones only | b | wikipedia | Eastern Oregon |
 | Image engines refuse REData's shared egress IP (REData P116), leaving 0-7 results | d | web_photos | 19: Anna, Arkansas, Augusta, Central State KY, Cherokee, Clarinda, Danville, Eastern Oregon, Eastern State WA, the Institute, Jacksonville, Kalamazoo, Kankakee, Mississippi, Spring Grove, St. Vincent's, Trenton, Western State KY, Winnebago |
 | An image search whose engines timed out answered empty (`core/services/search.py:858`, fixed in 0.3.6) | b | web_photos; photos? | St. Lawrence; St. Lawrence, Central State KY, Danville, Mississippi (0.3.5) |
 | GDELT refused production's egress (five `429`s from 01:11Z), and SearXNG's news engines were throttled; a `200` from the fallback does not say GDELT was skipped | d | news | 17: Anna, Clinton Valley, Columbus, Dixmont, Fergus Falls, Harlem Valley (inconclusive), Independence, Kalamazoo, Kankakee, Northampton, Patton, Sheppard Pratt (inconclusive), Dayton, St. Vincent's, Terrell, Topeka, Trenton |
-| The news query is a shared name without its town | a | news | Central State KY, Western State KY: UrbanLens#339 ("news check searches a shared campus name without its town") |
+| The news query was a shared name without its town, and now carries it (UrbanLens#339, "news check searches a shared campus name without its town") | a | news | Central State KY, Western State KY |
 | A media source did not answer (`wikimedia_commons` unavailable, `searxng_media` rate-limited) | d | photos (inconclusive) | Anna, Clinton Valley, Independence, Kankakee |
 | Every media source answered, with nothing near the point | c? | photos | Cherokee, Patton, Winnebago |
 | loc.gov holds the town's Sanborn atlas, production's catalogue does not (REData P112; `parcels/services/historical_maps/lookup.py:246`) | b | historic_maps | Central State IN (31 volumes), Jacksonville (7), Western State KY (9); Athens on 0.3.5 (passes on 0.3.6) |
@@ -107,15 +107,38 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
 
 - **`kirkbrides.toml`.** Twenty-two `known_issues` entries are new, all confirmed (c): 17 register, 2 wikipedia,
   1 historic_maps and 2 incidents, each with its evidence. Harlem Valley's `historic_maps` entry is gone: its
-  volume answer came back `near` at 0 m (request `c664b3b4d793469b90071c593aab429f`). The (e) items above wait
-  for a decision on the catalogue. Mendocino's `status = "standing"` also looks stale: the Kirkbride was razed in
-  1952.
-- **Three harness-only fixes:**
+  volume answer came back `near` at 0 m (request `c664b3b4d793469b90071c593aab429f`). The (e) items are settled
+  from NPS's NRHP layers, Wikipedia's NRHP lists and the state sources, each named in the entry's comment:
+  - five campuses carry the number of their own building or district, and Jacksonville's removed one is no longer
+    expected;
+  - Central State VA and Terrell gain a register known issue (c);
+  - Terrell's point stands: it is on the grounds, beside the water tower, and THC's own published point for its
+    marker is the one 542 m out;
+  - Mendocino stays `standing`: its Kirkbride was razed in 1952, but later hospital buildings still stand at the
+    point. `status` means whether buildings stand at the catalogue point (it gates the building, footprint and
+    build-date checks), not whether the original Kirkbride survives, so Central State IN, Jacksonville, Mendota,
+    Kalamazoo, St. Peter, Central State VA, Terrell and Eastern State WA, which Wikipedia also records as having lost
+    theirs, stay `standing` too. The catalogue's header says so.
+
+  The nine `demolished` entries came from Wikipedia's status column, which describes the Kirkbride, so each was
+  rechecked on 2026-10-07 against OSM building footprints (50 m2 or more) within 100 m of the point and an Esri aerial
+  (2023-2025). Seven have buildings there and are now `standing`: Spring Grove (on the point), Danvers (on the point),
+  Taunton (34 m), Northampton (25 m), Topeka (a new building on the point that OSM lacks), Columbus (79 m: two state
+  office buildings, none a hospital's) and Central State KY (88 m: one park building; the 1996-demolished campus is
+  now a state park). The last two are borderline. Dixmont (nothing within 200 m) and Clinton Valley (open field; the
+  nearest houses are 136 m away, also borderline) stay `demolished`. The seven's building checks now run, and none
+  has been run against REData. The 47 `standing` entries not mentioned here were not rechecked.
+- **Five harness-only fixes:**
   - the URL, key and Host are read from `.env` together or not at all;
   - a `503` carrying a REData error code is remembered for the session;
-  - a call still refused when its wait ran out is not asked again by each later check.
+  - a call still refused when its wait ran out is not asked again by each later check;
+  - the news search carries the town and state after a name that needs one, and never searches a Wikipedia
+    disambiguator (UrbanLens#339);
+  - the register check counts a row naming the campus as a historic district in its `attributes`, or carrying its
+    NRHP number there, and never counts a record the register withdrew (not eligible, delisted, removed). When every
+    match is a SHPO's eligible record, which is not a listing, its result says so (UrbanLens#340).
 
-  The last one cut repeated worker kills on production to one per endpoint per campus.
+  The third cut repeated worker kills on production to one per endpoint per campus.
 - **UrbanLens#339 and UrbanLens#340** hold the two suite gaps. **N47** is the handoff to REData.
 
 Not run on production: the pipeline layer (`test_pipeline.py`). It last ran on staging 0.3.0, on 2026-10-05, and
@@ -150,8 +173,10 @@ passed for all four primaries apart from Athens's build date (REData P111).
 9. Build years outside New York (REData P111: 27 campuses).
 10. A completeness envelope on the buildings endpoints instead of a header (REData P103).
 11. New York centroid parcels with no polygon, and Maryland's centroid layer (REData P101, P102).
-12. A decision on the catalogue's (e) items above, and on whether every catalogue campus should be expected to
-    have incidents and news.
+12. A decision on whether every catalogue campus should be expected to have incidents and news. `status` is decided
+    (buildings stand at the catalogue point, not whether the Kirkbride survives) and applied to all nine `demolished`
+    entries; the first live run will show whether Columbus and Central State KY, whose only buildings are not
+    hospital ones, belong with the `standing` campuses.
 
 **P3 - ingestion and outsourcing.**
 

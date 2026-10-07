@@ -86,18 +86,20 @@ itself* never leaks through other APIs, but nothing exercises what the token *gr
 
 **Fixed this round** — see [Fixes applied](#fixes-applied-this-round-2026-08-24).
 
-Also flagged, not yet acted on:
-- `invite_checkin_partner` (`services/visits/safety.py:666-716`) requires an existing `User` by
-  username, and `SafetyCheckinPartner.profile` is non-null — the "opt a contact into enhanced
-  access" tier structurally requires the invitee to already be a site member, in tension with "a
-  contact never needs to be a site member" if that's meant to cover both tiers. **Ask Jess**:
-  is the two-tier model (token contact: no membership, post-incident, plan-only; partner:
-  membership + accept, pre-incident, full access) the intended design? If so the goal doc/CLAUDE.md
-  should say so explicitly.
-- `mark_found_safe`'s notification loop to `other_contacts` is unfiltered by `notified_at`,
-  unlike `notify_contacts_of_update` which filters to `notified_at__isnull=False` — worth
-  checking whether resolving a check-in can hand a portal token to a contact who was never
-  escalated to.
+Also flagged, both since settled:
+- **Answered by `docs/GOALS.md:102-103`.** `invite_checkin_partner` (`services/visits/safety.py:666-716`)
+  requires an existing `User` by username, and `SafetyCheckinPartner.profile` is non-null, so the
+  enhanced-access tier needs a site member. This was put to Jess as a possible tension with "a contact
+  never needs to be a site member". GOALS.md settles it: "A contact never needs to be a site member; access
+  is via token link. The check-in owner can specify that a user does get live location and an ability to see
+  the plan before a failed check-in, but this must be explicitly chosen and consent-focused." The
+  no-membership rule is for contacts; earlier access is for "a user" the owner explicitly chooses, which is
+  the partner an owner invites and who accepts. The two-tier model is the intended design.
+- **Fixed by UrbanLens#344 (2026-10-07).** `mark_found_safe`'s notification loop to the other contacts was
+  unfiltered by `notified_at`, unlike `notify_contacts_of_update`. A partner can resolve a check-in before
+  escalation, so contacts who were never alerted got a "has been found" email and in-app notice naming the
+  trip, with a portal token in the email. `_resolve_as_found_safe` now tells only contacts with `notified_at`
+  set.
 
 ---
 
