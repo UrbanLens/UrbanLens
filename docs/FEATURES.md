@@ -1690,7 +1690,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   - every handler in `LOGGING`, and every handler a Celery worker installs, rewrites the URLs a record prints, in the
   message and the traceback: a credential parameter becomes a `redact_secret` token, a coordinate parameter or
   `lat,lng` value a `redact_coordinate` token, and a `user:password@` password a token. A `requests` error, whose
-  text is its URL, can be logged as it is (P203).
+  text is its URL, can be logged as it is (P203). Any email address in the message or the traceback becomes an
+  `<email:...>` token (`redact_email_addresses`): an SMTP refusal's text names the recipients it refused.
 - **`mark_retry_later(request)`** (`UrbanLens/logging_filters.py`) - for a view whose 503 with `Retry-After` means
   "not yet": `django.request` drops that request's 503 instead of logging it at ERROR. media-copy uses it (P204).
 

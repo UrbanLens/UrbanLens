@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.db.models.signals import post_delete, post_save, pre_save
 
+from urbanlens.dashboard.services.security.redact import redact_filename
+
 if TYPE_CHECKING:
     from django.db.models import Model
 
@@ -81,7 +83,7 @@ def _unlink(storage, name: str, instance: Model, field: str) -> None:
         # A missing file is the normal case on a re-run, and a storage backend
         # that is unavailable is not a reason to fail the write that triggered
         # this. Logged rather than swallowed silently.
-        logger.warning("Could not delete replaced file %s for %s %s", name, instance._meta.object_name, instance.pk, exc_info=True)  # noqa: SLF001
+        logger.warning("Could not delete replaced file %s for %s %s", redact_filename(name), instance._meta.object_name, instance.pk, exc_info=True)  # noqa: SLF001
 
 
 def remember_replaced_file(sender, instance, **kwargs) -> None:

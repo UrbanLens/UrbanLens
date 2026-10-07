@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from contextlib import suppress
 import inspect
+import os
 import re
 import secrets
 import threading
@@ -162,6 +163,23 @@ def redact_text(value: str | None) -> str:
     if not value:
         return "<none>"
     return f"<text:{_tag(value)}>"
+
+
+def redact_filename(value: str | None) -> str:
+    """Return a log-safe token standing in for a user-supplied file name.
+    Uploaded and archived file names are private user content (they are often the name of a place). The token keeps the lower-cased extension - only when it is plain alphanumerics - and the length, which is what is useful for debugging, and a stable tag so one file correlates across log lines.
+
+    Args:
+        value: The raw file name (or archive member path, or stem), or ``None``/empty if unset.
+
+    Returns:
+        ``"<none>"`` when unset, otherwise ``"<file:XXXXXXXX ext=.json len=12>"``."""
+    if not value:
+        return "<none>"
+    extension = os.path.splitext(value)[1].lower()[:10]
+    if not extension[1:].isalnum():
+        extension = ""
+    return f"<file:{_tag(value)} ext={extension or '-'} len={len(value)}>"
 
 
 def redact_coordinate(value: object) -> str:
@@ -322,3 +340,71 @@ def redact_urls(text: str) -> str:
         text = _USERINFO_PASSWORD.sub(_redact_password, text)
     text = _MAPPING_ENTRY.sub(_redact_mapping_entry, text)
     return _PRECISE_COORDINATE_PAIR.sub(_redact_precise_pair, text)
+
+
+#: A cache or lock key's leading segments that say what kind of key it is, never whose or where.
+_KEY_NAME_SEGMENT = re.compile(r"[A-Za-z_-]+")
+
+
+def redact_cache_key(key: str) -> str:
+    """Return a log-safe stand-in for a cache or lock key: its leading name segments, then a token for the rest.
+    A key names its subject after a fixed prefix - ``redata:context:<lat>,<lng>`` keys a lookup by the point it is
+    about - so nothing past the prefix is logged in any form derived from it.
+
+    Args:
+        key: The key, colon-separated.
+
+    Returns:
+        The key unchanged when every segment is a name, otherwise its name segments and ``<key:XXXXXXXX>``.
+    """
+    segments = key.split(":")
+    named = []
+    for segment in segments:
+        if not _KEY_NAME_SEGMENT.fullmatch(segment):
+            break
+        named.append(segment)
+    if len(named) == len(segments):
+        return key
+    return ":".join([*named, f"<key:{_tag(key)}>"])
+
+
+#: The deepest zoom a logged map tile keeps. A zoom-12 tile is about 10 km across at the equator.
+LOGGED_TILE_MAX_ZOOM = 12
+
+
+def redact_tile(z: int, x: int, y: int) -> str:
+    """Return a map tile's ``z/x/y``, coarsened to its ancestor at :data:`LOGGED_TILE_MAX_ZOOM` when it is deeper.
+    A tile someone's map asked for is where they were looking, and at zoom 18 that is one building.
+
+    Args:
+        z: Zoom.
+        x: Column.
+        y: Row.
+
+    Returns:
+        ``z/x/y``, or the ancestor's followed by the original zoom, as ``12/x/y (z18)``.
+    """
+    if z <= LOGGED_TILE_MAX_ZOOM:
+        return f"{z}/{x}/{y}"
+    shift = z - LOGGED_TILE_MAX_ZOOM
+    return f"{LOGGED_TILE_MAX_ZOOM}/{x >> shift}/{y >> shift} (z{z})"
+
+
+#: An email address in running text. A mail server's refusal names the recipients it refused, and a send failure is
+#: logged with its traceback, so an address reaches the log in an exception's text however the log line itself
+#: names the recipient.
+_EMAIL_ADDRESS = re.compile(r"(?<![\w.%+-])[\w.%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b")
+
+
+def redact_email_addresses(text: str) -> str:
+    """Return ``text`` with each email address in it replaced by a :func:`_tag` token.
+
+    Args:
+        text: A log message, exception message or traceback.
+
+    Returns:
+        The text, each address an ``<email:XXXXXXXX>`` token; the same address draws the same token.
+    """
+    if "@" not in text:
+        return text
+    return _EMAIL_ADDRESS.sub(lambda match: f"<email:{_tag(match[0].casefold())}>", text)

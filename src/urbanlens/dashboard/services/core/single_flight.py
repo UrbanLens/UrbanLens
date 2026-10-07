@@ -18,17 +18,19 @@ _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 PENDING = "pending"
 
 
-def claim(key: str, ttl_seconds: int) -> bool:
+def claim(key: str, ttl_seconds: int, token: str = PENDING) -> bool:
     """Reserve *key* for one job, if nothing holds it.
 
     Args:
         key: Identifies the job and whose it is.
         ttl_seconds: How long the reservation survives without being released.
+        token: What holds it: the job's own id when it is known before the job starts, so a job that ends before the
+            caller could :func:`adopt` it still finds its own claim to release.
 
     Returns:
         Whether the caller may start the job."""
     try:
-        return bool(cache.add(key, PENDING, timeout=ttl_seconds))
+        return bool(cache.add(key, token, timeout=ttl_seconds))
     except _CACHE_ERRORS:
         logger.warning("single-flight %s could not be read; refusing to start a second copy", key, exc_info=True)
         return False

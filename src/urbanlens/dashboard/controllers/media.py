@@ -16,6 +16,7 @@ from django.views import View
 from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
 from urbanlens.dashboard.services.media.access import authorize_media
 from urbanlens.dashboard.services.media.origin import apply_media_response_headers
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -86,7 +87,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         source = self._resolve_media_path(path)
 
         if not self._authorized(profile, source.rel_path):
-            logger.info("Denied media request for %s by profile %s", source.rel_path, profile.pk)
+            logger.info("Denied media request for %s by profile %s", redact_filename(source.rel_path), profile.pk)
             raise Http404
 
         return apply_media_response_headers(request, serve_media_file(source))
@@ -231,7 +232,7 @@ class LocalMediaSource(MediaByteSource):
         try:
             handle = self.full_path.open("rb")  # lgtm[py/path-injection] -- already traversal-checked by resolve_media_path
         except OSError as exc:
-            logger.info("Media file %r could not be opened: %s", self.rel_path, exc)
+            logger.info("Media file %s could not be opened: %s", redact_filename(self.rel_path), type(exc).__name__)
             raise Http404 from exc
 
         return mark_private_media(FileResponse(handle))
@@ -269,7 +270,7 @@ class ObjectMediaSource(MediaByteSource):
         try:
             stream = default_storage.open(self.rel_path, "rb")
         except (FileNotFoundError, OSError) as exc:
-            logger.info("Media object %r could not be opened: %s", self.rel_path, exc)
+            logger.info("Media object %s could not be opened: %s", redact_filename(self.rel_path), type(exc).__name__)
             raise Http404 from exc
 
         return mark_private_media(FileResponse(stream))

@@ -17,6 +17,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATIT
 from urbanlens.dashboard.services.import_formats.json_stream import top_level_keys
 from urbanlens.dashboard.services.import_formats.streams import READ_CHUNK_BYTES, as_stream, is_valid_text, skip_bom_and_whitespace
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -230,7 +231,7 @@ def _read_entry(budget: ExtractionBudget, name: str, member: IO[bytes], kind: st
     content = member.read(budget.read_limit() + 1)
     budget.claim_bytes(len(content))
     if len(content) > _MAX_SINGLE_FILE_BYTES:
-        logger.warning("Actual size of %s entry exceeded declared size, skipping: %s", kind, name)
+        logger.warning("Actual size of %s entry exceeded declared size, skipping: %s", kind, redact_filename(name))
         return None
     return ExtractedFile(name, content)
 
@@ -246,7 +247,7 @@ def _spool_entry(directory: str, budget: ExtractionBudget, name: str, member: IO
         raise
     if written > _MAX_SINGLE_FILE_BYTES:
         os.remove(path)
-        logger.warning("Actual size of %s entry exceeded declared size, skipping: %s", kind, name)
+        logger.warning("Actual size of %s entry exceeded declared size, skipping: %s", kind, redact_filename(name))
         return None
     return SpooledFile(name, path)
 
@@ -283,7 +284,7 @@ def _sniff(name: str, stream: IO[bytes]) -> str | None:
     start = stream.tell()
     magic = stream.read(16)
     if len(magic) < 4:
-        logger.debug("Skipping file too small to validate: %s", name)
+        logger.debug("Skipping file too small to validate: %s", redact_filename(name))
         return None
 
     # Binary WKB is checked before the UTF-8 decode attempt below, since it is
@@ -296,7 +297,7 @@ def _sniff(name: str, stream: IO[bytes]) -> str | None:
     # (plain utf-8 leaves the BOM glued to that header, and str.lstrip() does not remove \\ufeff).
     stream.seek(start)
     if not is_valid_text(stream, "utf-8-sig"):
-        logger.debug("Skipping non-UTF-8 file: %s", name)
+        logger.debug("Skipping non-UTF-8 file: %s", redact_filename(name))
         return None
     stream.seek(start)
     text = skip_bom_and_whitespace(stream, limit=_SNIFF_CHARS)
@@ -310,13 +311,13 @@ def _sniff(name: str, stream: IO[bytes]) -> str | None:
         stream.seek(start)
         keys = top_level_keys(stream)
         if keys is None:
-            logger.debug("File is not one well-formed JSON object: %s", name)
+            logger.debug("File is not one well-formed JSON object: %s", redact_filename(name))
             return None
         if "features" in keys:
             return "json"
         if "timelineObjects" in keys:
             return "location_history"
-        logger.debug("File is valid JSON but not a recognised import format: %s", name)
+        logger.debug("File is valid JSON but not a recognised import format: %s", redact_filename(name))
         return None
 
     # XML: dispatch on root tag (KML/GPX/OSM XML all share the same shape otherwise).
@@ -325,7 +326,7 @@ def _sniff(name: str, stream: IO[bytes]) -> str | None:
         for tag, fmt in _XML_TAG_FORMATS:
             if tag in window:
                 return fmt
-        logger.debug("File is XML but does not match a known format: %s", name)
+        logger.debug("File is XML but does not match a known format: %s", redact_filename(name))
         return None
 
     # HTML: Google Takeout's My Activity export.
@@ -337,7 +338,7 @@ def _sniff(name: str, stream: IO[bytes]) -> str | None:
 
         if looks_like_my_activity(text[:4000]):
             return "my_activity"
-        logger.debug("File is HTML but not a recognised My Activity export: %s", name)
+        logger.debug("File is HTML but not a recognised My Activity export: %s", redact_filename(name))
         return None
 
     # WKT: first token is a recognised geometry keyword, e.g. "POINT (...)".
@@ -368,7 +369,7 @@ def _sniff(name: str, stream: IO[bytes]) -> str | None:
     if has_latitude_column and has_longitude_column:
         return "csv"
 
-    logger.debug("File content did not match any supported import format: %s", name)
+    logger.debug("File content did not match any supported import format: %s", redact_filename(name))
     return None
 
 
@@ -487,12 +488,12 @@ def _zip_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
 
                 # Skip symlinks: check Unix mode bits stored in external_attr.
                 if (info.external_attr >> 16) & 0o170000 == 0o120000:
-                    logger.warning("Skipping symlink in ZIP: %s", info.filename)
+                    logger.warning("Skipping symlink in ZIP: %s", redact_filename(info.filename))
                     continue
 
                 safe_name = _safe_basename(info.filename)
                 if not safe_name:
-                    logger.warning("Skipping unsafe path in ZIP: %s", info.filename)
+                    logger.warning("Skipping unsafe path in ZIP: %s", redact_filename(info.filename))
                     continue
 
                 if _extension(safe_name) not in _ARCHIVE_ALLOWED_EXTENSIONS:
@@ -501,7 +502,7 @@ def _zip_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
                 if info.file_size > _MAX_SINGLE_FILE_BYTES:
                     logger.warning(
                         "Skipping oversized entry in ZIP: %s (%d bytes)",
-                        safe_name,
+                        redact_filename(safe_name),
                         info.file_size,
                     )
                     continue
@@ -517,7 +518,8 @@ def _zip_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
         logger.info("ZIP archive refused: %s", exc)
         raise ValueError("The ZIP archive lists too many files.") from exc
     except zipfile.BadZipFile as exc:
-        logger.info("Invalid ZIP archive: %s", exc)
+        # zipfile's messages can quote a member's file name ("File name in directory ... and header ... differ").
+        logger.info("Invalid ZIP archive: %s", type(exc).__name__)
         raise ValueError("Invalid ZIP archive.") from exc
 
 
@@ -535,7 +537,7 @@ def _tgz_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
 
                 safe_name = _safe_basename(member.name)
                 if not safe_name:
-                    logger.warning("Skipping unsafe path in TGZ: %s", member.name)
+                    logger.warning("Skipping unsafe path in TGZ: %s", redact_filename(member.name))
                     continue
 
                 if _extension(safe_name) not in _ARCHIVE_ALLOWED_EXTENSIONS:
@@ -544,7 +546,7 @@ def _tgz_entries[T](source: IO[bytes], budget: ExtractionBudget, take: _Take[T])
                 if member.size > _MAX_SINGLE_FILE_BYTES:
                     logger.warning(
                         "Skipping oversized member in TGZ: %s (%d bytes)",
-                        safe_name,
+                        redact_filename(safe_name),
                         member.size,
                     )
                     continue

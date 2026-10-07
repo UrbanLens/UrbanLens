@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.notifications.meta import Importance, Notificati
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.services.core.site_urls import absolute_url
 from urbanlens.dashboard.services.notifications.notification_delivery import queue_email
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -40,7 +41,7 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
         msg.attach_alternative(html_body, "text/html")
         msg.send()
     except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send account deletion email to %s", to)
+        logger.exception("Failed to send account deletion email to %s", redact_text(to))
 
 
 def request_deletion(profile: Profile) -> None:
