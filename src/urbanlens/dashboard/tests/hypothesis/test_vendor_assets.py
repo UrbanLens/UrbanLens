@@ -307,13 +307,13 @@ class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
         from django.conf import settings
 
         from urbanlens.dashboard.services.core.egress import hosted_basemap_api_key
-        from urbanlens.UrbanLens.settings.base import _CSP_DIRECTIVES
 
-        # Read at settings import, from the same gate the page embed uses.
-        admitted = _CSP_DIRECTIVES["connect-src"].count("https://api.protomaps.com")
-        self.assertEqual(admitted, 1 if hosted_basemap_api_key() else 0)
+        # The policy the CSP middleware serves, built at settings import from the same gate the page embed uses.
+        # Read through django.conf, not settings.base, which test_config_fails_closed and
+        # test_celery_broker_is_not_shared_with_dragonfly reload: a reloaded module holds a new dict that nothing serves.
         policy = getattr(settings, "CONTENT_SECURITY_POLICY", None) or settings.CONTENT_SECURITY_POLICY_REPORT_ONLY
-        self.assertIs(policy["DIRECTIVES"], _CSP_DIRECTIVES)
+        admitted = policy["DIRECTIVES"]["connect-src"].count("https://api.protomaps.com")
+        self.assertEqual(admitted, 1 if hosted_basemap_api_key() else 0)
 
     def test_no_style_origin_configured_changes_nothing(self) -> None:
         """The default for every deployment today, hosted and self-hosted: REData offers only raster."""
