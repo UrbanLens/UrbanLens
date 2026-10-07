@@ -21,7 +21,10 @@ def _cache_buildings(location: Location, buildings: list[dict]) -> None:
 class YearBuiltQuestionTests(TestCase):
     def test_generates_a_question_for_a_named_building_with_a_year_built(self) -> None:
         location = baker.make(Location)
-        _cache_buildings(location, [{"name": "The Armory", "building_number": "", "year_built": 1937}])
+        _cache_buildings(
+            location,
+            [{"name": "The Armory", "building_number": "", "year_built": 1937, "year_built_basis": "building"}],
+        )
 
         questions = generate_deterministic_questions(location)
 
@@ -38,12 +41,17 @@ class YearBuiltQuestionTests(TestCase):
 
     def test_skips_a_building_with_no_meaningful_name(self) -> None:
         location = baker.make(Location)
-        _cache_buildings(location, [{"name": "", "building_number": "", "year_built": 1937}])
+        _cache_buildings(
+            location, [{"name": "", "building_number": "", "year_built": 1937, "year_built_basis": "building"}]
+        )
         self.assertEqual(generate_deterministic_questions(location), [])
 
     def test_is_idempotent(self) -> None:
         location = baker.make(Location)
-        _cache_buildings(location, [{"name": "The Armory", "building_number": "", "year_built": 1937}])
+        _cache_buildings(
+            location,
+            [{"name": "The Armory", "building_number": "", "year_built": 1937, "year_built_basis": "building"}],
+        )
 
         generate_deterministic_questions(location)
         generate_deterministic_questions(location)

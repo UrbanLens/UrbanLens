@@ -132,6 +132,11 @@ REVIEWED: dict[str, str] = {
         "adds; reversing the AddField drops the column and every mark with it, so there is nothing left to undo. The "
         "marks cannot be rebuilt by a later forward run either way: nothing records which titles were typed."
     ),
+    "0070_withdraw_year_built_trivia.py": (
+        "withdraw_year_built_questions marks approved deterministic year-built trivia questions REJECTED with the "
+        "generator's withdrawn reason. A reverse leaves them so: one the generator withdrew since cannot be told apart, "
+        "and older code reads an ordinary rejected question, which it never serves and never re-approves - lossy, valid."
+    ),
 }
 
 

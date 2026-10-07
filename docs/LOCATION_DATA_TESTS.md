@@ -18,7 +18,7 @@ Harlem Valley, Athens) have hand-verified anchors and are what a default run che
 `--sites all` checks every campus; a demolished one skips the building checks.
 
 ```bash
-# UL_LIVE_REDATA_API_URL / _API_KEY / _HOST from the environment or .env
+# UL_LIVE_REDATA_API_URL / _API_KEY / _HOST from the environment, or all three from .env
 bin/run_live_location_tests.sh                          # the primary sites
 bin/run_live_location_tests.sh --sites all --report /tmp/live.json
 bin/run_live_location_tests.sh --sites hrsh -- -k footprints
