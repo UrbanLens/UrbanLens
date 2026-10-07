@@ -10,6 +10,7 @@ from urllib.parse import urlsplit
 
 from urbanlens.dashboard.services.core.gateway import Gateway, is_source_outage
 from urbanlens.dashboard.services.core.tracking_params import without_tracking_params
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -193,10 +194,10 @@ class MediaProvider(Gateway, ABC):
             except Exception as exc:
                 # TODO: Catch specific exceptions
                 if is_source_outage(exc):
-                    logger.warning("%s media lookup unavailable for %r: %s", self.service_key, search_term, exc)
+                    logger.warning("%s media lookup unavailable for %s: %s", self.service_key, redact_text(search_term), type(exc).__name__)
                     outage = exc
                 else:
-                    logger.exception("%s media lookup failed for %r", self.service_key, search_term)
+                    logger.exception("%s media lookup failed for %s", self.service_key, redact_text(search_term))
 
         if outage is not None and not items:
             raise outage

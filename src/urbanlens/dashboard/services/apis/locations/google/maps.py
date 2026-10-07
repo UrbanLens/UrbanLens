@@ -913,7 +913,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 unavailable = len(rows) - index
                 break
             except ValueError as exc:
-                logger.warning("Failed to extract coordinates from URL %s: %s", row["maps_url"], exc)
+                logger.warning("Failed to extract coordinates from URL %s: %s", redact_text(row["maps_url"]), exc)
                 continue
             if latitude is None or longitude is None:
                 continue
@@ -1204,7 +1204,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         try:
             pins = list(self.iter_kml_pins(file_contents, user_profile))
         except IMPORT_PARSE_ERRORS as e:
-            logger.exception("Failed to import pins from KML: %s", e)
+            logger.exception("Failed to import pins from KML: %s", type(e).__name__)
             raise
         logger.debug("Converted %s pins from KML file to dicts.", len(pins))
         return pins

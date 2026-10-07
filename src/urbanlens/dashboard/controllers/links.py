@@ -122,10 +122,10 @@ class PinLinksView(LoginRequiredMixin, View):
             logger.info("pin link creation rejected: %s", exc)
             return HttpResponse(f"That url is too long (max {MAX_LINK_URL_LENGTH:,} characters).", status=400)
         except InvalidLinkUrlFormatError as exc:
-            logger.info("pin link creation rejected: %s", exc)
+            logger.info("pin link creation rejected: %s", type(exc).__name__)
             return HttpResponse("That doesn't look like a valid http(s) url.", status=400)
         except LinkExistsError as exc:
-            logger.info("pin link creation rejected: %s", exc)
+            logger.info("pin link creation rejected: %s", type(exc).__name__)
             return HttpResponse("That link is already on this pin.", status=400)
         return _with_links_changed(_render_pin_links(request, pin))
 

@@ -10,6 +10,7 @@ from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, NameSearchSource
+from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.UrbanLens.egress import EgressCategory
 
 if TYPE_CHECKING:
@@ -63,7 +64,7 @@ class GdeltPanelSource(NameSearchSource, InfoPanelSource):
             self.store(pin, scope, {"articles": []}, query_key="")
             return
         query_text = query.gdelt_query()
-        logger.info("News search for pin %s: %s", pin.pk, query_text)
+        logger.info("News search for pin %s: %s", pin.pk, redact_text(query_text))
         articles = RedataNewsSearchGateway().search_news(query_text, max_results=_REQUESTED_ARTICLES)
         self.store(pin, scope, {"articles": query.relevant(articles)}, query_key=query_text)
 

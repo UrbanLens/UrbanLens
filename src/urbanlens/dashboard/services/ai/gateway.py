@@ -369,7 +369,7 @@ class LLMGateway(ABC):
                 self._record_received_tokens(response)
                 answer = self._parse_answer(message)
                 if not answer:
-                    logger.error("No answer from message queue: %s", queue)
+                    logger.error("No answer from model %s to a prompt of %d messages (%s)", self.model, len(queue), ", ".join(msg["role"] for msg in queue))
                 return answer
 
         return None
@@ -451,7 +451,7 @@ class LLMGateway(ABC):
         answers = self._parse_answers(message_content)
         if answers:
             return answers[0]
-        logger.error('No ANSWER in response from AI model "%s": Response: %s', self.model, message_content)
+        logger.error('No ANSWER in response from AI model "%s" (%d characters)', self.model, len(message_content))
         return None
 
     def _parse_answers(self, message_content: str) -> list[str]:

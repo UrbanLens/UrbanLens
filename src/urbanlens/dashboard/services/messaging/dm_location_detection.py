@@ -246,8 +246,9 @@ def detect_coordinate_mentions(message: DirectMessage) -> list[DirectMessageLoca
     for match in parse_coordinates(message.body):
         try:
             location, _created = Location.objects.get_nearby_or_create(match.latitude, match.longitude)
-        except DatabaseError:
-            logger.exception("Could not resolve Location for DM coordinates %s", match.matched_text)
+        except DatabaseError as exc:
+            # Not the matched text, nor a traceback that could quote it: it is a place someone named in private.
+            logger.error("Could not resolve a Location for coordinates in DM %s: %s", message.pk, type(exc).__name__)  # noqa: TRY400
             continue
         mention = _record_mention(message, location, LocationMentionKind.COORDINATES, match.matched_text)
         if mention is not None:
@@ -271,8 +272,8 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
         if not app_settings.google_unrestricted_api_key:
             return None
         data = GoogleGeocodingGateway().geocode_place_name(address)
-    except Exception:
-        logger.warning("Geocoding failed for DM address candidate %r", address, exc_info=True)
+    except Exception as exc:
+        logger.warning("Geocoding failed for a DM address candidate: %s", type(exc).__name__)
         return None
     results = (data or {}).get("results") or []
     if not results:
@@ -308,8 +309,8 @@ def detect_address_mentions(message: DirectMessage) -> list[DirectMessageLocatio
             continue
         try:
             location, _created = Location.objects.get_nearby_or_create(coordinates[0], coordinates[1])
-        except DatabaseError:
-            logger.exception("Could not resolve Location for DM address %r", candidate)
+        except DatabaseError as exc:
+            logger.error("Could not resolve a Location for an address in DM %s: %s", message.pk, type(exc).__name__)  # noqa: TRY400
             continue
         mention = _record_mention(message, location, LocationMentionKind.ADDRESS, candidate)
         if mention is not None:

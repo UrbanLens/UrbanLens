@@ -355,10 +355,10 @@ class MessageThreadView(ExternalApiView):
                 client_uuid=client_uuid,
             )
         except SharedPinNotFoundError as exc:
-            logger.info("external API message-send share rejected: %s", exc)
+            logger.info("external API message-send share rejected: %s", type(exc).__name__)
             return Response({"error": "No such pin."}, status=404)
         except SharedTripNotFoundError as exc:
-            logger.info("external API message-send share rejected: %s", exc)
+            logger.info("external API message-send share rejected: %s", type(exc).__name__)
             return Response({"error": "No such trip."}, status=404)
         except TripInviteNotConnectedError as exc:
             logger.info("external API message-send share rejected: %s", exc)

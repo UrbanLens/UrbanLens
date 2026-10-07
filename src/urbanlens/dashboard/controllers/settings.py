@@ -39,6 +39,7 @@ from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flic
 from urbanlens.dashboard.services.auth.api_keys import active_api_key_count
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
+from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.security.throttle import Rate, account_or_address, allow, retry_after
 
 if TYPE_CHECKING:
@@ -442,12 +443,12 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
                     loc = results[0]["geometry"]["location"]
                     return JsonResponse({"lat": loc["lat"], "lng": loc["lng"]})
                 except (KeyError, TypeError):
-                    logger.warning("Google geocoding returned malformed result for %r", address, exc_info=True)
-            logger.warning("Google geocoding returned no results for %r (status: %s)", address, result.get("status"))
+                    logger.warning("Google geocoding returned malformed result for %s", redact_text(address), exc_info=True)
+            logger.warning("Google geocoding returned no results for %s (status: %s)", redact_text(address), result.get("status"))
     except (ImportError, OSError, ValueError, GatewayRequestError):
         # GatewayRequestError also covers a rate-limiter refusal (P122) - routine (dev/demo refuse
         # most services outright), not grounds to 500 when Nominatim can still answer below.
-        logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
+        logger.warning("Google geocoding unavailable for %s", redact_text(address), exc_info=True)
 
     # Fall back to Nominatim (OpenStreetMap) - no API key required. Through
     # the shared rate-limited gateway helper, never a raw geopy client.

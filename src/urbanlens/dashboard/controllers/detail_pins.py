@@ -374,7 +374,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         try:
             child_location = _location_for_child_wiki(lat, lon)
         except ChildWikiLocationError as exc:
-            logger.info("child wiki location rejected: %s", exc)
+            logger.info("child wiki location rejected: %s", type(exc).__name__)
             return JsonResponse(
                 {
                     "ok": False,
@@ -447,7 +447,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             try:
                 new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
             except ChildWikiLocationError as exc:
-                logger.info("child wiki move rejected: %s", exc)
+                logger.info("child wiki move rejected: %s", type(exc).__name__)
                 return JsonResponse(
                     {
                         "ok": False,

@@ -66,7 +66,7 @@ def run_each[T](items: Iterable[T], action: Callable[[T], object], *, requested:
             with transaction.atomic():
                 action(item)
         except Exception:
-            logger.exception("Bulk %s failed for %r", description, item)
+            logger.exception("Bulk %s failed for %s pk=%s", description, type(item).__name__, getattr(item, "pk", None))
             outcome.failed += 1
         else:
             outcome.processed += 1

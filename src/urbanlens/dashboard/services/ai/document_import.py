@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_featu
 from urbanlens.dashboard.services.ai.access import ai_refused_here
 from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -454,13 +455,13 @@ def _geocode_pins(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], int
                 continue
             try:
                 geocoded_lat, geocoded_lng = gateway.get_coordinates(query)
-            except (ValueError, requests.RequestException):
-                logger.warning("Could not geocode extracted location %r", query, exc_info=True)
+            except (ValueError, requests.RequestException) as exc:
+                logger.warning("Could not geocode extracted location %s: %s", redact_text(query), type(exc).__name__)
                 failed += 1
                 continue
 
             if geocoded_lat is None or geocoded_lng is None:
-                logger.info("Skipping extracted location that could not be geocoded: %r", query)
+                logger.info("Skipping extracted location that could not be geocoded: %s", redact_text(query))
                 failed += 1
                 continue
 
