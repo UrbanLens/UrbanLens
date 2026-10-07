@@ -366,7 +366,7 @@ def is_contact_opted_out(
         account = user.profile if user is not None else None
     if account is not None:
         addresses |= verified_addresses(account.user)
-    return SafetyContactOptOut.objects.blocks_notification(owner=owner, profile=account, addresses=addresses, checkin=checkin)
+    return SafetyContactOptOut.objects.blocks_notification(owner=owner, profile=account, addresses=addresses, email=email, checkin=checkin)
 
 
 def _contact_recipients(contact: SafetyCheckinContact, checkin: SafetyCheckin) -> tuple[Profile | None, str] | None:
@@ -387,7 +387,7 @@ def _contact_recipients(contact: SafetyCheckinContact, checkin: SafetyCheckin) -
     if contact.email:
         return account, contact.email
     email = account.user.email if account is not None else ""
-    if email and SafetyContactOptOut.objects.blocks_notification(owner=checkin.profile, addresses={normalize_email(email)}, checkin=checkin):
+    if email and SafetyContactOptOut.objects.blocks_notification(owner=checkin.profile, addresses={normalize_email(email)}, email=email, checkin=checkin):
         email = ""
     return account, email
 
@@ -1626,9 +1626,10 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
 def send_final_warning(checkin: SafetyCheckin) -> bool:
     """Give the owner one last chance to check in before contacts are notified.
 
-    The warning is claimed with a conditional write before it is sent, and escalation claims ``escalated_at`` the
-    same way, so of two sweeps racing on one row only one warns and none warns once escalation has begun. A send that
-    raises gives the claim back for the next sweep to retry, until ``FINAL_WARNING_MAX_WAIT``.
+    The warning is claimed with a conditional write, and escalation claims ``escalated_at`` the same way, so of two
+    sweeps racing on one row only one warns and none warns once escalation has begun. The claim commits with the
+    in-app warning or not at all, so a failure there leaves the warning owed for the next sweep, until
+    ``FINAL_WARNING_MAX_WAIT``. The email follows the commit, and its failures are logged, not retried.
 
     Args:
         checkin: The check-in owed a final warning (see ``SafetyCheckin.objects.due_for_final_warning``).
@@ -1637,10 +1638,10 @@ def send_final_warning(checkin: SafetyCheckin) -> bool:
         True if this call sent the warning."""
     checkin_path = reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
     claimed_at = timezone.now()
-    if not SafetyCheckin.objects.due_for_final_warning().filter(pk=checkin.pk).update(final_warning_sent_at=claimed_at, updated=claimed_at):
-        logger.info("Safety checkin %s no longer owes a final warning; skipping", checkin.pk)
-        return False
-    try:
+    with transaction.atomic():
+        if not SafetyCheckin.objects.due_for_final_warning().filter(pk=checkin.pk).update(final_warning_sent_at=claimed_at, updated=claimed_at):
+            logger.info("Safety checkin %s no longer owes a final warning; skipping", checkin.pk)
+            return False
         NotificationLog.objects.notify(
             profile=checkin.profile,
             status=Status.UNREAD,
@@ -1650,17 +1651,14 @@ def send_final_warning(checkin: SafetyCheckin) -> bool:
             message=f'Your emergency contacts will be notified soon if you don\'t check in for "{checkin.title}".',
             url=checkin_path,
         )
-        if checkin.profile.user and checkin.profile.user.email:
-            _send_email(
-                to=checkin.profile.user.email,
-                subject=f'Final reminder: check in for "{checkin.title}"',
-                template="dashboard/email/safety_checkin_final_warning.html",
-                context={"checkin": checkin, "checkin_url": absolute_url(checkin_path)},
-            )
-    except Exception:
-        SafetyCheckin.objects.filter(pk=checkin.pk, final_warning_sent_at=claimed_at, escalated_at__isnull=True).update(final_warning_sent_at=None)
-        raise
     checkin.final_warning_sent_at = claimed_at
+    if checkin.profile.user and checkin.profile.user.email:
+        _send_email(
+            to=checkin.profile.user.email,
+            subject=f'Final reminder: check in for "{checkin.title}"',
+            template="dashboard/email/safety_checkin_final_warning.html",
+            context={"checkin": checkin, "checkin_url": absolute_url(checkin_path)},
+        )
     return True
 
 

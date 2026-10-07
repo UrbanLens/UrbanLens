@@ -252,6 +252,7 @@ class SafetyContactOptOutManager(_SafetyContactOptOutManagerBase["SafetyContactO
         owner: Profile,
         profile: Profile | None = None,
         addresses: Collection[str] = (),
+        email: str | None = None,
         checkin: SafetyCheckin | None = None,
     ) -> bool:
         """Whether an opt-out recorded for any of these identities covers this owner/check-in.
@@ -260,6 +261,8 @@ class SafetyContactOptOutManager(_SafetyContactOptOutManagerBase["SafetyContactO
             owner: The check-in owner whose notification is about to be sent.
             profile: An account the contact is, if any - matches opt-outs it recorded as that account.
             addresses: Normalized addresses the contact is reached at - matches opt-outs recorded from an emailed link.
+            email: The address as typed, if any - matches, as typed, a row written without its normalized copy by
+                code from before ``email_normalized`` existed, still serving during a rolling deploy.
             checkin: The specific check-in being notified about, if any - enables matching a
                 CHECKIN-scoped opt-out in addition to OWNER/GLOBAL-scoped ones.
 
@@ -275,6 +278,8 @@ class SafetyContactOptOutManager(_SafetyContactOptOutManagerBase["SafetyContactO
         # A blank address would match every opt-out recorded by account.
         if real_addresses := {address for address in addresses if address}:
             identity |= Q(email_normalized__in=real_addresses)
+        if email:
+            identity |= Q(email_normalized="", email__iexact=email)
         if not identity:
             return False
         scope = Q(scope=SafetyContactOptOutScope.GLOBAL) | Q(scope=SafetyContactOptOutScope.OWNER, owner=owner)
