@@ -1,7 +1,8 @@
 # Resolved problems (archive)
 
 Entries from `docs/PROBLEMS.md` whose headers record them as resolved, fixed or dismissed,
-moved here on 2026-08-18 so the live file lists what still needs attention.
+moved here on 2026-08-18 so the live file lists what still needs attention. It takes no new
+entries: open problems became GitHub issues on 2026-10-07, and one resolved since is a closed issue.
 
 Kept rather than deleted: several of these are the only written record of *why* something is
 shaped the way it is, and a few document traps that would otherwise be rediscovered the hard

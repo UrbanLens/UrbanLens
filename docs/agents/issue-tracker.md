@@ -13,6 +13,14 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## UrbanLens conventions
+
+- **Title**: a claim, not a category, as in `docs/README.md`'s house style.
+- **Labels**: one category (`bug` or `enhancement`) and one state from `docs/agents/triage-labels.md`. A new issue starts at `needs-triage`.
+- **Body**: open with `> Written by a Claude agent, not independently reviewed. Re-check figures against the code before relying on them.` when an agent wrote it. Link repo files with permalinks (`blob/<sha>/path`), since branches are deleted after release.
+- **Long-form analysis** goes in a `docs/` document the issue links to; the issue holds the status.
+- **Former ids**: `P#` and `T#` from before 2026-10-07 map to issues in `docs/PROBLEMS.md`.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
