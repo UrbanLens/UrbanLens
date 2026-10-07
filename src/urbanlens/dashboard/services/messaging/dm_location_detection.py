@@ -275,8 +275,8 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
         if not app_settings.google_unrestricted_api_key:
             return None
         data = GoogleGeocodingGateway().geocode_place_name(address)
-    except (GatewayRequestError, ValueError, KeyError, TypeError, AttributeError) as exc:
-        # A refusal, throttle or unreadable answer will not be different next time. Only the class is logged: the candidate is the user's DM text.
+    except (GatewayRequestError, DatabaseError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        # A refusal, throttle or unreadable answer will not be different next time, and a failed cache read is not worth losing the message's other candidates over. Only the class is logged: the candidate is the user's DM text.
         logger.warning("Geocoding a DM address candidate failed: %s", type(exc).__name__)
         return None
     results = (data or {}).get("results") or []

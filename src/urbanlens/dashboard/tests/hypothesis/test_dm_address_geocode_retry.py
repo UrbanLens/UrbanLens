@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.db import DatabaseError
 from django.test import SimpleTestCase
 import requests
 
@@ -41,7 +42,13 @@ class GeocodeFailureTests(SimpleTestCase):
         self.assertTrue(issubclass(requests.RequestException, tuple(tasks.detect_dm_address_mentions.autoretry_for)))
 
     def test_a_refusal_or_unparseable_answer_is_no_match(self) -> None:
-        for failure in (GatewayRequestError("refused"), ValueError("bad json"), KeyError("results"), TypeError("x")):
+        for failure in (
+            GatewayRequestError("refused"),
+            DatabaseError("cache read"),
+            ValueError("bad json"),
+            KeyError("results"),
+            TypeError("x"),
+        ):
             with mock.patch(_GEOCODE, side_effect=failure), self.subTest(failure=type(failure).__name__):
                 self.assertIsNone(dm_location_detection._geocode_address("12 Mill Street"))
 
