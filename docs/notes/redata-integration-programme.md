@@ -149,7 +149,7 @@ passed for all four primaries apart from Athens's build date (REData P111).
 **P1 - blocks the goal on production.**
 
 1. Deploy UrbanLens 0.9.0 (Jess approved it and REData 0.3.0's deploy on 2026-10-05). REData's half is done:
-   production has run v0.3.7 since 2026-10-07 08:30Z (v0.3.6 from 03:05Z), so what had been fixed only on staging (NY parcels by polygon,
+   production runs v0.3.9 (the coordinating session's audit of 2026-10-07; not re-checked live for this edit), which carries v0.3.7 (in production from 2026-10-07 08:30Z) and v0.3.6 (from 03:05Z), so what had been fixed only on staging (NY parcels by polygon,
    campus footprints beyond the parcel box, Athens County's owner, web and news search, the cultural-resource cache,
    Chronicling America descriptions, per-provider `limit`, the loc.gov walk) is in REData's production code, and
    Athens's owner and atlas are in its data. UrbanLens's own half ships with 0.9.0 (`release/v_0_9_0`; production
@@ -160,11 +160,12 @@ passed for all four primaries apart from Athens's build date (REData P111).
    for 19 of the 57 campuses, and cold buildings and boundaries answers that cost a gunicorn worker (REData P62).
    Both are answered by REData 0.3.7 (tag `v0.3.7`, `3a2b017d`), in production since 2026-10-07 08:30Z: the Smithsonian error (N47 item 1) is isolated as one
    `unavailable` archive, and a cold parcel's buildings and boundaries answer 503 `refresh_queued` while REData
-   computes them (REData #147). UrbanLens's half of both is in UrbanLens#352 (`fix/redata-partial-answers`), into
-   `release/v_0_9_0`, which reads them once it ships; see "How a partial REData answer is cached" below. Its vendored
+   computes them (REData #147). REData's P62 stays open after #147 (0.3.7) and #153 (0.3.8, CRIS site reads and footprint
+   placement): a filtered `?source=` call has no deadline, and some serializers are unaudited. UrbanLens's half of both is in
+   UrbanLens#352 (`fix/redata-partial-answers`), merged into `release/v_0_9_0`, so 0.9.0 reads them and production's 0.8.0 does not; see "How a partial REData answer is cached" below. Its vendored
    schema is from `release/0.3.7` `c4e0de94`; the tag adds only release-please's version bump and one REData test (#150).
 3. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
-   (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
+   (REData P108, fixed by `4810a6c5` in v0.3.4; not re-measured). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
    REData's `Retry-After` (P315, REData P70).
 4. Web search that does not rest on mwmbl alone (REData P113): the self-hosted SearXNG relays to engines that
    refuse the shared egress IP, so either more engines that tolerate it or one keyed index.

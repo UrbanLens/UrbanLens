@@ -1,6 +1,6 @@
 # REData production failed UrbanLens's 57-campus live-locations run in seven ways of its own, the worst a Smithsonian parse error that fails archive search for 19 campuses
 
-- **Status: PARTLY ANSWERED 2026-10-07: items 1 and 6 answered by REData 0.3.7, in production since 2026-10-07 08:30Z.** REData's reply is its T15
+- **Status: PARTLY ANSWERED 2026-10-07: items 1, 3, 5, 6 and 7 are answered by REData's T15, and every fix in it is in REData 0.3.7 (tag `v0.3.7`, `3a2b017d`); REData production runs v0.3.9 (the coordinating session's audit of 2026-10-07; not re-checked live for this edit). Item 3's fix makes the loc.gov walk resume, but the targeted Sanborn harvest it asks an operator to run on production has not been recorded as run. Item 2 is REData's P62: #147 (0.3.7) and #153 (0.3.8) answer the cold buildings and boundaries worker stalls it named, and P62 stays open on REData's side for filtered calls and unaudited loops. Item 4: REData #143 (0.3.7) added ten county layers and Pennsylvania's owner; whether production has been seeded with them is not verified. Items 8 and 9 are not answered (REData P110 and P111 are narrower than the ask). UrbanLens reads items 1 and 6 on `release/v_0_9_0` (UrbanLens#352, merged).** REData's reply is its T15
   (`docs/urbanlens-2026-10-07-replies.md` on its `release/0.3.7`, `d1f1bbcb`). Item 1: an archive provider that raises
   is isolated, reported `unavailable` with `complete: false`, and the other archives' results still come back;
   Smithsonian reads an empty date list. Item 6: `/search/news/` carries `complete`, `degraded` and a per-provider
@@ -9,7 +9,7 @@
   REData test (#150), no API change. UrbanLens reads both on `release/v_0_9_0` (UrbanLens#352, branch `fix/redata-partial-answers`): a partial news or archive
   answer is shown and kept an hour, an empty one is not kept, and an older REData's answer is read as before.
   REData #147 on the same release answers item 2's cold parcels with 503 `refresh_queued` and a `retry_after`;
-  UrbanLens waits that out on the same branch. Originally SENT 2026-10-07. Measured against `https://redata.urbanlens.org` with UrbanLens production's key,
+  UrbanLens waits that out on the same branch (merged). Originally SENT 2026-10-07. Measured against `https://redata.urbanlens.org` with UrbanLens production's key,
   2026-10-07 01:09-05:06Z. Production ran REData v0.3.5 until 03:05:28Z and v0.3.6 after; each item says which. Line
   numbers are REData `v0.3.6`'s.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.

@@ -1,6 +1,6 @@
 # Two REData production failures UrbanLens hit on 2026-10-01: some CRIS attachment downloads 500, and nearby Places answers 503
 
-- **Status: ANSWERED by REData T10 and deployed in its production 5aabe887 (production has run v0.3.4, which contains it, since 2026-10-06 15:21Z). The Places budget is Jess's call (REData P70). On `release/v_0_9_0` only, so shipping with 0.9.0, this repo keeps REData Places to 40 calls a day (`5e5363aca`, `rate_limiter.py:146`, the figure REData asked for in its `infrastructure-2026-10-02-replies.md` item 3) and waits out the `Retry-After` REData names on a 503 (P315, which is that wait, not the cap). Raised 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
+- **Status: ANSWERED by REData T10 and deployed in its production 5aabe887 (production has run v0.3.4, which contains it, since 2026-10-06 15:21Z). The Places budget is Jess's call (REData P70). On `release/v_0_9_0` only, so shipping with 0.9.0, this repo keeps REData Places to 40 calls a day (`5e5363aca`, `rate_limiter.py:153`, the figure REData asked for in its `infrastructure-2026-10-02-replies.md` item 3) and waits out the `Retry-After` REData names on a 503 (P315, which is that wait, not the cap). Raised 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
   (`v080e2e`); reproduced directly against `https://redata.urbanlens.org` with UrbanLens's API key, no UrbanLens
   code in the path.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
