@@ -11,6 +11,10 @@ schema's say-so.
 
 ``gaps`` holds fields a reader looks for that REData does not publish there - a tolerated fallback or a known
 mismatch. The test requires each to stay unpublished, so the row is revisited when either side changes.
+
+``optional`` holds top-level fields REData publishes that an older REData UrbanLens still supports does not send; a
+reader defaults any of them it reads. The vendoring script leaves them out of the body's ``required``, and the test
+holds both that and that REData still publishes them.
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ class Read:
         fields: Field paths the reader uses, all of which REData must publish.
         status: The response status read.
         gaps: Field paths the reader looks for that REData does not publish there.
+        optional: Top-level fields an older REData UrbanLens supports does not send, so the reader must default them.
     """
 
     reader: str
@@ -43,10 +48,18 @@ class Read:
     fields: tuple[str, ...]
     status: str = "200"
     gaps: tuple[str, ...] = ()
+    optional: tuple[str, ...] = ()
 
 
-def _get(reader: str, path: str, *fields: str, status: str = "200", gaps: tuple[str, ...] = ()) -> Read:
-    return Read(reader, "get", path, fields, status, gaps)
+def _get(
+    reader: str,
+    path: str,
+    *fields: str,
+    status: str = "200",
+    gaps: tuple[str, ...] = (),
+    optional: tuple[str, ...] = (),
+) -> Read:
+    return Read(reader, "get", path, fields, status, gaps, optional)
 
 
 def _post(reader: str, path: str, *fields: str, status: str = "200", gaps: tuple[str, ...] = ()) -> Read:
@@ -609,6 +622,16 @@ READS: tuple[Read, ...] = (
     ),
     _get(
         "plugins/builtin/gdelt.py", "/api/v1/search/news/", *_within("results[].", ("link", "date", "title", "snippet"))
+    ),
+    # REData 0.3.7 says whether GDELT answered; an older one sends only ``results``, read as complete.
+    _get(
+        "services/apis/locations/redata_search_gateway.py",
+        "/api/v1/search/news/",
+        "results",
+        "complete",
+        "providers[].provider",
+        "providers[].status",
+        optional=("complete", "degraded", "providers"),
     ),
     _get(
         "controllers/pin.py",

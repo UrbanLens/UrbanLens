@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRo
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.apis.assets.wikimedia import WikimediaGateway
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataSearchGateway
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.photos.pin_photos import external_photos_for_pin
@@ -90,15 +91,18 @@ class Upstream:
             },
         ]
 
-    def news(self, _gateway: object, query: str, *, max_results: int = 10, months: int | None = None) -> list[dict]:
+    def news(
+        self, _gateway: object, query: str, *, max_results: int = 10, months: int | None = None
+    ) -> LocationContextEnvelope:
         number = self._record("gdelt", query)
-        return [
+        articles = [
             {
                 "title": f"Poughkeepsie story p188-{number}",
                 "link": f"https://news.example/p188-{number}",
                 "date": "20240101T000000Z",
             },
         ]
+        return LocationContextEnvelope(count=len(articles), complete=True, results=articles)
 
     def web(self, query: str) -> list[dict[str, Any]]:
         number = self._record("web", query)
