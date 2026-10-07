@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from hypothesis import given, strategies as st
@@ -29,10 +30,14 @@ class EnvBoolTests(SimpleTestCase):
             self.assertIs(env_bool("UL_TEST_FLAG", default=True), True)
             self.assertIs(env_bool("UL_TEST_FLAG", default=False), False)
 
-    def test_an_unrecognised_value_falls_back_to_the_default(self) -> None:
-        """Garbage must not silently mean False - for TLS that is the unsafe direction."""
-        with mock.patch.dict("os.environ", {"UL_TEST_FLAG": "banana"}):
-            self.assertIs(env_bool("UL_TEST_FLAG", default=True), True)
+    def test_an_unrecognised_value_refuses_rather_than_guessing(self) -> None:
+        """Garbage must not silently mean False - for a cookie flag that is the unsafe direction - nor the default."""
+        for default in (True, False):
+            with mock.patch.dict("os.environ", {"UL_TEST_FLAG": "banana"}), self.subTest(default=default):
+                with self.assertRaises(ImproperlyConfigured) as caught:
+                    env_bool("UL_TEST_FLAG", default=default)
+                self.assertIn("UL_TEST_FLAG", str(caught.exception))
+                self.assertNotIn("banana", str(caught.exception), "the value is not echoed into logs")
 
     @given(st.sampled_from(_TRUTHY), st.booleans())
     def test_a_truthy_value_wins_over_any_default(self, raw: str, default: bool) -> None:
