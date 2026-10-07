@@ -5,11 +5,13 @@ from __future__ import annotations
 from unittest import mock
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
+from urbanlens.dashboard.services.security.email_safety import _inflight_cache_key
 
 
 class EmailVerificationLimitTests(TestCase):
@@ -81,3 +83,19 @@ class EmailVerificationLimitTests(TestCase):
             )
         self.assertEqual(response.status_code, 200)
         send.assert_called_once()
+
+    def test_a_resend_releases_the_in_flight_reservation_it_took(self) -> None:
+        """The check reserves a slot until the send is logged; every other sender gives it back, and a resend that did
+        not left the slot counted against the hourly limit for five minutes after the send was already in the ledger."""
+        self._add("second@example.test")
+        import datetime
+
+        stale = EmailSendLog.objects.get(sender=self.profile).created - datetime.timedelta(minutes=10)
+        EmailSendLog.objects.filter(sender=self.profile).update(created=stale)
+        cache.delete(_inflight_cache_key(self.profile.pk))
+        email_id = self.profile.secondary_emails.get().pk
+        with mock.patch("urbanlens.dashboard.services.auth.email_claims.queue_confirmation"):
+            self.client.post(
+                self.url, {"action": "resend_email_verification", "email_id": email_id}, HTTP_HX_REQUEST="true"
+            )
+        self.assertFalse(cache.get(_inflight_cache_key(self.profile.pk)), "the reservation was left claimed")

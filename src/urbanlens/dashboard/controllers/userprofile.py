@@ -801,7 +801,7 @@ class EditProfileView(LoginRequiredMixin, View):
         secondary_email = profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id")), is_verified=False).first()
         if secondary_email:
             from urbanlens.dashboard.models.email_log.model import EmailType
-            from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, verification_recently_sent
+            from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, release_email_reservation, verification_recently_sent
 
             if verification_recently_sent(profile, secondary_email.email):
                 email_status = "A verification email was just sent to that address - check your inbox (and spam), and try again in a few minutes."
@@ -810,7 +810,10 @@ class EditProfileView(LoginRequiredMixin, View):
             else:
                 from urbanlens.dashboard.services.auth.email_claims import queue_confirmation
 
-                record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                try:
+                    record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                finally:
+                    release_email_reservation(profile)
                 queue_confirmation(secondary_email)
                 email_status = f"Verification email resent to {secondary_email.email}."
         return self._emails_response(request, profile, email_status=email_status)
