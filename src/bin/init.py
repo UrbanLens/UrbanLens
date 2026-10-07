@@ -10,6 +10,12 @@ import re
 from shutil import which
 import subprocess  # nosec B404
 import sys
+from typing import TYPE_CHECKING
+
+from dotenv import dotenv_values
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,42 @@ class Mode(Enum):
     DATABASE = "database"
     #: Build the frontend and serve, against a database DATABASE has already prepared.
     SERVE = "serve"
+
+
+#: Every name ``UL_ENVIRONMENT`` accepts: ``urbanlens.UrbanLens.environments.meta.EnvironmentTypes``, restated
+#: because this script imports nothing of the app's (a test holds the two equal).
+ENVIRONMENTS = ("development", "local", "production", "staging", "testing")
+
+
+def resolve_environment(explicit: str | None, *, environ: Mapping[str, str] | None = None, env_file: Path | None = None) -> str:
+    """The environment this start is for: ``--environment``, else ``UL_ENVIRONMENT``, else the checkout's ``.env``.
+
+    The ``.env`` is read the way ``settings.base`` reads it, never over a variable the process already has, so the
+    ``manage.py`` children agree with this script. Unset used to mean production; since 2026-10-07 it refuses.
+
+    Args:
+        explicit: The ``--environment`` argument, if given.
+        environ: Environment to read; defaults to this process's own.
+        env_file: The checkout's ``.env``; defaults to the one at the repo root.
+
+    Returns:
+        The lower-cased name, not yet checked against :data:`ENVIRONMENTS`.
+
+    Raises:
+        UnrecoverableError: When nothing names one, or the name is blank.
+    """
+    environ = os.environ if environ is None else environ
+    if explicit:
+        value = explicit
+    elif "UL_ENVIRONMENT" in environ:
+        value = environ["UL_ENVIRONMENT"]
+    else:
+        env_file = ROOT_DIR / ".env" if env_file is None else env_file
+        value = (dotenv_values(env_file).get("UL_ENVIRONMENT") if env_file.is_file() else None) or ""
+    value = value.strip().lower()
+    if not value:
+        raise UnrecoverableError(f"UL_ENVIRONMENT is not set; use one of: {', '.join(ENVIRONMENTS)}.")
+    return value
 
 
 def resolve_executable(name: str) -> str:
@@ -61,7 +103,9 @@ class DjangoProjectInitializer:
         self.db_name = os.environ.get("UL_DB_NAME", "UrbanLens")
         self.db_user = os.environ.get("UL_DB_USER", "postgres")
         self.db_pass = os.environ.get("UL_DB_PASS", "postgres")
-        self.environment = environment or os.environ.get("UL_ENVIRONMENT", "production")
+        self.environment = resolve_environment(environment)
+        # The manage.py children read the variable themselves; without this, --environment reached this script alone.
+        os.environ["UL_ENVIRONMENT"] = self.environment
         # Hot-reload bind-mounts make build outputs host-owned; see docker-compose.hot-reload.yml.
         self.skip_frontend_build = os.environ.get("UL_SKIP_FRONTEND_BUILD", "").lower() in {"1", "true", "yes"}
 
@@ -131,7 +175,7 @@ class DjangoProjectInitializer:
 
     @environment.setter
     def environment(self, value: str):
-        if value not in {"local", "development", "testing", "production", "staging"}:
+        if value not in ENVIRONMENTS:
             safe_value = re.sub(r"[^a-zA-Z0-9_-]", "", value)
             logger.error("Invalid environment: %s", safe_value)
             raise UnrecoverableError(f"Invalid environment: {safe_value}")
@@ -594,8 +638,8 @@ def main():
     parser.add_argument(
         "--environment",
         "-e",
-        choices=["local", "development", "testing", "production", "staging"],
-        help="Set the environment",
+        choices=ENVIRONMENTS,
+        help="Set the environment; defaults to UL_ENVIRONMENT, which must then be set",
     )
     args = parser.parse_args()
 

@@ -1074,6 +1074,14 @@ class PinListDetailSerializer(PinListSerializer):
     """One pin list including its full boundary geometry."""
 
     smart_boundary = serializers.SerializerMethodField()
+    #: True while pin changes are still queued for this smart list's sync, so its items may not match its rules yet.
+    membership_pending = serializers.SerializerMethodField()
+
+    def get_membership_pending(self, obj) -> bool:
+        """Whether the list may not yet reflect its owner's latest pin changes."""
+        from urbanlens.dashboard.services.pins.smart_list_sync import membership_pending
+
+        return membership_pending(obj)
 
     def get_smart_boundary(self, obj) -> dict | None:
         """The boundary as a GeoJSON MultiPolygon, or null when unset."""
@@ -2684,7 +2692,7 @@ class TripActivitySerializer(serializers.Serializer):
     #: The label the UI shows: the title, else the linked pin/location's name. source is the row's
     #: already-masked display_title, not activity.effective_title directly - the raw model property has no
     #: location_hidden/viewer-privacy awareness, and reading it here bypassed the masking the internal HTMX
-    #: panel already applies (see trip_activities._masked_activity_title's docstring for the leak this exists
+    #: panel already applies (see trip_visibility.masked_activity_title's docstring for the leak this exists
     effective_title = serializers.CharField(source="display_title", read_only=True)
     notes = serializers.CharField(source="activity.notes", read_only=True, allow_null=True)
     status = serializers.ChoiceField(choices=TripActivity.STATUS_CHOICES, source="activity.status", read_only=True)

@@ -404,9 +404,9 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     max_smart_lists_per_sync: int = Field(
         default=25,
         description=(
-            "How many smart lists one pin save may be evaluated against inside the request. Each list deserialises "
-            "its criteria and runs its own query, and a bulk edit multiplies that by how many pins were touched. "
-            "Nothing is dropped past this - the whole sync moves to the bulk queue instead."
+            "How many smart lists an account may have and still have its smart-list syncs run on the interactive "
+            "queue. A pin change is applied to smart lists by a task, never on the request; each sync runs one query "
+            "per rule per list, so an account past this runs its syncs on the bulk queue instead."
         ),
     )
     immich_marker_cache_max_assets: int = Field(

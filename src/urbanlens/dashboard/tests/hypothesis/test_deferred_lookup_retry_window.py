@@ -10,9 +10,15 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
-from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.cid_resolution import (
+    PROVIDER_GOOGLE,
+    PROVIDER_REDATA,
+    CidResolutionResult,
+)
 
 #: Position of started_at in retry()'s args list, counted from the start.
 _ARG_STARTED_AT = 6
@@ -113,3 +119,138 @@ class DeferredLookupRetryWindowTests(TestCase):
         from urbanlens.dashboard.tasks import _deferred_deadline_passed
 
         self.assertFalse(_deferred_deadline_passed("not-a-timestamp"))
+
+
+class DeferredLookupRetryBoundTests(TestCase):
+    """The deadline ends a batch; ``max_retries`` is finite as well, so a batch the deadline cannot end still stops.
+
+    ``_deferred_deadline_passed`` reads an unparseable ``started_at`` as "not expired", and the task re-sends the
+    stamp it was given, so a replayed or hand-made message carrying one would retry for ever on the deadline alone.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = Profile.objects.get(user=baker.make("auth.User"))
+        self.deferred_lists = [
+            {
+                "stem": "",
+                "create_category": False,
+                "label_ids": [],
+                "pins": [
+                    {"name": "Black Point Ruins", "lat": 41.348754, "lng": -71.453896, "description": "", "cid": 111}
+                ],
+            },
+        ]
+
+    def _apply(
+        self,
+        *,
+        retries: int,
+        request_failed: bool = False,
+        provider: str = PROVIDER_REDATA,
+        lookup: CidResolutionResult | None = None,
+    ):
+        """Run the task as a worker would on its ``retries``-th retry, with a start stamp the deadline cannot read.
+
+        Celery's own ``retry()`` runs, so a retry past the bound raises ``MaxRetriesExceededError`` here as it would
+        on a worker; only the re-sent message is stubbed.
+
+        Returns:
+            The stubbed signature of the retry message, and the task's return value.
+        """
+        pending = lookup or CidResolutionResult(provider=provider, pending=[111], request_failed=request_failed)
+        args = [self.profile.pk, self.deferred_lists, False, 1, 0, 0, "not-a-timestamp"]
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=pending),
+            mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
+            mock.patch.object(tasks.resolve_deferred_pin_locations, "signature_from_request") as resent,
+        ):
+            result = tasks.resolve_deferred_pin_locations.apply(args=args, retries=retries, throw=True)
+        return resent, result.get()
+
+    def test_the_task_has_a_finite_retry_bound(self) -> None:
+        self.assertIsNotNone(
+            tasks.resolve_deferred_pin_locations.max_retries, "a permanent failure can requeue the batch for ever"
+        )
+
+    def test_the_bound_never_cuts_a_batch_short_of_the_deadline(self) -> None:
+        """Every retry waits at least the shortest gap, so the bound must not run out before the deadline does."""
+        shortest_gap = min(*tasks._DEFERRED_RETRY_SCHEDULE, tasks._GOOGLE_RATE_LIMIT_RETRY_SECONDS)
+
+        self.assertGreaterEqual(
+            tasks.resolve_deferred_pin_locations.max_retries * shortest_gap,
+            tasks._DEFERRED_LOOKUP_DEADLINE.total_seconds(),
+        )
+
+    def test_the_bound_is_no_looser_than_the_deadline_needs(self) -> None:
+        shortest_gap = min(*tasks._DEFERRED_RETRY_SCHEDULE, tasks._GOOGLE_RATE_LIMIT_RETRY_SECONDS)
+
+        self.assertLess(
+            (tasks.resolve_deferred_pin_locations.max_retries - 1) * shortest_gap,
+            tasks._DEFERRED_LOOKUP_DEADLINE.total_seconds(),
+        )
+
+    def test_a_batch_short_of_the_bound_still_retries(self) -> None:
+        """The half that stops the tests below passing against a task that never retries."""
+        bound = tasks.resolve_deferred_pin_locations.max_retries
+
+        resent, _result = self._apply(retries=bound - 1)
+
+        resent.assert_called_once()
+        self.assertEqual(
+            resent.call_args.kwargs["retries"], bound, "the last retry was not sent as retry number max_retries"
+        )
+        self.assertFalse(PinImportFailure.objects.filter(profile=self.profile).exists())
+
+    def test_a_batch_at_the_bound_gives_up_and_records_failures(self) -> None:
+        resent, result = self._apply(retries=tasks.resolve_deferred_pin_locations.max_retries)
+
+        resent.assert_not_called()
+        self.assertEqual(result, {"created": 0, "exists": 0, "skipped": 1})
+        failure = PinImportFailure.objects.get(profile=self.profile, cid=111)
+        self.assertEqual(failure.reason, PinImportFailureReason.LOOKUP_STALLED)
+
+    def test_a_google_rate_limited_batch_at_the_bound_gives_up(self) -> None:
+        """Google's fixed wait is the shortest gap, so this is the path that reaches the bound first."""
+        resent, _result = self._apply(
+            retries=tasks.resolve_deferred_pin_locations.max_retries, provider=PROVIDER_GOOGLE
+        )
+
+        resent.assert_not_called()
+        self.assertTrue(PinImportFailure.objects.filter(profile=self.profile, cid=111).exists())
+
+    def test_a_failing_lookup_service_at_the_bound_is_reported_as_unavailable(self) -> None:
+        resent, _result = self._apply(retries=tasks.resolve_deferred_pin_locations.max_retries, request_failed=True)
+
+        resent.assert_not_called()
+        self.assertEqual(
+            PinImportFailure.objects.get(profile=self.profile, cid=111).reason, PinImportFailureReason.LOOKUP_ERROR
+        )
+
+    def test_the_user_is_told_when_the_bound_ends_the_batch(self) -> None:
+        self._apply(retries=tasks.resolve_deferred_pin_locations.max_retries)
+
+        self.assertTrue(
+            NotificationLog.objects.filter(
+                profile=self.profile, title="Location lookup is taking longer than expected"
+            ).exists()
+        )
+
+    def test_cids_the_last_round_resolved_are_placed_not_failed(self) -> None:
+        """Giving up recorded a failure for every cid in the batch, including those the same round had resolved."""
+        self.deferred_lists[0]["pins"].append(
+            {"name": "Fort Getty", "lat": 41.49, "lng": -71.39, "description": "", "cid": 222}
+        )
+        partial = CidResolutionResult(provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222])
+
+        _resent, result = self._apply(retries=tasks.resolve_deferred_pin_locations.max_retries, lookup=partial)
+
+        self.assertEqual(result["created"], 1)
+        self.assertTrue(Pin.objects.filter(profile=self.profile).exists(), "the resolved cid was not placed")
+        self.assertFalse(
+            PinImportFailure.objects.filter(profile=self.profile, cid=111).exists(),
+            "a placed cid was recorded as a failure",
+        )
+        self.assertEqual(
+            PinImportFailure.objects.get(profile=self.profile, cid=222).reason, PinImportFailureReason.LOOKUP_STALLED
+        )

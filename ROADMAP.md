@@ -377,7 +377,7 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 
 ### Comment Hygiene
 * Repo-wide sweep for comments narrating development history ("used to be X, now Y") instead of
-  describing current behavior - already prohibited by CLAUDE.md but still widespread per a
+  describing current behavior - already prohibited by AGENTS.md but still widespread per a
   2026-08-21 grep sample (900+ raw hits across 500+ files, inflated by false positives like
   present-tense "no longer exists" status strings, but genuine violations are real and common,
   not edge cases). Densest concentrations found so far: `tasks.py`, `controllers/pin.py`,

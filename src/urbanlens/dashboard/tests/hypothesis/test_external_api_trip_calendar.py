@@ -89,11 +89,12 @@ class _CalendarTestCase(TestCase):
         gateway.update_event.return_value = {"id": "evt-new"}
         return gateway
 
-    def _new_event(self, _body: dict) -> dict[str, str]:
+    def _new_event(self, _body: dict, event_id: str | None = None) -> dict[str, str]:
         """Return a distinct created-event payload for each gateway call.
 
         Args:
             _body: The event body the service built (unused).
+            event_id: The client-assigned id the service sent (unused).
 
         Returns:
             An event dict with an id unique within this test."""
@@ -159,7 +160,7 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
         export_trip_to_calendar(self.account, trip)
 
         body = gateway.create_event.call_args_list[0][0][0]
-        self.assertNotIn("location", body)
+        self.assertEqual(body["location"], "")
 
     def test_activity_event_omits_a_location_the_exporter_may_not_see(self) -> None:
         """The per-activity timed event must not carry it either."""
@@ -176,7 +177,7 @@ class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
         bodies = [call[0][0] for call in gateway.create_event.call_args_list]
         activity_bodies = [body for body in bodies if "dateTime" in body["start"]]
         self.assertEqual(len(activity_bodies), 1)
-        self.assertNotIn("location", activity_bodies[0])
+        self.assertEqual(activity_bodies[0]["location"], "")
 
     def test_a_visible_location_is_still_exported(self) -> None:
         """The gate must not swallow locations the exporter is allowed to see."""
@@ -241,6 +242,7 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["activities_exported"], 1)
+        self.assertEqual((body["complete"], body["events_synced"], body["events_total"]), (True, 2, 2))
         self.assertTrue(body["calendar"]["connected"])
         self.assertTrue(body["calendar"]["linked"])
         self.assertEqual(body["calendar"]["account_email"], "exporter@example.com")
@@ -275,10 +277,10 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         baseline = len(connection.savepoint_ids)
         depths: list[int] = []
 
-        def _record(body):
+        def _record(body, event_id=None):
             """Record the savepoint depth in force when the gateway is called."""
             depths.append(len(connection.savepoint_ids))
-            return self._new_event(body)
+            return self._new_event(body, event_id)
 
         gateway.create_event.side_effect = _record
 
