@@ -69,6 +69,7 @@ from urbanlens.dashboard.services.trips.trip_membership import (
     set_member_organizer,
     set_trip_rsvp,
 )
+from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -1621,6 +1622,10 @@ class TripWeatherView(LoginRequiredMixin, View):
             today = timezone.localdate()
             horizon = timezone.now() + FORECAST_HORIZON
             all_activities = list(_activity_qs(trip))
+            # A stop's forecast and its name both come from its place, so a stop whose location this viewer may not
+            # see is left out, as the map and the driving legs leave it out.
+            hidden = viewer_hidden_activity_ids(all_activities, profile)
+            all_activities = [act for act in all_activities if act.id not in hidden]
             # A past activity is one the forecast can no longer speak to.
             past_activities = [act for act in all_activities if act.scheduled_at is not None and act.scheduled_at.date() < today]
             try:
