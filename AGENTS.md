@@ -27,7 +27,7 @@ record: `grep -E '^\| N7 ' docs/INDEX.md`. A former `P#`/`T#` maps to its issue 
 
 - **Issue tracker:** GitHub Issues on UrbanLens/UrbanLens via `gh`. See `docs/agents/issue-tracker.md`.
 - **Triage labels:** the defaults (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-- **Domain docs:** single-context; the glossary is `CONTEXT.md`, decisions are `docs/adr/`. See `docs/agents/domain.md`.
+- **Domain docs:** single-context; the glossary is `docs/CONTEXT.md`, decisions are `docs/adr/`. See `docs/agents/domain.md`.
 
 ## Layout
 
