@@ -11,6 +11,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.locations.cid_resolution import (
@@ -141,7 +142,14 @@ class DeferredLookupRetryBoundTests(TestCase):
             },
         ]
 
-    def _apply(self, *, retries: int, request_failed: bool = False, provider: str = PROVIDER_REDATA):
+    def _apply(
+        self,
+        *,
+        retries: int,
+        request_failed: bool = False,
+        provider: str = PROVIDER_REDATA,
+        lookup: CidResolutionResult | None = None,
+    ):
         """Run the task as a worker would on its ``retries``-th retry, with a start stamp the deadline cannot read.
 
         Celery's own ``retry()`` runs, so a retry past the bound raises ``MaxRetriesExceededError`` here as it would
@@ -150,7 +158,7 @@ class DeferredLookupRetryBoundTests(TestCase):
         Returns:
             The stubbed signature of the retry message, and the task's return value.
         """
-        pending = CidResolutionResult(provider=provider, pending=[111], request_failed=request_failed)
+        pending = lookup or CidResolutionResult(provider=provider, pending=[111], request_failed=request_failed)
         args = [self.profile.pk, self.deferred_lists, False, 1, 0, 0, "not-a-timestamp"]
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=pending),
@@ -226,4 +234,23 @@ class DeferredLookupRetryBoundTests(TestCase):
             NotificationLog.objects.filter(
                 profile=self.profile, title="Location lookup is taking longer than expected"
             ).exists()
+        )
+
+    def test_cids_the_last_round_resolved_are_placed_not_failed(self) -> None:
+        """Giving up recorded a failure for every cid in the batch, including those the same round had resolved."""
+        self.deferred_lists[0]["pins"].append(
+            {"name": "Fort Getty", "lat": 41.49, "lng": -71.39, "description": "", "cid": 222}
+        )
+        partial = CidResolutionResult(provider=PROVIDER_REDATA, resolved={111: (41.348754, -71.453896)}, pending=[222])
+
+        _resent, result = self._apply(retries=tasks.resolve_deferred_pin_locations.max_retries, lookup=partial)
+
+        self.assertEqual(result["created"], 1)
+        self.assertTrue(Pin.objects.filter(profile=self.profile).exists(), "the resolved cid was not placed")
+        self.assertFalse(
+            PinImportFailure.objects.filter(profile=self.profile, cid=111).exists(),
+            "a placed cid was recorded as a failure",
+        )
+        self.assertEqual(
+            PinImportFailure.objects.get(profile=self.profile, cid=222).reason, PinImportFailureReason.LOOKUP_STALLED
         )

@@ -3184,14 +3184,16 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
             consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
 
         if out_of_time:
+            # What this last round did resolve is placed, as on any other round; only what is still pending fails.
+            created_count, exists_count, skipped_count = _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
             logger.error(
                 "resolve_deferred_pin_locations: %d cid(s) for profile %s still pending after %d retries (%d without progress) - giving up.",
-                len(all_cids),
+                len(result.pending),
                 profile_id,
                 self.request.retries,
                 consecutive_no_progress,
             )
-            for cid in all_cids:
+            for cid in result.pending:
                 record_pin_import_failure(
                     profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED
                 )
@@ -3202,13 +3204,13 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
                 notification_type=NotificationType.ERROR,
                 title="Location lookup is taking longer than expected",
                 message=(
-                    f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
+                    f"{len(result.pending)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
                     "This isn't a problem with your import - review them on the Locations page to enter an address or coordinates yourself."
                 ),
                 url=reverse("memories.locations"),
             )
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
-            return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+            return {"created": created_count, "exists": exists_count, "skipped": skipped_count + len(result.pending)}
 
         # Place whatever DID resolve this round before scheduling the retry: `remaining_pins` below drops every
         # resolved cid from the retry args, so any coordinate not placed here is never placed at all - not this
