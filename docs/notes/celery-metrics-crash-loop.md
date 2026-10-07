@@ -1,4 +1,4 @@
-# N15 — `celery-metrics` has been crash-looping on staging since it was deployed, because nothing gates it on the flag it requires
+# N15 — `celery-metrics` crash-looped on compose staging until it was stopped by hand, because nothing gated it on the flag it requires
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -8,11 +8,10 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: N15` · `status: current` · `updated: 2026-09-10`
+`id: N15` · `status: current` · `updated: 2026-10-07`
 
 **Stopped 2026-09-10 ~14:46Z at 4,410 restarts**, by hand on damballa. The gate
-below is on `release/v_0_8_0`; staging's checkout is 52 commits behind it, so the
-permanent fix is a scheduled deploy rather than a container action. See
+below (`profiles: ["metrics"]`) shipped in 0.8.0 (`d1fb1bf`), and compose staging is stopped (the infrastructure repo's `4f20bd7`, 2026-10-03), so the deploy that was to carry it is moot. See
 [`../handoffs/infrastructure-metrics-exporter-loop-closed.md`](../handoffs/infrastructure-metrics-exporter-loop-closed.md).
 
 Observed 2026-09-10 on damballa:
@@ -41,7 +40,7 @@ Two consequences worth naming separately:
 2. Each restart pays a full `django.setup()` (~178 MiB resident before it exits), several times a
    minute, forever.
 
-Fix is one line - `profiles: ["metrics"]` on the service, with `COMPOSE_PROFILES=metrics` documented
+The fix was one line - `profiles: ["metrics"]` on the service (`docker-compose.yml:700` on `release/v_0_9_0`, and in 0.8.0), with `COMPOSE_PROFILES=metrics` documented
 next to `UL_METRICS_ENABLED` in `.env-sample`. Keep the `CommandError`: it is correct behaviour for
 a service that should not have been started, and it is what made this diagnosable at a glance.
 

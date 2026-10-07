@@ -276,4 +276,4 @@ it puts a third-party wrapper in the path of every PostGIS query.
   mechanism is per-service, so turning it on later is one line in
   `docker-compose.yml` plus that instrumentation.
 - **k3s.** The equivalent there is a scrape annotation or a `ServiceMonitor`, in
-  the `UrbanLens/infrastructure` repo, not this one.
+  the `UrbanLens/infrastructure` repo, not this one. Nothing there runs the exporter or scrapes it yet: #361.

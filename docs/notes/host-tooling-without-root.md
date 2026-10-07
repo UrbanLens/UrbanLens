@@ -10,10 +10,10 @@
 
 ## R30 — mypy and pytest run on a host with no system GDAL, on the copies the pyogrio and shapely wheels vendor
 
-`id: R30` · `status: current` · `updated: 2026-09-23`
+`id: R30` · `status: current` · `updated: 2026-10-07`
 
-Measured on chiron (Ubuntu 24.04, no `gdal-bin`, no passwordless sudo). `ldconfig -p | grep -iE
-'gdal|geos|proj'` finds nothing there.
+Measured on chiron (Ubuntu 24.04, no `gdal-bin`). `ldconfig -p | grep -iE 'gdal|geos|proj'` finds nothing there. The agent
+account has passwordless `sudo` and is in the `docker` group (`sudo -n -l`, `id`, 2026-10-07). The GDAL and GEOS setup below uses neither; `bin/host_pytest.sh` needs the `docker` group, for `docker inspect`.
 
 ### GeoDjango on the host
 
