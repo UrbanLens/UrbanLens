@@ -10,11 +10,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from live_sites import Answer, InconclusiveError, LiveRedata, Site
+from live_sites import Answer, InconclusiveError, LiveRedata, Site, eligible_only_note
 import pytest
 from shapely.geometry import Point, shape
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterable
+
     from shapely.geometry.base import BaseGeometry
 
 #: How far from the anchor an on-property building may be. A campus is large; a roster match
@@ -62,7 +64,7 @@ def _found(site: Site, answer: Answer, rows: list[dict[str, Any]], what: str) ->
 
 
 def _found_under_a_name(
-    redata: LiveRedata, site: Site, path: str, query: str, fields: tuple[str, ...], what: str
+    redata: LiveRedata, site: Site, path: str, queries: Iterable[str], fields: tuple[str, ...], what: str
 ) -> None:
     """Search under each of the site's names in turn until an answer names the campus.
 
@@ -71,8 +73,8 @@ def _found_under_a_name(
     """
     unanswered: list[str] = []
     seen = 0
-    for label in dict.fromkeys(site.labels):
-        answer = redata.get(path, q=query.format(label))
+    for query in queries:
+        answer = redata.get(path, q=query)
         assert answer.status == 200, f"{site.name}: {path} answered {answer.status} {_error(answer)}"
         if _relevant(site, answer.rows, *fields):
             return
@@ -183,16 +185,16 @@ def test_the_parcel_has_an_owner_of_record(redata: LiveRedata, site: Site) -> No
 
 
 @pytest.mark.live_check("register")
-def test_a_historic_register_lists_the_campus(redata: LiveRedata, site: Site) -> None:
+def test_a_historic_register_lists_the_campus(
+    redata: LiveRedata, site: Site, record_property: Callable[[str, object], None]
+) -> None:
     rows = _near(redata, site, "cultural-resources/lookup/", radius_meters=500).rows
-    listed = [
-        row
-        for row in rows
-        if (site.nrhp and str(row.get("external_id", "")).startswith(site.nrhp)) or site.mentions(row.get("name"))
-    ]
+    listed = site.register_listings(rows)
     assert listed, (
         f"{site.name}: none of {len(rows)} cultural resources within 500 m names the campus{f' or NRHP {site.nrhp}' if site.nrhp else ''}"
     )
+    if note := eligible_only_note(listed):
+        record_property("register", note)
 
 
 @pytest.mark.live_check("wikipedia")
@@ -206,7 +208,10 @@ def test_the_campus_wikipedia_article_is_found_near_it(redata: LiveRedata, site:
 
 @pytest.mark.live_check("documents")
 def test_archives_hold_documents_about_the_campus(redata: LiveRedata, site: Site) -> None:
-    _found_under_a_name(redata, site, "reference-documents/search/", "{}", ("title", "description"), "archival result")
+    queries = tuple(dict.fromkeys(site.labels))
+    _found_under_a_name(
+        redata, site, "reference-documents/search/", queries, ("title", "description"), "archival result"
+    )
 
 
 @pytest.mark.live_check("web_photos")
@@ -229,7 +234,7 @@ def test_a_web_search_finds_pages_about_the_campus(redata: LiveRedata, site: Sit
 @pytest.mark.live_check("news")
 def test_news_coverage_of_the_campus_is_found(redata: LiveRedata, site: Site) -> None:
     fields = ("title", "snippet", "description", "link", "url")
-    _found_under_a_name(redata, site, "search/news/", '"{}"', fields, "news result")
+    _found_under_a_name(redata, site, "search/news/", site.news_queries, fields, "news result")
 
 
 @pytest.mark.live_check("photos")

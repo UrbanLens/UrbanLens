@@ -293,9 +293,20 @@ class SafetyCheckinContactByTokenTests(TestCase):
 
     def test_returns_the_matching_contact(self):
         contact = baker.make(
-            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            email="contact@example.com",
+            contact_profile=None,
+            notified_at=timezone.now(),
         )
         self.assertEqual(SafetyCheckinContact.objects.by_token(contact.token).first(), contact)
+
+    def test_empty_for_a_contact_not_yet_alerted(self):
+        """The token is emailed only with the alert; one presented earlier was leaked and must resolve to nothing."""
+        contact = baker.make(
+            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+        )
+        self.assertFalse(SafetyCheckinContact.objects.by_token(contact.token).exists())
 
     def test_empty_for_an_unknown_token(self):
         self.assertFalse(SafetyCheckinContact.objects.by_token(uuid4()).exists())
@@ -304,7 +315,11 @@ class SafetyCheckinContactByTokenTests(TestCase):
         """Every real call site chains select_related(...) before by_token() -
         confirm that composition still resolves to exactly the right row."""
         contact = baker.make(
-            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            email="contact@example.com",
+            contact_profile=None,
+            notified_at=timezone.now(),
         )
         result = (
             SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(contact.token).first()
@@ -314,7 +329,7 @@ class SafetyCheckinContactByTokenTests(TestCase):
 
 
 class SafetyContactPortalEscalationGateTests(TestCase):
-    """The token contact portal (and its markup JSON) must not disclose the plan, message, route, or photos before the check-in has actually escalated - the token is only ever emailed at escalation, but nothing previously stopped a leaked/guessed/forwarded token from returning the full plan regardless of check-in state."""
+    """The token contact portal (and its markup JSON) must not disclose the plan, message, route, or photos before the contact has been alerted - the token is only ever emailed with the alert, so a leaked/guessed/forwarded token presented earlier resolves to nothing at all."""
 
     def setUp(self):
         self.profile = baker.make("auth.User").profile
@@ -330,11 +345,12 @@ class SafetyContactPortalEscalationGateTests(TestCase):
     def _escalate(self):
         self.checkin.escalated_at = timezone.now()
         self.checkin.save(update_fields=["escalated_at", "updated"])
+        SafetyCheckinContact.objects.filter(pk=self.contact.pk).update(notified_at=timezone.now())
 
     def test_portal_hides_the_plan_and_message_before_escalation(self):
         response = self.client.get(reverse("safety.contact.portal", kwargs={"token": self.contact.token}))
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 404)
         content = response.content.decode()
         self.assertNotIn("Meet at the north gate", content)
         self.assertNotIn("Call the ranger station", content)
@@ -368,7 +384,7 @@ class SafetyContactPortalEscalationGateTests(TestCase):
 
         self.assertIn("safety-photo-thumb", response.content.decode())
 
-    def test_markup_json_is_empty_before_escalation(self):
+    def test_markup_json_is_a_404_before_the_alert(self):
         markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)
         self.checkin.markup_map = markup_map
         self.checkin.save(update_fields=["markup_map", "updated"])
@@ -382,8 +398,7 @@ class SafetyContactPortalEscalationGateTests(TestCase):
 
         response = self.client.get(reverse("safety.contact.markup.json", kwargs={"token": self.contact.token}))
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["markup_items"], [])
+        self.assertEqual(response.status_code, 404)
 
     def test_markup_json_returns_items_once_escalated(self):
         markup_map = baker.make("dashboard.MarkupMap", profile=self.profile)

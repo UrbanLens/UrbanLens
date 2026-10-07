@@ -40,16 +40,12 @@
         {% if checkin.is_resolved %}
         <p><i class="material-symbols-outlined">check_circle</i>
             This check-in has been resolved - {{ checkin.profile.username }} is accounted for.</p>
-        {% elif checkin.escalated_at %}
+        {% else %}
         <p><i class="material-symbols-outlined">emergency</i>
             {{ checkin.profile.username }} hasn't checked in from a trip to this destination, and their
             emergency contacts have been notified. If you've seen them or know something that could help,
             leave a comment on the community wiki{% if wiki %} for <a href="{% url 'location.wiki' wiki.location.slug|default:wiki.location.uuid %}">{{ wiki.name }}</a>{% endif %}
             or reach out to them directly.</p>
-        {% else %}
-        <p><i class="material-symbols-outlined">schedule</i>
-            You're listed as an emergency contact for this upcoming trip. {{ checkin.profile.username }} is
-            expected to check in by {{ checkin.checkin_by|date:"N j, Y g:i A" }}.</p>
         {% endif %}
     </div>
 

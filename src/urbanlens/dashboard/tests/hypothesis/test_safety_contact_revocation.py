@@ -6,6 +6,7 @@ import json
 from unittest.mock import patch
 
 from channels.db import database_sync_to_async
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
@@ -49,6 +50,7 @@ class ContactAccessRevocationTests(SafetyCheckinChatConsumerTests):
             contact_profile=None,
             email="kept@example.com",
             name="Kept",
+            notified_at=timezone.now(),
         )
         owner_comm = self._owner_communicator()
         self.assertTrue((await owner_comm.connect())[0])

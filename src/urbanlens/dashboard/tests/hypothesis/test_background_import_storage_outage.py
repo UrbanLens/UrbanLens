@@ -56,6 +56,7 @@ from urbanlens.dashboard.tests.hypothesis.test_object_store_client_config import
     garage_unavailable,
     object_store,
 )
+from urbanlens.dashboard.tests.hypothesis.test_proxied_media_is_capped import _streamed
 
 _ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 
@@ -377,10 +378,7 @@ class GooglePhotosImportStorageTests(_LibraryImportTests):
             photo_id = url.removesuffix("=d").rsplit("/", 1)[-1]
             if photo_id == "p3":
                 raise requests.ConnectionError("Google is unreachable")
-            response = requests.Response()
-            response.status_code = 200
-            response._content = self.content[photo_id]
-            return response
+            return _streamed(self.content[photo_id])
 
         with (
             mock.patch.object(_RateLimitedSession, "get", get),

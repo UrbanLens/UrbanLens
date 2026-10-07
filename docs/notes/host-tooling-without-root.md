@@ -70,7 +70,8 @@ refuses to start unless `UL_TEST_DB_NAME` is set.
 UL_TEST_DB_NAME=test_<unique> bin/host_pytest.sh --reuse-db src/urbanlens/... -k ...
 ```
 
-The tests' network guard (`core/testing_network.py`) allows only localhost. It patches Python's
+The tests' network guard (`core/testing_network.py`) allows only localhost, and refuses a hostname lookup
+(`getaddrinfo`, `gethostbyname`) of anything but an IP literal, localhost or a configured database host. It patches Python's
 `socket` module, and psycopg connects through libpq, below that layer, so the non-local database
 IP is not blocked. Measured: 18 tests from three GIS files, two of them DB-backed, passed in 235s, most of it creating and
 migrating the test database. The rerun with `--reuse-db` took 6s.

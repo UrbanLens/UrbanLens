@@ -15,7 +15,16 @@ spend real REData budget, and are never collected by a plain `pytest` or CI.
 Kirkbride hospitals, with coordinates from each article or its Wikidata item, plus
 St. Lawrence and Harlem Valley. The four `tier = "primary"` sites (HRSH, St. Lawrence,
 Harlem Valley, Athens) have hand-verified anchors and are what a default run checks.
-`--sites all` checks every campus; a demolished one skips the building checks.
+`--sites all` checks every campus; a `demolished` one skips the building, footprint and
+build-date checks. A campus's `status` says whether buildings stand at its point, not whether its
+own Kirkbride survives: Mendocino's was razed in 1952 and hospital buildings still stand there, so
+it is `standing`. Only Dixmont and Clinton Valley, with no building within 100 m of their points,
+are `demolished`; the catalogue's header says how that was measured.
+
+A campus's `nrhp` is the reference of its own listing, which can be one building's or its
+district's (Mendota is the Wisconsin Memorial Hospital Historic District, Kalamazoo its Water
+Tower). A listing the Register has removed is not expected: Jacksonville's (1984) and Central
+State VA's chapel (2017) are known issues instead. Each entry's comment names its source.
 
 ```bash
 # UL_LIVE_REDATA_API_URL / _API_KEY / _HOST from the environment, or all three from .env
@@ -38,6 +47,18 @@ only when it names it as a whole phrase (`Site.mentions`): one of its names or a
 its town or Wikipedia disambiguator when the name could be another campus's ("Central State
 Hospital") or does not say it is an institution ("The Ridges"). A car called a Hudson, Athens
 in Greece and Warren Buffett do not count.
+
+Two checks have rules of their own. The news search puts the town and state after a name
+that needs one (`"Central State Hospital" Anchorage Kentucky`), because the bare name is
+answered with whichever campus of it is in the news, and never searches a Wikipedia
+disambiguator, which no headline contains (`Site.news_queries`). The register check counts a
+`cultural-resources/lookup/` row when its NRHP reference is the catalogue's (in `external_id` or
+any attribute) or when it names the campus in its `name` or in an attribute that names a
+historic district: New Jersey's SHPO layer records Trenton's campus that way, as
+`attributes.HD_NAME` on each building's row (`Site.register_listings`). A district the SHPO
+only holds as eligible counts too, and when every matching row is an eligible record the check
+passes with that in its report detail ("matched only eligible, not listed, register rows"); a
+record the register withdrew (not eligible, delisted, removed) never counts.
 
 **The pipeline** (`test_pipeline.py`, `--pipeline`) creates a root pin on each campus the way the
 map does, runs the bootstrap chain that sets off inline against the same REData, and checks

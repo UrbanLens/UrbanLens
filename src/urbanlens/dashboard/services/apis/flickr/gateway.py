@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from requests_oauthlib import OAuth1
 
 from urbanlens.dashboard.services.apis.flickr.oauth import _consumer_credentials
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError, read_capped
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -202,18 +202,21 @@ class FlickrGateway(Gateway):
             Tuple of (file bytes, filename, content-type).
 
         Raises:
-            GatewayRequestError: When no downloadable size is available, or the download fails.
+            GatewayRequestError: When no downloadable size is available, the download fails, or the file is larger than the site's upload limit.
         """
+        from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+
         url = fallback_url or self._largest_available_url(photo_id)
         try:
-            response = self.session.get(url, timeout=_REQUEST_TIMEOUT)
+            response = self.session.get(url, timeout=_REQUEST_TIMEOUT, stream=True)
         except OSError as exc:
             raise GatewayRequestError(f"Could not download Flickr photo {photo_id}: {exc}") from exc
         if not response.ok:
             raise GatewayRequestError(f"Downloading Flickr photo {photo_id} failed with status {response.status_code}.")
         filename = url.rsplit("/", 1)[-1] or f"{photo_id}.jpg"
         content_type = response.headers.get("Content-Type", "image/jpeg")
-        return response.content, filename, content_type
+        # The photo is about to be stored, so a file a browser upload would be refused for is refused here too.
+        return read_capped(response, max_bytes=max_upload_file_size_bytes(), what="Flickr photo"), filename, content_type
 
     def _largest_available_url(self, photo_id: str) -> str:
         """Return the largest size URL Flickr will serve for a photo.

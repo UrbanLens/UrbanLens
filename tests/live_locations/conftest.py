@@ -99,9 +99,14 @@ def pytest_runtest_makereport(
         inconclusive = call.excinfo is not None and call.excinfo.errisinstance(InconclusiveError)
         _RESULTS.setdefault(site.key, {})[_check_name(item) or item.name] = {
             "outcome": "inconclusive" if inconclusive else report.outcome,
-            "detail": str(call.excinfo.value)[:300] if call.excinfo else "",
+            "detail": str(call.excinfo.value)[:300] if call.excinfo else _notes(report),
         }
     return report
+
+
+def _notes(report: pytest.TestReport) -> str:
+    """What a passing check recorded about how it passed (``record_property``)."""
+    return "; ".join(f"{name}: {value}" for name, value in report.user_properties)[:300]
 
 
 def pytest_runtest_logreport(report: pytest.TestReport) -> None:
