@@ -99,7 +99,7 @@ class EmergencyContactByEmailTests(TestCase):
 
 
 class EmailContactStillSeesTheCheckinTests(TestCase):
-    """The account that verified a contact's address sees the check-in as a contact, without the owner learning who it is."""
+    """The account that verified a contact's address sees the check-in as a contact once alerted, without the owner learning who it is."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -114,6 +114,11 @@ class EmailContactStillSeesTheCheckinTests(TestCase):
             destination_longitude="-74.000000",
         )
         set_checkin_contacts(self.checkin, [(None, "J.A.N.E.Q.P.U.B.L@googlemail.com", "")])
+        self._alert()
+
+    def _alert(self) -> None:
+        """A contact sees the check-in only once escalation has alerted it."""
+        self.checkin.contacts.update(notified_at=timezone.now())
 
     def test_it_is_shared_with_the_verified_account_by_any_spelling(self) -> None:
         self.assertIn(self.checkin, SafetyCheckin.objects.shared_with(self.member.profile))
@@ -127,6 +132,7 @@ class EmailContactStillSeesTheCheckinTests(TestCase):
         other = _verified("other_member", "other@example.com")
         ProfileEmail.objects.create(profile=other.profile, email="backup@example.com", is_verified=True)
         set_checkin_contacts(self.checkin, [(None, "backup@example.com", "")])
+        self._alert()
 
         self.assertIn(self.checkin, SafetyCheckin.objects.shared_with(other.profile))
 

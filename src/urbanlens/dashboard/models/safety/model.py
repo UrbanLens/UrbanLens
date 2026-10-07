@@ -439,6 +439,8 @@ class SafetyCheckinContact(abstract.DashboardModel):
     name = CharField(max_length=150, blank=True, default="")
     token = UUIDField(default=uuid4, unique=True, editable=False)
     notified_at = DateTimeField(null=True, blank=True)
+    # When this contact was told the check-in is over, claimed before sending so each alerted contact hears it once.
+    resolution_notified_at = DateTimeField(null=True, blank=True)
     found_safe_at = DateTimeField(null=True, blank=True)
 
     checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="contacts")

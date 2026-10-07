@@ -131,8 +131,8 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
         return self.exclude(status__in=SafetyCheckinStatus.resolved_statuses())
 
     def shared_with(self, profile: Profile) -> Self:
-        """Return other profiles' check-ins where ``profile`` is a registered emergency contact.
-        Powers the safety overview's "Shared with you" section - a logged-in emergency contact gets a read-only view of the check-in (see ``SafetyCheckinDetailView._render_shared_view``) even before/without the owner ever posting it to a community wiki.
+        """Return other profiles' check-ins where ``profile`` is an emergency contact who has been alerted.
+        Powers the safety overview's "Shared with you" section and a contact's reach to a check-in's photos. Before that alert a contact sees nothing of the check-in: GOALS.md ("Safety check-ins") gives contacts the plan "only if the user fails to check in on time", and earlier access to someone the owner explicitly chose - the accepted partner tier, ``partnered_with``.
 
         Args:
             profile: The viewing profile.
@@ -143,7 +143,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
         """
         from urbanlens.dashboard.models.safety.model import SafetyCheckinContact
 
-        return self.filter(pk__in=SafetyCheckinContact.objects.reaching(profile).values("checkin_id")).exclude(profile=profile)
+        return self.filter(pk__in=SafetyCheckinContact.objects.reaching(profile).alerted().values("checkin_id")).exclude(profile=profile)
 
     def partnered_with(self, profile: Profile) -> Self:
         """Return other profiles' check-ins where ``profile`` is an accepted safety check-in partner.
@@ -183,8 +183,9 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet["SafetyCheckinCont
     """QuerySet for SafetyCheckinContact records."""
 
     def by_token(self, token: str) -> Self:
-        """Resolve a contact by their magic-link token.
+        """Resolve a contact by their magic-link token, once that contact has been alerted.
         A contact identified only by email has no account to log into, so the public contact portal (and the check-in/markup-map views it links to) all resolve the requesting contact this same way - see the model's own docstring for why ``token`` is the credential here.
+        The token is only ever emailed with an alert, so one presented before it was leaked or guessed, and resolves to nothing: a contact learns nothing of a check-in, and can do nothing to it, before its owner misses it (GOALS.md, "Safety check-ins").
 
         Args:
             token: The magic-link token from the URL.
@@ -194,7 +195,11 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet["SafetyCheckinCont
             wrap this in ``get_object_or_404`` (optionally after chaining
             their own ``select_related(...)`` first).
         """
-        return self.filter(token=token)
+        return self.alerted().filter(token=token)
+
+    def alerted(self) -> Self:
+        """Contacts an escalation has reached - the only ones a check-in may show itself or send a notice to."""
+        return self.filter(notified_at__isnull=False)
 
     def reaching(self, profile: Profile) -> Self:
         """Contacts that stand for ``profile``: chosen as that connection, or added by an address it has verified."""
