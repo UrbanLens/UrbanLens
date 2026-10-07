@@ -12,7 +12,7 @@ from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscript
 from urbanlens.dashboard.models.boundary import Boundary, BoundaryRevision, BoundarySource, BoundaryType
 from urbanlens.dashboard.models.boundary_vote import BoundaryVote
 from urbanlens.dashboard.models.cache import GeocodedLocation
-from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.calendar_sync import CalendarEventDeletion, CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.comments import Comment, CommentLocationMention
 from urbanlens.dashboard.models.consensus import (
     ConsensusAnswer,

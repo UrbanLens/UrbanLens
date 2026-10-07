@@ -5,15 +5,18 @@ This is one-way only - edits made on Google Calendar are never pulled back into 
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models.signals import post_save, pre_delete
+from django.db.models.signals import post_delete, post_save, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
 from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment
+
+if TYPE_CHECKING:
+    from django.db.models import Q
 
 
 def queue_calendar_push(trip_id: int | None) -> None:
@@ -40,6 +43,19 @@ def queue_calendar_push(trip_id: int | None) -> None:
     transaction.on_commit(_enqueue)
 
 
+def queue_calendar_pushes_where(links: Q) -> None:
+    """:func:`queue_calendar_push` for every trip with an auto-sync trip-level link matching *links*.
+
+    For a change that is not a save of the trip or its activities but changes what a member may see of them.
+
+    Args:
+        links: A filter on ``TripCalendarLink``.
+    """
+    trip_ids = TripCalendarLink.objects.filter(links, activity__isnull=True, auto_sync=True).values_list("trip_id", flat=True).distinct()
+    for trip_id in sorted(set(trip_ids)):
+        queue_calendar_push(trip_id)
+
+
 @receiver(post_save, sender=Trip, dispatch_uid="trip_calendar_auto_sync_on_trip_save")
 def sync_trip_on_save(sender: type[Trip], instance: Trip, **kwargs: Any) -> None:
     """Push a saved trip to its auto-synced calendar event, if any.
@@ -61,6 +77,21 @@ def sync_trip_on_activity_save(sender: type[TripActivity], instance: TripActivit
         instance: The activity that was saved.
         **kwargs: Remaining signal arguments (unused).
     """
+    queue_calendar_push(instance.trip_id)
+
+
+@receiver(post_delete, sender=TripActivity, dispatch_uid="trip_calendar_auto_sync_on_activity_delete")
+def sync_trip_on_activity_delete(sender: type[TripActivity], instance: TripActivity, **kwargs: Any) -> None:
+    """Push a deleted activity's trip, whose all-day event may carry the activity's location.
+
+    Args:
+        sender: The TripActivity model class.
+        instance: The activity that was deleted.
+        **kwargs: Remaining signal arguments; ``origin`` is what the delete was called on.
+    """
+    origin = kwargs.get("origin")
+    if getattr(origin, "model", type(origin)) is Trip:
+        return
     queue_calendar_push(instance.trip_id)
 
 
