@@ -73,7 +73,7 @@ def _writes(fn: ast.FunctionDef, watched: set[str], writers: frozenset[str]) -> 
                 names.add(root.id)
             hit = names & watched
             if hit:
-                found.append((node.lineno, f"{sorted(hit)[0]}.{func.attr}()"))
+                found.append((node.lineno, f"{min(hit)}.{func.attr}()"))
                 continue
         called = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
         if called in writers:
