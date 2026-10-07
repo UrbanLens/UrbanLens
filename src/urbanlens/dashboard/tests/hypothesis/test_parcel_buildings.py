@@ -236,6 +236,35 @@ class FetchParcelBuildingsTests(RedataConfiguredMixin, TestCase):
             payload = fetch_parcel_buildings(self.location)
 
         self.assertEqual(payload["provider"], "osm")
+        self.assertEqual(payload["unanswered_sources"], ["redata"], "a fallback standing in for REData is a floor")
+
+    def test_an_overpass_outage_beside_a_cris_answer_is_marked(self) -> None:
+        official_geometry(
+            self.location,
+            _square_around(float(self.location.latitude), float(self.location.longitude)),
+        )
+        cris = [{"name": "Main Hall", "latitude": 41.7331, "longitude": -73.9301, "source": "cris"}]
+        with (
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "lookup_parcel_uuid", return_value=None),
+            patch.object(OverpassGateway, "__post_init__", lambda _self: None),
+            patch.object(OverpassGateway, "buildings_within", side_effect=OSError("overpass down")),
+            patch("urbanlens.dashboard.plugins.builtin.parcel_buildings._cris_buildings", return_value=cris),
+            patch(
+                "urbanlens.dashboard.plugins.builtin.parcel_buildings.merge_cris_buildings",
+                side_effect=lambda found, cris_rows, _polygon: [*found, *cris_rows],
+            ),
+        ):
+            payload = fetch_parcel_buildings(self.location)
+
+        self.assertEqual(payload["provider"], "cris")
+        self.assertEqual(payload["unanswered_sources"], ["overpass"])
+
+    def test_a_redata_answer_found_unaided_is_not_marked(self) -> None:
+        with _redata_answers(ParcelBuildings(_REDATA_BUILDINGS)):
+            payload = fetch_parcel_buildings(self.location)
+
+        self.assertNotIn("unanswered_sources", payload)
 
     def test_an_overpass_outage_with_nothing_else_found_raises(self) -> None:
         official_geometry(

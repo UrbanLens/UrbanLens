@@ -65,8 +65,9 @@ class GdeltPanelSource(NameSearchSource, InfoPanelSource):
             return
         query_text = query.gdelt_query()
         logger.info("News search for pin %s: %s", pin.pk, redact_text(query_text))
-        articles = RedataNewsSearchGateway().search_news(query_text, max_results=_REQUESTED_ARTICLES)
-        self.store(pin, scope, {"articles": query.relevant(articles)}, query_key=query_text)
+        answer = RedataNewsSearchGateway().search_news(query_text, max_results=_REQUESTED_ARTICLES)
+        # SearXNG standing in for GDELT is a floor, which the cache keeps only briefly.
+        self.store(pin, scope, answer.marked({"articles": query.relevant(answer.results)}), query_key=query_text)
 
     def result_identity(self, result: object) -> str:
         """An article is its link."""

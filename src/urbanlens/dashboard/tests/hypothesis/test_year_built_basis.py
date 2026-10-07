@@ -17,7 +17,7 @@ from model_bakery import baker
 
 from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus
@@ -237,6 +237,38 @@ class TriviaYearBuiltTests(TestCase):
 
         self.assertEqual(
             _questions(self.location), {"year_built:Catholic Chapel": ("1906", TriviaQuestionStatus.APPROVED)}
+        )
+
+    def test_a_question_whose_building_a_partial_list_leaves_out_is_kept(self) -> None:
+        """A list REData answered without one of its sources says nothing about the buildings it does not name."""
+        self._asked_before()
+        laundry = {**_building("building", year=1895), "name": "Laundry"}
+        LocationCache.set(
+            self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [laundry], UNANSWERED_SOURCES_KEY: ["cris"]}
+        )
+
+        generate_deterministic_questions(self.location)
+
+        self.assertEqual(
+            _questions(self.location),
+            {
+                "year_built:Catholic Chapel": ("1874", TriviaQuestionStatus.APPROVED),
+                "year_built:Laundry": ("1895", TriviaQuestionStatus.APPROVED),
+            },
+        )
+
+    def test_a_partial_list_still_withdraws_a_question_its_own_record_contradicts(self) -> None:
+        self._asked_before()
+        LocationCache.set(
+            self.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": [_building("parcel", year=1874)], UNANSWERED_SOURCES_KEY: ["overture"]},
+        )
+
+        generate_deterministic_questions(self.location)
+
+        self.assertEqual(
+            _questions(self.location), {"year_built:Catholic Chapel": ("1874", TriviaQuestionStatus.REJECTED)}
         )
 
     def test_with_no_building_list_cached_nothing_is_judged(self) -> None:

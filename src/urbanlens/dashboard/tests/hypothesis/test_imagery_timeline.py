@@ -215,15 +215,17 @@ class HistoricalCarouselSlideTests(SimpleTestCase):
 
         self.assertEqual(self._slides(envelope, seen={"https://x/current.png"}), [])
 
-    def test_an_unavailable_timeline_yields_nothing_rather_than_raising(self) -> None:
+    def test_an_unavailable_timeline_yields_no_slide_rather_than_raising(self) -> None:
+        """Only the signal that the carousel's answer is partial, so the slides already shown are not cached."""
         from unittest import mock
 
+        from urbanlens.dashboard.services.apis.locations.base import SlideSignal
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 
         gateway = mock.Mock()
         gateway.get_timeline.side_effect = LocationContextUnavailableError("source_error", "down")
 
-        self.assertEqual(list(self._provider()._historical_slides(gateway, 41.7, -73.9, set())), [])
+        self.assertEqual(list(self._provider()._historical_slides(gateway, 41.7, -73.9, set())), [SlideSignal.PARTIAL])
 
 
 class _FakeSlide:

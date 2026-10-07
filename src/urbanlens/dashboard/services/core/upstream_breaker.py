@@ -402,6 +402,23 @@ class RedataBreaker(UpstreamBreaker):
             return self.REFUSED_SECONDS
         return self.SOURCE_BUSY_SECONDS if scope.startswith("source:") else super().default_seconds(scope)
 
+    def refuses(self, url: str) -> bool:
+        """Whether REData refused this key at ``url``'s endpoint and the breaker still holds that refusal.
+
+        A call the breaker stops says only that it was stopped; this says it was stopped for a refusal, not a throttle.
+
+        Args:
+            url: A REData URL.
+
+        Returns:
+            True while the endpoint's refusal is held; False when it is not, or the cache cannot say.
+        """
+        try:
+            retry_at = cache.get(self._key(self._refused_scope(url)))
+        except _CACHE_ERRORS:
+            return False
+        return isinstance(retry_at, int | float) and retry_at > time.time()
+
     def _refusals_key(self) -> str:
         return self._key(f"refusals:{self._key_fingerprint()}")
 

@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest import mock
 
+from django.core.cache import cache
 import pytest
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.services.apis.locations.base import SlideFetch, SlideSignal
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 from urbanlens.dashboard.services.apis.locations.redata_media_gateway import (
     KartaViewStreetViewProvider,
@@ -16,6 +18,8 @@ from urbanlens.dashboard.services.apis.locations.redata_media_gateway import (
     RedataMediaGateway,
 )
 from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+from urbanlens.dashboard.services.locations.redata_point_data import StreetViewDates
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -130,7 +134,9 @@ class _ProviderSlideMappingMixin(_MixinBase):
             mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
             mock.patch.object(RedataStreetViewGateway, "get_timeline", return_value=_timeline(dates)) as mock_timeline,
         ):
-            slides = list(self.provider_cls()._generate_street_view_slides(38.456, -77.123, radius=50))
+            generated = list(self.provider_cls()._generate_street_view_slides(38.456, -77.123, radius=50))
+        slides = [item for item in generated if not isinstance(item, SlideSignal)]
+        self.assertEqual(len(slides), len(generated), "a complete timeline signalled it was partial")
         return slides, mock_timeline
 
     def test_asks_once_for_every_network(self) -> None:
@@ -226,3 +232,33 @@ class PanoramaxStreetViewProviderTests(_ProviderSlideMappingMixin, SimpleTestCas
     provider_cls = PanoramaxStreetViewProvider
     redata_provider = "panoramax"
     display_name = "Panoramax"
+
+
+class PartialStreetViewTests(RedataConfiguredMixin, TestCase):
+    """Dates REData gave while a network did not answer are shown, but not kept in the slide cache."""
+
+    _DATES = "urbanlens.dashboard.services.locations.redata_point_data.street_view_dates"
+
+    def setUp(self) -> None:
+        super().setUp()
+        cache.clear()
+
+    def _fetch_twice(self, *, complete: bool) -> tuple[list[SlideFetch], int]:
+        dates = [{**_date_entry("2020-01-01", image_url="https://example.test/a.jpg"), "provider": "mapillary"}]
+        with mock.patch(self._DATES, return_value=StreetViewDates(dates=dates, complete=complete)) as found:
+            fetched = [MapillaryStreetViewProvider().get_street_view_slides(38.456, -77.123) for _ in range(2)]
+        return fetched, found.call_count
+
+    def test_a_partial_answer_is_shown_and_asked_for_again(self) -> None:
+        fetched, asked = self._fetch_twice(complete=False)
+
+        self.assertEqual([slide.img_src for slide in fetched[0].slides], ["https://example.test/a.jpg"])
+        self.assertTrue(fetched[0].degraded)
+        self.assertEqual(asked, 2)
+
+    def test_a_complete_answer_is_kept(self) -> None:
+        fetched, asked = self._fetch_twice(complete=True)
+
+        self.assertFalse(fetched[0].degraded)
+        self.assertTrue(fetched[1].from_cache)
+        self.assertEqual(asked, 1)

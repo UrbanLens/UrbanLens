@@ -148,7 +148,12 @@ Never swap the key in one step — that is the data-loss path. Roll it:
    Use it only once you have confirmed the listed rows are unrecoverable rather than a missing
    fallback you could still supply. Everything else is rotated exactly as normal, so the retired
    key is safe to drop; the listed rows were already unreadable before you started.
-3. **Drop the retired key** from `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`. Deploy.
+3. **Drop the retired key** from `UL_FIELD_ENCRYPTION_KEY_FALLBACKS` and deploy, **unless it was ever the active
+   key while safety check-ins were archived.** Archival keeps keyed hashes (`email_hmac`) of contacts' addresses,
+   and opt-outs recorded after archival hold the same hashes. Step 2 cannot re-key them, because the address is
+   gone. They match under any key still configured (`keyed_digests`), so dropping the key that made one stops that
+   person's opt-out from matching, and they can be alerted again. An opt-out for everyone is kept indefinitely, so
+   in practice such a key stays in the fallbacks for good. Nothing here checks for this.
 
 To verify step 2 really worked, remove the old key and confirm the app still reads the data —
 that is exactly what `test_field_encryption_rotation.py` asserts.
@@ -265,6 +270,7 @@ lookups) — left plaintext, see the "reviewed, left plaintext" table below.
 | `SafetyContactOptOut.email`, `.email_normalized` | Opt-out identity | `email_normalized__in` exact-match is the entire suppression mechanism (`SafetyContactOptOutManager.blocks_notification`); indexed (`idxdb_scoo_email_normalized`). `email` is the display copy the normalized one is derived from |
 | `SafetyCheckinContact.email`, `.email_normalized` | Per-checkin contact snapshot | Normalized and matched against `SafetyContactOptOut.email_normalized` at notify time; the indexed `email_normalized` copy is matched by `SafetyCheckinContact.objects.reaching`. `email` itself is not indexed |
 | `SafetyCheckinContact.name` | Third party's name on a live check-in | Snapshot on an active check-in; scrubbed by the post-resolution archival design rather than encrypted |
+| `SafetyCheckinContact.email_hmac`, `SafetyContactOptOut.email_hmac` | Keyed hash of an archived, alerted contact's normalized address | Not the address: an HMAC-SHA256 under the field-encryption key (`models.fields.keyed_digest`), exact-matched by `blocks_notification` so an opt-out from a link clicked after archival still holds. Nothing to encrypt, and ciphertext would not match. See docs/PRIVACY_MODEL.md for what it reveals and how long it is kept |
 | `ProfileNickname.nickname` | Private nickname a viewer assigns another user | Global search matches it with `nickname__icontains` — see `services.global_search.providers.person_match`, which powers every "from &lt;person&gt;" clause. **This one was encrypted and then reverted**: ciphertext made the lookup silently return nothing, breaking two existing tests (`test_matches_sharer_by_viewers_own_nickname`, `test_messages_from_person_matches_viewers_own_nickname`) with no error raised |
 | `SocialLink.handle` | Public social media handle | User-published-by-design (rendered as a public profile link, not gated by a visibility setting like contact info is); also has a test asserting an exact-match `.filter(handle=...)` |
 | `PushDevice.address` | UnifiedPush endpoint URL / FCM token | `register_device()` does `update_or_create(profile=, address=)` and a DB `UniqueConstraint(profile, address)` — Fernet ciphertext is non-deterministic, so both the idempotent re-registration and the constraint would silently break (duplicate rows per device instead of one). Fixable, but needs a separate deterministic lookup column (e.g. an HMAC-SHA256 of the address) added first — see Follow-ups |

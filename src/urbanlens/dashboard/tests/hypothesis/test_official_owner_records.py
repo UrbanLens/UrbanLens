@@ -24,6 +24,7 @@ from urbanlens.dashboard.plugins.builtin.property_records import (
     _render_available,
     _write_official_owners_and_sales,
 )
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsUnavailableError,
     RedataGateway,
@@ -207,7 +208,9 @@ class FetchOwnerRecordsTests(TestCase):
     def _gateway(self, mock_gateway_cls, *, owners=None, sales=None, base=None):
         gateway = mock_gateway_cls.return_value
         gateway.lookup_parcel.return_value = {"uuid": "parcel-1", **(base or {})}
-        for name in ("lookup_assessments", "lookup_sale_records", "lookup_liens", "lookup_tax_payments"):
+        for name in ("lookup_assessments", "lookup_sale_records"):
+            getattr(gateway, name).return_value = LocationContextEnvelope(count=0, complete=True)
+        for name in ("lookup_liens", "lookup_tax_payments"):
             getattr(gateway, name).return_value = []
         gateway.lookup_coverage.return_value = {}
         gateway.lookup_demographics.return_value = None

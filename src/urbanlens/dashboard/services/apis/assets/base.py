@@ -157,7 +157,7 @@ class MediaProvider(Gateway, ABC):
         Raises:
             Exception: The outage that left every query unanswered, so that nothing is cached (see ``is_source_outage``).
         """
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
 
         if (service_key := self.service_key) is None:
             raise RuntimeError(f"{type(self).__name__} has no service_key configured")
@@ -205,5 +205,8 @@ class MediaProvider(Gateway, ABC):
         data: dict = {"items": [asdict(item) for item in items]}
         if search_names is not None:
             data["search_names"] = search_names
+        if outage is not None:
+            # What did come back is shown, but a query was left unanswered, so the cache keeps it only briefly.
+            data[UNANSWERED_SOURCES_KEY] = [service_key]
         LocationCache.set(location, service_key, data, query_key=query_key, audience=audience)
         return items, False

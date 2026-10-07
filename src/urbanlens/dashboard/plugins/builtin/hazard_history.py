@@ -69,7 +69,8 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
         envelope = RedataHazardsGateway().get_hazard_events(lat, lng, providers=list(_PROVIDERS), years=80, limit=self.row_limit)
         # Belt-and-braces: ?provider= already restricts which sources run.
         events = [event for event in envelope.results if event.get("provider") in _PROVIDERS]
-        LocationCache.set(pin.location, self.cache_source, {"events": events}, query_key=f"{lat:.5f},{lng:.5f}")
+        # One feed's events while the other did not answer are a floor, which the cache keeps only briefly.
+        LocationCache.set(pin.location, self.cache_source, envelope.marked({"events": events}), query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Fires first (they answer a tighter question), then declarations, newest first."""

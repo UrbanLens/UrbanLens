@@ -7,14 +7,14 @@ without YouTube, a building list without Overture's footprints. Only an answer w
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.utils import timezone
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import (
     PARTIAL_ANSWER_STALE_AFTER,
     UNANSWERED_SOURCES_KEY,
@@ -241,3 +241,454 @@ class MediaTests(_Case):
             fetch_redata_temporal_features(self.location, 41.733, -73.93)
 
         self.assert_partial_and_brief(REDATA_FEATURES_CACHE_SOURCE)
+
+
+def _complete(rows: list[dict[str, Any]]) -> LocationContextEnvelope:
+    return LocationContextEnvelope(count=len(rows), complete=True, results=rows)
+
+
+class OwnFetchPanelTests(_Case):
+    """Panels that make their REData calls themselves rather than through ``RedataInfoPanelSource``."""
+
+    _GATEWAYS = "urbanlens.dashboard.services.apis.locations"
+
+    def assert_kept_for_the_window(self, source: str) -> None:
+        row = self.row(source)
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNotNone(LocationCache.get_fresh(self.location, source))
+
+    def _hazards(self, envelope: LocationContextEnvelope) -> str:
+        from urbanlens.dashboard.plugins.builtin.hazard_history import HazardHistoryPanelSource
+
+        source = HazardHistoryPanelSource()
+        with mock.patch(
+            f"{self._GATEWAYS}.redata_hazards_gateway.RedataHazardsGateway.get_hazard_events", return_value=envelope
+        ):
+            source.fetch(self.pin)
+        return source.cache_source
+
+    def test_fire_history_with_a_provider_unanswered_is_kept_briefly(self) -> None:
+        source = self._hazards(_partial([{"provider": "nifc_wildfires", "occurred_at": "2003-08-01"}]))
+
+        self.assert_partial_and_brief(source)
+        self.assertEqual(len(self.row(source).data["events"]), 1)
+
+    def test_complete_fire_history_keeps_the_window(self) -> None:
+        self.assert_kept_for_the_window(
+            self._hazards(_complete([{"provider": "nifc_wildfires", "occurred_at": "2003-08-01"}]))
+        )
+
+    def _elevation(self, envelope: LocationContextEnvelope) -> str:
+        from urbanlens.dashboard.plugins.builtin.open_elevation import ElevationPanelSource
+
+        source = ElevationPanelSource()
+        with mock.patch(
+            f"{self._GATEWAYS}.redata_elevation_gateway.RedataElevationGateway.get_elevation", return_value=envelope
+        ):
+            source.fetch(self.pin)
+        return source.cache_source
+
+    def test_a_coarser_elevation_while_a_finer_model_is_unanswered_is_kept_briefly(self) -> None:
+        source = self._elevation(_partial([{"provider": "srtm", "elevation_meters": 52.0}]))
+
+        self.assert_partial_and_brief(source)
+        self.assertEqual(self.row(source).data["elevation_m"], 52.0)
+
+    def test_a_complete_elevation_keeps_the_window(self) -> None:
+        self.assert_kept_for_the_window(
+            self._elevation(_complete([{"provider": "usgs_3dep", "elevation_meters": 51.0}]))
+        )
+
+    def _site_conditions(self, *, land_cover: object, walkability: object, soil: object) -> str:
+        from urbanlens.dashboard.plugins.builtin.redata_site_conditions import SiteConditionsPanelSource
+
+        def answer(outcome: object) -> dict[str, Any]:
+            return {"side_effect": outcome} if isinstance(outcome, Exception) else {"return_value": outcome}
+
+        source = SiteConditionsPanelSource()
+        with (
+            mock.patch(
+                f"{self._GATEWAYS}.redata_land_cover_gateway.RedataLandCoverGateway.get_land_cover",
+                **answer(land_cover),
+            ),
+            mock.patch(
+                f"{self._GATEWAYS}.redata_walkability_gateway.RedataWalkabilityGateway.get_walkability",
+                **answer(walkability),
+            ),
+            mock.patch(f"{self._GATEWAYS}.redata_soil_gateway.RedataSoilGateway.get_soil_components", **answer(soil)),
+        ):
+            source.fetch(self.pin)
+        return source.cache_source
+
+    def test_site_conditions_with_a_domain_unreachable_are_kept_briefly(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+
+        source = self._site_conditions(
+            land_cover=_complete([{"class_name": "Developed, Low Intensity"}]),
+            walkability=_complete([{"index": 9.5}]),
+            soil=LocationContextUnavailableError("all_providers_unavailable", "ssurgo down"),
+        )
+
+        self.assert_partial_and_brief(source)
+        self.assertEqual(self.row(source).data[UNANSWERED_SOURCES_KEY], ["soil"])
+        self.assertIn("land_cover", self.row(source).data)
+
+    def test_site_conditions_with_a_domain_redata_says_is_incomplete_are_kept_briefly(self) -> None:
+        source = self._site_conditions(
+            land_cover=_complete([{"class_name": "Developed, Low Intensity"}]),
+            walkability=_complete([{"index": 9.5}]),
+            soil=_partial([{"component_name": "Hudson"}]),
+        )
+
+        self.assert_partial_and_brief(source)
+
+    def test_complete_site_conditions_keep_the_window(self) -> None:
+        source = self._site_conditions(
+            land_cover=_complete([{"class_name": "Developed, Low Intensity"}]),
+            walkability=_complete([{"index": 9.5}]),
+            soil=_complete([{"component_name": "Hudson"}]),
+        )
+
+        self.assert_kept_for_the_window(source)
+
+
+_RECORD_GATEWAY = "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway"
+_APN = "12-34-567"
+_ASSESSMENT = {"parcel_identifier": _APN, "tax_year": 2025, "total_value": "250000", "value_stage": "final"}
+_TIER_UNANSWERED = [
+    {"tier": 1, "status": "unavailable", "host": "gis.example.gov", "http_status": 503, "message": "down"}
+]
+
+
+def _outage() -> Exception:
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+        REASON_SOURCE_ERROR,
+        PropertyRecordsUnavailableError,
+    )
+
+    return PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "upstream timed out", retry_later=True)
+
+
+class PropertyRecordTests(_Case):
+    """The sections asked for beside the parcel record: liens, tax, owners, sales, assessments, demographics, parks.
+
+    The record itself was already kept briefly when REData answered it in part. A section REData could not answer was
+    left out and the record cached for the whole window, so the liens or tax history it lacked stayed hidden for days.
+    """
+
+    def _gateway(self, gateway_cls: mock.Mock) -> mock.Mock:
+        gateway = gateway_cls.return_value
+        gateway.lookup_parcel.return_value = {"uuid": "parcel-1", "apn": _APN}
+        gateway.lookup_coverage.return_value = {}
+        gateway.lookup_assessments.return_value = _complete([_ASSESSMENT])
+        gateway.lookup_sale_records.return_value = _complete([])
+        gateway.lookup_liens.return_value = [
+            {"lien_type": "code", "amount": "500", "filed_date": "2024-01-02", "status": "open"}
+        ]
+        gateway.lookup_tax_payments.return_value = [{"tax_year": 2025, "paid": False, "delinquent": True}]
+        gateway.lookup_owners.return_value = []
+        gateway.lookup_sales.return_value = []
+        gateway.lookup_demographics.return_value = {"population": 1000}
+        gateway.lookup_national_parks.return_value = {}
+        return gateway
+
+    def _cached(self, **lookups: object) -> dict[str, Any]:
+        from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsPanelSource
+
+        with mock.patch(_RECORD_GATEWAY) as gateway_cls:
+            gateway = self._gateway(gateway_cls)
+            for name, answer in lookups.items():
+                lookup = getattr(gateway, f"lookup_{name}")
+                if isinstance(answer, Exception):
+                    lookup.side_effect = answer
+                else:
+                    lookup.return_value = answer
+            PropertyRecordsPanelSource().fetch(self.pin)
+        return self.row("property_records").data
+
+    def test_a_section_redata_could_not_answer_is_asked_for_again_within_the_hour(self) -> None:
+        data = self._cached(liens=_outage())
+
+        self.assertIn("liens", data[UNANSWERED_SOURCES_KEY])
+        self.assertNotIn("liens", {key for key in data if key != UNANSWERED_SOURCES_KEY})
+        self.assertTrue(data["available"])
+        self.assertIn("tax_status", data, "the sections that did come back are still shown")
+        self.assertIn("assessment_history", data)
+        self.assert_partial_and_brief("property_records")
+
+    def test_every_section_redata_could_not_answer_is_named(self) -> None:
+        data = self._cached(
+            tax_payments=_outage(), owners=_outage(), sales=_outage(), national_parks=_outage(), demographics=_outage()
+        )
+
+        self.assertEqual(
+            sorted(data[UNANSWERED_SOURCES_KEY]), ["demographics", "national-parks", "owners", "sales", "tax-payments"]
+        )
+        self.assertIn("liens", data)
+
+    def test_a_section_redata_refused_for_good_keeps_the_window(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+            REASON_FORBIDDEN,
+            PropertyRecordsUnavailableError,
+        )
+
+        self._cached(liens=PropertyRecordsUnavailableError(REASON_FORBIDDEN, "This key may not read liens."))
+
+        self.assert_kept_for_the_window("property_records")
+
+    def test_demographics_redata_is_not_configured_for_keeps_the_window(self) -> None:
+        """REData without a Census key refuses every parcel alike, and asking again within the hour changes nothing."""
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+        refusal = PropertyRecordsUnavailableError("census_data_api_not_configured", "No Census key.", retry_later=True)
+        self._cached(demographics=refusal)
+
+        self.assert_kept_for_the_window("property_records")
+
+    def test_an_assessment_answer_missing_a_provider_keeps_its_rows_briefly(self) -> None:
+        partial = LocationContextEnvelope(
+            count=1, complete=False, results=[_ASSESSMENT], providers=[{"provider": "ny_orps", "status": "unavailable"}]
+        )
+
+        data = self._cached(assessments=partial)
+
+        self.assertEqual([row["tax_year"] for row in data["assessment_history"]], [2025])
+        self.assertIn("assessments:ny_orps", data[UNANSWERED_SOURCES_KEY])
+        self.assert_partial_and_brief("property_records")
+
+    def test_a_sale_record_answer_missing_a_provider_is_asked_for_again(self) -> None:
+        partial = LocationContextEnvelope(
+            count=0, complete=False, results=[], providers=[{"provider": "ct_opm", "status": "rate_limited"}]
+        )
+
+        data = self._cached(sale_records=partial)
+
+        self.assertIn("sale-records:ct_opm", data[UNANSWERED_SOURCES_KEY])
+        self.assert_partial_and_brief("property_records")
+
+    def test_a_complete_record_keeps_the_window(self) -> None:
+        data = self._cached()
+
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, data)
+        self.assert_kept_for_the_window("property_records")
+
+    def assert_kept_for_the_window(self, source: str) -> None:
+        row = self.row(source)
+        self.assertNotIn(UNANSWERED_SOURCES_KEY, row.data)
+        later = timezone.now() + PARTIAL_ANSWER_STALE_AFTER + timedelta(minutes=1)
+        with mock.patch("django.utils.timezone.now", return_value=later):
+            self.assertIsNotNone(LocationCache.get_fresh(self.location, source))
+
+
+class ProviderResultsGatewayTests(SimpleTestCase):
+    """``/assessments/`` and ``/sale-records/`` answer REData's provider envelope; its ``complete`` was dropped."""
+
+    def _answer(self, read: str, body: dict[str, Any]) -> LocationContextEnvelope:
+        session = mock.Mock()
+        response = mock.Mock(status_code=200, headers={}, text="")
+        response.json.return_value = body
+        session.get.return_value = response
+        gateway = RedataGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
+        answer = getattr(gateway, read)("parcel-1")
+        assert isinstance(answer, LocationContextEnvelope)
+        return answer
+
+    def test_an_answer_missing_a_provider_says_which(self) -> None:
+        body = {
+            "count": 1,
+            "complete": False,
+            "results": [_ASSESSMENT],
+            "providers": [{"provider": "ny_orps", "status": "unavailable"}, {"provider": "ok", "status": "ok"}],
+        }
+        for read in ("lookup_assessments", "lookup_sale_records"):
+            with self.subTest(read=read):
+                answer = self._answer(read, body)
+
+                self.assertEqual((answer.results, answer.unanswered_sources), ([_ASSESSMENT], ["ny_orps"]))
+
+    def test_an_older_redata_that_sends_no_complete_is_taken_as_complete(self) -> None:
+        for read in ("lookup_assessments", "lookup_sale_records"):
+            with self.subTest(read=read):
+                answer = self._answer(read, {"results": [_ASSESSMENT]})
+
+                self.assertEqual((answer.results, answer.complete), ([_ASSESSMENT], True))
+
+
+class OfficialOwnerTests(_Case):
+    """A record REData answered in part may name today's owner; it is not evidence that anyone else stopped owning."""
+
+    def _linked(self) -> set[str]:
+        return set(self.location.owners.values_list("name", flat=True))
+
+    def test_a_partial_record_links_its_owner_and_unlinks_nobody(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["New Owner LLC"], UNANSWERED_SOURCES_KEY: _TIER_UNANSWERED}
+        )
+
+        self.assertEqual(self._linked(), {"Old Owner LLC", "New Owner LLC"})
+
+    def test_a_record_that_names_its_gaps_only_vaguely_is_partial_too(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["New Owner LLC"], UNANSWERED_SOURCES_KEY: ["unknown"]}
+        )
+
+        self.assertEqual(self._linked(), {"Old Owner LLC", "New Owner LLC"})
+
+    def test_a_record_missing_only_a_section_still_settles_who_owns_it(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(
+            self.location, {"owner_name": ["New Owner LLC"], UNANSWERED_SOURCES_KEY: ["liens", "assessments:ny_orps"]}
+        )
+
+        self.assertEqual(self._linked(), {"New Owner LLC"})
+
+    def test_a_complete_record_unlinks_the_owner_it_no_longer_names(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.property_records import _write_official_owners_and_sales
+
+        _write_official_owners_and_sales(self.location, {"owner_name": ["Old Owner LLC"]})
+        _write_official_owners_and_sales(self.location, {"owner_name": ["New Owner LLC"]})
+
+        self.assertEqual(self._linked(), {"New Owner LLC"})
+
+
+_ANY_SECTION = {"count": 0, "complete": True, "results": [], "providers": [], "next": None}
+
+
+class SectionRefusalTests(_Case):
+    """Only a section REData could not answer for now is named; one it refused for good is not (review finding 1).
+
+    Asked through the real gateway, so each refusal is classified as REData's status code makes it.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def _unanswered(self, section: str, status: int, body: object, headers: dict[str, str] | None = None) -> list[Any]:
+        """The sections named unanswered when ``section`` answers ``status``, through the breaker a real session has."""
+        from urbanlens.dashboard.plugins.builtin.property_records import _add_sections
+
+        def request(_method: str, url: str, **_kwargs: object) -> mock.Mock:
+            failing = f"/{section}/" in url
+            code = status if failing else 200
+            response = mock.Mock(status_code=code, headers=(headers or {}) if failing else {}, text="", ok=code == 200)
+            response.json.return_value = body if failing else _ANY_SECTION
+            return response
+
+        inner = mock.Mock()
+        inner.request.side_effect = request
+        gateway = RedataGateway(base_url="https://redata.example.test", api_key="test-key")
+        # The gateway's own rate-limited session, so REData's breaker sees every answer; only the wire is stubbed.
+        cast("Any", gateway.session)._session = inner
+        payload: dict[str, Any] = {"uuid": "parcel-1", "available": True}
+        _add_sections(payload, gateway, "parcel-1")
+        return list(payload.get(UNANSWERED_SOURCES_KEY) or [])
+
+    def test_a_section_the_key_may_not_read_is_not_asked_for_hourly(self) -> None:
+        for section in ("demographics", "owners", "liens"):
+            with self.subTest(section=section):
+                self.assertEqual(self._unanswered(section, 403, {"detail": "You do not have permission."}), [])
+
+    def test_a_refusal_the_breaker_holds_for_the_next_parcel_is_not_asked_for_hourly_either(self) -> None:
+        """After one 403 the breaker holds the endpoint for an hour, so the next parcel's call never goes out."""
+        refused = {"detail": "You do not have permission."}
+
+        self.assertEqual(self._unanswered("owners", 403, refused), [])
+        self.assertEqual(self._unanswered("owners", 403, refused), [])
+
+    def test_a_section_redata_has_no_such_parcel_for_is_not_asked_for_hourly(self) -> None:
+        for body in ({"detail": "Not found."}, {"error": "no_data_found", "message": "none"}):
+            with self.subTest(body=body):
+                self.assertEqual(self._unanswered("national-parks", 404, body), [])
+
+    def test_a_section_redata_could_not_answer_for_now_is_named(self) -> None:
+        cases: tuple[tuple[int, dict[str, str], dict[str, str]], ...] = (
+            (503, {"error": "source_error", "message": "upstream timed out"}, {}),
+            (500, {"detail": "Server error"}, {}),
+            (429, {"detail": "throttled"}, {"Retry-After": "30"}),
+        )
+        for status, body, headers in cases:
+            with self.subTest(status=status):
+                # A 429 holds REData's whole pool, so the sections asked after it go unanswered too.
+                self.assertIn("liens", self._unanswered("liens", status, body, headers))
+
+
+class PartialBoundaryTests(_Case):
+    """REData 0.3.7 names the sources its unfiltered ``/boundaries/`` could not hear from (review finding 2)."""
+
+    _CANDIDATE = {
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+                [[-73.931, 41.732], [-73.929, 41.732], [-73.929, 41.734], [-73.931, 41.734], [-73.931, 41.732]]
+            ],
+        },
+        "is_suggested": True,
+        "kind": "area",
+    }
+
+    def test_the_gateway_keeps_the_sources_boundaries_did_not_hear_from(self) -> None:
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import UNANSWERED_SOURCES_HEADER
+
+        session = mock.Mock()
+        response = mock.Mock(status_code=200, headers={UNANSWERED_SOURCES_HEADER: "ny_cris, tigerweb"}, text="")
+        response.json.return_value = [self._CANDIDATE]
+        session.get.return_value = response
+
+        answer = RedataGateway(
+            base_url="https://redata.example.test", api_key="test-key", session=session
+        ).lookup_boundaries("parcel-1")
+
+        self.assertEqual((answer.candidates, answer.unanswered_sources), ([self._CANDIDATE], ("ny_cris", "tigerweb")))
+
+    def test_a_scored_boundary_from_a_partial_answer_is_deferred_not_drawn(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBoundaries
+
+        gateway = mock.Mock()
+        gateway.lookup_boundaries.return_value = ParcelBoundaries([self._CANDIDATE], unanswered_sources=("ny_cris",))
+
+        with self.assertRaises(BoundaryProviderDeferredError):
+            RedataBoundaryProvider()._scored_boundary(gateway, "parcel-1")
+
+    def test_a_scored_boundary_from_a_complete_answer_is_drawn(self) -> None:
+        from django.contrib.gis.geos import Polygon
+
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBoundaries
+
+        gateway = mock.Mock()
+        gateway.lookup_boundaries.return_value = ParcelBoundaries([self._CANDIDATE])
+
+        self.assertIsInstance(RedataBoundaryProvider()._scored_boundary(gateway, "parcel-1"), Polygon)
+
+    def test_a_hull_of_a_partial_building_list_is_deferred_however_many_it_names(self) -> None:
+        from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
+        from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
+
+        corners = ((41.7325, -73.9305), (41.7325, -73.9295), (41.7335, -73.9295), (41.7335, -73.9305))
+        buildings = [
+            {**_BUILDING, "name": f"Hall {n}", "latitude": lat, "longitude": lng}
+            for n, (lat, lng) in enumerate(corners)
+        ]
+        gateway = mock.Mock()
+        gateway.lookup_parcel_buildings.return_value = ParcelBuildings(buildings, unanswered_sources=("overture",))
+
+        with self.assertRaises(BoundaryProviderDeferredError):
+            RedataBoundaryProvider()._buildings_convex_hull(gateway, "parcel-1", 41.733, -73.93)
+
+        gateway.lookup_parcel_buildings.return_value = ParcelBuildings(buildings)
+        self.assertIsNotNone(RedataBoundaryProvider()._buildings_convex_hull(gateway, "parcel-1", 41.733, -73.93))

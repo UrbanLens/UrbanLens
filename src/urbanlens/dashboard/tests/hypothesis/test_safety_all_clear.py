@@ -201,6 +201,32 @@ class AllClearDuringEscalationTests(_AllClearTestCase):
         self.assertIn("hasn't checked in", subjects[0])
         self.assertIn("stop looking", subjects[1])
 
+    def test_a_contact_alerted_while_the_owner_deletes_it_hears_it_was_removed(self) -> None:
+        """Deleting resolves first and deletes after; an alert saved in between is told from here, worded as a removal."""
+        SafetyCheckinContact.objects.exclude(pk=self.by_email.pk).delete()
+        real_send = safety_service._send_email
+        resolved: list[bool] = []
+
+        def send_then_owner_starts_deleting(**kwargs) -> None:
+            real_send(**kwargs)
+            if kwargs["to"] == "rescuer@example.com" and not resolved:
+                # delete_checkin's first step; the row is deleted only after it returns.
+                resolved.append(check_in(SafetyCheckin.objects.get(pk=self.checkin.pk), self.owner, removing=True))
+
+        with (
+            notification_emails_sent(),
+            mock.patch.object(safety_service, "_send_email", side_effect=send_then_owner_starts_deleting),
+        ):
+            escalate_checkin(self.checkin)
+
+        self.assertEqual(resolved, [True])
+        _alert, over = self._messages_to("rescuer@example.com")
+        self.assertIn("stop looking", over.subject.lower())
+        text = self._html(over).lower()
+        self.assertIn("removed their check-in", text)
+        self.assertNotIn("checked in", text)
+        self.assertNotIn("view check-in", text)
+
 
 class AllClearOnceTests(_AllClearTestCase):
     def test_a_second_pass_over_a_contact_already_told_sends_nothing(self) -> None:

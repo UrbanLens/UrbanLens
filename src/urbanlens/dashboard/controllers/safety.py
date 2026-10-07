@@ -1698,8 +1698,13 @@ class SafetyContactOptOutView(View):
         if SafetyContactOptOutScope.invalid(scope):
             raise Http404
         contact = get_object_or_404(SafetyCheckinContact.objects.by_token(token))
-        record_contact_opt_out(contact, SafetyContactOptOutScope(scope))
-        messages.success(request, "You won't receive further notifications about this trip.")
+        if record_contact_opt_out(contact, SafetyContactOptOutScope(scope)):
+            messages.success(request, "You won't receive further notifications about this trip.")
+        else:
+            messages.error(
+                request,
+                "This check-in was archived and your address deleted with it, so this link couldn't record an opt-out. The link in any future alert you receive will work.",
+            )
         return redirect("safety.contact.portal", token=token)
 
 

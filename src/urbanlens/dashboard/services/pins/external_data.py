@@ -1871,26 +1871,31 @@ def _mark_unavailable_here(source: PanelSource, pin: Pin, service: str) -> None:
     cache.set(source.skip_key(pin), 1, UNAVAILABLE_HERE_TTL_SECONDS)
 
 
-def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) -> None:
+def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) -> int | None:
     """Execute one panel fetch inside the Celery worker. Owns the failure policy so individual sources don't have to:
 
     Args:
         source_key: A :func:`panel_sources` key.
-        pin: The pin whose panel data should be fetched."""
+        pin: The pin whose panel data should be fetched.
+
+    Returns:
+        The seconds to wait before asking again, when the source is working out its answer and will have it then
+        (an ``UpstreamBusyError`` whose ``answer_pending`` is set); None otherwise, a throttle or outage included."""
     source = get_panel_source(source_key)
     if source is None:
         logger.warning("Panel fetch for unknown source '%s' skipped (plugin removed or disabled?)", source_key)
-        return
+        return None
     if not pin.profile.external_apis_enabled:
         # External APIs may have been turned off after this task was enqueued;
         # skip without recording a failure so the panel just stays absent.
         _release_flight(source, pin, flight_token)
-        return
+        return None
 
     started = time.monotonic()
     logger.debug("Panel fetch %s for pin %s starting on queue '%s'", source_key, pin.pk, source.queue)
     # Every service the environment refuses on the way, including a refusal the source swallowed itself.
     refused: list[str] = []
+    deferred_for: int | None = None
     try:
         with collect_refusals() as refused:
             if not (isinstance(source, LocationCachePanelSource) and source.adopt_site_answer(pin)):
@@ -1910,6 +1915,7 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
     except UpstreamBusyError as exc:
         logger.info("Panel fetch %s for pin %s deferred %ss: %s", source_key, pin.pk, exc.retry_after, exc)
         cache.set(source.skip_key(pin), 1, exc.retry_after)
+        deferred_for = exc.retry_after if exc.answer_pending else None
     except (RateLimitExceededError, ServiceDisabledError) as exc:
         logger.debug("Panel fetch %s for pin %s skipped: %s", source_key, pin.pk, exc)
         cache.set(source.skip_key(pin), 1, DISABLED_SKIP_TTL_SECONDS)
@@ -1943,3 +1949,4 @@ def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) 
             cache.set(source.skip_key(pin), 1, FAILURE_SKIP_TTL_SECONDS)
     finally:
         _release_flight(source, pin, flight_token)
+    return deferred_for

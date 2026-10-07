@@ -180,6 +180,10 @@ REData and no network.
 - **`gaps`** on a row lists fields the reader looks for that REData does not publish there: a tolerated fallback, or a
   known mismatch such as the floorplan editor reading UrbanLens's own plan shape from REData's plan document. Each must
   stay unpublished, so the row is revisited when REData fills the gap.
+- **`optional`** on a row lists top-level fields REData publishes that an older REData UrbanLens still supports does
+  not send, such as `/search/news/`'s `complete`, `degraded` and `providers` (REData 0.3.7 and later). The reader
+  defaults them, `bin/vendor_redata_schema.py` leaves them out of the body's `required`, and the test holds both that
+  and that REData still publishes them.
 - **What it cannot see:** fields REData sends but does not document (a parcel sub-resource's 404 `message` is one,
   hence a gap), and reads the harvest missed. The table was built by tracing every REData reader in the code; a new
   reader that is not added to it goes unchecked.

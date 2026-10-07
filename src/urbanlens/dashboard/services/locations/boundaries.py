@@ -75,6 +75,13 @@ class ResolvedBoundaries:
     deferred: list[str] = field(default_factory=list)
     #: The longest wait any deferring provider asked for, in seconds.
     retry_after: int | None = None
+    #: Deferring providers that are computing their answer and said when they will have it.
+    computing: list[str] = field(default_factory=list)
+
+    @property
+    def backs_off(self) -> bool:
+        """Whether any provider deferred for a reason other than computing its answer, so a retry should back off."""
+        return bool(set(self.deferred) - set(self.computing))
 
     def polygon_for(self, boundary_type: str) -> MultiPolygon | None:
         """The resolved polygon for a :class:`BoundaryType` value, or None."""
@@ -126,6 +133,8 @@ class BoundaryProviderChain:
                 typed = provider.get_typed_boundaries(latitude, longitude, name=name)
             except BoundaryProviderDeferredError as exc:
                 resolved.deferred.append(exc.service_key)
+                if exc.computing:
+                    resolved.computing.append(exc.service_key)
                 if exc.retry_after is not None:
                     resolved.retry_after = max(resolved.retry_after or 0, exc.retry_after)
                 continue
@@ -313,7 +322,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
     outcome = ensure_place_outcome(location, name=name, force=force)
     place = outcome.place
     if outcome.deferred:
-        _schedule_deferred_retry(location, outcome.retry_after, attempt=attempt, force=place is not None)
+        _schedule_deferred_retry(location, outcome.retry_after, attempt=attempt, force=place is not None, backs_off=outcome.backs_off)
     if place is None and not outcome.deferred and location.place_id is None:
         # Nothing resolved and nothing provisioned: record that we asked, and refresh the
         # stamp on a later retry so a circle is not re-queried on every view. A deferred
@@ -344,7 +353,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
     return place
 
 
-def _schedule_deferred_retry(location: Location, retry_after: int | None, *, attempt: int, force: bool) -> None:
+def _schedule_deferred_retry(location: Location, retry_after: int | None, *, attempt: int, force: bool, backs_off: bool = True) -> None:
     """Ask the provider chain again once the deferring provider's wait is over.
 
     Args:
@@ -353,6 +362,8 @@ def _schedule_deferred_retry(location: Location, retry_after: int | None, *, att
         attempt: How many retries preceded this run.
         force: Re-run the chain even though a fallback provider already placed the location, so the
             authoritative outline can replace the fallback's.
+        backs_off: Wait at least an exponential back-off; False when every deferring provider was computing its
+            answer, which it will have after ``retry_after``.
     """
     if attempt >= MAX_DEFERRED_RETRIES:
         logger.info("Place resolution for location %s still deferred after %d retries", location.pk, attempt)
@@ -360,7 +371,7 @@ def _schedule_deferred_retry(location: Location, retry_after: int | None, *, att
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import generate_boundaries_for_location
 
-    countdown = max(retry_after or 0, DEFERRED_RETRY_BASE_SECONDS * 2**attempt)
+    countdown = max(retry_after or 0, DEFERRED_RETRY_BASE_SECONDS * 2**attempt) if backs_off else max(retry_after or 0, 1)
     safely_enqueue_task(generate_boundaries_for_location, location.pk, countdown=countdown, force=force, attempt=attempt + 1)
 
 

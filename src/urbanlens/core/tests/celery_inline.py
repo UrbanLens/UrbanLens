@@ -123,10 +123,10 @@ def notification_emails_sent() -> Iterator[mock.MagicMock]:
         The patched ``safely_enqueue_task`` mock."""
     from django.test import TestCase
 
-    from urbanlens.dashboard.tasks import send_email_task, send_notification_email_task
+    from urbanlens.dashboard.tasks import send_email_task, send_notification_email_task, send_safety_resolution_email
 
     with (
-        tasks_run_inline(send_notification_email_task, send_email_task) as enqueue,
+        tasks_run_inline(send_notification_email_task, send_email_task, send_safety_resolution_email) as enqueue,
         TestCase.captureOnCommitCallbacks(execute=True),
     ):
         yield enqueue
