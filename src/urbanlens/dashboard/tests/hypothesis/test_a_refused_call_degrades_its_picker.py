@@ -71,6 +71,10 @@ class TheImmichPickerDegradesTests(_PickerCase):
     def setUp(self) -> None:
         super().setUp()
         ImmichAccount.objects.create(profile=self.user.profile, server_url="https://photos.example.com", api_key="k")
+        # The server's host is resolved before the call, so a stub keeps the lookup off the network guard.
+        dns = mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
+        dns.start()
+        self.addCleanup(dns.stop)
 
     def test_an_unreadable_limiter_shows_the_error_card_without_calling_out(self) -> None:
         with (

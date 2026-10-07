@@ -116,9 +116,10 @@ class SafetySweepIsolationTests(TestCase):
             title="healthy", checkin_by=self.now - timedelta(hours=3), status=SafetyCheckinStatus.AWAITING_CHECKIN
         )
 
-        def escalate(checkin: SafetyCheckin) -> None:
+        def escalate(checkin: SafetyCheckin) -> bool:
             if checkin.title == "poisoned":
                 raise ValueError("corrupt contact row")
+            return True
 
         with mock.patch("urbanlens.dashboard.services.visits.safety.escalate_checkin", side_effect=escalate):
             self.assertEqual(escalate_overdue_checkins(), 1)

@@ -198,5 +198,3 @@ def main():
 if __name__ == "__main__":
     """Run when called directly."""
     main()
-if __name__ == "__main__":
-    main()

@@ -252,7 +252,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
-  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
+  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV (a CSV text cell that opens with `=`, `+`,
+  `-`, `@`, a tab or a carriage return gets a leading `'` so a spreadsheet reads it as text)
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups. The archive
   carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
   profile's contact/social fields - all importable, with deliberate exceptions: live-status
@@ -1067,18 +1068,24 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
-  when more exist; the import runs in the `import_calendar_events` task behind a progress poll.
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll, and skips
+  an event once the profile is at `max_upcoming_trips_per_user`, saying how many were skipped.
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
   (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
-  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. Only Google's refusal of the
+  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. Stops withheld from the
+  exporter are written first, so a budget cut leaves the events that matter least. An event Google
+  refuses for itself (`forbiddenForNonOrganizer`, a 400) is skipped and counted ("Google Calendar
+  refused to change K"), and the rest are still written; a push that met one counts an attempt only
+  when it wrote nothing else (UrbanLens#332). Only Google's refusal of the
   user's grant drops the connection: `invalid_grant` from the token endpoint, a 401 a fresh access
   token does not cure (the gateway refreshes and retries once), or a 403 naming a reason that is not
   a rate limit, not about one event (`forbiddenForNonOrganizer`) and not about the site. A refresh
   that gets a 5xx, a 429 or no answer is "busy" like a rate limit; a refusal of the site's Google
   project (`accessNotConfigured`, `SERVICE_DISABLED`, ...) or OAuth client, or a 403 naming no
   reason, is logged at ERROR and reported as calendar sync being unavailable (UrbanLens#302). A push
-  or queued delete held up by any of those, or by Google failing (`CalendarServerError`), waits for
+  or queued delete held up by any of those, by Google failing (`CalendarServerError`), or by our own
+  limiter (unreadable, or the service switched off), waits for
   the sweep and is not counted toward `MAX_CALENDAR_PUSH_ATTEMPTS`; only a refusal of the write
   itself is, and anything still owed after `MAX_OWED_CALENDAR_WRITE_AGE` (30 days) is dropped.
   Each member's export applies their own location
@@ -1090,9 +1097,14 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   adder account) queues the same auto-sync push an edit does (`models/calendar_sync/signals.py`). A
   deleted stop or trip has the events UrbanLens made for it deleted from every exporter's calendar,
   through the calendar budget (`CalendarEventDeletion`, `delete_orphaned_calendar_events`, retried
-  by the push sweep); an event an import linked from the user's own calendar is never deleted (UrbanLens#301).
-  `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`) rewrites, once, the events
-  of exports without auto-sync that may still hold a location or title now withheld
+  by the push sweep). An event an import linked from the user's own calendar is never deleted, on
+  any path: "Remove from Google Calendar" and its API unlink it and say so, an export unlinks it
+  when its stop loses its schedule, and `queue_calendar_event_deletion` refuses it (UrbanLens#301,
+  UrbanLens#330). `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`)
+  rewrites, once, the events of exports without auto-sync that may still hold a location or title
+  now withheld, an unscheduled stop's included; an imported event only when its fingerprint shows
+  UrbanLens wrote what is now withheld, and then only its location and title, each only where the
+  event still holds what UrbanLens wrote; otherwise it is counted and left (UrbanLens#333)
 - A hidden stop (its own "hide location", or its adder's `trip_pin_location_visibility`) shows a
   member who may not see it neither its place's name nor its location: the activities panel and its
   edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel,
@@ -1120,14 +1132,33 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - "I didn't come home" style safety net: create a check-in with expected return time and
   emergency contacts (registered friends or external email contacts). A contact added by email is shown as
   the address typed, never matched to an account for the owner; the account that verified it still gets
-  the in-app alerts (`_contact_account` in `services/visits/safety.py`) and sees the check-in under "Shared
-  with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
+  the in-app alerts (`_contact_account` in `services/visits/safety.py`) and, once alerted, sees the check-in
+  under "Shared with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
 - Escalation on missed check-in: emails emergency contacts, optionally posts to the location's
   community wiki, notifies pin owners
+- The owner gets a "check in now" final warning about five minutes before escalation, and escalation waits
+  for it: a warning sent late (a missed beat tick) holds escalation `FINAL_WARNING_MIN_NOTICE` after it, and
+  one that never goes out holds it at most `FINAL_WARNING_MAX_WAIT` past the overdue point. Each side claims
+  its row with a conditional write, so the warning never follows a contact alert (`due_for_final_warning`,
+  `due_for_escalation`)
+- A contact learns nothing of a check-in until escalation alerts them (GOALS.md, "Safety check-ins"); seeing it
+  earlier is for an accepted partner, whom the owner chose. "Shared with you", the shared status page, its
+  photos, and every magic-link token route (portal, photo, route map, chat, mark-safe, opt-out) reach only a
+  contact with `notified_at` set (`SafetyCheckinContact.objects.alerted`, `by_token`). The "found safe" and
+  "plan updated" notices go to those contacts only, so a partner resolving it early tells no one else
+- When an escalated check-in ends, every alerted contact is told, once (`resolution_notified_at` is claimed
+  before sending), through the alert's channels and behind the opt-out gate: "found" when someone reported the
+  owner safe, otherwise an all-clear ("you can stop looking") for the owner checking in late, cancelling or
+  deleting it. A contact alerted while the owner was checking in gets it from the escalation itself
+  (`_tell_alerted_contacts_it_is_over`)
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+- An opt-out holds however the person is added. One made as an account, or from an emailed link to any address
+  that account verified (compared normalized), stops both the email and the in-app alert, as the opt-out page
+  promises. One on an address no account has verified stops mail to that address only, so an account that
+  never proved it is that person is still alerted in-app (`is_contact_opted_out`, `_contact_recipients`)
 - Community-wiki posting is gated by `services.visits.safety.find_visible_community_wiki` and
   `community_wiki_opt_in`, so a check-in can only notify or link a wiki its owner can actually see
 
@@ -1629,7 +1660,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   `settings.PROXIED_BYTES_CACHE` that treat an unreachable or full cache as a miss rather than an error,
   and `set_if_small` to refuse bodies over a ceiling while still serving them.
 - **`read_capped`** (`services/core/gateway.py`) - read a `stream=True` response up to a byte ceiling,
-  refusing (not truncating) anything larger and refusing a response that was not streamed.
+  refusing (not truncating) anything larger and refusing a response that was not streamed. A read that
+  fails midway raises `GatewayRequestError` like a refusal does, and a response refused for its size is closed.
 - **`reorder_id_ceiling`** (`services/core/reorder_limits.py`) - the most ids a drag-and-drop reorder may
   name: the container's own item limit, or that setting's validator maximum when it is unlimited.
 - **`UpstreamBreaker`** (`services/core/upstream_breaker.py`) - an upstream that tells this deployment

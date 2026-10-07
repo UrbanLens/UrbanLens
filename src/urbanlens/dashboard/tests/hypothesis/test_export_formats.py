@@ -11,9 +11,11 @@ import math
 from fastkml import kml
 import gpxpy
 from pygeoif.geometry import Point
+import pytest
 
-from hypothesis import given, strategies as st
+from hypothesis import assume, given, strategies as st
 from urbanlens.dashboard.services.import_export.export_formats import (
+    csv_text_cell,
     pins_to_csv,
     pins_to_geojson,
     pins_to_gpx,
@@ -98,10 +100,38 @@ def test_csv_round_trips_row_count_and_values(pins: list[_FakePin]) -> None:
     assert header == ["name", "latitude", "longitude", "description"]
     assert len(data_rows) == len(pins)
     for pin, row in zip(pins, data_rows, strict=True):
-        assert row[0] == pin.effective_name
+        assert row[0] == csv_text_cell(pin.effective_name)
         assert float(row[1]) == pin.effective_latitude
         assert float(row[2]) == pin.effective_longitude
-        assert row[3] == pin.description
+        assert row[3] == csv_text_cell(pin.description)
+
+
+@pytest.mark.parametrize("trigger", ["=", "+", "-", "@", "\t", "\r"])
+def test_csv_text_cell_defuses_spreadsheet_formula_prefixes(trigger: str) -> None:
+    assert csv_text_cell(f'{trigger}HYPERLINK("http://evil")') == f'\'{trigger}HYPERLINK("http://evil")'
+
+
+@given(_printable_text)
+def test_csv_text_cell_leaves_text_without_a_formula_prefix_alone(text: str) -> None:
+    assume(not text.startswith(("=", "+", "-", "@", "\t", "\r")))
+    assert csv_text_cell(text) == text
+
+
+def test_csv_text_cell_treats_none_as_empty() -> None:
+    assert csv_text_cell(None) == ""
+
+
+def test_csv_export_neutralises_formulas_in_user_text_but_not_numbers() -> None:
+    pins = [
+        _FakePin(
+            effective_name="=cmd|' /C calc'!A0",
+            effective_latitude=-12.5,
+            effective_longitude=-3.25,
+            description="@SUM(A1)",
+        )
+    ]
+    _header, row = csv.reader(io.StringIO(pins_to_csv(pins)))
+    assert row == ["'=cmd|' /C calc'!A0", "-12.5", "-3.25", "'@SUM(A1)"]
 
 
 def test_empty_pin_list_produces_valid_empty_documents() -> None:

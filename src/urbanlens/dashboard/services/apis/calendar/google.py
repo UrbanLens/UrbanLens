@@ -226,6 +226,14 @@ class CalendarServerError(GatewayRequestError):
     """
 
 
+class CalendarEventRefusedError(GatewayRequestError):
+    """Google refused a request for something in it, which on a write means that one event: ``forbiddenForNonOrganizer``
+    (a shared property changed on a copy the user does not organise), or a 4xx no other error names, such as a 400.
+
+    A write of another event may still go through, unlike after any other failure.
+    """
+
+
 class CalendarNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError):
     """Raised when the site has no Google OAuth client configured."""
 
@@ -437,7 +445,9 @@ class GoogleCalendarGateway(Gateway):
             CalendarEventNotFoundError: The event does not exist, or was deleted (404/410).
             CalendarEventExistsError: The client-assigned id of an event being created is taken (409).
             CalendarServerError: Google failed (5xx, 408) or did not answer.
-            GatewayRequestError: Any other failure, including a refusal of one event.
+            CalendarEventRefusedError: Google refused the request for something in it: ``forbiddenForNonOrganizer``,
+                or any other 4xx.
+            GatewayRequestError: Any other failure.
         """
         refreshed = self.account.is_token_expired
         response = self._send(method, url, params=params, json_body=json_body)
@@ -470,7 +480,7 @@ class GoogleCalendarGateway(Gateway):
         if is_rate_limit_refusal(response):
             raise CalendarRateLimitedError(type(self).service_key, retry_after=upstream_retry_after(response) or UPSTREAM_BUSY_DEFAULT_SECONDS)
         if is_event_refusal(response):
-            raise GatewayRequestError(f"Google Calendar refused a change to one event ({response.status_code}).")
+            raise CalendarEventRefusedError(f"Google Calendar refused a change to one event ({response.status_code}).")
         if response.status_code in (401, 403):
             raise GoogleAuthExpiredError("Google Calendar access was denied. Please reconnect your account.")
         if response.status_code in (404, 410):
@@ -479,6 +489,8 @@ class GoogleCalendarGateway(Gateway):
             raise CalendarEventExistsError("A calendar event with this id already exists.")
         if response.status_code >= 500 or response.status_code == 408:
             raise CalendarServerError(f"Google Calendar failed with status {response.status_code}.")
+        if 400 <= response.status_code < 500:
+            raise CalendarEventRefusedError(f"Google Calendar refused the request ({response.status_code}).")
         raise GatewayRequestError(f"Google Calendar API request failed with status {response.status_code}.")
 
     def list_events(

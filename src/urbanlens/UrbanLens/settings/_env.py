@@ -14,14 +14,20 @@ _FALSE_VALUES = frozenset({"0", "false", "f", "no", "n", "off", ""})
 
 
 def env_bool(name: str, default: bool) -> bool:
-    """Read a boolean env var; fall back to default when unset or unrecognised.
+    """Read a boolean env var; use the default only when it is unset.
+
+    A value that is not a recognised spelling refuses to start rather than silently becoming either answer: ``SESSION_COOKIE_SECURE=ture``
+    read as False would ship insecure cookies, and read as the default would hide that the operator's setting was ignored.
 
     Args:
         name: The environment variable to read.
-        default: Value to use when the variable is unset or unrecognised.
+        default: Value to use when the variable is unset.
 
     Returns:
         The parsed boolean.
+
+    Raises:
+        ImproperlyConfigured: When the variable is set to something other than a true or false spelling.
     """
     raw = os.getenv(name)
     if raw is None:
@@ -31,7 +37,8 @@ def env_bool(name: str, default: bool) -> bool:
         return True
     if normalized in _FALSE_VALUES:
         return False
-    return default
+    accepted = ", ".join(sorted(_TRUE_VALUES | _FALSE_VALUES - {""}))
+    raise ImproperlyConfigured(f"{name} is set to a value that is not a boolean. Use one of: {accepted}.")
 
 
 #: Environment names meaning the real shared deployment. Fail-closed allow-list.

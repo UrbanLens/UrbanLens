@@ -19,6 +19,7 @@ from django.core.cache import cache
 from django.db.models import OuterRef, QuerySet, Subquery
 from django.utils import timezone
 
+from urbanlens.dashboard.services.import_export.export_formats import csv_text_cell
 from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS, is_missing
 
 if TYPE_CHECKING:
@@ -713,7 +714,7 @@ def _export_pins_google_takeout(profile: Any, temp_dir: str, *, base_url: str = 
             note = pin.description or ""
             url = f"{base_url.rstrip('/')}/dashboard/map/pin/{pin.slug}/" if pin.slug else ""
             tags = ", ".join(b.name for b in pin.labels.all() if hasattr(b, "name"))
-            writer.writerow([name, note, url, tags, ""])
+            writer.writerow([csv_text_cell(name), csv_text_cell(note), url, csv_text_cell(tags), ""])
 
 
 def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:

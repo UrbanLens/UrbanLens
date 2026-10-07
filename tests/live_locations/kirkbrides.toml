@@ -2,13 +2,22 @@
 #
 # Source: the "Notable Kirkbride hospitals / United States" table of Wikipedia's "Kirkbride Plan"
 # article (2026-10-05), coordinates from each article or its Wikidata item (P625), NRHP
-# reference numbers from the table or Wikidata (P649). St. Lawrence and Harlem Valley are
-# added by hand; Harlem Valley is not a Kirkbride but is a required reference campus.
+# reference numbers from the table or Wikidata (P649). Where neither gives one, nrhp is the NPS
+# National Register database's listing for a campus building or its district (2026-10-07), named
+# in a comment under the entry. A listing the Register has removed is not expected, and its
+# entry says so. St. Lawrence and Harlem Valley are added by hand; Harlem Valley is not a
+# Kirkbride but is a required reference campus.
 # Omitted for want of any published coordinate: Mount Pleasant State Hospital (IA),
 # Nevada State Hospital (MO), San Antonio State Hospital (TX).
 #
 # tier = "primary": anchor verified by hand; every check must pass.
-# status = "demolished": the Kirkbride building is gone, so building checks do not apply.
+# status says whether buildings stand at the point, not whether the campus's own Kirkbride
+# survives (Central State IN, Mendocino and others lost theirs). "demolished" skips the building,
+# footprint and build-date checks; "standing" runs them. The nine campuses first marked
+# "demolished" from Wikipedia's status column were rechecked 2026-10-07 against OSM building
+# footprints (50 m2 or more) within 100 m of the point and an Esri aerial (2023-2025); only
+# Dixmont and Clinton Valley have none, and each entry's comment gives the distances. The
+# "standing" entries were not rechecked.
 # known_issues maps a check name to the problem id tracking why it fails today; the test
 # for that check is marked xfail(strict=True), so a fix turns it red until the entry goes.
 
@@ -22,6 +31,9 @@ lat = 40.2436
 lng = -74.8055
 built = 1848
 status = "standing"
+# New Jersey's SHPO records the campus as the "Trenton Psychiatric Hospital Historic District" (attributes.HD_NAME,
+# status ELIGIBLE_HD, on each building's row): eligible, not listed. NPS holds no NRHP listing within 1.5 km
+# (2026-10-07). The register check counts that record and says in its result that the match is eligible only.
 
 [[site]]
 key = "central-state-hospital-indiana"
@@ -33,6 +45,9 @@ lat = 39.7693
 lng = -86.2112
 built = 1848
 status = "standing"
+nrhp = "72000011"
+# NRHP 72000011 is the Old Pathology Building (now the Indiana Medical History Museum), listed 1972-04-25 and
+# 200 m from the point: the campus's only listing, no district (NPS, Wikipedia's Marion County list).
 
 [[site]]
 key = "jacksonville-developmental-center"
@@ -44,8 +59,9 @@ lat = 39.719248
 lng = -90.229773
 built = 1848
 status = "standing"
-nrhp = "75000669"
-known_issues = { register = "its NRHP listing (75000669, Main Building) was removed in 1984 after demolition; nothing else names it; REData has no Illinois register provider (2026-10-07)" }
+known_issues = { register = "its NRHP listing (75000669, Main Building, 1975) was removed 1984-04-18 after demolition, so none is expected; no NPS listing within 3 km is the hospital's; REData has no Illinois register provider (2026-10-07)" }
+# 75000669 is under "Former listings" in Wikipedia's Morgan County list (delisted 1984-04-18, "Demolished") and is
+# absent from NPS's NRHP layers.
 
 [[site]]
 key = "harrisburg-state-hospital"
@@ -68,8 +84,10 @@ state = "MA"
 lat = 41.911886
 lng = -71.100561
 built = 1853
-status = "demolished"
+status = "standing"
 nrhp = "93001484"
+# The Kirkbride's last historic sections went in 2009, but newer buildings remain and the hospital is open
+# (Wikipedia). OSM has a 1,459 m2 building 34 m from the point and six within 200 m (Esri aerial, 2025-03-18).
 
 [[site]]
 key = "western-state-hospital-kentucky"
@@ -152,8 +170,11 @@ state = "MA"
 lat = 42.311
 lng = -72.649
 built = 1858
-status = "demolished"
+status = "standing"
 nrhp = "94000696"
+# Old Main, the Kirkbride, was demolished in 2006. The Haskell building (1959), still a Department of Mental Health
+# office, is 25 m from the point (2,114 m2 in OSM) and 57 buildings stand within 200 m (Wikipedia; Esri aerial,
+# 2025-03-18).
 
 [[site]]
 key = "mendota-mental-health-institute"
@@ -165,6 +186,10 @@ lat = 43.132
 lng = -89.4013
 built = 1858
 status = "standing"
+nrhp = "88002183"
+# NRHP 88002183 is the Wisconsin Memorial Hospital Historic District (816 Troy Dr., listed 1988-11-03): the 1920s
+# veterans' hospital on this campus, its edge 140 m from the point. The Kirkbride went in 1964. Wisconsin
+# Historical Society record NR1141 calls it "now Mendota Mental Health Institute".
 
 [[site]]
 key = "institute-of-the-pennsylvania-hospital"
@@ -188,7 +213,10 @@ lat = 42.279324
 lng = -85.604318
 built = 1859
 status = "standing"
+nrhp = "72000624"
 known_issues = { wikipedia = "the article has no coordinates (2026-10-07)" }
+# NRHP 72000624 is the Kalamazoo State Hospital Water Tower (listed 1972-03-16), 382 m from the point. The State
+# Hospital Gatehouse (83000872, Kalamazoo MRA, 425 m) is the campus's other listing; no district.
 
 [[site]]
 key = "bryce-hospital"
@@ -213,6 +241,8 @@ lng = -80.112222
 built = 1862
 status = "demolished"
 nrhp = "80003401"
+# Demolished in 2006 (Wikipedia). The Esri aerial (2025-08-03) shows an open field at the point, and OSM has no
+# building within 200 m.
 
 [[site]]
 key = "trans-allegheny-lunatic-asylum"
@@ -236,6 +266,10 @@ lat = 44.307958
 lng = -93.982136
 built = 1866
 status = "standing"
+nrhp = "86002117"
+# NRHP 86002117 is the Center Building, Minnesota Hospital for the Insane (listed 1986-07-31), the Kirkbride's
+# surviving core, now the St. Peter State Hospital Museum. It is 406 m south-east of the point, which is on the
+# modern Security Hospital (NPS, Wikipedia).
 
 [[site]]
 key = "hrsh"
@@ -286,9 +320,12 @@ state = "KY"
 lat = 38.278056
 lng = -85.555
 built = 1869
-status = "demolished"
+status = "standing"
 nrhp = "83002646"
 known_issues = { incidents = "louisville_fire, the one covering feed, has nothing within 2 km (2026-10-07)" }
+# The old campus was demolished in 1996 and is now E.P. "Tom" Sawyer State Park (Kentucky Historical Society marker
+# 2308). Borderline: the nearest buildings are park ones, an 841 m2 building 88 m from the point (OSM, Esri aerial
+# 2025-04-18) and a 24 m2 structure at 62 m, not counted.
 
 [[site]]
 key = "danville-state-hospital"
@@ -312,7 +349,8 @@ lat = 37.2094
 lng = -77.4513
 built = 1870
 status = "standing"
-known_issues = { wikipedia = "the article has no coordinates (2026-10-07)", incidents = "chesterfield_va_fire_ems, the one covering feed, has nothing within 2 km (2026-10-07)" }
+known_issues = { register = "its only listing within 500 m, the Chapel (NRHP 10000794, 2010), was removed 2017-02-07 after it collapsed, so none is expected; the grounds' other listing, Mayfield Cottage (69000236), is 616 m away (2026-10-07)", wikipedia = "the article has no coordinates (2026-10-07)", incidents = "chesterfield_va_fire_ems, the one covering feed, has nothing within 2 km (2026-10-07)" }
+# 10000794 is NPS status "Removed"; Wikipedia's Dinwiddie County list gives delisted 2017-02-07.
 
 [[site]]
 key = "richardson-olmsted-complex"
@@ -335,7 +373,9 @@ state = "MD"
 lat = 39.264722
 lng = -76.7225
 built = 1872
-status = "demolished"
+status = "standing"
+# The Kirkbride buildings were demolished in 1963 and replaced by more modern ones (Wikipedia). OSM's Foster Wade
+# Building (1,853 m2) is on the point and 19 buildings stand within 200 m (Esri aerial, 2025-02-23).
 
 [[site]]
 key = "elgin-mental-health-center"
@@ -358,7 +398,10 @@ state = "KS"
 lat = 39.064722
 lng = -95.710973
 built = 1872
-status = "demolished"
+status = "standing"
+# The Kirkbride's centre building went in June 2010 (Wikipedia). A new multi-wing residential-type building with
+# outbuildings stands on the point, under construction in the Esri aerial of 2023-10-21; OSM does not have it yet
+# (its nearest building is 163 m).
 
 [[site]]
 key = "winnebago-mental-health-institute"
@@ -444,9 +487,12 @@ state = "OH"
 lat = 39.958333
 lng = -83.055556
 built = 1877
-status = "demolished"
+status = "standing"
 nrhp = "86000851"
 known_issues = { register = "NPS places NRHP 86000851 (Central Ohio Lunatic Asylum) 1.06 km from the site, with no polygon (2026-10-07)" }
+# The asylum building was demolished between 1991 and 1996 (Wikipedia). The point is a car park of the Ohio
+# Departments of Transportation and Public Safety, whose two buildings (5,502 and 5,448 m2 in OSM) stand 79 and
+# 103 m away on the hospital's land (Esri aerial, 2024-03-11). Borderline: neither is a hospital building.
 
 [[site]]
 key = "worcester-state-hospital"
@@ -469,8 +515,11 @@ state = "MA"
 lat = 42.581234
 lng = -70.974394
 built = 1878
-status = "demolished"
+status = "standing"
 nrhp = "84002436"
+# Demolition of the hospital, the Kirkbride included, began in 2006; only the shells of its administration block and
+# two wings were kept, inside AvalonBay's apartments (Wikipedia). OSM's Building 1 (3,107 m2) is on the point and 28
+# buildings stand within 200 m (Esri aerial, 2025-03-18).
 
 [[site]]
 key = "clinton-valley-center"
@@ -483,6 +532,8 @@ lng = -83.322389
 built = 1878
 status = "demolished"
 nrhp = "81000315"
+# Demolished in 2000 and a subdivision built on the site (Wikipedia). The point is an open field in the Esri aerial
+# (2025-06-14); OSM's nearest buildings are the subdivision's houses, 136 m away. Borderline.
 
 [[site]]
 key = "kankakee-state-hospital"
@@ -577,6 +628,10 @@ lat = 32.742
 lng = -96.264
 built = 1885
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS); THC marker 8556 is published 542 m from the point, outside the grounds and the 500 m radius (2026-10-07)" }
+# The point is right: inside the grounds (OSM way 425190682), 162 m from their centre, beside the surviving water
+# tower. THC's marker 8556 stands in front of the administration building, but its UTM 14 756160 E 3625498 N is
+# 32.737545, -96.266352 (NAD83), 124 m outside the grounds, in a residential block.
 
 [[site]]
 key = "cherokee-mental-health-institute"
@@ -612,6 +667,9 @@ lat = 47.573
 lng = -117.696
 built = 1891
 status = "standing"
+nrhp = "97001084"
+# NRHP 97001084 is Roosevelt Hall (1935, listed 1997-09-08), 171 m from the point: the campus's only listing, no
+# district (NPS, Wikipedia's Spokane County list).
 
 [[site]]
 key = "mendocino-state-hospital"
@@ -624,6 +682,8 @@ lng = -123.16
 built = 1893
 status = "standing"
 known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no California register provider (2026-10-07)" }
+# The 1893 Kirkbride was razed in 1952 (Wikipedia; kirkbridebuildings.com). Later hospital buildings still stand
+# around the point, now the City of Ten Thousand Buddhas (aerial, 2026-10-07).
 
 [[site]]
 key = "patton-state-hospital"

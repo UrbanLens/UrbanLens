@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| (live|actionable) ' docs/INDEX.md   # plans and ideas still in play
 ```
 
-**Next free id:** `PL11` · `X32` · `I8` · `R32` · `N48`
+**Next free id:** `PL11` · `X32` · `I8` · `R32` · `N49`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -162,3 +162,4 @@ the detail.
 | N44 | current | 2026-10-07 | REData's street-view timeline picked a date's representative frame without looking at `mirror_gone`, so UrbanLens dropped a date whose other frames still load (P325); answered by REData v0.3.6 (#135 represents a date by a frame still there, `count` unchanged), in production 2026-10-07 | [`docs/handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md`](handoffs/redata-street-view-timeline-representative-ignores-mirror-gone.md) |
 | N46 | current | 2026-10-07 | The 0.9.0 production rollout should run `manage.py clear_withheld_calendar_locations` once (dry run, then `--apply`) to clear the locations and titles 0.8.0 calendar exports left on events nothing pushes to (#301); sent | [`docs/handoffs/infrastructure-clear-withheld-calendar-locations.md`](handoffs/infrastructure-clear-withheld-calendar-locations.md) |
 | N47 | current | 2026-10-07 | REData production failed UrbanLens's 57-campus live-locations run in seven ways of its own: a Smithsonian parse error fails archive search at 19 campuses, cold buildings answers cost gunicorn workers (P62), production's Sanborn catalogue misses three towns, PA owners and 14 counties' parcels, Greystone's NRHP listing, news that hides a skipped GDELT, and non-primary Wikipedia coordinates | [`docs/handoffs/redata-production-live-locations-2026-10-07.md`](handoffs/redata-production-live-locations-2026-10-07.md) |
+| N48 | current | 2026-10-07 | A weaker model's 85-finding audit of 0.9.0 was re-read by five verifiers: nothing high severity was confirmed, five medium findings went to fix PRs (Spark P340, P341/P363, P395, P351, P376), the rest were fixed in a batch, filed, or dropped, and its P322-P406 collide with real former P-ids so cite them as "Spark P###" | [`docs/notes/spark-audit-assessment-2026-10-07.md`](notes/spark-audit-assessment-2026-10-07.md) |
