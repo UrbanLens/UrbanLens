@@ -1,6 +1,6 @@
 # REData's street-view timeline picks a date's representative without looking at `mirror_gone`
 
-- **Status: SENT 2026-10-06.** Found while fixing UrbanLens's P325. Read from REData `origin/main` (`4f52e491`) on
+- **Status: ANSWERED 2026-10-07; in REData production since v0.3.6 (2026-10-07 ~03:05Z).** REData #135 picks each date's representative among the frames not marked `mirror_gone`; a date whose every frame is gone keeps the old pick, which carries its own `attributes.mirror_gone`. The second ask was declined: `count` still counts gone frames, since counting fewer would change a published field's meaning, and a `gone_count` waits for a consumer. REData's reply is its T14 (`docs/urbanlens-2026-10-06-replies.md`). One correction to this handoff: a gone frame's `/street-view/{uuid}/download/` answers `503 capture_unavailable`, not 404 (REData `api/views_history.py:732`, read from code). UrbanLens keeps its filter, now the backstop for a date with nothing left and for REData before 0.3.6 (P325). Originally SENT 2026-10-06, found while fixing UrbanLens's P325. Read from REData `origin/main` (`4f52e491`) on
   2026-10-06; nothing here was run against a REData deployment.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
 - `id: N44` · `status: current`

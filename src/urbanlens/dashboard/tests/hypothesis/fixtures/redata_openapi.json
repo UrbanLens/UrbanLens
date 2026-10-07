@@ -143,7 +143,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -318,6 +320,10 @@
       "nullable": true,
       "readOnly": true,
       "type": "integer"
+     },
+     "year_built_basis": {
+      "readOnly": true,
+      "type": "string"
      }
     },
     "required": [
@@ -335,7 +341,8 @@
      "on_parcel",
      "on_survey_roster",
      "source",
-     "year_built"
+     "year_built",
+     "year_built_basis"
     ],
     "type": "object"
    },
@@ -350,7 +357,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -1152,7 +1161,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -1192,7 +1203,8 @@
        "census_data_api_not_configured",
        "census_geography_unavailable",
        "census_data_api_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted"
       ],
       "type": "string"
      },
@@ -1284,7 +1296,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -1335,12 +1349,20 @@
        "fetched",
        "no_detail_published",
        "not_supported",
-       "already_fetched"
+       "already_fetched",
+       "unresolved"
       ],
+      "type": "string"
+     },
+     "message": {
       "type": "string"
      },
      "resource": {
       "$ref": "#/components/schemas/CulturalResource"
+     },
+     "retry_after": {
+      "format": "date-time",
+      "type": "string"
      }
     },
     "required": [
@@ -2175,7 +2197,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -2215,7 +2239,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -2624,7 +2650,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -2769,7 +2797,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -3118,7 +3148,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -3240,7 +3272,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -3482,7 +3516,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -3853,7 +3889,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -4467,7 +4505,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -5043,7 +5083,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -5347,6 +5389,10 @@
       "nullable": true,
       "type": "integer"
      },
+     "complete": {
+      "readOnly": true,
+      "type": "boolean"
+     },
      "created": {
       "format": "date-time",
       "readOnly": true,
@@ -5474,6 +5520,13 @@
       "maxLength": 12,
       "type": "string"
      },
+     "sources": {
+      "items": {
+       "$ref": "#/components/schemas/SourceFailure"
+      },
+      "readOnly": true,
+      "type": "array"
+     },
      "special_land_use_areas": {},
      "subdivision_name": {
       "maxLength": 200,
@@ -5500,11 +5553,13 @@
     },
     "required": [
      "additional_geometry",
+     "complete",
      "created",
      "display_name",
      "jurisdiction",
      "land_use_types",
      "parcel_geometry",
+     "sources",
      "updated",
      "uuid"
     ],
@@ -5642,7 +5697,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -5767,6 +5824,7 @@
        "no_data_found",
        "source_error",
        "source_rate_limited",
+       "key_budget_exhausted",
        "search_key_unavailable",
        "derived_address_unconfirmed"
       ],
@@ -7000,7 +7058,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -7298,7 +7358,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -7356,7 +7418,8 @@
        "not_applicable",
        "skipped",
        "not_attempted",
-       "not_cached"
+       "not_cached",
+       "key_budget_exhausted"
       ],
       "type": "string"
      }
@@ -7470,6 +7533,9 @@
      "considered": {
       "type": "integer"
      },
+     "held": {
+      "type": "integer"
+     },
      "message": {
       "type": "string"
      },
@@ -7489,6 +7555,7 @@
     "required": [
      "already_fetched",
      "considered",
+     "held",
      "message",
      "providers",
      "queued",
@@ -7607,6 +7674,14 @@
       "nullable": true,
       "readOnly": true,
       "type": "integer"
+     },
+     "year_built_basis": {
+      "readOnly": true,
+      "type": "string"
+     },
+     "year_built_source": {
+      "readOnly": true,
+      "type": "string"
      }
     },
     "required": [
@@ -7630,7 +7705,9 @@
      "ref",
      "residual_geometry",
      "sources",
-     "year_built"
+     "year_built",
+     "year_built_basis",
+     "year_built_source"
     ],
     "type": "object"
    },
@@ -7710,6 +7787,10 @@
       "nullable": true,
       "readOnly": true,
       "type": "integer"
+     },
+     "year_built_basis": {
+      "readOnly": true,
+      "type": "string"
      }
     },
     "required": [
@@ -7728,7 +7809,8 @@
      "on_survey_roster",
      "ref",
      "source",
-     "year_built"
+     "year_built",
+     "year_built_basis"
     ],
     "type": "object"
    },
@@ -7867,7 +7949,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -7904,6 +7988,37 @@
      "query",
      "query_styles",
      "results"
+    ],
+    "type": "object"
+   },
+   "RejectedCid": {
+    "properties": {
+     "cid": {
+      "nullable": true,
+      "type": "string"
+     },
+     "error": {
+      "enum": [
+       "cid_not_integer",
+       "cid_out_of_range",
+       "cid_float_rounded",
+       "cid_conflicts_with_url",
+       "no_identifier"
+      ],
+      "type": "string"
+     },
+     "index": {
+      "type": "integer"
+     },
+     "message": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "cid",
+     "error",
+     "index",
+     "message"
     ],
     "type": "object"
    },
@@ -8007,6 +8122,12 @@
       },
       "type": "array"
      },
+     "rejected": {
+      "items": {
+       "$ref": "#/components/schemas/RejectedCid"
+      },
+      "type": "array"
+     },
      "results": {
       "additionalProperties": {
        "allOf": [
@@ -8021,6 +8142,7 @@
     },
     "required": [
      "pending",
+     "rejected",
      "results"
     ],
     "type": "object"
@@ -8349,7 +8471,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -8497,7 +8621,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -8543,6 +8669,7 @@
       "enum": [
        "error",
        "rate_limited",
+       "key_budget_exhausted",
        "not_asked",
        "unconfirmed"
       ],
@@ -8749,7 +8876,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -9081,7 +9210,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -9183,7 +9314,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -9313,7 +9446,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -9439,7 +9574,9 @@
      "error": {
       "enum": [
        "all_providers_unavailable",
-       "rate_limited"
+       "rate_limited",
+       "key_budget_exhausted",
+       "not_cached"
       ],
       "type": "string"
      },
@@ -9473,7 +9610,7 @@
  "info": {
   "title": "REData API",
   "version": "1.0.0",
-  "x-redata-revision": "release/0.3.1 84b3c436"
+  "x-redata-revision": "v0.3.6 91bb40d2"
  },
  "openapi": "3.0.3",
  "paths": {
