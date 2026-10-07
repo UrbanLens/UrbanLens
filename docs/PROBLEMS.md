@@ -3265,3 +3265,82 @@ Found by spark-audit models batch 5 (M6), coordinator-verified per site. One ent
 5. Rating 0 is legal (`models/reviews/model.py:16`, 0–5) but the pin-edit path treats it as clear: `if rating and 1 <= rating <= 5` (`controllers/pin_edit.py:313-314`) falls a submitted `0` through to `elif clear_rating:` (`:319`), *deleting* the review — while viewset/service paths accept 0–5. The paths disagree on what 0 means. Low-medium.
 
 None in `PROBLEMS.md`/archive. Appears new.
+
+## P394 — Five unthrottled upstream-spend endpoints: article-sources panel, billing Stripe POSTs, calendar import, region search, Google Photos thumbnails
+
+`id: P394` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit controllers batch 6 (C1/C2/C4), coordinator-verified against route registration. One entry, one theme (authenticated endpoints that spend upstream budget with no route throttle), five sites.
+
+1. Article-sources panel GET polls (up to `SOURCES_MAX_POLL_ATTEMPTS = 75`) can each kick server-side provider fetches via `collect_source_documents(..., may_fetch=...)` (`controllers/article_sources.py:35-36,152-161`); only the sibling document view carries `throttled("redata.media", ...)` (`urls.py:486,1453`), the panel routes are bare. Medium-low.
+2. All seven billing routes (`urls.py:1248-1254`) are bare while every POST mints Stripe sessions/calls (`controllers/billing.py:93-99,118-121,138`). Low-medium.
+3. Calendar import dialog GET (`controllers/calendar_sync.py:260` `list_importable_events`) and preview POST (`:376` `build_import_preview`) call Google per request; `urls.py:1767-1768` bare. Low-medium.
+4. `RegionBoundarySearchView` (`controllers/region_search.py:38-39`) fires a Nominatim lookup (heaviest `polygon_geojson` shape) per keystroke; `urls.py:1129` bare — while map autocomplete/lookup, search panel, and even the settings geocode helper (`GEOCODE_UPSTREAM_RATE = 20/hour`) are all budgeted. Burns the shared Nominatim pool. Medium.
+5. `PinGooglePhotosThumbnailView.get` (`controllers/google_photos.py:265-290`) fetches via `download_media_item` with only `bounded_cache` — no `UpstreamSlots`, no route throttle (`urls.py:1057-1059` bare) — vs the Immich sibling (`immich.py:382-387`: nested profile/global slots, 503+Retry-After; `urls.py:993` throttled). A picker grid fires dozens per open. Medium-low.
+
+P329 covers assistant/search hints only; archive REData-throttle entries cover media proxies, never these. Appears new.
+
+## P395 — Unbounded request-driven amplification: provider import id lists, tools import/export, email invites, vote materialization, DM uploads
+
+`id: P395` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit controllers batch 6 (C2/C5), coordinator-verified. One entry, one theme (one POST mints unbounded work), six sites.
+
+1. Flickr (`controllers/flickr.py:253,421,476`), Immich (`immich.py:403`), and Google Photos (`google_photos.py:300`) import endpoints take unbounded `getlist("photo_ids"/"asset_ids"/"media_item_ids")` straight into `safely_enqueue_task` payloads — while the gallery bulk sibling caps at `MAX_BULK_IMAGES = 500` (`image_gallery.py:237,262-263,351-352`, added for exactly this shape). Low-medium.
+2. `ImportStartView` (`controllers/tools.py:400-417`) mints a dir + up-to-500 MB stored zip + Celery job per POST with no `single_flight.claim` and no throttle, while `ExportStartView` directly above (`tools.py:177`) claims a guard. Parallel re-POSTs stack unboundedly. Medium. (Archive `:3708` one-import guard is `confirmed_import`, not tools import.)
+3. `ExportFormatDownloadView` (`controllers/tools.py:354-358`) synchronously serializes every root pin per GET — no throttle, pagination, or single-flight — while the ZIP export it mirrors is async + guarded. Low-medium.
+4. Trip (`controllers/trip.py:506-511,985-986`) and friend (`urls.py:1402-1404`) email-invite sends are unthrottled fan-out per authenticated caller, unlike the verification-resend sibling (`userprofile.py:806-809` with `verification_recently_sent` + `email_rate_limit_error`). Medium-low. (P355 is the resend reservation leak; P388.2 the join-email race — this is the missing send throttle.)
+5. Wiki-media up-vote (`controllers/wiki_media.py:229-244`) materializes an arbitrary client URL server-side (`materialize=not shows_members_media(source)`) with only `source` length-capped (`:211`); all three wiki_media routes (`urls.py:1732,1738,1743`) bare, unlike the throttled REData media routes. Medium-low.
+6. `DirectMessageImageUploadView.post` (`controllers/direct_messages.py:464-505`, route `urls.py:1970` bare) mints an `Image` row + `process_image_upload` task per call with no send-style budget — siblings budget sends via `MessageRateLimitedError → 429` (`:378-383`, `group_chats.py:268-272`). The view's own docstring concedes unattached-row accumulation is unactioned. Medium-low. (Album add-external, `controllers/albums.py:1032-1056`, shares the uncapped-URL/queue shape at low severity.)
+
+P329/P342/P344 name other surfaces. Appears new.
+
+## P396 — Unthrottled read fan-outs: DM/group search keystrokes, saved-filter counts, suggestion map blob
+
+`id: P396` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit controllers batch 6 (C2/C4), verified against route registration. One entry, one theme (login-gated reads whose cost scales with use, no budget), three sites.
+
+1. DM/group recipient, message-search, member-search, and conversation GETs (`urls.py:1968-1969,1974` bare) run per-keystroke `icontains` queries with no max length (only a 2-char minimum; `direct_messages.py:838`, `group_chats.py:726`) — the code's own comment (`direct_messages.py:839-842`) flags "a full scan of the requester's pins per match, on every keystroke". Low. (P329's counterpart on the messages surface; H42/H49 cover the global panel, G5-3 never lists these.)
+2. `SavedFilterMatchCountsView` (`controllers/saved_filters.py:318-327`) costs F subqueries + F×(1+A) nested-`pk__in` COUNTs per toolbar render (`urls.py:1125` bare, no in-view budget). Low (indexed pk lookups; covered by `test_saved_filter_match_counts.py` — throttling gap, not correctness).
+3. `PinSuggestionMapDataView.get` (`controllers/pin_suggestions.py:146-160`) serializes the entire pending queue as one JSON blob — no paging — while sibling queue views paginate at 12 and bulk-accept caps at 200. A bulk photo-scan ingest makes one poll materialize every row plus `effective_name` each. Low (own data; self-DoS weight).
+
+No `PROBLEMS.md`/archive entries on these endpoints' boundedness (P384 covers suggestion *integrity*). Appears new.
+
+## P397 — Write-semantics inconsistencies with destructive defaults: invite decline-by-default, rating-0 clears, future visits, label parents, icon/name/bbox validation
+
+`id: P397` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit controllers batch 6 (C2/C3/C4/C5), coordinator-verified per site. One entry, one theme (sibling paths disagree; the surprising one wins silently), seven instances.
+
+1. `FriendInvitationAnswerView` (`controllers/friend_invitations.py:81-85`): anything but `answer == "accept"` — missing field, typo, stray POST — silently *declines* (state-changing write with email side effects), where the DM-share sibling 400s unknown actions (`direct_message_shares.py:178-180`). Medium-low. (P375 is the friendship state machine, not this route.)
+2. `PinBulkEditView` (`controllers/pin_bulk.py:236-244`): `rating == 0` clears the review — the P393-rating-0 disagreement (model legal 0–5; viewset accepts; single-edit deletes) reproduced in a file P393 never names. Low-medium, silent loss.
+3. Memories bulk quick-log (`controllers/memories.py:744-760`) `fromisoformat`s `visited_date` with no future check and `create`s directly, bypassing `create_manual_visit`'s `VisitInFutureError` that the single-visit sibling answers as 400 (`visits.py:344-352`, `services/visits/visits.py:582-583`) — then propagates via `sync_last_visited`. Low.
+4. `LabelBulkConvertView` (`controllers/labels.py:1196-1215`) resolves parents under the *old* kind, flips kind, then re-attaches — while single-edit clears parents on kind change (`:828-829`) and the bulk path's own comment claims parity (`:1129-1130`). Kind-mismatched hierarchy edges, owner-scoped. Low.
+5. `SavedFilterEditView` (`controllers/saved_filters.py:237,241`) stores raw `icon` with no `clean_icon`/length check while the create sibling validates (`:121-122`); >64 chars 500s on the `CharField(64)` column, non-catalogue strings persist (escaped at render — integrity/500, not XSS). Medium (self-corruption + triggerable 500; archive fixed only the external-API side).
+6. Profile autosave (`controllers/userprofile.py:408-412`) writes `first_name`/`last_name` unbounded via `setattr(...).save(update_fields=[field])` while the full-form sibling truncates to 150 with a comment about the 500 (`:690-693`). Same payload, same crash. Medium-low self-500.
+7. `_parse_bbox` (`controllers/maps.py:1003-1024`, `memories.py:246-255`) accepts inf/nan/out-of-range/inverted boxes — only numeric-parse + count==4 guarded — into `within_bounds`/`BBox`, while sibling validators in the same files reject exactly this class (`maps.py:416,882`, `pin_import_failures.py:90-93`). Low. (Pin-boundary area-cap asymmetry, `controllers/boundary.py:251-265` vs `:328-341`, same class at low severity.)
+
+None in `PROBLEMS.md`/archive (the archive `_parse_bbox` hit is a logging defect). Appears new.
+
+## P398 — View-layer scoping gaps: trivia join gates, unscoped gallery lookup, partner-triggered GET writes, notification profile 500
+
+`id: P398` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit controllers batch 6 (C2/C3/C4/C5), coordinator-verified. One entry, one theme (the view trusts more than its siblings), four sites plus one anon-endpoint note.
+
+1. Trivia answer submit (`controllers/trivia.py:408-414`) checks session access but not joined-participant (`refuse_unless_joined`, which its own round view `:389-390` and SpotGuessr siblings `:570-572,648-649` enforce) — invited-but-not-joined gets 400 from the service instead of 403 at the view. And the question vote (`trivia.py:457-465`) is globally addressable by `question_id` with only "answered once, ever" as gate — no session/lobby scoping, unlike session-scoped SpotGuessr feedback (`spotguessr.py:644-651`); any alpha user who once saw a reused question votes it forever. Medium / medium-low. (P379 is vote-model integrity, not these endpoint gates.)
+2. `PinImageView._get_image` (`controllers/image_gallery.py:410-419`) resolves the pin slug without profile scope where every sibling in the file scopes (`:180,204,213,253,382`). Low — the later `img.profile` check (`:425-426,452-453`) still holds, so the property rests on one check instead of two; no cross-user access confirmed.
+3. `SafetyCheckinDetailView` GET performs writes on the shared render path (`controllers/safety.py:715-716`: `checkin.ensure_slug()` — persists immediately per `abstract/model.py:147-157` — plus `_ensure_markup_map`, which creates a `MarkupMap` row and saves the *owner's* check-in) for both owner and accepted-partner viewers. Partner opens link → owner row created; GETs lack CSRF and crawlers can trigger it. Low (bounded, idempotent after first).
+4. Notification views (`controllers/notifications.py:167,174,193,214,247,252,284`) and organize (`organize.py:57`) dereference `request.user.profile` directly while every sibling `get_or_create`s (`maps.py:105,374,597`, `memories.py:367`, `pin_bulk.py:97`) — a session with a missing profile row 500s instead of recovering (proven possible in-file, `maps.py:119-122`). Low.
+5. `SafetyContactMarkupJsonView` (`controllers/markup.py:390`, route `urls.py:1894`) is a plain anonymous `View` with no `throttled()` wrapper — unlike every `LoginRequiredMixin` sibling in the file and the budgeted `e2ee.login_params` anon route — and has zero test references. Low (UUID capability + `escalated_at` gate bound it; archive H39 fixed only its row-capping). (P342 names the other contact routes, not this one.)
+
+None in `PROBLEMS.md`/archive. Appears new.
+
+## P399 — Seven wired view modules with zero test references (P331 class, new instances)
+
+`id: P399` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit controllers batch 6 (C3/C5) via the P331 import-reference check (`controllers.<module>` refs in `dashboard/tests/` + `tests/`), coordinator-confirmed for the class. Seven modules, all wired, zero refs: `trip_invitations` (`urls.py:1761-1763,1849` answer/cancel), `two_factor` (`urls.py:1239-1244` TOTP/backup-code flows; `test_two_factor.py` tests the service, never the controller), `ui` (icon grid), `vault_media` (`urls.py:2152-2157,2184-2186`; only `vault_photos` is referenced), `visit_suggestions` (`urls.py:1957`), `wiki_share` (`urls.py:473`), and `MarkupMapShareDetailView`/dialog (`controllers/map_sharing.py:85-104` — the recipient-scope check at `:99-103` is the view's entire authorization property, unpinned by any regression test; sibling send route is covered). Controls from the same run are non-zero (`spotguessr`, `trivia`, `webauthn`, `userprofile`, `vault_photos`, `wiki_media`). Low-medium (trip-invitation answer/cancel and TOTP flows highest value).
+
+P331 names only the OAuth pair; no entry names these seven. Natural home is PL6 batches.

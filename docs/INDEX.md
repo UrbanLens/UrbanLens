@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P394` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P400` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -293,3 +293,9 @@ still resolves after it is fixed, and the id is never handed out again.
 | P391 | open | 2026-10-06 | Two DM/group parity gaps: no disappearing messages in groups, group shares carry pins only | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P392 | open | 2026-10-06 | `Wiki.versioned_fields` omits relations and presentation, and deleting a wiki vaporizes its revision trail | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P393 | open | 2026-10-06 | Five misc model/task gaps: calendar sync silently drops, upload retry never gives up, Immich credential rot invisible, tombstone URL bypass, rating-0 deletion | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P394 | open | 2026-10-06 | Five unthrottled upstream-spend endpoints: article-sources panel, billing Stripe POSTs, calendar import, region search, Google Photos thumbnails | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P395 | open | 2026-10-06 | Unbounded request-driven amplification: provider import id lists, tools import/export, email invites, vote materialization, DM uploads | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P396 | open | 2026-10-06 | Unthrottled read fan-outs: DM/group search keystrokes, saved-filter counts, suggestion map blob | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P397 | open | 2026-10-06 | Write-semantics inconsistencies with destructive defaults: invite decline-by-default, rating-0 clears, future visits, label parents, icon/name/bbox validation | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P398 | open | 2026-10-06 | View-layer scoping gaps: trivia join gates, unscoped gallery lookup, partner-triggered GET writes, notification profile 500 | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P399 | open | 2026-10-06 | Seven wired view modules with zero test references (P331 class, new instances) | [`docs/PROBLEMS.md`](PROBLEMS.md) |
