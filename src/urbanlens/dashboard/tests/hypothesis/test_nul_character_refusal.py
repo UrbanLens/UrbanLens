@@ -180,10 +180,9 @@ class TheDrfParsersTests(SimpleTestCase):
         self.assertEqual(parsed["a"], "xy")
 
 
-# NUL is one of over a million code points, so drawn uniformly it almost never appears: the property below saw a nested
-# one in none of 1,000 draws, and the anti-vacuity test's `find` failed most fresh runs, passing on a host only once the
-# example store had kept an earlier find. Drawn as often as every other character together, about half the values hold
-# one and a tenth hold one nested, so both halves of the property are exercised.
+# NUL is one of over a million code points, so drawn uniformly it almost never appears, nested almost never. Drawn as
+# often as every other character together, about half the values hold one and a tenth hold one nested, so both halves
+# of the property are exercised.
 _JSON_TEXT = st.text(
     alphabet=st.characters(codec="utf-8", exclude_categories=("Cs",)) | st.just("\x00"),
     max_size=5,
