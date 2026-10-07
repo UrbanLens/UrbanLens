@@ -98,7 +98,7 @@ def main() -> int:
     index_path = root / "docs/INDEX.md"
     adr_dir = root / "docs/adr"
     if not index_path.is_file():
-        print("docs/INDEX.md is missing. CLAUDE.md and .claude/agents/ both send readers to it.")
+        print("docs/INDEX.md is missing. AGENTS.md and .claude/agents/ both send readers to it.")
         return 1
 
     adr_names = sorted(path.name for path in adr_dir.glob("*.md")) if adr_dir.is_dir() else []

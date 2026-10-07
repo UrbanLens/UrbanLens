@@ -6,8 +6,8 @@ Code pipes the tool call in as JSON on stdin; exit 2 blocks the call and shows
 the agent whatever this prints to stderr. Exit 0 means "no opinion" and the
 normal permission flow continues.
 
-It watches Bash too, not only the edit tools: `sed -i ... CLAUDE.md` and
-`echo ... > CLAUDE.md` would otherwise walk straight past a guard that only
+It watches Bash too, not only the edit tools: `sed -i ... AGENTS.md` and
+`echo ... > AGENTS.md` would otherwise walk straight past a guard that only
 matched Edit and Write. Reading a protected file is always fine -- only writes
 are blocked -- so `grep x CLAUDE.md > out.txt` passes and `sed -i s/a/b/
 CLAUDE.md` does not.
@@ -24,30 +24,32 @@ import os
 import re
 import sys
 
+_WRITE_TO_DOCS = (
+    "Write what you learned in docs/ instead:\n"
+    "  - a defect or work to do -> a GitHub issue  (docs/agents/issue-tracker.md)\n"
+    "  - a choice you made      -> docs/adr/       (next ADR number)\n"
+    "  - a domain term          -> CONTEXT.md      (docs/agents/domain.md)\n"
+    "  - a measurement          -> docs/NOTES.md   (X id, and state its unit)\n"
+    "  - how something works    -> the relevant docs/*.md reference (R id)\n"
+    "and add any X/R/N entry's line to docs/INDEX.md in the same commit.\n"
+)
+
 # path fragment -> what to do instead
 PROTECTED = {
-    "CLAUDE.md": (
-        "CLAUDE.md is read by every session and every subagent, so every line "
-        "costs tokens on every task. It is kept under 140 lines deliberately.\n"
-        "Write what you learned in docs/ instead:\n"
-        "  - a defect or work to do -> a GitHub issue  (docs/agents/issue-tracker.md)\n"
-        "  - a choice you made      -> docs/adr/       (next ADR number)\n"
-        "  - a measurement          -> docs/NOTES.md   (X id, and state its unit)\n"
-        "  - how something works    -> the relevant docs/*.md reference (R id)\n"
-        "and add any X/R/N entry's line to docs/INDEX.md in the same commit.\n"
-        "If it truly belongs in CLAUDE.md, print the exact replacement lines in "
+    "AGENTS.md": (
+        "AGENTS.md is read by every session and every subagent, so every line "
+        "costs tokens on every task. It is kept under 140 lines deliberately.\n" + _WRITE_TO_DOCS + "If it truly belongs in AGENTS.md, print the exact replacement lines in "
         "your reply and let the user apply them."
+    ),
+    "CLAUDE.md": (
+        "Each CLAUDE.md only imports the AGENTS.md beside it (`@AGENTS.md`), so Claude Code "
+        "and other agents read one set of instructions. Anything added here reaches Claude "
+        "alone. AGENTS.md is protected too; print the exact replacement lines in your reply "
+        "and let the user apply them."
     ),
     "CLAUDE.local.md": (
         "CLAUDE.local.md is read by every session and every subagent, so every line "
-        "costs tokens on every task. It is kept short deliberately.\n"
-        "Write what you learned in docs/ instead:\n"
-        "  - a defect or work to do -> a GitHub issue  (docs/agents/issue-tracker.md)\n"
-        "  - a choice you made      -> docs/adr/       (next ADR number)\n"
-        "  - a measurement          -> docs/NOTES.md   (X id, and state its unit)\n"
-        "  - how something works    -> the relevant docs/*.md reference (R id)\n"
-        "and add any X/R/N entry's line to docs/INDEX.md in the same commit.\n"
-        "If it truly belongs in CLAUDE.local.md, print the exact replacement lines in "
+        "costs tokens on every task. It is kept short deliberately.\n" + _WRITE_TO_DOCS + "If it truly belongs in CLAUDE.local.md, print the exact replacement lines in "
         "your reply and let the user apply them."
     ),
     "docs/GOALS.md": ("GOALS.md is Jess' notes on project goals, written in their voice. Do not edit, summarise, or 'tidy' it. If you have something to say about it, write your own docs/ entry and cite SRC."),

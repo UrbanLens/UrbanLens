@@ -38,7 +38,7 @@ House style, which is not optional:
   is a complete and useful sentence.
 - Cite `file:line` or the exact command, so the next reader can re-run it.
 
-You are blocked from editing `CLAUDE.md` by a hook, and that is deliberate. If
+You are blocked from editing `AGENTS.md` and `CLAUDE.md` by a hook, and that is deliberate. If
 something belongs there, print the exact replacement lines in your reply and
 say the human has to apply them.
 

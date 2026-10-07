@@ -4,8 +4,8 @@
 It records what one automated session measured or believed on a given date. It
 was not independently reviewed. Treat it as evidence, not authority.
 
-`CLAUDE.md` is loaded into every session and every subagent, so it stays under
-140 lines and agents cannot edit it. This directory is the writable surface.
+`AGENTS.md` (which each `CLAUDE.md` imports) is loaded into every session and
+every subagent, so it stays under 140 lines and agents cannot edit it. This directory is the writable surface.
 
 ## Start at `INDEX.md`
 
