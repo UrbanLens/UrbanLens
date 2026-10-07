@@ -45,6 +45,22 @@ class PurgeDemoAccountsTests(TestCase):
         with mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_mode", False), self.assertRaises(CommandError):
             call_command("purge_demo_accounts", execute=True)
 
+    def test_a_negative_ttl_is_refused_not_read_as_everything_has_expired(self) -> None:
+        """``--ttl-hours -1`` puts the cutoff in the future, which selects every demo account including this minute's."""
+        user = self._demo_user(age_hours=0)
+
+        with self.assertRaises(CommandError):
+            self._run(ttl_hours=-1, execute=True)
+
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_a_zero_ttl_is_still_allowed(self) -> None:
+        user = self._demo_user(age_hours=1)
+
+        self._run(ttl_hours=0, execute=True)
+
+        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+
     def test_a_dry_run_deletes_nothing(self) -> None:
         user = self._demo_user(age_hours=48)
 

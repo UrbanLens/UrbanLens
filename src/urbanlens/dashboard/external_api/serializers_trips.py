@@ -90,13 +90,16 @@ class TripCalendarExportResponseSerializer(serializers.Serializer):
     #: How many scheduled activities are mirrored as their own timed events. Zero is normal - a trip with no
     #: scheduled stops still exports its own all-day event.
     activities_exported = serializers.IntegerField(read_only=True)
-    #: False when the calendar budget ran out partway. What was written stays, and the rest follows without
-    #: another request: the server finishes it in the background.
+    #: False when the calendar budget ran out partway, or Google refused some events. What was written stays. The
+    #: rest of a budget cut follows without another request: the server finishes it in the background.
     complete = serializers.BooleanField(read_only=True)
     #: How many of the trip's events are on the calendar and up to date, from this request or an earlier one.
     events_synced = serializers.IntegerField(read_only=True)
     #: How many events the trip needs: its all-day event plus one per scheduled activity.
     events_total = serializers.IntegerField(read_only=True)
+    #: How many writes Google refused for that event alone (it does not let this user change it, say); the other
+    #: events were still written, and the next export or push tries these again.
+    events_refused = serializers.IntegerField(read_only=True)
 
 
 class TripCalendarRemovalResponseSerializer(serializers.Serializer):
@@ -107,6 +110,9 @@ class TripCalendarRemovalResponseSerializer(serializers.Serializer):
     #: unexporting something already absent is the state the caller asked for, and an offline client retrying a
     #: delete it never saw acknowledged must not be told it failed.
     removed = serializers.BooleanField(read_only=True)
+    #: Events an import linked from the caller's own calendar: unlinked from the trip and left on the calendar, since
+    #: they are the caller's, not UrbanLens's. Only events UrbanLens made are deleted.
+    events_kept = serializers.IntegerField(read_only=True)
 
 
 class TripCalendarBlockedSerializer(serializers.Serializer):

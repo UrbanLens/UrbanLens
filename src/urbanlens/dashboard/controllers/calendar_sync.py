@@ -498,7 +498,12 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))
 
-        toast = ("success", "Trip removed from your Google Calendar.") if removed else ("info", "This trip was not on your Google Calendar.")
+        if not removed.unlinked:
+            toast = ("info", "This trip was not on your Google Calendar.")
+        elif removed.kept:
+            toast = ("success", "Trip removed from your Google Calendar. The event you imported it from is yours, so it stays there.")
+        else:
+            toast = ("success", "Trip removed from your Google Calendar.")
         return self._render_button(request, trip, profile, toast=toast)
 
 

@@ -329,6 +329,46 @@ class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
             self._reload_as(["gunicorn", "urbanlens.UrbanLens.wsgi"], **_CONFIGURED)
 
 
+class AMistypedBooleanRefusesToStartTests(_ReloadsSettings):
+    """Spark P404: ``_env_bool`` in base.py mapped every unrecognised string to False, so ``SESSION_COOKIE_SECURE=ture``
+    shipped a deployment with insecure cookies and nothing said so."""
+
+    _FLAGS = (
+        "SESSION_COOKIE_SECURE",
+        "CSRF_COOKIE_SECURE",
+        "DJANGO_DEBUG",
+        "UL_UNSAFE_ALLOW_HTTP",
+        "UL_MEDIA_X_ACCEL",
+        "UL_HSTS_INCLUDE_SUBDOMAINS",
+        "UL_DB_CONN_HEALTH_CHECKS",
+        "UL_CELERY_TASK_ALWAYS_EAGER",
+        "UL_BACKUP_ENABLED",
+    )
+
+    def test_a_typo_in_any_flag_refuses_naming_it(self) -> None:
+        for flag in self._FLAGS:
+            with self.subTest(flag=flag):
+                self.assertIn(flag, self._refuses("production", **_CONFIGURED, **{flag: "ture"}))
+
+    def test_the_spellings_the_shared_helper_accepts_work_for_the_cookie_flags(self) -> None:
+        """base.py used to accept only true/1/yes, so ``on`` quietly turned a secure cookie off."""
+        for spelling in ("on", "Y", " TRUE "):
+            with self.subTest(spelling=spelling):
+                reloaded = self._reload(
+                    "development",
+                    SESSION_COOKIE_SECURE=spelling,
+                    CSRF_COOKIE_SECURE=spelling,
+                    UL_UNSAFE_ALLOW_HTTP="true",
+                )
+                self.assertTrue(reloaded.SESSION_COOKIE_SECURE)
+                self.assertTrue(reloaded.CSRF_COOKIE_SECURE)
+
+    def test_a_flag_that_is_left_unset_keeps_its_default(self) -> None:
+        reloaded = self._reload("production", **_CONFIGURED)
+        self.assertTrue(reloaded.SESSION_COOKIE_SECURE)
+        self.assertTrue(reloaded.UL_BACKUP_ENABLED)
+
+
 class TheGuardsStandAsideForTestsTests(SimpleTestCase):
     """Test settings import ``base`` first; a guard that fired under pytest would stop the suite loading."""
 

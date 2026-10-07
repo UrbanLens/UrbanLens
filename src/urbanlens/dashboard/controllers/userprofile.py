@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.auth.username import USERNAME_UNAVAILABLE, use
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.numbers import safe_int_or_none
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.storage import StorageUnavailableError
 from urbanlens.dashboard.services.security.throttle import Rate
 
@@ -406,7 +407,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         field = request.POST.get("field", "")
 
         if field in self._USER_FIELDS:
-            value = request.POST.get("value", "").strip()
+            # Cut to the column width, as ``EditProfileView._save_profile`` does for the same two fields.
+            value = request.POST.get("value", "").strip()[: column_max_length(User, field)]
             setattr(request.user, field, value)
             request.user.save(update_fields=[field])
             return JsonResponse({"ok": True})
@@ -801,7 +803,7 @@ class EditProfileView(LoginRequiredMixin, View):
         secondary_email = profile.secondary_emails.filter(pk=safe_int_or_none(request.POST.get("email_id")), is_verified=False).first()
         if secondary_email:
             from urbanlens.dashboard.models.email_log.model import EmailType
-            from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, verification_recently_sent
+            from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, release_email_reservation, verification_recently_sent
 
             if verification_recently_sent(profile, secondary_email.email):
                 email_status = "A verification email was just sent to that address - check your inbox (and spam), and try again in a few minutes."
@@ -810,7 +812,10 @@ class EditProfileView(LoginRequiredMixin, View):
             else:
                 from urbanlens.dashboard.services.auth.email_claims import queue_confirmation
 
-                record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                try:
+                    record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                finally:
+                    release_email_reservation(profile)
                 queue_confirmation(secondary_email)
                 email_status = f"Verification email resent to {secondary_email.email}."
         return self._emails_response(request, profile, email_status=email_status)

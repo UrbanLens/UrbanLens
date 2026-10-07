@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.site_settings.meta import (
 from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManager
 from urbanlens.UrbanLens.environments.factory import select_environment
 from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+from urbanlens.UrbanLens.settings._env import env_bool
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.subscriptions.model import SiteFeature
@@ -522,7 +523,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     # --- Database backups ---
 
     backup_enabled = BooleanField(
-        default=os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"},
+        default=env_bool("UL_BACKUP_ENABLED", default=True),
         help_text="Whether scheduled database backups are enabled.",
         verbose_name="Backups enabled",
     )

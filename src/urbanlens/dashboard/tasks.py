@@ -3630,8 +3630,8 @@ def send_final_checkin_warnings() -> int:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_final_warning():
             try:
-                send_final_warning(checkin)
-                count += 1
+                if send_final_warning(checkin):
+                    count += 1
             except Exception:
                 logger.exception("Safety checkin %s failed to send its final warning; will retry next sweep", checkin.pk)
         if count:
@@ -3643,7 +3643,7 @@ def send_final_checkin_warnings() -> int:
 
 @shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
-    """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
+    """Notify emergency contacts for every safety check-in whose grace period has elapsed, once its owner had the final warning."""
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import escalate_checkin
@@ -3654,13 +3654,13 @@ def escalate_overdue_checkins() -> int:
         return 0
     try:
         count = 0
-        for checkin in SafetyCheckin.objects.overdue():
+        for checkin in SafetyCheckin.objects.due_for_escalation():
             # The most consequential of the three sweeps to isolate: this is the call that reaches someone's
             # emergency contacts, and escalate_checkin is already per-contact idempotent, so retrying a failed
             # one next tick only reaches the contacts the failed attempt never got to.
             try:
-                escalate_checkin(checkin)
-                count += 1
+                if escalate_checkin(checkin):
+                    count += 1
             except Exception:
                 logger.exception("Safety checkin %s failed to escalate to its emergency contacts; will retry next sweep", checkin.pk)
         if count:

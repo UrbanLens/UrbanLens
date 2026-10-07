@@ -393,8 +393,13 @@ class SafetyContactTokenRouteTests(_SafetyFixture):
         super().setUp()
         self.checkin.status = SafetyCheckinStatus.OVERDUE
         self.checkin.save()
+        # Alerted: a token is only ever emailed with the alert, and resolves only after it.
         self.contact = baker.make(
-            SafetyCheckinContact, checkin=self.checkin, email="friend@example.com", contact_profile=None
+            SafetyCheckinContact,
+            checkin=self.checkin,
+            email="friend@example.com",
+            contact_profile=None,
+            notified_at=timezone.now(),
         )
 
     def test_the_token_holder_marks_the_owner_safe_without_logging_in(self) -> None:
