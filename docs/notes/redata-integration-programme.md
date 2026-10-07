@@ -149,7 +149,7 @@ passed for all four primaries apart from Athens's build date (REData P111).
 **P1 - blocks the goal on production.**
 
 1. Deploy UrbanLens 0.9.0 (Jess approved it and REData 0.3.0's deploy on 2026-10-05). REData's half is done:
-   production has run v0.3.6 since 2026-10-07 03:05Z, so what had been fixed only on staging (NY parcels by polygon,
+   production has run v0.3.7 since 2026-10-07 08:30Z (v0.3.6 from 03:05Z), so what had been fixed only on staging (NY parcels by polygon,
    campus footprints beyond the parcel box, Athens County's owner, web and news search, the cultural-resource cache,
    Chronicling America descriptions, per-provider `limit`, the loc.gov walk) is in REData's production code, and
    Athens's owner and atlas are in its data. UrbanLens's own half ships with 0.9.0 (`release/v_0_9_0`; production
@@ -158,10 +158,11 @@ passed for all four primaries apart from Athens's build date (REData P111).
    index-backed lookups"); that order is now met.
 2. REData's fixes from N47 that every UrbanLens user meets: the Smithsonian parse error that fails archive search
    for 19 of the 57 campuses, and cold buildings and boundaries answers that cost a gunicorn worker (REData P62).
-   Both are fixed on REData's `release/0.3.7`, not yet released: the Smithsonian error (N47 item 1) is isolated as one
+   Both are answered by REData 0.3.7 (tag `v0.3.7`, `3a2b017d`), in production since 2026-10-07 08:30Z: the Smithsonian error (N47 item 1) is isolated as one
    `unavailable` archive, and a cold parcel's buildings and boundaries answer 503 `refresh_queued` while REData
    computes them (REData #147). UrbanLens's half of both is in UrbanLens#352 (`fix/redata-partial-answers`), into
-   `release/v_0_9_0`; see "How a partial REData answer is cached" below.
+   `release/v_0_9_0`, which reads them once it ships; see "How a partial REData answer is cached" below. Its vendored
+   schema is from `release/0.3.7` `c4e0de94`; the tag adds only release-please's version bump and one REData test (#150).
 3. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
    (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours
    REData's `Retry-After` (P315, REData P70).
