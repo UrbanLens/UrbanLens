@@ -1074,6 +1074,14 @@ class PinListDetailSerializer(PinListSerializer):
     """One pin list including its full boundary geometry."""
 
     smart_boundary = serializers.SerializerMethodField()
+    #: True while pin changes are still queued for this smart list's sync, so its items may not match its rules yet.
+    membership_pending = serializers.SerializerMethodField()
+
+    def get_membership_pending(self, obj) -> bool:
+        """Whether the list may not yet reflect its owner's latest pin changes."""
+        from urbanlens.dashboard.services.pins.smart_list_sync import membership_pending
+
+        return membership_pending(obj)
 
     def get_smart_boundary(self, obj) -> dict | None:
         """The boundary as a GeoJSON MultiPolygon, or null when unset."""

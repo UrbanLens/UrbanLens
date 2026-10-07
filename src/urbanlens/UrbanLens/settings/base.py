@@ -547,6 +547,11 @@ FULL_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.requeue_pending_calendar_pushes",
         "schedule": crontab(minute="*/15"),
     },
+    # Smart-list sync requests whose own sync was lost.
+    "smart-list-sync-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_smart_list_sync_requests",
+        "schedule": crontab(minute="7-59/10"),
+    },
     # Facts whose queued confidence recompute never ran.
     "fact-confidence-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_stale_fact_confidence",

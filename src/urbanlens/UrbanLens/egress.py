@@ -367,6 +367,7 @@ BEAT_EGRESS: Mapping[str, BeatEgress] = {
     "wayback-archive-sweep": BeatEgress.EXTERNAL,
     "calendar-push-sweep": BeatEgress.EXTERNAL,
     "fact-confidence-sweep": BeatEgress.INTERNAL,
+    "smart-list-sync-sweep": BeatEgress.INTERNAL,
     "requeue-stalled-device-scans": BeatEgress.INTERNAL,
     "discard-unretried-failed-uploads": BeatEgress.INTERNAL,
     "sweep-stale-preview-sources": BeatEgress.INTERNAL,
