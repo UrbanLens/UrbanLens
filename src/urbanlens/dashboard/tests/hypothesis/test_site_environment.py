@@ -6,6 +6,7 @@ import os
 from unittest.mock import patch
 
 from django.contrib.auth.models import AnonymousUser, User
+from django.core.exceptions import ImproperlyConfigured
 from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
@@ -32,14 +33,18 @@ class SiteSettingsEnvironmentTests(TestCase):
         with patch.dict(os.environ, {"UL_ENVIRONMENT": "production"}):
             self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
 
-    def test_default_falls_back_to_production_without_env_var(self) -> None:
+    def test_default_refuses_without_env_var(self) -> None:
+        """Startup refuses first; this is the same refusal if the variable is lost while running."""
         SiteSettings.objects.filter(pk=self.site.pk).update(
             environment_override=EnvironmentOverrideChoice.DEFAULT,
         )
         self.site.refresh_from_db()
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
-        with patch.dict(os.environ, stripped, clear=True):
-            self.assertEqual(self.site.get_effective_environment_type(), EnvironmentTypes.PRODUCTION)
+        with (
+            patch.dict(os.environ, stripped, clear=True),
+            self.assertRaisesRegex(ImproperlyConfigured, "UL_ENVIRONMENT is not set"),
+        ):
+            self.site.get_effective_environment_type()
 
     def test_development_override_wins_over_env_var(self) -> None:
         SiteSettings.objects.filter(pk=self.site.pk).update(
@@ -116,12 +121,15 @@ class IsDevelopmentEnvironmentTests(TestCase):
         self._set_override(EnvironmentOverrideChoice.TESTING)
         self.assertFalse(self.site.is_development_environment())
 
-    def test_default_with_no_env_var_is_not_dev(self) -> None:
-        """Unset is production, so an image run without UL_ENVIRONMENT does not show admins the dev toolbar."""
+    def test_default_with_no_env_var_refuses_rather_than_showing_the_dev_toolbar(self) -> None:
+        """Unset used to mean production here; it never means development, and now it is not an answer at all."""
         self._set_override(EnvironmentOverrideChoice.DEFAULT)
         stripped = {k: v for k, v in os.environ.items() if k != "UL_ENVIRONMENT"}
-        with patch.dict(os.environ, stripped, clear=True):
-            self.assertFalse(self.site.is_development_environment())
+        with (
+            patch.dict(os.environ, stripped, clear=True),
+            self.assertRaisesRegex(ImproperlyConfigured, "UL_ENVIRONMENT is not set"),
+        ):
+            self.site.is_development_environment()
 
     def test_default_with_ul_environment_local_is_dev(self) -> None:
         self._set_override(EnvironmentOverrideChoice.DEFAULT)

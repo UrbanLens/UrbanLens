@@ -13,7 +13,7 @@ from oauth2_provider.utils import set_oauthlib_user_to_device_request_user
 
 from urbanlens.dashboard.services.auth.oauth_device import refuse_an_inactive_account
 from urbanlens.UrbanLens.egress import PROTOMAPS_API_ORIGIN, email_delivery_backend, hosted_basemap_key, policy_environment, scheduled_beat_entries
-from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, environment_from_env
+from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, EnvironmentTypes, environment_from_env
 from urbanlens.UrbanLens.settings._env import (
     deployment_settings_required,
     is_loopback_host,
@@ -29,6 +29,20 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Find the repo-root .env regardless of working directory.
 load_dotenv(find_dotenv())
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    return os.getenv(name, str(default)).lower() in {"true", "1", "yes"}
+
+
+# pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
+TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
+
+# An unset UL_ENVIRONMENT refuses to start (Jess, 2026-10-07), except in a test run, which is never a deployment:
+# one started without it (a worktree has no .env) is the suite, named as CI names it. Written to os.environ so
+# xdist workers, which hide pytest from argv, and anything reading the variable later get the same answer.
+if TESTING and not os.environ.get("UL_ENVIRONMENT", "").strip():
+    os.environ["UL_ENVIRONMENT"] = str(EnvironmentTypes.TESTING)
 
 ENVIRONMENT_NAME = str(environment_from_env())
 _is_local = ENVIRONMENT_NAME == "local"
@@ -56,12 +70,6 @@ SECRET_KEY = require_deployment_setting(
 )
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    return os.getenv(name, str(default)).lower() in {"true", "1", "yes"}
-
-
-# pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
-TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
 # The environment the egress policy applies (D26): the test suite takes production's terms, since it mocks the network.
 EGRESS_ENVIRONMENT = policy_environment(ENVIRONMENT_NAME, testing=TESTING)
 
