@@ -26,6 +26,7 @@ from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
     CalendarNotConfiguredError,
+    CalendarUnavailableError,
     build_authorization_url,
     exchange_code_for_tokens,
     revoke_token,
@@ -35,6 +36,7 @@ from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.trips.calendar_sync import (
     CALENDAR_BUSY_MESSAGE,
+    CALENDAR_UNAVAILABLE_MESSAGE,
     MAX_IMPORTABLE_EVENTS,
     TooManyEventsError,
     build_import_preview,
@@ -116,8 +118,9 @@ _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try aga
 def _drop_expired_account(account: GoogleCalendarAccount) -> None:
     """Delete a connection Google has already rejected.
 
-    Called when a gateway call raises ``GoogleAuthExpiredError`` - the stored tokens are dead, so
-    keeping the row around would just repeat the same failure on every next attempt.
+    Called only when a gateway call raises ``GoogleAuthExpiredError`` - Google refused the grant itself, so
+    keeping the row around would just repeat the same failure on every next attempt. A failure that passes, or one
+    about the site rather than the user (P337), keeps it.
 
     Args:
         account: The connection to discard.
@@ -266,6 +269,8 @@ class CalendarImportView(LoginRequiredMixin, View):
             _drop_expired_account(account)
             account = None
             error = _RECONNECT_MESSAGE
+        except CalendarUnavailableError:
+            error = CALENDAR_UNAVAILABLE_MESSAGE
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             error = _GATEWAY_FAILURE_MESSAGE
@@ -381,6 +386,8 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return HttpResponse(_RECONNECT_MESSAGE, status=502)
+        except CalendarUnavailableError:
+            return HttpResponse(CALENDAR_UNAVAILABLE_MESSAGE, status=503)
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return HttpResponse(_GATEWAY_FAILURE_MESSAGE, status=502)
@@ -448,6 +455,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         except RateLimitExceededError:
             # Nothing of the trip reached the calendar, so there is nothing to finish later.
             return self._render_button(request, trip, profile, toast=("warning", CALENDAR_BUSY_MESSAGE))
+        except CalendarUnavailableError:
+            return self._render_button(request, trip, profile, toast=("error", CALENDAR_UNAVAILABLE_MESSAGE))
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))
@@ -481,6 +490,10 @@ class TripCalendarExportView(LoginRequiredMixin, View):
         except GoogleAuthExpiredError:
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
+        except RateLimitExceededError:
+            return self._render_button(request, trip, profile, toast=("warning", CALENDAR_BUSY_MESSAGE))
+        except CalendarUnavailableError:
+            return self._render_button(request, trip, profile, toast=("error", CALENDAR_UNAVAILABLE_MESSAGE))
         except GatewayRequestError as exc:
             logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
             return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))

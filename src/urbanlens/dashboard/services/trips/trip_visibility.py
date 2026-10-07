@@ -18,19 +18,38 @@ if TYPE_CHECKING:
 HIDDEN_ACTIVITY_TITLE = "Secret Location"
 
 
+def shown_activity_title(activity: TripActivity, *, hidden: bool) -> str | None:
+    """The activity's own stored title as this viewer may see it.
+
+    A title filled in from the place (``TripActivity.title_from_place``) names the place, so it goes wherever the
+    location goes. A title the author typed was written for the other members and is kept.
+
+    Args:
+        activity: The activity being rendered.
+        hidden: Whether this viewer may not see its location.
+
+    Returns:
+        The title, or None when it has none or it names a place this viewer may not see.
+    """
+    title = (activity.title or "").strip()
+    if not title or (hidden and activity.title_from_place):
+        return None
+    return title
+
+
 def masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
-    """The activity's title as this viewer may see it.
+    """The activity's display title as this viewer may see it.
     An activity's ``effective_title`` falls back to its location's name, so for a hidden activity the title *is* the location - which is why masking it is not cosmetic.
 
     Args:
         activity: The activity being rendered.
-        hidden: Whether this viewer may see its location.
+        hidden: Whether this viewer may not see its location.
 
     Returns:
         A display title safe to put anywhere in the page, including in attributes the eye does not reach."""
     if not hidden:
         return activity.effective_title
-    return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
+    return shown_activity_title(activity, hidden=True) or HIDDEN_ACTIVITY_TITLE
 
 
 def apply_trip_visibility_filter(

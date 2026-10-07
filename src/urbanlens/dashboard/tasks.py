@@ -445,22 +445,45 @@ def push_trip_to_calendar(trip_id: int) -> int:
 PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
 #: Pushes in a row that wrote nothing, after which a request is dropped until the trip changes again. A push that
 #: wrote some events and ran out of budget does not count, so a long export is finished however many it takes.
+#: Also the cap on a calendar event delete Google keeps refusing.
 MAX_CALENDAR_PUSH_ATTEMPTS = 5
 PENDING_CALENDAR_PUSH_BATCH = 200
+#: A calendar event delete still owed after this long is dropped: its calendar was never reconnected, or Google
+#: kept refusing the site.
+MAX_CALENDAR_DELETION_AGE = timedelta(days=30)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def delete_orphaned_calendar_events(profile_id: int) -> int:
+    """Delete the events UrbanLens made on one profile's calendar whose trip or activity is gone.
+
+    Args:
+        profile_id: Whose calendar.
+
+    Returns:
+        How many events were deleted.
+    """
+    from urbanlens.dashboard.services.trips.calendar_sync import delete_queued_calendar_events
+
+    return delete_queued_calendar_events(profile_id)
 
 
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("calendar-push-sweep")
 def requeue_pending_calendar_pushes() -> int:
-    """Queue the calendar pushes owed and not delivered: an auto-sync change, or the rest of a cut-short export.
+    """Queue the calendar writes owed and not delivered: an auto-sync change, the rest of a cut-short export, or the
+    delete of an event whose trip or activity is gone.
 
     Returns:
-        How many trips were queued.
+        How many trips and calendars were queued.
     """
-    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.calendar_sync.model import CalendarEventDeletion, TripCalendarLink
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
-    cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
+    now = timezone.now()
+    cutoff = now - PENDING_CALENDAR_PUSH_AGE
     # Not limited to auto_sync links: an export the budget cut short marks its link whether or not it auto-syncs.
     pending = TripCalendarLink.objects.filter(activity__isnull=True, push_requested_at__lt=cutoff)
     abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
@@ -472,8 +495,16 @@ def requeue_pending_calendar_pushes() -> int:
         # A refusal is found again by the next sweep.
         if safely_enqueue_task(push_trip_to_calendar, trip_id, durable=False) is not None:
             queued += 1
+
+    dropped, _by_model = CalendarEventDeletion.objects.filter(Q(attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS) | Q(created__lt=now - MAX_CALENDAR_DELETION_AGE)).delete()
+    if dropped:
+        logger.warning("Dropped %d calendar event delete(s) Google kept refusing or no calendar took for %s", dropped, MAX_CALENDAR_DELETION_AGE)
+    owed_deletes = CalendarEventDeletion.objects.filter(created__lt=cutoff).order_by("profile_id").values_list("profile_id", flat=True).distinct()
+    for profile_id in list(owed_deletes[:PENDING_CALENDAR_PUSH_BATCH]):
+        if safely_enqueue_task(delete_orphaned_calendar_events, profile_id, durable=False) is not None:
+            queued += 1
     if queued:
-        logger.info("Re-queued %d calendar auto-sync push(es)", queued)
+        logger.info("Re-queued %d calendar push(es) and delete(s)", queued)
     return queued
 
 

@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import client_event_id
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.google_oauth import GOOGLE_TOKEN_URL
 from urbanlens.dashboard.services.core import rate_limiter
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
@@ -75,7 +76,11 @@ class FakeGoogleCalendar:
         lose_next_response_to: Apply the next request with this method, then raise as if its response were lost.
         fail_after: Answer ``failure`` to every request after this many.
         failure: ``(status, json body)`` of the answer ``fail_after`` gives; a 500 unless a test sets another.
+        refuse_next: ``(status, json body)`` answers given, in order, to the next requests, before anything is applied.
         meanwhile: Called once, after the request numbered by its first element has been applied.
+        token_answer: What Google's token endpoint answers a refresh with: ``(status, json body)``, or an exception
+            to raise as if no answer came.
+        token_requests: How many refreshes reached the token endpoint; not counted in ``requests``.
     """
 
     def __init__(self) -> None:
@@ -84,9 +89,17 @@ class FakeGoogleCalendar:
         self.lose_next_response_to: str | None = None
         self.fail_after: int | None = None
         self.failure: tuple[int, dict[str, Any]] = (500, {"error": {"message": "backend error"}})
+        self.refuse_next: list[tuple[int, dict[str, Any]]] = []
         self.meanwhile: tuple[int, Callable[[], object]] | None = None
+        self.token_answer: tuple[int, dict[str, Any]] | Exception = (
+            200,
+            {"access_token": "refreshed", "expires_in": 3599},
+        )
+        self.token_requests = 0
 
     def __call__(self, _session: requests.Session, method: str, url: str, **kwargs: Any) -> requests.Response:
+        if url == GOOGLE_TOKEN_URL:
+            return self._refresh()
         response = self._answer(method, url, **kwargs)
         if self.meanwhile is not None and len(self.requests) == self.meanwhile[0]:
             _count, action = self.meanwhile
@@ -104,6 +117,8 @@ class FakeGoogleCalendar:
         event_id = match.group("event_id")
         body = kwargs.get("json")
         self.requests.append((method, event_id, body))
+        if self.refuse_next:
+            return _response(*self.refuse_next.pop(0))
         if self.fail_after is not None and len(self.requests) > self.fail_after:
             return _response(*self.failure)
         if method == "POST":
@@ -121,6 +136,12 @@ class FakeGoogleCalendar:
             event["status"] = "cancelled"
             return _response(204)
         raise AssertionError(f"unexpected method {method}")
+
+    def _refresh(self) -> requests.Response:
+        self.token_requests += 1
+        if isinstance(self.token_answer, Exception):
+            raise self.token_answer
+        return _response(*self.token_answer)
 
     def _insert(self, body: dict[str, Any]) -> requests.Response:
         event_id = body.get("id") or uuid.uuid4().hex

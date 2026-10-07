@@ -147,11 +147,21 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-def _trip_representative_point(trip: Trip) -> tuple[float, float] | None:
-    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity."""
+def _trip_representative_point(trip: Trip, profile: Profile) -> tuple[float, float] | None:
+    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity *profile* may see.
+
+    A stop whose location is hidden from the profile is passed over: its point would place the trip on the map, and
+    a ``bbox`` filter could find it.
+    """
+    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
+
     # trip.activities.all() rather than a fresh .select_related().order_by() chain, so the
     # caller's Prefetch is actually used - re-filtering the manager would re-query per trip.
-    for activity in trip.activities.all():
+    activities = list(trip.activities.all())
+    hidden = viewer_hidden_activity_ids(activities, profile)
+    for activity in activities:
+        if activity.id in hidden:
+            continue
         if activity.lat_override is not None and activity.lng_override is not None:
             return (activity.lat_override, activity.lng_override)
         if activity.pin and activity.pin.effective_latitude is not None and activity.pin.effective_longitude is not None:
@@ -175,7 +185,7 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         .prefetch_related(
             Prefetch(
                 "activities",
-                queryset=TripActivity.objects.select_related("pin", "location").order_by("scheduled_at", "order"),
+                queryset=TripActivity.objects.select_related("pin", "location", "added_by").order_by("scheduled_at", "order"),
             )
         )
         .order_by("-_eff_start", "-pk")
@@ -194,7 +204,7 @@ def _trips_for_range(profile: Profile, start: date, end: date, bbox: BBox | None
         if occurred_at is None:
             continue
         ended_at = trip._eff_end  # noqa: SLF001
-        point = _trip_representative_point(trip)
+        point = _trip_representative_point(trip, profile)
         if bbox is not None and (point is None or not (bbox.min_lat <= point[0] <= bbox.max_lat and bbox.min_lng <= point[1] <= bbox.max_lng)):
             continue
         yield MemoryEvent(

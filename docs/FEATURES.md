@@ -1063,12 +1063,30 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
   (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
-  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. A rate limit never drops the
-  connection; an auth or permission refusal does, and so, for now, does any failed token refresh
-  (P337). Each member's export applies their own location visibility: a stop whose location they
-  may not see is exported with `location: ""` and the title "Secret Location", so an update clears
-  a location an earlier export wrote (a PATCH keeps omitted fields). An imported event keeps its own
-  location unless one is withheld
+  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. Only Google's refusal of the
+  user's grant drops the connection: `invalid_grant` from the token endpoint, a 401 a fresh access
+  token does not cure (the gateway refreshes and retries once), or a 403 that is not a rate limit,
+  not about one event (`forbiddenForNonOrganizer`) and not about the site. A refresh that gets a 5xx,
+  a 429 or no answer is "busy" like a rate limit; a refusal of the site's Google project
+  (`accessNotConfigured`, `SERVICE_DISABLED`, ...) or OAuth client is logged at ERROR and reported
+  as calendar sync being unavailable (P337). Each member's export applies their own location
+  visibility: a stop whose location they may not see is exported with `location: ""` and the title
+  the activities panel shows them (a title its author typed, else "Secret Location"), so an update
+  clears a location an earlier export wrote (a PATCH keeps omitted fields). An imported event keeps
+  its own location unless one is withheld. A change to what a member may see that does not save the
+  trip (a trip-mate's `trip_pin_location_visibility`, an ended friendship, a removed pin, a deleted
+  adder account) queues the same auto-sync push an edit does (`models/calendar_sync/signals.py`). A
+  deleted stop or trip has the events UrbanLens made for it deleted from every exporter's calendar,
+  through the calendar budget (`CalendarEventDeletion`, `delete_orphaned_calendar_events`, retried
+  by the push sweep); an event an import linked from the user's own calendar is never deleted (P336).
+  `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`) rewrites, once, the events
+  of exports without auto-sync that may still hold a location or title now withheld
+- A hidden stop (its own "hide location", or its adder's `trip_pin_location_visibility`) shows a
+  member who may not see it neither its place's name nor its location: the activities panel and its
+  edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel
+  and `@act` mentions all mask it. A title taken from a place search or an imported event's location
+  (`TripActivity.title_from_place`) is masked with the location; a title the author typed is still
+  shown (P338)
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an
@@ -1638,7 +1656,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
   marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
   PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
-  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`: an auto-sync change, or an export the budget cut short),
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`: an auto-sync change, or an export the budget cut short;
+  and `CalendarEventDeletion`: an event whose stop or trip was deleted),
   `sweep_unarchived_links` (a pin or wiki link without a Wayback snapshot: a failed URL waits
   1 h, 6 h, 1 d, 3 d, 7 d, then 30 d before it is given up, in `wayback_retry_at`; a link whose
   own task never ran is taken up after 15 minutes; `services/links/wayback_archive.py`).

@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.notifications.change_notifications import anno
 from urbanlens.dashboard.services.trips.trip_access import has_joined, is_organizer, require_joined, require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError, TripQuotaError, TripValidationError
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
-from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, viewer_hidden_activity_ids
+from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, shown_activity_title, viewer_hidden_activity_ids
 from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 from urbanlens.dashboard.services.wiki.wiki_access import visible_locations_filter
 
@@ -284,7 +284,8 @@ def create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivi
         add_visited_status(pin)
 
     if activity.scheduled_at is not None:
-        other_memberships = list(TripMembership.objects.filter(trip=trip).exclude(profile=completer).select_related("profile"))
+        # A suggestion names the place and its coordinates, so a member who may not see the stop's location gets none.
+        other_memberships = [membership for membership in TripMembership.objects.filter(trip=trip).exclude(profile=completer).select_related("profile") if not viewer_hidden_activity_ids([activity], membership.profile)]
         overrides = dict(
             TripActivityRSVP.objects.filter(
                 activity=activity,
@@ -395,6 +396,9 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             # The panel did exactly that: it swapped the visible label for "Secret Location" and
             # then emitted the real name and slug into the row's own data attributes and the RSVP
             "display_title": masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
+            # The stored title, for the edit dialog and the API's ``title``: blank when it names a place this viewer
+            # may not see (P338).
+            "display_own_title": shown_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
             "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
             "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
             # A linked child trip's name/uuid are exactly the kind of identifying information a
@@ -512,11 +516,14 @@ def create_activity(
     _checked_schedule(scheduled_at, "The start time")
     _checked_schedule(scheduled_end, "The end time")
     location, pin = resolve_activity_place(place or {}, actor, trip=trip)
+    title_from_place = False
     if clean_title is None and pin is None:
-        # The picked place's name is the activity's own, never the shared Location's.
+        # The picked place's name is the activity's own, never the shared Location's. It still names the place, so it
+        # is marked to be withheld wherever the location is (P338).
         title_field = TripActivity._meta.get_field("title")  # noqa: SLF001 - _meta is public API
         geocoded_name = _clean_text((place or {}).get("geocoded_name"))
         clean_title = geocoded_name[: title_field.max_length] if geocoded_name and isinstance(title_field, CharField) else geocoded_name
+        title_from_place = clean_title is not None
     child_trip = _resolve_child_trip(child_trip_uuid, actor)
 
     clean_status = str(status or "").strip()
@@ -532,6 +539,7 @@ def create_activity(
             pin=pin,
             added_by=actor,
             title=clean_title,
+            title_from_place=title_from_place,
             notes=clean_notes,
             scheduled_at=scheduled_at,
             scheduled_end=scheduled_end,
@@ -594,7 +602,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     before = _editable_state(activity)
 
     if "title" in changes:
-        activity.title = _clean_text(changes["title"])
+        _apply_title(activity, actor, _clean_text(changes["title"]))
     if "notes" in changes:
         clean_notes = _clean_text(changes["notes"])
         length_error = text_length_error(clean_notes, MAX_TRIP_ACTIVITY_NOTES_LENGTH, "Notes")
@@ -628,9 +636,32 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     return activity
 
 
+def _apply_title(activity: TripActivity, actor: Profile, title: str | None) -> None:
+    """Set a title the actor submitted, which is theirs from then on rather than the place's.
+
+    The edit dialog posts every field, and a title taken from a place the actor may not see reached them blank
+    (``shown_activity_title``): submitting it back blank is not a request to clear a title they were never shown.
+    Any other title from such an actor is theirs, even one that matches the stored name, so that whether it matched
+    cannot be read off the result.
+
+    Args:
+        activity: The activity being edited.
+        actor: The profile editing it.
+        title: The submitted title, cleaned.
+    """
+    withheld = activity.title_from_place and bool(viewer_hidden_activity_ids([activity], actor))
+    if title is None and withheld:
+        return
+    if title == activity.title and not withheld:
+        return
+    activity.title = title
+    activity.title_from_place = False
+
+
 def _editable_state(activity: TripActivity) -> tuple[Any, ...]:
     return (
         activity.title,
+        activity.title_from_place,
         activity.notes,
         activity.scheduled_at,
         activity.scheduled_end,
