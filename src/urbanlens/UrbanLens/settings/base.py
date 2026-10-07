@@ -16,6 +16,7 @@ from urbanlens.UrbanLens.egress import PROTOMAPS_API_ORIGIN, email_delivery_back
 from urbanlens.UrbanLens.environments.meta import EPHEMERAL_ENVIRONMENTS, EnvironmentTypes, environment_from_env
 from urbanlens.UrbanLens.settings._env import (
     deployment_settings_required,
+    env_bool,
     is_loopback_host,
     is_production_environment,
     persistent_connection_seconds,
@@ -31,12 +32,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(find_dotenv())
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    return os.getenv(name, str(default)).lower() in {"true", "1", "yes"}
-
-
 # pytest-django skips DiscoverRunner's HTTPS-redirect disable, so detect tests here too.
-TESTING = _env_bool("DJANGO_TESTING", False) or running_under_pytest()
+TESTING = env_bool("DJANGO_TESTING", default=False) or running_under_pytest()
 
 # An unset UL_ENVIRONMENT refuses to start (Jess, 2026-10-07), except in a test run, which is never a deployment:
 # one started without it (a worktree has no .env) is the suite, named as CI names it. Both are written to os.environ
@@ -76,7 +73,7 @@ SECRET_KEY = require_deployment_setting(
 # The environment the egress policy applies (D26): the test suite takes production's terms, since it mocks the network.
 EGRESS_ENVIRONMENT = policy_environment(ENVIRONMENT_NAME, testing=TESTING)
 
-DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
+DEBUG = env_bool("DJANGO_DEBUG", _is_dev)
 if DEBUG and _deployment:
     raise ImproperlyConfigured(
         f"DJANGO_DEBUG is on while UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. Debug pages publish settings, SQL and tracebacks to anyone who triggers an error; it is only allowed in local, development and testing.",
@@ -84,7 +81,6 @@ if DEBUG and _deployment:
 
 # AppSettings owns ALLOWED_HOSTS (UL_ALLOWED_HOSTS); local defaults allow immediate access.
 from urbanlens.UrbanLens.settings import _metrics  # noqa: E402
-from urbanlens.UrbanLens.settings._env import env_bool  # noqa: E402
 from urbanlens.UrbanLens.settings.app import settings as _app_settings  # noqa: E402
 
 ALLOWED_HOSTS = _app_settings.allowed_hosts
@@ -247,9 +243,9 @@ DATABASES = {
         "PORT": os.getenv("UL_DB_PORT", "5432"),
         # Persistent connections for deployments reaching the DB over high-latency links.
         "CONN_MAX_AGE": persistent_connection_seconds(),
-        "CONN_HEALTH_CHECKS": os.getenv("UL_DB_CONN_HEALTH_CHECKS", "").lower() in {"1", "true", "yes"},
+        "CONN_HEALTH_CHECKS": env_bool("UL_DB_CONN_HEALTH_CHECKS", default=False),
         # Required behind a transaction-mode pooler: .iterator() outside atomic() holds a cursor across transactions.
-        "DISABLE_SERVER_SIDE_CURSORS": env_bool("UL_DB_DISABLE_SERVER_SIDE_CURSORS", False),
+        "DISABLE_SERVER_SIDE_CURSORS": env_bool("UL_DB_DISABLE_SERVER_SIDE_CURSORS", default=False),
         # Fail fast on unreachable DB so a request errors instead of holding a worker.
         "OPTIONS": {
             "connect_timeout": int(os.getenv("UL_DB_CONNECT_TIMEOUT", "10")),
@@ -383,7 +379,7 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = os.getenv("UL_CELERY_TIMEZONE", "UTC")
-CELERY_TASK_ALWAYS_EAGER = os.getenv("UL_CELERY_TASK_ALWAYS_EAGER", "False").lower() in {"true", "1", "yes"}
+CELERY_TASK_ALWAYS_EAGER = env_bool("UL_CELERY_TASK_ALWAYS_EAGER", default=False)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_SEND_SENT_EVENT = True
 # Events feed the celery-metrics exporter; off when metrics are off.
@@ -416,7 +412,7 @@ UL_AI_INFERENCE_TIMEOUT_SECONDS = _app_settings.ai_inference_timeout_seconds
 UL_DIRECT_INFERENCE_POLICY = _app_settings.direct_inference_policy
 UL_AI_WORKER_ENABLED = _app_settings.ai_worker_enabled
 # Backup defaults, overridable in the database-backed settings UI.
-UL_BACKUP_ENABLED = os.getenv("UL_BACKUP_ENABLED", "True").lower() in {"true", "1", "yes"}
+UL_BACKUP_ENABLED = env_bool("UL_BACKUP_ENABLED", default=True)
 UL_BACKUP_FREQUENCY_HOURS = int(os.getenv("UL_BACKUP_FREQUENCY_HOURS", "24"))
 UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
@@ -751,7 +747,7 @@ MEDIA_URL = f"{UL_MEDIA_BASE_URL}/media/" if UL_MEDIA_BASE_URL else "/media/"
 MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
 
 # Gate answers with X-Accel-Redirect behind nginx, streams directly in dev.
-MEDIA_X_ACCEL = _env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
+MEDIA_X_ACCEL = env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
 # Must match the nginx `location /_protected_media/` block.
 MEDIA_X_ACCEL_PREFIX = "/_protected_media/"
 
@@ -793,16 +789,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Plain HTTP only for local/dev by default; override via UL_UNSAFE_ALLOW_HTTP.
 _http_default = "True" if _is_dev else "False"
-UNSAFE_ALLOW_HTTP = _env_bool("UL_UNSAFE_ALLOW_HTTP", _http_default == "True")
+UNSAFE_ALLOW_HTTP = env_bool("UL_UNSAFE_ALLOW_HTTP", _http_default == "True")
 SECURE_SSL_REDIRECT = not UNSAFE_ALLOW_HTTP and not TESTING
-SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
-CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
 # Container health checks hit /health over HTTP.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
 # HSTS mirrors SECURE_SSL_REDIRECT; preload left off for self-hosted domains.
 SECURE_HSTS_SECONDS = int(os.getenv("UL_HSTS_SECONDS", "31536000")) if SECURE_SSL_REDIRECT else 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
 
 # No Django setting exists for these; consumed by SecurityHeadersMiddleware.
 PERMISSIONS_POLICY = "geolocation=(self), clipboard-write=(self), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()"

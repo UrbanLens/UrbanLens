@@ -12,9 +12,12 @@ from pathlib import Path
 import re
 import time
 import tomllib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 CATALOGUE = Path(__file__).with_name("kirkbrides.toml")
 
@@ -89,28 +92,108 @@ class Site:
             found.append(_normalized(match.group(1)))
         return tuple(phrase for phrase in found if phrase)
 
+    def needs_qualifier(self, label: str) -> bool:
+        """Whether a text naming ``label`` could be about another place: the label does not say it is an institution
+        ("The Ridges"), or other campuses share it (this site's wikipedia title is disambiguated in parentheses).
+        """
+        return "(" in self.wikipedia or _INSTITUTION_WORDS.isdisjoint(_normalized(_undisambiguated(label)).split())
+
+    @property
+    def news_queries(self) -> tuple[str, ...]:
+        """One news search per distinct name, each carrying the town and state when the name needs a qualifier.
+
+        A search for "Central State Hospital" alone is answered with whichever campus of that name is in the news.
+        """
+        queries: dict[str, str] = {}
+        for label in self.labels:
+            phrase = " ".join(_undisambiguated(label).split())
+            query = f'"{phrase}"'
+            if self.needs_qualifier(phrase):
+                query = f"{query} {self.place.replace(',', '')}"
+            queries.setdefault(_normalized(phrase), query)
+        return tuple(queries.values())
+
     def mentions(self, *texts: Any) -> bool:
         """Whether any text names this site.
 
-        One of its names must appear as a whole phrase. A name that does not say it is an institution
-        ("The Ridges"), or that other campuses share (a wikipedia title disambiguated in parentheses),
-        also needs the town or the disambiguator somewhere in the same texts - not necessarily next to it,
-        so "Athens, Georgia ... the ridges" still counts for Athens, Ohio.
+        One of its names must appear as a whole phrase. A name that ``needs_qualifier`` also needs the town or
+        the disambiguator somewhere in the same texts - not necessarily next to it, so "Athens, Georgia ...
+        the ridges" still counts for Athens, Ohio.
         """
         haystack = f" {_normalized(' '.join(str(text) for text in texts if text))} "
         qualified = any(f" {phrase} " in haystack for phrase in self.qualifiers)
-        shared = "(" in self.wikipedia
         for label in self.labels:
-            phrase = _normalized(re.sub(r"\([^)]*\)", "", label))
+            phrase = _normalized(_undisambiguated(label))
             if not phrase or f" {phrase} " not in haystack:
                 continue
-            if qualified or not (shared or _INSTITUTION_WORDS.isdisjoint(phrase.split())):
+            if qualified or not self.needs_qualifier(label):
                 return True
         return False
+
+    def register_listings(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """The ``cultural-resources/lookup/`` rows that list this campus.
+
+        A row does when its NRHP reference is the catalogue's (in ``external_id``, or in any attribute) or it names
+        the campus: in its ``name``, or in an attribute naming a historic district. A state register that records a
+        campus as a district does so on each building's row, whose own name is the building's: New Jersey's puts
+        Trenton's in ``attributes.HD_NAME``. A record the register has withdrawn (not eligible, delisted, removed)
+        never counts. An eligible district does, and ``eligible_only_note`` says when that is all there is.
+        """
+        return [row for row in rows if self._lists(row)]
+
+    def _lists(self, row: dict[str, Any]) -> bool:
+        if any(_WITHDRAWN.search(status) for status in _statuses(row)):
+            return False
+        attributes = list(_scalars(row.get("attributes")))
+        if self.nrhp and any(value.startswith(self.nrhp) for value in [str(row.get("external_id", "")), *attributes]):
+            return True
+        districts = [value for value in attributes if re.search(r"\bdistricts?\b", value, re.IGNORECASE)]
+        return self.mentions(row.get("name"), *districts)
+
+
+#: Register statuses that say a record is not the campus's listing, whatever its name or number.
+_WITHDRAWN = re.compile(r"not[\s_-]*eligible|delisted|removed", re.IGNORECASE)
 
 
 def _normalized(text: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _undisambiguated(label: str) -> str:
+    """``label`` without a parenthetical disambiguator, which no article or headline contains."""
+    return re.sub(r"\([^)]*\)", "", label)
+
+
+def _statuses(row: dict[str, Any]) -> list[str]:
+    """What a row says its register status is: its ``status``, and any top-level attribute named like one."""
+    found = [row.get("status")]
+    if isinstance(attributes := row.get("attributes"), dict):
+        found += [value for key, value in attributes.items() if "status" in str(key).lower()]
+    return [value for value in found if isinstance(value, str)]
+
+
+def eligible_only_note(listed: list[dict[str, Any]]) -> str:
+    """Why matching register rows are not a listing, or ``""`` when any of them is one.
+
+    A state register can record a campus as an eligible district without listing it (New Jersey's ``ELIGIBLE_HD``).
+    The check counts that, and its result says so.
+    """
+    if not listed or not all(any("eligible" in status.lower() for status in _statuses(row)) for row in listed):
+        return ""
+    statuses = sorted({status for row in listed for status in _statuses(row) if "eligible" in status.lower()})
+    return f"matched only eligible, not listed, register rows: {len(listed)} with status {', '.join(statuses)}"
+
+
+def _scalars(value: Any) -> Iterator[str]:
+    """Every string and number nested in a row's ``attributes``, as text."""
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from _scalars(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _scalars(item)
+    elif isinstance(value, str | int | float) and not isinstance(value, bool):
+        yield str(value)
 
 
 def load_sites(path: Path = CATALOGUE) -> list[Site]:
@@ -189,6 +272,9 @@ class LiveRedata:
             self.session.headers["X-Forwarded-Proto"] = "https"
         self.max_wait_seconds = max_wait_seconds
         self._answers: dict[tuple[str, tuple[tuple[str, str], ...]], Answer] = {}
+        # A call still refused when its wait ran out, by why: the session's verdict for it. Asking again from the next
+        # check repeats work REData could not finish - a cold buildings answer that times a worker out, once per check.
+        self._unanswered: dict[tuple[str, tuple[tuple[str, str], ...]], str] = {}
         self.log: list[dict[str, Any]] = []
 
     @classmethod
@@ -219,6 +305,8 @@ class LiveRedata:
         key = (path, tuple(sorted((name, str(value)) for name, value in params.items())))
         if key in self._answers:
             return self._answers[key]
+        if key in self._unanswered:
+            raise InconclusiveError(self._unanswered[key])
         deadline = time.monotonic() + self.max_wait_seconds
         while True:
             started = time.monotonic()
@@ -235,13 +323,16 @@ class LiveRedata:
             if _asks_again_later(response, error):
                 wait = _retry_after(response, body)
                 if time.monotonic() + wait > deadline:
-                    raise InconclusiveError(
+                    self._unanswered[key] = (
                         f"{path}: {error or response.status_code} for longer than {self.max_wait_seconds:.0f}s"
                     )
+                    raise InconclusiveError(self._unanswered[key])
                 time.sleep(wait)
                 continue
             answer = Answer(response.status_code, body, seconds)
-            if response.status_code < 500:
+            # A 503 carrying a REData error code it does not ask us to retry (parcels/lookup's no_data_found) is
+            # REData's answer for this session: asking again repeats the same live lookups upstream, once per check.
+            if response.status_code < 500 or (response.status_code == 503 and isinstance(error, str)):
                 self._answers[key] = answer
             return answer
 

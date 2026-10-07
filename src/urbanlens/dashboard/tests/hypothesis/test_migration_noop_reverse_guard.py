@@ -110,6 +110,37 @@ REVIEWED: dict[str, str] = {
         "Sets database defaults on columns 0036-0053 added. A reverse leaves them; no release reads a column's default, "
         "and reversing those migrations drops the columns with their defaults."
     ),
+    "0064_rate_limit_rows_take_0_9_0_defaults.py": (
+        "apply_0_9_0_defaults writes 0.9.0's limits and notes into ApiRateLimit rows that still hold exactly 0.8.0's. "
+        "A reverse leaves them: a row with 0.9.0's values cannot be told from one an admin set the same, so restoring "
+        "0.8.0's could lift a cap somebody chose. The values are ordinary integers and text, and 0.8.0 runs with "
+        "REData Places held to 40 a day."
+    ),
+    "0067_calendar_export_resumable.py": (
+        "raise_calendar_minute_limit moves google_calendar rows still holding every release's 30 a minute to 120; a row "
+        "at 120 cannot be told from one an admin set to 120, and an older release runs within it. "
+        "settle_marks_nothing_delivers clears push marks on links whose auto-sync is off, which no older release would "
+        "ever have delivered. The schema reverse drops the new field."
+    ),
+    "0068_rate_limit_rows_from_any_release_take_0_9_0_defaults.py": (
+        "bring_earlier_defaults_up_to_0_9_0 is 0064's rule for every earlier release's defaults, not only 0.8.0's: a row "
+        "still holding one of them takes 0.9.0's. Not reversed for 0064's reason - a row with 0.9.0's values cannot be "
+        "told from an admin's choice - and older releases read ordinary integers and text and run within 0.9.0's limits."
+    ),
+    "0069_calendar_privacy_followups.py": (
+        "mark_stored_titles_as_possibly_the_places only sets TripActivity.title_from_place, the column this migration "
+        "adds; reversing the AddField drops the column and every mark with it, so there is nothing left to undo. The "
+        "marks cannot be rebuilt by a later forward run either way: nothing records which titles were typed."
+    ),
+    "0070_withdraw_year_built_trivia.py": (
+        "withdraw_year_built_questions marks approved deterministic year-built trivia questions REJECTED with the "
+        "generator's withdrawn reason. A reverse leaves them so: one the generator withdrew since cannot be told apart, "
+        "and older code reads an ordinary rejected question, which it never serves and never re-approves - lossy, valid."
+    ),
+    "0071_safety_opt_out_email_normalized.py": (
+        "_backfill only fills SafetyContactOptOut.email_normalized, the column this migration adds; reversing the "
+        "AddField drops it, and the raw email it was derived from is untouched, so there is nothing left to undo."
+    ),
 }
 
 
@@ -134,7 +165,12 @@ def _noop_reverse_files() -> dict[str, list[str]]:
             if not reverse and len(node.args) >= 2:
                 reverse = ast.unparse(node.args[1])
             if "noop" in reverse:
-                forward = ast.unparse(node.args[0]) if node.args else "?"
+                code = (
+                    node.args[0]
+                    if node.args
+                    else next((kw.value for kw in node.keywords if kw.arg in {"code", "sql"}), None)
+                )
+                forward = ast.unparse(code) if code is not None else "?"
                 found.setdefault(path.name, []).append(forward)
     return found
 

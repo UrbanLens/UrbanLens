@@ -15,7 +15,7 @@
 #   bin/run_live_location_tests.sh --report out.json     # write per-check results and every call
 #   bin/run_live_location_tests.sh -- -k footprints -x   # pass through to pytest
 #
-# Environment (read from .env when unset):
+# Environment (read from .env when unset; the URL, key and Host only when the URL is unset, as one set):
 #   UL_LIVE_REDATA_API_URL   REData origin, e.g. https://redata.example.org (no /api/v1)
 #   UL_LIVE_REDATA_API_KEY   a key for that REData; a dedicated one, since a run spends its budget
 #   UL_LIVE_REDATA_HOST      Host header, when the URL is an address rather than the site's name
@@ -47,7 +47,16 @@ done
 # A worktree has no .env of its own; the main checkout's holds the key.
 env_file=.env
 [ -f "$env_file" ] || env_file="$(git rev-parse --path-format=absolute --git-common-dir)/../.env"
-for name in UL_LIVE_REDATA_API_URL UL_LIVE_REDATA_API_KEY UL_LIVE_REDATA_HOST UL_LIVE_MAX_WAIT_SECONDS; do
+# The URL, key and Host come from .env together or not at all: a URL from the environment with .env's Host would
+# send one deployment's name to another, and .env's key to a REData it was not issued by.
+names=(UL_LIVE_MAX_WAIT_SECONDS)
+if [ -z "${UL_LIVE_REDATA_API_URL:-}" ]; then
+    names+=(UL_LIVE_REDATA_API_URL UL_LIVE_REDATA_API_KEY UL_LIVE_REDATA_HOST)
+else
+    # Set, even when empty: the Django settings' load_dotenv fills only names that are unset.
+    export UL_LIVE_REDATA_HOST="${UL_LIVE_REDATA_HOST:-}"
+fi
+for name in "${names[@]}"; do
     if [ -z "${!name:-}" ] && [ -f "$env_file" ]; then
         value=$(sed -n "s/^${name}=//p" "$env_file" | tr -d "\"'" | head -1)
         [ -n "$value" ] && export "$name=$value"

@@ -45,11 +45,11 @@ from urbanlens.dashboard.external_api.throttling import (
 # reads.
 from urbanlens.dashboard.external_api.views import TripScopedApiView, _trip_detail_payload
 from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
-from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError
+from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError, CalendarUnavailableError
 from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
-from urbanlens.dashboard.services.trips.calendar_sync import CALENDAR_BUSY_MESSAGE, export_trip_to_calendar, remove_trip_from_calendar, trip_calendar_status
+from urbanlens.dashboard.services.trips.calendar_sync import CALENDAR_BUSY_MESSAGE, CALENDAR_UNAVAILABLE_MESSAGE, export_trip_to_calendar, remove_trip_from_calendar, trip_calendar_status
 from urbanlens.dashboard.services.trips.trip_crud import set_trip_permissions
 from urbanlens.dashboard.services.trips.trip_errors import TripError
 
@@ -179,8 +179,8 @@ class TripCalendarExportView(TripScopedApiView):
             exc: The exception raised by the calendar service.
 
         Returns:
-            409 for a dead grant, 503 when the deployment has no OAuth client configured or the calendar budget
-            is spent, 502 for any other upstream failure.
+            409 for a dead grant, 503 when the deployment has no OAuth client configured, Google refused the site, or
+            the calendar budget is spent (or Google is busy), 502 for any other upstream failure.
         """
         if isinstance(exc, GoogleAuthExpiredError):
             account.delete()
@@ -188,6 +188,9 @@ class TripCalendarExportView(TripScopedApiView):
         if isinstance(exc, CalendarNotConfiguredError):
             # A deployment-level omission, not anything the caller did wrong.
             return Response({"error": _NOT_CONFIGURED_MESSAGE}, status=503)
+        if isinstance(exc, CalendarUnavailableError):
+            # Google refused the site's project or OAuth client; already logged at ERROR by the gateway.
+            return Response({"error": CALENDAR_UNAVAILABLE_MESSAGE}, status=503)
         if isinstance(exc, RateLimitExceededError):
             # The calendar budget was spent before anything of the trip was written; an export that got further
             # answers 200 with complete: false instead.
@@ -273,6 +276,7 @@ class TripCalendarExportView(TripScopedApiView):
                 "complete": result.complete,
                 "events_synced": result.events_synced,
                 "events_total": result.events_total,
+                "events_refused": result.refused,
             },
         )
 
@@ -311,4 +315,4 @@ class TripCalendarExportView(TripScopedApiView):
         except (GoogleAuthExpiredError, CalendarNotConfiguredError, GatewayRequestError) as exc:
             return self._gateway_failure(request, account, exc)
 
-        return self._status_response(trip, profile, {"removed": removed})
+        return self._status_response(trip, profile, {"removed": bool(removed.unlinked), "events_kept": removed.kept})

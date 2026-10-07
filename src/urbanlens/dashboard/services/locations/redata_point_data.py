@@ -295,10 +295,12 @@ def dates_from_captures(captures: list[dict[str, Any]], latitude: float, longitu
 def live_timeline_date(entry: dict[str, Any], latitude: float, longitude: float) -> dict[str, Any] | None:
     """One ``/street-view/timeline/`` date without the frames REData marked :func:`mirror_gone`.
 
-    REData picks a date's representative by distance alone, gone or not. When the date names its frames (``captures``,
-    sent only for ``include_captures=true``), the nearest one still there stands in, and ``count``, ``is_panoramic`` and
-    ``captures`` describe only the frames left. Without them a gone representative has no stand-in, so the date is left
-    out, and the ``count`` of a kept date is REData's, gone frames included.
+    From REData 0.3.6 a date's representative is the nearest frame still there, and is gone only when every frame of
+    the date is; before it, the nearest frame, gone or not. When the date names its frames (``captures``, sent only for
+    ``include_captures=true``), the nearest one still there stands in, and ``count``, ``is_panoramic`` and ``captures``
+    describe only the frames left. Without them a gone representative has no stand-in, so the date is left out: from
+    0.3.6 because nothing of it loads, before it at the cost of any frames that would. The ``count`` of a kept date is
+    REData's, gone frames included.
 
     Args:
         entry: A ``dates[]`` entry of the timeline.

@@ -51,10 +51,15 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   job; so does a pin past its profile's ten bootstraps an hour, or the site's twenty. `manage.py bootstrap_pin <uuid|slug>`
   queues it for an existing pin
 - **Build dates from records** (`services.pins.build_dates`) — a building pin takes its record's
-  `year_built` when it is created; the root pin takes the year of a register listing drawn around it,
-  else of the building it stands on, else the assessor's, once the bootstrap has fetched them. Only an
-  empty date is filled, stored as January 1st of the year. The same year is recorded as `built_year`
-  evidence (`EXTERNAL_SOURCE`) on the place's wikis, and the wiki's About card shows "Built <year>"
+  `year_built` when it is created, only when REData says the year is the building's own
+  (`year_built_basis: "building"`, REData 0.3.6+; `own_build_year`). The assessor's year is the parcel's,
+  for its principal improvement, and reaches at most the building under the parcel's lookup point; a
+  record without a basis (older REData, a list cached before it) is read as the parcel's, so neither
+  dates a building. The root pin takes the year of a register listing drawn around it, else of the
+  building it stands on, else, unless it reads as a building itself, the assessor's, once the bootstrap
+  has fetched them. Only an empty date is filled, stored as January 1st of the year. The same year is
+  recorded as `built_year` evidence (`EXTERNAL_SOURCE`) on the place's wikis, and the wiki's About card
+  shows "Built <year>"
 - **Every building on a property becomes a child pin and a child wiki automatically**
   (`services.pins.auto_nest`, `services.pins.building_clusters`) — once a top-level pin's property
   outline is known and it holds several buildings, a background sweep creates one `building` sub pin
@@ -65,8 +70,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   within 15 m - collapse into one building, so no two sibling pins stand within 15 m; REData's
   `parent_ref` nesting always keeps a building apart from the one containing it. Child wikis take
   the building's public name, else "Building <number>", else its address, else a descriptor such as
-  "Garage (1925) at Hudson River State Hospital" - never the campus's own name or a private pin
-  name, and a later sweep renames one given a placeholder before the campus was named. Each building pin's
+  "Garage (1925) at Hudson River State Hospital", dated only by the building's own year (see Build dates
+  from records) - never the campus's own name or a private pin name. A later sweep renames one given a
+  placeholder before the campus was named, or a descriptor its records now date differently, including
+  one dated before UrbanLens read `year_built_basis`. Each building pin's
   detail boundary is its own footprint, which the floorplan editor seeds as exterior walls. The sweep
   runs when the pin is created, when the building list is fetched or refreshed, when the property
   outline arrives, and when the Buildings panel shows an unpinned building (throttled to once per
@@ -245,7 +252,8 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Import: Google Takeout (Saved Places, Location History, My Activity), GPX, GPX tracks, OSM XML,
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
-  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
+  (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV (a CSV text cell that opens with `=`, `+`,
+  `-`, `@`, a tab or a carriage return gets a leading `'` so a spreadsheet reads it as text)
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups. The archive
   carries safety check-in history, map annotations, saved searches/routes, pin aliases, and the
   profile's contact/social fields - all importable, with deliberate exceptions: live-status
@@ -744,8 +752,8 @@ direct-only because REData's contract can't reproduce what they show:
   `overview_summary()` into one unattributed list, then Nominatim, Photon, Elevation and Site
   Conditions. Tabs that settle with nothing to show are removed, and so is a tab whose panel's gate
   refuses the pin, which the Overview never fetches (`PinController._card_overview`)
-- **Property Records** — the parcel's and building's records: an Overview (owner, parcel number, year
-  built, historic status and National Register number), then Parcel, Building Characteristics (not
+- **Property Records** — the parcel's and building's records: an Overview (owner, parcel number, the
+  main building's year built, historic status and National Register number), then Parcel, Building Characteristics (not
   on a parcel, whose buildings carry their own) and Historic Preservation (Historic Registers and
   CRIS). The Overview names an official owner only to a viewer holding `SiteFeature.PROPERTY_OWNERS`,
   as the Parcel tab does, and says "Owner on record - subscribers only" to anyone else. It counts
@@ -767,7 +775,8 @@ direct-only because REData's contract can't reproduce what they show:
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
   that building at any depth - every record of one physical building links to the same pin - or
-  offers to create the ones that have none (`plugins.builtin.parcel_buildings`). On a pin's page it
+  offers to create the ones that have none (`plugins.builtin.parcel_buildings`). A row says when its
+  building was built only from the building's own year, never the parcel's. On a pin's page it
   is also where child pins are listed: a Child pins tab has every direct child of any type, a child
   pin with children of its own gets that list alone, and the header adds a child pin or pulls the
   wiki's in. CRIS's campus buildings are in this list, not repeated on the CRIS tab.
@@ -1066,16 +1075,54 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
-  when more exist; the import runs in the `import_calendar_events` task behind a progress poll.
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll, and skips
+  an event once the profile is at `max_upcoming_trips_per_user`, saying how many were skipped.
   An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
   under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
   (ours, or Google's rate limit: a 429, or a 403 with a usage-limit reason) runs out partway reports
-  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. A rate limit never drops the
-  connection; an auth or permission refusal does, and so, for now, does any failed token refresh
-  (P337). Each member's export applies their own location visibility: a stop whose location they
-  may not see is exported with `location: ""` and the title "Secret Location", so an update clears
-  a location an earlier export wrote (a PATCH keeps omitted fields). An imported event keeps its own
-  location unless one is withheld
+  "N of M" and leaves the rest to `requeue_pending_calendar_pushes`. Stops withheld from the
+  exporter are written first, so a budget cut leaves the events that matter least. An event Google
+  refuses for itself (`forbiddenForNonOrganizer`, a 400) is skipped and counted ("Google Calendar
+  refused to change K"), and the rest are still written; a push that met one counts an attempt only
+  when it wrote nothing else (UrbanLens#332). Only Google's refusal of the
+  user's grant drops the connection: `invalid_grant` from the token endpoint, a 401 a fresh access
+  token does not cure (the gateway refreshes and retries once), or a 403 naming a reason that is not
+  a rate limit, not about one event (`forbiddenForNonOrganizer`) and not about the site. A refresh
+  that gets a 5xx, a 429 or no answer is "busy" like a rate limit; a refusal of the site's Google
+  project (`accessNotConfigured`, `SERVICE_DISABLED`, ...) or OAuth client, or a 403 naming no
+  reason, is logged at ERROR and reported as calendar sync being unavailable (UrbanLens#302). A push
+  or queued delete held up by any of those, by Google failing (`CalendarServerError`), or by our own
+  limiter (unreadable, or the service switched off), waits for
+  the sweep and is not counted toward `MAX_CALENDAR_PUSH_ATTEMPTS`; only a refusal of the write
+  itself is, and anything still owed after `MAX_OWED_CALENDAR_WRITE_AGE` (30 days) is dropped.
+  Each member's export applies their own location
+  visibility: a stop whose location they may not see is exported with `location: ""` and the title
+  the activities panel shows them (a title its author typed, else "Secret Location"), so an update
+  clears a location an earlier export wrote (a PATCH keeps omitted fields). An imported event keeps
+  its own location unless one is withheld. A change to what a member may see that does not save the
+  trip (a trip-mate's `trip_pin_location_visibility`, an ended friendship, a removed pin, a deleted
+  adder account) queues the same auto-sync push an edit does (`models/calendar_sync/signals.py`). A
+  deleted stop or trip has the events UrbanLens made for it deleted from every exporter's calendar,
+  through the calendar budget (`CalendarEventDeletion`, `delete_orphaned_calendar_events`, retried
+  by the push sweep). An event an import linked from the user's own calendar is never deleted, on
+  any path: "Remove from Google Calendar" and its API unlink it and say so, an export unlinks it
+  when its stop loses its schedule, and `queue_calendar_event_deletion` refuses it (UrbanLens#301,
+  UrbanLens#330). `manage.py clear_withheld_calendar_locations` (dry-run unless `--apply`)
+  rewrites, once, the events of exports without auto-sync that may still hold a location or title
+  now withheld, an unscheduled stop's included; an imported event only when its fingerprint shows
+  UrbanLens wrote what is now withheld, and then only its location and title, each only where the
+  event still holds what UrbanLens wrote; otherwise it is counted and left (UrbanLens#333)
+- A hidden stop (its own "hide location", or its adder's `trip_pin_location_visibility`) shows a
+  member who may not see it neither its place's name nor its location: the activities panel and its
+  edit dialog, the external API (`title`, `effective_title`), the calendar export, the weather panel,
+  `@act` mentions, visit suggestions on completion, the Memories timeline and global search all mask
+  it. A title taken from a place search or an imported event's location
+  (`TripActivity.title_from_place`) is masked with the location, and an imported stop whose only
+  place is that title is withheld by its adder's setting as a located one is; a title the author
+  typed is still shown (UrbanLens#303). An editor who may not see the stop who saves it with the
+  title or place left blank
+  keeps the stored ones; a place they pick replaces the location and drops a title taken from the
+  old one
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an
@@ -1096,10 +1143,21 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
 - Escalation on missed check-in: emails emergency contacts, optionally posts to the location's
   community wiki, notifies pin owners
+- The owner gets a "check in now" final warning about five minutes before escalation, and escalation waits
+  for it: a warning sent late (a missed beat tick) holds escalation `FINAL_WARNING_MIN_NOTICE` after it, and
+  one that never goes out holds it at most `FINAL_WARNING_MAX_WAIT` past the overdue point. Each side claims
+  its row with a conditional write, so the warning never follows a contact alert (`due_for_final_warning`,
+  `due_for_escalation`)
+- A contact hears about a check-in only once escalation has alerted them: the "found safe" and "plan updated"
+  notices go only to contacts with `notified_at` set, so a partner resolving it early tells no one else
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+- An opt-out holds however the person is added. One made as an account, or from an emailed link to any address
+  that account verified (compared normalized), stops both the email and the in-app alert, as the opt-out page
+  promises. One on an address no account has verified stops mail to that address only, so an account that
+  never proved it is that person is still alerted in-app (`is_contact_opted_out`, `_contact_recipients`)
 - Community-wiki posting is gated by `services.visits.safety.find_visible_community_wiki` and
   `community_wiki_opt_in`, so a check-in can only notify or link a wiki its owner can actually see
 
@@ -1601,7 +1659,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   `settings.PROXIED_BYTES_CACHE` that treat an unreachable or full cache as a miss rather than an error,
   and `set_if_small` to refuse bodies over a ceiling while still serving them.
 - **`read_capped`** (`services/core/gateway.py`) - read a `stream=True` response up to a byte ceiling,
-  refusing (not truncating) anything larger and refusing a response that was not streamed.
+  refusing (not truncating) anything larger and refusing a response that was not streamed. A read that
+  fails midway raises `GatewayRequestError` like a refusal does, and a response refused for its size is closed.
 - **`reorder_id_ceiling`** (`services/core/reorder_limits.py`) - the most ids a drag-and-drop reorder may
   name: the container's own item limit, or that setting's validator maximum when it is unlimited.
 - **`UpstreamBreaker`** (`services/core/upstream_breaker.py`) - an upstream that tells this deployment
@@ -1645,7 +1704,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
   marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
   PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
-  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`: an auto-sync change, or an export the budget cut short),
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`: an auto-sync change, or an export the budget cut short;
+  and `CalendarEventDeletion`: an event whose stop or trip was deleted),
   `sweep_unarchived_links` (a pin or wiki link without a Wayback snapshot: a failed URL waits
   1 h, 6 h, 1 d, 3 d, 7 d, then 30 d before it is given up, in `wayback_retry_at`; a link whose
   own task never ran is taken up after 15 minutes; `services/links/wayback_archive.py`).
@@ -1951,7 +2011,8 @@ Everything below the line is not yet built.
 - Three question sources, all gated by the same content classifier before reaching a player:
   **deterministic** templates from cached property-records data (year built, building number,
   and building count once a parcel has more than a few buildings - all only for named
-  buildings), **AI-generated** from wiki articles with substantial content (up to 3 per wiki),
+  buildings; a year only when REData says it is the building's own, withdrawn once the records stop
+  saying so), **AI-generated** from wiki articles with substantial content (up to 3 per wiki),
   and **user-submitted** questions about a location the submitter has pinned
 - Content classifier (`services.trivia.classifier`): rejects a question about a specific
   individual - even one only referenced indirectly and never named (e.g. "the year *someone*

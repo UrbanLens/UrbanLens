@@ -1005,7 +1005,7 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
         bbox_str: Raw query-param value (may be empty or malformed).
 
     Returns:
-        ``(south, west, north, east)``, or None when absent/invalid.
+        ``(south, west, north, east)``, or None when absent, malformed, non-finite or with south above north.
     """
     bbox_str = (bbox_str or "").strip()
     if not bbox_str:
@@ -1019,4 +1019,11 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
         logger.warning("Invalid bbox parameter: %d values, not 4", len(parts))
         return None
     south, west, north, east = parts
+    if not all(math.isfinite(part) for part in parts):
+        logger.warning("Invalid bbox parameter: a value is not finite")
+        return None
+    if south > north:
+        logger.warning("Invalid bbox parameter: south is above north")
+        return None
+    # West may exceed east: a viewport across the date line is split by ``PinQuerySet.within_bounds``.
     return south, west, north, east

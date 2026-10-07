@@ -181,12 +181,15 @@ def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> 
     from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
     from urbanlens.dashboard.services.trips.trip_activities import activity_queryset, compute_activity_index_map
+    from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
 
     activities = list(activity_queryset(trip))
     index_map = compute_activity_index_map(activities)
-    act_by_index = {v: a for a, v in index_map.items()}
+    # An @act mention renders the stop's name and links its place, so a stop whose location this viewer may not see
+    # stays the bare token, as a hidden stop with no marker does.
+    hidden = viewer_hidden_activity_ids(activities, viewer)
     act_objects = {a.id: a for a in activities}
-    act_index_for_render = {idx: act_objects[act_id] for idx, act_id in act_by_index.items()}
+    act_index_for_render = {idx: act_objects[act_id] for act_id, idx in index_map.items() if act_id not in hidden}
 
     pinned = viewer_pinned_uuids(viewer)
     # The gates below still run, on whatever rows arrived: they resolve mentions
