@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import math
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -244,13 +245,15 @@ def _parse_datetime(value: str | None) -> datetime.datetime | None:
 
 
 def _parse_bbox(request: HttpRequest) -> BBox | None:
-    """Parse a ``minLat,minLng,maxLat,maxLng`` bbox query param, or None if absent/invalid."""
+    """Parse a ``minLat,minLng,maxLat,maxLng`` bbox query param, or None if absent, malformed, non-finite or inverted."""
     raw = request.GET.get("bbox")
     if not raw:
         return None
     try:
         min_lat, min_lng, max_lat, max_lng = (float(part) for part in raw.split(","))
     except ValueError:
+        return None
+    if not all(math.isfinite(part) for part in (min_lat, min_lng, max_lat, max_lng)) or min_lat > max_lat or min_lng > max_lng:
         return None
     return BBox(min_lat, min_lng, max_lat, max_lng)
 

@@ -406,7 +406,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         field = request.POST.get("field", "")
 
         if field in self._USER_FIELDS:
-            value = request.POST.get("value", "").strip()
+            # Cut to the column width, as ``EditProfileView._save_profile`` does for the same two fields.
+            value = request.POST.get("value", "").strip()[: User._meta.get_field(field).max_length]  # noqa: SLF001 - _meta is public API
             setattr(request.user, field, value)
             request.user.save(update_fields=[field])
             return JsonResponse({"ok": True})
