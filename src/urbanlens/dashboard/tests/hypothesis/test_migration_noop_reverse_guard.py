@@ -127,6 +127,11 @@ REVIEWED: dict[str, str] = {
         "still holding one of them takes 0.9.0's. Not reversed for 0064's reason - a row with 0.9.0's values cannot be "
         "told from an admin's choice - and older releases read ordinary integers and text and run within 0.9.0's limits."
     ),
+    "0069_calendar_privacy_followups.py": (
+        "mark_stored_titles_as_possibly_the_places only sets TripActivity.title_from_place, the column this migration "
+        "adds; reversing the AddField drops the column and every mark with it, so there is nothing left to undo. The "
+        "marks cannot be rebuilt by a later forward run either way: nothing records which titles were typed."
+    ),
 }
 
 
