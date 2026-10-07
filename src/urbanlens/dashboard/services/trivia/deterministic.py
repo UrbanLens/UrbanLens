@@ -42,22 +42,29 @@ def _get_or_create(location: Location, *, dedupe_key: str, prompt: str, answer: 
     return question
 
 
-def _year_built_questions(location: Location, buildings: list[dict]) -> list[TriviaQuestion]:
+def _year_built_questions(location: Location, buildings: list[dict], *, complete: bool) -> list[TriviaQuestion]:
     """One question per named building whose records date that building itself.
 
     A year that is the parcel's, or whose basis REData did not say (``services.pins.build_dates.own_build_year``),
     would assert one building's year from its parcel's, so it asks nothing. A question the records no longer support
-    is withdrawn, and one withdrawn that way is approved again, with the records' year, once they do.
+    is withdrawn, and one withdrawn that way is approved again, with the records' year, once they do. A list that is
+    not ``complete`` withdraws only the questions about buildings it names: one it leaves out may stand there yet.
     """
     wanted: dict[str, tuple[str, str]] = {}
+    named: set[str] = set()
     for building in buildings:
         name = building.get("name")
-        year = own_build_year(building)
-        if is_meaningful_name(name) and year is not None:
+        if not is_meaningful_name(name):
+            continue
+        named.add(f"{YEAR_BUILT_KEY}{name}")
+        if (year := own_build_year(building)) is not None:
             wanted.setdefault(f"{YEAR_BUILT_KEY}{name}", (str(name), str(year)))
 
     asked = TriviaQuestion.objects.filter(location=location, source=TriviaQuestionSource.DETERMINISTIC, dedupe_key__startswith=YEAR_BUILT_KEY)
-    asked.filter(status=TriviaQuestionStatus.APPROVED).exclude(dedupe_key__in=wanted).update(status=TriviaQuestionStatus.REJECTED, rejection_reason=YEAR_BUILT_WITHDRAWN, updated=timezone.now())
+    unsupported = asked.filter(status=TriviaQuestionStatus.APPROVED).exclude(dedupe_key__in=wanted)
+    if not complete:
+        unsupported = unsupported.filter(dedupe_key__in=named)
+    unsupported.update(status=TriviaQuestionStatus.REJECTED, rejection_reason=YEAR_BUILT_WITHDRAWN, updated=timezone.now())
 
     questions = []
     for dedupe_key, (name, answer) in wanted.items():
@@ -112,13 +119,15 @@ def generate_deterministic_questions(location: Location) -> list[TriviaQuestion]
 
     Returns:
         Every deterministic question now on record for this location (empty if there's no cached parcel-buildings data yet, or none of it met a generator's bar)."""
-    buildings = site_scope.parcel_buildings(location)
-    if buildings is None:
+    cached = site_scope.cached_parcel_buildings(location)
+    if cached is None:
         # Nothing to judge a year-built question asked earlier by, so it stays as it is.
         return []
-    questions = [*_year_built_questions(location, buildings), *_building_number_questions(location, buildings)]
+    buildings = cached.buildings
+    questions = [*_year_built_questions(location, buildings, complete=cached.complete), *_building_number_questions(location, buildings)]
 
-    count_question = _building_count_question(location, buildings)
+    # A count is asked once and never corrected, so only a list REData answered in full may set it.
+    count_question = _building_count_question(location, buildings) if cached.complete else None
     if count_question is not None:
         questions.append(count_question)
 

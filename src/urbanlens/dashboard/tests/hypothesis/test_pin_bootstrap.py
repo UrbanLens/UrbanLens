@@ -22,7 +22,7 @@ from model_bakery import baker
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
-from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
 from urbanlens.dashboard.models.facts.model import FactEvidence
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
@@ -598,6 +598,35 @@ class BuildDateTests(_BootstrapCase):
         self.assertIsNone(wiki_build_year(campus_wiki))
         laundry = Wiki.objects.get(location=Pin.objects.get(name="LAUNDRY").location)
         self.assertEqual(wiki_build_year(laundry), LAUNDRY_YEAR)
+
+    def assert_a_rerun_takes_nothing_back(self, pin: Pin) -> None:
+        from urbanlens.dashboard.services.pins.build_dates import fill_build_dates, wiki_build_year
+
+        main_wiki = Wiki.objects.get(location=Pin.objects.get(name="MAIN/ADMIN").location)
+        campus_wiki = Wiki.objects.get(location=pin.location)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            fill_build_dates(pin)
+
+        self.assertEqual((wiki_build_year(main_wiki), wiki_build_year(campus_wiki)), (MAIN_YEAR, MAIN_YEAR))
+
+    def test_a_rerun_over_a_list_redata_answered_in_part_takes_nothing_back(self) -> None:
+        """A source that did not answer may be the one that dated the building."""
+        pin = self.create_pin()
+        undated = [{**building, "year_built": None} for building in campus_buildings()]
+        LocationCache.set(
+            pin.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": undated, "provider": "redata", UNANSWERED_SOURCES_KEY: ["cris"]},
+        )
+
+        self.assert_a_rerun_takes_nothing_back(pin)
+
+    def test_a_rerun_with_no_building_list_cached_takes_nothing_back(self) -> None:
+        pin = self.create_pin()
+        LocationCache.objects.filter(location=pin.location, source=PARCEL_BUILDINGS_CACHE_SOURCE).delete()
+
+        self.assert_a_rerun_takes_nothing_back(pin)
 
     def test_with_nothing_known_the_date_stays_empty(self) -> None:
         self.upstreams = HrshUpstreams(buildings=[], parcel_year=None)

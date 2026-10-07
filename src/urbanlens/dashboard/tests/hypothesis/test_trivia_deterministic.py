@@ -5,7 +5,7 @@ from __future__ import annotations
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.cache.location_cache import LocationCache
+from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource
 from urbanlens.dashboard.services.trivia.deterministic import (
@@ -96,6 +96,17 @@ class BuildingCountQuestionTests(TestCase):
 
         self.assertEqual(len(questions), 1)
         self.assertEqual(questions[0].answer, str(BUILDING_COUNT_QUESTION_THRESHOLD))
+
+    def test_no_count_question_from_a_list_redata_answered_in_part(self) -> None:
+        """The count of a floor is not the parcel's count, and a count question is never corrected once asked."""
+        location = baker.make(Location)
+        buildings = [
+            {"name": "", "building_number": "", "year_built": None} for _ in range(BUILDING_COUNT_QUESTION_THRESHOLD)
+        ]
+        LocationCache.set(location, "parcel_buildings", {"buildings": buildings, UNANSWERED_SOURCES_KEY: ["overture"]})
+
+        self.assertEqual(generate_deterministic_questions(location), [])
+        self.assertFalse(TriviaQuestion.objects.filter(location=location, dedupe_key="building_count").exists())
 
 
 class NoCachedDataTests(TestCase):
