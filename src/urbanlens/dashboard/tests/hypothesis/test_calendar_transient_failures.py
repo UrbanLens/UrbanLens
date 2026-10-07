@@ -1,9 +1,11 @@
-"""A Google failure that passes, or one about the site rather than the user, keeps the calendar connection (P337).
+"""A Google failure that passes, or one about the site rather than the user, keeps the calendar connection.
 
 Only Google's refusal of the user's grant drops it: ``invalid_grant`` from the token endpoint, a 401 that a fresh token
-does not cure, or a 403 that is neither a rate limit, a refusal of the site's Google project, nor a refusal of one event.
-A refresh that gets a 5xx, a 429 or no answer at all is busy; a refusal of the site's OAuth client or Google project is
-logged at ERROR and reported as calendar sync being unavailable.
+does not cure, or a 403 naming a reason that is neither a rate limit, a refusal of the site's Google project, nor a
+refusal of one event. A refresh that gets a 5xx, a 429 or no answer at all is busy; a refusal of the site's OAuth client
+or Google project, or a 403 naming no reason, is logged at ERROR and reported as calendar sync being unavailable. A
+write held up by any of those waits for the sweep rather than counting toward the attempt cap. See
+UrbanLens#302 ("a failed token refresh drops the calendar connection").
 
 The token endpoint's answers follow RFC 6749 section 5.2 and Google's "Using OAuth 2.0 to Access Google APIs"
 (refresh token expiration). The Calendar API bodies are the ones its "Handle API errors" guide prints, and the

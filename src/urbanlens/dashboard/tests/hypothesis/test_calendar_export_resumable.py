@@ -423,7 +423,7 @@ class ClientEventIdTests(SimpleTestCase):
 
 class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
     """A push that wrote resets the count; one that wrote nothing adds to it only when Google refused it for a reason
-    of its own. The budget, Google's rate limit or failure, and a refusal of the site pass (P337), and a push held up by
+    of its own. The budget, Google's rate limit or failure, and a refusal of the site pass, and a push held up by
     one waits for the sweep however long it takes, up to ``MAX_OWED_CALENDAR_WRITE_AGE``."""
 
     def setUp(self) -> None:

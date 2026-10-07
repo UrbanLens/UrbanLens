@@ -2,21 +2,20 @@
 
 ``TripActivity.title_from_place`` marks a title taken from the place: a place search's name, stored as the title when
 none was typed (P186), or an imported calendar event's location. Such a title is withheld wherever the stop's
-location is (P338). Nothing recorded where an existing title came from, so every title that may be a place's is
+location is; see UrbanLens#303 ("a hidden stop shows its place's name"). Nothing recorded where an existing title came from, so every title that may be a place's is
 marked: every located stop's, since a place search always makes a Location, and an unlocated stop's only when a
 calendar import made it (its note, or the import's link to it). A hidden stop's typed title then reads "Secret
 Location" to members who may not see the stop, until its author types a title again; a visible stop shows its title
 as before, and a stop with no place keeps showing its typed title to everyone.
 
 ``CalendarEventDeletion`` holds the delete owed for an event UrbanLens made whose trip or activity was deleted, since
-the link that named it goes with them (P336).
+the link that named it goes with them; see UrbanLens#301 ("hidden location stays on an unreached calendar").
 
 Reverse drops both; the marks cannot be told from typed titles afterwards.
 """
 
 from django.db import migrations, models
 import django.db.models.deletion
-
 
 #: The note ``calendar_sync._create_activity_from_event`` has given every activity it made, since 0.4.0.
 _IMPORT_NOTE = "Location from the imported Google Calendar event."

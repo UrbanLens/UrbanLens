@@ -901,7 +901,7 @@ class TripSearchProvider(SearchProvider):
 
         def visible_title_match(term: str) -> Q:
             # A stop's title taken from its place matches only for a member who may see the place, or a match on
-            # a hidden stop would say what it is called (P338).
+            # a hidden stop would say what it is called.
             activities = list(TripActivity.objects.filter(trip_id__in=trip_ids, title__icontains=term).select_related("added_by"))
             hidden = viewer_hidden_activity_ids(activities, profile)
             return Q(pk__in={activity.trip_id for activity in activities if shown_activity_title(activity, hidden=activity.id in hidden)})

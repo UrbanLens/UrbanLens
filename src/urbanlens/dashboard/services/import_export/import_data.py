@@ -1172,7 +1172,7 @@ def _import_settings(
         previous_trip_pin_visibility = Profile.objects.filter(pk=profile.pk).values_list("trip_pin_location_visibility", flat=True).first()
         Profile.objects.filter(pk=profile.pk).update(**update_fields)
         if update_fields.get("trip_pin_location_visibility", previous_trip_pin_visibility) != previous_trip_pin_visibility:
-            # An update fires no save signal; who may see this profile's trip stops changed all the same (P336).
+            # An update fires no save signal; who may see this profile's trip stops changed all the same.
             from urbanlens.dashboard.models.calendar_sync.signals import queue_pushes_for_stops_added_by
 
             queue_pushes_for_stops_added_by([profile.pk])

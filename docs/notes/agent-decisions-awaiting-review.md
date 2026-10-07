@@ -142,16 +142,19 @@ Jess answered a numbered list of every open decision:
   staging in the infrastructure repo, which name it on every workload.
 - **Trivia generation caps:** "that's fine for now": `trivia_generation` keeps 5 calls a minute and 200 a day
   (`SERVICE_REGISTRY` in `services/core/rate_limiter.py`), as D26 records. Kept as is.
-- **A hidden stop's calendar title (633a4819f, P338):** decided by the owner 2026-10-07: a hidden stop must never
-  show a place-derived name to someone who may not see it, and a title its author genuinely typed may still be
-  shown; the panel, the external API and the calendar export agree. `TripActivity.title_from_place` records a title
-  taken from a place search or an imported event's location, and every masking surface withholds it with the
-  location; a typed title is shown on all of them, the calendar included. Migration 0069 marks every title stored
-  before it, since none can be shown to have been typed.
-- **Calendar follow-ups P336 and P337:** decided by the owner 2026-10-07. A transient failure (a token refresh that
+- **A hidden stop's calendar title (633a4819f, UrbanLens#303):** decided by the owner 2026-10-07
+  ([ADR-0029](../adr/0029-place-derived-stop-titles-hidden-with-the-location.md)): a hidden stop must never show a
+  place-derived name to someone who may not see it, and a title its author genuinely typed may still be shown; the
+  panel, the external API and the calendar export agree. `TripActivity.title_from_place` records a title taken from
+  a place search or an imported event's location, and every masking surface withholds it with the location; a typed
+  title is shown on all of them, the calendar included. Migration 0069 marks every located stop's stored title and
+  every imported stop's, since none of those can be shown to have been typed.
+- **Calendar follow-ups UrbanLens#301 and UrbanLens#302:** decided by the owner 2026-10-07
+  ([ADR-0028](../adr/0028-calendar-connection-dropped-only-for-a-refused-grant.md),
+  [ADR-0030](../adr/0030-calendar-writes-reach-hidden-locations.md)). A transient failure (a token refresh that
   gets a 5xx, a timeout or no answer) keeps the connection and answers "busy"; only Google's refusal of the grant
   drops it, and a refusal of the site's Google project or OAuth client is logged at ERROR and reported as calendar
   sync being unavailable. A visibility change on an auto-synced trip queues the push an edit would; a deleted stop's
   event is deleted (queued, through the calendar budget), never an event an import linked; exports without
   auto-sync are not pushed, and `manage.py clear_withheld_calendar_locations` cleans them once at the 0.9.0 rollout
-  (N45).
+  (N46).

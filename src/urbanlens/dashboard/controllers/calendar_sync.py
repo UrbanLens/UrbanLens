@@ -120,7 +120,7 @@ def _drop_expired_account(account: GoogleCalendarAccount) -> None:
 
     Called only when a gateway call raises ``GoogleAuthExpiredError`` - Google refused the grant itself, so
     keeping the row around would just repeat the same failure on every next attempt. A failure that passes, or one
-    about the site rather than the user (P337), keeps it.
+    about the site rather than the user, keeps it.
 
     Args:
         account: The connection to discard.

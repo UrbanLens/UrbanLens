@@ -1,10 +1,10 @@
-"""A hidden stop never shows a member who may not see it a name taken from its place (P338).
+"""A hidden stop never shows a member who may not see it a name taken from its place.
 
 A stop picked from a place search with no title typed stores the place's name as its title (P186), and an imported
 calendar event's location becomes an activity's title. ``TripActivity.title_from_place`` records that, and every
 surface that masks a hidden stop masks such a title with its location: the activities panel (its text and its data
 attributes), the external API (``title`` and ``effective_title``), the Google Calendar export, the weather panel and
-``@act`` mentions in comments. A title the author typed is still shown, as it always was.
+``@act`` mentions in comments. A title the author typed is still shown. See UrbanLens#303 ("a hidden stop shows its place's name").
 """
 
 from __future__ import annotations

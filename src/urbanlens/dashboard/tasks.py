@@ -446,7 +446,7 @@ PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
 #: Pushes in a row that Google refused for a reason of their own, after which a request is dropped until the trip
 #: changes again. A push that wrote some events resets the count, and one held up by something that passes (the
 #: budget, Google's rate limit or failure, a refusal of the site) does not add to it, so a push that clears a
-#: withheld location is not given up during an outage (P337). Also the cap on a calendar event delete Google refuses.
+#: withheld location is not given up during an outage. Also the cap on a calendar event delete Google refuses.
 MAX_CALENDAR_PUSH_ATTEMPTS = 5
 PENDING_CALENDAR_PUSH_BATCH = 200
 #: A push or calendar event delete still owed after this long is dropped: its calendar was never reconnected, or

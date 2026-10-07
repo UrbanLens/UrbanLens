@@ -1,11 +1,11 @@
-"""Rewrite the Google Calendar events UrbanLens made that may still hold a location or title now withheld (P336).
+"""Rewrite the Google Calendar events UrbanLens made that may still hold a location or title now withheld.
 
 An export without auto-sync is never pushed, so an event keeps what it was last given until its owner exports the
 trip again. Exports made under 0.8.0 left a stop's address on the event, and its place's name in the title, after the
 stop was hidden or its adder restricted who may see it (P335). This rewrites, once, each such event whose link does
 not already vouch for the body it would now get: the location is cleared and the title masked as the activities panel
 masks it. An event with nothing withheld is not touched, an event the user deleted is not recreated, and an event an
-import linked from the user's own calendar is left alone.
+import linked from the user's own calendar is left alone. See UrbanLens#301 ("hidden location stays on an unreached calendar").
 
 Dry-run by default; ``--apply`` writes. Every write goes through the calendar gateway and its rate limiter
 (``google_calendar``, shared with members' own exports). When the budget runs out the command waits for the next

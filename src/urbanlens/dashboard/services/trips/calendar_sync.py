@@ -61,7 +61,7 @@ def _passes(exc: GatewayRequestError) -> bool:
     """Whether a calendar call failed for a reason that is not the write's own, so the write waits rather than counts.
 
     Our budget or Google's rate limit, a token service that could not answer, Google failing or not answering, and a
-    refusal of the site (P337) all pass or are the operator's to fix. A write held up by one must not be used up
+    refusal of the site all pass or are the operator's to fix. A write held up by one must not be used up
     against ``tasks.MAX_CALENDAR_PUSH_ATTEMPTS``: it may be what clears a location withheld from the calendar.
 
     Args:
@@ -246,7 +246,7 @@ def activity_to_event_body(
 
     A location withheld from the exporting viewer is sent as ``""``, so an update clears it (P335), and the title as
     the activities panel shows it to them (:func:`~urbanlens.dashboard.services.trips.trip_visibility.masked_activity_title`):
-    a title the author typed, else "Secret Location". A title taken from the place is never sent (P338).
+    a title the author typed, else "Secret Location". A title taken from the place is never sent.
 
     Args:
         activity: The TripActivity to export (with ``trip`` loaded).
@@ -484,7 +484,7 @@ def _create_activity_from_event(trip: Trip, event: dict[str, Any], profile: Prof
         trip=trip,
         added_by=profile,
         title=location_text[:255],
-        # The title is the event's location, so it is withheld wherever the stop's location is (P338).
+        # The title is the event's location, so it is withheld wherever the stop's location is.
         title_from_place=True,
         notes="Location from the imported Google Calendar event.",
         scheduled_at=_parse_event_datetime(event.get("start")),

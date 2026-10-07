@@ -397,7 +397,7 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             # then emitted the real name and slug into the row's own data attributes and the RSVP
             "display_title": masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
             # The stored title, for the edit dialog and the API's ``title``: blank when it names a place this viewer
-            # may not see (P338).
+            # may not see.
             "display_own_title": shown_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
             "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
             "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
@@ -519,7 +519,7 @@ def create_activity(
     title_from_place = False
     if clean_title is None and pin is None:
         # The picked place's name is the activity's own, never the shared Location's. It still names the place, so it
-        # is marked to be withheld wherever the location is (P338).
+        # is marked to be withheld wherever the location is.
         title_field = TripActivity._meta.get_field("title")  # noqa: SLF001 - _meta is public API
         geocoded_name = _clean_text((place or {}).get("geocoded_name"))
         clean_title = geocoded_name[: title_field.max_length] if geocoded_name and isinstance(title_field, CharField) else geocoded_name
@@ -583,7 +583,7 @@ def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
 def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Mapping[str, Any]) -> TripActivity:
     """Apply a presence-keyed partial update to an activity.
     Only keys actually present in *changes* are touched, so the external API's PATCH semantics and the internal form's full-replace semantics are the same call - the internal controller simply supplies every key.
-    A blank ``title`` or ``place`` from an actor who may not see the activity's location keeps the stored one: it was never shown to them (P338).
+    A blank ``title`` or ``place`` from an actor who may not see the activity's location keeps the stored one: it was never shown to them.
 
     Args:
         trip: The trip owning the activity.
@@ -601,7 +601,7 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
     require_perform(actor, trip, trip.allow_edit_activities, EDIT_ACTIVITY_DENIED)
     activity = get_activity(trip, activity_id)
     before = _editable_state(activity)
-    # Whether the actor was shown this stop's location and the title taken from it (P338).
+    # Whether the actor was shown this stop's location and the title taken from it.
     withheld = bool(viewer_hidden_activity_ids([activity], actor))
 
     if "title" in changes:

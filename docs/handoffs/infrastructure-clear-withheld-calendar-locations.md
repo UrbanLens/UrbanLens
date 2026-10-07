@@ -2,9 +2,9 @@
 
 - **Status: SENT 2026-10-07.** Written for Jess to pass on; this repo's sessions can't reach production.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`'s 0.9.0 cutover (`plans/phase-9-cutover.md`).
-- `id: N45` · `status: current`
+- `id: N46` · `status: current`
 
-Jess decided P336 on 2026-10-07: a Google Calendar export without auto-sync is never pushed automatically, so what
+Jess decided UrbanLens#301 on 2026-10-07 ([ADR-0030](../adr/0030-calendar-writes-reach-hidden-locations.md)): a Google Calendar export without auto-sync is never pushed automatically, so what
 0.8.0 left on members' calendars is cleaned once, by a command, at the 0.9.0 rollout. Please add it to the cutover
 steps, after migrations (0069 included) and after the new image serves.
 
@@ -32,4 +32,4 @@ python manage.py clear_withheld_calendar_locations --apply   # "Rewrote N events
   skips every event already rewritten, so it can be interrupted and started again.
 - If Google refuses the site (Calendar API disabled on the project, or the OAuth client refused) it stops with a
   `CommandError` and writes nothing more; that is the operator's to fix, and the run is repeated after.
-- Please send back the two counts (dry run, `--apply`), so P336's archive entry can record them.
+- Please send back the two counts (dry run, `--apply`), so UrbanLens#301 can record them.

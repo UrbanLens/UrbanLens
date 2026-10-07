@@ -264,7 +264,7 @@ class AWithheldLocationIsRemovedFromTheEventTests(_TripWithAMateCase):
         self.assertEqual(self._event(None)["location"], "")
 
     def test_a_stop_picked_from_a_place_search_is_not_named_by_the_title_it_was_given(self) -> None:
-        """An untitled stop added from a place search stores the place's name as its title (P186, P338)."""
+        """An untitled stop added from a place search stores the place's name as its title (P186, UrbanLens#303)."""
         self._set_mate_visibility(VisibilityChoice.NO_ONE)
         activity = create_activity(
             self.trip,
@@ -362,7 +362,7 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
             trip=Trip(name="Mill weekend"),
             location=location,
             title=title,
-            # A title that is the place's own name (a place search's, P338) is marked so; a typed one is shown.
+            # A title that is the place's own name (a place search's) is marked so; a typed one is shown.
             title_from_place=bool(title),
             location_hidden=True,
             lat_override=latitude if overridden else None,

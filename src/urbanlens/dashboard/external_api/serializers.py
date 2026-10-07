@@ -2689,7 +2689,7 @@ class TripActivitySerializer(serializers.Serializer):
 
     id = serializers.IntegerField(source="activity.id", read_only=True)
     #: The activity's own title; null when it has none, or when it was taken from a place search (or an imported
-    #: event's location) and the location is hidden from this viewer (P338).
+    #: event's location) and the location is hidden from this viewer.
     title = serializers.CharField(source="display_own_title", read_only=True, allow_null=True)
     #: The label the UI shows: the title, else the linked pin/location's name. source is the row's
     #: already-masked display_title, not activity.effective_title directly - the raw model property has no

@@ -1,4 +1,4 @@
-"""Calendar writes owed by changes that do not save a trip or its activities (P336).
+"""Calendar writes owed by changes that do not save a trip or its activities.
 
 What a member may see of a trip-mate's stop depends on the stop's own ``location_hidden`` (a save of the activity,
 which ``models.trips.signals`` already pushes), on the trip-mate's ``trip_pin_location_visibility``, on friendships
@@ -9,7 +9,7 @@ longer hold. A push that finds nothing changed writes nothing to Google.
 
 A link deleted with the trip or activity it mirrors takes the only record of its event with it, so an event
 UrbanLens made is queued for deletion first (``CalendarEventDeletion``). An event an import linked from the user's
-own calendar is theirs, and stays.
+own calendar is theirs, and stays. See UrbanLens#301 ("hidden location stays on an unreached calendar").
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def _account_going(kwargs: dict[str, Any]) -> bool:
 
 def _stops_added_by(profile_ids: list[int]) -> Q:
     """Links of trips holding a stop one of *profile_ids* added that names a place: a located one, or one whose title
-    is a place's (an imported event's location, P338). In one ``filter``, so both hold of the same stop."""
+    is a place's (an imported event's location). In one ``filter``, so both hold of the same stop."""
     return Q(trip__activities__added_by_id__in=profile_ids) & (Q(trip__activities__location__isnull=False) | Q(trip__activities__title_from_place=True))
 
 
