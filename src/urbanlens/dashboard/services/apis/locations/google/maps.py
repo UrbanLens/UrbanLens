@@ -37,7 +37,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates, repoint_cid_to_corrected_location
 from urbanlens.dashboard.services.core.capacity import CapacityExceededError
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError, is_source_outage, read_capped
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.geometry_readers import MAX_NESTING, geojson_nests_too_deep
@@ -406,6 +406,9 @@ class StreetViewStatusError(GatewayRequestError, ValueError):
         return self.status in _STREET_VIEW_TRANSIENT_STATUSES
 
 
+#: Ceiling for a Static Maps or Street View image. The request fixes the size (640x640 at most), so a JPEG is a few hundred kilobytes; this only has to stop a runaway body.
+_MAX_FIXED_SIZE_IMAGE_BYTES = 5 * 1024 * 1024
+
 #: Searches after a placeholder image. Google answers the pano closest to the point, so a wider search usually names
 #: the same one; a search that names it again ends the search without fetching its image.
 _STREET_VIEW_PLACEHOLDER_RETRIES = 1
@@ -490,6 +493,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         Raises:
             ImpossibleInputError: The point is not on the globe.
+            GatewayRequestError: The image was larger than :data:`_MAX_FIXED_SIZE_IMAGE_BYTES`, or the connection failed while it was read.
             requests.exceptions.RequestException: The request failed.
         """
         from urbanlens.dashboard.services.core.input_validation import require_coordinates
@@ -508,9 +512,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 "key": self.api_key,
             },
             timeout=15,
+            stream=True,
         )
         resp.raise_for_status()
-        return resp.content
+        return read_capped(resp, max_bytes=_MAX_FIXED_SIZE_IMAGE_BYTES, what="Static Maps satellite image")
 
     def get_street_view_single(
         self,
@@ -533,6 +538,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``, where no road runs.
             StreetViewNotFoundError: No Street View imagery was found within ``max_radius``, or only a placeholder.
             StreetViewStatusError: The API answered with an account or request-level status.
+            GatewayRequestError: The image was larger than :data:`_MAX_FIXED_SIZE_IMAGE_BYTES`, or the connection failed while it was read.
             requests.RequestException: The request failed."""
         from urbanlens.dashboard.services.core.input_validation import require_coordinates
 
@@ -553,11 +559,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             # Keep `radius` in image_params - metadata may have only found the pano by searching out to it, and
             # Google's own smaller default radius would miss that pano and return its "no imagery" placeholder.
             image_params = {**params, "heading": self.calculate_heading(metadata["location"]["lat"], metadata["location"]["lng"], latitude, longitude)}
-            image_response = self.session.get("https://maps.googleapis.com/maps/api/streetview", params=image_params)
+            image_response = self.session.get("https://maps.googleapis.com/maps/api/streetview", params=image_params, stream=True)
             image_response.raise_for_status()
+            image = read_capped(image_response, max_bytes=_MAX_FIXED_SIZE_IMAGE_BYTES, what="Street View image")
             # A suspiciously small image is the placeholder despite the 200, so a wider search is tried.
-            if len(image_response.content) >= 2000:
-                return image_response.content, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
+            if len(image) >= 2000:
+                return image, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
             if pano_id:
                 placeholders.add(pano_id)
             radii = radii[index + 1 :]

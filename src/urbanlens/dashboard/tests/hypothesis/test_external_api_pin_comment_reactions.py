@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.contrib.auth.models import User
 from model_bakery import baker
 
@@ -175,6 +177,18 @@ class ReactionNotificationTests(TestCase):
         """The service - not the view - is what makes every surface notify."""
         toggle_reaction(self.reactor, self.comment, "👍")
 
+        self.assertEqual(self._liked_notifications(), 1)
+
+    def test_a_double_tap_that_loses_the_race_is_already_applied_not_a_500(self) -> None:
+        """Two taps read "no reaction yet" together; the second insert hits the unique constraint. It must not raise
+        (a 500 on a double-tap), leave one reaction, and not announce it twice."""
+        toggle_reaction(self.reactor, self.comment, "👍")
+
+        with mock.patch("urbanlens.dashboard.models.reactions.queryset.ReactionQuerySet.existing", return_value=None):
+            added = toggle_reaction(self.reactor, self.comment, "👍")
+
+        self.assertTrue(added)
+        self.assertEqual(Reaction.objects.filter(comment=self.comment, profile=self.reactor).count(), 1)
         self.assertEqual(self._liked_notifications(), 1)
 
     def test_removing_a_reaction_does_not_notify(self) -> None:

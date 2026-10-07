@@ -6,17 +6,20 @@ from unittest.mock import MagicMock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.tests.hypothesis.test_proxied_media_is_capped import _streamed
 
 _REAL_IMAGE_BYTES = b"x" * 5000
 _PLACEHOLDER_IMAGE_BYTES = b"x" * 500
 
 
-def _response(json_data=None, content=b""):
+def _response(json_data=None, content=None):
+    """A metadata answer (JSON), or an image answer, which is read through ``read_capped`` and so must be streamed."""
+    if content is not None:
+        return _streamed(content)
     response = MagicMock()
     response.raise_for_status = MagicMock()
     if json_data is not None:
         response.json.return_value = json_data
-    response.content = content
     return response
 
 
