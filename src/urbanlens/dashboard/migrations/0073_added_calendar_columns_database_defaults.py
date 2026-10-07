@@ -10,7 +10,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0070_withdraw_year_built_trivia"),
+        ("dashboard", "0072_safety_contact_resolution_notified_at"),
     ]
 
     operations = [
