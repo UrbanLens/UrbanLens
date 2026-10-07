@@ -14,6 +14,17 @@ from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin
 _SUBSCRIPTIONS_URL = reverse("site_admin_subscriptions")
 
 
+def _vip_role() -> SubscriptionRole:
+    """The role migration 0020 seeds, made here when a flush has removed it.
+
+    A TransactionTestCase truncates every table when it ends, seeded rows included. pytest-django runs those last in
+    one process, but ``--dist loadfile`` hands a worker a whole file, so on a worker given a file that mixes both kinds
+    the seeded row was gone before these ran.
+    """
+    role, _created = SubscriptionRole.objects.get_or_create(slug="vip", defaults={"name": "VIP"})
+    return role
+
+
 class RoleCreateActionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -60,7 +71,7 @@ class RoleRenameActionTests(TestCase):
         add_user_to_site_admin_group(self.admin)
         self.client = Client()
         self.client.force_login(self.admin)
-        self.role = SubscriptionRole.objects.get(slug="vip")
+        self.role = _vip_role()
 
     def test_renames_the_role(self) -> None:
         response = self.client.post(
@@ -104,7 +115,7 @@ class RoleDeleteActionTests(TestCase):
         add_user_to_site_admin_group(self.admin)
         self.client = Client()
         self.client.force_login(self.admin)
-        self.role = SubscriptionRole.objects.get(slug="vip")
+        self.role = _vip_role()
 
     def test_deletes_the_role(self) -> None:
         response = self.client.post(_SUBSCRIPTIONS_URL, {"action": "role_delete", "role_slug": "vip"})
