@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum, StrEnum
 import itertools
 import json
 import logging
@@ -90,9 +90,18 @@ class SlideState(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
-def _collect_slides(generator, limit: int, what: str) -> tuple[list, SlideState]:
+class SlideSignal(Enum):
+    """Something a slide generator yields among its slides that is not a slide."""
+
+    #: An upstream said a source it asked did not answer, so the slides are not all there are. Yielded ahead of the
+    #: slides it qualifies, so a collector that stops at its limit has still seen it.
+    PARTIAL = "partial"
+
+
+def _collect_slides(generator: Iterable[object], limit: int, what: str) -> tuple[list, SlideState]:
     """Drain a slide generator, reporting how the provider ended.
-    Providers signal the difference by letting their gateway error propagate out of the generator rather than swallowing it.
+    Providers signal the difference by letting their gateway error propagate out of the generator rather than
+    swallowing it, or by yielding :attr:`SlideSignal.PARTIAL` when an upstream answered only in part.
 
     Args:
         generator: The provider's slide generator.
@@ -106,8 +115,12 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, SlideState]
     from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
     slides: list = []
+    partial = False
     try:
         for slide in generator:
+            if slide is SlideSignal.PARTIAL:
+                partial = True
+                continue
             slides.append(slide)
             if limit > 0 and len(slides) >= limit:
                 break
@@ -119,9 +132,12 @@ def _collect_slides(generator, limit: int, what: str) -> tuple[list, SlideState]
         return slides, SlideState.DEGRADED
     except ImpossibleInputError:
         # Counted where it was refused; the same point can only be refused again, so the answer is kept.
-        return slides, SlideState.COMPLETE
+        return slides, SlideState.DEGRADED if partial else SlideState.COMPLETE
     except (GatewayRequestError, OSError) as exc:
         logger.warning("%s provider degraded after %d slide(s): %s", what, len(slides), exc)
+        return slides, SlideState.DEGRADED
+    if partial:
+        logger.info("%s provider answered in part with %d slide(s)", what, len(slides))
         return slides, SlideState.DEGRADED
     return slides, SlideState.COMPLETE
 
@@ -161,7 +177,7 @@ class SatelliteViewProvider(Gateway, ABC):
         return True
 
     @abstractmethod
-    def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
+    def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide | SlideSignal]: ...
 
     def get_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = 5) -> SlideFetch:
         if not self.available():
@@ -191,7 +207,7 @@ class StreetViewProvider(Gateway, ABC):
         return True
 
     @abstractmethod
-    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]: ...
+    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide | SlideSignal]: ...
 
     def get_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> SlideFetch:
         if not self.available():

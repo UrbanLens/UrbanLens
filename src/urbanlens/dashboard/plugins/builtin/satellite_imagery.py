@@ -10,7 +10,7 @@ import math
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider
+from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, SlideSignal
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
 from urbanlens.dashboard.services.apis.locations.redata_imagery_gateway import RedataImageryGateway
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
@@ -240,7 +240,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         width: int = 640,
         height: int = 400,
         limit: int = -1,
-    ) -> Generator[SatelliteSlide]:
+    ) -> Generator[SatelliteSlide | SlideSignal]:
         if not self.available():
             return
 
@@ -252,10 +252,13 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         # Deliberately not swallowed: SatelliteViewProvider.get_satellite_slides distinguishes "this
         # place has no imagery" from "we could not ask", and caches only the first.
         # Catching here would hide the difference and cache an outage as a permanent absence.
-        results = gateway.get_imagery(latitude, longitude, providers=wanted)
+        answer = gateway.get_imagery(latitude, longitude, providers=wanted)
+        if not answer.complete:
+            # The slides are still shown; get_satellite_slides keeps none of them.
+            yield SlideSignal.PARTIAL
 
         seen_urls: set[str] = set()
-        for result in results:
+        for result in answer.results:
             slide = self._slide_from_result(gateway, result, latitude, longitude)
             if slide is not None:
                 seen_urls.add(slide.img_src)
@@ -273,7 +276,7 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         latitude: float,
         longitude: float,
         seen_urls: set[str],
-    ) -> Generator[SatelliteSlide]:
+    ) -> Generator[SatelliteSlide | SlideSignal]:
         """Slides for dated captures from the imagery timeline.
         ``_slide_from_result`` already materializes one representative date per ``time_series`` provider from the plain ``/imagery/`` call above, so nothing is lost; this loop only ever sees ``"capture"`` offerings.
 
@@ -285,13 +288,15 @@ class RedataSatelliteProvider(SatelliteViewProvider):
                 the current image is not shown twice.
 
         Yields:
-            One slide per dated capture, newest first.
+            One slide per dated capture, newest first, after :attr:`SlideSignal.PARTIAL` when the timeline failed or
+            REData said a source of it did not answer.
         """
         from urbanlens.dashboard.services.locations.imagery_timeline import flatten_timeline
 
         # Swallowed on purpose, unlike the current-imagery call above: the
         # timeline is an enrichment on top of slides that already exist, so a
-        # timeline outage should not discard them or suppress their caching.
+        # timeline outage should not discard them. It does keep them out of the
+        # slide cache.
         try:
             envelope = gateway.get_timeline(latitude, longitude)
         except LocationContextUnavailableError as exc:
@@ -301,7 +306,10 @@ class RedataSatelliteProvider(SatelliteViewProvider):
                 redact_coordinate(longitude),
                 exc.reason,
             )
+            yield SlideSignal.PARTIAL
             return
+        if envelope.get("complete") is False:
+            yield SlideSignal.PARTIAL
 
         for entry in flatten_timeline(envelope):
             if entry["kind"] != "capture":
