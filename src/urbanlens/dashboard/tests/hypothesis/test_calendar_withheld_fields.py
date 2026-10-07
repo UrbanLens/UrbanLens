@@ -264,7 +264,7 @@ class AWithheldLocationIsRemovedFromTheEventTests(_TripWithAMateCase):
         self.assertEqual(self._event(None)["location"], "")
 
     def test_a_stop_picked_from_a_place_search_is_not_named_by_the_title_it_was_given(self) -> None:
-        """An untitled stop added from a place search stores the place's name as its title (P186, P338)."""
+        """An untitled stop added from a place search stores the place's name as its title (P186, UrbanLens#303)."""
         self._set_mate_visibility(VisibilityChoice.NO_ONE)
         activity = create_activity(
             self.trip,
@@ -334,13 +334,16 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
 
     # "Zq" occurs nowhere else in a body, so a generated value found in it can only have come from the place.
     _token = st.text(alphabet=string.ascii_letters, min_size=3, max_size=12).map(lambda text: f"Zq{text}")
+    _magnitude = st.floats(min_value=0.5, max_value=89, allow_nan=False)
 
     @given(
         name=_token,
         route=_token,
         locality=_token,
-        latitude=st.floats(min_value=-89, max_value=89, allow_nan=False).filter(lambda value: abs(value) > 0.01),
-        longitude=st.floats(min_value=-179, max_value=179, allow_nan=False).filter(lambda value: abs(value) > 0.01),
+        latitude=st.tuples(_magnitude, st.sampled_from((-1, 1))).map(lambda pair: pair[0] * pair[1]),
+        longitude=st.tuples(_magnitude.map(lambda value: value * 2), st.sampled_from((-1, 1))).map(
+            lambda pair: pair[0] * pair[1]
+        ),
         overridden=st.booleans(),
         title=st.one_of(st.none(), st.just(""), _token),
     )
@@ -359,6 +362,8 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
             trip=Trip(name="Mill weekend"),
             location=location,
             title=title,
+            # A title that is the place's own name (a place search's) is marked so; a typed one is shown.
+            title_from_place=bool(title),
             location_hidden=True,
             lat_override=latitude if overridden else None,
             lng_override=longitude if overridden else None,
@@ -369,12 +374,25 @@ class AHiddenActivityBodyNamesNothingOfThePlaceTests(SimpleTestCase):
 
         assert body is not None
         self.assertEqual(body["location"], "")
-        # A title may be the place's own name (a place search's), so a hidden stop's title is never sent.
         self.assertEqual(body["summary"], f"Mill weekend: {HIDDEN_ACTIVITY_TITLE}")
         text = json.dumps(body)
         self.assertNotIn("Zq", text)
         for coordinate in (latitude, longitude):
             self.assertNotIn(f"{coordinate:.6f}", text)
+
+    def test_a_hidden_stop_keeps_a_title_its_author_typed(self) -> None:
+        activity = TripActivity(
+            trip=Trip(name="Mill weekend"),
+            location=Location(latitude=42.38, longitude=-83.03, official_name=_PLACE_NAME),
+            title="Meet at the gate",
+            location_hidden=True,
+            scheduled_at=datetime.datetime(2026, 10, 1, 9, 0, tzinfo=datetime.UTC),
+        )
+
+        body = activity_to_event_body(activity)
+
+        assert body is not None
+        self.assertEqual((body["summary"], body["location"]), ("Mill weekend: Meet at the gate", ""))
 
     def test_a_stop_with_no_place_sends_an_empty_location_only_for_an_event_urbanlens_made(self) -> None:
         activity = TripActivity(

@@ -235,9 +235,10 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         inferred_source_share_id: int | None
         cover_photo_id: int | None
         wiki_id: int | None
-        # Transient bookkeeping shared by the pre/post-save child-boundary hooks.
+        # Transient bookkeeping shared by the pre/post-save child-boundary and calendar hooks.
         child_boundary_previous_parent_id: int | None
         child_boundary_position_changed: bool
+        previous_location_id: int | None
 
     objects = PinManager()
 
