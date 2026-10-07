@@ -160,7 +160,7 @@ passed for all four primaries apart from Athens's build date (REData P111).
    for 19 of the 57 campuses, and cold buildings and boundaries answers that cost a gunicorn worker (REData P62).
    Both are fixed on REData's `release/0.3.7`, not yet released: the Smithsonian error (N47 item 1) is isolated as one
    `unavailable` archive, and a cold parcel's buildings and boundaries answer 503 `refresh_queued` while REData
-   computes them (REData #147). UrbanLens's half of both is on `fix/redata-partial-answers`, into
+   computes them (REData #147). UrbanLens's half of both is in UrbanLens#352 (`fix/redata-partial-answers`), into
    `release/v_0_9_0`; see "How a partial REData answer is cached" below.
 3. Background media sweeps that leave a live request its share of the free SearXNG-media and Commons budgets
    (REData P108). The paid Google Places budget is not raised; UrbanLens keeps its searches few and honours

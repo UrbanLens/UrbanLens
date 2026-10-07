@@ -5,7 +5,7 @@
   is isolated, reported `unavailable` with `complete: false`, and the other archives' results still come back;
   Smithsonian reads an empty date list. Item 6: `/search/news/` carries `complete`, `degraded` and a per-provider
   `providers`, with `complete: false` whenever GDELT did not answer. Neither is released or deployed; production runs
-  v0.3.6. UrbanLens reads both on `release/v_0_9_0` (branch `fix/redata-partial-answers`): a partial news or archive
+  v0.3.6. UrbanLens reads both on `release/v_0_9_0` (UrbanLens#352, branch `fix/redata-partial-answers`): a partial news or archive
   answer is shown and kept an hour, an empty one is not kept, and an older REData's answer is read as before.
   REData #147 on the same release answers item 2's cold parcels with 503 `refresh_queued` and a `retry_after`;
   UrbanLens waits that out on the same branch. Originally SENT 2026-10-07. Measured against `https://redata.urbanlens.org` with UrbanLens production's key,
