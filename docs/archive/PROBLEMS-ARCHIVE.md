@@ -1,7 +1,8 @@
 # Resolved problems (archive)
 
 Entries from `docs/PROBLEMS.md` whose headers record them as resolved, fixed or dismissed,
-moved here on 2026-08-18 so the live file lists what still needs attention.
+moved here on 2026-08-18 so the live file lists what still needs attention. It takes no new
+entries: open problems became GitHub issues on 2026-10-07, and one resolved since is a closed issue.
 
 Kept rather than deleted: several of these are the only written record of *why* something is
 shaped the way it is, and a few document traps that would otherwise be rediscovered the hard
@@ -10,6 +11,116 @@ way. Search here before concluding a defect is new.
 Note for anything citing this material by line number: `docs/reports/` contains audit reports that
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
+
+## RESOLVED 2026-10-07: A calendar event kept a location the export withheld, because an update is a PATCH and the body left `location` out; a hidden stop's event title named the place, and a Google rate limit dropped the connection
+
+`id: P335` · `status: fixed` · `resolved: 2026-10-07` · `found by: P334's fix, reading the export path`
+
+**What was wrong.**
+
+- **A withheld location stayed on the event.** `trip_to_event_body` and `activity_to_event_body`
+  (`services/trips/calendar_sync.py`) set `location` only when the exporting member could see one. A location stops
+  being visible after export when the activity is marked `location_hidden`, or when the trip-mate who added it
+  restricts `trip_pin_location_visibility`. The next export sent a body with no `location`.
+  `GoogleCalendarGateway.update_event` is a PATCH, and Google keeps any field a PATCH leaves out, so the event kept the
+  address. Reproduced against a fake calendar whose PATCH merges the body the way Google documents: after the stop
+  was hidden and the trip re-exported, both the stop's event and the trip's all-day event still read
+  "1580 E Grand Blvd, Detroit, MI".
+- **The original entry missed a second leak, on every write, the first included.** The stop's event `summary` was
+  `"<trip>: <effective_title>"`, and `TripActivity.effective_title` falls back to the pin's label, the place's name
+  or its address. A hidden stop with no title of its own put the place in the event title. A stop added from a place
+  search with no title typed has the place's name *as* its title (P186's `create_activity`), so it put the place
+  there too. The adversarial review of this fix found that second route.
+- **A Google rate limit read as a revoked grant.** `GoogleCalendarGateway._request` turned every 401 and 403 into
+  `GoogleAuthExpiredError`. Google answers a rate or usage limit with 403 (`rateLimitExceeded`,
+  `userRateLimitExceeded`, `quotaExceeded`, domain `usageLimits`) as well as with 429 (Calendar API guide, "Handle API
+  errors"). The export button, import dialog, import preview, unexport and the external API then deleted the
+  `GoogleCalendarAccount`, and a push settled its request as if nothing could be done. A 429 was a plain
+  `GatewayRequestError`.
+
+**What changed.**
+
+- **Every field an export may withhold is sent, so a PATCH clears it.** `_activity_location_string` now answers in
+  three ways: the address (else the coordinates), `""` when the stop has a location the exporting member may not see,
+  or None when it has none. `_trip_location_string` answers the first visible one, else `""` when only withheld ones
+  exist, else None. For an event UrbanLens made, the body always carries `location`, `""` when there is nothing to
+  show (`_set_location`).
+- **An imported event keeps a location it came with.** An import links the user's own event, and turns its location
+  into an activity *title* with no coordinates (`_create_activity_from_event`). The entry's proposed fix, `location: ""`
+  whenever there is none, would have erased that location from the user's own event on the first auto-sync push. For
+  an event an import linked (`TripCalendarLink.direction` IMPORTED, and an id other than `trip_event_id`'s), the body
+  sends `location: ""` only when a location is withheld; when the trip has none at all it leaves `location` out
+  (`_TripCalendarExport._owns_event`, the `owns_event` argument of both body builders).
+- **A hidden stop's event title is always "<trip>: Secret Location".** This is stricter than the activities panel,
+  which keeps a title of the stop's own ("Meet at the gate" is written for the other members). A stored title cannot
+  be told apart from a place search's name, and an event is a copy UrbanLens cannot mask later. The panel and API
+  still show such a title, which is P338. `HIDDEN_ACTIVITY_TITLE` and `masked_activity_title` moved from
+  `trip_activities` to `services/trips/trip_visibility.py`, so the exporter takes the constant without importing
+  `trip_activities`.
+- **The other fields were checked and carry nothing withheld.** `description` is the trip's description or the
+  stop's notes, then the trip page URL (`/trips/<slug>/`). Notes are shown to every member whatever the location's
+  visibility (panel and API), and the location string is never added to them. No map URL is sent; coordinates appear
+  only as the `location` text of a stop with no address. `extendedProperties.private` holds the trip's uuid and the
+  activity's id. All of these are sent on every write, so a PATCH overwrites them.
+- **PATCH, not PUT.** A PUT replaces the whole event, which would also erase reminders, colour and attendees a user
+  set on their copy, and every field of an imported event that UrbanLens does not write.
+- **The fingerprint covers the withheld state.** `_event_fingerprint` hashes the body, which now holds `""` or the
+  address and the masked or real title, so a change in what a member may see changes the fingerprint and the next
+  export rewrites the event. The export after that writes nothing. Every event exported without a location gains
+  `location: ""`, so it is rewritten once on its next export or push. On an upgrade from 0.8.0, migration 0067 leaves
+  every fingerprint blank anyway.
+- **A rate limit is transient.** `is_rate_limit_refusal` (`services/apis/calendar/google.py`) matches a 429, or a 403
+  whose `errors[].reason` or `details[].reason` is in `RATE_LIMIT_REASONS`. The Calendar guide names
+  `rateLimitExceeded`, `userRateLimitExceeded` and `quotaExceeded`. `dailyLimitExceeded` (Google's general daily-quota
+  reason) and `RATE_LIMIT_EXCEEDED` (its newer envelope's `ErrorInfo`) are not in the Calendar guide and were added to
+  be safe. Matching is by reason, not by the `usageLimits` domain, which `accessNotConfigured` shares. It ignores the
+  envelope's `status`, because Google sends PERMISSION_DENIED with a per-user quota refusal too. The gateway raises
+  `CalendarRateLimitedError`, a `RateLimitExceededError`, so it takes the path P334 built for our own budget. An
+  export cut short has the push it then owes finished by `requeue_pending_calendar_pushes`. A refusal before
+  anything was written gets the "busy" toast, or 503 with `Retry-After` from the API. A push stays owed and counts an
+  attempt. Every other 403 (`forbidden`, `insufficientPermissions`, a body with no readable reason) and every 401 is
+  still a dead grant. A failed token refresh still is too, whatever the reason (P337).
+
+**Tests.** `dashboard/tests/hypothesis/test_calendar_withheld_fields.py`. Run against the code before this change,
+its export, push and view cases failed: the address stayed, and the connection was deleted. The exception is the
+imported-event guard, which passed before and after. It covers:
+
+- hiding an exported stop, and a trip-mate restricting theirs;
+- showing it again;
+- a stop that lost its location;
+- a hidden stop added from a place search, whose title is the place's name;
+- an imported event keeping its own location but losing a withheld one;
+- a Hypothesis property that a hidden stop's body names nothing of the place, its title included;
+- the classifier on Google's documented bodies, on `accessNotConfigured`, and on malformed ones;
+- the export, push, button, API and import dialog after a rate limit.
+
+Four existing assertions that a withheld location was absent from the body now expect `""`.
+
+**Not verified against Google.** The fake calendar's PATCH merges as Google documents a PATCH. That `location: ""`
+clears the field is taken from Google's PATCH semantics, not observed here. The 403 and 429 bodies are the ones the
+Calendar API guide prints. The per-user quota body in the newer envelope is assembled from Google's `ErrorInfo`
+format, not captured from a live response.
+
+**Left as they are.**
+
+- An imported event whose trip has no location keeps the location it came with. If UrbanLens once wrote a stop's
+  location onto it, and that stop then lost its location rather than having it hidden, that address stays too,
+  because it cannot be told from the event's own.
+- An export without auto-sync is never pushed, so a location hidden after it stays on that member's calendar until
+  they export again, and once a trip is linked the trip page offers no re-export. Clearing it would mean writing to
+  a calendar whose owner did not ask for updates: P336.
+- A push that Google rate-limits five times in a row is dropped by P334's cap (`MAX_CALENDAR_PUSH_ATTEMPTS`), so a
+  location withheld in the meantime stays until the trip next changes. Before this fix, the same refusal deleted the
+  connection.
+- An event an earlier export left an address on is cleaned only by the trip's next export or push; nothing
+  re-pushes every linked trip. Requesting one push per auto-sync trip on deploy would clean them sooner, at the cost
+  of rewriting every event of those trips (0067 blanks the fingerprints). That is an API-write policy call, left for
+  Jess.
+- A change that hides a location without editing the trip (a trip-mate's setting, an unfriending, a removed common
+  pin) queues no push, and a deleted activity's event is orphaned: P336.
+- The activities panel and the external API still show a hidden stop's title when it is a place search's name: P338.
+- A token refresh that fails for any reason, and a 403 about the site rather than the user, still drop the
+  connection: P337.
 
 ## RESOLVED 2026-10-07: A trip with 30 or more scheduled activities never finished a Google Calendar export, because every attempt restarted from the first event inside a 30-a-minute budget
 
@@ -94,10 +205,8 @@ counted as a failed attempt and waits for the sweep. Before, the `requests` exce
 `OSError` autoretry retried it. An event the user deleted in Google is not rewritten by a re-export of an unchanged
 trip, which was the decision's trade-off. Reconnecting the account forces a full rewrite.
 
-**Related, not fixed here.** An update is a PATCH, which leaves out fields the body omits. So an event keeps a
-`location` that a later export no longer sends: a location hidden after export, or a trip-mate who restricted
-theirs. That is P335. A 403 from Google is always read as a dead grant and drops the account, though Google also
-answers 403 for `rateLimitExceeded`. Our 120 a minute is well below Google's 600 per user, so this was not pursued.
+**Related, fixed separately.** An update is a PATCH, so an event kept a `location` a later export withheld, and a
+rate-limit 403 from Google was read as a dead grant. Both were fixed under P335.
 
 ## RESOLVED 2026-10-06: Historic Newspapers showed nothing, because a page was judged by its paper's dateline
 

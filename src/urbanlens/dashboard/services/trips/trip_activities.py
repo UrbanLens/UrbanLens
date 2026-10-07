@@ -27,7 +27,7 @@ from urbanlens.dashboard.services.notifications.change_notifications import anno
 from urbanlens.dashboard.services.trips.trip_access import has_joined, is_organizer, require_joined, require_perform
 from urbanlens.dashboard.services.trips.trip_errors import TripNotFoundError, TripPermissionError, TripQuotaError, TripValidationError
 from urbanlens.dashboard.services.trips.trip_legs import activity_coords
-from urbanlens.dashboard.services.trips.trip_visibility import viewer_hidden_activity_ids
+from urbanlens.dashboard.services.trips.trip_visibility import masked_activity_title, viewer_hidden_activity_ids
 from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 from urbanlens.dashboard.services.wiki.wiki_access import visible_locations_filter
 
@@ -305,25 +305,6 @@ def create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivi
             )
 
 
-#: What a viewer who may not see an activity's location is shown instead.
-HIDDEN_ACTIVITY_TITLE = "Secret Location"
-
-
-def _masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
-    """The activity's title as this viewer may see it.
-    An activity's ``effective_title`` falls back to its location's name, so for a hidden activity the title *is* the location - which is why masking it is not cosmetic.
-
-    Args:
-        activity: The activity being rendered.
-        hidden: Whether this viewer may see its location.
-
-    Returns:
-        A display title safe to put anywhere in the page, including in attributes the eye does not reach."""
-    if not hidden:
-        return activity.effective_title
-    return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
-
-
 def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = True) -> list[dict[str, Any]]:
     """Build one render row per activity: index, votes, RSVP, permissions, visibility, leg.
     The single source of the activities-panel context and of the external API's activity list, so the two can never diverge on what a viewer is allowed to see or manage.
@@ -413,7 +394,7 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
             # guard for `act.location` or `effective_title`.
             # The panel did exactly that: it swapped the visible label for "Secret Location" and
             # then emitted the real name and slug into the row's own data attributes and the RSVP
-            "display_title": _masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
+            "display_title": masked_activity_title(act, hidden=act.location_hidden or (act.id in viewer_hidden)),
             "display_location_name": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.display_name if act.location else ""),
             "display_location_ref": "" if (act.location_hidden or act.id in viewer_hidden) else (act.location.slug if act.location else ""),
             # A linked child trip's name/uuid are exactly the kind of identifying information a
