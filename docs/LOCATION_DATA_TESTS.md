@@ -15,8 +15,10 @@ spend real REData budget, and are never collected by a plain `pytest` or CI.
 Kirkbride hospitals, with coordinates from each article or its Wikidata item, plus
 St. Lawrence and Harlem Valley. The four `tier = "primary"` sites (HRSH, St. Lawrence,
 Harlem Valley, Athens) have hand-verified anchors and are what a default run checks.
-`--sites all` checks every campus; a demolished one (its Kirkbride is gone, even where later
-hospital buildings stand: Mendocino) skips the building checks.
+`--sites all` checks every campus; a `demolished` one skips the building, footprint and
+build-date checks. A campus's `status` says whether buildings stand at its point, not whether its
+own Kirkbride survives: Mendocino's was razed in 1952 and hospital buildings still stand there, so
+it is `standing`.
 
 A campus's `nrhp` is the reference of its own listing, which can be one building's or its
 district's (Mendota is the Wisconsin Memorial Hospital Historic District, Kalamazoo its Water
@@ -53,7 +55,9 @@ disambiguator, which no headline contains (`Site.news_queries`). The register ch
 any attribute) or when it names the campus in its `name` or in an attribute that names a
 historic district: New Jersey's SHPO layer records Trenton's campus that way, as
 `attributes.HD_NAME` on each building's row (`Site.register_listings`). A district the SHPO
-only holds as eligible counts too.
+only holds as eligible counts too, and when every matching row is an eligible record the check
+passes with that in its report detail ("matched only eligible, not listed, register rows"); a
+record the register withdrew (not eligible, delisted, removed) never counts.
 
 **The pipeline** (`test_pipeline.py`, `--pipeline`) creates a root pin on each campus the way the
 map does, runs the bootstrap chain that sets off inline against the same REData, and checks

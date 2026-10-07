@@ -88,7 +88,7 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
 | No current listing within 500 m: Central State VA's only one, the Chapel (10000794), was removed 2017-02-07 after it collapsed, and Mayfield Cottage (69000236) is 616 m away; Terrell has none, and THC marker 8556 is published 542 m from the catalogue point, outside the grounds, past the radius | c | register (known issues) | Central State VA, Terrell |
 | NPS places the campus's listing (86000851) 1.06 km from it | c | register (known issue) | Columbus |
 | Listed under a number the catalogue lacked, because the listing is one of the campus's buildings or its district (NPS, cross-checked against Wikipedia's NRHP lists; corrected in `kirkbrides.toml`) | e | register | Central State IN (`72000011`, Old Pathology Building), Eastern State WA (`97001084`, Roosevelt Hall), Kalamazoo (`72000624`, Water Tower), Mendota (`88002183`, the Wisconsin Memorial Hospital Historic District), St. Peter (`86002117`, Center Building) |
-| A historic district named only in the rows' `attributes` (New Jersey's `HD_NAME`; SHPO-eligible, with no NRHP listing): the check read only names, and now also reads a district named in an attribute (UrbanLens#340, "register check reads only each row's name") | a | register | Trenton |
+| A historic district named only in the rows' `attributes` (New Jersey's `HD_NAME`; SHPO-eligible, with no NRHP listing): the check read only names, and now also reads a district named in an attribute, and says in its result when the match is an eligible record, not a listing (UrbanLens#340, "register check reads only each row's name") | a | register | Trenton |
 | A listed NRHP property within 500 m not returned; REData's cultural-resource cache may ignore the radius | b | register | Greystone (00000653) |
 | The article has no coordinates | c | wikipedia (known issues) | Central State VA, Kalamazoo |
 | The article's coordinates are not marked primary, and REData's geosearch reads primary ones only | b | wikipedia | Eastern Oregon |
@@ -114,13 +114,17 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
   - Central State VA and Terrell gain a register known issue (c);
   - Terrell's point stands: it is on the grounds, beside the water tower, and THC's own published point for its
     marker is the one 542 m out;
-  - Mendocino is `demolished` (its Kirkbride was razed in 1952), which skips the building checks on a campus whose
-    later hospital buildings still stand.
+  - Mendocino stays `standing`: its Kirkbride was razed in 1952, but later hospital buildings still stand at the
+    point. `status` means whether buildings stand at the catalogue point (it gates the building, footprint and
+    build-date checks), not whether the original Kirkbride survives, so Central State IN, Jacksonville, Mendota,
+    Kalamazoo, St. Peter, Central State VA, Terrell and Eastern State WA, which Wikipedia also records as having lost
+    theirs, stay `standing` too. The catalogue's header says so.
 
-  Eight other campuses whose Kirkbride Wikipedia records as demolished (Central State IN, Jacksonville, Mendota,
-  Kalamazoo, St. Peter, Central State VA, Terrell, Eastern State WA) stay `standing`. The catalogue's `status`
-  follows Wikipedia's status column (Central State KY, "Demolished 1996", is `demolished`; those eight, "Active" or
-  "Inactive", are not), so only Mendocino now reads the Kirkbride alone. None of this has been run against REData.
+  The nine `demolished` entries came from Wikipedia's status column, which describes the Kirkbride, and were not
+  each checked against that meaning. An Esri aerial (2026-10-07) shows buildings at the point of two: Spring Grove
+  (an active hospital; Wikipedia's "Demolished 1963" is its Kirkbride) and Danvers (apartments around the preserved
+  centre of the Kirkbride). The other seven were not looked at. Nothing was changed. None of this has been run
+  against REData.
 - **Five harness-only fixes:**
   - the URL, key and Host are read from `.env` together or not at all;
   - a `503` carrying a REData error code is remembered for the session;
@@ -128,7 +132,8 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
   - the news search carries the town and state after a name that needs one, and never searches a Wikipedia
     disambiguator (UrbanLens#339);
   - the register check counts a row naming the campus as a historic district in its `attributes`, or carrying its
-    NRHP number there (UrbanLens#340).
+    NRHP number there, and never counts a record the register withdrew (not eligible, delisted, removed). When every
+    match is a SHPO's eligible record, which is not a listing, its result says so (UrbanLens#340).
 
   The third cut repeated worker kills on production to one per endpoint per campus.
 - **UrbanLens#339 and UrbanLens#340** hold the two suite gaps. **N47** is the handoff to REData.
@@ -165,8 +170,9 @@ passed for all four primaries apart from Athens's build date (REData P111).
 9. Build years outside New York (REData P111: 27 campuses).
 10. A completeness envelope on the buildings endpoints instead of a header (REData P103).
 11. New York centroid parcels with no polygon, and Maryland's centroid layer (REData P101, P102).
-12. A decision on whether every catalogue campus should be expected to have incidents and news, and on whether
-    `status` means the campus or its Kirkbride (the eight campuses above).
+12. A decision on whether every catalogue campus should be expected to have incidents and news. Decided:
+    `status` means whether buildings stand at the catalogue point, not whether the Kirkbride survives. Open: Spring
+    Grove and Danvers, still `demolished` with buildings at the point, and the seven `demolished` entries not looked at.
 
 **P3 - ingestion and outsourcing.**
 
