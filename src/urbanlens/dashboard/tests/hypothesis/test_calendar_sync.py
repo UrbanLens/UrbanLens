@@ -756,7 +756,7 @@ class ExportTripTests(_CalendarSyncDBTestCase):
 
         removed = remove_trip_from_calendar(self.account, trip)
 
-        self.assertTrue(removed)
+        self.assertTrue(removed.unlinked)
         gateway.delete_event.assert_called_once_with("evt-x")
         self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
 
@@ -766,7 +766,7 @@ class ExportTripTests(_CalendarSyncDBTestCase):
 
         removed = remove_trip_from_calendar(self.account, trip)
 
-        self.assertFalse(removed)
+        self.assertFalse(removed.unlinked)
         gateway.delete_event.assert_not_called()
 
 
@@ -1178,7 +1178,7 @@ class ExportActivityEventsTests(_CalendarSyncDBTestCase):
 
         removed = remove_trip_from_calendar(self.account, trip)
 
-        self.assertTrue(removed)
+        self.assertTrue(removed.unlinked)
         deleted_ids = {call.args[0] for call in gateway.delete_event.call_args_list}
         self.assertEqual(deleted_ids, {"trip-evt", "act-evt"})
         self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
