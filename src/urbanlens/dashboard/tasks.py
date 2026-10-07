@@ -22,6 +22,7 @@ import contextlib
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import async_to_sync
@@ -2879,6 +2880,14 @@ _DEFERRED_LOOKUP_DEADLINE = timedelta(days=2)
 #: Seconds between retries, indexed by attempt number (the last entry repeats).
 _DEFERRED_RETRY_SCHEDULE = (120, 120, 120, 300, 600, 1800, 3600, 7200, 14400, 21600)
 
+#: Seconds a batch waits on Google's rate limit, whatever the attempt.
+_GOOGLE_RATE_LIMIT_RETRY_SECONDS = 65
+
+#: The most retries the deadline can hold. Each retry waits at least the shortest gap above, and a batch that keeps
+#: resolving a cid or two resets its counters to that gap, so this many retries always outlast the deadline. The
+#: deadline ends a batch first; this ends one whose ``started_at`` it cannot read.
+_DEFERRED_MAX_RETRIES = math.ceil(_DEFERRED_LOOKUP_DEADLINE.total_seconds() / min(*_DEFERRED_RETRY_SCHEDULE, _GOOGLE_RATE_LIMIT_RETRY_SECONDS))
+
 
 def _deferred_retry_countdown(attempt: int) -> int:
     """Seconds to wait before retry number ``attempt`` (0-based).
@@ -3042,7 +3051,7 @@ def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[di
     return checked
 
 
-@shared_task(bind=True, max_retries=None, queue=Queue.BULK)
+@shared_task(bind=True, max_retries=_DEFERRED_MAX_RETRIES, queue=Queue.BULK)
 def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enqueue_task passes its arguments positionally, and queued messages carry that order
     self,
     profile_id: int,
@@ -3065,6 +3074,9 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     from the retry args, so a retry never redoes finished work - if anything
     is still pending on a rate limit or a REData outage. Reports a summary via
     NotificationLog once every cid is either placed or confirmed unresolvable.
+
+    Retries stop at :data:`_DEFERRED_LOOKUP_DEADLINE`, or at :data:`_DEFERRED_MAX_RETRIES` for a batch the deadline
+    cannot end; either way the cids still pending become ``PinImportFailure`` rows and the user is told.
 
     Args:
         profile_id: PK of the importing profile.
@@ -3134,12 +3146,15 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
     consecutive_request_failures = consecutive_request_failures + 1 if result.request_failed else 0
-    if _deferred_deadline_passed(started_at) and consecutive_request_failures:
+    # self.request.retries counts this run's predecessors; Celery refuses a retry() past max_retries.
+    out_of_time = _deferred_deadline_passed(started_at) or self.request.retries >= _DEFERRED_MAX_RETRIES
+    if out_of_time and consecutive_request_failures:
         logger.error(
-            "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s - giving up.",
+            "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s after %d retries - giving up.",
             consecutive_request_failures,
             len(all_cids),
             profile_id,
+            self.request.retries,
         )
         for cid in all_cids:
             record_pin_import_failure(
@@ -3168,14 +3183,17 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         else:
             consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
 
-        if _deferred_deadline_passed(started_at):
+        if out_of_time:
+            # What this last round did resolve is placed, as on any other round; only what is still pending fails.
+            created_count, exists_count, skipped_count = _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
             logger.error(
-                "resolve_deferred_pin_locations: %d cid(s) for profile %s made no progress across %d consecutive retries - giving up.",
-                len(all_cids),
+                "resolve_deferred_pin_locations: %d cid(s) for profile %s still pending after %d retries (%d without progress) - giving up.",
+                len(result.pending),
                 profile_id,
+                self.request.retries,
                 consecutive_no_progress,
             )
-            for cid in all_cids:
+            for cid in result.pending:
                 record_pin_import_failure(
                     profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED
                 )
@@ -3186,13 +3204,13 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
                 notification_type=NotificationType.ERROR,
                 title="Location lookup is taking longer than expected",
                 message=(
-                    f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
+                    f"{len(result.pending)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
                     "This isn't a problem with your import - review them on the Locations page to enter an address or coordinates yourself."
                 ),
                 url=reverse("memories.locations"),
             )
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
-            return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+            return {"created": created_count, "exists": exists_count, "skipped": skipped_count + len(result.pending)}
 
         # Place whatever DID resolve this round before scheduling the retry: `remaining_pins` below drops every
         # resolved cid from the retry args, so any coordinate not placed here is never placed at all - not this
@@ -3209,7 +3227,7 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         # A Google rate limit clears on its own timescale and is unrelated to how
         # long this batch has been going, so it keeps its short fixed wait.
         if result.provider == "google_places":
-            countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
+            countdown, message = _GOOGLE_RATE_LIMIT_RETRY_SECONDS, "Waiting on Google's rate limit - resuming shortly..."
         else:
             countdown = _deferred_retry_countdown(max(consecutive_no_progress, consecutive_request_failures))
             message = "Still waiting on the location lookup service - checking back periodically..." if countdown > 600 else "Having trouble reaching the location lookup service - retrying shortly..."
@@ -3229,7 +3247,6 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
         self.retry(
             args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress, started_at or timezone.now().isoformat()],
             countdown=countdown,
-            max_retries=None,
             throw=False,
         )
         return {"created": 0, "exists": 0, "skipped": 0}
