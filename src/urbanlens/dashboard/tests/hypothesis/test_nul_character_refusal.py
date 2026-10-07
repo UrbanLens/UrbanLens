@@ -21,7 +21,7 @@ from model_bakery import baker
 from rest_framework.exceptions import ParseError
 from rest_framework.views import APIView
 
-from hypothesis import find, given, strategies as st
+from hypothesis import find, given, settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.middleware import NulCharacterRefusalMiddleware
 from urbanlens.dashboard.models.account.model import ApiKeyScope
@@ -180,7 +180,13 @@ class TheDrfParsersTests(SimpleTestCase):
         self.assertEqual(parsed["a"], "xy")
 
 
-_JSON_TEXT = st.text(alphabet=st.characters(codec="utf-8", exclude_categories=("Cs",)), max_size=5)
+# NUL is one of over a million code points, so drawn uniformly it almost never appears, nested almost never. Drawn as
+# often as every other character together, about half the values hold one and a tenth hold one nested, so both halves
+# of the property are exercised.
+_JSON_TEXT = st.text(
+    alphabet=st.characters(codec="utf-8", exclude_categories=("Cs",)) | st.just("\x00"),
+    max_size=5,
+)
 _JSON_VALUES = st.recursive(
     st.none() | st.booleans() | st.integers(min_value=-1000, max_value=1000) | _JSON_TEXT,
     lambda children: st.lists(children, max_size=3) | st.dictionaries(_JSON_TEXT, children, max_size=3),
@@ -216,13 +222,20 @@ class DecodedJsonTests(SimpleTestCase):
         self.assertEqual(decode_json(r'{"a": "\\u0000"}'), {"a": "\\u0000"})
 
     def test_the_strategy_draws_a_nul_in_a_key_and_in_a_nested_value(self) -> None:
-        """Anti-vacuity for the property above."""
-        in_a_key = find(_JSON_VALUES, lambda value: isinstance(value, dict) and any("\x00" in key for key in value))
+        """Anti-vacuity for the property above.
+
+        Derandomized and without the example store, so the answer is the strategy's and not an earlier run's.
+        """
+        fresh = settings(database=None, derandomize=True)
+        in_a_key = find(
+            _JSON_VALUES, lambda value: isinstance(value, dict) and any("\x00" in key for key in value), settings=fresh
+        )
         nested = find(
             _JSON_VALUES,
             lambda value: (
                 isinstance(value, list) and any(isinstance(item, list | dict) and _holds_nul(item) for item in value)
             ),
+            settings=fresh,
         )
 
         self.assertTrue(_holds_nul(in_a_key))
