@@ -920,8 +920,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 unavailable = len(rows) - index
                 break
             except ValueError as exc:
-                # The link names the place and carries its coordinates.
-                logger.warning("Failed to extract coordinates from a saved-place link: %s", type(exc).__name__)
+                logger.warning("Failed to extract coordinates from URL %s: %s", redact_text(row["maps_url"]), exc)
                 continue
             if latitude is None or longitude is None:
                 continue

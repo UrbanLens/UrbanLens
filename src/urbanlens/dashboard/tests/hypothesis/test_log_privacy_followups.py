@@ -300,6 +300,6 @@ class AMapsLinkThatWouldNotParseTests(TestCase):
             )
 
         logged = _text(captured.records)
-        self.assertIn("ValueError", logged, "the failure was not logged")
+        self.assertIn("Failed to extract coordinates", logged, "the failure was not logged")
         self.assertNotIn("Quokkabridge", logged)
         self.assertNotIn(_LATITUDE, logged)
