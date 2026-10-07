@@ -1806,7 +1806,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
     Args:
         checkin: The check-in being resolved.
         resolved_by_label: Display name of whoever reported the profile safe, for the owner/other-contact notification text.
-        exclude_contact: The contact who just reported this, if any - excluded from the "everyone else" notification pass so they don't get told about their own report.
+        exclude_contact: The contact who just reported this, if any - excluded from the notification pass to the other alerted contacts so they don't get told about their own report.
 
     Returns:
         True if this call actually performed the resolution, False if the checkin was already resolved (a no-op) - callers use this to decide whether posting a "marked safe" system chat message is appropriate."""
@@ -1850,7 +1850,9 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
             context={"checkin": checkin, "resolved_by_label": resolved_by_label, "checkin_url": absolute_url(checkin_path)},
         )
 
-    other_contacts = checkin.contacts.all()
+    # Only contacts already alerted: a partner can report the owner safe before escalation, and a contact must not
+    # learn of a trip whose owner never missed a check-in.
+    other_contacts = checkin.contacts.filter(notified_at__isnull=False)
     if exclude_contact is not None:
         other_contacts = other_contacts.exclude(pk=exclude_contact.pk)
     for other in other_contacts:

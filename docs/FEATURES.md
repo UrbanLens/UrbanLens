@@ -1139,6 +1139,8 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   one that never goes out holds it at most `FINAL_WARNING_MAX_WAIT` past the overdue point. Each side claims
   its row with a conditional write, so the warning never follows a contact alert (`due_for_final_warning`,
   `due_for_escalation`)
+- A contact hears about a check-in only once escalation has alerted them: the "found safe" and "plan updated"
+  notices go only to contacts with `notified_at` set, so a partner resolving it early tells no one else
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts

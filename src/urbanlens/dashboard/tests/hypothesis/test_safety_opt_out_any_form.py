@@ -170,6 +170,8 @@ class ProfileContactWhoOptedOutByEmailTests(_OptOutTestCase):
     def test_the_found_safe_notice_skips_them(self) -> None:
         set_checkin_contacts(self.checkin, [(self.member.profile, None, ""), (None, "finder@example.com", "")])
         finder = self.checkin.contacts.get(email="finder@example.com")
+        # Alerted, so only the opt-out keeps the notice from them.
+        self.checkin.contacts.update(notified_at=timezone.now())
         self._opt_out_by_email("member@example.com")
 
         with notification_emails_sent():
