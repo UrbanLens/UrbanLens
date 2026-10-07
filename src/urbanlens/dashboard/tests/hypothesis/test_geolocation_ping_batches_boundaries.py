@@ -51,8 +51,8 @@ class _Case(TestCase):
     def _unbounded_pin(self, lat: float, lng: float) -> Pin:
         """A pin with no property boundary at all: its marker stands on one building of a multi-building parcel.
 
-        ``scope.outline_applies`` rules the property outline out there. A lone building with no footprint no longer
-        does: since P264 (a82caf1a4) it falls through to its wiki's outline and then to the default circle.
+        ``scope.outline_applies`` rules the property outline out there. A lone building with no footprint does not:
+        its outline falls through to its wiki's and then to the default circle (P264).
         """
         parcel = make_place(PlaceKind.PARCEL, _square(lng, lat, 0.0005))
         building = make_place(PlaceKind.BUILDING, None, parent=parcel)
