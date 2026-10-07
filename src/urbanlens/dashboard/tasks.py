@@ -423,13 +423,13 @@ def refresh_profile_map_center(profile_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def push_trip_to_calendar(trip_id: int) -> int:
-    """Push a changed trip to its auto-synced calendars.
+    """Push a changed trip to its auto-synced calendars, and finish any export of it the calendar budget cut short.
 
     Args:
         trip_id: PK of the trip that changed.
 
     Returns:
-        The number of calendars the trip was successfully pushed to.
+        The number of calendars the trip was fully pushed to.
     """
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.services.trips.calendar_sync import push_auto_synced_trip_changes
@@ -441,9 +441,10 @@ def push_trip_to_calendar(trip_id: int) -> int:
     return push_auto_synced_trip_changes(trip)
 
 
-#: An auto-sync request older than this lost its push, or its push failed.
+#: A push request older than this lost its push, or its push failed or was cut short by the calendar budget.
 PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
-#: Failed pushes after which a request is dropped until the trip changes again.
+#: Pushes in a row that wrote nothing, after which a request is dropped until the trip changes again. A push that
+#: wrote some events and ran out of budget does not count, so a long export is finished however many it takes.
 MAX_CALENDAR_PUSH_ATTEMPTS = 5
 PENDING_CALENDAR_PUSH_BATCH = 200
 
@@ -451,7 +452,7 @@ PENDING_CALENDAR_PUSH_BATCH = 200
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("calendar-push-sweep")
 def requeue_pending_calendar_pushes() -> int:
-    """Queue the auto-sync pushes whose trip change was never delivered to the calendar.
+    """Queue the calendar pushes owed and not delivered: an auto-sync change, or the rest of a cut-short export.
 
     Returns:
         How many trips were queued.
@@ -460,10 +461,11 @@ def requeue_pending_calendar_pushes() -> int:
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
     cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
-    pending = TripCalendarLink.objects.filter(activity__isnull=True, auto_sync=True, push_requested_at__lt=cutoff)
+    # Not limited to auto_sync links: an export the budget cut short marks its link whether or not it auto-syncs.
+    pending = TripCalendarLink.objects.filter(activity__isnull=True, push_requested_at__lt=cutoff)
     abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
     if abandoned:
-        logger.warning("Dropped %d calendar auto-sync request(s) after %d failed pushes", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+        logger.warning("Dropped %d calendar push request(s) after %d pushes that wrote nothing", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
     trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
     queued = 0
     for trip_id in trip_ids:

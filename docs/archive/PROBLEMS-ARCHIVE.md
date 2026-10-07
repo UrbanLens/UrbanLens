@@ -11,6 +11,94 @@ Note for anything citing this material by line number: `docs/reports/` contains 
 quote `PROBLEMS.md:<line>`. Those numbers refer to the pre-split file and now point at different
 content - follow them by *searching for the quoted text*, not by jumping to the line.
 
+## RESOLVED 2026-10-07: A trip with 30 or more scheduled activities never finished a Google Calendar export, because every attempt restarted from the first event inside a 30-a-minute budget
+
+`id: P334` · `status: fixed` · `resolved: 2026-10-07` · `found by: N30, Batch 26 third pass, 2026-10-06`
+
+**What was wrong.** `export_trip_to_calendar` wrote the trip's all-day event, then one event per scheduled activity,
+each a separate request through the rate-limited session. `google_calendar` allowed 30 calls a minute site-wide
+(`plugins/builtin/google_calendar.py`), counted over every account's `ApiCallLog` rows. Nothing recorded what an
+attempt had already written, so each attempt began again at the trip event, updated the events the last attempt had
+written, and was refused at the same place. Measured 2026-10-06 with the real limiter and the HTTP layer stubbed, a
+trip with 40 scheduled activities sent 30 requests per attempt. After four attempts, 120 requests had gone out, there
+were 30 link rows, and the last 11 activities had never reached the calendar. The export button and the external
+API's `POST /trips/{trip_slug}/calendar/` reported a failure each time. An auto-sync push was retried by
+`requeue_pending_calendar_pushes` until `MAX_CALENDAR_PUSH_ATTEMPTS` dropped it, and each attempt spent the whole
+site's minute.
+
+**What changed** (Jess's decision, 2026-10-07):
+
+- **Every export is resumable, the button and API included.** `TripCalendarLink.event_fingerprint` holds the SHA-256
+  of the event body last written and the calendar it went to (`_event_fingerprint`). An attempt skips an event whose
+  new body hashes the same (`_TripCalendarExport._sync_event`), so the next attempt continues from the cut. The
+  fingerprint is cleared before each write and set again only when Google answers (`_claim`). Otherwise an update
+  whose answer was lost, followed by a change back, left the link vouching for a body the event no longer held, and
+  the event was skipped from then on. The
+  original entry proposed comparing a link's write time with `push_requested_at`. That would not have worked. An
+  event's body also depends on the trip's name and URL and on who may see each location, none of which an activity's
+  timestamp tracks. It also covered only pushes, and the button is how most exports start. Migration 0067 adds the
+  field blank, so each trip's next export rewrites its events once. (Re)connecting a Google account clears a profile's
+  fingerprints (`TripCalendarLinkQuerySet.forget_written_events`), since the new account may hold none of those events.
+- **One body everywhere.** The button had put the request's absolute trip URL in each description, and an auto-sync
+  push had put none. A continuation would then have rewritten every event the button wrote. Both now use
+  `absolute_url` (`SITE_URL`).
+- **Client-assigned event ids.** A create sends `id` = `client_event_id(SITE_URL, trip.uuid, profile.pk, activity.pk
+  or "trip")`: SHA-256, base32hex, 52 characters (`trip_event_id`). If a create reached Google but its response was
+  lost, the retry sends the same id and gets 409. The service then PATCHes that event with `status: confirmed` and
+  writes the link, so there is no duplicate. Google keeps a deleted event's id, so re-adding a trip after "remove from
+  calendar" meets 409 too, and the same PATCH brings the event back. If that PATCH 404s or 410s, the create is sent
+  again without an id. The profile is in the seed because two profiles can share one Google calendar. `SITE_URL` is
+  in it so that a copy of this database restored on another site cannot claim this site's events. The gateway now
+  maps 410 to `CalendarEventNotFoundError` and 409 to `CalendarEventExistsError`, and turns a request with no
+  response into `GatewayRequestError`. Before, such a request raised a `requests` exception, which the export view
+  did not catch.
+- **A budget refusal partway is a partial result, not a failure.** `export_trip_to_calendar` returns a
+  `CalendarExportResult` (`events_synced` of `events_total`, `complete`). When the budget runs out after the trip has
+  a link, it marks that link as owing a push (`push_requested_at`, keeping an older mark). The button's toast reads
+  "N of M events are on your Google Calendar. The rest will follow automatically." The API answers 200 with
+  `complete: false`, `events_synced` and `events_total`. `requeue_pending_calendar_pushes` no longer requires
+  `auto_sync`, and `push_auto_synced_trip_changes` pushes any trip-level link that owes a push, so the rest follows
+  10 to 25 minutes later (the sweep's cut-off and schedule) without another request. Once a trip is linked, the
+  trip page shows only the auto-sync and remove buttons, so the sweep is the only way to finish an export from the
+  page. A refusal before anything was written has nothing to resume. The button then says Google Calendar is busy,
+  and the API answers 503 with `Retry-After: 60`.
+- **An export stops when the trip leaves the calendar mid-run.** A continuation now runs minutes after the button
+  press, so "remove from calendar" can land while it writes. Before each write, the export checks that the link is
+  still there (`_claim`) and stops if it is gone. Without that check, the push recreated every remaining event under
+  its deterministic id, without a trip-level link. The write already in flight still lands. An activity deleted
+  mid-export has its event skipped.
+- **The cap counts only pushes that went nowhere.** A push that wrote anything resets `push_attempts`, and one that
+  wrote nothing adds one (`_count_push_attempt`), for a budget cut and a failed write alike. Each write that
+  succeeds leaves one fewer event to write, so a push that keeps making progress still ends.
+- **The budget fits a trip.** `google_calendar` is 120 a minute (`GOOGLE_CALENDAR_CALLS_PER_MINUTE`), at least
+  `max_trip_activities + 1` (101 at defaults). The daily limit stays 2,000. Google's quota is per user (600 a
+  minute), so this is our own politeness limit, not spend. Migration 0067 writes 120 only into a row that still
+  holds exactly the old defaults, as 0064 did. It also clears `push_requested_at` on trip-level links without
+  auto-sync. No earlier release would have delivered those marks, and this one would.
+
+**Measured after**, same harness (`test_calendar_export_resumable.py`, which also reproduces the 120-request
+figure against the old code). At 30 a minute, 40 activities: the first attempt sends 30 requests and links the trip
+and 29 activities. The sweep's push sends the other 11. That is 41 requests and 41 events in all, with one create
+per event. At the default 120 a minute, a 100-activity trip finishes in one attempt of 101 requests.
+
+**Not verified against Google.** The tests stub HTTP. Two Google behaviours are taken from its documentation and
+from reports, and were not observed here. A 409 on `events.insert` names an id already in use. A PATCH setting
+`status: confirmed` restores a deleted event. Google also says a colliding id "cannot be guaranteed" to be detected
+at creation. A button press racing a push of the same trip is handled: the ids are deterministic, and a lost insert
+of a link row falls back to updating the winner's row (`_record_link`). That race was not exercised under real
+concurrency.
+
+**Left as they are.** Turning auto-sync off leaves an owed push owed, so it is delivered once. Clearing it could
+cancel the rest of a button export, and the two cannot be told apart. A push that gets no response from Google is now
+counted as a failed attempt and waits for the sweep. Before, the `requests` exception escaped and Celery's
+`OSError` autoretry retried it. An event the user deleted in Google is not rewritten by a re-export of an unchanged
+trip, which was the decision's trade-off. Reconnecting the account forces a full rewrite.
+
+**Related, not fixed here.** An update is a PATCH, which leaves out fields the body omits. So an event keeps a
+`location` that a later export no longer sends: a location hidden after export, or a trip-mate who restricted
+theirs. That is P335. A 403 from Google is always read as a dead grant and drops the account, though Google also
+answers 403 for `rateLimitExceeded`. Our 120 a minute is well below Google's 600 per user, so this was not pursued.
+
 ## RESOLVED 2026-10-06: Historic Newspapers showed nothing, because a page was judged by its paper's dateline
 
 `id: P216` · `status: fixed` · `resolved: 2026-10-06` · `found by: P196, checking each provider's fields, 2026-10-03`

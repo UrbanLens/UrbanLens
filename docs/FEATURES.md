@@ -1052,7 +1052,10 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
   (attendees become friend invites), export trip activities to Calendar. The import dialog lists up
   to `MAX_IMPORTABLE_EVENTS` (500) events of the coming year, following Google's pages and saying
-  when more exist; the import runs in the `import_calendar_events` task behind a progress poll
+  when more exist; the import runs in the `import_calendar_events` task behind a progress poll.
+  An export rewrites only events whose body changed (`TripCalendarLink.event_fingerprint`), creates
+  under a deterministic event id so a retried create cannot duplicate, and when the calendar budget
+  runs out partway reports "N of M" and leaves the rest to `requeue_pending_calendar_pushes`
 - Trip settings controlling member/organizer permissions
 - **Invite by email** from the create dialog or the Add Member dialog (and `trips/<slug>/invitations/`
   in the external API). The inviter sees the address listed as invited whether or not it has an
@@ -1622,7 +1625,7 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Stall sweeps** that recover work a lost enqueue or a dead worker dropped, each keyed on a
   marker set in the same transaction as the change: `requeue_stalled_device_scans` (PENDING/
   PROCESSING uploads), `sweep_stale_fact_confidence` (`Fact.needs_recompute`),
-  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`),
+  `requeue_pending_calendar_pushes` (`TripCalendarLink.push_requested_at`: an auto-sync change, or an export the budget cut short),
   `sweep_unarchived_links` (a pin or wiki link without a Wayback snapshot: a failed URL waits
   1 h, 6 h, 1 d, 3 d, 7 d, then 30 d before it is given up, in `wayback_retry_at`; a link whose
   own task never ran is taken up after 15 minutes; `services/links/wayback_archive.py`).
