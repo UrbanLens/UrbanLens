@@ -1,6 +1,6 @@
 # D26 — Production spends the shared external budgets; staging gets a sliver, development none
 
-`id: D26` · `status: accepted` · `updated: 2026-10-06` · `decided by: Jess, 2026-10-05; amended 2026-10-06 (development calls no hosted AI)`
+`id: D26` · `status: accepted` · `updated: 2026-10-07` · `decided by: Jess, 2026-10-05; amended 2026-10-06 (development calls no hosted AI); 2026-10-07 (an unset environment refuses to start; trivia caps kept)`
 
 > **Written by a Claude agent. Not authoritative.**
 >
@@ -42,9 +42,9 @@ through (`rate_limiter._reserve_call`, `api_call_slot`, the gateway session, and
 - **The share.** `UL_ENVIRONMENT_SHARE` replaces `UL_BILLED_API_SHARE`. Defaults: production 0.9, staging 0.05,
   development and local 0, an unknown environment 0, the test suite 1.0. It scales every window (per minute, per
   day, per 30 days) of every `quota` and `billed` service, never below one call; a billed service's monthly
-  ceiling keeps #210's formula with this share (R31). An *unset* `UL_ENVIRONMENT` is production
-  (`environments/meta.py`), so every other deployment must set it: one that loses the variable spends
-  production's share, sends real mail and schedules every beat entry, and says so only in its startup line.
+  ceiling keeps #210's formula with this share (R31). An unset or blank `UL_ENVIRONMENT`
+  refuses to start (Jess, 2026-10-07; it used to be production, so a deployment that lost the variable spent
+  production's share, sent real mail and scheduled every beat entry). A test run that names none runs as `testing`.
   The share is per deployment: every deployment that says `staging` takes its own 5%, so with more than two
   of them (the damballa staging stack, staging on k3s, and the k3s sites while they run as staging before the
   cutover) production's 0.9 and theirs together pass the whole budget. Give the extra ones
@@ -108,8 +108,8 @@ service is treated as `billed`.
 The seven AI features that called the provider with no gate now each reserve an `api_call_slot` under their
 feature name, one row per provider call (the assistant one per round), which the gateway fills in with model,
 tokens and cost (#214). The six rows added for them carry only a per-minute guard against a runaway loop: AI
-is logged, never refused for spend (R31); it is refused in development by environment. `trivia_generation` already had a row, 5 a minute and 200 a day,
-which its slot now enforces; the hourly sweep stops at the first refused call and marks no wiki tried, so the
+is logged, never refused for spend (R31); it is refused in development by environment. `trivia_generation` already had a row, 5 a minute and 200 a day
+(Jess, 2026-10-07: "that's fine for now", kept as is), which its slot now enforces; the hourly sweep stops at the first refused call and marks no wiki tried, so the
 rest wait for the next run rather than for the 30-day retry.
 
 ### Hosted AI

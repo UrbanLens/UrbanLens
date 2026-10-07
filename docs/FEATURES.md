@@ -1662,7 +1662,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - Deployment configuration fails closed at import (`settings/_env.require_deployment_setting`):
   outside local/development/testing, a missing `DJANGO_SECRET_KEY`, `UL_SITE_URL` (or a loopback
   one), broker or Dragonfly URL, or `DJANGO_DEBUG=true`, refuses to start. `UL_ENVIRONMENT` is
-  resolved once by `environments.meta.environment_from_env` (unset is production). See P156.
+  resolved once by `environments.meta.environment_from_env`; unset or blank refuses to start (Jess, 2026-10-07),
+  except in a test run, which is `testing`. See P156.
 - `services/core/site_urls.absolute_url(path)` builds request-less links (mail, SMS, Celery) on
   `SITE_URL`; nothing else may join onto it (`test_site_urls.py`)
 - `/thanks/` credits page, rendering live contributor data pulled from the GitHub API
