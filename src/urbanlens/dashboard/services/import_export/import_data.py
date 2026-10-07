@@ -395,6 +395,10 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
         logger.exception("Import stopped by a storage failure for user %s", user_id)
         job_status.write("error", 0, "Storage was unavailable, so the import stopped. Try again in a few minutes.")
         return False
+    except _ImportMemberTooLargeError as exc:
+        logger.warning("Import refused for user %s: %s", user_id, exc)
+        job_status.write("error", 0, _MEMBER_TOO_LARGE_MESSAGE)
+        return False
     except _ImportValidationError as exc:
         logger.warning("Import validation failed for user %s: %s", user_id, exc)
         job_status.write("error", 0, "That archive couldn't be imported.")
@@ -525,6 +529,26 @@ class _ImportValidationError(Exception):
     pass
 
 
+class _ImportMemberTooLargeError(_ImportValidationError):
+    """A data file in the archive is over :data:`_MAX_JSON_MEMBER_BYTES`."""
+
+
+#: The most bytes any one JSON file in an archive may hold, since ``json.load`` builds it whole. The importer reads only
+#: this app's own export (``SUPPORTED_FORMATS``): no Google Takeout file, Records.json included, comes through here -
+#: those go through the import preview, which streams them. The largest file an export writes is ``pins.json``, about
+#: 1.5 KB a pin before descriptions and articles, so this holds ~170,000 pins; the app is sized for 10,000+ per user.
+#: Parsed, indented export JSON measured about 1.75x its size in Python objects (2.5x compact), so one file at the
+#: ceiling costs a sandbox worker roughly 0.45-0.65 GB; the worker pod is limited to 4 GiB across four children.
+_MAX_JSON_MEMBER_BYTES = 256 * 1024**2
+
+#: What the user is told when an archive holds a data file over the ceiling.
+_MEMBER_TOO_LARGE_MESSAGE = f"That archive couldn't be imported: one of its data files is larger than the {_MAX_JSON_MEMBER_BYTES // 1024**2} MB an import reads."
+
+
+def _is_json_member(name: str) -> bool:
+    return name.lower().endswith(".json")
+
+
 #: Ceilings on what an uploaded archive may declare before extraction even starts, guarding against a
 #: crafted zip filling the disk (decompression bomb) or exhausting inodes.
 #: The byte ceiling is dynamic (see ``_extraction_size_ceiling``) because export archives bundle the
@@ -583,6 +607,8 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         # attacker-controlled and independent of the actual compressed payload (zipfile only detects
         if sum(member.file_size for member in members) > ceiling:
             raise _ImportValidationError("Archive is too large to import.")
+        if any(_is_json_member(member.filename) and member.file_size > _MAX_JSON_MEMBER_BYTES for member in members):
+            raise _ImportMemberTooLargeError("Archive declares a data file over the per-file ceiling.")
         # Guard against zip-slip path traversal.
         # The separator is part of the comparison on purpose: a bare prefix check would accept an
         # entry escaping into a SIBLING directory whose name merely starts with the extract dir's
@@ -657,6 +683,9 @@ def _extract_zip_members_bounded(
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
 
+        # Counted here as well as checked against the declared size, which zipfile stops reading at today.
+        member_ceiling = _MAX_JSON_MEMBER_BYTES if _is_json_member(member.filename) else None
+        member_written = 0
         with zf.open(member) as src, open(dest_path, "wb") as dst:
             while True:
                 remaining_budget = ceiling - total_written
@@ -670,6 +699,9 @@ def _extract_zip_members_bounded(
                 if not chunk:
                     break
                 total_written += len(chunk)
+                member_written += len(chunk)
+                if member_ceiling is not None and member_written > member_ceiling:
+                    raise _ImportMemberTooLargeError("Archive holds a data file over the per-file ceiling.")
                 dst.write(chunk)
 
 
@@ -733,10 +765,16 @@ def _find_data_dir(root: str) -> str | None:
 
 
 def _read_json(data_dir: str, filename: str) -> Any:
-    """Read and parse a JSON file from the data directory; return None if missing."""
+    """Read and parse a JSON file from the data directory; return None if missing.
+
+    Raises:
+        _ImportMemberTooLargeError: The file is over :data:`_MAX_JSON_MEMBER_BYTES`, which extraction refuses first.
+    """
     path = os.path.join(data_dir, filename)
     if not os.path.exists(path):
         return None
+    if os.path.getsize(path) > _MAX_JSON_MEMBER_BYTES:
+        raise _ImportMemberTooLargeError("A data file is over the per-file ceiling.")
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 

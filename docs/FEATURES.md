@@ -256,7 +256,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   image media storage refuses on import is set aside with every file after it, the rest of the
   archive is imported, and the job runs again for just those files (1, 2, 4, 8, then 15 minutes
   apart, the import status saying storage is unavailable meanwhile); after five refusals in a row
-  with nothing stored between them, the summary lists the files left and asks for the archive again
+  with nothing stored between them, the summary lists the files left and asks for the archive again.
+  An account runs one import at a time, as it does one export: a second press while one runs shows
+  the running job. The importer reads only this app's own export format, and refuses an archive
+  holding a JSON file over 256 MB (`import_data._MAX_JSON_MEMBER_BYTES`), checked from the zip's
+  declared sizes and counted again while extracting, because `json.load` builds the whole file in
+  memory. The largest file an export writes is `pins.json`, about 1.5 KB a pin, so that is roughly
+  170,000 pins; Google Takeout files, `Records.json` included, go through the import preview,
+  which streams them
 
 ## Public Locations
 
