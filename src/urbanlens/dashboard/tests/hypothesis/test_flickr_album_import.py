@@ -35,6 +35,9 @@ def _mock_response(
     resp.status_code = status_code
     resp.json.return_value = json_data
     resp.content = content
+    # A streamed body, as read_capped reads it.
+    resp._content_consumed = False
+    resp.raw.read.return_value = content
     resp.headers = headers or {}
     resp.text = ""
     return resp

@@ -84,6 +84,22 @@ def _trip_date(value: object, label: str) -> datetime.date | None:
     raise TripValidationError(f"{label} must be a date, written YYYY-MM-DD.")
 
 
+def ensure_upcoming_trip_quota(creator: Profile) -> None:
+    """Refuse one more trip for ``creator`` once they are at ``max_upcoming_trips_per_user``.
+    Takes a lock on the creator's profile row, so it belongs inside the ``transaction.atomic()`` that also creates the trip: two creations racing for the last slot then queue instead of both passing.
+
+    Args:
+        creator: The profile the trip would belong to.
+
+    Raises:
+        TripQuotaError: The creator already has the maximum number of upcoming trips (0 means no maximum)."""
+    Profile.objects.select_for_update().filter(pk=creator.pk).first()
+
+    max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
+    if max_upcoming > 0 and Trip.objects.upcoming(creator).count() >= max_upcoming:
+        raise TripQuotaError(f"You already have the maximum of {max_upcoming} upcoming trips.")
+
+
 def create_trip(
     creator: Profile,
     *,
@@ -140,12 +156,7 @@ def create_trip(
         # `services.messaging.direct_messages.create_direct_message` uses.
         # The quota check sits inside it, behind a lock on the creator's own profile row, because
         with transaction.atomic():
-            Profile.objects.select_for_update().filter(pk=creator.pk).first()
-
-            max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
-            if max_upcoming > 0 and Trip.objects.upcoming(creator).count() >= max_upcoming:
-                raise TripQuotaError(f"You already have the maximum of {max_upcoming} upcoming trips.")
-
+            ensure_upcoming_trip_quota(creator)
             trip = Trip.objects.create(**create_kwargs)
     except IntegrityError:
         # Two offline retries carrying the same client uuid arrived close enough together that both

@@ -80,11 +80,6 @@ class BlockedAtTests(TestCase):
         block_profile(self.alice, self.bob)
         self.assertGreater(_row(self.alice, self.bob).blocked_at, first)
 
-    def test_the_legacy_classmethod_also_records_it(self) -> None:
-        Friendship.block(self.alice, self.bob)
-
-        self.assertIsNotNone(_row(self.alice, self.bob).blocked_at)
-
     def test_a_blocked_row_without_a_time_is_refused_by_the_database(self) -> None:
         """A queryset ``update()`` skips ``save()``; the constraint is what still holds it."""
         friendship = Friendship.request(self.alice, self.bob)

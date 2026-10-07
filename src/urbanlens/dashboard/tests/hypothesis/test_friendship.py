@@ -11,6 +11,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.social.friendship import block_profile
 
 _db_settings = settings(
     max_examples=30,
@@ -96,7 +97,7 @@ class FriendshipTransitionTests(TestCase):
 
 
 class FriendshipBlockMuteTests(TestCase):
-    """block() creates a new friendship row when none exists; mute() only flips a flag.
+    """block_profile() creates a new friendship row when none exists; mute() only flips a flag.
 
     The asymmetry is the point."""
 
@@ -109,7 +110,7 @@ class FriendshipBlockMuteTests(TestCase):
         self.profile_b = baker.make(User).profile
 
     def test_block_creates_blocked_friendship(self) -> None:
-        f = Friendship.block(self.profile_a, self.profile_b)
+        f = block_profile(self.profile_a, self.profile_b)
         self.assertIsNotNone(f)
         f.refresh_from_db()  # type: ignore[union-attr]
         self.assertEqual(f.status, FriendshipStatus.BLOCKED)  # type: ignore[union-attr]
@@ -134,12 +135,12 @@ class FriendshipBlockMuteTests(TestCase):
         self.assertTrue(FriendshipStatus.can_request(friendship.status))
 
     def test_block_blocks_re_request(self) -> None:
-        f = Friendship.block(self.profile_a, self.profile_b)
+        f = block_profile(self.profile_a, self.profile_b)
         self.assertFalse(FriendshipStatus.can_request(f.status))  # type: ignore[union-attr]
 
     def test_block_existing_friendship_updates_status(self) -> None:
         existing = _make_requested(self.profile_a, self.profile_b)
-        f = Friendship.block(self.profile_a, self.profile_b)
+        f = block_profile(self.profile_a, self.profile_b)
         assert f is not None  # nosec B101
         f.refresh_from_db()
         self.assertEqual(f.pk, existing.pk)  # same row, updated

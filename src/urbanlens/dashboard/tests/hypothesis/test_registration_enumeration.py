@@ -104,9 +104,9 @@ class SignupDoesNotRevealRegistrationTests(TestCase):
         self.assertEqual(_scrub(taken, "taken@example.com"), _scrub(fresh, "fresh@example.com"))
 
     def test_a_gmail_variant_of_a_registered_address_is_treated_as_registered(self) -> None:
-        _verified("gmailer", "jess.a.mann@gmail.com")
+        _verified("gmailer", "jane.q.public@gmail.com")
 
-        self._signup("newcomer_one", "jessamann+ul@gmail.com")
+        self._signup("newcomer_one", "janeqpublic@gmail.com")
 
         self.assertFalse(User.objects.filter(username="newcomer_one").exists())
 

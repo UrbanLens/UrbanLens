@@ -217,6 +217,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         name = (request.POST.get("filter_name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "A name is required to save a filter."}, status=400)
+        if name_error := column_length_error(SavedFilter, "name", name, "Filter name"):
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         if SavedFilter.objects.name_taken_for(profile, name, exclude_pk=saved_filter.pk):
             return JsonResponse({"ok": False, "error": "You already have a saved filter with that name."}, status=409)
 
@@ -234,7 +236,7 @@ class SavedFilterEditView(LoginRequiredMixin, View):
 
         color = clean_color(request.POST.get("color"), default="")
         saved_filter.name = name
-        saved_filter.icon = (request.POST.get("icon") or "bookmark").strip()
+        saved_filter.icon = clean_icon(request.POST.get("icon"), default="bookmark", max_length=column_max_length(SavedFilter, "icon"))
         saved_filter.color = color if color in _ALLOWED_COLORS else ""
         saved_filter.opacity = _clamp_opacity(request.POST.get("opacity"))
         saved_filter.criteria = criteria

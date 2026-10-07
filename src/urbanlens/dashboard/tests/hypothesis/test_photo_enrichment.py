@@ -21,6 +21,7 @@ from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGa
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import PlacesRateLimitedError
 from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
 from urbanlens.dashboard.services.photos import photo_enrichment
+from urbanlens.dashboard.tests.hypothesis.test_proxied_media_is_capped import _streamed
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
@@ -367,8 +368,7 @@ class GetSatelliteImageBytesTests(SimpleTestCase):
     """GoogleMapsGateway.get_satellite_image_bytes - the static image the carousel and the backfill both use."""
 
     def test_returns_the_image_bytes(self) -> None:
-        response = mock.Mock(content=b"hello")
-        gateway = GoogleMapsGateway(api_key="key", session=mock.Mock(get=mock.Mock(return_value=response)))
+        gateway = GoogleMapsGateway(api_key="key", session=mock.Mock(get=mock.Mock(return_value=_streamed(b"hello"))))
 
         self.assertEqual(gateway.get_satellite_image_bytes(1.0, 2.0), b"hello")
 

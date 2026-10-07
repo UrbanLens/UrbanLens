@@ -187,7 +187,7 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
             dual_user = baker.make("auth.User")
             dual_profile = dual_user.profile
             contact = SafetyCheckinContact.objects.create(
-                checkin=self.checkin, contact_profile=dual_profile, email=None
+                checkin=self.checkin, contact_profile=dual_profile, email=None, notified_at=timezone.now()
             )
             SafetyCheckinPartner.objects.create(
                 checkin=self.checkin,

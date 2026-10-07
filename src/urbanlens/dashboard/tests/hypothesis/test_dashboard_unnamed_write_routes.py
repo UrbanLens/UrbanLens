@@ -155,8 +155,13 @@ class SafetyContactMessageRouteTests(_OwnerAndStranger):
     def setUp(self) -> None:
         super().setUp()
         self.checkin = _checkin(self.owner)
+        # Alerted: a token is only ever emailed with the alert, and resolves only after it.
         self.contact = baker.make(
-            SafetyCheckinContact, checkin=self.checkin, email="mo@example.com", contact_profile=None
+            SafetyCheckinContact,
+            checkin=self.checkin,
+            email="mo@example.com",
+            contact_profile=None,
+            notified_at=timezone.now(),
         )
         self.url = reverse("safety.contact.messages", args=[self.contact.token])
 
