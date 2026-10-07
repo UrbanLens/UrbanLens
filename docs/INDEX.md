@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| open ' docs/INDEX.md      # everything still open
 ```
 
-**Next free id:** `P364` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
+**Next free id:** `P375` · `T4` · `PL11` · `D28` · `X32` · `I8` · `R32` · `N44`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -263,3 +263,14 @@ still resolves after it is fixed, and the id is never handed out again.
 | P361 | open | 2026-10-06 | Trip/wiki change fan-out tasks are non-idempotent under at-least-once delivery, so redelivery double-notifies | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P362 | open | 2026-10-06 | Document sniffing fails open for unfingerprintable bytes, and uploaded PDFs are stored and served verbatim | [`docs/PROBLEMS.md`](PROBLEMS.md) |
 | P363 | open | 2026-10-06 | `reencode_stored_field` reads the whole stored file into RAM unbounded — the P341 pattern in a second file | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P364 | open | 2026-10-06 | Provider clients missing call bounds: 9 Google calls without explicit timeouts, 3 unbounded pagination loops | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P365 | open | 2026-10-06 | Two fail-open third-party paths: breached-password check skipped on HIBP outage, USGS client proceeds unauthenticated after login failure | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P366 | open | 2026-10-06 | Two test-depth gaps: `route_import` has no provider-client test, AI suite pins prompt formatting while stubbing the wire | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P367 | open | 2026-10-06 | `wants_tile_copy` decodes bytes with Pillow outside the untrusted-parse guard | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P368 | open | 2026-10-06 | Data-import photo coordinates from `metadata.json` are stored with no range validation | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P369 | open | 2026-10-06 | Global-search fallback can run the full provider fan-out twice per query; trip comment matching materializes id lists per term | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P370 | open | 2026-10-06 | Repeat-billable AI paths have no memoization: vision re-bills same bytes, geocoding runs per row, web cache is exact-match brittle | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P371 | open | 2026-10-06 | Two cryptographic-hygiene notes: trip slug suffix is MT `random` over 90k, unknown-vs-legacy API-key probes are timing-distinguishable | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P372 | open | 2026-10-06 | Three N+1 leftovers: enrichment density counts, scan-ingestion device lookups, floorplan per-row saves | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P373 | open | 2026-10-06 | Three task retry gaps: Stripe sync retries hot, CRIS extraction is soft-only with no retry, DM geocode swallows retryable failures | [`docs/PROBLEMS.md`](PROBLEMS.md) |
+| P374 | open | 2026-10-06 | Fact recompute's bare `save()` can clear a concurrently-set `needs_recompute` (lost recompute) | [`docs/PROBLEMS.md`](PROBLEMS.md) |

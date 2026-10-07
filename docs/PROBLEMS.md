@@ -2929,3 +2929,118 @@ Medium-low (sandbox + `pending_scan` quarantine + media-gate auth contain it; re
 Found by spark-audit services batch 3 (media), verified: `services/media/stored_field.py:232-235` does `raw = handle.read()` then `reencode_image_file(io.BytesIO(raw), ...)` with no size check — the same shape as P341's `held_upload.py:229-232`, covering comment/trip-comment images and icon/avatar re-encodes, gated only by the site-wide upload cap (default 250 MB, raisable toward 900 MB). Sandbox worker-memory DoS, re-queueable. Medium, smaller blast radius than P341's icon path.
 
 P341 names only the held path; grep for `reencode_stored_field` in `PROBLEMS.md`/archive hits nothing. Filed separately so fixing one file does not silently close the other — `see P341 and P363 in docs/PROBLEMS.md`.
+
+## P364 — Provider clients missing call bounds: 9 Google calls without explicit timeouts, 3 unbounded pagination loops
+
+`id: P364` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (apis), coordinator-confirmed per line. One entry, one theme (upstream call bounds), two shapes.
+
+1. `services/apis/locations/google/places.py:50,100,128,166,186,198` and `maps.py:436,556,604` call `session.get/post` with no `timeout=` — every other gateway in the tree passes one explicitly. Mitigated, not moot: `_RateLimitedSession` forces a `(5, 30)` default (`rate_limiter.py:1221`), so these cannot hang forever; the gap is per-call budget control. Low.
+2. `while True:` pagination with no page bound in `apis/calendar/google.py:266` (`list_events`), `apis/photos/google.py:268` (`list_session_media_items`), `apis/infra/github/contributors.py:88` — each exits only on empty/short page or item cap, so a provider returning full pages with a cursor forever never terminates. Contrast `immich/gateway.py:30-32,301` (`_MAX_LIBRARY_PAGES = 500` runaway guard — the pattern to copy) and the Flickr picker deadline test. Low (requires a misbehaving trusted provider, not an attacker).
+
+No `PROBLEMS.md`/archive hit for these files and bounds. Appears new.
+
+## P365 — Two fail-open third-party paths: breached-password check skipped on HIBP outage, USGS client proceeds unauthenticated after login failure
+
+`id: P365` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (apis), coordinator-confirmed. One entry, one theme (fail-open on upstream failure), two sites.
+
+1. `validators/password.py:82`: only `result is True` raises; `hibp.py:68-72` returns `None` on any failure. The docstring owns it ("skipped (fail-open) so signup/reset is not blocked by a third-party outage"). Documented availability tradeoff; worst case is a breached password accepted during an HIBP outage. Low. (Credit: the 20-bit prefix log leak noted at `hibp.py:69-70` is already fixed.)
+2. `apis/locations/usgs.py:59-62`: `except Exception:` (with its own `# TODO: Catch specific exception`) logs and returns `None`, and `m2m_request` (`:77-79`) then proceeds with `headers = ... if session_token else None` — unauthenticated rather than failing closed on a credential-exchange failure. No secret leak (key travels in the JSON body) and `endpoint` takes only fixed internal strings, so no path injection. Low.
+
+P1 covers VirusTotal scope, not these. Appears new.
+
+## P366 — Two test-depth gaps: `route_import` has no provider-client test, AI suite pins prompt formatting while stubbing the wire
+
+`id: P366` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (apis/AI), coordinator-confirmed. One entry, one theme (tests that cannot catch the bugs they surround).
+
+1. Every other `apis/` family hits ≥2 hypothesis/property tests; `route_import` hits exactly one file (`test_memories_toggles.py`), which covers memory toggles, not route parsing/import (`route_import.py:19-59` is pure DB-write logic — the gap is import-path depth, not live-network risk). Low.
+2. AI tests assert `"<USER_DATA>" in captured_prompt` (`test_document_pin_import.py:378-379`, `test_ai_tools_registry.py:172-173`, `test_ai_tools_trips.py:67,174-175`, plus trivia/article variants) while stubbing the gateway (`test_ai_assistant.py` `_StubGateway`; `test_inference_call_budget.py:35-39` mocks `requests.post`). Formatting-brittle, wire-blind: no test asserts the outgoing `InferenceRequest.max_tokens`, per-feature budgets, or cost recording. Low.
+
+P335 covers harness DNS/TLS only. Appears new; natural home is PL6 batches.
+
+## P367 — `wants_tile_copy` decodes bytes with Pillow outside the untrusted-parse guard
+
+`id: P367` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (media), coordinator-confirmed: `services/media/remote_copies.py:233-238` opens `BytesIO(content)` with Pillow with no `@untrusted_parse` decorator in the file — so the decode never logs under `warn` and never raises under `deny` (the P116/P117 shape). Called today from the sandbox task `render_remote_image_copy` (`tasks.py:1764`) on this server's own re-encode output, so the live risk is guard-blindness plus reuse on untrusted bytes later. Low.
+
+`PROBLEMS.md`/archive grep for `wants_tile_copy`: zero hits (P116/P117 were different call sites). Appears new.
+
+## P368 — Data-import photo coordinates from `metadata.json` are stored with no range validation
+
+`id: P368` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (media), coordinator-confirmed: `_decimal` (`services/import_export/import_data.py:1571-1577`) converts with no finite/range check (contrast `images.coerce_coordinates`, which rejects non-finite/out-of-range), and `:1621-1623` lands the values directly on `Image.latitude/longitude`. Archive-controlled values become map placement and spatial queries. Low (own-import path; broken placement, not cross-user leak).
+
+No `PROBLEMS.md`/archive hit for import lat/lon validation. Appears new.
+
+## P369 — Global-search fallback can run the full provider fan-out twice per query; trip comment matching materializes id lists per term
+
+`id: P369` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (search), coordinator-confirmed. One entry, two cost shapes in one engine.
+
+- `services/global_search/engine.py:107-125`: zero-hit structured queries retry via a second full `_run` (`:128-174` loops all active providers, default chain of 10) — worst case ~20 provider queries per user query, no timeout/cancellation in `_run`; `limit` bounds rows, not providers touched. Medium (cost/latency; distinct layer from P329's route throttles and H42/H49's panel throttle).
+- `services/global_search/providers.py:902-906`: per-term `list(queryset.values_list(...))` materialization inside the term loop. Low-medium.
+
+Neither the fallback double-run nor the per-term materialization is named in any open entry. Appears new.
+
+## P370 — Repeat-billable AI paths have no memoization: vision re-bills same bytes, geocoding runs per row, web cache is exact-match brittle
+
+`id: P370` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (AI/search), coordinator-confirmed. One entry, three un-cacheable spend paths.
+
+- `services/ai/vision.py:139-201` (`describe_photo_keywords`, `classify_photo`): straight `api_call_slot` → provider call on every view; same bytes re-billed.
+- `services/ai/document_import.py:431-481` `_geocode_pins`: up to `MAX_EXTRACTED_PINS = 200` paid `get_coordinates` calls per upload, no cache/dedupe — repeated addresses included.
+- `services/search/pin_web_search.py:96-100`: cache hit requires exact 255-char `query_key` match — any name/punctuation tweak or `get_unique_search_name` drift re-fetches.
+
+Low-medium (spend, not correctness). Archive photo-backfill/budget entries concern REData/Places budgets, never these three. Appears new.
+
+## P371 — Two cryptographic-hygiene notes: trip slug suffix is MT `random` over 90k, unknown-vs-legacy API-key probes are timing-distinguishable
+
+`id: P371` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (core/auth), coordinator-confirmed. One entry, two info-level notes that constrain future design.
+
+1. `services/core/slugs.py:42-44,217-218`: public slug collision suffix is `random.randint(2, 90000)` — Mersenne Twister over ~16.5 bits, enumerable and predictable after observations. Not a credential today (views still gate on membership), but it must never become one. Info/low.
+2. `services/auth/api_keys.py:192-200`: unknown-prefix probes cost one SHA-256 ("hash anyway, so an unknown prefix costs what a known one does") while legacy-prefix probes fall into PBKDF2 `check_password` (`:124-130`, ~0.9 s per module docstring) — timing distinguishes "prefix names a legacy row" from "unknown prefix". Narrowing as legacy rows upgrade on first use. Info.
+
+P146 covers legacy-key CPU cost/migration, not the oracle; no slug-entropy entry exists. Appears new.
+
+## P372 — Three N+1 leftovers: enrichment density counts, scan-ingestion device lookups, floorplan per-row saves
+
+`id: P372` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (locations/device_scan/floorplans), coordinator-confirmed per site. One entry, one bug class (P5/N+1 family), three files.
+
+1. `services/locations/enrichment.py:398-400` + `_nearby_density_score` (`:420-422`): one `point__dwithin` count per shortlisted candidate per source per cycle — 3× the per-run budget in extra spatial counts. Background job, low-medium.
+2. `services/device_scan/ingestion.py:69-70`: one `get_or_create_for_mac` round-trip per device in the upload (module comment `:57-59` notes ~200 entries/uploads and celebrates batching only the marker lookup). Synchronous request path the module calls "deliberately lightweight". Medium.
+3. `services/floorplans/serialization.py:388,406,448`: per-pool/per-item bare `source.save()`/`reference.save()`/`row.save()` plus `references.set()`/`labels.set()` per item — one autosaved edit fans out to O(pools + items) round trips on the request path (editor autosaves on debounce). Low.
+
+P338 covers marker-path indexes/atomicity, not these; no `ingestion.py`/floorplan-save/enrichment-density entries exist. Appears new.
+
+## P373 — Three task retry gaps: Stripe sync retries hot, CRIS extraction is soft-only with no retry, DM geocode swallows retryable failures
+
+`id: P373` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (tasks/messaging), coordinator-confirmed. One entry, one theme (retry policy), three tasks.
+
+1. `tasks.py:5055-5056`: `sync_stripe_subscriptions` catches `APIConnectionError/RateLimitError/APIError` into bare `self.retry(exc=exc)` — bypassing the task's own `autoretry_backoff`, no `countdown`, so a sustained Stripe outage walks every page with tight retries, re-hitting the rate limiter hot. Medium.
+2. `tasks.py:1571`: `extract_cris_attachments` declares only `soft_time_limit` (720 s; hard falls through to the 3600 s global) with no `autoretry_for` — a soft-kill mid-list abandons the tail (prefix already merged, each in its own `atomic`), and transient REData blips are swallowed as `continue`. Low-medium. (P304 is preview parse limits, not CRIS retry.)
+3. `services/messaging/dm_location_detection.py:274`: bare `except Exception → return None` inside `_geocode_address` converts timeouts/DNS/5xx into permanent silence — `detect_dm_address_mentions` (`tasks.py:3675`, INTERACTIVE, `autoretry OSError`) never sees the `OSError`, so autoretry never fires and no sweep replays it. Low-medium (missed location-share records).
+
+No Stripe-retry/CRIS-retry/DM-geocode entries in either PROBLEMS file. Appears new.
+
+## P374 — Fact recompute's bare `save()` can clear a concurrently-set `needs_recompute` (lost recompute)
+
+`id: P374` · `status: open` · `updated: 2026-10-06`
+
+Found by spark-audit services batch 3 (facts), coordinator-confirmed: `_recompute_locked` sets `fact.needs_recompute = False` under `select_for_update` then bare `fact.save()` (`services/facts/confidence.py:234`), while the writer path does `evidence.save()` + `Fact.objects.filter(pk=...).update(needs_recompute=True, ...)` (`services/facts/evidence.py:142-145`). Evidence committed after the recompute read but before its save gets its flag overwritten back to `False`, and the new evidence waits until something else sets the flag (bounded by the 10-min `sweep_stale_fact_confidence`, `tasks.py:4645`). Medium (stale confidence/status up to 10 min).
+
+No fact-confidence lost-update entry in either file. Appears new.
