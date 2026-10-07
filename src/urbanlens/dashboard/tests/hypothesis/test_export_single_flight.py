@@ -7,6 +7,7 @@ tell its own claim from another's.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, ExitStack
 import shutil
 import tempfile
 from unittest import mock
@@ -85,6 +86,42 @@ class AnExportsClaimTests(TestCase):
             self.assertFalse(run_export(user_id, export_types, export_dir, base_url, job_id=job_id))
 
         self.assertIsNone(self._guard(), "the finished export still held the guard")
+
+    def _run_queued_export(self, *patches: AbstractContextManager[object]) -> bool:
+        from urbanlens.dashboard.services.import_export.export import run_export
+
+        self._press()
+        user_id, export_types, export_dir, base_url, job_id = self._export_calls()[0].args[1:6]
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch("urbanlens.dashboard.services.import_export.export.schedule_export_cleanup"))
+            for patch in patches:
+                stack.enter_context(patch)
+            return run_export(user_id, export_types, export_dir, base_url, job_id=job_id)
+
+    def test_a_worker_that_cannot_make_the_export_directory_gives_the_claim_up(self) -> None:
+        """The worker's volume is not the web process's; a failure there ended the task with the claim still held."""
+        from urbanlens.dashboard.services.import_export.export import ExportJobStatus
+
+        ended = self._run_queued_export(
+            mock.patch(
+                "urbanlens.dashboard.services.import_export.export.os.makedirs", side_effect=OSError("disk full")
+            )
+        )
+
+        self.assertFalse(ended)
+        self.assertIsNone(self._guard(), "the export that could not start still held the guard")
+        job_id = self._export_calls()[0].args[5]
+        self.assertEqual(ExportJobStatus(job_id).read().get("status"), "error")
+
+    def test_a_database_failure_loading_the_account_gives_the_claim_up(self) -> None:
+        from django.db import OperationalError
+
+        ended = self._run_queued_export(
+            mock.patch.object(User.objects, "select_related", side_effect=OperationalError("the database went away"))
+        )
+
+        self.assertFalse(ended)
+        self.assertIsNone(self._guard(), "the export that could not load its account still held the guard")
 
     def test_an_export_that_ends_before_the_view_returns_gives_its_claim_up(self) -> None:
         from urbanlens.dashboard.services.import_export.export import run_export
