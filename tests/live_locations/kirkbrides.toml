@@ -45,6 +45,7 @@ lng = -90.229773
 built = 1848
 status = "standing"
 nrhp = "75000669"
+known_issues = { register = "its NRHP listing (75000669, Main Building) was removed in 1984 after demolition; nothing else names it; REData has no Illinois register provider (2026-10-07)" }
 
 [[site]]
 key = "harrisburg-state-hospital"
@@ -104,6 +105,7 @@ lat = 32.242526
 lng = -90.070705
 built = 1855
 status = "standing"
+known_issues = { register = "no NRHP listing at the Whitfield campus (NPS, Wikidata); REData has no Mississippi register provider (2026-10-07)", historic_maps = "loc.gov holds no Sanborn of Whitfield or Rankin County; Jackson's depict the old site 13.6 km off (2026-10-07)" }
 
 [[site]]
 key = "southern-ohio-lunatic-asylum"
@@ -186,6 +188,7 @@ lat = 42.279324
 lng = -85.604318
 built = 1859
 status = "standing"
+known_issues = { wikipedia = "the article has no coordinates (2026-10-07)" }
 
 [[site]]
 key = "bryce-hospital"
@@ -260,6 +263,7 @@ lat = 38.510246
 lng = -94.94011
 built = 1868
 status = "standing"
+known_issues = { register = "no NRHP or Kansas Register listing; ks_khri's rows near it are unlisted survey records (2026-10-07)" }
 
 [[site]]
 key = "anna-state-hospital"
@@ -271,6 +275,7 @@ lat = 37.477222
 lng = -89.241944
 built = 1869
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Illinois register provider (2026-10-07)" }
 
 [[site]]
 key = "central-state-hospital-kentucky"
@@ -283,6 +288,7 @@ lng = -85.555
 built = 1869
 status = "demolished"
 nrhp = "83002646"
+known_issues = { incidents = "louisville_fire, the one covering feed, has nothing within 2 km (2026-10-07)" }
 
 [[site]]
 key = "danville-state-hospital"
@@ -294,6 +300,7 @@ lat = 40.949
 lng = -76.596
 built = 1869
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Pennsylvania register provider (2026-10-07)" }
 
 [[site]]
 key = "central-state-hospital-virginia"
@@ -305,6 +312,7 @@ lat = 37.2094
 lng = -77.4513
 built = 1870
 status = "standing"
+known_issues = { wikipedia = "the article has no coordinates (2026-10-07)", incidents = "chesterfield_va_fire_ems, the one covering feed, has nothing within 2 km (2026-10-07)" }
 
 [[site]]
 key = "richardson-olmsted-complex"
@@ -339,6 +347,7 @@ lat = 42.01545
 lng = -88.28812
 built = 1872
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Illinois register provider (2026-10-07)" }
 
 [[site]]
 key = "topeka-state-hospital"
@@ -361,6 +370,7 @@ lat = 44.075
 lng = -88.518
 built = 1873
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Wisconsin register provider (2026-10-07)" }
 
 [[site]]
 key = "independence-state-hospital"
@@ -372,6 +382,7 @@ lat = 42.457702
 lng = -91.925919
 built = 1873
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Iowa register provider (2026-10-07)" }
 
 [[site]]
 key = "athens"
@@ -399,6 +410,7 @@ lat = 41.8792
 lng = -79.1458
 built = 1874
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Pennsylvania register provider (2026-10-07)" }
 
 [[site]]
 key = "greystone-park-psychiatric-hospital"
@@ -421,6 +433,7 @@ lat = 38.278056
 lng = -122.266944
 built = 1876
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no California register provider (2026-10-07)" }
 
 [[site]]
 key = "columbus-state-hospital"
@@ -433,6 +446,7 @@ lng = -83.055556
 built = 1877
 status = "demolished"
 nrhp = "86000851"
+known_issues = { register = "NPS places NRHP 86000851 (Central Ohio Lunatic Asylum) 1.06 km from the site, with no polygon (2026-10-07)" }
 
 [[site]]
 key = "worcester-state-hospital"
@@ -515,6 +529,7 @@ lat = 34.7507
 lng = -92.3243
 built = 1883
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Arkansas register provider (2026-10-07)" }
 
 [[site]]
 key = "clarinda-treatment-complex"
@@ -526,6 +541,7 @@ lat = 40.757897
 lng = -95.037625
 built = 1884
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Iowa register provider (2026-10-07)" }
 
 [[site]]
 key = "traverse-city-state-hospital"
@@ -572,6 +588,7 @@ lat = 42.757
 lng = -95.573
 built = 1890
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Iowa register provider (2026-10-07)" }
 
 [[site]]
 key = "sheppard-and-enoch-pratt-hospital"
@@ -606,6 +623,7 @@ lat = 39.134
 lng = -123.16
 built = 1893
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no California register provider (2026-10-07)" }
 
 [[site]]
 key = "patton-state-hospital"
@@ -617,6 +635,7 @@ lat = 34.138077
 lng = -117.21454
 built = 1893
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no California register provider (2026-10-07)" }
 
 [[site]]
 key = "st-vincent-s-hospital-normandy-missouri"
@@ -652,6 +671,7 @@ lat = 45.6715
 lng = -118.817
 built = 1913
 status = "standing"
+known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no Oregon register provider (2026-10-07)" }
 
 [[site]]
 key = "st-lawrence"
@@ -680,5 +700,5 @@ built = 1924
 status = "standing"
 aliases = ["Harlem Valley Psychiatric Center"]
 tier = "primary"
-known_issues = { footprints = "REData P114: CRIS roster rows no footprint matches", historic_maps = "loc.gov holds no Sanborn atlas of Wingdale; Poughkeepsie's is 26 km off (REData P112)", incidents = "REData P110" }
+known_issues = { footprints = "REData P114: CRIS roster rows no footprint matches", incidents = "REData P110" }
 # Campus point of CRIS project 'Olivet Center Full Build [Harlem Valley Psych Center]'.

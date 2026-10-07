@@ -148,8 +148,9 @@ _PLACES_ERRORS = (
     ("/api/v1/places/{place_id}/photos/{id}/download/", "503"),
 )
 
-#: A building as REData reconciles it, for ``/parcels/{uuid}/buildings/`` rows.
-_BUILDING = ("[].latitude", "[].longitude", "[].name", "[].building_number", "[].year_built")
+#: A building as REData reconciles it, for ``/parcels/{uuid}/buildings/`` rows. ``year_built_basis`` (REData 0.3.6) says
+#: whether ``year_built`` is the building's own; UrbanLens reads a row without it as the parcel's.
+_BUILDING = ("[].latitude", "[].longitude", "[].name", "[].building_number", "[].year_built", "[].year_built_basis")
 #: A cultural resource as ``lookup`` lists it and ``fetch-detail`` returns it under ``resource``.
 _RESOURCE = (
     "uuid",
@@ -769,7 +770,14 @@ READS: tuple[Read, ...] = (
         "/api/v1/parcels/{parcel_uuid}/buildings/",
         "[].name",
         "[].year_built",
+        "[].year_built_basis",
         "[].building_number",
+    ),
+    _get(
+        "services/pins/build_dates.py",
+        "/api/v1/parcels/{parcel_uuid}/buildings/",
+        "[].year_built",
+        "[].year_built_basis",
     ),
     _get(
         "services/apis/locations/boundaries/redata.py",
