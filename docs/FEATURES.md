@@ -1134,10 +1134,19 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   with you" (`SafetyCheckinContact.objects.reaching`, matched on `email_normalized`)
 - Escalation on missed check-in: emails emergency contacts, optionally posts to the location's
   community wiki, notifies pin owners
+- The owner gets a "check in now" final warning about five minutes before escalation, and escalation waits
+  for it: a warning sent late (a missed beat tick) holds escalation `FINAL_WARNING_MIN_NOTICE` after it, and
+  one that never goes out holds it at most `FINAL_WARNING_MAX_WAIT` past the overdue point. Each side claims
+  its row with a conditional write, so the warning never follows a contact alert (`due_for_final_warning`,
+  `due_for_escalation`)
 - Public (tokenized, no-login) contact portal for emergency contacts to mark the user safe,
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+- An opt-out holds however the person is added. One made as an account, or from an emailed link to any address
+  that account verified (compared normalized), stops both the email and the in-app alert, as the opt-out page
+  promises. One on an address no account has verified stops mail to that address only, so an account that
+  never proved it is that person is still alerted in-app (`is_contact_opted_out`, `_contact_recipients`)
 - Community-wiki posting is gated by `services.visits.safety.find_visible_community_wiki` and
   `community_wiki_opt_in`, so a check-in can only notify or link a wiki its owner can actually see
 
