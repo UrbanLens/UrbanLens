@@ -44,11 +44,6 @@ jobs:
     name: Python quality and tests
     runs-on: ubuntu-latest
     timeout-minutes: 240
-    # TEMPORARY: measuring worker counts on a 4-vCPU runner; collapses to one value before review.
-    strategy:
-      fail-fast: false
-      matrix:
-        workers: ["4", "8", "12"]
     services:
       dragonfly:
         image: docker.dragonflydb.io/dragonflydb/dragonfly:v1.40.2
@@ -84,15 +79,12 @@ jobs:
       # The deployment's own image (PostGIS and pgvector), which a service container cannot be built from.
       # Installing pgvector into a running stock image upgraded the server package underneath it, and every
       # extension the old binary loaded afterwards failed on a missing symbol.
-      #
-      # Without durability: nothing here outlives the job, and every pytest-xdist worker migrates its own database
-      # and commits on every TransactionTestCase flush, so waiting on fsync is time spent protecting nothing.
       - name: Start Postgres
         run: |
           docker build -t urbanlens-postgres src/urbanlens/config/postgres
           docker run -d --name postgres -p 5432:5432 \
             -e POSTGRES_DB=urbanlens_ci -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-            urbanlens-postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+            urbanlens-postgres
           timeout 120 sh -c 'until docker exec postgres pg_isready -h 127.0.0.1 -U postgres -d urbanlens_ci; do sleep 2; done'
 
       - name: Set up uv
@@ -155,19 +147,23 @@ jobs:
       # Two passes, one coverage data file per process, combined at the end (pyproject.toml's `patch = ["subprocess"]`
       # follows coverage into the pytest-xdist workers).
       #
-      # 1. Everything not marked `serial`, across pytest-xdist workers. Each worker has its own database (pytest-django
-      #    suffixes the name with the worker id: test_urbanlens_ci_gw0, ...). `--dist loadscope --no-loadscope-reorder`
-      #    hands out whole classes in the order pytest-django sorted them - every TestCase before any
-      #    TransactionTestCase, whose teardown empties the tables migrations seeded - so each worker keeps Django's order.
+      # 1. Everything not marked `serial`, across four pytest-xdist workers, one per vCPU on ubuntu-latest. Measured
+      #    2026-10-07: 4 workers took 50-53 min twice; 6 took 53; 8 took 36 on one runner and 59 on another; 12 took
+      #    68, since every worker collects the suite and migrates its own database first. `-n auto` counts physical
+      #    cores, which is 2 there. pytest-django suffixes each worker's database with its id
+      #    (test_urbanlens_ci_gw0, ...). `--dist loadscope --no-loadscope-reorder` hands out whole classes in the
+      #    order pytest-django sorted them - every TestCase before any TransactionTestCase, whose teardown empties the
+      #    tables migrations seeded - so each worker keeps Django's order.
       # 2. Tests marked `serial` assert on wall-clock time, and a neighbouring worker's load failed them. They run alone,
       #    in one process with its own database.
       #
       # Both passes run even if the first fails, so one CI run reports every failure.
       - name: Tests with coverage
         run: |
-          python -c 'import os, psutil; print("cpus:", os.cpu_count(), "physical:", psutil.cpu_count(logical=False))'
           status=0
-          coverage run --source=src -m pytest -n "${{ matrix.workers }}" --dist loadscope --no-loadscope-reorder -m "not serial" --durations=60 || status=$?
+          export LEAKDET_DIR="$RUNNER_TEMP/leaks" && mkdir -p "$LEAKDET_DIR"  # TEMPORARY
+          PYTHONPATH=tests/_ci_tmp coverage run --source=src -m pytest -p leakdet -n 4 --dist loadscope --no-loadscope-reorder -m "not serial" --durations=25 || status=$?
+          head -n 200 "$LEAKDET_DIR"/* || true  # TEMPORARY
           coverage run --source=src -m pytest -p no:xdist -m serial --durations=10 || status=$?
           coverage combine
           coverage xml
@@ -178,7 +174,7 @@ jobs:
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: coverage-xml-${{ matrix.workers }}
+          name: coverage-xml
           path: coverage.xml
           if-no-files-found: ignore
 

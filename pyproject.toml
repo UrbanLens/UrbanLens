@@ -339,10 +339,11 @@ dev = [
     "pytest-django>=4.12,<4.15",
     # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
     "pytest-randomly>=4.1,<5.1",
-    # Parallel test workers. Off by default: each worker takes its own database,
-    # so the multiplier applies to database *setup* as well, and the local
-    # Postgres has been observed to fall over under exactly this load. Use it in
-    # the container, via `bin/run_tests.sh --parallel`.
+    # Parallel test workers. CI runs the suite under it (see docs/TOOLING.md).
+    # Off by default locally: each worker takes its own database, so the
+    # multiplier applies to database *setup* as well, and the local Postgres has
+    # been observed to fall over under exactly this load. Use it in the
+    # container, via `bin/run_tests.sh --parallel`.
     "pytest-xdist~=3.8.0",
     "ruff>=0.16.10,<0.17.0",
     # Property-based conformance testing against the published OpenAPI document.
