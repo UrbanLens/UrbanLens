@@ -47,6 +47,10 @@ class _RecordingScalingCase(QueryScalingMixin, TestCase):
     analyzed: list[set[str]]
 
     def setUp(self) -> None:
+        # Driven directly, never run, so Django's _pre_setup never gives this class its client. The one it used to
+        # find was a class attribute this class's own collected `runTest` left behind, which only held while that
+        # ran first in the same process - pytest-xdist can send it to another worker.
+        self.client = self.client_class()
         super().setUp()
         self.analyzed = []
         self.user = baker.make(User)

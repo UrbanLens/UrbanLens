@@ -84,6 +84,45 @@ _disable_hypothesis_example_patching()
 _configure_hypothesis()
 
 
+#: Files that each hold one pytest-xdist worker for many minutes, longest first. A worker takes classes in
+#: collection order (CI passes ``--dist loadscope --no-loadscope-reorder``), and alphabetically these come near the
+#: end: test_write_route_smoke.py alone kept one worker busy for 15-19 minutes after the others had finished.
+#: Handing them out first lets the rest of the suite fill in around them. An entry that no longer exists, or is no
+#: longer slow, costs nothing; a new slow file only costs wall time until it is listed here.
+_LONGEST_FILES = (
+    "dashboard/tests/hypothesis/test_write_route_smoke.py",
+    "dashboard/tests/hypothesis/test_every_stored_photo_is_reencoded.py",
+    "dashboard/tests/hypothesis/test_import_parse_memory.py",
+)
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """On a pytest-xdist worker, move the longest files' ``TestCase`` tests to the front of the collection.
+
+    pytest-django has already sorted the collection the way Django's runner does - ``TestCase`` first, then
+    ``TransactionTestCase``, whose teardown empties every table, including rows a migration seeded. With
+    ``--no-loadscope-reorder`` xdist hands out classes in that order, so every worker still runs its ``TestCase``
+    classes before its first flush. Only ``TestCase`` tests move, and they move within that first group, so the
+    ordering survives.
+
+    Only workers reorder, so a plain run keeps its usual order. Every worker sorts the same way, which xdist
+    requires: it refuses to schedule when the workers' collections differ.
+    """
+    if not hasattr(config, "workerinput"):
+        return
+
+    from django.test import TestCase as DjangoTestCase
+
+    def rank(item: pytest.Item) -> int:
+        cls = getattr(item, "cls", None)
+        if cls is None or not issubclass(cls, DjangoTestCase):
+            return len(_LONGEST_FILES)
+        path = item.path.as_posix()
+        return next((index for index, suffix in enumerate(_LONGEST_FILES) if path.endswith(suffix)), len(_LONGEST_FILES))
+
+    items.sort(key=rank)
+
+
 @pytest.fixture(scope="session")
 def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: None) -> None:  # noqa: ARG001
     """Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130).

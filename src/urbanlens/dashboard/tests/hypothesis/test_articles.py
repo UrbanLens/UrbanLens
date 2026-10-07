@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -669,6 +670,9 @@ class ArticleImageScanIsLinearTests(SimpleTestCase):
     """Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
     worker. Before the fix 1,000 backticks took thirteen seconds, 2,000 four minutes, 20,000 ``<img `` fifty, and
     50,000 ``![`` ten."""
+
+    # A two-second wall-clock bound, which a loaded pytest-xdist neighbour pushed to 2.4 s.
+    pytestmark = pytest.mark.serial
 
     def _assert_fast(self, content: str) -> None:
         import time

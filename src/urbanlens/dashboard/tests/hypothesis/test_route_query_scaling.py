@@ -9,6 +9,7 @@ from django.urls import NoReverseMatch, get_resolver, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.thread_writes import DiscardsLedgerRowsFromOtherThreadsMixin
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -46,7 +47,7 @@ def _walk(patterns, inherited: tuple[str, ...] = (), namespace: str = ""):
             yield f"{namespace}{name}", list(dict.fromkeys(inherited + own))
 
 
-class RouteQueryScalingTests(TestCase):
+class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.user = baker.make(User)

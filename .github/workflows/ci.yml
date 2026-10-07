@@ -144,11 +144,29 @@ jobs:
         run: python3 bin/check_css_variables.py
       - name: No missing migrations
         run: python src/urbanlens/manage.py makemigrations --check --dry-run
+      # Two passes, one coverage data file per process, combined at the end (pyproject.toml's `patch = ["subprocess"]`
+      # follows coverage into the pytest-xdist workers).
+      #
+      # 1. Everything not marked `serial`, across four pytest-xdist workers, one per vCPU on ubuntu-latest. Measured
+      #    2026-10-07: 4 workers took 50-53 min twice; 6 took 53; 8 took 36 on one runner and 59 on another; 12 took
+      #    68, since every worker collects the suite and migrates its own database first. `-n auto` counts physical
+      #    cores, which is 2 there. pytest-django suffixes each worker's database with its id
+      #    (test_urbanlens_ci_gw0, ...). `--dist loadscope --no-loadscope-reorder` hands out whole classes in the
+      #    order pytest-django sorted them - every TestCase before any TransactionTestCase, whose teardown empties the
+      #    tables migrations seeded - so each worker keeps Django's order.
+      # 2. Tests marked `serial` assert on wall-clock time, and a neighbouring worker's load failed them. They run alone,
+      #    in one process with its own database.
+      #
+      # Both passes run even if the first fails, so one CI run reports every failure.
       - name: Tests with coverage
         run: |
-          coverage run --source=src -m pytest
+          status=0
+          coverage run --source=src -m pytest -n 4 --dist loadscope --no-loadscope-reorder -m "not serial" --durations=25 || status=$?
+          coverage run --source=src -m pytest -p no:xdist -m serial --durations=10 || status=$?
+          coverage combine
           coverage xml
           coverage report --fail-under=1
+          exit "$status"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v7
