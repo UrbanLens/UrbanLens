@@ -123,7 +123,7 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
         if isinstance(row, dict) and row.get(CONTAINS_POINT_KEY) and (year := plausible_year(row.get("year_built"))) is not None:
             return BuildYear(year, SOURCE_HISTORIC_REGISTER)
 
-    if (year := next((found for cluster in standing_on(pin, nester) if (found := cluster_build_year(cluster)) is not None), None)) is not None:
+    if (year := standing_year(pin, nester)) is not None:
         return BuildYear(year, SOURCE_BUILDING_RECORD)
 
     if not parcel_year_may_date(pin):
@@ -132,6 +132,19 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
     if record and isinstance(record.data, dict) and record.data.get("available") and (year := plausible_year(record.data.get("year_built"))) is not None:
         return BuildYear(year, SOURCE_PROPERTY_RECORD)
     return None
+
+
+def standing_year(pin: Pin, nester: BuildingNester) -> int | None:
+    """The own year of the innermost building the pin stands on that has one (:func:`standing_on`, :func:`cluster_build_year`).
+
+    Args:
+        pin: The pin.
+        nester: Its property's buildings.
+
+    Returns:
+        The year, or None.
+    """
+    return next((found for cluster in standing_on(pin, nester) if (found := cluster_build_year(cluster)) is not None), None)
 
 
 def parcel_year_may_date(marker: Pin | Wiki) -> bool:
@@ -221,10 +234,20 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
         return
     if site_year is not None and (site_year.source != SOURCE_PROPERTY_RECORD or parcel_year_may_date(campus)):
         record_wiki_build_year(campus, site_year)
+    # A record that no longer dates the campus takes back what it said, such as a parcel's year recorded as a
+    # building's before REData said which it was.
+    if standing_year(pin, nester) is None:
+        retract_wiki_build_year(campus, SOURCE_BUILDING_RECORD)
+    if not parcel_year_may_date(campus):
+        retract_wiki_build_year(campus, SOURCE_PROPERTY_RECORD)
     matched, _unmatched = match_clusters(nester.clusters, building_markers(campus.descendants().select_related("location")))
     for index, wiki in matched.items():
-        if isinstance(wiki, Wiki) and (year := cluster_build_year(nester.clusters[index])) is not None:
+        if not isinstance(wiki, Wiki):
+            continue
+        if (year := cluster_build_year(nester.clusters[index])) is not None:
             record_wiki_build_year(wiki, BuildYear(year, SOURCE_BUILDING_RECORD))
+        else:
+            retract_wiki_build_year(wiki, SOURCE_BUILDING_RECORD)
 
 
 def record_wiki_build_year(wiki: Wiki, built: BuildYear) -> bool:
@@ -248,6 +271,34 @@ def record_wiki_build_year(wiki: Wiki, built: BuildYear) -> bool:
         return False
     earlier.update(superseded=True)
     return record_evidence(key=BUILT_YEAR_FACT, value=float(built.year), source_kind=FactSourceKind.EXTERNAL_SOURCE, source_name=built.source, wiki=wiki) is not None
+
+
+def retract_wiki_build_year(wiki: Wiki, source: str) -> bool:
+    """Withdraw a source's observations of a wiki's year once that source no longer dates it.
+
+    Args:
+        wiki: The wiki the year was about.
+        source: The record it came from, a ``SOURCE_*`` name.
+
+    Returns:
+        Whether any observation was withdrawn.
+    """
+    from django.db import transaction
+
+    from urbanlens.dashboard import tasks
+    from urbanlens.dashboard.models.facts.model import Fact, FactEvidence, FactSourceKind
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    earlier = FactEvidence.objects.active().filter(fact__wiki=wiki, fact__key=BUILT_YEAR_FACT, source_kind=FactSourceKind.EXTERNAL_SOURCE, source_name=source)
+    fact_ids = set(earlier.values_list("fact_id", flat=True))
+    if not fact_ids:
+        return False
+    earlier.update(superseded=True)
+    # As record_evidence does for an observation added.
+    Fact.objects.filter(pk__in=fact_ids).update(needs_recompute=True, updated=timezone.now())
+    for fact_id in fact_ids:
+        transaction.on_commit(lambda fact_id=fact_id: safely_enqueue_task(tasks.recompute_fact_confidence, fact_id))
+    return True
 
 
 def wiki_build_year(wiki: Wiki) -> int | None:

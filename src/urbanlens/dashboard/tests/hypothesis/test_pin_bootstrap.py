@@ -22,6 +22,7 @@ from model_bakery import baker
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
+from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.facts.model import FactEvidence
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
@@ -575,6 +576,28 @@ class BuildDateTests(_BootstrapCase):
 
         self.assertEqual({child.date_built for child in self.children(pin)}, {None})
         self.assertIsNone(pin.date_built)
+
+    def test_a_rerun_takes_back_a_year_the_records_no_longer_give_the_building(self) -> None:
+        """A year a wiki was given before REData said it was the parcel's, as UrbanLens did until it read the basis."""
+        from urbanlens.dashboard.services.pins.build_dates import fill_build_dates, wiki_build_year
+
+        pin = self.create_pin()
+        main_wiki = Wiki.objects.get_for_location(Pin.objects.get(name="MAIN/ADMIN").location)
+        campus_wiki = Wiki.objects.get(location=pin.location)
+        self.assertEqual((wiki_build_year(main_wiki), wiki_build_year(campus_wiki)), (MAIN_YEAR, MAIN_YEAR))
+        LocationCache.set(
+            pin.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": self._main_dated_by_the_parcel(year_built_basis="parcel"), "provider": "redata"},
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            fill_build_dates(pin)
+
+        self.assertIsNone(wiki_build_year(main_wiki))
+        self.assertIsNone(wiki_build_year(campus_wiki))
+        laundry = Wiki.objects.get_for_location(Pin.objects.get(name="LAUNDRY").location)
+        self.assertEqual(wiki_build_year(laundry), LAUNDRY_YEAR)
 
     def test_with_nothing_known_the_date_stays_empty(self) -> None:
         self.upstreams = HrshUpstreams(buildings=[], parcel_year=None)
