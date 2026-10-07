@@ -136,16 +136,23 @@ class Site:
         A row does when its NRHP reference is the catalogue's (in ``external_id``, or in any attribute) or it names
         the campus: in its ``name``, or in an attribute naming a historic district. A state register that records a
         campus as a district does so on each building's row, whose own name is the building's: New Jersey's puts
-        Trenton's in ``attributes.HD_NAME``.
+        Trenton's in ``attributes.HD_NAME``. A record the register has withdrawn (not eligible, delisted, removed)
+        never counts. An eligible district does, and ``eligible_only_note`` says when that is all there is.
         """
         return [row for row in rows if self._lists(row)]
 
     def _lists(self, row: dict[str, Any]) -> bool:
+        if any(_WITHDRAWN.search(status) for status in _statuses(row)):
+            return False
         attributes = list(_scalars(row.get("attributes")))
         if self.nrhp and any(value.startswith(self.nrhp) for value in [str(row.get("external_id", "")), *attributes]):
             return True
         districts = [value for value in attributes if re.search(r"\bdistricts?\b", value, re.IGNORECASE)]
         return self.mentions(row.get("name"), *districts)
+
+
+#: Register statuses that say a record is not the campus's listing, whatever its name or number.
+_WITHDRAWN = re.compile(r"not[\s_-]*eligible|delisted|removed", re.IGNORECASE)
 
 
 def _normalized(text: str) -> str:
@@ -155,6 +162,26 @@ def _normalized(text: str) -> str:
 def _undisambiguated(label: str) -> str:
     """``label`` without a parenthetical disambiguator, which no article or headline contains."""
     return re.sub(r"\([^)]*\)", "", label)
+
+
+def _statuses(row: dict[str, Any]) -> list[str]:
+    """What a row says its register status is: its ``status``, and any top-level attribute named like one."""
+    found = [row.get("status")]
+    if isinstance(attributes := row.get("attributes"), dict):
+        found += [value for key, value in attributes.items() if "status" in str(key).lower()]
+    return [value for value in found if isinstance(value, str)]
+
+
+def eligible_only_note(listed: list[dict[str, Any]]) -> str:
+    """Why matching register rows are not a listing, or ``""`` when any of them is one.
+
+    A state register can record a campus as an eligible district without listing it (New Jersey's ``ELIGIBLE_HD``).
+    The check counts that, and its result says so.
+    """
+    if not listed or not all(any("eligible" in status.lower() for status in _statuses(row)) for row in listed):
+        return ""
+    statuses = sorted({status for row in listed for status in _statuses(row) if "eligible" in status.lower()})
+    return f"matched only eligible, not listed, register rows: {len(listed)} with status {', '.join(statuses)}"
 
 
 def _scalars(value: Any) -> Iterator[str]:

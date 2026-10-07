@@ -11,7 +11,9 @@
 # Nevada State Hospital (MO), San Antonio State Hospital (TX).
 #
 # tier = "primary": anchor verified by hand; every check must pass.
-# status = "demolished": the Kirkbride building is gone, so building checks do not apply.
+# status says whether buildings stand at the point, not whether the campus's own Kirkbride
+# survives (Central State IN, Mendocino and others lost theirs). "demolished" skips the building,
+# footprint and build-date checks; "standing" runs them.
 # known_issues maps a check name to the problem id tracking why it fails today; the test
 # for that check is marked xfail(strict=True), so a fix turns it red until the entry goes.
 
@@ -25,6 +27,9 @@ lat = 40.2436
 lng = -74.8055
 built = 1848
 status = "standing"
+# New Jersey's SHPO records the campus as the "Trenton Psychiatric Hospital Historic District" (attributes.HD_NAME,
+# status ELIGIBLE_HD, on each building's row): eligible, not listed. NPS holds no NRHP listing within 1.5 km
+# (2026-10-07). The register check counts that record and says in its result that the match is eligible only.
 
 [[site]]
 key = "central-state-hospital-indiana"
@@ -648,11 +653,10 @@ state = "CA"
 lat = 39.134
 lng = -123.16
 built = 1893
-status = "demolished"
+status = "standing"
 known_issues = { register = "no NRHP listing (NPS, Wikidata); REData has no California register provider (2026-10-07)" }
 # The 1893 Kirkbride was razed in 1952 (Wikipedia; kirkbridebuildings.com). Later hospital buildings still stand
-# around the point, now the City of Ten Thousand Buddhas (aerial, 2026-10-07), so "demolished" here skips building
-# checks on a campus that has buildings.
+# around the point, now the City of Ten Thousand Buddhas (aerial, 2026-10-07).
 
 [[site]]
 key = "patton-state-hospital"

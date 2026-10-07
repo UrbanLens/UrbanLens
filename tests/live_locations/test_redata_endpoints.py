@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from live_sites import Answer, InconclusiveError, LiveRedata, Site
+from live_sites import Answer, InconclusiveError, LiveRedata, Site, eligible_only_note
 import pytest
 from shapely.geometry import Point, shape
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Callable, Iterable
 
     from shapely.geometry.base import BaseGeometry
 
@@ -185,12 +185,16 @@ def test_the_parcel_has_an_owner_of_record(redata: LiveRedata, site: Site) -> No
 
 
 @pytest.mark.live_check("register")
-def test_a_historic_register_lists_the_campus(redata: LiveRedata, site: Site) -> None:
+def test_a_historic_register_lists_the_campus(
+    redata: LiveRedata, site: Site, record_property: Callable[[str, object], None]
+) -> None:
     rows = _near(redata, site, "cultural-resources/lookup/", radius_meters=500).rows
     listed = site.register_listings(rows)
     assert listed, (
         f"{site.name}: none of {len(rows)} cultural resources within 500 m names the campus{f' or NRHP {site.nrhp}' if site.nrhp else ''}"
     )
+    if note := eligible_only_note(listed):
+        record_property("register", note)
 
 
 @pytest.mark.live_check("wikipedia")

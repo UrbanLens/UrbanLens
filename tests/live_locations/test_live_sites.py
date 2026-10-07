@@ -8,7 +8,7 @@ import re
 from typing import TYPE_CHECKING, Any
 from unittest import mock
 
-from live_sites import Answer, InconclusiveError, LiveRedata, Site, load_sites, settled
+from live_sites import Answer, InconclusiveError, LiveRedata, Site, eligible_only_note, load_sites, settled
 import pytest
 import requests
 import test_redata_endpoints as endpoints
@@ -68,8 +68,8 @@ class TestCatalogue:
         assert site.nrhp == ""
         assert "removed" in site.known_issues["register"]
 
-    def test_a_kirkbride_razed_in_1952_is_demolished(self) -> None:
-        assert not _catalogued("mendocino-state-hospital").standing
+    def test_a_campus_whose_kirkbride_was_razed_but_whose_buildings_stand_is_standing(self) -> None:
+        assert _catalogued("mendocino-state-hospital").standing
 
 
 class TestMentions:
@@ -151,14 +151,15 @@ def _normalized_query(query: str) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", query.lower()))
 
 
-class _SearchStub:
+class _SearchStub(LiveRedata):
     """Answers a news search from a table of query to result titles, and remembers what was asked."""
 
     def __init__(self, titles: dict[str, list[str]]) -> None:
+        super().__init__("https://redata.example.test", "key")
         self.titles = titles
         self.asked: list[str] = []
 
-    def get(self, path: str, **params: str) -> Answer:
+    def get(self, path: str, **params: Any) -> Answer:
         assert path == "search/news/"
         self.asked.append(params["q"])
         return Answer(200, {"results": [{"title": title} for title in self.titles.get(params["q"], [])]}, 0.0)
@@ -257,6 +258,60 @@ class TestRegisterListings:
 
         assert mendota.register_listings([by_id, by_attribute, elsewhere]) == [by_id, by_attribute]
 
+    @pytest.mark.parametrize("status", ["NOT_ELIGIBLE_HD", "DELISTED_HD", "Removed", "not eligible"])
+    def test_a_record_the_register_withdrew_is_not_a_listing_however_it_names_the_campus(
+        self, trenton: Site, status: str
+    ) -> None:
+        by_name = {"name": "Trenton Psychiatric Hospital", "status": status}
+        by_district = {
+            "name": "Main Hospital Building",
+            "attributes": {"HD_NAME": "Trenton Psychiatric Hospital Historic District", "STATUS": status},
+        }
+        by_number = _catalogued("mendota-mental-health-institute").register_listings(
+            [{"external_id": "88002183", "name": "Wisconsin Memorial Hospital Historic District", "status": status}]
+        )
+
+        assert trenton.register_listings([by_name, by_district]) == []
+        assert by_number == []
+
+    def test_an_eligible_district_counts_by_the_status_in_the_row_or_in_its_attributes(self, trenton: Site) -> None:
+        in_row = {
+            "name": "Main Hospital Building",
+            "status": "ELIGIBLE_HD",
+            "attributes": {"HD_NAME": "Trenton Psychiatric Hospital Historic District"},
+        }
+        in_attributes = self._district_row("Support Building", "Trenton Psychiatric Hospital Historic District")
+
+        assert trenton.register_listings([in_row, in_attributes]) == [in_row, in_attributes]
+
+
+class TestEligibleOnlyNote:
+    def test_rows_that_are_all_eligible_districts_say_the_campus_is_not_listed(self) -> None:
+        rows = [
+            TestRegisterListings._district_row(
+                "Main Hospital Building", "Trenton Psychiatric Hospital Historic District"
+            ),
+            {"name": "Support Building", "status": "ELIGIBLE_HD", "attributes": {}},
+        ]
+
+        note = eligible_only_note(rows)
+
+        assert note == "matched only eligible, not listed, register rows: 2 with status ELIGIBLE_HD"
+
+    def test_one_listing_among_them_says_nothing(self) -> None:
+        rows = [
+            TestRegisterListings._district_row(
+                "Main Hospital Building", "Trenton Psychiatric Hospital Historic District"
+            ),
+            {"name": "Trenton Psychiatric Hospital", "status": "Listed", "attributes": {}},
+        ]
+
+        assert eligible_only_note(rows) == ""
+
+    def test_a_row_with_no_status_is_not_called_eligible(self) -> None:
+        assert eligible_only_note([{"name": "Trenton Psychiatric Hospital"}]) == ""
+        assert eligible_only_note([]) == ""
+
 
 class TestRegisterCheck:
     def test_a_campus_found_only_in_the_attributes_passes(self) -> None:
@@ -266,8 +321,22 @@ class TestRegisterCheck:
         )
         stub = mock.Mock()
         stub.get.return_value = Answer(200, {"results": [row]}, 0.0)
+        recorded: list[tuple[str, object]] = []
 
-        endpoints.test_a_historic_register_lists_the_campus(stub, trenton)
+        endpoints.test_a_historic_register_lists_the_campus(stub, trenton, lambda *pair: recorded.append(pair))
+
+        assert recorded == [("register", "matched only eligible, not listed, register rows: 1 with status ELIGIBLE_HD")]
+
+    def test_a_campus_with_a_listing_records_nothing(self) -> None:
+        mendota = _catalogued("mendota-mental-health-institute")
+        row = {"external_id": "88002183", "name": "Wisconsin Memorial Hospital Historic District", "status": "Listed"}
+        stub = mock.Mock()
+        stub.get.return_value = Answer(200, {"results": [row]}, 0.0)
+        recorded: list[tuple[str, object]] = []
+
+        endpoints.test_a_historic_register_lists_the_campus(stub, mendota, lambda *pair: recorded.append(pair))
+
+        assert recorded == []
 
     def test_a_register_with_no_row_for_the_campus_fails(self) -> None:
         trenton = _catalogued("trenton-psychiatric-hospital")
@@ -275,7 +344,13 @@ class TestRegisterCheck:
         stub.get.return_value = Answer(200, {"results": [{"name": "Main Hospital Building", "attributes": {}}]}, 0.0)
 
         with pytest.raises(AssertionError, match="none of 1 cultural resources"):
-            endpoints.test_a_historic_register_lists_the_campus(stub, trenton)
+            endpoints.test_a_historic_register_lists_the_campus(stub, trenton, lambda *pair: None)
+
+    def test_what_a_passing_check_recorded_reaches_the_report(self) -> None:
+        report = mock.Mock(user_properties=[("register", "matched only eligible, not listed, register rows: 1")])
+
+        assert _load_conftest()._notes(report) == "register: matched only eligible, not listed, register rows: 1"
+        assert _load_conftest()._notes(mock.Mock(user_properties=[])) == ""
 
 
 def _load_conftest() -> Any:
