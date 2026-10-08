@@ -876,7 +876,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         Off by default on the Private Pin page map - only fetched once the user turns the layer on.
         """
-        from urbanlens.dashboard.services.map.land_use_areas import LandUseAreasBusyError, land_use_area_collection
+        from urbanlens.dashboard.services.map.land_use_areas import BUSY_MESSAGE, LandUseAreasBusyError, land_use_area_collection
         from urbanlens.dashboard.services.security.throttle import account_or_address
 
         try:
@@ -887,7 +887,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         try:
             collection = land_use_area_collection(pin, caller=account_or_address(request))
         except LandUseAreasBusyError as exc:
-            response = JsonResponse({"error": str(exc)}, status=503)
+            response = JsonResponse({"error": BUSY_MESSAGE}, status=503)
             response["Retry-After"] = str(exc.retry_after)
             return response
 

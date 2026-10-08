@@ -41,7 +41,8 @@ PARTIAL_ANSWER_SECONDS = 5 * 60
 _FAILURE_SECONDS = 5 * 60
 
 _ATTRIBUTION = "U.S. Census Bureau TIGERweb, via REData"
-_BUSY_MESSAGE = "Land-use boundaries are temporarily unavailable. Please try again shortly."
+#: What a viewer is told when REData could not answer; fixed, so no upstream error text reaches the page.
+BUSY_MESSAGE = "Land-use boundaries are temporarily unavailable. Please try again shortly."
 _DRAWABLE_TYPES = frozenset({"Polygon", "MultiPolygon"})
 _LABELS = dict(SPECIAL_LAND_USE_LABELS)
 _ORDER = {category: index for index, (category, _label) in enumerate(SPECIAL_LAND_USE_LABELS)}
@@ -168,7 +169,7 @@ def _cached_areas(parcel_uuid: str, expected: frozenset[str] | None, caller: str
         return cached
     failure = get_or_none(failure_key, label="land-use areas failure", alias=DEFAULT_CACHE_ALIAS)
     if isinstance(failure, dict):
-        raise LandUseAreasBusyError(str(failure.get("message") or ""), retry_after=int(failure.get("retry_after") or _FAILURE_SECONDS))
+        raise LandUseAreasBusyError(BUSY_MESSAGE, retry_after=int(failure.get("retry_after") or _FAILURE_SECONDS))
 
     try:
         return _ask(lambda: _fetch_and_keep(key, parcel_uuid, expected), caller)
@@ -177,7 +178,7 @@ def _cached_areas(parcel_uuid: str, expected: frozenset[str] | None, caller: str
             # A REData that predates the endpoint, or no longer holds the parcel: nothing to draw, and nothing to retry.
             return _collection(STATUS_UNAVAILABLE)
         busy = _busy(exc)
-        set_or_skip(failure_key, {"message": str(busy), "retry_after": busy.retry_after}, max(busy.retry_after, _FAILURE_SECONDS), label="land-use areas failure", alias=DEFAULT_CACHE_ALIAS)
+        set_or_skip(failure_key, {"retry_after": busy.retry_after}, max(busy.retry_after, _FAILURE_SECONDS), label="land-use areas failure", alias=DEFAULT_CACHE_ALIAS)
         raise busy from exc
 
 
@@ -214,12 +215,12 @@ def _ask[T](fetch: Callable[[], T], caller: str | None) -> T:
         return result.value
     if isinstance(result.error, PropertyRecordsUnavailableError):
         raise result.error
-    raise LandUseAreasBusyError(_BUSY_MESSAGE, retry_after=max(1, result.retry_after or LandUseAreasUpstream.busy_retry_seconds))
+    raise LandUseAreasBusyError(BUSY_MESSAGE, retry_after=max(1, result.retry_after or LandUseAreasUpstream.busy_retry_seconds))
 
 
 def _busy(exc: PropertyRecordsUnavailableError) -> LandUseAreasBusyError:
     named = exc.retry_after if isinstance(exc, PropertyRecordsBusyError) else 0
-    return LandUseAreasBusyError(_BUSY_MESSAGE, retry_after=max(1, min(named or _FAILURE_SECONDS, UPSTREAM_BUSY_MAX_SECONDS)))
+    return LandUseAreasBusyError(BUSY_MESSAGE, retry_after=max(1, min(named or _FAILURE_SECONDS, UPSTREAM_BUSY_MAX_SECONDS)))
 
 
 def _feature(category: str, area: dict[str, Any]) -> dict[str, Any] | None:
