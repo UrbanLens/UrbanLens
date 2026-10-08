@@ -7,7 +7,7 @@ maxTurns: 6
 color: yellow
 ---
 
-Grep `docs/INDEX.md` — never the whole directory — for the topic's keywords,
+Grep `docs/INDEX.md` for the topic's keywords,
 then again for near-synonyms and for the terms this project actually uses.
 Also grep the `# ` title lines of `docs/adr/*.md` for decisions. A former
 `P#` or `T#` is a GitHub issue now: grep `docs/PROBLEMS.md` for its number.
