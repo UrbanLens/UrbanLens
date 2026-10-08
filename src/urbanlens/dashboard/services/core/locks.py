@@ -11,6 +11,7 @@ from uuid import uuid4
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.core.counters import delete_if_value
+from urbanlens.dashboard.services.security.redact import redact_cache_key
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -45,13 +46,13 @@ def release_lock(key: str, token: str | None) -> None:
         if delete_if_value(key, token):
             return
     except ValueError:
-        logger.warning("Lock %s could not be released; it will expire", key, exc_info=True)
+        logger.warning("Lock %s could not be released; it will expire", redact_cache_key(key), exc_info=True)
         return
     if cache.get(key) is None:
         # Already gone: expired with nobody taking it, or a second release of one token.
-        logger.debug("Lock %s was already released or expired before its holder released it", key)
+        logger.debug("Lock %s was already released or expired before its holder released it", redact_cache_key(key))
     else:
-        logger.warning("Sweep lock %s outlived its TTL; leaving the current holder's lock alone", key)
+        logger.warning("Sweep lock %s outlived its TTL; leaving the current holder's lock alone", redact_cache_key(key))
 
 
 @contextmanager

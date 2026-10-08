@@ -586,7 +586,23 @@ class SafetyCheckinMediaGateTests(TestCase):
 
         self.assertEqual(self._fetch(), 404)
 
-    def test_a_signed_in_emergency_contact_can_fetch_a_checkin_photo(self):
+    def test_a_signed_in_emergency_contact_can_fetch_a_checkin_photo_once_alerted(self):
+        from django.utils import timezone
+
+        contact_user = _new_user()
+        baker.make(
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            email=None,
+            contact_profile=contact_user.profile,
+            notified_at=timezone.now(),
+        )
+        self.client.force_login(contact_user)
+
+        self.assertEqual(self._fetch(), 200)
+
+    def test_a_signed_in_emergency_contact_cannot_fetch_one_before_the_alert(self):
+        """GOALS.md: a contact sees the check-in only once its owner has missed it."""
         contact_user = _new_user()
         baker.make(
             "dashboard.SafetyCheckinContact",
@@ -596,7 +612,7 @@ class SafetyCheckinMediaGateTests(TestCase):
         )
         self.client.force_login(contact_user)
 
-        self.assertEqual(self._fetch(), 200)
+        self.assertEqual(self._fetch(), 404)
 
 
 class SafetyContactTokenPhotoTests(TestCase):
@@ -625,8 +641,13 @@ class SafetyContactTokenPhotoTests(TestCase):
 
         self.checkin = self._checkin()
         self.image = baker.make(Image, image="pin_images/tok.png", profile=self.owner, safety_checkin=self.checkin)
+        # Alerted: a token is only ever emailed with the alert, and resolves only after it.
         self.contact = baker.make(
-            "dashboard.SafetyCheckinContact", checkin=self.checkin, email="contact@example.com", contact_profile=None
+            "dashboard.SafetyCheckinContact",
+            checkin=self.checkin,
+            email="contact@example.com",
+            contact_profile=None,
+            notified_at=timezone.now(),
         )
 
     def _checkin(self):

@@ -123,5 +123,5 @@ def classify_trivia_question(prompt: str, answer: str, location: Location, *, pr
     if verdict_word in _REJECT_TOKENS:
         return ClassifierVerdict(approved=False, reason=verdict_word.removeprefix("REJECT_").lower())
 
-    logger.warning("Trivia classifier returned an unrecognized token %r; rejecting fail-closed", verdict_word)
+    logger.warning("Trivia classifier returned an unrecognized token of length %d; rejecting fail-closed", len(verdict_word))
     return ClassifierVerdict(approved=False, reason="unparseable")

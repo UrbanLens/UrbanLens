@@ -13,6 +13,7 @@ from django.urls import NoReverseMatch, get_resolver, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.thread_writes import DiscardsLedgerRowsFromOtherThreadsMixin
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -113,7 +114,7 @@ def _origin(exc: BaseException) -> str:
     return f"{Path(frames[-1].filename).relative_to(package)}:{frames[-1].lineno}"
 
 
-class WriteRouteSmokeTests(TestCase):
+class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
     """Every owner-scoped write route refuses a minimal request rather than crashing."""
 
     def setUp(self) -> None:

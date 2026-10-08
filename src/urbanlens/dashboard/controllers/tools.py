@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from django.conf import settings
@@ -31,11 +31,17 @@ from urbanlens.dashboard.services.import_export.export import (
 from urbanlens.dashboard.services.import_export.import_data import (
     ImportJobStatus,
     import_dir as _import_dir_fn,
+    import_guard_key,
+    import_guard_ttl,
+    release_import_guard,
 )
 from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.media.storage import cap_to_ingress
 from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
 from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
+
+if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
 
 logger = logging.getLogger(__name__)
 
@@ -128,22 +134,8 @@ _EXPORT_GUARD_TTL = 60 * 75
 #: guessed vocabulary here would leave the guard held for the whole TTL after a successful export.
 _EXPORT_TERMINAL_STATES = frozenset({"done", "error"})
 
-
-def _export_guard_key(user_id: int | None) -> str:
-    """One in-flight export per account.
-
-    Args:
-        user_id: The exporting account.
-
-    Returns:
-        The cache key holding that account's in-flight export.
-
-    Raises:
-        ValueError: There is no authenticated user.
-    """
-    if user_id is None:
-        raise ValueError("an export guard needs an authenticated user")
-    return f"ul:single-flight:export:{user_id}"
+#: The same for an import, read off ``services/import_export/import_data.py``'s writers.
+_IMPORT_TERMINAL_STATES = frozenset({"done", "error"})
 
 
 class ExportStartView(LoginRequiredMixin, View):
@@ -171,19 +163,46 @@ class ExportStartView(LoginRequiredMixin, View):
 
         email_to_user = bool(request.POST.get("email_export"))
 
+        from urbanlens.dashboard.services.import_export.export import export_guard_key
+
         # Claimed before anything is created, so a double-click cannot get two exports past a read-then-write
-        # check. An export copies every photo the account owns, twice, onto the shared media volume.
-        guard = _export_guard_key(request.user.pk)
-        if not single_flight.claim(guard, _EXPORT_GUARD_TTL):
+        # check. An export copies every photo the account owns, twice, onto the shared media volume. Held by the
+        # job's own id from the start, so a task that ends before this view returns still finds its claim to release.
+        job_id = str(uuid.uuid4())
+        guard = export_guard_key(request.user.pk)
+        if not single_flight.claim(guard, _EXPORT_GUARD_TTL, token=job_id):
             return render(
                 request,
                 "dashboard/partials/tools/export_progress.html",
                 {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An export is already running."},
             )
 
-        job_id = str(uuid.uuid4())
+        try:
+            refused = self._start(request, export_types, job_id, email_to_user=email_to_user)
+        except BaseException:
+            single_flight.release(guard)
+            raise
+        if refused is not None:
+            single_flight.release(guard)
+            return refused
+        return render(
+            request,
+            "dashboard/partials/tools/export_progress.html",
+            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing export..."},
+        )
+
+    def _start(self, request: HttpRequest, export_types: list[str], job_id: str, *, email_to_user: bool) -> HttpResponse | None:
+        """Prepare the job's directory and queue its export.
+
+        Returns:
+            None once it is queued, or the response saying why it was not.
+        """
         exp_dir = _export_dir(job_id)
-        os.makedirs(exp_dir, exist_ok=True)
+        try:
+            os.makedirs(exp_dir, exist_ok=True)
+        except OSError:
+            logger.exception("Failed to prepare the export directory for user %s", request.user.pk)
+            return _export_error_partial(request, job_id, "Could not start the export. Please try again.")
         ExportJobStatus(job_id).write("pending", 0, "Preparing export...", user_id=request.user.pk)
 
         base_url = request.build_absolute_uri("/")
@@ -192,7 +211,6 @@ class ExportStartView(LoginRequiredMixin, View):
 
         result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user, durable=False)
         if result is None:
-            single_flight.release(guard)
             ExportJobStatus(job_id).write("error", 0, "Export queue is unavailable. Please try again later.", user_id=request.user.pk)
             return render(
                 request,
@@ -200,15 +218,8 @@ class ExportStartView(LoginRequiredMixin, View):
                 {"job_id": job_id, "status": "error", "progress": 0, "message": "Export queue is unavailable. Please try again later."},
                 status=503,
             )
-
-        single_flight.adopt(guard, job_id, _EXPORT_GUARD_TTL)
         logger.info("Export task %s started for user %s", result.id, request.user.pk)
-
-        return render(
-            request,
-            "dashboard/partials/tools/export_progress.html",
-            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing export..."},
-        )
+        return None
 
 
 class ExportStatusView(LoginRequiredMixin, View):
@@ -245,10 +256,11 @@ class ExportStatusView(LoginRequiredMixin, View):
                     "Could not verify export ownership. Please start a new export.",
                 )
 
-            # The guard is released the moment the job stops, so the next export
-            # does not wait out the TTL. A user who never polls waits it out.
+            # The task gives its claim up as it ends; this covers one that wrote its last status and died first.
             if data.get("status") in _EXPORT_TERMINAL_STATES:
-                single_flight.release(_export_guard_key(request.user.pk))
+                from urbanlens.dashboard.services.import_export.export import release_export_guard
+
+                release_export_guard(request.user.pk, job_id)
 
             return render(request, "dashboard/partials/tools/export_progress.html", {"job_id": job_id, **data})
         except Exception:
@@ -397,12 +409,42 @@ class ImportStartView(LoginRequiredMixin, View):
                 status=400,
             )
 
+        # Claimed before the upload is written, as an export is: an import extracts, scans and writes a whole archive on
+        # a sandbox worker slot. Held by the job's own id from the start, so a task that ends before this view returns
+        # still finds its claim to release.
         job_id = str(uuid.uuid4())
-        imp_dir = _import_dir(job_id)
-        os.makedirs(imp_dir, exist_ok=True)
+        guard = import_guard_key(request.user.pk)
+        if not single_flight.claim(guard, import_guard_ttl(), token=job_id):
+            return render(
+                request,
+                "dashboard/partials/tools/import_progress.html",
+                {"job_id": single_flight.holder(guard), "status": "pending", "progress": 0, "message": "An import is already running."},
+            )
 
+        try:
+            refused = self._start(request, upload, job_id)
+        except BaseException:
+            single_flight.release(guard)
+            raise
+        if refused is not None:
+            single_flight.release(guard)
+            return refused
+        return render(
+            request,
+            "dashboard/partials/tools/import_progress.html",
+            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
+        )
+
+    def _start(self, request: HttpRequest, upload: UploadedFile, job_id: str) -> HttpResponse | None:
+        """Save the upload and queue its import.
+
+        Returns:
+            None once it is queued, or the response saying why it was not.
+        """
+        imp_dir = _import_dir(job_id)
         zip_path = os.path.join(imp_dir, "upload.zip")
         try:
+            os.makedirs(imp_dir, exist_ok=True)
             with open(zip_path, "wb") as fh:
                 fh.writelines(upload.chunks())
         except OSError:
@@ -423,13 +465,8 @@ class ImportStartView(LoginRequiredMixin, View):
                 {"job_id": job_id, "status": "error", "progress": 0, "message": "Import queue is unavailable. Please try again later."},
                 status=503,
             )
-
         logger.info("Import task %s started for user %s", result.id, request.user.pk)
-        return render(
-            request,
-            "dashboard/partials/tools/import_progress.html",
-            {"job_id": job_id, "status": "pending", "progress": 0, "message": "Preparing import..."},
-        )
+        return None
 
 
 class ImportStatusView(LoginRequiredMixin, View):
@@ -460,6 +497,10 @@ class ImportStatusView(LoginRequiredMixin, View):
             if data.get("user_id") != request.user.pk:
                 logger.warning("Unauthorized import status access: job %s, user %s", job_id, request.user.pk)
                 return _import_error_partial(request, job_id, "Could not verify import ownership. Please try again.")
+
+            # The task gives its claim up as it ends; this covers one that wrote its last status and died first.
+            if data.get("status") in _IMPORT_TERMINAL_STATES:
+                release_import_guard(request.user.pk, job_id)
 
             return render(request, "dashboard/partials/tools/import_progress.html", {"job_id": job_id, **data})
         except Exception:

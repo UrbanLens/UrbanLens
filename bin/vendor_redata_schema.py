@@ -83,8 +83,25 @@ def _refs(node: Any) -> set[str]:
     return found
 
 
+def _without_required(components: dict[str, Any], body: Any, optional: tuple[str, ...]) -> None:
+    """Leave ``optional`` out of the ``required`` of the component ``body`` references, in place.
+
+    Args:
+        components: The vendored document's schema components.
+        body: A response's JSON schema.
+        optional: Top-level fields an older REData UrbanLens supports does not send.
+    """
+    while isinstance(body, dict) and isinstance(body.get("$ref"), str):
+        body = components.get(body["$ref"].rsplit("/", 1)[1])
+    if isinstance(body, dict) and "required" in body:
+        body["required"] = [name for name in body["required"] if name not in optional]
+
+
 def trimmed(schema: dict[str, Any], revision: str) -> dict[str, Any]:
     """The operations the contract table names, their responses, and every component those reference.
+
+    A field a row marks ``optional`` is left out of its body's ``required``: UrbanLens supports a REData that does not
+    send it, so the vendored document must not promise it.
 
     Args:
         schema: REData's full OpenAPI document.
@@ -117,7 +134,7 @@ def trimmed(schema: dict[str, Any], revision: str) -> dict[str, Any]:
         wanted.add(name)
         pending |= _refs(components[name])
 
-    return _without_prose(
+    document = _without_prose(
         {
             "openapi": schema.get("openapi"),
             "info": {"title": schema.get("info", {}).get("title"), "version": schema.get("info", {}).get("version"), "x-redata-revision": revision},
@@ -125,6 +142,11 @@ def trimmed(schema: dict[str, Any], revision: str) -> dict[str, Any]:
             "components": {"schemas": {name: components[name] for name in sorted(wanted)}},
         },
     )
+    for read in READS:
+        if read.optional:
+            response = document["paths"][read.path][read.method]["responses"].get(read.status, {})
+            _without_required(document["components"]["schemas"], response.get("content", {}).get("application/json", {}).get("schema"), read.optional)
+    return document
 
 
 def overture_shards(checkout: pathlib.Path, revision: str) -> dict[str, Any]:

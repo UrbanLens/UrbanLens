@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 import hashlib
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.geos import GEOSGeometry, Point
@@ -66,7 +66,7 @@ def building_footprint(building: dict[str, Any]) -> GEOSGeometry | None:
     try:
         shape = GEOSGeometry(json.dumps(geometry), srid=4326)
     except (GEOSException, GDALException, ValueError, TypeError):
-        logger.debug("pin_restructure: unparseable building geometry %r", geometry, exc_info=True)
+        logger.debug("pin_restructure: unparseable building geometry of type %s", geometry.get("type"), exc_info=True)
         return None
     # dims 2 == areal. A provider sending a LineString "footprint" has nothing
     # to test containment against, so it falls back to the centroid radius.
@@ -393,7 +393,12 @@ def building_kind(building: dict[str, Any]) -> str:
     return ""
 
 
-def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reserved: Iterable[str] = ()) -> str:
+#: Which of a building's years :func:`building_wiki_name` may date it by: its own (``own_build_year``), any its records
+#: carry, or none.
+DatingYears = Literal["own", "any", "none"]
+
+
+def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reserved: Iterable[str] = (), *, years: DatingYears = "own") -> str:
     """A public, descriptive name for one building's child wiki.
     Built only from the building records and the campus's own public names, never from anybody's pin.
 
@@ -401,12 +406,16 @@ def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reser
         cluster: The building.
         container_name: The campus's name; used only when it is a real name.
         reserved: Further names the building may not take - what the campus is called, or about to be.
+        years: Which years may date the building. A name is given by its own year alone; ``"any"`` is how names were
+            given before REData said what a year dates, and ``"none"`` how they are while no record dates the building,
+            both only for recognising a name given under other records.
 
     Returns:
-        The building's own name, else its number, else its address, else what it is and when it was built,
-        placed on the campus.
+        The building's own name, else its number, else its address, else what it is and, when its records date it
+        (``services.pins.build_dates.own_build_year``), when it was built, placed on the campus.
     """
     from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+    from urbanlens.dashboard.services.pins.build_dates import own_build_year
 
     container = container_name if is_meaningful_name(container_name) else ""
     taken = {name.casefold() for name in (container, *reserved) if name}
@@ -419,7 +428,12 @@ def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reser
     if (name := next((candidate for candidate in candidates if usable(candidate)), None)) is not None:
         return name
     kind = next((label for member in cluster.members if (label := building_kind(member))), "")
-    year = next((str(member["year_built"]) for member in cluster.members if member.get("year_built")), "")
+    if years == "any":
+        year = next((str(member["year_built"]) for member in cluster.members if member.get("year_built")), "")
+    elif years == "own":
+        year = next((str(found) for member in cluster.members if (found := own_build_year(member)) is not None), "")
+    else:
+        year = ""
     descriptor = f"{kind or 'Building'} ({year})" if year else kind or "Building"
     if container:
         return f"{descriptor} at {container}"
@@ -690,11 +704,22 @@ class BuildingNester:
         names = self._campus_names(campus)
         return building_wiki_name(cluster, names[0] if names else "", reserved=names)
 
+    def _given_names(self, cluster: BuildingCluster, campus: Wiki) -> set[str]:
+        """Every name a sweep may have given this building's wiki: before the campus had a name or since, and dated by
+        any year its records carry, its own, or none. A wiki still holding one was named by a sweep, not by anybody,
+        so a sweep may rename it as its records change."""
+        names = self._campus_names(campus)
+        containers: list[tuple[str, Sequence[str]]] = [("", ())]
+        if names:
+            containers.append((names[0], names))
+        dating: tuple[DatingYears, ...] = ("own", "any", "none")
+        return {building_wiki_name(cluster, container, reserved=reserved, years=years) for container, reserved in containers for years in dating}
+
     def _refresh_name(self, wiki: Wiki, cluster: BuildingCluster, campus: Wiki) -> None:
-        """Rename a building's wiki whose name is a placeholder, the campus's own, or one given before the campus had a name."""
+        """Rename a building's wiki whose name is a placeholder, the campus's own, or one a sweep gave it (:meth:`_given_names`)."""
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 
-        stale = not is_meaningful_name(wiki.name) or wiki.name.casefold() in {name.casefold() for name in self._campus_names(campus)} or wiki.name == building_wiki_name(cluster)
+        stale = not is_meaningful_name(wiki.name) or wiki.name.casefold() in {name.casefold() for name in self._campus_names(campus)} or wiki.name in self._given_names(cluster, campus)
         wanted = self._wiki_name(cluster, campus)
         if stale and wiki.name != wanted:
             wiki.name = wanted

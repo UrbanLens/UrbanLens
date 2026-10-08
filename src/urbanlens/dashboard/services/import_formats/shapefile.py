@@ -17,6 +17,7 @@ from pyogrio.raw import open_arrow
 from urbanlens.dashboard.services.import_formats.heuristics import pick_name_and_description
 from urbanlens.dashboard.services.import_formats.streams import READ_CHUNK_BYTES
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -91,7 +92,7 @@ class ShapefileSpool:
         for stem, exts in self._parts.items():
             missing = _REQUIRED_PARTS - exts
             if missing:
-                logger.warning("Skipping incomplete shapefile bundle '%s': missing .%s", stem, ", .".join(sorted(missing)))
+                logger.warning("Skipping incomplete shapefile bundle %s: missing .%s", redact_text(stem), ", .".join(sorted(missing)))
                 continue
             yield stem, self._base(stem).with_suffix(".shp")
 

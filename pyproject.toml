@@ -339,10 +339,11 @@ dev = [
     "pytest-django>=4.12,<4.15",
     # Installed but disabled in `addopts`; `bin/run_tests.sh --shuffle` enables it.
     "pytest-randomly>=4.1,<5.1",
-    # Parallel test workers. Off by default: each worker takes its own database,
-    # so the multiplier applies to database *setup* as well, and the local
-    # Postgres has been observed to fall over under exactly this load. Use it in
-    # the container, via `bin/run_tests.sh --parallel`.
+    # Parallel test workers. CI runs the suite under it (see docs/TOOLING.md).
+    # Off by default locally: each worker takes its own database, so the
+    # multiplier applies to database *setup* as well, and the local Postgres has
+    # been observed to fall over under exactly this load. Use it in the
+    # container, via `bin/run_tests.sh --parallel`.
     "pytest-xdist~=3.8.0",
     "ruff>=0.16.10,<0.17.0",
     # Property-based conformance testing against the published OpenAPI document.
@@ -473,10 +474,19 @@ testpaths = ["src/urbanlens"]
 addopts = "--import-mode=importlib -p no:randomly"
 markers = [
     "contract: OpenAPI conformance checks (tests/contract). Needs --contract-* options; not collected by default.",
+    "serial: asserts on wall-clock time, so CI runs it after the pytest-xdist pass, alone, where no other worker's load can fail it.",
 ]
 
 [tool.coverage.run]
 source = ["."]
+# Measure Python subprocesses too, which is what makes `coverage run -m pytest -n N` count the pytest-xdist workers
+# rather than only the controller (which runs no tests). It implies parallel mode: every process writes its own
+# .coverage.* file, so `coverage combine` has to run before any report.
+patch = ["subprocess"]
+# sys.monitoring rather than the C tracer: same executed lines (compared file by file over 469 tests), at about 4%
+# overhead instead of 70%. Line coverage only - branch coverage needs Python 3.14 for this core, and this config
+# does not measure branches.
+core = "sysmon"
 omit = [
     "*/migrations/*",
     "*/tests/*",

@@ -1,6 +1,6 @@
 # Reply: /static/, media on Garage, and the 100 MB upload cap
 
-- **Status: SENT, 2026-09-06.** Answers both of the `infrastructure` repo's
+- **Status: ANSWERED, and built (read 2026-10-07).** Sent 2026-09-06. The infrastructure repo marks both asks ANSWERED and built (its 524ceaf): production serves hashed `/static/` assets (WhiteNoise), media is in Garage's `ul-media` through the S3 backend, and `UL_MAX_REQUEST_BODY_MB=100` is set on web and websocket. Only Jess's browser checks are left, and they are theirs. The 100 MB cap is why a larger upload cannot work until #359 lands. Answers both of the `infrastructure` repo's
   open outbound handoffs. Static assets and the S3 backend are built and
   merged on `release/v_0_8_0`; the upload protocol is decided and deferred.
 - **Direction: outbound.** This repo to whoever owns `UrbanLens/infrastructure`.

@@ -40,9 +40,13 @@ fi
 
 if [ "$REUSE" -eq 0 ]; then
     echo "==> measuring coverage${pytest_args[*]:+ over ${pytest_args[*]}}"
+    # Parallel mode (pyproject's `patch = ["subprocess"]`) writes one data file per process and combines whatever
+    # it finds, so a previous run's leftovers would be counted too.
+    python -m coverage erase
     # A unique database for the same reason bin/run_tests.sh uses one.
     UL_TEST_DB_NAME="${UL_TEST_DB_NAME:-dc_$(date +%s)_$$}" \
         python -m coverage run -m pytest "${pytest_args[@]}"
+    python -m coverage combine
     python -m coverage xml -o coverage.xml
 elif [ ! -f coverage.xml ]; then
     echo "error: --reuse needs a coverage.xml, and there is none. Run without --reuse first." >&2

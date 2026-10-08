@@ -99,7 +99,7 @@ def score_with(rule: Rule, target: Any) -> ScoreResult | None:
     try:
         return rule.score(target)
     except Exception:
-        logger.exception("Reputation rule %s failed while scoring %r", rule.key, target)
+        logger.exception("Reputation rule %s failed while scoring %s pk=%s", rule.key, type(target).__name__, getattr(target, "pk", None))
         return None
 
 

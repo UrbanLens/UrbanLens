@@ -115,6 +115,6 @@ would isolate tiers from one another, but not from the owner, and are not done.
   web tier is affected.
 - **The outage has not been reproduced:** its own shape, with slots held as the application's role, has still
   not been run (N20).
-- **Kubernetes:** the infrastructure repo's k8s manifests still connect as the owner (N23).
+- **Kubernetes:** the infrastructure repo's k8s manifests still connect as the owner (N23, #360).
 - **No pooler:** pgbouncer stays deferred on D11's triggers. This bounds and attributes connections; it does
   not reuse them.

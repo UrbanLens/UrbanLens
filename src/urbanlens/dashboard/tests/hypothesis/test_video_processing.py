@@ -112,6 +112,30 @@ class ProcessUploadedVideoTests(TestCase):
         assert replacement is not None
         self.assertEqual(replacement.size, 1)
 
+    def test_a_location_a_stream_copy_cannot_strip_is_reencoded_away(self) -> None:
+        """MP4 cannot carry VP8 or Vorbis as they are, so the copy fails, and the upload used to be kept as it came."""
+
+        def fake_reencode(src_path: str, out_path: str, max_height: int, *, strip_location: bool = False) -> bool:
+            with open(out_path, "wb") as f:
+                f.write(b"x")
+            return True
+
+        with (
+            patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=True),
+            patch(
+                "urbanlens.dashboard.services.media.videos.extract_video_metadata",
+                return_value={"height": 480, "has_location_tag": True},
+            ),
+            patch("urbanlens.dashboard.services.media.videos._remux_without_location", return_value=False),
+            patch("urbanlens.dashboard.services.media.videos._reencode", side_effect=fake_reencode) as reencode,
+        ):
+            _metadata, replacement = process_uploaded_video(self.image, 1080)
+
+        reencode.assert_called_once()
+        self.assertEqual(reencode.call_args.args[2], 480, "the fallback resized the video")
+        self.assertTrue(reencode.call_args.kwargs["strip_location"])
+        self.assertIsNotNone(replacement)
+
     def test_reencode_failure_returns_no_replacement(self) -> None:
         with (
             patch("urbanlens.dashboard.services.media.videos.ffmpeg_available", return_value=True),

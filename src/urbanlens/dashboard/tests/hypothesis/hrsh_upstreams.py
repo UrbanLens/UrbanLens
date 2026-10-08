@@ -57,6 +57,7 @@ def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
             name="MAIN/ADMIN",
             building_number="51",
             year_built=MAIN_YEAR,
+            year_built_basis="building",
         ),
         record(
             "osm:way/2",
@@ -66,6 +67,7 @@ def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
             name="LAUNDRY",
             building_number="45",
             year_built=LAUNDRY_YEAR,
+            year_built_basis="building",
         ),
         record("cris:02714.000028", 110, -100, geometry=rect(110, -100, 25, 25), name="CATHOLIC CHAPEL"),
         record(
@@ -76,6 +78,7 @@ def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
             name="GARAGE",
             building_number="166",
             year_built=GARAGE_YEAR,
+            year_built_basis="building",
         ),
         record("cris:02714.000999", 0, 600, is_on_property=False, name="Across the road"),
     ]
@@ -165,6 +168,8 @@ class HrshUpstreams:
             it before the building list does.
         register_year: The construction year the National Register listing drawn around the campus reports; NPS
             publishes none, but a state or city register can.
+        pending_parcel_answers: How many unfiltered ``boundaries/`` and ``buildings/`` calls answer REData 0.3.7's
+            ``503 refresh_queued`` first, while it computes the parcel's answer in the background.
     """
 
     def __init__(
@@ -175,8 +180,10 @@ class HrshUpstreams:
         parcel_year: int | None = ASSESSOR_YEAR,
         osm_main_building: bool = True,
         register_year: int | None = None,
+        pending_parcel_answers: int = 0,
     ) -> None:
         self.calls: Counter[tuple[str, str]] = Counter()
+        self.pending_parcel_answers = pending_parcel_answers
         self.osm_main_building = osm_main_building
         self.register_year = register_year
         self.prewarm_status = prewarm_status
@@ -252,6 +259,16 @@ class HrshUpstreams:
                 "parcel_geometry": None,
                 "building_geometry": None,
                 "record_payload": payload,
+            }
+        if (
+            path in ("/api/v1/parcels/{id}/boundaries/", "/api/v1/parcels/{id}/buildings/")
+            and self.pending_parcel_answers
+        ):
+            self.pending_parcel_answers -= 1
+            return 503, {
+                "error": "refresh_queued",
+                "message": "The parcel's answers are being computed.",
+                "retry_after": 60,
             }
         if path == "/api/v1/parcels/{id}/boundaries/":
             return 200, [

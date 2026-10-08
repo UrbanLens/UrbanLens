@@ -21,7 +21,10 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.places import resolution
 from urbanlens.dashboard.services.visits.visits import record_geolocation_pin_visits
+
+from .test_places_campus import make_place
 
 
 def _square(lng: float, lat: float, delta: float = 0.001) -> MultiPolygon:
@@ -44,6 +47,21 @@ class _Case(TestCase):
     def _pin(self, lat: float, lng: float, **extra) -> Pin:
         location = baker.make("dashboard.Location", latitude=f"{lat:.6f}", longitude=f"{lng:.6f}", **extra)
         return baker.make("dashboard.Pin", profile=self.profile, location=location)
+
+    def _unbounded_pin(self, lat: float, lng: float) -> Pin:
+        """A pin with no property boundary at all: its marker stands on one building of a multi-building parcel.
+
+        ``scope.outline_applies`` rules the property outline out there. A lone building with no footprint does not:
+        its outline falls through to its wiki's and then to the default circle (P264).
+        """
+        parcel = make_place(PlaceKind.PARCEL, _square(lng, lat, 0.0005))
+        building = make_place(PlaceKind.BUILDING, None, parent=parcel)
+        make_place(PlaceKind.BUILDING, _square(lng + 0.0003, lat, 0.0001), parent=parcel)
+        pin = self._pin(lat, lng)
+        resolution.attach_location(pin.location, building)
+        # Drops the cached place, whose parent was read before the second building raised its count.
+        pin.location.refresh_from_db()
+        return pin
 
 
 class TheBatchAnswersWhatThePerPinResolverDoesTests(_Case):
@@ -136,7 +154,7 @@ class APingCostsTheSameHoweverManyPinsAreNearbyTests(_Case):
         elif kind == 2:
             self._pin(lat, -74.0)  # falls through to the circle
         else:
-            self._pin(lat, -74.0, place=baker.make(Place, kind=PlaceKind.BUILDING, geometry=None))  # no boundary at all
+            self._unbounded_pin(lat, -74.0)  # no boundary at all
 
     def test_query_count_is_flat_in_nearby_pins(self) -> None:
         for i in range(1, 5):
@@ -185,8 +203,7 @@ class EveryContainingPinIsVisitedTests(_Case):
             self.assertTrue(pin.labels.filter(pk=visited_label.pk).exists())
 
     def test_a_pin_with_no_boundary_counts_only_near_its_marker(self) -> None:
-        parcel = baker.make(Place, kind=PlaceKind.BUILDING, geometry=None)
-        near = self._pin(40.0, -74.0, place=parcel)
+        near = self._unbounded_pin(40.0, -74.0)
 
         self.assertEqual(
             Boundary.objects.effective_polygon_for_pin(near, BoundaryType.PROPERTY),

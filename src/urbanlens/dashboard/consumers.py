@@ -917,11 +917,11 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         try:
             self.checkin, self.contact = await self._resolve(kwargs.get("checkin_uuid"), kwargs.get("token"))
         except (ObjectDoesNotExist, PermissionError):
-            logger.info("Safety chat connection rejected (not found/unauthorized): %s", kwargs)
+            logger.info("Safety chat connection rejected (not found/unauthorized): route keys=%s checkin_uuid=%s", sorted(kwargs), kwargs.get("checkin_uuid"))
             await self.close(code=4404)
             return
         except Exception:
-            logger.exception("Safety chat connect failed unexpectedly: %s", kwargs)
+            logger.exception("Safety chat connect failed unexpectedly: route keys=%s checkin_uuid=%s", sorted(kwargs), kwargs.get("checkin_uuid"))
             # Channels fires disconnect() only for a connection that reached
             # accept(), so without this the place - and the task renewing its
             # claim - would be held for the life of the process.
@@ -1212,7 +1212,7 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
 
         if token is not None:
             self.profile_id = None
-            contact = SafetyCheckinContact.objects.select_related("checkin").get(token=token)
+            contact = SafetyCheckinContact.objects.select_related("checkin").by_token(token).get()
             return contact.checkin, contact
 
         user = self.scope.get("user")

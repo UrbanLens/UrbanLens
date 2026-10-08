@@ -18,19 +18,38 @@ if TYPE_CHECKING:
 HIDDEN_ACTIVITY_TITLE = "Secret Location"
 
 
+def shown_activity_title(activity: TripActivity, *, hidden: bool) -> str | None:
+    """The activity's own stored title as this viewer may see it.
+
+    A title filled in from the place (``TripActivity.title_from_place``) names the place, so it goes wherever the
+    location goes. A title the author typed was written for the other members and is kept.
+
+    Args:
+        activity: The activity being rendered.
+        hidden: Whether this viewer may not see its location.
+
+    Returns:
+        The title, or None when it has none or it names a place this viewer may not see.
+    """
+    title = (activity.title or "").strip()
+    if not title or (hidden and activity.title_from_place):
+        return None
+    return title
+
+
 def masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
-    """The activity's title as this viewer may see it.
+    """The activity's display title as this viewer may see it.
     An activity's ``effective_title`` falls back to its location's name, so for a hidden activity the title *is* the location - which is why masking it is not cosmetic.
 
     Args:
         activity: The activity being rendered.
-        hidden: Whether this viewer may see its location.
+        hidden: Whether this viewer may not see its location.
 
     Returns:
         A display title safe to put anywhere in the page, including in attributes the eye does not reach."""
     if not hidden:
         return activity.effective_title
-    return (activity.title or "").strip() or HIDDEN_ACTIVITY_TITLE
+    return shown_activity_title(activity, hidden=True) or HIDDEN_ACTIVITY_TITLE
 
 
 def apply_trip_visibility_filter(
@@ -94,23 +113,21 @@ def apply_trip_visibility_filter(
         if act.added_by_id not in viewer_friend_ids:
             hidden_out.add(act.id)
 
+    # The adders' friends, for every adder at once: one query however many trips the activities span.
+    c_friend_adders = {act.added_by_id for act in c_friend_acts if act.added_by_id is not None and act.added_by_id not in viewer_friend_ids}
+    adders_friends: dict[int, set[int]] = {adder: set() for adder in c_friend_adders}
+    if c_friend_adders:
+        for from_id, to_id in Friendship.objects.filter(
+            Q(from_profile_id__in=c_friend_adders) | Q(to_profile_id__in=c_friend_adders),
+            status=FriendshipStatus.ACCEPTED,
+        ).values_list("from_profile_id", "to_profile_id"):
+            if from_id in adders_friends:
+                adders_friends[from_id].add(to_id)
+            if to_id in adders_friends:
+                adders_friends[to_id].add(from_id)
     for act in c_friend_acts:
-        if act.added_by_id in viewer_friend_ids:
-            continue
-        # Adder's friends
-        adder_friends = set(
-            Friendship.objects.filter(
-                Q(from_profile_id=act.added_by_id) | Q(to_profile_id=act.added_by_id),
-                status=FriendshipStatus.ACCEPTED,
-            ).values_list("from_profile_id", "to_profile_id"),
-        )
-        adder_flat: set[int] = set()
-        for pair in adder_friends:
-            adder_flat.update(pair)
-        if act.added_by_id is not None:
-            adder_flat.discard(act.added_by_id)
-
-        if not (viewer_friend_ids & adder_flat):
+        adder = act.added_by_id
+        if adder is not None and adder not in viewer_friend_ids and not (viewer_friend_ids & adders_friends[adder]):
             hidden_out.add(act.id)
 
 
@@ -127,7 +144,9 @@ def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) 
     # An activity whose adder is NULL reaches the filter too.
     # Every production path sets added_by to a real profile, so NULL means that account was deleted
     # (the FK is SET_NULL) - their setting is gone and the filter treats it as most restrictive.
-    sensitive = [act for act in activities if not act.location_hidden and act.location_id and act.added_by_id != viewer.id and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)]
+    # A title taken from a place is that place even with no Location behind it, as an imported calendar event's
+    # location is, so it is withheld as a location would be.
+    sensitive = [act for act in activities if not act.location_hidden and (act.location_id or act.title_from_place) and act.added_by_id != viewer.id and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)]
     if sensitive:
         apply_trip_visibility_filter(sensitive, viewer, hidden)
     return hidden

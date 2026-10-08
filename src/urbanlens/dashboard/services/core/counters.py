@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 from django.core.cache import DEFAULT_CACHE_ALIAS, caches
 
 from urbanlens.core.cache_backend import AtomicCacheOps, CacheUnavailableError, next_arrival
+from urbanlens.dashboard.services.security.redact import redact_cache_key
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -206,7 +207,7 @@ def _warn_outage(operation: str, key: str, on_outage: Outage) -> None:
     now = time.monotonic()
     if now - _last_warning >= _WARN_INTERVAL_SECONDS:
         _last_warning = now
-        logger.warning("Counter store unavailable on %s of %s; policy %s", operation, key, on_outage)
+        logger.warning("Counter store unavailable on %s of %s; policy %s", operation, redact_cache_key(key), on_outage)
 
 
 def hit(key: str, ttl: int, *, on_outage: Outage, sliding: bool = False) -> int:
@@ -230,7 +231,7 @@ def hit(key: str, ttl: int, *, on_outage: Outage, sliding: bool = False) -> int:
     except _UNAVAILABLE as exc:
         _warn_outage("hit", key, on_outage)
         if on_outage is Outage.REFUSE:
-            raise CounterUnavailableError(key) from exc
+            raise CounterUnavailableError(redact_cache_key(key)) from exc
         return _local.hit(key, ttl, sliding=sliding)
 
 
@@ -259,7 +260,7 @@ def take_token(key: str, *, interval_us: int, burst: int, on_outage: Outage) -> 
     except _UNAVAILABLE as exc:
         _warn_outage("take_token", key, on_outage)
         if on_outage is Outage.REFUSE:
-            raise CounterUnavailableError(key) from exc
+            raise CounterUnavailableError(redact_cache_key(key)) from exc
         return _local.take_token(key, now_us=now_us, interval_us=interval_us, burst=burst)
 
 
@@ -295,7 +296,7 @@ def peek(key: str, *, on_outage: Outage) -> int:
     except _UNAVAILABLE as exc:
         _warn_outage("peek", key, on_outage)
         if on_outage is Outage.REFUSE:
-            raise CounterUnavailableError(key) from exc
+            raise CounterUnavailableError(redact_cache_key(key)) from exc
         return _local.peek(key)
 
 
@@ -342,7 +343,7 @@ def add_to_tally(key: str, increments: Mapping[str, int], ttl: int) -> None:
         _ops().add_to_tally(key, increments, ttl)
     except _UNAVAILABLE as exc:
         _warn_outage("add_to_tally", key, Outage.REFUSE)
-        raise CounterUnavailableError(key) from exc
+        raise CounterUnavailableError(redact_cache_key(key)) from exc
 
 
 def take_tally(key: str) -> dict[str, int]:
@@ -361,7 +362,7 @@ def take_tally(key: str) -> dict[str, int]:
         return _ops().take_tally(key)
     except _UNAVAILABLE as exc:
         _warn_outage("take_tally", key, Outage.REFUSE)
-        raise CounterUnavailableError(key) from exc
+        raise CounterUnavailableError(redact_cache_key(key)) from exc
 
 
 def delete_if_value(key: str, value: str) -> bool:

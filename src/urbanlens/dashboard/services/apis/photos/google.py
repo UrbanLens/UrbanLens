@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.utils import timezone
 
 from urbanlens.dashboard.services.auth import google_oauth
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import MAX_PROXIED_MEDIA_BYTES, Gateway, GatewayRequestError, read_capped
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -26,6 +26,8 @@ PICKER_API_BASE = "https://photospicker.googleapis.com/v1"
 PHOTOS_PICKER_SCOPES = ("https://www.googleapis.com/auth/photospicker.mediaitems.readonly", "openid", "email")
 
 _REQUEST_TIMEOUT = 30
+#: Pages of picked items to read, at 100 a page: a bound on a listing whose ``nextPageToken`` never ends, not a limit on how many photos can be picked.
+_MAX_PICKER_PAGES = 100
 _DEFAULT_POLL_INTERVAL_S = 5
 _DEFAULT_TIMEOUT_S = 300
 
@@ -265,7 +267,7 @@ class GooglePhotosGateway(Gateway):
         """
         items: list[PickedMediaItem] = []
         page_token: str | None = None
-        while True:
+        for _ in range(_MAX_PICKER_PAGES):
             params: dict[str, Any] = {"sessionId": session_id, "pageSize": 100}
             if page_token:
                 params["pageToken"] = page_token
@@ -287,7 +289,8 @@ class GooglePhotosGateway(Gateway):
                 )
             page_token = body.get("nextPageToken")
             if not page_token:
-                break
+                return items
+        logger.warning("Google Photos picker listing stopped after %d pages; %d item(s) kept", _MAX_PICKER_PAGES, len(items))
         return items
 
     def download_media_item(self, base_url: str, *, original: bool = True) -> bytes:
@@ -303,13 +306,16 @@ class GooglePhotosGateway(Gateway):
             The file bytes.
 
         Raises:
-            GatewayRequestError: On a network error or non-2xx response.
+            GatewayRequestError: On a network error or non-2xx response, or a file larger than the site's upload limit (an original) or the proxied-media ceiling (a preview).
         """
+        from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+
         suffix = "=d" if original else f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}"
-        response = self._send(self.session.get, f"{base_url}{suffix}", what="download an item")
+        response = self._send(self.session.get, f"{base_url}{suffix}", what="download an item", stream=True)
         if not response.ok:
             raise GatewayRequestError(f"Downloading the Google Photos item failed (status {response.status_code}).")
-        return response.content
+        # An original is about to be stored, so the upload limit bounds it; a preview is only proxied to the browser.
+        return read_capped(response, max_bytes=max_upload_file_size_bytes() if original else MAX_PROXIED_MEDIA_BYTES, what="Google Photos item")
 
 
 def session_items_cache_key(session_id: str) -> str:

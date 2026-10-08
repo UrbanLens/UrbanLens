@@ -62,7 +62,7 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         if not matches:
             return None
         if len(matches) > 1:
-            logger.warning("Two Friendship rows join profiles %s and %s (%s, %s); using the older one", from_profile, to_profile, matches[0].pk, matches[1].pk)
+            logger.warning("Two Friendship rows join profiles %s and %s (%s, %s); using the older one", getattr(from_profile, "pk", from_profile), getattr(to_profile, "pk", to_profile), matches[0].pk, matches[1].pk)
         return matches[0]
 
     def is_friend(self) -> Self:

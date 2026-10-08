@@ -3,6 +3,7 @@ A ``Pin`` (and its community ``Wiki``) has always doubled as both *the parcel* a
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 from math import cos, radians
 from typing import TYPE_CHECKING
@@ -98,23 +99,50 @@ def is_site_scope(target: Pin | Wiki) -> bool:
 # Buildings known on the parcel
 
 
-def parcel_buildings(location: Location | None) -> list[dict] | None:
-    """Every building known on this location's parcel, from cache only.
+@dataclass(frozen=True, slots=True)
+class CachedBuildings:
+    """The building list cached for a location's parcel.
+
+    Attributes:
+        buildings: The building records; ``[]`` when the providers were asked and found none.
+        complete: False when a provider did not answer, so the list is a floor: a building it leaves out may stand
+            there, and one it holds may lack what the missing provider knew.
+    """
+
+    buildings: list[dict]
+    complete: bool
+
+
+def cached_parcel_buildings(location: Location | None) -> CachedBuildings | None:
+    """The building list cached for this location's parcel, and whether it is all of them.
     Never fetches - the cache is filled by ``ParcelBuildingsPanelSource`` (on demand, when a Private Pin page asks for its panel) and by that plugin's background enrichment source, so a page render only ever reads it.
 
     Args:
         location: The location whose parcel to look up; None is tolerated.
 
     Returns:
-        The building records, ``[]`` when the providers were asked and found none, or None when nothing has ever been cached for this location."""
-    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        The cached list, or None when nothing fresh is cached for this location."""
+    from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
 
     if location is None:
         return None
     cached = LocationCache.get_fresh(location, PARCEL_BUILDINGS_CACHE_SOURCE)
     if cached is None:
         return None
-    return list((cached.data or {}).get("buildings") or [])
+    data = cached.data or {}
+    return CachedBuildings(buildings=list(data.get("buildings") or []), complete=not data.get(UNANSWERED_SOURCES_KEY))
+
+
+def parcel_buildings(location: Location | None) -> list[dict] | None:
+    """Every building known on this location's parcel, from cache only (see :func:`cached_parcel_buildings`).
+
+    Args:
+        location: The location whose parcel to look up; None is tolerated.
+
+    Returns:
+        The building records, ``[]`` when the providers were asked and found none, or None when nothing has ever been cached for this location."""
+    cached = cached_parcel_buildings(location)
+    return None if cached is None else cached.buildings
 
 
 def site_buildings(location: Location) -> list[dict]:

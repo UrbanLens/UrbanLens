@@ -835,7 +835,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 page_url = str(entry.get("page_url") or "")
                 caption = str(entry.get("caption") or "")
             except (KeyError, TypeError, ValueError):
-                logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
+                logger.warning("media_send_to_wiki: malformed item entry: %s", sorted(entry) if isinstance(entry, dict) else type(entry).__name__)
                 errors.append("Could not save this photo.")
                 continue
             if shows_members_media(source):
@@ -1299,7 +1299,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_panel(request, pin, "loopnet")
         data = cached.data or {}
         if not panel.shows(pin, data):
-            logger.debug("loopnet_info: no listings found for pin %s (address=%r)", pin_slug, address)
+            logger.debug("loopnet_info: no listings found for pin %s", pin_slug)
             return HttpResponse(status=204)
 
         context = {

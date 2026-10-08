@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.core import counters
 from urbanlens.dashboard.services.core.counters import Outage
 from urbanlens.dashboard.services.core.request_body import MalformedBodyError, json_body, posted_json_object
 from urbanlens.dashboard.services.security.client_ip import client_ip
+from urbanlens.dashboard.services.security.redact import redact_text
 from urbanlens.dashboard.services.security.throttle import Rate
 
 if TYPE_CHECKING:
@@ -111,11 +112,24 @@ def _raw_lockout_key(identifier: str) -> str:
 
     Collapses every spelling the login form would accept for one account, so probing variants of an
     identifier that matches no account is rate-limited under one shared key rather than each variant
-    getting a fresh counter - it just isn't tied to a real account id.
+    getting a fresh counter - it just isn't tied to a real account id. Keyed by a keyed digest of the
+    identifier rather than the identifier itself: what a visitor types there is a username, an email
+    address, or now and then a password, and the key sits in the cache and in counter-outage logs.
     """
+    from django.utils.crypto import salted_hmac
+
     from urbanlens.dashboard.services.auth.identity import canonical_identifier
 
-    return f"raw:{canonical_identifier(identifier)}"
+    return f"raw:{salted_hmac('dashboard.account.login_lockout', canonical_identifier(identifier)).hexdigest()[:32]}"
+
+
+def _loggable_lockout_key(key: str) -> str:
+    """Return *key* with its identifier part redacted, for logging.
+
+    Only ``uid:<pk>`` keys name an account; a ``raw:`` key is a digest of what the visitor typed, logged as a token.
+    """
+    kind, _, value = key.partition(":")
+    return key if kind == "uid" else f"{kind}:{redact_text(value)}"
 
 
 def _lockout_key_for_identifier(identifier: str) -> str:
@@ -161,7 +175,7 @@ def _record_failed_attempt(key: str) -> int:
     if attempts >= max_attempts:
         _set_lockout(_lockout_key(key), lockout_seconds)
         counters.clear(attempts_key)
-        logger.warning("Login locked out for key %r after %d failed attempts", key, attempts)
+        logger.warning("Login locked out for key %r after %d failed attempts", _loggable_lockout_key(key), attempts)
 
     return attempts
 

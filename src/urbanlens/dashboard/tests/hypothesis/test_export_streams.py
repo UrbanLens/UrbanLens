@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 import tempfile
@@ -94,3 +95,15 @@ class ExportReadsInChunksTests(TestCase):
 
         self.assertEqual(lines[0], "Title,Note,URL,Tags,Comment")
         self.assertEqual(len(lines), 6)
+
+    def test_takeout_csv_neutralises_spreadsheet_formulas_in_user_text(self) -> None:
+        # update() skips Pin.save(), which already strips a leading "=" from a typed name; imports and wiki names do not.
+        Pin.objects.filter(pk=self.pins[0].pk).update(name='=HYPERLINK("http://evil")', description="+1+1")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export._export_pins_google_takeout(self.profile, temp_dir)
+            with open(os.path.join(temp_dir, "google_takeout", "pins.csv"), encoding="utf-8", newline="") as fh:
+                rows = list(csv.reader(fh))
+
+        by_title = {row[0]: row for row in rows[1:]}
+        self.assertIn('\'=HYPERLINK("http://evil")', by_title)
+        self.assertEqual(by_title['\'=HYPERLINK("http://evil")'][1], "'+1+1")

@@ -92,7 +92,7 @@ class Command(BaseCommand):
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.trips.model import TripComment
         from urbanlens.dashboard.services.media.held_upload import reencode_shown
-        from urbanlens.dashboard.services.media.storage import get_downscale_policy
+        from urbanlens.dashboard.services.media.storage import get_downscale_policy, max_upload_file_size_bytes
         from urbanlens.dashboard.services.media.stored_field import Reencoded, clear_stored_field, reencode_stored_field
         from urbanlens.dashboard.services.profile.avatar import GENERATED_AVATAR_PATTERN
 
@@ -119,7 +119,7 @@ class Command(BaseCommand):
 
                 def rewrite_comment(model=model, comment=comment, name=name, convert_webp=convert_webp) -> bool:
                     rows = model.objects.all()
-                    outcome = reencode_stored_field(rows, comment.pk, "image", name, max_dimension=None, convert_webp=convert_webp, only_if={"pending_scan": False})
+                    outcome = reencode_stored_field(rows, comment.pk, "image", name, max_dimension=None, convert_webp=convert_webp, max_bytes=max_upload_file_size_bytes(), only_if={"pending_scan": False})
                     if outcome is Reencoded.UNDECODABLE:
                         # Already seen by others, so the comment keeps its text and loses only the image.
                         return clear_stored_field(rows, comment.pk, "image", name)

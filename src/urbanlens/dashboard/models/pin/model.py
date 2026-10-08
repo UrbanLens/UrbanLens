@@ -235,9 +235,10 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
         inferred_source_share_id: int | None
         cover_photo_id: int | None
         wiki_id: int | None
-        # Transient bookkeeping shared by the pre/post-save child-boundary hooks.
+        # Transient bookkeeping shared by the pre/post-save child-boundary and calendar hooks.
         child_boundary_previous_parent_id: int | None
         child_boundary_position_changed: bool
+        previous_location_id: int | None
 
     objects = PinManager()
 
@@ -293,7 +294,7 @@ class Pin(HeldUploadModel, abstract.PublicDashboardModel, abstract.SecurityModel
             try:
                 PinAlias.objects.resolve_or_create(self, new_name)
             except DatabaseError:
-                logger.debug("Could not ensure alias for pin %s name %r", self.pk, self.name, exc_info=True)
+                logger.debug("Could not ensure alias for pin %s", self.pk, exc_info=True)
         self._loaded_name = self.name
 
     def coerce_colors(self) -> None:

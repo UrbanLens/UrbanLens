@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import quote
 
-from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
+from urbanlens.dashboard.services.apis.locations.base import SlideSignal, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import MAX_NEAR_POINT_LIMIT, REASON_ALL_PROVIDERS_UNAVAILABLE, LocationContextUnavailableError, RedataLocationContextGateway, redata_configured
 
 if TYPE_CHECKING:
@@ -171,7 +171,7 @@ class _RedataStreetViewProvider(StreetViewProvider):
         """Only through REData."""
         return redata_configured()
 
-    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
+    def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide | SlideSignal]:
         """Yield one dated slide per capture *date* from this provider, newest first.
 
         The three networks share one REData answer for the point (``services.locations.redata_point_data``) rather
@@ -185,11 +185,15 @@ class _RedataStreetViewProvider(StreetViewProvider):
             limit: Maximum number of dated slides to yield.
 
         Yields:
-            ``StreetViewSlide`` entries, newest capture date first.
+            ``StreetViewSlide`` entries, newest capture date first, after :attr:`SlideSignal.PARTIAL` when a network
+            did not answer, so they are shown but not cached.
         """
         from urbanlens.dashboard.services.locations.redata_point_data import street_view_dates
 
-        dates = [entry for entry in street_view_dates(latitude, longitude).dates if entry.get("provider") == self._redata_provider]
+        found = street_view_dates(latitude, longitude)
+        if not found.complete:
+            yield SlideSignal.PARTIAL
+        dates = [entry for entry in found.dates if entry.get("provider") == self._redata_provider]
         for entry in dates:
             representative = entry.get("representative") or {}
             # download_url (REData's archived copy) needs API auth, so the

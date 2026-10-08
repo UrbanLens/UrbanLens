@@ -150,7 +150,9 @@ class ExtractedFileScanningTests(SimpleTestCase):
         entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"%PDF-1.4\n" + b"\x00" * 32
         with self.assertRaises(_ImportValidationError) as ctx:
             self._run(entries)
-        self.assertIn("cover.jpg", str(ctx.exception))
+        # Logged, never shown, so the member's name is redacted to its extension.
+        self.assertIn("ext=.jpg", str(ctx.exception))
+        self.assertNotIn("cover", str(ctx.exception))
         self.assertIn("doesn't match its file type", str(ctx.exception))
 
     def test_json_files_are_never_scanned_or_sniffed(self) -> None:
@@ -173,7 +175,8 @@ class ExtractedFileScanningTests(SimpleTestCase):
             self.assertRaises(_ImportValidationError) as ctx,
         ):
             self._run(entries)
-        self.assertIn("cover.jpg", str(ctx.exception))
+        self.assertIn("ext=.jpg", str(ctx.exception))
+        self.assertNotIn("cover", str(ctx.exception))
         self.assertIn("malicious", str(ctx.exception))
 
     def test_scanner_unavailable_is_a_retryable_error_not_a_permanent_rejection(self) -> None:

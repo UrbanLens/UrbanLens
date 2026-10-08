@@ -28,6 +28,8 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
 from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.map.tile_cache_keys import basemap_tile_cache_key
+from urbanlens.UrbanLens.environments.meta import EnvironmentTypes
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 COMPOSE = REPO_ROOT / "docker-compose.yml"
@@ -159,6 +161,11 @@ class WhatSeedsATileWritesWhereTheProxyReadsTests(TestCase):
     measured the fetch path it exists to avoid. The pre-flight check in `tests/perf/k6` caught it;
     these make it a test failure instead.
     """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # The seeder refuses production. Pinned so the runner's UL_ENVIRONMENT cannot decide whether it runs.
+        self.enterContext(mock.patch.object(app_settings, "environment_name", EnvironmentTypes.TESTING))
 
     def _seed(self, size: int = 1) -> None:
         call_command(

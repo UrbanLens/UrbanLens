@@ -246,8 +246,9 @@ def detect_coordinate_mentions(message: DirectMessage) -> list[DirectMessageLoca
     for match in parse_coordinates(message.body):
         try:
             location, _created = Location.objects.get_nearby_or_create(match.latitude, match.longitude)
-        except DatabaseError:
-            logger.exception("Could not resolve Location for DM coordinates %s", match.matched_text)
+        except DatabaseError as exc:
+            # Not the matched text, nor a traceback that could quote it: it is a place someone named in private.
+            logger.error("Could not resolve a Location for coordinates in DM %s: %s", message.pk, type(exc).__name__)  # noqa: TRY400
             continue
         mention = _record_mention(message, location, LocationMentionKind.COORDINATES, match.matched_text)
         if mention is not None:
@@ -263,16 +264,21 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
         address: The candidate address text.
 
     Returns:
-        ``(latitude, longitude)``, or None when unconfigured/no match."""
-    try:
-        from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
+        ``(latitude, longitude)``, or None when unconfigured/no match.
 
+    Raises:
+        OSError: The geocoder could not be reached or answered with an error status (``requests.RequestException`` is one), so ``tasks.detect_dm_address_mentions`` retries rather than recording "no match"."""
+    from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    try:
         if not app_settings.google_unrestricted_api_key:
             return None
         data = GoogleGeocodingGateway().geocode_place_name(address)
-    except Exception:
-        logger.warning("Geocoding failed for DM address candidate %r", address, exc_info=True)
+    except (GatewayRequestError, DatabaseError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        # A refusal, throttle or unreadable answer will not be different next time, and a failed cache read is not worth losing the message's other candidates over. Only the class is logged: the candidate is the user's DM text.
+        logger.warning("Geocoding a DM address candidate failed: %s", type(exc).__name__)
         return None
     results = (data or {}).get("results") or []
     if not results:
@@ -308,8 +314,8 @@ def detect_address_mentions(message: DirectMessage) -> list[DirectMessageLocatio
             continue
         try:
             location, _created = Location.objects.get_nearby_or_create(coordinates[0], coordinates[1])
-        except DatabaseError:
-            logger.exception("Could not resolve Location for DM address %r", candidate)
+        except DatabaseError as exc:
+            logger.error("Could not resolve a Location for an address in DM %s: %s", message.pk, type(exc).__name__)  # noqa: TRY400
             continue
         mention = _record_mention(message, location, LocationMentionKind.ADDRESS, candidate)
         if mention is not None:

@@ -1,6 +1,6 @@
 # Two REData production failures UrbanLens hit on 2026-10-01: some CRIS attachment downloads 500, and nearby Places answers 503
 
-- **Status: ANSWERED by REData T10 and deployed in its production 5aabe887 (production has run v0.3.4, which contains it, since 2026-10-06 15:21Z). The Places budget is Jess's call (REData P70). On `release/v_0_9_0` only, so shipping with 0.9.0, this repo keeps REData Places to 40 calls a day (`5e5363aca`, `rate_limiter.py:146`, the figure REData asked for in its `infrastructure-2026-10-02-replies.md` item 3) and waits out the `Retry-After` REData names on a 503 (P315, which is that wait, not the cap). Raised 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
+- **Status: ANSWERED by REData T10 and deployed in its production 5aabe887 (production has run v0.3.4, which contains it, since 2026-10-06 15:21Z). The Places budget is Jess's call (REData P70). On `release/v_0_9_0` only, so shipping with 0.9.0, this repo keeps REData Places to 40 calls a day (`5e5363aca`, `rate_limiter.py:153`, the figure REData asked for in its `infrastructure-2026-10-02-replies.md` item 3) and waits out the `Retry-After` REData names on a 503 (P315, which is that wait, not the cap). Raised 2026-10-01.** Found by UrbanLens's location integration suite on a v0.8.0 dev environment
   (`v080e2e`); reproduced directly against `https://redata.urbanlens.org` with UrbanLens's API key, no UrbanLens
   code in the path.
 - **Direction: outbound**, from `UrbanLens/UrbanLens` to `../REData`.
@@ -43,6 +43,10 @@ tell "not available" from "try later".
 Earlier the same day it answered `503 {"error":"rate_limited","message":"Places API (New) request budget is
 exhausted ..."}`. UrbanLens opens its breaker for 60 s on either (on `places_api_unavailable` only since 2026-10-05,
 P302). Every new pin's naming and wiki enrichment asks this endpoint first, so while it holds, pins get worse names.
+On `release/v_0_9_0`, since 2026-10-07, `RedataPlacesGateway` also raises `PlacesRateLimitedError` for it (Google's 429
+relayed, REData's own 429, or any 503 naming a wait), so the hourly enrichment cycle's place-photo backfill stops at
+the first one instead of going on to its next location. 0.8.0 stopped only at `rate_limited`; production logged 31 of
+these 503s in 13 h on 2026-10-07, in a burst at :12-:14 past each hour (the cycle runs at :12).
 
 **Still failing 2026-10-05**, with the same body. Dev's `ApiCallLog` shows nearby search has barely worked for a month:
 of the calls that reached REData, 2 answered on 10-04, 0 on 10-03, and 10 of 1,933 since 09-23. News search fails the

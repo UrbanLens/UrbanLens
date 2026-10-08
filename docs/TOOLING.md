@@ -49,6 +49,15 @@ default because it multiplies concurrent load on Postgres, which is what has
 been observed to take the local instance down — the symptom is mass "ERROR at
 setup" across files that have nothing to do with each other.
 
+CI runs the suite this way (`.github/workflows/ci.yml`), in two passes: every
+test not marked `serial` across xdist workers, then the `serial` ones alone.
+`serial` is for a test that asserts on wall-clock time, which a neighbouring
+worker's load can fail; mark a new one with `pytestmark = pytest.mark.serial`.
+A test that fails only under xdist is otherwise an isolation bug - it leans on
+something an earlier test in the same process left behind - so fix the test
+rather than marking it. `--parallel` here does not split the passes, so a
+`serial` test can fail under it on a busy machine.
+
 `--shuffle` enables pytest-randomly, which is installed but switched off in
 `addopts`. Shuffling found no order dependence when probed across three seeds,
 but only over a subset, so it stays opt-in until a full shuffled run has been

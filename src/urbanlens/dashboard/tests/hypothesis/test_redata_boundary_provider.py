@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from unittest import mock
 
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
@@ -15,6 +17,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider, suggested_boundary
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_ERROR,
+    ParcelBoundaries,
     ParcelBuildings,
     PropertyRecordsUnavailableError,
 )
@@ -133,6 +136,14 @@ class GeojsonPolygonToGeosTests(SimpleTestCase):
         assert isinstance(result, Polygon)
 
 
+@contextmanager
+def _gateway_patch(target: str) -> Iterator[mock.MagicMock]:
+    """Patch the boundary provider's gateway, its boundaries answer complete and empty unless a test says otherwise."""
+    with mock.patch(target) as gateway_cls:
+        gateway_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
+        yield gateway_cls
+
+
 class RedataBoundaryProviderNotConfiguredTests(SimpleTestCase):
     def test_missing_url_and_key_returns_empty_dict(self) -> None:
         with mock.patch.object(settings, "redata_api_url", None), mock.patch.object(settings, "redata_api_key", None):
@@ -163,7 +174,7 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
         self.addCleanup(patcher_key.stop)
 
     def test_unavailable_record_returns_none_for_both_kinds(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
             result = RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         self.assertEqual(result, {"property": None, "building": None})
@@ -172,13 +183,13 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
         """An outage is not an answer; test_boundary_deferral covers what the chain does with it."""
         from urbanlens.dashboard.services.apis.locations.base import BoundaryProviderDeferredError
 
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
             with self.assertRaises(BoundaryProviderDeferredError):
                 RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
 
     def test_parcel_geometry_only_fills_the_property_slot(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {
                 "parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}
             }
@@ -188,7 +199,7 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
     def test_both_geometries_fill_both_slots(self) -> None:
         building_ring = [[4.0, 4.0], [6.0, 4.0], [6.0, 6.0], [4.0, 6.0], [4.0, 4.0]]
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {
                 "parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]},
                 "building_geometry": {"type": "Polygon", "coordinates": [building_ring]},
@@ -198,13 +209,13 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
         self.assertIsInstance(result["building"], Polygon)
 
     def test_lookup_is_called_with_the_given_coordinates(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {}
             RedataBoundaryProvider().get_typed_boundaries(42.65, -73.75)
         gw_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75)
 
     def test_get_boundary_reduces_a_multipolygon_to_its_largest_shell(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {
                 "parcel_geometry": {"type": "MultiPolygon", "coordinates": [[_GEOJSON_SQUARE], [_GEOJSON_SQUARE_2]]}
             }
@@ -212,7 +223,7 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
         self.assertIsInstance(result, Polygon)
 
     def test_get_boundary_returns_none_when_nothing_found(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {}
             result = RedataBoundaryProvider().get_boundary(42.65, -73.75)
         self.assertIsNone(result)
@@ -239,14 +250,14 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         return {"latitude": lat, "longitude": lng, "source": "cris"}
 
     def test_no_uuid_skips_the_buildings_lookup_entirely(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {}
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
         self.assertIsNone(result["property"])
         gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_three_or_more_buildings_produce_a_convex_hull_polygon(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
@@ -260,7 +271,7 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         gw_cls.return_value.lookup_parcel_buildings.assert_called_once_with("parcel-uuid")
 
     def test_parcel_geometry_present_never_triggers_the_buildings_lookup(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {
                 "uuid": "parcel-uuid",
                 "parcel_geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]},
@@ -270,7 +281,7 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_fewer_than_three_buildings_leaves_property_none(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
@@ -283,7 +294,7 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
 
     def test_collinear_buildings_leave_property_none(self) -> None:
         """A degenerate hull (all points on one line) is a LineString, not usable as a boundary."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
@@ -296,7 +307,7 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         self.assertIsNone(result["property"])
 
     def test_buildings_missing_coordinates_are_skipped(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
@@ -310,7 +321,7 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         self.assertIsInstance(result["property"], Polygon)
 
     def test_a_settled_buildings_failure_leaves_property_none(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_parcel_buildings.side_effect = PropertyRecordsUnavailableError(
                 "no_data_found", "none"
@@ -319,7 +330,7 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
         self.assertIsNone(result["property"])
 
     def test_a_buildings_outage_defers(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_parcel_buildings.side_effect = PropertyRecordsUnavailableError(
                 REASON_SOURCE_ERROR, "down"
@@ -409,11 +420,11 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
 
     def test_a_scored_boundary_is_preferred_over_the_hull(self) -> None:
         """parcel_geometry is null for every NY parcel, so this is the live path."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = [
-                {"geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}, "is_suggested": True},
-            ]
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries(
+                [{"geometry": {"type": "Polygon", "coordinates": [_GEOJSON_SQUARE]}, "is_suggested": True}]
+            )
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
 
@@ -422,9 +433,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
 
     def test_the_ranking_is_requested_unfiltered(self) -> None:
         """Any ?source= makes REData skip scoring, leaving is_suggested false everywhere."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings([])
 
             RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
@@ -432,9 +443,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         gw_cls.return_value.lookup_boundaries.assert_called_once_with("parcel-uuid")
 
     def test_no_candidates_still_falls_back_to_the_hull(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
                     {"latitude": 42.0, "longitude": -73.0},
@@ -448,7 +459,7 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         self.assertIsInstance(result["property"], Polygon)
 
     def test_a_settled_ranking_failure_is_not_fatal(self) -> None:
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError("no_data_found", "none")
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings([])
@@ -459,7 +470,7 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
 
     def test_a_ranking_outage_defers_instead_of_falling_back_to_the_hull(self) -> None:
         """P148: the ranking call for parcel 781dd879 timed out and the hull became a 1,322 km² parcel."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
             gw_cls.return_value.lookup_boundaries.side_effect = PropertyRecordsUnavailableError(
                 REASON_SOURCE_ERROR, "Could not reach REData: Read timed out."
@@ -493,9 +504,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
             {"latitude": 41.8, "longitude": -72.7, "match_scope": "survey_roster", "is_on_property": True},
             {"latitude": 42.25, "longitude": -72.8, "match_scope": "project", "is_on_property": True},
         ]
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(near + far)
 
             result = RedataBoundaryProvider().get_typed_boundaries(_NEAR_LAT, _NEAR_LON)
@@ -506,9 +517,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
 
     def test_a_consultation_project_match_never_reaches_the_hull(self) -> None:
         """A project's Area of Potential Effect is a review boundary, however close the building is."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
                     {"latitude": 42.0, "longitude": -73.0, "match_scope": "project", "is_on_property": True},
@@ -523,9 +534,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
 
     def test_a_building_redata_places_off_the_parcel_never_reaches_the_hull(self) -> None:
         """``on_parcel: false`` is REData's own point-in-polygon test failing."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
                     {"latitude": 42.0, "longitude": -73.0},
@@ -540,9 +551,9 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
 
     def test_off_property_buildings_never_reach_the_hull(self) -> None:
         """The one-line change that alone would have prevented the reported boundary."""
-        with mock.patch(self._GATEWAY_CLASS_PATH) as gw_cls:
+        with _gateway_patch(self._GATEWAY_CLASS_PATH) as gw_cls:
             gw_cls.return_value.lookup_parcel.return_value = {"uuid": "parcel-uuid"}
-            gw_cls.return_value.lookup_boundaries.return_value = []
+            gw_cls.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             gw_cls.return_value.lookup_parcel_buildings.return_value = ParcelBuildings(
                 [
                     {"latitude": 42.0, "longitude": -73.0, "is_on_property": True},

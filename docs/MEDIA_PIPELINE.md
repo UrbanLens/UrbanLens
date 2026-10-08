@@ -295,8 +295,14 @@ server's encoder wrote, not bytes the uploader sent. A disguised non-image
 fails to decode; data appended after the end-of-image marker does not survive
 re-encoding; polyglot tricks stop working because the container is rebuilt.
 
-Video goes through ffmpeg for the same reason, and always has its container
-location tags stripped.
+Video goes through ffmpeg for the same reason, and has its location stripped:
+the container's location tags, and every stream but the first picture
+and the first sound (`videos._is_location_track`). A drone captions each frame
+with its position in a subtitle track (DJI's SRT), an action camera records GPS
+telemetry in a data track (GoPro's GPMF), and phones write timed-metadata
+tracks; none of them is read, so a file carrying any such stream is rewritten
+without it. A timecode track (`tmcd`) alone does not count. A file ffmpeg
+cannot rewrite is kept as uploaded, and the failure is logged.
 
 The rewrite lands under a *new* name whenever the extension changes, and the
 superseded file is **not** deleted by the function that replaced it. It returns
@@ -531,6 +537,16 @@ and documents; the data-file import form and the export-archive import view
 each cap at 500 MB. `UL_MAX_REQUEST_BODY_MB` states what the proxy in front of
 the deployment will actually pass, and
 `services/media/storage.cap_to_ingress` lowers each of the three to it.
+
+Icons and avatars have tighter ceilings of their own, checked from the declared
+size before the gauntlet's antivirus scan reads the file:
+`AVATAR_MAX_UPLOAD_BYTES` and `ICON_MAX_UPLOAD_BYTES` (5 MB each; an icon goes
+through `held_upload.icon_upload_error`). The sandbox worker reads a held icon
+or avatar, and a comment image it scans and re-encodes, no further than the
+ceiling its door applied (`stored_field.read_at_most`): an upload over it is
+dropped, and a comment image over the site cap is rejected. Inside an export
+archive, no JSON file may hold more than 256 MB, since the importer parses each
+one whole.
 
 That exists so the *user* finds out. A body the proxy rejects is answered by
 the proxy: no view runs, nothing is logged here, and the uploader watches an

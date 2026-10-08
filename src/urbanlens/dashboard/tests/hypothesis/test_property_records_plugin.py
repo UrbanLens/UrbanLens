@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -15,6 +17,8 @@ from urbanlens.dashboard.plugins.builtin.property_records import (
     _render_available,
     _write_official_owners_and_sales,
 )
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import REDATA_TEST_KEY, REDATA_TEST_URL, RedataConfiguredMixin
 
 
 class PanelRenderContextTests(SimpleTestCase):
@@ -474,8 +478,8 @@ class FetchPayloadSupplementaryCallsTests(TestCase):
         gateway = mock_gateway_cls.return_value
         gateway.lookup_parcel.return_value = {"uuid": "parcel-1"}
         gateway.lookup_coverage.return_value = overrides.get("coverage", {})
-        gateway.lookup_assessments.return_value = overrides.get("assessments", [])
-        gateway.lookup_sale_records.return_value = overrides.get("sale_records", [])
+        gateway.lookup_assessments.return_value = LocationContextEnvelope(count=0, complete=True)
+        gateway.lookup_sale_records.return_value = LocationContextEnvelope(count=0, complete=True)
         gateway.lookup_liens.return_value = overrides.get("liens", [])
         gateway.lookup_tax_payments.return_value = overrides.get("tax_payments", [])
         gateway.lookup_demographics.return_value = overrides.get("demographics")
@@ -737,3 +741,100 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
         _write_official_owners_and_sales(self.location, {})
         self.assertEqual(WikiOwner.objects.for_location(self.location).count(), 0)
         self.assertEqual(WikiPropertySale.objects.for_location(self.location).count(), 0)
+
+
+class DemographicsAskedOncePerParcelTests(RedataConfiguredMixin, TestCase):
+    """Background enrichment of every location on one parcel, against a stubbed REData.
+
+    Production (0.8.0) asked REData for one parcel's demographics 24 times: once for each location on it, because the
+    answer was neither shared nor remembered per parcel.
+    """
+
+    _PARCEL = "ac17ced7-0000-4000-8000-000000000001"
+
+    def setUp(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
+
+        super().setUp()
+        # A campus: every building's pin stands on the one parcel.
+        self.locations = [
+            baker.make(Location, latitude=f"42.65{index:04d}", longitude="-73.750000", google_place=None)
+            for index in range(4)
+        ]
+        self.demographics_answer = self._answer(
+            200, {"demographics": {"uuid": "d1", "population": 4210, "geography_level": "census_tract"}}
+        )
+        self.session = mock.MagicMock()
+        self.session.get.side_effect = self._redata
+        real = RedataGateway
+        patcher = mock.patch(
+            "urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway",
+            side_effect=lambda: real(base_url=REDATA_TEST_URL, api_key=REDATA_TEST_KEY, session=self.session),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def _answer(status: int, body: object, headers: dict[str, str] | None = None) -> mock.MagicMock:
+        response = mock.MagicMock(status_code=status, headers=headers or {}, text="")
+        response.json.return_value = body
+        return response
+
+    def _redata(self, url: str, **_kwargs: object) -> mock.MagicMock:
+        if url.endswith("/parcels/lookup/"):
+            return self._answer(200, {"uuid": self._PARCEL, "record_payload": {"apn": "12.-1-3"}})
+        if url.endswith("/demographics/"):
+            return self.demographics_answer
+        return self._answer(200, {"count": 0, "results": [], "next": None})
+
+    def _demographics_calls(self) -> int:
+        return sum(1 for call in self.session.get.call_args_list if call.args[0].endswith("/demographics/"))
+
+    def _enrich_all(self) -> list[dict]:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.property_records import PropertyRecordsEnrichmentSource
+
+        source = PropertyRecordsEnrichmentSource()
+        for location in self.locations:
+            source.enrich(location)
+        return [
+            LocationCache.objects.get(location=location, source="property_records").data for location in self.locations
+        ]
+
+    def test_every_location_on_the_parcel_shares_one_answer(self) -> None:
+        records = self._enrich_all()
+
+        self.assertEqual(self._demographics_calls(), 1)
+        self.assertEqual([record["demographics"]["population"] for record in records], [4210] * len(self.locations))
+
+    def test_an_answer_redata_could_not_give_is_asked_for_once_and_named_on_every_record(self) -> None:
+        """#352's rule still holds for every location: the record is kept only briefly, so demographics are asked for again."""
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
+        self.demographics_answer = self._answer(
+            503, {"error": "census_data_api_unavailable", "message": "Census is down."}
+        )
+
+        records = self._enrich_all()
+
+        self.assertEqual(self._demographics_calls(), 1)
+        for record in records:
+            self.assertTrue(record["available"])
+            self.assertNotIn("demographics", record)
+            self.assertIn("demographics", record[UNANSWERED_SOURCES_KEY])
+
+    def test_a_redata_without_the_endpoint_is_asked_once_and_settles(self) -> None:
+        """An older REData answers its router's 404: no demographics, and the record keeps the whole window."""
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
+
+        self.demographics_answer = self._answer(404, None)
+        self.demographics_answer.json.side_effect = ValueError("not json")
+
+        records = self._enrich_all()
+
+        self.assertEqual(self._demographics_calls(), 1)
+        for record in records:
+            self.assertTrue(record["available"])
+            self.assertNotIn("demographics", record)
+            self.assertNotIn("demographics", record.get(UNANSWERED_SOURCES_KEY) or [])

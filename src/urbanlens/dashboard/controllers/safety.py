@@ -606,7 +606,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         try:
             lat, lng = _parse_destination(request.POST)
         except InvalidDestinationError as exc:
-            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, exc)
+            logger.info("Safety check-in create rejected for profile %s: %s", profile.pk, type(exc).__name__)
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Invalid destination."}, status=400)
 
         allowed_contacts, rejected_contacts = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile))
@@ -757,9 +757,10 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
         - Anyone, once the check-in has posted to a community wiki (``wiki_notified_at`` set) - linked from
           that wiki comment.
-        - A logged-in profile who is a registered emergency contact
-          (``SafetyCheckinContact.contact_profile``) on the check-in, at any point in its lifecycle -
-          surface...
+        - A logged-in profile an emergency contact on the check-in stands for (``SafetyCheckinContact.objects.reaching``),
+          once escalation has alerted that contact. Before then a contact sees nothing of the check-in: GOALS.md
+          ("Safety check-ins") gives contacts the plan only once the owner misses the check-in, and earlier access to
+          an accepted partner the owner chose.
 
         Args:
             request: Incoming HTTP request.
@@ -770,14 +771,14 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
         Raises:
             Http404: If the identifier isn't a UUID, or the requester is neither a wiki visitor of an
-            escalated check-in nor a registered contact.
+            escalated check-in nor an alerted contact.
         """
         try:
             checkin = get_object_or_404(SafetyCheckin.objects.select_related("profile"), uuid=checkin_slug)
         except ValidationError as exc:
             raise Http404 from exc
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        is_contact = checkin.contacts.reaching(profile).exists()
+        is_contact = checkin.contacts.reaching(profile).alerted().exists()
         if checkin.wiki_notified_at is None and not is_contact:
             raise Http404
         is_archived = hasattr(checkin, "archive")
@@ -826,7 +827,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         try:
             destination = _parse_destination(request.POST)
         except InvalidDestinationError as exc:
-            logger.info("Safety check-in edit rejected on checkin %s: %s", checkin.pk, exc)
+            logger.info("Safety check-in edit rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
             if is_xhr:
                 return JsonResponse({"ok": False, "error": "Invalid destination."}, status=400)
             messages.error(request, "Invalid destination.")
@@ -908,9 +909,9 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
     POST /safety/<slug:checkin_slug>/delete/
 
     If the check-in hasn't been resolved yet, it's routed through the normal self-check-in flow first
-    (``services.visits.safety.check_in``) so any side effects that flow carries - today, resolving the
-    check-in and raising a visit suggestion; it does not itself email already-notified contacts - happen
-    before the row disappears, rather than silently vanishing out from under an in-progress escalation.
+    (``services.visits.safety.check_in``) so any side effects that flow carries - resolving the check-in,
+    raising a visit suggestion, and telling already-alerted contacts it has ended - happen before the row
+    disappears, rather than silently vanishing out from under an in-progress escalation.
     """
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
@@ -1034,7 +1035,7 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
                 logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
                 error = "This check-in already has as many partners as it can hold."
             except PartnerNotFoundError as exc:
-                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+                logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
                 error = f'No user found with username "{username}".'
             except CannotInviteSelfError as exc:
                 logger.info("Safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
@@ -1697,8 +1698,13 @@ class SafetyContactOptOutView(View):
         if SafetyContactOptOutScope.invalid(scope):
             raise Http404
         contact = get_object_or_404(SafetyCheckinContact.objects.by_token(token))
-        record_contact_opt_out(contact, SafetyContactOptOutScope(scope))
-        messages.success(request, "You won't receive further notifications about this trip.")
+        if record_contact_opt_out(contact, SafetyContactOptOutScope(scope)):
+            messages.success(request, "You won't receive further notifications about this trip.")
+        else:
+            messages.error(
+                request,
+                "This check-in was archived and your address deleted with it, so this link couldn't record an opt-out. The link in any future alert you receive will work.",
+            )
         return redirect("safety.contact.portal", token=token)
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from functools import lru_cache
 import hashlib
+import hmac
 import json
 import logging
 from typing import TYPE_CHECKING, Any, Self
@@ -68,6 +69,41 @@ def _fernet() -> MultiFernet:
         A ``MultiFernet`` over :func:`encryption_keys`.
     """
     return MultiFernet([_derive_fernet(key) for key in encryption_keys()])
+
+
+def keyed_digest(purpose: str, value: str, *, key: str | None = None) -> str:
+    """HMAC-SHA256 of ``value``, for matching a value later without keeping it.
+
+    Keyed rather than a bare hash: without the key, a copy of the database cannot test a guessed value against it, and
+    with it a guess can be confirmed but the value still never read back. ``purpose`` separates digests made for
+    different features, so one can never be compared with another.
+
+    Args:
+        purpose: A fixed label for what the digest is for.
+        value: The value to digest, already in the form it will be compared in.
+        key: The secret to key it with; the active field-encryption key when omitted.
+
+    Returns:
+        The hex digest.
+    """
+    secret = key if key is not None else encryption_keys()[0]
+    return hmac.new(secret.encode(), f"{purpose}:{value}".encode(), hashlib.sha256).hexdigest()
+
+
+def keyed_digests(purpose: str, value: str) -> set[str]:
+    """Every digest :func:`keyed_digest` could have stored for ``value``, one per key still configured.
+
+    A digest cannot be re-keyed the way ``rotate_field_encryption`` re-encrypts a column, because the value is gone,
+    so one written before a rotation matches only while its key stays in ``UL_FIELD_ENCRYPTION_KEY_FALLBACKS``.
+
+    Args:
+        purpose: The label the digest was made with.
+        value: The value to digest.
+
+    Returns:
+        The hex digests under the active key and every fallback.
+    """
+    return {keyed_digest(purpose, value, key=key) for key in encryption_keys()}
 
 
 def reset_encryption_keys() -> None:

@@ -16,12 +16,16 @@ import zipfile
 
 from django.core.cache import cache
 
+from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.core.capacity import CUSTOM_FIELDS, PIN_LISTS, SAVED_FILTERS, CapacityExceededError, reserve
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, coordinate_or_none, degrees_or_none
 from urbanlens.dashboard.services.import_export.archive_extractor import ZipDirectoryTooLargeError, open_zip
 from urbanlens.dashboard.services.media.storage_errors import IMPORT_STORAGE_WAITS, OBJECT_STORE_ERRORS, STORAGE_ERRORS, storage_retry_countdown
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
+    from decimal import Decimal
+
     from django.contrib.gis.geos import LineString
 
 logger = logging.getLogger(__name__)
@@ -37,6 +41,56 @@ def import_dir(job_id: str) -> str:
     from django.conf import settings as django_settings
 
     return os.path.join(django_settings.MEDIA_ROOT, "imports", job_id)
+
+
+def import_guard_key(user_id: int | None) -> str:
+    """One in-flight import per account.
+
+    Args:
+        user_id: The importing account.
+
+    Returns:
+        The cache key holding that account's in-flight import.
+
+    Raises:
+        ValueError: There is no authenticated user.
+    """
+    if user_id is None:
+        raise ValueError("an import guard needs an authenticated user")
+    return f"ul:single-flight:import:{user_id}"
+
+
+def import_guard_ttl() -> int:
+    """How long an import's claim survives unrefreshed.
+
+    Each run of the import task refreshes it, and a run may last up to the task's hard limit and then wait out the
+    longest storage wait before the next, so it outlives both. A run killed at its hard limit gives it up on expiry.
+
+    Returns:
+        Seconds.
+    """
+    from django.conf import settings as django_settings
+
+    return int(django_settings.CELERY_TASK_TIME_LIMIT) + 2 * storage_retry_countdown(IMPORT_STORAGE_WAITS)
+
+
+def _hold_import_guard(user_id: int, job_id: str) -> None:
+    """Refresh *job_id*'s claim at the start of a run, unless a newer import took the expired claim meanwhile."""
+    guard = import_guard_key(user_id)
+    if single_flight.holder(guard) in {None, job_id}:
+        single_flight.adopt(guard, job_id, import_guard_ttl())
+
+
+def release_import_guard(user_id: int | None, job_id: str) -> None:
+    """Give up *user_id*'s import claim, if *job_id* is what holds it.
+
+    Args:
+        user_id: The importing account.
+        job_id: The import that ended.
+    """
+    guard = import_guard_key(user_id)
+    if single_flight.holder(guard) == job_id:
+        single_flight.release(guard)
 
 
 #: Deferred-row keys, and what to call their files in a message.
@@ -308,6 +362,7 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
 
     User = get_user_model()
     job_status = ImportJobStatus(job_id)
+    _hold_import_guard(user_id, job_id)
 
     try:
         user = User.objects.select_related("profile").get(pk=user_id)
@@ -316,6 +371,7 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
         logger.exception("Import: could not load user %s", user_id)
         job_status.write("error", 0, "Failed to load user data.")
         schedule_import_cleanup(os.path.dirname(zip_path), job_status)
+        release_import_guard(user_id, job_id)
         return False
 
     extract_dir = os.path.join(os.path.dirname(zip_path), "extracted")
@@ -342,6 +398,10 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
         logger.exception("Import stopped by a storage failure for user %s", user_id)
         job_status.write("error", 0, "Storage was unavailable, so the import stopped. Try again in a few minutes.")
         return False
+    except _ImportMemberTooLargeError as exc:
+        logger.warning("Import refused for user %s: %s", user_id, exc)
+        job_status.write("error", 0, _MEMBER_TOO_LARGE_MESSAGE)
+        return False
     except _ImportValidationError as exc:
         logger.warning("Import validation failed for user %s: %s", user_id, exc)
         job_status.write("error", 0, "That archive couldn't be imported.")
@@ -360,9 +420,10 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
         return False
     finally:
         shutil.rmtree(extract_dir, ignore_errors=True)
-        # A waiting job still needs the archive; the run that finishes it schedules the cleanup.
+        # A waiting job still needs the archive, and keeps its claim; the run that finishes it does both.
         if not waiting:
             schedule_import_cleanup(os.path.dirname(zip_path), job_status)
+            release_import_guard(user_id, job_id)
 
 
 def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_status: ImportJobStatus) -> None:
@@ -471,6 +532,26 @@ class _ImportValidationError(Exception):
     pass
 
 
+class _ImportMemberTooLargeError(_ImportValidationError):
+    """A data file in the archive is over :data:`_MAX_JSON_MEMBER_BYTES`."""
+
+
+#: The most bytes any one JSON file in an archive may hold, since ``json.load`` builds it whole. The importer reads only
+#: this app's own export (``SUPPORTED_FORMATS``): no Google Takeout file, Records.json included, comes through here -
+#: those go through the import preview, which streams them. The largest file an export writes is ``pins.json``, about
+#: 1.5 KB a pin before descriptions and articles, so this holds ~170,000 pins; the app is sized for 10,000+ per user.
+#: Parsed, indented export JSON measured about 1.75x its size in Python objects (2.5x compact), so one file at the
+#: ceiling costs a sandbox worker roughly 0.45-0.65 GB; the worker pod is limited to 4 GiB across four children.
+_MAX_JSON_MEMBER_BYTES = 256 * 1024**2
+
+#: What the user is told when an archive holds a data file over the ceiling.
+_MEMBER_TOO_LARGE_MESSAGE = f"That archive couldn't be imported: one of its data files is larger than the {_MAX_JSON_MEMBER_BYTES // 1024**2} MB an import reads."
+
+
+def _is_json_member(name: str) -> bool:
+    return name.lower().endswith(".json")
+
+
 #: Ceilings on what an uploaded archive may declare before extraction even starts, guarding against a
 #: crafted zip filling the disk (decompression bomb) or exhausting inodes.
 #: The byte ceiling is dynamic (see ``_extraction_size_ceiling``) because export archives bundle the
@@ -529,6 +610,8 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         # attacker-controlled and independent of the actual compressed payload (zipfile only detects
         if sum(member.file_size for member in members) > ceiling:
             raise _ImportValidationError("Archive is too large to import.")
+        if any(_is_json_member(member.filename) and member.file_size > _MAX_JSON_MEMBER_BYTES for member in members):
+            raise _ImportMemberTooLargeError("Archive declares a data file over the per-file ceiling.")
         # Guard against zip-slip path traversal.
         # The separator is part of the comparison on purpose: a bare prefix check would accept an
         # entry escaping into a SIBLING directory whose name merely starts with the extract dir's
@@ -595,7 +678,7 @@ def _extract_zip_members_bounded(
         # A symlink entry could otherwise point extraction output at an arbitrary target path, or
         # let a later step unknowingly follow it off the extracted tree.
         if (member.external_attr >> 16) & 0o170000 == 0o120000:
-            logger.warning("Skipping symlink in import archive: %s", member.filename)
+            logger.warning("Skipping symlink in import archive: %s", redact_filename(member.filename))
             continue
 
         dest_path = os.path.join(extract_root, member.filename)
@@ -603,6 +686,9 @@ def _extract_zip_members_bounded(
         if parent_dir:
             os.makedirs(parent_dir, exist_ok=True)
 
+        # Counted here as well as checked against the declared size, which zipfile stops reading at today.
+        member_ceiling = _MAX_JSON_MEMBER_BYTES if _is_json_member(member.filename) else None
+        member_written = 0
         with zf.open(member) as src, open(dest_path, "wb") as dst:
             while True:
                 remaining_budget = ceiling - total_written
@@ -616,6 +702,9 @@ def _extract_zip_members_bounded(
                 if not chunk:
                     break
                 total_written += len(chunk)
+                member_written += len(chunk)
+                if member_ceiling is not None and member_written > member_ceiling:
+                    raise _ImportMemberTooLargeError("Archive holds a data file over the per-file ceiling.")
                 dst.write(chunk)
 
 
@@ -648,11 +737,11 @@ def _scan_extracted_files(extract_root: str) -> None:
                 # storage, so an extension we would not serve as a passive image has no business in
                 # the archive.
                 if declared_kind is None:
-                    raise _ImportValidationError(f"'{filename}' in the import archive isn't a supported photo, video, or document and the import was rejected.")
+                    raise _ImportValidationError(f"{redact_filename(filename)} in the import archive isn't a supported photo, video, or document and the import was rejected.")
 
                 mismatch_error = content_type_mismatch_error(file_obj, declared_kind)
                 if mismatch_error:
-                    raise _ImportValidationError(f"'{filename}' in the import archive doesn't match its file type and the import was rejected.")
+                    raise _ImportValidationError(f"{redact_filename(filename)} in the import archive doesn't match its file type and the import was rejected.")
 
                 # Sniffing only fires on a *confirmed* mismatch, so a shell
                 # script named .png is unrecognised rather than mismatched. The
@@ -660,14 +749,14 @@ def _scan_extracted_files(extract_root: str) -> None:
                 if declared_kind == MediaKind.PHOTO:
                     not_an_image = photo_is_not_an_image_error(file_obj)
                     if not_an_image:
-                        raise _ImportValidationError(f"'{filename}' in the import archive is named as an image but its contents are not one, and the import was rejected.")
+                        raise _ImportValidationError(f"{redact_filename(filename)} in the import archive is named as an image but its contents are not one, and the import was rejected.")
 
                 try:
                     malware_error = malware_error_for_upload(file_obj)
                 except MalwareScanUnavailableError as exc:
                     raise _ImportValidationError("Our antivirus scanner is temporarily unavailable. Please try again shortly.") from exc
                 if malware_error:
-                    raise _ImportValidationError(f"'{filename}' in the import archive was flagged as malicious and the import was rejected.")
+                    raise _ImportValidationError(f"{redact_filename(filename)} in the import archive was flagged as malicious and the import was rejected.")
 
 
 def _find_data_dir(root: str) -> str | None:
@@ -679,10 +768,16 @@ def _find_data_dir(root: str) -> str | None:
 
 
 def _read_json(data_dir: str, filename: str) -> Any:
-    """Read and parse a JSON file from the data directory; return None if missing."""
+    """Read and parse a JSON file from the data directory; return None if missing.
+
+    Raises:
+        _ImportMemberTooLargeError: The file is over :data:`_MAX_JSON_MEMBER_BYTES`, which extraction refuses first.
+    """
     path = os.path.join(data_dir, filename)
     if not os.path.exists(path):
         return None
+    if os.path.getsize(path) > _MAX_JSON_MEMBER_BYTES:
+        raise _ImportMemberTooLargeError("A data file is over the per-file ceiling.")
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -1034,7 +1129,7 @@ def _import_connections(
 
             friendship = Friendship.request(from_profile=profile, to_profile=other_profile, relationship_type=relationship_type)
         except Exception:
-            logger.warning("Failed to import connection %s → %s", profile, other_profile, exc_info=True)
+            logger.warning("Failed to import connection %s → %s", profile.pk, other_profile.pk, exc_info=True)
             result.warnings.append(f"Could not import connection with '{row.get('other_username', other_uuid)}'.")
             continue
 
@@ -1169,7 +1264,13 @@ def _import_settings(
         update_fields["allow_friend_recommendations"] = bool(privacy["allow_friend_recommendations"])
 
     if update_fields:
+        previous_trip_pin_visibility = Profile.objects.filter(pk=profile.pk).values_list("trip_pin_location_visibility", flat=True).first()
         Profile.objects.filter(pk=profile.pk).update(**update_fields)
+        if update_fields.get("trip_pin_location_visibility", previous_trip_pin_visibility) != previous_trip_pin_visibility:
+            # An update fires no save signal; who may see this profile's trip stops changed all the same.
+            from urbanlens.dashboard.models.calendar_sync.signals import queue_pushes_for_stops_added_by
+
+            queue_pushes_for_stops_added_by([profile.pk])
         result.inc_created("settings")
     else:
         result.inc_skipped("settings")
@@ -1553,11 +1654,10 @@ def _import_photos(
         label_uuid_map: Archive label uuid -> local pk.
         report_progress: Optional throttled progress callback.
         only: 1-based positions of the rows to import, for a run storing an earlier run's deferred photos."""
-    from decimal import Decimal, InvalidOperation
-
     from django.core.files import File
 
     from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.media.images import coerce_coordinates
     from urbanlens.dashboard.services.media.storage import BACKGROUND_RESERVATION_WAIT_SECONDS, UploadRefusedError, file_size_error_for_upload, reserve_upload
 
     rows = _read_json(data_dir, os.path.join("photos", "metadata.json"))
@@ -1568,13 +1668,12 @@ def _import_photos(
     missing_files = 0
     over_quota = 0
 
-    def _decimal(value: Any) -> Decimal | None:
-        if value in (None, ""):
-            return None
+    def _coordinates(row: dict[str, Any]) -> tuple[Decimal | None, Decimal | None]:
+        # A pair that is missing, non-finite or out of range costs the photo its location, not the import.
         try:
-            return Decimal(str(value))
-        except InvalidOperation:
-            return None
+            return coerce_coordinates(row)
+        except ValueError:
+            return None, None
 
     for idx, row in enumerate(rows, start=1):
         if only is not None and idx not in only:
@@ -1613,14 +1712,15 @@ def _import_photos(
                 pin_pk, wiki, _resolved = _resolve_import_target(profile, row, pin_uuid_map)
 
                 media_type = row.get("media_type") if row.get("media_type") in MediaKind.values else MediaKind.PHOTO
+                latitude, longitude = _coordinates(row)
                 image = Image(
                     profile=profile,
                     pin_id=pin_pk,
                     wiki=wiki,
                     caption=(row.get("caption") or "")[:500] or None,
                     media_type=media_type,
-                    latitude=_decimal(row.get("latitude")),
-                    longitude=_decimal(row.get("longitude")),
+                    latitude=latitude,
+                    longitude=longitude,
                     file_size=size,
                     pending_scan=True,
                 )

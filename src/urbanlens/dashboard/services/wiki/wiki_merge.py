@@ -136,7 +136,7 @@ def absorb_wiki(parent: Wiki, child: Wiki) -> None:
         editor=None,
         changes={"child_wiki_merged": {"from": None, "to": child.name}},
     )
-    logger.info("wiki_merge: nested wiki %s (%r) under %s (%r)", child.pk, child.name, parent.pk, parent.name)
+    logger.info("wiki_merge: nested wiki %s under %s", child.pk, parent.pk)
     drop_misplaced_wikipedia_seed(child)
 
 

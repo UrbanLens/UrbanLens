@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     REASON_SOURCE_ERROR,
+    ParcelBoundaries,
     ParcelBuildings,
     PropertyRecordsUnavailableError,
 )
@@ -289,7 +290,7 @@ class ProvisioningReproductionTests(TestCase):
 
     def test_without_a_ranking_the_hull_still_stays_on_the_property(self) -> None:
         with mock.patch(self._GATEWAY) as gateway:
-            gateway.return_value.lookup_boundaries.return_value = []
+            gateway.return_value.lookup_boundaries.return_value = ParcelBoundaries([])
             self._provision_west(gateway)
 
         self.assertIsNone(self.east.place_id, "a location 35 km away was swept onto the new parcel")
@@ -327,7 +328,7 @@ class DetachOversizedPlacesCommandTests(TestCase):
         return out.getvalue()
 
     def test_it_takes_the_county_out_of_every_domain(self) -> None:
-        self._run()
+        self._run("--apply")
 
         self.county.refresh_from_db()
         self.building.refresh_from_db()
@@ -346,14 +347,14 @@ class DetachOversizedPlacesCommandTests(TestCase):
         self.assertFalse(Profile._have_common_pin(self.first, self.second))
 
     def test_it_is_idempotent(self) -> None:
-        self._run()
+        self._run("--apply")
         snapshot = (
             list(Place.objects.order_by("pk").values_list("pk", "status", "parent_id", "domain_root_id")),
             list(Location.objects.order_by("pk").values_list("pk", "place_id", "place_resolved_at")),
             list(Wiki.objects.order_by("pk").values_list("pk", "parent_wiki_id")),
         )
 
-        second = self._run()
+        second = self._run("--apply")
 
         self.assertEqual(
             snapshot,
@@ -365,16 +366,28 @@ class DetachOversizedPlacesCommandTests(TestCase):
         )
         self.assertIn("0 place(s)", second)
 
-    def test_a_dry_run_writes_nothing(self) -> None:
-        self._run("--dry-run")
+    def test_without_apply_it_only_reports(self) -> None:
+        """A dry run by default, like the other repair commands: running it bare against production must not write."""
+        out = self._run()
 
         self.county.refresh_from_db()
         self.west.refresh_from_db()
+        self.child_wiki.refresh_from_db()
         self.assertEqual(self.county.status, PlaceStatus.CURRENT)
         self.assertEqual(self.west.place_id, self.county.pk)
+        self.assertEqual(self.child_wiki.parent_wiki_id, self.parent_wiki.pk)
+        self.assertIn("would detach", out)
+        self.assertIn("--apply", out)
+
+    def test_the_old_dry_run_flag_is_gone(self) -> None:
+        """One way to ask for a dry run: an old invocation fails loudly rather than being read as something else."""
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            self._run("--dry-run")
 
     def test_an_ordinary_parcel_is_left_alone(self) -> None:
-        self._run()
+        self._run("--apply")
 
         self.real_parcel.refresh_from_db()
         self.assertEqual(self.real_parcel.status, PlaceStatus.CURRENT)

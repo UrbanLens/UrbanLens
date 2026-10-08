@@ -39,8 +39,10 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
 
     def fetch(self, pin: Pin) -> None:
         """Fetch all three domains, caching whichever answered.
-        Each domain is fetched independently: one source's outage must not blank the facts the others can still supply, so failures are logged and recorded as an absent key rather than raised."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        Each domain is fetched independently: one source's outage must not blank the facts the others can still
+        supply, so a failure is logged and its key left absent rather than raised. A domain that failed, or that REData
+        answered only in part, marks the row partial, so the cache keeps it only briefly."""
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_land_cover_gateway import RedataLandCoverGateway
         from urbanlens.dashboard.services.apis.locations.redata_soil_gateway import RedataSoilGateway
         from urbanlens.dashboard.services.apis.locations.redata_walkability_gateway import RedataWalkabilityGateway
@@ -50,19 +52,24 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
 
         data: dict[str, Any] = {}
         failed = 0
+        unanswered: list[str] = []
         for domain, fetch_one in (
-            ("land_cover", lambda: RedataLandCoverGateway().get_land_cover(lat, lng).results),
-            ("walkability", lambda: RedataWalkabilityGateway().get_walkability(lat, lng).results),
-            ("soil", lambda: RedataSoilGateway().get_soil_components(lat, lng).results),
+            ("land_cover", lambda: RedataLandCoverGateway().get_land_cover(lat, lng)),
+            ("walkability", lambda: RedataWalkabilityGateway().get_walkability(lat, lng)),
+            ("soil", lambda: RedataSoilGateway().get_soil_components(lat, lng)),
         ):
             try:
-                data[domain] = fetch_one()
+                envelope = fetch_one()
             except LocationContextUnavailableError as exc:
                 # outage-cache-ok: one domain of three failing is a partial result, not an outage -
-                # the domains that answered are real data worth caching, and the missing ones
-                # re-fetch when the row goes stale.
+                # the domains that answered are real data worth caching, and the missing one is
+                # asked again once the briefly kept row lapses.
                 failed += 1
+                unanswered.append(domain)
                 logger.warning("Site-conditions %s lookup failed: %s", domain, exc)
+                continue
+            data[domain] = envelope.results
+            unanswered.extend(envelope.unanswered_sources)
         if failed and not data:
             # Every domain failed, so there is nothing to cache but the outage.
             # The existence of the row marks this source as fetched, so writing an empty dict would
@@ -70,6 +77,8 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
             # image cache.
             logger.warning("Site-conditions: every domain failed, leaving it unfetched to retry")
             return
+        if unanswered:
+            data[UNANSWERED_SOURCES_KEY] = unanswered
         LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:

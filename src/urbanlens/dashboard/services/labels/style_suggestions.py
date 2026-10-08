@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.services.ai.access import ai_features_enabled
+from urbanlens.dashboard.services.security.redact import redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
     try:
         gateway = get_gateway("label_style_suggestions", profile=profile, instructions=_build_instructions())
     except (RuntimeError, ValueError, OSError) as exc:
-        logger.warning("AI gateway unavailable for label style suggestion %r: %s", name, exc)
+        logger.warning("AI gateway unavailable for label style suggestion %s: %s", redact_text(name), exc)
         return LabelStyleSuggestion()
     if not gateway:
         return LabelStyleSuggestion()
@@ -55,10 +56,10 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
             # The gateway marks an answered call itself; an answer with nothing usable in it is still an answer.
             slot.success, slot.cost_estimate = slot.success or bool(answers), gateway.cost - cost_before
     except RequestCancelledError as exc:
-        logger.info("AI label style suggestion for %r was refused before its call: %s", name, exc)
+        logger.info("AI label style suggestion for %s was refused before its call: %s", redact_text(name), exc)
         return LabelStyleSuggestion()
     except (RuntimeError, ValueError, OSError) as exc:
-        logger.warning("AI label style suggestion failed for %r: %s", name, exc)
+        logger.warning("AI label style suggestion failed for %s: %s", redact_text(name), exc)
         return LabelStyleSuggestion()
 
     return _parse_answers(answers)

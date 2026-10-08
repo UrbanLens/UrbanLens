@@ -8,6 +8,7 @@ Database and cache are reachable, and it reports how much of the connection pool
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,8 @@ from rest_framework.viewsets import GenericViewSet
 from urbanlens.dashboard.services.core.process_memo import ProcessMemo
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from django.db.backends.utils import CursorWrapper
 
 logger = logging.getLogger(__name__)
@@ -52,6 +55,25 @@ def _limit_probe_runtime(cursor: CursorWrapper) -> None:
         cursor: A cursor inside an open transaction.
     """
     cursor.execute("SELECT set_config('statement_timeout', %s, true)", [str(_PROBE_TIMEOUT_SECONDS * 1000)])
+
+
+@contextmanager
+def _deadlined_cursor() -> Iterator[CursorWrapper]:
+    """A cursor in a transaction of its own, whose queries the probe's deadline caps, and nothing after them.
+
+    Inside an enclosing transaction, such as a test case's, ``atomic()`` is only a savepoint, and releasing one leaves
+    a transaction-scoped setting in force for every later query of that transaction. So the previous value is put
+    back before the block is left; a query the deadline cancels rolls the savepoint back, which undoes the setting too.
+
+    Yields:
+        The cursor.
+    """
+    with transaction.atomic(), connection.cursor() as cursor:
+        cursor.execute("SELECT current_setting('statement_timeout')")
+        (previous,) = cursor.fetchone()
+        _limit_probe_runtime(cursor)
+        yield cursor
+        cursor.execute("SELECT set_config('statement_timeout', %s, true)", [previous])
 
 
 class HealthController(GenericViewSet):
@@ -169,8 +191,7 @@ class HealthController(GenericViewSet):
         if connection.vendor != "postgresql":
             return None
         try:
-            with transaction.atomic(), connection.cursor() as cursor:
-                _limit_probe_runtime(cursor)
+            with _deadlined_cursor() as cursor:
                 cursor.execute(
                     "SELECT (SELECT count(*) FROM pg_stat_activity WHERE backend_type = 'client backend'), current_setting('max_connections')::int",
                 )
@@ -191,8 +212,7 @@ class HealthController(GenericViewSet):
         """
         try:
             if connection.vendor == "postgresql":
-                with transaction.atomic(), connection.cursor() as cursor:
-                    _limit_probe_runtime(cursor)
+                with _deadlined_cursor() as cursor:
                     cursor.execute("SELECT pg_is_in_recovery()")
                     in_recovery = cursor.fetchone()[0]
                     return "ok", "replica" if in_recovery else "primary"

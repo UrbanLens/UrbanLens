@@ -22,6 +22,7 @@ from model_bakery import baker
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
+from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
 from urbanlens.dashboard.models.facts.model import FactEvidence
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
@@ -40,6 +41,7 @@ from urbanlens.dashboard.services.pins.external_data import (
 )
 from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 from urbanlens.dashboard.services.pins.pin_restructure import enclosing_parcel
+from urbanlens.dashboard.services.places.scope import effective_pin_type
 from urbanlens.dashboard.tests.hypothesis.building_fixtures import CAMPUS_LAT, CAMPUS_LNG, offset, parcel_square
 from urbanlens.dashboard.tests.hypothesis.hrsh_upstreams import (
     ASSESSOR_YEAR,
@@ -469,6 +471,28 @@ class InFlightDeduplicationTests(_BootstrapCase):
         self.assertEqual(retry[0].kwargs["stage"], bootstrap.BootstrapStage.BUILDINGS)
         self.assertGreater(retry[0].kwargs["countdown"], 0)
 
+    def test_a_building_list_redata_is_still_computing_is_asked_for_again_after_its_wait(self) -> None:
+        """REData 0.3.7 answers a cold parcel ``503 refresh_queued`` with its wait in the body: the bootstrap sits that
+        out rather than nesting the campus from a fallback list, or from none."""
+        self.upstreams = HrshUpstreams(pending_parcel_answers=1)
+
+        self.run_stage(bootstrap.BootstrapStage.BUILDINGS)
+
+        (retry,) = self.enqueued(tasks.bootstrap_location)
+        self.assertEqual(retry.kwargs["stage"], bootstrap.BootstrapStage.BUILDINGS)
+        self.assertGreaterEqual(retry.kwargs["countdown"], 60)
+        self.assertFalse(self.upstreams.other_hosts, "no fallback stands in for the answer REData is computing")
+        rows = LocationCache.objects.filter(location=self.pin.location, source=PARCEL_BUILDINGS_CACHE_SOURCE)
+        self.assertFalse(rows.exists())
+
+        source = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
+        assert source is not None
+        cache.delete(source.skip_key(self.pin))  # REData's wait is over
+        self.run_stage(bootstrap.BootstrapStage.BUILDINGS, attempt=retry.kwargs["attempt"])
+
+        self.assertTrue(rows.exists())
+        self.assertEqual(self.enqueued(tasks.bootstrap_location)[0].kwargs["stage"], bootstrap.BootstrapStage.NEST)
+
     def test_after_enough_waiting_the_chain_moves_on(self) -> None:
         source = get_panel_source(PARCEL_BUILDINGS_CACHE_SOURCE)
         acquire_lock(source.flight_key(self.pin), 150)
@@ -536,6 +560,95 @@ class BuildDateTests(_BootstrapCase):
         pin = self.create_pin(latitude=latitude, longitude=longitude)
 
         self.assertEqual(pin.date_built, _year(ASSESSOR_YEAR))
+
+    def _main_dated_by_the_parcel(self, **basis: str) -> list[dict]:
+        """The campus as REData answers it when the assessor's year is the only one to reach the main building."""
+        buildings = campus_buildings()
+        main = next(building for building in buildings if building["name"] == "MAIN/ADMIN")
+        main.pop("year_built_basis")
+        main.update(year_built=ASSESSOR_YEAR, **basis)
+        return buildings
+
+    def test_a_building_dated_only_by_the_parcels_year_is_left_undated(self) -> None:
+        from urbanlens.dashboard.services.pins.build_dates import wiki_build_year
+
+        self.upstreams = HrshUpstreams(
+            buildings=self._main_dated_by_the_parcel(year_built_basis="parcel", year_built_source="assessor")
+        )
+
+        pin = self.create_pin()
+
+        main = Pin.objects.get(name="MAIN/ADMIN")
+        self.assertIsNone(main.date_built)
+        self.assertIsNone(wiki_build_year(Wiki.objects.get(location=main.location)))
+        self.assertEqual(Pin.objects.get(name="LAUNDRY").date_built, _year(LAUNDRY_YEAR))
+        # The campus pin stands on the main building's place, so it reads as that building, and the parcel's year is
+        # not known to be that building's either. Off every building, it takes the parcel's year (the test above).
+        self.assertEqual(effective_pin_type(pin), PinType.BUILDING)
+        self.assertIsNone(pin.date_built)
+        self.assertIsNone(wiki_build_year(Wiki.objects.get(location=pin.location)))
+
+    def test_a_year_older_redata_does_not_explain_dates_no_building(self) -> None:
+        buildings = self._main_dated_by_the_parcel()
+        for building in buildings:
+            building.pop("year_built_basis", None)
+        self.upstreams = HrshUpstreams(buildings=buildings)
+
+        pin = self.create_pin()
+
+        self.assertEqual({child.date_built for child in self.children(pin)}, {None})
+        self.assertIsNone(pin.date_built)
+
+    def test_a_rerun_takes_back_a_year_the_records_no_longer_give_the_building(self) -> None:
+        """A year a wiki was given before REData said it was the parcel's, as UrbanLens did until it read the basis."""
+        from urbanlens.dashboard.services.pins.build_dates import fill_build_dates, wiki_build_year
+
+        pin = self.create_pin()
+        main_wiki = Wiki.objects.get(location=Pin.objects.get(name="MAIN/ADMIN").location)
+        campus_wiki = Wiki.objects.get(location=pin.location)
+        self.assertEqual((wiki_build_year(main_wiki), wiki_build_year(campus_wiki)), (MAIN_YEAR, MAIN_YEAR))
+        LocationCache.set(
+            pin.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": self._main_dated_by_the_parcel(year_built_basis="parcel"), "provider": "redata"},
+        )
+
+        with self.captureOnCommitCallbacks(execute=True):
+            fill_build_dates(pin)
+
+        self.assertIsNone(wiki_build_year(main_wiki))
+        self.assertIsNone(wiki_build_year(campus_wiki))
+        laundry = Wiki.objects.get(location=Pin.objects.get(name="LAUNDRY").location)
+        self.assertEqual(wiki_build_year(laundry), LAUNDRY_YEAR)
+
+    def assert_a_rerun_takes_nothing_back(self, pin: Pin) -> None:
+        from urbanlens.dashboard.services.pins.build_dates import fill_build_dates, wiki_build_year
+
+        main_wiki = Wiki.objects.get(location=Pin.objects.get(name="MAIN/ADMIN").location)
+        campus_wiki = Wiki.objects.get(location=pin.location)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            fill_build_dates(pin)
+
+        self.assertEqual((wiki_build_year(main_wiki), wiki_build_year(campus_wiki)), (MAIN_YEAR, MAIN_YEAR))
+
+    def test_a_rerun_over_a_list_redata_answered_in_part_takes_nothing_back(self) -> None:
+        """A source that did not answer may be the one that dated the building."""
+        pin = self.create_pin()
+        undated = [{**building, "year_built": None} for building in campus_buildings()]
+        LocationCache.set(
+            pin.location,
+            PARCEL_BUILDINGS_CACHE_SOURCE,
+            {"buildings": undated, "provider": "redata", UNANSWERED_SOURCES_KEY: ["cris"]},
+        )
+
+        self.assert_a_rerun_takes_nothing_back(pin)
+
+    def test_a_rerun_with_no_building_list_cached_takes_nothing_back(self) -> None:
+        pin = self.create_pin()
+        LocationCache.objects.filter(location=pin.location, source=PARCEL_BUILDINGS_CACHE_SOURCE).delete()
+
+        self.assert_a_rerun_takes_nothing_back(pin)
 
     def test_with_nothing_known_the_date_stays_empty(self) -> None:
         self.upstreams = HrshUpstreams(buildings=[], parcel_year=None)

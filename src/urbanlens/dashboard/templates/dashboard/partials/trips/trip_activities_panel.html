@@ -58,7 +58,7 @@
             <li class="trip-activity-item{% if act.status == 'completed' %} trip-activity--completed{% endif %}"
                 id="trip-activity-{{ act.id }}"
                 data-act-id="{{ act.id }}"
-                data-act-title="{{ act.title|default:'' }}"
+                data-act-title="{{ item.display_own_title|default:'' }}"
                 data-act-notes="{{ act.notes|default:'' }}"
                 data-act-date="{% if act.scheduled_at %}{{ act.scheduled_at|date:'Y-m-d' }}{% endif %}"
                 data-act-time="{% if act.scheduled_at %}{% with t=act.scheduled_at|time:'H:i' %}{% if t != '00:00' %}{{ t }}{% endif %}{% endwith %}{% endif %}"

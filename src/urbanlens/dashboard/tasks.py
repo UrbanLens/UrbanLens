@@ -443,37 +443,69 @@ def push_trip_to_calendar(trip_id: int) -> int:
 
 #: A push request older than this lost its push, or its push failed or was cut short by the calendar budget.
 PENDING_CALENDAR_PUSH_AGE = timedelta(minutes=10)
-#: Pushes in a row that wrote nothing, after which a request is dropped until the trip changes again. A push that
-#: wrote some events and ran out of budget does not count, so a long export is finished however many it takes.
+#: Pushes in a row that Google refused for a reason of their own, after which a request is dropped until the trip
+#: changes again. A push that wrote some events resets the count, and one held up by something that passes (the
+#: budget, Google's rate limit or failure, a refusal of the site) does not add to it, so a push that clears a
+#: withheld location is not given up during an outage. Also the cap on a calendar event delete Google refuses.
 MAX_CALENDAR_PUSH_ATTEMPTS = 5
 PENDING_CALENDAR_PUSH_BATCH = 200
+#: A push or calendar event delete still owed after this long is dropped: its calendar was never reconnected, or
+#: Google kept failing or refusing the site for a month.
+MAX_OWED_CALENDAR_WRITE_AGE = timedelta(days=30)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
+def delete_orphaned_calendar_events(profile_id: int) -> int:
+    """Delete the events UrbanLens made on one profile's calendar whose trip or activity is gone.
+
+    Args:
+        profile_id: Whose calendar.
+
+    Returns:
+        How many events were deleted.
+    """
+    from urbanlens.dashboard.services.trips.calendar_sync import delete_queued_calendar_events
+
+    return delete_queued_calendar_events(profile_id)
 
 
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("calendar-push-sweep")
 def requeue_pending_calendar_pushes() -> int:
-    """Queue the calendar pushes owed and not delivered: an auto-sync change, or the rest of a cut-short export.
+    """Queue the calendar writes owed and not delivered: an auto-sync change, the rest of a cut-short export, or the
+    delete of an event whose trip or activity is gone.
 
     Returns:
-        How many trips were queued.
+        How many trips and calendars were queued.
     """
-    from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+    from django.db.models import Q
+
+    from urbanlens.dashboard.models.calendar_sync.model import CalendarEventDeletion, TripCalendarLink
     from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
-    cutoff = timezone.now() - PENDING_CALENDAR_PUSH_AGE
+    now = timezone.now()
+    cutoff = now - PENDING_CALENDAR_PUSH_AGE
     # Not limited to auto_sync links: an export the budget cut short marks its link whether or not it auto-syncs.
     pending = TripCalendarLink.objects.filter(activity__isnull=True, push_requested_at__lt=cutoff)
-    abandoned = pending.filter(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS).update(push_requested_at=None, push_attempts=0)
+    abandoned = pending.filter(Q(push_attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS) | Q(push_requested_at__lt=now - MAX_OWED_CALENDAR_WRITE_AGE)).update(push_requested_at=None, push_attempts=0)
     if abandoned:
-        logger.warning("Dropped %d calendar push request(s) after %d pushes that wrote nothing", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS)
+        logger.warning("Dropped %d calendar push request(s) Google refused %d times or that were owed for %s", abandoned, MAX_CALENDAR_PUSH_ATTEMPTS, MAX_OWED_CALENDAR_WRITE_AGE)
     trip_ids = list(pending.order_by("trip_id").values_list("trip_id", flat=True).distinct()[:PENDING_CALENDAR_PUSH_BATCH])
     queued = 0
     for trip_id in trip_ids:
         # A refusal is found again by the next sweep.
         if safely_enqueue_task(push_trip_to_calendar, trip_id, durable=False) is not None:
             queued += 1
+
+    dropped, _by_model = CalendarEventDeletion.objects.filter(Q(attempts__gte=MAX_CALENDAR_PUSH_ATTEMPTS) | Q(created__lt=now - MAX_OWED_CALENDAR_WRITE_AGE)).delete()
+    if dropped:
+        logger.warning("Dropped %d calendar event delete(s) Google kept refusing or no calendar took for %s", dropped, MAX_OWED_CALENDAR_WRITE_AGE)
+    owed_deletes = CalendarEventDeletion.objects.filter(created__lt=cutoff).order_by("profile_id").values_list("profile_id", flat=True).distinct()
+    for profile_id in list(owed_deletes[:PENDING_CALENDAR_PUSH_BATCH]):
+        if safely_enqueue_task(delete_orphaned_calendar_events, profile_id, durable=False) is not None:
+            queued += 1
     if queued:
-        logger.info("Re-queued %d calendar auto-sync push(es)", queued)
+        logger.info("Re-queued %d calendar push(es) and delete(s)", queued)
     return queued
 
 
@@ -1789,6 +1821,7 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
     from urbanlens.dashboard.models.remote_tiles.model import RemoteTile
     from urbanlens.dashboard.services.map.remote_tiles import REMOTE_TILE_MAX_DIMENSION, pending_marker, record_failure, store
     from urbanlens.dashboard.services.media.previews import discard_preview_source, load_preview_source, render_preview
+    from urbanlens.dashboard.services.security.redact import redact_tile
 
     tile = RemoteTile.objects.select_related("source").filter(pk=tile_id).first()
     try:
@@ -1800,7 +1833,7 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
             record_failure(tile)
             return False
         if not store(tile, *rendered):
-            logger.warning("Tile source %s keeps as many tiles as it may; %s/%s/%s was not kept", tile.source_id, tile.z, tile.x, tile.y)
+            logger.warning("Tile source %s keeps as many tiles as it may; %s was not kept", tile.source_id, redact_tile(tile.z, tile.x, tile.y))
             record_failure(tile)
             return False
         return True
@@ -2498,6 +2531,10 @@ def scan_trip_comment_image(self, comment_id: int) -> bool:
     return _run_comment_image_scan(self, comment, TripComment)
 
 
+#: Why a comment image over the site's upload limit was refused: the limit was lowered between its upload and its scan.
+_COMMENT_IMAGE_TOO_LARGE = "That photo is larger than this site's upload limit."
+
+
 def _run_comment_image_scan(task, comment, model) -> bool:
     """Shared body for ``scan_comment_image``/``scan_trip_comment_image`` - see either's docstring.
 
@@ -2512,15 +2549,24 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     from django.core.files.base import ContentFile
 
     from urbanlens.dashboard.services.media import upload_retry
+    from urbanlens.dashboard.services.media.storage import max_upload_file_size_bytes
+    from urbanlens.dashboard.services.media.stored_field import read_at_most
     from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError, malware_error_for_upload
 
     target = f"{model._meta.label}.image"  # noqa: SLF001 - _meta is Django's public model API
+    # The ceiling its upload passed; read no further, whatever is stored.
+    ceiling = max_upload_file_size_bytes()
     # Read before the scan, which reports any OSError reading its stream as the scanner being down.
     try:
         with comment.image.open("rb") as handle:
-            upload = ContentFile(handle.read(), name=comment.image.name)
+            raw = read_at_most(handle, ceiling)
     except STORAGE_ERRORS as exc:
         return _comment_storage_failed(task, comment, target, exc)
+    if raw is None:
+        upload_retry.stop_waiting(target, comment.pk)
+        reject_comment_upload(comment, _COMMENT_IMAGE_TOO_LARGE)
+        return False
+    upload = ContentFile(raw, name=comment.image.name)
 
     try:
         malware_error = malware_error_for_upload(upload)
@@ -2551,6 +2597,7 @@ def _run_comment_image_scan(task, comment, model) -> bool:
             comment.image.name,
             max_dimension=max_dimension,
             convert_webp=convert_webp,
+            max_bytes=ceiling,
             only_if={"pending_scan": True},
             also_set={"pending_scan": False},
         )
@@ -2559,6 +2606,9 @@ def _run_comment_image_scan(task, comment, model) -> bool:
     upload_retry.stop_waiting(target, comment.pk)
     if outcome is Reencoded.UNDECODABLE:
         reject_comment_upload(comment, "That photo couldn't be processed.")
+        return False
+    if outcome is Reencoded.TOO_LARGE:
+        reject_comment_upload(comment, _COMMENT_IMAGE_TOO_LARGE)
         return False
     if outcome is Reencoded.REPLACED:
         upload_retry.record_storage_success()
@@ -2958,6 +3008,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
     from urbanlens.dashboard.services.core.bulk_followup import batching_follow_on_work
     from urbanlens.dashboard.services.labels.style_suggestions import resolve_or_create_styled_label
     from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
+    from urbanlens.dashboard.services.security.redact import redact_text
 
     created_count = exists_count = skipped_count = 0
     # Coalesces this round's per-pin follow-on work (wiki creation, category suggestion, reputation
@@ -2975,7 +3026,7 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
                 try:
                     category_label, _ = resolve_or_create_styled_label(profile, stem, KIND_CATEGORY)
                 except CapacityExceededError as exc:
-                    logger.info("Deferred import for profile %s: no category %r: %s", profile.pk, stem, exc)
+                    logger.info("Deferred import for profile %s: no category %s: %s", profile.pk, redact_text(stem), exc)
 
             for pin_dict in lst.get("pins", []):
                 cid = pin_dict["cid"]
@@ -3598,8 +3649,8 @@ def send_final_checkin_warnings() -> int:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_final_warning():
             try:
-                send_final_warning(checkin)
-                count += 1
+                if send_final_warning(checkin):
+                    count += 1
             except Exception:
                 logger.exception("Safety checkin %s failed to send its final warning; will retry next sweep", checkin.pk)
         if count:
@@ -3611,10 +3662,14 @@ def send_final_checkin_warnings() -> int:
 
 @shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
-    """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
+    """Notify emergency contacts for every safety check-in whose grace period has elapsed, once its owner had the final warning.
+
+    Then sends any "it's over" notice a failure left owing to contacts an earlier escalation alerted
+    (``services.visits.safety.retry_resolution_notices``), under the same lock, so two runs never both retry one.
+    """
 
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
-    from urbanlens.dashboard.services.visits.safety import escalate_checkin
+    from urbanlens.dashboard.services.visits.safety import escalate_checkin, retry_resolution_notices
 
     _lock_token = acquire_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _CHECKIN_LOCK_TIMEOUT_SECONDS)
     if _lock_token is None:
@@ -3622,20 +3677,46 @@ def escalate_overdue_checkins() -> int:
         return 0
     try:
         count = 0
-        for checkin in SafetyCheckin.objects.overdue():
+        for checkin in SafetyCheckin.objects.due_for_escalation():
             # The most consequential of the three sweeps to isolate: this is the call that reaches someone's
             # emergency contacts, and escalate_checkin is already per-contact idempotent, so retrying a failed
             # one next tick only reaches the contacts the failed attempt never got to.
             try:
-                escalate_checkin(checkin)
-                count += 1
+                if escalate_checkin(checkin):
+                    count += 1
             except Exception:
                 logger.exception("Safety checkin %s failed to escalate to its emergency contacts; will retry next sweep", checkin.pk)
         if count:
             logger.info("Escalated %s overdue safety check-in(s)", count)
+        try:
+            if retried := retry_resolution_notices():
+                logger.info("Retried the end-of-check-in notice for %s safety contact(s)", retried)
+        except Exception:
+            logger.exception("Retrying owed end-of-check-in notices failed; will retry next sweep")
         return count
     finally:
         release_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _lock_token)
+
+
+@shared_task(queue=Queue.INTERACTIVE)
+def send_safety_resolution_email(contact_id: int, to: str, subject: str, text_body: str, html_body: str, *, removed: bool = False, attempt: int = 0) -> None:
+    """Send one contact's end-of-check-in email, queued by ``services.visits.safety._tell_contact_it_is_over``.
+
+    Unlike ``send_email_task``, a failed send is retried: marked on the contact for the escalation sweep, or, for a
+    deleted check-in, re-queued by ``send_resolution_email`` itself.
+
+    Args:
+        contact_id: The ``SafetyCheckinContact`` it is for.
+        to: Recipient address.
+        subject: Subject line.
+        text_body: The plain-text body.
+        html_body: The rendered HTML body, or empty.
+        removed: The email is for a check-in being deleted, so a failure re-queues this task rather than wait for a sweep.
+        attempt: Times this send was already re-queued.
+    """
+    from urbanlens.dashboard.services.visits.safety import send_resolution_email
+
+    send_resolution_email(contact_id, to=to, subject=subject, text_body=text_body, html_body=html_body, removed=removed, attempt=attempt)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)

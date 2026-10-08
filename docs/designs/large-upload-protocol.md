@@ -49,7 +49,7 @@ upload a 150 MB video.
 
 ## Decided now: the protocol will be chunked upload to Django, not presigned multipart
 
-Not yet built. The reasoning, so it is not re-litigated from scratch:
+Not yet built (#359). The reasoning, so it is not re-litigated from scratch:
 
 **Presigned multipart straight to Garage** (the infrastructure side's
 recommendation) is genuinely better on the wire — nothing over 100 MB is ever a

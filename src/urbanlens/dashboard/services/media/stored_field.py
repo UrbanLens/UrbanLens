@@ -11,7 +11,7 @@ from datetime import timedelta
 import enum
 import io
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 import uuid
 
 from django.core.files.base import ContentFile
@@ -19,6 +19,7 @@ from PIL.Image import DecompressionBombError
 
 from urbanlens.dashboard.services.media.images import reencode_image_file
 from urbanlens.dashboard.services.media.storage_errors import STORAGE_ERRORS
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from django.core.files.storage import Storage
@@ -38,6 +39,23 @@ SWEPT_FIELDS = (
 )
 
 
+def read_at_most(handle: IO[bytes], max_bytes: int) -> bytes | None:
+    """The whole of an open stored file, or None when it holds more than *max_bytes*.
+
+    Never asks for more than one byte past the limit, so a file that grew past the ceiling its upload passed, or one a
+    future writer stored without that check, costs this process no more memory than a file at the ceiling.
+
+    Args:
+        handle: The file, open for binary reading at its start.
+        max_bytes: The most it may hold.
+
+    Returns:
+        Its bytes, or None.
+    """
+    raw = handle.read(max_bytes + 1)
+    return None if len(raw) > max_bytes else raw
+
+
 def delete_unnamed_file(storage: Storage, name: str) -> bool:
     """Delete a file its row no longer names, leaving it to :func:`sweep_unnamed_files` when storage refuses.
 
@@ -53,7 +71,7 @@ def delete_unnamed_file(storage: Storage, name: str) -> bool:
     try:
         storage.delete(name)
     except STORAGE_ERRORS:
-        logger.warning("Could not delete %s, which no row names; the sweep will try again", name, exc_info=True)
+        logger.warning("Could not delete %s, which no row names; the sweep will try again", redact_filename(name), exc_info=True)
         return False
     return True
 
@@ -190,6 +208,8 @@ class Reencoded(enum.Enum):
     #: The row no longer holds that file, or no longer matches the filter.
     STALE = "stale"
     UNDECODABLE = "undecodable"
+    #: Larger than the caller's ``max_bytes``, so it was not read.
+    TOO_LARGE = "too_large"
 
 
 def reencode_stored_field(
@@ -200,6 +220,7 @@ def reencode_stored_field(
     *,
     max_dimension: int | None,
     convert_webp: bool,
+    max_bytes: int,
     only_if: dict[str, Any] | None = None,
     also_set: dict[str, Any] | None = None,
 ) -> Reencoded:
@@ -212,11 +233,13 @@ def reencode_stored_field(
         stored_name: The stored name the re-encode was queued for.
         max_dimension: Longest-edge cap in pixels, or None to keep dimensions.
         convert_webp: Whether to encode as WebP.
+        max_bytes: The most of the file to read: the ceiling the upload's door applied.
         only_if: Further conditions the row must still meet.
         also_set: Further fields to set in the same update as the swap.
 
     Returns:
-        What happened. On ``UNDECODABLE`` nothing was changed; the caller decides what to do with the file.
+        What happened. On ``UNDECODABLE`` and ``TOO_LARGE`` nothing was changed; the caller decides what to do with
+        the file.
 
     Raises:
         OSError: Storage could not read the file or write the re-encoded one; on the S3 backend, any of
@@ -230,7 +253,10 @@ def reencode_stored_field(
         return Reencoded.STALE
     stored = getattr(row, field)
     with stored.open("rb") as handle:
-        raw = handle.read()
+        raw = read_at_most(handle, max_bytes)
+    if raw is None:
+        logger.warning("Not re-encoding %s %s's %s: it is over the %s-byte ceiling", rows.model.__name__, pk, field, max_bytes)
+        return Reencoded.TOO_LARGE
     try:
         data, extension = reencode_image_file(io.BytesIO(raw), max_dimension=max_dimension, convert_webp=convert_webp)
     except (OSError, ValueError, EOFError, SyntaxError, DecompressionBombError) as exc:

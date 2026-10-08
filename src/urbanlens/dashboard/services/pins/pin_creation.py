@@ -175,7 +175,7 @@ def create_pin_for_profile(
         color: Hex color override.
         description: Personal notes to store on the pin, if any.
         pin_type: A ``PinType`` value; when given, the pin is marked user-classified (``pin_type_is_user_provided``) so automatic classification won't overwrite it - mirroring ``name``'s handling.
-        custom_icon: An uploaded custom icon image.
+        custom_icon: An uploaded custom icon image, already checked with ``held_upload.icon_upload_error``.
         label_ids: Label ids to attach directly (takes precedence over tag_ids/category_ids). Anything not an id is dropped.
         tag_ids: Tag-kind label ids to attach when ``label_ids`` wasn't given.
         category_ids: Category-kind label ids to attach when ``label_ids`` wasn't given.

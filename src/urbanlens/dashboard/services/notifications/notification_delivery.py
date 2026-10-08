@@ -13,6 +13,7 @@ from django.template.loader import render_to_string
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.services.core.site_urls import absolute_url
+from urbanlens.dashboard.services.security.redact import redact_text
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.notifications.model import NotificationLog
@@ -139,7 +140,7 @@ def send_email_now(*, to: str, subject: str, text_body: str, html_body: str = ""
             msg.attach_alternative(html_body, "text/html")
         msg.send()
     except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send email to %s", to)
+        logger.exception("Failed to send email to %s", redact_text(to))
 
 
 def send_notification_email_now(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
@@ -165,13 +166,13 @@ def send_notification_email_now(recipient: Profile, *, title: str, body_text: st
         msg.attach_alternative(html_body, "text/html")
         msg.send()
     except (smtplib.SMTPException, OSError):
-        logger.exception("Failed to send notification email to %s", recipient_email)
+        logger.exception("Failed to send notification email to profile %s", recipient.pk)
     except Exception:
         # A caller-supplied title/body isn't validated against the template ahead of time, so a
         # rendering bug must be logged like every other delivery failure here, not raised uncaught
         # into the notify function that's often mid-write on the actual event (a friend request, an
         # award) this email is secondary to.
-        logger.exception("Failed to render/send notification email to %s", recipient_email)
+        logger.exception("Failed to render/send notification email to profile %s", recipient.pk)
 
 
 def send_whatsapp(profile: Profile, body: str) -> None:

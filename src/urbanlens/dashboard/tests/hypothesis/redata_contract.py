@@ -11,6 +11,10 @@ schema's say-so.
 
 ``gaps`` holds fields a reader looks for that REData does not publish there - a tolerated fallback or a known
 mismatch. The test requires each to stay unpublished, so the row is revisited when either side changes.
+
+``optional`` holds top-level fields REData publishes that an older REData UrbanLens still supports does not send; a
+reader defaults any of them it reads. The vendoring script leaves them out of the body's ``required``, and the test
+holds both that and that REData still publishes them.
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ class Read:
         fields: Field paths the reader uses, all of which REData must publish.
         status: The response status read.
         gaps: Field paths the reader looks for that REData does not publish there.
+        optional: Top-level fields an older REData UrbanLens supports does not send, so the reader must default them.
     """
 
     reader: str
@@ -43,10 +48,18 @@ class Read:
     fields: tuple[str, ...]
     status: str = "200"
     gaps: tuple[str, ...] = ()
+    optional: tuple[str, ...] = ()
 
 
-def _get(reader: str, path: str, *fields: str, status: str = "200", gaps: tuple[str, ...] = ()) -> Read:
-    return Read(reader, "get", path, fields, status, gaps)
+def _get(
+    reader: str,
+    path: str,
+    *fields: str,
+    status: str = "200",
+    gaps: tuple[str, ...] = (),
+    optional: tuple[str, ...] = (),
+) -> Read:
+    return Read(reader, "get", path, fields, status, gaps, optional)
 
 
 def _post(reader: str, path: str, *fields: str, status: str = "200", gaps: tuple[str, ...] = ()) -> Read:
@@ -138,6 +151,9 @@ _PARCEL_503S = (
     "/api/v1/parcels/{parcel_uuid}/national-parks/",
     "/api/v1/parcels/{parcel_uuid}/sale-records/",
 )
+#: Unfiltered parcel calls REData (0.3.7) answers 503 while it computes the parcel, waiting ``retry_after``: the code in
+#: ``error`` before 0.3.10, in ``pending`` from it.
+_PARCEL_PENDING_503S = ("/api/v1/parcels/{parcel_uuid}/boundaries/", "/api/v1/parcels/{parcel_uuid}/buildings/")
 _PLACES_ERRORS = (
     ("/api/v1/places/autocomplete/", "503"),
     ("/api/v1/places/search/nearby/", "400"),
@@ -148,8 +164,9 @@ _PLACES_ERRORS = (
     ("/api/v1/places/{place_id}/photos/{id}/download/", "503"),
 )
 
-#: A building as REData reconciles it, for ``/parcels/{uuid}/buildings/`` rows.
-_BUILDING = ("[].latitude", "[].longitude", "[].name", "[].building_number", "[].year_built")
+#: A building as REData reconciles it, for ``/parcels/{uuid}/buildings/`` rows. ``year_built_basis`` (REData 0.3.6) says
+#: whether ``year_built`` is the building's own; UrbanLens reads a row without it as the parcel's.
+_BUILDING = ("[].latitude", "[].longitude", "[].name", "[].building_number", "[].year_built", "[].year_built_basis")
 #: A cultural resource as ``lookup`` lists it and ``fetch-detail`` returns it under ``resource``.
 _RESOURCE = (
     "uuid",
@@ -220,6 +237,10 @@ READS: tuple[Read, ...] = (
     _post(_BREAKER, "/api/v1/routes/", "error", "message", status="503"),
     *(_get(_PARCELS, path, "error", status="404", gaps=("message",)) for path in _PARCEL_404S),
     *(_get(_PARCELS, path, "error", "message", status="503") for path in _PARCEL_503S),
+    *(
+        _get(_PARCELS, path, "error", "message", "pending", "retry_after", status="503", optional=("pending",))
+        for path in _PARCEL_PENDING_503S
+    ),
     *(_get(_PLACES, path, "error", status=status) for path, status in _PLACES_ERRORS),
     # Places.
     _get(
@@ -609,6 +630,16 @@ READS: tuple[Read, ...] = (
     _get(
         "plugins/builtin/gdelt.py", "/api/v1/search/news/", *_within("results[].", ("link", "date", "title", "snippet"))
     ),
+    # REData 0.3.7 says whether GDELT answered; an older one sends only ``results``, read as complete.
+    _get(
+        "services/apis/locations/redata_search_gateway.py",
+        "/api/v1/search/news/",
+        "results",
+        "complete",
+        "providers[].provider",
+        "providers[].status",
+        optional=("complete", "degraded", "providers"),
+    ),
     _get(
         "controllers/pin.py",
         "/api/v1/search/web/",
@@ -632,11 +663,17 @@ READS: tuple[Read, ...] = (
         _PROPERTY,
         "/api/v1/parcels/{parcel_uuid}/assessments/",
         *_within("results[].", ("parcel_identifier", "total_value", "tax_year", "value_stage")),
+        "complete",
+        "providers[].provider",
+        "providers[].status",
     ),
     _get(
         _PROPERTY,
         "/api/v1/parcels/{parcel_uuid}/sale-records/",
         *_within("results[].", ("situs_address", "sale_date", "sale_price", "attributes.*")),
+        "complete",
+        "providers[].provider",
+        "providers[].status",
     ),
     _get(
         _PROPERTY,
@@ -769,7 +806,14 @@ READS: tuple[Read, ...] = (
         "/api/v1/parcels/{parcel_uuid}/buildings/",
         "[].name",
         "[].year_built",
+        "[].year_built_basis",
         "[].building_number",
+    ),
+    _get(
+        "services/pins/build_dates.py",
+        "/api/v1/parcels/{parcel_uuid}/buildings/",
+        "[].year_built",
+        "[].year_built_basis",
     ),
     _get(
         "services/apis/locations/boundaries/redata.py",

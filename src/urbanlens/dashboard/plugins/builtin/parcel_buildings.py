@@ -173,20 +173,27 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
 
     Returns:
         ``{"buildings": [...], "provider": "redata"|"osm"|"cris"}``, or ``{}`` when every provider answered and none
-        found anything. When REData named a source it could not hear from, whatever is returned carries
-        ``"unanswered_sources"``, so the cache keeps it only briefly.
+        found anything. When REData named a source it could not hear from, or REData or a fallback could not be
+        reached, whatever is returned carries ``"unanswered_sources"``, so the cache keeps it only briefly.
 
     Raises:
+        PropertyRecordsComputingError: REData is computing the parcel's list and named when it will have it, so no
+            fallback stands in for it and the caller asks again after the wait.
         Exception: A provider could not be asked and no other found anything, so there is no answer to cache (see
             ``is_source_outage``).
     """
     from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY
     from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
-    from urbanlens.dashboard.services.apis.property_records.redata_gateway import ParcelBuildings, PropertyRecordsUnavailableError, RedataGateway
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
+        ParcelBuildings,
+        PropertyRecordsComputingError,
+        PropertyRecordsUnavailableError,
+        RedataGateway,
+    )
 
     latitude = float(location.latitude or 0)
     longitude = float(location.longitude or 0)
-    outages: list[Exception] = []
+    outages: dict[str, Exception] = {}
 
     answer = ParcelBuildings([])
     if redata_configured():
@@ -194,24 +201,27 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
             gateway = RedataGateway()
             parcel_uuid = gateway.lookup_parcel_uuid(latitude, longitude)
             answer = gateway.lookup_parcel_buildings(parcel_uuid) if parcel_uuid else answer
+        except PropertyRecordsComputingError:
+            raise
         except PropertyRecordsUnavailableError as exc:
             # handful of candidates, and exc_info would re-leak the exact coordinate
             # from the failed request's own URL. See services/security/redact.py.
             logger.debug("parcel_buildings: REData unavailable near %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
             if is_source_outage(exc):
-                outages.append(exc)
+                outages["redata"] = exc
 
     partial = list(answer.unanswered_sources)
 
     def marked(payload: dict[str, Any]) -> dict[str, Any]:
-        # Whatever stands in for a REData list missing a source is a floor too.
-        return {**payload, UNANSWERED_SOURCES_KEY: partial} if partial else payload
+        # Whatever stands in for a REData list missing a source, or for a provider that could not be reached, is a floor too.
+        unanswered = [*partial, *outages]
+        return {**payload, UNANSWERED_SOURCES_KEY: unanswered} if unanswered else payload
 
     if answer.buildings:
         return marked({"buildings": answer.buildings, "provider": "redata"})
 
-    osm_buildings = _asked(_overpass_buildings, location, outages)
-    cris_buildings = _asked(_cris_buildings, location, outages)
+    osm_buildings = _asked("overpass", _overpass_buildings, location, outages)
+    cris_buildings = _asked("cris", _cris_buildings, location, outages)
     if osm_buildings:
         from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
@@ -223,17 +233,18 @@ def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
         if merged:
             return marked({"buildings": merged, "provider": "cris"})
     if outages:
-        raise outages[0]
+        raise next(iter(outages.values()))
     return marked({"buildings": []}) if partial else {}
 
 
-def _asked(lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: list[Exception]) -> list[dict[str, Any]]:
+def _asked(name: str, lookup: Callable[[Location], list[dict[str, Any]]], location: Location, outages: dict[str, Exception]) -> list[dict[str, Any]]:
     """One fallback's buildings, or none with its outage noted in ``outages``.
 
     Args:
+        name: The fallback's name, as the payload's ``unanswered_sources`` gives it.
         lookup: The fallback.
         location: The location whose parcel to search.
-        outages: Where an outage is noted.
+        outages: Where an outage is noted, by name.
 
     Returns:
         The fallback's buildings.
@@ -243,7 +254,7 @@ def _asked(lookup: Callable[[Location], list[dict[str, Any]]], location: Locatio
     except Exception as exc:
         if not is_source_outage(exc):
             raise
-        outages.append(exc)
+        outages[name] = exc
         return []
 
 
@@ -385,7 +396,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
         boundary_polygon: The property's real (non-circle) boundary, when known.
 
     Returns:
-        One row per building record, sorted by building number then name, each with ``name``, ``building_number``, ``year_built``, ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and... Records describing one physical building share its child."""
+        One row per building record, sorted by building number then name, each with ``name``, ``building_number``, ``year_built`` (the building's own, else ``""``: see ``services.pins.build_dates.own_build_year``), ``source``, ``source_label``, ``latitude``, ``longitude``, ``geometry``, ``has_geometry``, ``child_name``, ``child_uuid``, and... Records describing one physical building share its child."""
     rows, _unmatched = match_buildings_to_children(buildings, children, url_for=url_for, boundary_polygon=boundary_polygon)
     return rows
 
@@ -433,12 +444,16 @@ def match_buildings_to_children(
 
 def _building_row(building: dict[str, Any], record_index: int, child: Any, url_for) -> dict[str, Any]:
     """One building record as a panel row, with the child marker standing for it."""
+    from urbanlens.dashboard.services.pins.build_dates import own_build_year
+
     geometry = building_footprint_geojson(building)
     sources = record_sources(building)
+    year_built = own_build_year(building)
     return {
         "name": building.get("name") or "",
         "building_number": building.get("building_number") or "",
-        "year_built": building.get("year_built") or "",
+        # A parcel's year on a row would read as when this building was built.
+        "year_built": year_built if year_built is not None else "",
         "source": sources[0] if sources else "",
         "source_label": " + ".join(source_chips(sources)),
         "latitude": building.get("latitude"),

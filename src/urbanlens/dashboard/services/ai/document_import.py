@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_featu
 from urbanlens.dashboard.services.ai.access import ai_refused_here
 from urbanlens.dashboard.services.core.rate_limiter import EnvironmentRefusedError, RequestCancelledError, api_call_slot
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+from urbanlens.dashboard.services.security.redact import redact_filename, redact_text
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -113,7 +114,7 @@ def extract_text(filename: str, data: bytes) -> str | None:
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
-            logger.warning("Could not decode '%s' as UTF-8 text", filename)
+            logger.warning("Could not decode %s as UTF-8 text", redact_filename(filename))
             return None
         return text.strip() or None
 
@@ -124,7 +125,7 @@ def extract_text(filename: str, data: bytes) -> str | None:
 
             doc = Document(io.BytesIO(data))
         except Exception:
-            logger.warning("Could not parse '%s' as a Word document", filename, exc_info=True)
+            logger.warning("Could not parse %s as a Word document", redact_filename(filename), exc_info=True)
             return None
 
         parts = [p.text for p in doc.paragraphs if p.text.strip()]
@@ -247,16 +248,16 @@ def extract_pins_from_text(filename: str, text: str, profile: Profile) -> tuple[
             answer = gateway.send_prompt(prompt)
             slot.success, slot.cost_estimate = answer is not None, gateway.cost - cost_before
     except EnvironmentRefusedError as exc:
-        logger.info("AI document pin extraction for '%s' was not made in this environment: %s", filename, exc)
+        logger.info("AI document pin extraction for %s was not made in this environment: %s", redact_filename(filename), exc)
         return None, f"'{filename}': {UNAVAILABLE_HERE_WARNING}"
     except RequestCancelledError as exc:
-        logger.info("AI document pin extraction for '%s' was refused before its call: %s", filename, exc)
+        logger.info("AI document pin extraction for %s was refused before its call: %s", redact_filename(filename), exc)
         return None, None
     except (RuntimeError, ValueError, OSError) as exc:
-        logger.warning("AI document pin extraction failed for '%s': %s", filename, exc)
+        logger.warning("AI document pin extraction failed for %s: %s", redact_filename(filename), exc)
         return None, None
 
-    logger.info("AI document import for '%s': ~%d tokens, est. cost $%s", filename, gateway.tokens, gateway.cost)
+    logger.info("AI document import for %s: ~%d tokens, est. cost $%s", redact_filename(filename), gateway.tokens, gateway.cost)
 
     if not answer:
         return None, None
@@ -454,13 +455,13 @@ def _geocode_pins(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], int
                 continue
             try:
                 geocoded_lat, geocoded_lng = gateway.get_coordinates(query)
-            except (ValueError, requests.RequestException):
-                logger.warning("Could not geocode extracted location %r", query, exc_info=True)
+            except (ValueError, requests.RequestException) as exc:
+                logger.warning("Could not geocode extracted location %s: %s", redact_text(query), type(exc).__name__)
                 failed += 1
                 continue
 
             if geocoded_lat is None or geocoded_lng is None:
-                logger.info("Skipping extracted location that could not be geocoded: %r", query)
+                logger.info("Skipping extracted location that could not be geocoded: %s", redact_text(query))
                 failed += 1
                 continue
 

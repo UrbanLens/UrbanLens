@@ -226,7 +226,7 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
                 WikiAlias.objects.resolve_or_create(self, new_name, defaults={"created_by_id": current_write_actor()})
             except DatabaseError:
-                logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
+                logger.exception("Could not ensure alias for wiki %s", self.pk)
         self._loaded_name = self.name
 
     # ------------------------------------------------------------------

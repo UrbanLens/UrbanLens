@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+from urbanlens.dashboard.services.security.redact import redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
     except LocationContextUnavailableError as exc:
         if exc.is_outage:
             raise
-        logger.warning("REData web search rejected %r: %s", query, exc)
+        logger.warning("REData web search rejected %s: %s (reason=%s)", redact_text(query), type(exc).__name__, exc.reason)
         return []
 
 

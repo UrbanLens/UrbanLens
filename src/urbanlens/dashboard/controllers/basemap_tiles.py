@@ -40,6 +40,7 @@ from urbanlens.dashboard.services.core import bounded_cache
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError, servable_tile_type
 from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError, ServiceDisabledError
 from urbanlens.dashboard.services.core.upstream_slots import UpstreamSlots as BaseUpstreamSlots
+from urbanlens.dashboard.services.security.redact import redact_tile
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 logger = logging.getLogger(__name__)
@@ -244,7 +245,7 @@ class BasemapTileView(AccessMixin, View):
         auth_key = tile_auth_key(session_key) if session_key else None
         # One round trip for both: the tile is useless without the gate and the gate costs nothing
         # to carry alongside it.
-        found = bounded_cache.get_many_or_empty([auth_key, cache_key] if auth_key else [cache_key], label=f"Basemap tile {layer} {z}/{x}/{y}")
+        found = bounded_cache.get_many_or_empty([auth_key, cache_key] if auth_key else [cache_key], label=f"Basemap tile {layer} {redact_tile(z, x, y)}")
 
         if auth_key is None or auth_key not in found:
             # Nothing remembered about this session, so ask properly - and remember the answer.
@@ -274,7 +275,8 @@ class BasemapTileView(AccessMixin, View):
             try:
                 status, body, content_type = _fetch_tile(layer, z, x, y)
             except (LocationContextUnavailableError, RequestCancelledError, GatewayRequestError, OSError) as exc:
-                logger.warning("Basemap tile fetch failed for %s %s/%s/%s: %s", layer, z, x, y, exc)
+                # The exception's text is the request URL, which carries the tile's own z/x/y.
+                logger.warning("Basemap tile fetch failed for %s %s: %s", layer, redact_tile(z, x, y), type(exc).__name__)
                 if isinstance(exc, ServiceDisabledError):
                     # Switched off rather than busy or unreachable, so it will still be switched off
                     # for as long as the catalogue advertising these layers stays cached - and a map
@@ -292,7 +294,7 @@ class BasemapTileView(AccessMixin, View):
                 # Not cached, and not a retryable status: the upstream will answer the next
                 # coordinate the same way, and a viewport retrying five times each would turn one
                 # broken layer into 150 calls. Uncached so a fixed upstream is visible at once.
-                logger.warning("REData answered %s %s/%s/%s with %r, which this origin will not serve", layer, z, x, y, content_type)
+                logger.warning("REData answered %s %s with %r, which this origin will not serve", layer, redact_tile(z, x, y), content_type)
                 return HttpResponse(status=404)
             # Bounded like the Immich thumbnail proxy: these bytes come from a
             # vendor and land in the same shared Dragonfly that holds sessions
@@ -301,7 +303,7 @@ class BasemapTileView(AccessMixin, View):
             # failed cache writes for everyone sharing the store.
             # The helper also swallows a cache failure - a full or unreachable
             # Dragonfly is a degraded cache, not a broken map.
-            bounded_cache.set_if_small(cache_key, body, resolved_type, _ttl_for(z), label=f"Basemap tile {layer} {z}/{x}/{y}")
+            bounded_cache.set_if_small(cache_key, body, resolved_type, _ttl_for(z), label=f"Basemap tile {layer} {redact_tile(z, x, y)}")
             return _keep_for(HttpResponse(body, content_type=resolved_type), _browser_ttl(layer, _ttl_for(z)))
         if status == 400 and _VECTOR_LAYER_REFUSAL in body:
             # Same reasoning as the disabled-service branch above: the catalogue is what named this
@@ -315,7 +317,7 @@ class BasemapTileView(AccessMixin, View):
         if status in (400, 404):
             # A definitive answer about the request: no such tile, unknown
             # layer, or coordinates out of range. Safe to remember.
-            bounded_cache.set_or_skip(cache_key, _NO_TILE, _ttl_for_absence(z), label=f"Basemap tile {layer} {z}/{x}/{y} (absent)")
+            bounded_cache.set_or_skip(cache_key, _NO_TILE, _ttl_for_absence(z), label=f"Basemap tile {layer} {redact_tile(z, x, y)} (absent)")
             return _keep_for(HttpResponse(status=404), _browser_ttl(layer, _ttl_for_absence(z)))
-        logger.warning("Basemap tile upstream status %s for %s %s/%s/%s", status, layer, z, x, y)
+        logger.warning("Basemap tile upstream status %s for %s %s", status, layer, redact_tile(z, x, y))
         return HttpResponse(status=503)

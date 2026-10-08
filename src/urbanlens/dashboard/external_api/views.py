@@ -1438,10 +1438,10 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
             logger.info("external API photo labels rejected: %s", exc)
             return Response({"error": f"A photo may have at most {MAX_MEDIA_LABELS} labels."}, status=400)
         except BlankMediaLabelNameError as exc:
-            logger.info("external API photo labels rejected: %s", exc)
+            logger.info("external API photo labels rejected: %s", type(exc).__name__)
             return Response({"error": "Label names cannot be blank."}, status=400)
         except MediaLabelNameTooLongError as exc:
-            logger.info("external API photo labels rejected: %s", exc)
+            logger.info("external API photo labels rejected: %s", type(exc).__name__)
             return Response({"error": f"Label names cannot exceed {MAX_MEDIA_LABEL_NAME_LENGTH} characters."}, status=400)
         except CapacityExceededError as exc:
             return Response({"error": exc.user_message}, status=400)
@@ -2684,7 +2684,7 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
         try:
             created = self.create(pin, serializer.validated_data)
         except PinSubResourceError as exc:
-            logger.info("external API pin sub-resource create rejected: %s", exc)
+            logger.info("external API pin sub-resource create rejected: %s", type(exc).__name__)
             return Response({"error": _subresource_error_message(exc)}, status=_subresource_error_status(exc))
 
         return Response(self.output_serializer(created, context=self.serializer_context(pin)).data, status=201)
@@ -2728,7 +2728,7 @@ class PinSubResourceDetailView[SubResourceT: Model](OwnedPinMixin, ExternalApiVi
         try:
             self.perform_delete(pin, obj)
         except PinSubResourceError as exc:
-            logger.info("external API pin sub-resource delete rejected: %s", exc)
+            logger.info("external API pin sub-resource delete rejected: %s", type(exc).__name__)
             return Response({"error": _subresource_error_message(exc)}, status=_subresource_error_status(exc))
         return Response(status=204)
 
@@ -3368,7 +3368,7 @@ class SafetyCheckinPartnersApiView(SafetyCheckinScopedView):
             logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
             return Response({"error": "This check-in already has as many partners as it can hold."}, status=400)
         except PartnerNotFoundError as exc:
-            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)
+            logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, type(exc).__name__)
             return Response({"error": f'No user found with username "{username}".'}, status=400)
         except CannotInviteSelfError as exc:
             logger.info("external API safety partner invite rejected on checkin %s: %s", checkin.pk, exc)

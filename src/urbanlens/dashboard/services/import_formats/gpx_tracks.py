@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_
 from urbanlens.dashboard.services.import_formats.route_geometry import simplify_and_measure
 from urbanlens.dashboard.services.import_formats.streams import as_stream, iter_decoded
 from urbanlens.dashboard.services.sandbox import untrusted_parse
+from urbanlens.dashboard.services.security.redact import redact_filename
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -197,7 +198,7 @@ def gpx_tracks_to_routes(file_contents: bytes | IO[bytes], user_profile: Profile
     logger.debug(
         "Converted %s tracks/routes from GPX file '%s' to Route candidates.",
         len(parsed),
-        source_filename,
+        redact_filename(source_filename),
     )
     return parsed
 

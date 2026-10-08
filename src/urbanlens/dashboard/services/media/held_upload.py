@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     from django.core.files import File
     from django.core.files.storage import Storage
+    from django.core.files.uploadedfile import UploadedFile
     from django.db.models import Model, QuerySet
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,9 @@ ICON_MAX_PX = 256
 
 #: The longest side a stored avatar keeps.
 AVATAR_MAX_PX = 512
+
+#: The setting holding the most bytes a label, pin or award icon upload may carry.
+ICON_CEILING_SETTING = "ICON_MAX_UPLOAD_BYTES"
 
 #: How long a held upload waits before the sweep takes it that its publish was never queued or never finished.
 STALLED_HELD_AGE = timedelta(minutes=15)
@@ -79,6 +83,8 @@ class HeldField:
     model: str
     field: str
     max_dimension: int
+    #: The setting holding the most bytes an upload to the field may carry, which its door checks before anything reads it.
+    ceiling_setting: str
     #: Label and pin icons leave the file they replace to the sweep, which keeps a file an undo record names.
     delete_replaced: bool
     #: Clients that cache a label by ``updated`` redraw its icon when it moves.
@@ -89,6 +95,13 @@ class HeldField:
     def key(self) -> str:
         """The name a queued task refers to this field by."""
         return f"{self.model}.{self.field}"
+
+    @property
+    def max_upload_bytes(self) -> int:
+        """The most bytes an upload to the field may carry."""
+        from django.conf import settings
+
+        return int(getattr(settings, self.ceiling_setting))
 
     @property
     def upload_column(self) -> str:
@@ -104,10 +117,10 @@ class HeldField:
 HELD_FIELDS: dict[str, HeldField] = {
     held.key: held
     for held in (
-        HeldField("dashboard.Label", "custom_icon", ICON_MAX_PX, delete_replaced=False, bump_updated=True, after_publish=_touch_label_pins),
-        HeldField("dashboard.Pin", "custom_icon", ICON_MAX_PX, delete_replaced=False, after_publish=_touch_pin),
-        HeldField("dashboard.Achievement", "custom_icon", ICON_MAX_PX, delete_replaced=True),
-        HeldField("dashboard.Profile", "avatar", AVATAR_MAX_PX, delete_replaced=True),
+        HeldField("dashboard.Label", "custom_icon", ICON_MAX_PX, ICON_CEILING_SETTING, delete_replaced=False, bump_updated=True, after_publish=_touch_label_pins),
+        HeldField("dashboard.Pin", "custom_icon", ICON_MAX_PX, ICON_CEILING_SETTING, delete_replaced=False, after_publish=_touch_pin),
+        HeldField("dashboard.Achievement", "custom_icon", ICON_MAX_PX, ICON_CEILING_SETTING, delete_replaced=True),
+        HeldField("dashboard.Profile", "avatar", AVATAR_MAX_PX, "AVATAR_MAX_UPLOAD_BYTES", delete_replaced=True),
     )
 }
 
@@ -119,6 +132,30 @@ def held_field(instance: Model, field: str) -> HeldField:
         KeyError: The field does not hold its uploads.
     """
     return HELD_FIELDS[f"{instance._meta.label}.{field}"]  # noqa: SLF001 - _meta is Django's public model API
+
+
+def icon_upload_error(upload: UploadedFile) -> tuple[str, int] | None:
+    """Every check a label, pin or award icon upload must pass before it is held, in order.
+
+    The ceiling comes first, from the declared size, because the gauntlet's last step is the antivirus scan, which
+    copies the whole file into this process and streams it to the shared clamd daemon.
+
+    Args:
+        upload: The uploaded file.
+
+    Returns:
+        ``(message, status_code)`` for the first failing check, or None.
+    """
+    from django.conf import settings
+    from django.template.defaultfilters import filesizeformat
+
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.media.images import image_upload_error
+
+    ceiling = int(getattr(settings, ICON_CEILING_SETTING))
+    if (size := upload.size or 0) > ceiling:
+        return f"That icon is too large ({filesizeformat(size)}). An icon may be at most {filesizeformat(ceiling)}.", 413
+    return image_upload_error(upload, MediaKind.PHOTO)
 
 
 def _delete_quietly(storage: Storage, name: str) -> bool:
@@ -194,7 +231,7 @@ def queue_held_upload(instance: Model, field: str) -> None:
 def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) -> bool:
     """Write a re-encoded copy of a held upload into its field, if the row still holds that upload.
 
-    One that cannot be decoded is dropped, and the field keeps what it showed.
+    One that cannot be decoded, or is over the field's upload ceiling, is dropped, and the field keeps what it showed.
 
     Args:
         key: The :attr:`HeldField.key`.
@@ -225,9 +262,15 @@ def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) 
         if cache.get(running) not in {None, token}:
             return False
         cache.set(running, token, timeout=settings.CELERY_TASK_TIME_LIMIT)
+    from urbanlens.dashboard.services.media.stored_field import read_at_most
+
     try:
         with getattr(row, held.field).storage.open(held_name, "rb") as handle:
-            raw = handle.read()
+            raw = read_at_most(handle, held.max_upload_bytes)
+        if raw is None:
+            logger.warning("Dropping the upload held for %s %s: it is over the %s-byte ceiling", key, pk, held.max_upload_bytes)
+            drop_held(key, pk, held_name)
+            return False
         cache.set(_starts_key(held_name), cache.get(_starts_key(held_name), 0) + 1, timeout=_STARTS_TTL)
         return _publish_read(held, key, row, raw)
     finally:
@@ -296,7 +339,7 @@ def drop_held(key: str, pk: int, held_name: str) -> bool:
 
 
 def reencode_shown(key: str, pk: int, name: str) -> bool:
-    """Re-encode a file the field already shows, stored before uploads to it were held. One that cannot be decoded is removed.
+    """Re-encode a file the field already shows, stored before uploads to it were held. One that cannot be decoded, or is over the field's upload ceiling, is removed.
 
     Args:
         key: The :attr:`HeldField.key`.
@@ -315,8 +358,9 @@ def reencode_shown(key: str, pk: int, name: str) -> bool:
     held = HELD_FIELDS[key]
     rows = apps.get_model(held.model).objects.all()
     also_set = {"updated": timezone.now()} if held.bump_updated else None
-    outcome = reencode_stored_field(rows, pk, held.field, name, max_dimension=held.max_dimension, convert_webp=True, also_set=also_set)
-    changed = outcome is Reencoded.REPLACED or (outcome is Reencoded.UNDECODABLE and clear_stored_field(rows, pk, held.field, name, also_set=also_set))
+    outcome = reencode_stored_field(rows, pk, held.field, name, max_dimension=held.max_dimension, convert_webp=True, max_bytes=held.max_upload_bytes, also_set=also_set)
+    unshowable = outcome in {Reencoded.UNDECODABLE, Reencoded.TOO_LARGE}
+    changed = outcome is Reencoded.REPLACED or (unshowable and clear_stored_field(rows, pk, held.field, name, also_set=also_set))
     if changed and held.after_publish is not None:
         held.after_publish(pk)
     return changed

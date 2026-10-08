@@ -11,6 +11,7 @@ import threading
 from typing import ClassVar
 
 import requests
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 
 def _normalize_service_key(class_name: str) -> str:
@@ -173,7 +174,11 @@ class UpstreamBusyError(GatewayRequestError):
 
     Attributes:
         retry_after: Seconds the upstream asked callers to wait, bounded by :data:`UPSTREAM_BUSY_MAX_SECONDS`.
+        answer_pending: The upstream is working out this one answer and will have it after ``retry_after``, so asking
+            again then is the next step, not a retry of a failure.
     """
+
+    answer_pending: ClassVar[bool] = False
 
     def __init__(self, *args: object, retry_after: int = UPSTREAM_BUSY_DEFAULT_SECONDS) -> None:
         super().__init__(*args)
@@ -257,14 +262,21 @@ def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MED
         The body, at most *max_bytes* long.
 
     Raises:
-        GatewayRequestError: The body is larger than *max_bytes*, or the
-            response was not streamed and so cannot be capped.
+        GatewayRequestError: The body is larger than *max_bytes*, the
+            response was not streamed and so cannot be capped, or the
+            connection failed while the body was being read.
     """
     if response.raw is None or getattr(response, "_content_consumed", False):
         raise GatewayRequestError(f"{what} was fetched without stream=True, so its size cannot be bounded")
     # One byte past the ceiling: enough to know it was exceeded, without
     # reading the rest of whatever is on the other end.
-    body = response.raw.read(max_bytes + 1, decode_content=True)
+    try:
+        body = response.raw.read(max_bytes + 1, decode_content=True)
+    except Urllib3HTTPError as exc:
+        # ``raw.read`` skips the wrapper that turns these into ``requests`` exceptions, so a dropped connection or a read timeout would otherwise escape callers that catch ``GatewayRequestError``.
+        raise GatewayRequestError(f"{what} could not be read: {type(exc).__name__}") from exc
     if len(body) > max_bytes:
+        # Unread bytes remain, so the connection cannot go back to the pool.
+        response.close()
         raise GatewayRequestError(f"{what} is larger than the {max_bytes // (1024 * 1024)}MB limit for proxied media")
     return body

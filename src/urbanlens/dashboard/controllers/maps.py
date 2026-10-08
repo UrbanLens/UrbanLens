@@ -226,10 +226,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             color = clean_color(request.POST.get("color"))
             custom_icon = request.FILES.get("custom_icon") or None
             if custom_icon:
-                from urbanlens.dashboard.models.images.model import MediaKind
-                from urbanlens.dashboard.services.media.images import image_upload_error
+                from urbanlens.dashboard.services.media.held_upload import icon_upload_error
 
-                upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+                upload_error = icon_upload_error(custom_icon)
                 if upload_error:
                     message, status = upload_error
                     return HttpResponse(f"Error: {message}", status=status)
@@ -779,10 +778,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         color = clean_color(request.POST.get("color"))
         custom_icon = request.FILES.get("custom_icon") or None
         if custom_icon:
-            from urbanlens.dashboard.models.images.model import MediaKind
-            from urbanlens.dashboard.services.media.images import image_upload_error
+            from urbanlens.dashboard.services.media.held_upload import icon_upload_error
 
-            upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
+            upload_error = icon_upload_error(custom_icon)
             if upload_error:
                 message, status = upload_error
                 return JsonResponse({"error": message}, status=status)
@@ -1007,7 +1005,7 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
         bbox_str: Raw query-param value (may be empty or malformed).
 
     Returns:
-        ``(south, west, north, east)``, or None when absent/invalid.
+        ``(south, west, north, east)``, or None when absent, malformed, non-finite or with south above north.
     """
     bbox_str = (bbox_str or "").strip()
     if not bbox_str:
@@ -1021,4 +1019,11 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
         logger.warning("Invalid bbox parameter: %d values, not 4", len(parts))
         return None
     south, west, north, east = parts
+    if not all(math.isfinite(part) for part in parts):
+        logger.warning("Invalid bbox parameter: a value is not finite")
+        return None
+    if south > north:
+        logger.warning("Invalid bbox parameter: south is above north")
+        return None
+    # West may exceed east: a viewport across the date line is split by ``PinQuerySet.within_bounds``.
     return south, west, north, east
