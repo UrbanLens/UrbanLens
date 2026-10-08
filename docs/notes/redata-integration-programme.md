@@ -8,7 +8,7 @@
 > **rewrite this file** when you do — do not add a correction underneath the
 > old claim. When this file and the code disagree, the code wins.
 
-`id: PL9` · `status: live` · `updated: 2026-10-07`
+`id: PL9` · `status: live` · `updated: 2026-10-08`
 
 ## What done means
 
@@ -20,88 +20,94 @@
 - `tests/live_locations/` checks all of that against a real REData for the four primary campuses (HRSH,
   St. Lawrence, Harlem Valley, Athens) and the rest of the 57 in `kirkbrides.toml`. See `LOCATION_DATA_TESTS.md`.
 
-## Where it stands (2026-10-07, all 57 campuses against REData production)
+## Where it stands (2026-10-08, all 57 campuses against REData production 0.3.10)
 
-`bin/run_live_location_tests.sh` checked all 57 campuses against REData production (`https://redata.urbanlens.org`)
-with UrbanLens production's own key, 2026-10-07 01:09-05:06Z. Production was chosen so the answers are cached for
-real requests; staging's share is unchanged. REData production ran v0.3.5 until a deploy at 03:05:28Z and v0.3.6
-after it. The four primaries and 23 other campuses ran on 0.3.5, the other 30 on 0.3.6, and Athens was run again on
-0.3.6 at the end.
-
-Each campus had a pytest session of its own, 60 s apart, in batches of eight or nine with 5 minutes between them,
-and never more than 350 requests in the last hour. The harness never retried (`UL_LIVE_MAX_WAIT_SECONDS=0`). A
-source's `rate_limited` inside an answered response was recorded and the run went on. A request-level refusal
-would have stopped it, and none came: no `429`, no `key_budget_exhausted` and no `503` from REData's limiter. The
-run paused five times for a person to judge, and each time it resumed:
-- twice on a `503` whose causes were all upstream: GDELT's own `429` back-off, with SearXNG's news engines
-  throttled;
-- once on a parcel lookup's `503 no_data_found`;
-- once for the 0.3.6 deploy, whose app restart answered one campus's first request with `502` (that campus was run
-  again);
-- once to stop the suite asking again after a `502` that had cost a gunicorn worker.
-
-It made 956 REData requests: 933 from the suite and 23 diagnostic reads (20 parcel records, one register re-read,
-`capabilities/` and `schema/`). The busiest hour held 305.
+`bin/run_live_location_tests.sh` checked all 57 campuses against REData production (`https://redata.urbanlens.org`,
+v0.3.10) with UrbanLens production's own key, 2026-10-07 23:36Z to 2026-10-08 02:26Z. The suite is `release/v_0_9_0`
+at `f77477412` plus one catalogue line (Greystone's `nrhp`, below). Each campus had a pytest session of its own, 60 s
+apart, in batches of nine with 5 minutes between, never more than 350 requests in the last hour (the busiest held
+328), and `UL_LIVE_MAX_WAIT_SECONDS=0`: every call was asked once and none re-asked, so a `503 refresh_queued` counts
+as inconclusive and is not waited out. It made 881 suite requests and about 50 diagnostic reads to explain failures. The
+statuses were 869 `200`, 9 `503`, 2 `504` and one `404`: no `429`, no `key_budget_exhausted`, no `500`, no `502`.
+Production's app log held no `WORKER TIMEOUT` and no `SIGKILL` from 22:30Z to 02:30Z, against 7 to 16 an hour in the
+last run. No hosted-AI call was made, and staging's share was not touched.
 
 | Group | REData | Campuses | Checks | Passed | Failed | Known issue | Inconclusive | Not applicable |
 |---|---|---|---|---|---|---|---|---|
-| Primaries | 0.3.5 | 4 | 64 | 50 | 5 | 8 | 1 | 0 |
-| Primaries, Athens re-run | 0.3.6 | 1 | 16 | 14 | 0 | 2 | 0 | 0 |
-| The other 53 | 0.3.5 | 23 | 368 | 216 | 114 | 0 | 26 | 12 |
-| The other 53 | 0.3.6 | 30 | 480 | 320 | 131 | 0 | 14 | 15 |
+| Primaries | 0.3.10 | 4 | 64 | 52 | 2 | 8 | 2 | 0 |
+| The other 53 | 0.3.10 | 53 | 848 | 617 | 161 | 23 | 41 | 6 |
+| All 57 | 0.3.10 | 57 | 912 | 669 | 163 | 31 | 43 | 6 |
+| Primaries, previous run (Athens on 0.3.6) | 0.3.5, 0.3.6 | 4 | 64 | 52 | 11 with known issues | (in failed) | 1 | 0 |
+| The other 53, previous run | 0.3.5, 0.3.6 | 53 | 848 | 536 | 245 | 0 | 40 | 27 |
 | Primaries, staging 0.3.5 (2026-10-06) | | 4 | 64 | 51 | 10 | (in failed) | 3 | 0 |
 | Primaries, staging 0.3.0 (2026-10-05) | | 4 | 64 | 43 | 15 | (in failed) | 6 | 0 |
 
 "Known issue" is a `known_issues` entry failing as expected. "Not applicable" is a demolished campus's building
-checks. Harlem Valley's `historic_maps` passed against its entry, a strict xpass, and is counted as passed. Counted
-the staging way, with known issues among the failures, the primaries come to 50, 13 and 1 on production 0.3.5,
-against 51, 10 and 3 on staging. With Athens on 0.3.6 they come to 52, 11 and 1.
+checks: six now (Clinton Valley and Dixmont), against 27 before the seven campuses that still have buildings were
+made `standing`. Counted the staging way, the primaries come to 52, 10 and 2. The other 53 gained 81 passes, and their failures fell from 245 to 161. Mississippi's `historic_maps` known issue came back as a strict xpass and is counted as passed; it is
+not a fix (UrbanLens#373, below).
 
-What differs on the primaries:
-- Athens's `ownership` and `historic_maps` failed on 0.3.5 and pass on 0.3.6.
-- Harlem Valley's `documents` failed on Smithsonian's 500.
-- St. Lawrence's `photos` came back empty rather than inconclusive.
-- Harlem Valley's `historic_maps` now passes.
+The primaries' failures are St. Lawrence's `web_photos` and `photos` (nothing near the point) and two inconclusive
+checks at Harlem Valley (`documents`, with loc.gov and Chronicling America not answering, and `news`, with the news
+search unavailable). Athens's `ownership` and `historic_maps` pass, as they did on 0.3.6.
 
-### Every failure, by cause
+### What REData's releases fixed, seen live
+
+| N47 item | Release | Seen on 0.3.10 |
+|---|---|---|
+| 1. Smithsonian `500` fails archive search | 0.3.7 (REData #145) | **Fixed.** No `500` in 881 calls; `documents` passed at 44 of 57 campuses, against 25 or fewer. The other 13 are in the table below. |
+| 2. Cold boundaries and buildings hold a gunicorn worker (P62) | 0.3.7 (#147), 0.3.8 (#153) | **Fixed for 6 of 7, and no worker killed.** Augusta, Austin, St. Elizabeths, Spring Grove, Anna and Winnebago answer. Richardson Olmsted's `boundaries/` and `buildings/` answered `503 refresh_queued` (the designed answer, not re-asked). P62 stays open at REData. |
+| 3. Sanborn volumes missing (P112) | 0.3.6, targeted harvest | **Fixed.** Athens, Indianapolis, Jacksonville and Hopkinsville answer `near` volumes at 0 m (10, 10, 5 and 7), and `historic_maps` passes. |
+| 4. Counties with no parcel source | 0.3.7 (#143) and the seeded counties | **Mostly fixed.** Jefferson KY, Oakland MI, Kane IL, St. Louis MO, Shawnee KS and Grand Traverse MI answer a parcel (they were `404 unresearched`), and so do Montour PA, Warren PA and Nicollet MN (were `503 no_data_found`). Parcel failures fell from 14 campuses to 5. |
+| 4. Pennsylvania's and Philadelphia's owner | 0.3.7 (#143) | **Philadelphia fixed, Pennsylvania not seen.** The Institute's `ownership` passes. Harrisburg's parcel `62-026-004` still has no row in `owners/` or `assessments/`, and Danville's and Warren's new parcels have none either. |
+| 5. Greystone's NRHP listing at 500 m | 0.3.7 (#145) | **Fixed in REData.** `cultural-resources/lookup/` at 500 m now returns NRHP 00000653 from `nps_nrhp` and `nj_shpo`. The check still failed because the catalogue had no number and the listing's name does not say Greystone; `kirkbrides.toml` now carries `nrhp = "00000653"` (replayed on the two recorded rows, not re-asked live). |
+| 6. News hides a skipped GDELT | 0.3.7 (#145) | **Fixed for the harness.** 18 campuses are now inconclusive because `complete: false` says GDELT did not answer, where 17 failed or were inconclusive before; 3 more are inconclusive on `search_unavailable`. |
+| 7. Wikipedia misses a non-primary coordinate | 0.3.7 (#145) | **Not seen.** Eastern Oregon's article sits at the point (45.6715, -118.8171, no `primary` flag), and `reference-documents/?provider=wikipedia` at 1 km returned three other articles with distances. |
+| 8, 9. Build years, incidents | not answered | **Unchanged.** |
+
+### Every remaining failure, by cause
 
 Classes: **a** an UrbanLens bug; **b** a REData bug or gap REData can close; **c** a data gap no source covers;
 **d** a budget, throttle or upstream artifact; **e** a wrong expectation in `kirkbrides.toml`. A `?` marks a class
-not confirmed. File references are REData `v0.3.6`'s unless they name this repo. Request ids, and every REData-side
-item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`).
+not confirmed. REData-side items are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`) and
+REData's T15 reply.
 
 | Cause | Class | Checks | Campuses |
 |---|---|---|---|
-| Parcel lookup `404 unresearched`: no property-record source for the county (`parcels/services/property_records/orchestrator.py`) | b | parcel and everything on it | Anna (Union IL), Central State KY (Jefferson), Clinton Valley (Oakland MI), Elgin (Kane IL), St. Vincent's (St. Louis MO), Topeka (Shawnee KS), Traverse City (Grand Traverse MI) |
-| Parcel lookup `503 no_data_found`: every configured tier returned nothing for the point | b | the same | Danville (Montour PA), St. Peter (Nicollet MN), Warren (Warren PA), Western State KY (Christian) |
+| Parcel lookup `404 unresearched`: no property-record source for Union County IL | b | parcel and everything on it | Anna |
+| Parcel lookup `503 no_data_found` for Christian County KY (Tier 2) | b | the same | Western State KY |
 | Parcel lookup `503 search_key_unavailable`: the vendor tier needs an address REData could not derive | b | the same | Bryce (Tuscaloosa AL), Osawatomie (Miami KS) |
-| Parcel lookup `503 source_error`: `engineer.gomvo.org` unreachable | d | the same | Dayton (Montgomery OH) |
-| `502`/`504`: a cold answer held a gevent worker until gunicorn killed it (REData P62, `gunicorn.conf.py:5`) | b | boundary, buildings, footprints, build_dates; documents | Augusta, Austin, St. Elizabeths, Richardson Olmsted; Anna, Spring Grove, Winnebago |
-| `500`: a Smithsonian record's empty `indexedStructured.date` (`parcels/services/reference_documents/gateways.py:445`), which the registry does not isolate (`core/services/provider_registry.py:756`) | b | documents | 19: Arkansas, Austin, Central State IN/KY/VA, Cherokee, Clinton Valley, Columbus, Eastern Oregon, Eastern State WA, Fergus Falls, Harlem Valley, Mendota, Mississippi, Oregon, Dayton, Trenton, Warren, Western State KY |
-| Archives that did not answer: loc.gov's per-minute budgets (`library_of_congress`, `chronicling_america`), Internet Archive `502`/`503`, Digital Commonwealth and LoC timeouts | d | documents | 13: Bryce, Clarinda, Danville, Dixmont, Harrisburg, Independence, the Institute of the Pennsylvania Hospital, Kalamazoo, St. Peter, Osawatomie, St. Vincent's, Topeka, Trans-Allegheny |
-| No on-property building carries a year (REData P111's class; for Athens nothing REData can read dates them) | b | build_dates | 27: Agnews, Arkansas, Athens (known issue), Broughton, Central State IN/VA, Cherokee, Clarinda, Eastern Oregon, Eastern State WA, Fergus Falls, Greystone, Harrisburg, Independence, the Institute, Jacksonville, Kalamazoo, Kankakee, Mendocino, Mendota, Mississippi, Napa, Oregon, Patton, Terrell, Trans-Allegheny, Winnebago |
-| CRIS roster rows no footprint matches (REData P114, P103) | b | footprints (known issues) | HRSH 27 of 84 outlined, St. Lawrence 88 of 144, Harlem Valley 66 of 92 |
-| Owner in fields REData does not read: PA's `OWNER_LAST_NAME`/`OWNER_FIRST_NAME` (`parcels/services/property_records/known_endpoints.py:426`); Philadelphia's OPA not read | b | ownership | Harrisburg; the Institute of the Pennsylvania Hospital |
-| Athens's row not re-pointed at the County Auditor, so a cached statewide parcel with no owner answered (fixed on 0.3.6 by the re-point and REData P128) | b | ownership | Athens on 0.3.5 |
-| The statewide layer REData reads has no owner name (CA, ME, VA, WA) or a blank one (NJ, MD); county sources not researched | c? | ownership | Napa, Agnews, Mendocino, Augusta, Central State VA, Eastern State WA, Trenton, Greystone, Spring Grove, Sheppard Pratt |
-| No National Register listing within reach, and no register provider for the state | c | register (now known issues) | Anna, Arkansas, Cherokee, Clarinda, Danville, Eastern Oregon, Elgin, Independence, Jacksonville (its NRHP 75000669 was removed 1984-04-18, so the catalogue no longer expects it), Mendocino, Mississippi, Napa, Osawatomie, Patton, Warren, Winnebago |
-| No current listing within 500 m: Central State VA's only one, the Chapel (10000794), was removed 2017-02-07 after it collapsed, and Mayfield Cottage (69000236) is 616 m away; Terrell has none, and THC marker 8556 is published 542 m from the catalogue point, outside the grounds, past the radius | c | register (known issues) | Central State VA, Terrell |
-| NPS places the campus's listing (86000851) 1.06 km from it | c | register (known issue) | Columbus |
-| Listed under a number the catalogue lacked, because the listing is one of the campus's buildings or its district (NPS, cross-checked against Wikipedia's NRHP lists; corrected in `kirkbrides.toml`) | e | register | Central State IN (`72000011`, Old Pathology Building), Eastern State WA (`97001084`, Roosevelt Hall), Kalamazoo (`72000624`, Water Tower), Mendota (`88002183`, the Wisconsin Memorial Hospital Historic District), St. Peter (`86002117`, Center Building) |
-| A historic district named only in the rows' `attributes` (New Jersey's `HD_NAME`; SHPO-eligible, with no NRHP listing): the check read only names, and now also reads a district named in an attribute, and says in its result when the match is an eligible record, not a listing (UrbanLens#340, "register check reads only each row's name") | a | register | Trenton |
-| A listed NRHP property within 500 m not returned; REData's cultural-resource cache may ignore the radius | b | register | Greystone (00000653) |
+| Parcel lookup `503 source_error`: `engineer.gomvo.org` | d | the same, inconclusive | Dayton (Montgomery OH) |
+| `503 refresh_queued` on `boundaries/` and `buildings/` (REData P62's designed answer), not re-asked | b? | boundary, buildings, footprints, build_dates, inconclusive | Richardson Olmsted |
+| `reference-documents/search/` answered `504` at 90 s; no worker was killed | b | documents, inconclusive | Cherokee, Traverse City (REData P62's class) |
+| **New.** The parcel resolves in a newly seeded county and `buildings/` answers `200` with an empty list (Topeka's parcel is 2700 SW 3rd St, 277,250 sq ft; Traverse City's is 1001 W Eleventh St) | b? | buildings, footprints | Topeka, Traverse City |
+| No on-property building carries a year (REData P111's class; for Athens nothing REData can read dates them) | b | build_dates | 39 campuses, and Athens as a known issue; Anna, Bryce, Osawatomie and Western State KY never got a parcel: Agnews, Arkansas, Athens, Augusta, Austin, Broughton, Central State IN/KY/VA, Cherokee, Clarinda, Columbus, Danville, Eastern Oregon, Eastern State WA, Elgin, Fergus Falls, Greystone, Harrisburg, Independence, the Institute, Jacksonville, Kalamazoo, Kankakee, Mendocino, Mendota, St. Peter, Mississippi, Napa, Northampton, Oregon, Patton, St. Elizabeths, Taunton, Terrell, Topeka, Trans-Allegheny, Traverse City, Warren, Winnebago |
+| A building count under 0.8 outlined: CRIS roster rows no footprint matches (REData P114, P103) | b | footprints | HRSH 27 of 84, St. Lawrence 88 of 144, Harlem Valley 66 of 92 (known issues); Northampton and St. Vincent's, 2 of 3 each |
+| Owner in fields REData does not read, or a statewide layer with no owner name (CA, ME, VA, WA, NJ, MD), or a new county parcel whose owner is blank; county sources not researched | b / c? | ownership | Agnews, Augusta, Central State KY (new), Central State VA, Clinton Valley (new), Danville (new), Eastern State WA, Greystone, Harrisburg, Mendocino, Napa, Sheppard Pratt, Spring Grove, Trenton, Warren (new) |
+| No National Register listing within reach, and no register provider for the state | c | register (known issues) | Anna, Arkansas, Central State VA, Cherokee, Clarinda, Columbus, Danville, Eastern Oregon, Elgin, Independence, Jacksonville, Mendocino, Mississippi, Napa, Osawatomie, Patton, Terrell, Warren, Winnebago |
 | The article has no coordinates | c | wikipedia (known issues) | Central State VA, Kalamazoo |
-| The article's coordinates are not marked primary, and REData's geosearch reads primary ones only | b | wikipedia | Eastern Oregon |
-| Image engines refuse REData's shared egress IP (REData P116), leaving 0-7 results | d | web_photos | 19: Anna, Arkansas, Augusta, Central State KY, Cherokee, Clarinda, Danville, Eastern Oregon, Eastern State WA, the Institute, Jacksonville, Kalamazoo, Kankakee, Mississippi, Spring Grove, St. Vincent's, Trenton, Western State KY, Winnebago |
-| An image search whose engines timed out answered empty (`core/services/search.py:858`, fixed in 0.3.6) | b | web_photos; photos? | St. Lawrence; St. Lawrence, Central State KY, Danville, Mississippi (0.3.5) |
-| GDELT refused production's egress (five `429`s from 01:11Z), and SearXNG's news engines were throttled; a `200` from the fallback does not say GDELT was skipped | d | news | 17: Anna, Clinton Valley, Columbus, Dixmont, Fergus Falls, Harlem Valley (inconclusive), Independence, Kalamazoo, Kankakee, Northampton, Patton, Sheppard Pratt (inconclusive), Dayton, St. Vincent's, Terrell, Topeka, Trenton |
-| The news query was a shared name without its town, and now carries it (UrbanLens#339, "news check searches a shared campus name without its town") | a | news | Central State KY, Western State KY |
-| A media source did not answer (`wikimedia_commons` unavailable, `searxng_media` rate-limited) | d | photos (inconclusive) | Anna, Clinton Valley, Independence, Kankakee |
-| Every media source answered, with nothing near the point | c? | photos | Cherokee, Patton, Winnebago |
-| loc.gov holds the town's Sanborn atlas, production's catalogue does not (REData P112; `parcels/services/historical_maps/lookup.py:246`) | b | historic_maps | Central State IN (31 volumes), Jacksonville (7), Western State KY (9); Athens on 0.3.5 (passes on 0.3.6) |
-| loc.gov has no Sanborn of the place | c | historic_maps (known issue) | Mississippi (Whitfield) |
-| No incident provider covers the point: all 148 `not_applicable` (REData P110's class; public feeds not researched) | c? | incidents | 46 campuses, the primaries among them (their known issues) |
+| The article's coordinates are not marked primary and REData still does not return it (N47 section 7, REData T15 section 7) | b | wikipedia | Eastern Oregon |
+| Image engines refuse REData's shared egress IP (REData P116), leaving 0-7 results | d | web_photos | 22: Anna, Arkansas, Augusta, Austin, Central State KY, Cherokee, Clarinda, Danville, Eastern Oregon, Eastern State WA, the Institute, Jacksonville, Kalamazoo, Kankakee, St. Peter, Mississippi, Spring Grove, St. Lawrence, St. Vincent's, Trenton, Western State KY, Winnebago |
+| Every media source answered with nothing near the point | c? | photos | Anna, Central State KY, Cherokee, Clinton Valley, Danville, Independence, Mississippi, Patton, St. Lawrence, Winnebago |
+| GDELT did not answer (`complete: false`), or the news search answered `503 search_unavailable` (Harlem Valley, Sheppard Pratt, St. Vincent's) | d | news, inconclusive | 21: Agnews, Anna, Central State IN, Clinton Valley, Columbus, Dixmont, Eastern State WA, Fergus Falls, Harlem Valley, Independence, Kalamazoo, Kankakee, Northampton, Patton, Sheppard Pratt, Dayton, St. Vincent's, Terrell, Topeka, Trenton, Western State KY |
+| loc.gov's `library_of_congress` and `chronicling_america` did not answer | d | documents, inconclusive | 10: Anna, Austin, Clarinda, Eastern State WA, Harlem Valley, Harrisburg, the Institute, Dayton, St. Vincent's, Western State KY |
+| News answered with 0 results and every source ok | c? | news | Central State KY |
+| 76 archive results, none naming the campus | c? | documents | Independence |
+| `maps/` returned 23 state-scale sheets, so the known issue (no Sanborn of Whitfield) became a strict xpass (UrbanLens#373) | a | historic_maps | Mississippi |
+| No incident provider covers the point (REData P110's class; public feeds not researched) | c? | incidents | 46 campuses, the primaries among them |
 | The one covering feed holds nothing within 2 km | c | incidents (known issues) | Central State KY (`louisville_fire`), Central State VA (`chesterfield_va_fire_ems`) |
+
+The seven campuses made `standing` on 2026-10-07 ran their building checks for the first time. Spring Grove, Danvers,
+Taunton, Northampton, Columbus and Central State KY have buildings on the property (`buildings` passes), and all but
+Danvers and Spring Grove fail `build_dates` (P111's class). Topeka has none (above). Dixmont and Clinton Valley stay
+`demolished`.
+
+New failures: the empty `buildings/` for Topeka and Traverse City, Mississippi's xpass (UrbanLens#373), and the
+ownership of the four counties that now have a parcel and no owner (Central State KY, Clinton Valley, Danville,
+Warren). No new UrbanLens defect beyond #373.
+
+Not run: a second ask for Richardson Olmsted's `refresh_queued`, and the pipeline layer (`test_pipeline.py`), which
+last ran on staging 0.3.0 on 2026-10-05 and passed for all four primaries apart from Athens's build date.
 
 ### What changed in the suite
 
@@ -126,8 +132,8 @@ item, are in N47 (`docs/handoffs/redata-production-live-locations-2026-10-07.md`
   Taunton (34 m), Northampton (25 m), Topeka (a new building on the point that OSM lacks), Columbus (79 m: two state
   office buildings, none a hospital's) and Central State KY (88 m: one park building; the 1996-demolished campus is
   now a state park). The last two are borderline. Dixmont (nothing within 200 m) and Clinton Valley (open field; the
-  nearest houses are 136 m away, also borderline) stay `demolished`. The seven's building checks now run, and none
-  has been run against REData. The 47 `standing` entries not mentioned here were not rechecked.
+  nearest houses are 136 m away, also borderline) stay `demolished`. The seven's building checks ran on
+  2026-10-08 ("Where it stands"): Columbus and Central State KY have buildings on the property. The 47 `standing` entries not mentioned here were not rechecked.
 - **Five harness-only fixes:**
   - the URL, key and Host are read from `.env` together or not at all;
   - a `503` carrying a REData error code is remembered for the session;
@@ -149,7 +155,7 @@ passed for all four primaries apart from Athens's build date (REData P111).
 **P1 - blocks the goal on production.**
 
 1. Deploy UrbanLens 0.9.0 (Jess approved it and REData 0.3.0's deploy on 2026-10-05). REData's half is done:
-   production runs v0.3.9 (the coordinating session's audit of 2026-10-07; not re-checked live for this edit), which carries v0.3.7 (in production from 2026-10-07 08:30Z) and v0.3.6 (from 03:05Z), so what had been fixed only on staging (NY parcels by polygon,
+   production runs v0.3.10 (seen 2026-10-08 in the app container's `pyproject.toml`), which carries v0.3.7 (in production from 2026-10-07 08:30Z) and v0.3.6 (from 03:05Z), so what had been fixed only on staging (NY parcels by polygon,
    campus footprints beyond the parcel box, Athens County's owner, web and news search, the cultural-resource cache,
    Chronicling America descriptions, per-provider `limit`, the loc.gov walk) is in REData's production code, and
    Athens's owner and atlas are in its data. UrbanLens's own half ships with 0.9.0 (`release/v_0_9_0`; production
@@ -158,7 +164,7 @@ passed for all four primaries apart from Athens's build date (REData P111).
    index-backed lookups"); that order is now met.
 2. REData's fixes from N47 that every UrbanLens user meets: the Smithsonian parse error that fails archive search
    for 19 of the 57 campuses, and cold buildings and boundaries answers that cost a gunicorn worker (REData P62).
-   Both are answered by REData 0.3.7 (tag `v0.3.7`, `3a2b017d`), in production since 2026-10-07 08:30Z: the Smithsonian error (N47 item 1) is isolated as one
+   Both are answered by REData 0.3.7 (tag `v0.3.7`, `3a2b017d`), in production since 2026-10-07 08:30Z, and the 2026-10-08 run saw them work (no `500`, no `WORKER TIMEOUT`): the Smithsonian error (N47 item 1) is isolated as one
    `unavailable` archive, and a cold parcel's buildings and boundaries answer 503 `refresh_queued` while REData
    computes them (REData #147). REData's P62 stays open after #147 (0.3.7) and #153 (0.3.8, CRIS site reads and footprint
    placement): a filtered `?source=` call has no deadline, and some serializers are unaudited. UrbanLens's half of both is in
@@ -173,16 +179,16 @@ passed for all four primaries apart from Athens's build date (REData P111).
 **P2 - data gaps on the campuses.**
 
 5. Footprints for the CRIS roster rows no source matches, or a way to tell a demolished one (REData P114).
-6. Parcels for the 14 campuses whose county REData cannot answer, and owners where its layer has none (N47 §4).
-7. Production's Sanborn catalogue for the towns loc.gov holds atlases of (REData P112, N47 §3).
+6. Parcels for the 5 campuses whose county REData still cannot answer (Anna, Bryce, Osawatomie, Western State KY, and Dayton's source down), buildings for Topeka's and Traverse City's new parcels, and owners where a layer has none (N47 §4).
+7. Sanborn volumes for further towns loc.gov holds atlases of (REData P112). The four campus towns are in production's catalogue.
 8. An incident source beyond the eight cities that have one (REData P110: 46 of the 57 campuses have none).
-9. Build years outside New York (REData P111: 27 campuses).
+9. Build years outside New York (REData P111: 39 campuses on 2026-10-08, 12 of them newly counted because their parcels now resolve or their building checks newly run).
 10. A completeness envelope on the buildings endpoints instead of a header (REData P103).
 11. New York centroid parcels with no polygon, and Maryland's centroid layer (REData P101, P102).
 12. A decision on whether every catalogue campus should be expected to have incidents and news. `status` is decided
     (buildings stand at the catalogue point, not whether the Kirkbride survives) and applied to all nine `demolished`
-    entries; the first live run will show whether Columbus and Central State KY, whose only buildings are not
-    hospital ones, belong with the `standing` campuses.
+    entries. The 2026-10-08 run found buildings at Columbus and Central State KY (neither is a hospital's), so they stay
+    `standing`; whether the incidents and news checks belong on every campus is still open.
 
 **P3 - ingestion and outsourcing.**
 
