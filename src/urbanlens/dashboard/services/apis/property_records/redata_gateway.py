@@ -706,6 +706,26 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/national-parks/")
         return dict(body) if isinstance(body, dict) else {}
 
+    def lookup_land_use_areas(self, parcel_uuid: str) -> dict[str, dict[str, Any]]:
+        """Return the boundary of each Census Special Land Use Area a parcel's coordinate falls inside.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            ``{"<category>": {"name", "geoid", "geometry"}, ...}`` - only the categories the parcel is inside, usually
+            none. ``geometry`` is GeoJSON, or None when REData has no boundary for the area.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed. A REData that predates the endpoint, or does
+                not know the parcel, answers 404 (``status_code``); one whose share of the live lookup is spent answers a
+                503 with ``Retry-After``.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/land-use-areas/")
+        if not isinstance(body, dict):
+            return {}
+        return {str(category): dict(area) for category, area in body.items() if isinstance(area, dict)}
+
     def lookup_assessments(self, parcel_uuid: str) -> LocationContextEnvelope:
         """Return annual assessor valuations near a parcel.
 

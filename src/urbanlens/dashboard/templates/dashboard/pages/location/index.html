@@ -131,7 +131,7 @@
         <div class="map-wrapper" id="pin-detail-map-wrapper"
              {% if profile.pin_detail_map_height %}style="height: {{ profile.pin_detail_map_height }}px"{% endif %}>
 
-            {% include "dashboard/partials/layout/_map_annotations_panels.html" with layers="street,terrain,satellite,weather,borders,details,photos,nearby" %}
+            {% include "dashboard/partials/layout/_map_annotations_panels.html" with layers=map_layers %}
             {% include "dashboard/partials/ui/_bulk_toolbar.html" with namespace="detailpins" actions=detail_pin_bulk_actions %}
 
         </div>
@@ -757,6 +757,7 @@
 {% url 'boundary.pin' pin.slug as boundary_url %}
 {% url 'pin.gallery.json' pin.slug as photo_gallery_json_url %}
 {% url 'pin.nearby_pins.json' pin.slug as nearby_pins_json_url %}
+{% url 'pin.land_use_areas.json' pin.slug as land_use_areas_json_url %}
 {% url 'pin.share.dialog' pin.slug as pin_share_dialog_url %}
 <div id="map-annotations-config" hidden
      data-map-center-lat="{{ pin.effective_latitude|default:"42.6525" }}"
@@ -780,6 +781,7 @@
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}"
      data-nearby-pins-json-url="{{ nearby_pins_json_url }}"
+     data-land-use-areas-json-url="{{ land_use_areas_json_url }}"
      data-pin-share-dialog-url="{{ pin_share_dialog_url }}"
      data-detail-pins-send-to-wiki-url="{% url 'pin.detail_pins.send_to_wiki' pin.slug %}"
      data-media-relevance-url="{% url 'pin.media.relevance' pin.slug %}"

@@ -286,6 +286,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         custom_layers = list(CustomLayer.objects.for_pin(pin).order_by("order", "created"))
 
+        from urbanlens.dashboard.services.map.land_use_areas import LAND_USE_LAYER_KEY, land_use_layer_offered
+
+        map_layers = ["street", "terrain", "satellite", "weather", "borders", "details", "photos", "nearby"]
+        if land_use_layer_offered(pin):
+            map_layers.append(LAND_USE_LAYER_KEY)
+
         return render(
             request,
             "dashboard/pages/location/index.html",
@@ -293,6 +299,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "pin": pin,
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
+                "map_layers": ",".join(map_layers),
                 "manage_layers_url": reverse("pin.layers", args=[pin.slug]),
                 "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_pin(pin)),
                 "manage_overlays_url": reverse("pin.overlays", args=[pin.slug]),
@@ -863,6 +870,30 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         labels = Label.objects.exclude(kind=KIND_USER).with_customizations_for(pin.profile).order_by("-order", "name")
         nearby = Pin.objects.filter(profile=pin.profile).exclude(pk=pin.pk).near_point(pin.location.point, radius_km=5).select_related("location", "location__wiki").prefetch_related(Prefetch("labels", queryset=labels))[:200]
         return JsonResponse({"pins": [p.to_detail_json() for p in nearby]})
+
+    def land_use_areas_json(self, request: Request, pin_slug: str):
+        """Return the Special Land Use Area boundaries around this pin's parcel, for the "Land Use" map layer.
+
+        Off by default on the Private Pin page map - only fetched once the user turns the layer on.
+        """
+        from urbanlens.dashboard.services.map.land_use_areas import BUSY_MESSAGE, LandUseAreasBusyError, land_use_area_collection
+        from urbanlens.dashboard.services.security.throttle import account_or_address
+
+        try:
+            pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
+        except Pin.DoesNotExist:
+            return JsonResponse({"error": "Pin not found."}, status=404)
+
+        try:
+            collection = land_use_area_collection(pin, caller=account_or_address(request))
+        except LandUseAreasBusyError as exc:
+            response = JsonResponse({"error": BUSY_MESSAGE}, status=503)
+            response["Retry-After"] = str(exc.retry_after)
+            return response
+
+        response = JsonResponse(collection)
+        response["Cache-Control"] = "private, max-age=300"
+        return response
 
     @action(detail=False, methods=["post"])
     def set_media_sort(self, request: Request):

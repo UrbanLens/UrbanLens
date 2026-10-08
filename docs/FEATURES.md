@@ -168,6 +168,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Google, zoom 10+), national parks and geotagged Wikipedia articles nearby, each source per the viewer's
   profile toggles. Snapped to a ~2 km grid cell and a radius bucket, fetched in parallel under one budget,
   and cached per source, so one source failing leaves the rest (`services/map/nearby_places.py`)
+- **Land Use layer** (Private Pin map, off by default) - outlines the Census Special Land Use Areas the
+  pin's parcel falls inside (military installation, correctional facility, national park, college or
+  university), from REData's `/parcels/{uuid}/land-use-areas/`. Offered only when REData is configured and
+  the pin is in the US. It reads the parcel record the Property Records card cached and asks REData for
+  boundaries only when that record names an area. REData is asked under `LandUseAreasUpstream`'s deadline
+  and per-account rate; answers are kept per parcel (a week, or five minutes when REData drew fewer areas
+  than the record named) and a failure is held off for its wait (`services/map/land_use_areas.py`,
+  `shared/land-use-layer.ts`)
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo). The web select-map toolbar and the external API both call
   `services.pins.pin_bulk` (`bulk_merge_under`, `bulk_delete_pins`, `bulk_edit_pins`), one atomic
@@ -1667,8 +1675,8 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
   cached. `start()` + `wait_all()` run several under one budget. Each upstream is a subclass in
   `services/apis/request_upstreams.py` with its own slots, deadline and rate; `refusal_json` maps an
   unanswered result to 429/502/503 with `Retry-After`. Used by place search/resolve/details, the Places
-  layer (`services/map/nearby_places.py`), trip forecasts, historical-map browse, the REData media proxies
-  and Flickr album lookup.
+  layer (`services/map/nearby_places.py`), the Land Use layer (`services/map/land_use_areas.py`), trip
+  forecasts, historical-map browse, the REData media proxies and Flickr album lookup.
 - **`call_with_deadline` / `submit_bounded`** (`services/core/timeout_utils.py`) - run a blocking call on a
   small shared pool and stop waiting after a wall-clock budget (the call itself cannot be killed and runs
   on); `submit_bounded` returns the future for callers that wait on several or must know whether an

@@ -11488,6 +11488,94 @@
     }
    }
   },
+  "/api/v1/parcels/{parcel_uuid}/land-use-areas/": {
+   "get": {
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": {
+          "properties": {
+           "geoid": {
+            "nullable": true,
+            "type": "string"
+           },
+           "geometry": {
+            "nullable": true,
+            "type": "object"
+           },
+           "name": {
+            "nullable": true,
+            "type": "string"
+           }
+          },
+          "required": [
+           "name",
+           "geoid",
+           "geometry"
+          ],
+          "type": "object"
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "404": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
   "/api/v1/parcels/{parcel_uuid}/liens/": {
    "get": {
     "responses": {
