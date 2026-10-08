@@ -2,7 +2,7 @@
 name: verify-claims
 description: 'Checks specific factual claims and reports CONFIRMED / REFUTED / UNSUPPORTED with evidence. Use whenever a set of claims needs checking before they are acted on, or reported - audit findings, a "this is already fixed" assertion, a summary another agent produced, a doc that asserts something about the live system. Pass MANY claims in one invocation rather than one per agent; it is built to batch. Read-only, so it cannot change what it is checking.'
 tools: Read, Grep, Glob, Bash, WebSearch, WebFetch, ToolSearch
-model: haiku
+model: sonnet
 effort: high
 color: cyan
 ---
