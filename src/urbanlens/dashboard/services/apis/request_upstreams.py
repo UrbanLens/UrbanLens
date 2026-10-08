@@ -89,6 +89,18 @@ class RedataMediaUpstream(RequestUpstream):
     deadline = 30.0
 
 
+class LandUseAreasUpstream(RequestUpstream):
+    """The Private Pin map's Land Use layer: the pin's parcel, then its Special Land Use Area boundaries, from REData.
+
+    A parcel REData has not met runs its whole tier pipeline; one that outruns the deadline still lands in the parcel
+    lookup's shared answer, so the next toggle is quick.
+    """
+
+    name = "redata.land_use_areas"
+    deadline = 15.0
+    rate = Rate(limit=30, window_seconds=60)
+
+
 class FlickrAlbumUpstream(RequestUpstream):
     """A pasted public Flickr album, resolved for the preview grid."""
 

@@ -4826,6 +4826,15 @@ div.container .addr-search-bar {
     opacity: 1;
 }
 
+// A layer still fetching its data (Water & Rail, Land Use) spins over its thumbnail.
+.map-layer-btn.is-loading .map-layer-thumb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    @include spinner(14px);
+}
+
 // -- Manage Layers dialog ----------------------------------------------------
 // Body content for #custom-layers-dialog (see _custom_layers_list.html);
 // .ul-dialog-body on the wrapping div supplies the dialog's own padding.

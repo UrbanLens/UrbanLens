@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from unittest import mock
 
 from django.conf import settings as django_settings
@@ -21,6 +22,7 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import (
     PropertyRecordsBusyError,
     PropertyRecordsUnavailableError,
 )
+from urbanlens.dashboard.services.apis.request_upstreams import LandUseAreasUpstream
 from urbanlens.dashboard.services.integration_testing.accounts import prepare_signed_in_account
 from urbanlens.dashboard.services.map import land_use_areas
 from urbanlens.dashboard.templatetags.map_components import MAP_LAYER_REGISTRY
@@ -43,6 +45,10 @@ _CAMPUS = {
 }
 
 
+#: How a parcel record names an area it is inside.
+_FLAG = {"name": "FLAGGED", "geoid": None}
+
+
 def _record(**fields: object) -> dict:
     return {"available": True, "uuid": "parcel-uuid", **fields}
 
@@ -54,8 +60,8 @@ class _LayerTestCase(TestCase):
         caches[django_settings.PROXIED_BYTES_CACHE].clear()
         self.user = baker.make(User)
         self.profile = prepare_signed_in_account(self.user)
-        self.location = baker.make(Location, latitude=35.14, longitude=-79.0, address="1 Example Rd")
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
+        self.location = baker.make(Location, latitude=35.14, longitude=-79.0, street_number="1", route="Example Rd")
+        self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Mill")
         configured = mock.patch(_CONFIGURED, return_value=True)
         configured.start()
         self.addCleanup(configured.stop)
@@ -69,7 +75,9 @@ class _LayerTestCase(TestCase):
 
 class CollectionTests(_LayerTestCase):
     def test_draws_each_area_the_parcel_is_inside(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}, "college_university": {}}))
+        self._cache_record(
+            _record(special_land_use_areas={"military_installation": _FLAG, "college_university": _FLAG})
+        )
         self.gateway.lookup_land_use_areas.return_value = {
             "college_university": _CAMPUS,
             "military_installation": _FORT,
@@ -83,12 +91,12 @@ class CollectionTests(_LayerTestCase):
         self.gateway.lookup_land_use_areas.assert_called_once_with("parcel-uuid")
         features = answer["features"]
         self.assertEqual(
-            [f["properties"]["category"] for f in features], ["college_university", "military_installation"]
+            [f["properties"]["category"] for f in features], ["military_installation", "college_university"]
         )
-        self.assertEqual(features[1]["properties"]["name"], "FORT LIBERTY")
-        self.assertEqual(features[1]["properties"]["label"], "Military installation")
-        self.assertEqual(features[1]["geometry"], _FORT["geometry"])
-        self.assertEqual(features[0]["geometry"]["type"], "MultiPolygon")
+        self.assertEqual(features[0]["properties"]["name"], "FORT LIBERTY")
+        self.assertEqual(features[0]["properties"]["label"], "Military installation")
+        self.assertEqual(features[0]["geometry"], _FORT["geometry"])
+        self.assertEqual(features[1]["geometry"]["type"], "MultiPolygon")
 
     def test_a_parcel_in_no_area_asks_redata_nothing_more(self) -> None:
         self._cache_record(_record(special_land_use_areas={}))
@@ -117,7 +125,7 @@ class CollectionTests(_LayerTestCase):
         self.assertTrue(answer["complete"])
 
     def test_a_second_toggle_is_answered_from_the_cache(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
         self.gateway.lookup_land_use_areas.return_value = {"military_installation": _FORT}
 
         first = land_use_areas.land_use_area_collection(self.pin)
@@ -127,7 +135,7 @@ class CollectionTests(_LayerTestCase):
         self.gateway.lookup_land_use_areas.assert_called_once()
 
     def test_an_area_redata_flagged_but_did_not_draw_is_a_partial_answer_kept_briefly(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}, "national_park": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG, "national_park": _FLAG}))
         self.gateway.lookup_land_use_areas.return_value = {"military_installation": _FORT}
 
         with mock.patch.object(land_use_areas, "set_or_skip", wraps=land_use_areas.set_or_skip) as stored:
@@ -138,7 +146,7 @@ class CollectionTests(_LayerTestCase):
         self.assertEqual(stored.call_args.args[2], land_use_areas.PARTIAL_ANSWER_SECONDS)
 
     def test_a_complete_answer_is_kept_for_the_long_window(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
         self.gateway.lookup_land_use_areas.return_value = {"military_installation": _FORT}
 
         with mock.patch.object(land_use_areas, "set_or_skip", wraps=land_use_areas.set_or_skip) as stored:
@@ -168,7 +176,11 @@ class CollectionTests(_LayerTestCase):
         self.assertEqual(answer["features"][0]["properties"]["label"], "Tribal trust land")
 
     def test_without_a_cached_record_it_shares_the_property_panel_lookup(self) -> None:
-        self.gateway.lookup_parcel.return_value = _record(special_land_use_areas={"military_installation": {}})
+        # RedataGateway.lookup_parcel answers the bare record; only the panel adds "available".
+        self.gateway.lookup_parcel.return_value = {
+            "uuid": "parcel-uuid",
+            "special_land_use_areas": {"military_installation": _FLAG},
+        }
         self.gateway.lookup_land_use_areas.return_value = {"military_installation": _FORT}
 
         answer = land_use_areas.land_use_area_collection(self.pin)
@@ -194,7 +206,7 @@ class CollectionTests(_LayerTestCase):
         self.gateway.lookup_parcel.assert_not_called()
 
     def test_a_redata_without_the_endpoint_leaves_the_layer_empty(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
         self.gateway.lookup_land_use_areas.side_effect = PropertyRecordsUnavailableError(
             REASON_SOURCE_ERROR, "", status_code=404
         )
@@ -204,7 +216,7 @@ class CollectionTests(_LayerTestCase):
         self.assertEqual((answer["status"], answer["features"]), ("unavailable", []))
 
     def test_an_outage_raises_and_is_not_asked_again_at_once(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
         self.gateway.lookup_land_use_areas.side_effect = PropertyRecordsBusyError(
             "key_budget_exhausted", "spent", retry_after=900
         )
@@ -217,6 +229,20 @@ class CollectionTests(_LayerTestCase):
         self.assertEqual(first.exception.retry_after, 900)
         self.assertGreater(second.exception.retry_after, 0)
         self.gateway.lookup_land_use_areas.assert_called_once()
+
+    def test_a_redata_that_hangs_is_given_up_on_at_the_deadline(self) -> None:
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
+        release = threading.Event()
+        self.addCleanup(release.set)
+        self.gateway.lookup_land_use_areas.side_effect = lambda _uuid: release.wait(5) and {}
+
+        with (
+            mock.patch.object(LandUseAreasUpstream, "deadline", 0.05),
+            self.assertRaises(land_use_areas.LandUseAreasBusyError) as caught,
+        ):
+            land_use_areas.land_use_area_collection(self.pin)
+
+        self.assertGreater(caught.exception.retry_after, 0)
 
     def test_an_outage_of_the_parcel_lookup_raises(self) -> None:
         self.gateway.lookup_parcel.side_effect = PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "down")
@@ -232,8 +258,7 @@ class CollectionTests(_LayerTestCase):
         self.gateway.lookup_parcel.assert_not_called()
 
     def test_outside_the_united_states_nothing_is_asked(self) -> None:
-        self.location.latitude, self.location.longitude = 51.5, -0.12
-        self.location.save()
+        self.pin.location = baker.make(Location, latitude=51.5, longitude=-0.12)
 
         answer = land_use_areas.land_use_area_collection(self.pin)
 
@@ -250,8 +275,7 @@ class LayerOfferedTests(_LayerTestCase):
             self.assertFalse(land_use_areas.land_use_layer_offered(self.pin))
 
     def test_not_offered_outside_the_united_states(self) -> None:
-        self.location.latitude, self.location.longitude = 51.5, -0.12
-        self.location.save()
+        self.pin.location = baker.make(Location, latitude=51.5, longitude=-0.12)
         self.assertFalse(land_use_areas.land_use_layer_offered(self.pin))
 
     def test_the_layer_button_is_a_custom_toggle(self) -> None:
@@ -267,7 +291,7 @@ class LandUseAreasViewTests(_LayerTestCase):
         self.url = reverse("pin.land_use_areas.json", kwargs={"pin_slug": self.pin.ensure_slug()})
 
     def test_returns_the_collection_with_a_private_browser_cache(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
         self.gateway.lookup_land_use_areas.return_value = {"military_installation": _FORT}
 
         response = self.client.get(self.url)
@@ -279,7 +303,7 @@ class LandUseAreasViewTests(_LayerTestCase):
         self.assertEqual(response["Cache-Control"], "private, max-age=300")
 
     def test_an_outage_is_a_503_naming_the_wait(self) -> None:
-        self._cache_record(_record(special_land_use_areas={"military_installation": {}}))
+        self._cache_record(_record(special_land_use_areas={"military_installation": _FLAG}))
         self.gateway.lookup_land_use_areas.side_effect = PropertyRecordsBusyError(
             "rate_limited", "busy", retry_after=120
         )
@@ -291,7 +315,9 @@ class LandUseAreasViewTests(_LayerTestCase):
         self.assertIn("error", json.loads(response.content))
 
     def test_another_accounts_pin_is_not_found(self) -> None:
-        other = baker.make(Pin, profile=prepare_signed_in_account(baker.make(User)), location=self.location)
+        other = baker.make(
+            Pin, profile=prepare_signed_in_account(baker.make(User)), location=self.location, name="Depot"
+        )
 
         response = self.client.get(reverse("pin.land_use_areas.json", kwargs={"pin_slug": other.ensure_slug()}))
 
