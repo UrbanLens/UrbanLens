@@ -184,16 +184,16 @@
   {
     "rule": "py/clear-text-logging-sensitive-data",
     "path": "src/urbanlens/dashboard/services/core/coalesce.py",
-    "fingerprint": "e6c693e9fa0ec9e8:1",
+    "fingerprint": "1a2550d7dce00d5b:1",
     "language": "python",
-    "reason": "Logs a coalescing cache key - a hash, a UUID, or coordinates rounded to about 1 km - and only when the cache fails."
+    "reason": "Logs a coalescing cache key through redact_cache_key, which drops every segment past the leading name segments, and only when the cache fails. CodeQL still flags it because it does not model redact_cache_key as a sanitizer."
   },
   {
     "rule": "py/clear-text-logging-sensitive-data",
     "path": "src/urbanlens/dashboard/services/core/coalesce.py",
-    "fingerprint": "9b65006db7e042de:1",
+    "fingerprint": "efc9bf839dc9db39:1",
     "language": "python",
-    "reason": "Logs a coalescing cache key - a hash, a UUID, or coordinates rounded to about 1 km - and only when the cache fails."
+    "reason": "Logs a coalescing cache key through redact_cache_key, which drops every segment past the leading name segments, and only when the cache fails. CodeQL still flags it because it does not model redact_cache_key as a sanitizer."
   },
   {
     "rule": "py/clear-text-logging-sensitive-data",
@@ -205,23 +205,23 @@
   {
     "rule": "py/clear-text-logging-sensitive-data",
     "path": "src/urbanlens/dashboard/services/core/locks.py",
-    "fingerprint": "af297b6d05a35b85:1",
+    "fingerprint": "a0de5835798409b4:1",
     "language": "python",
-    "reason": "Logs a lock's cache key, a constant name per job."
+    "reason": "Logs a lock's cache key through redact_cache_key, which drops every segment past the leading name segments. CodeQL still flags it because it does not model redact_cache_key as a sanitizer."
   },
   {
     "rule": "py/clear-text-logging-sensitive-data",
     "path": "src/urbanlens/dashboard/services/core/locks.py",
-    "fingerprint": "8cc4c65c16197442:1",
+    "fingerprint": "b0a0bcb354a9dfe0:1",
     "language": "python",
-    "reason": "Logs a lock's cache key, a constant name per job."
+    "reason": "Logs a lock's cache key through redact_cache_key, which drops every segment past the leading name segments. CodeQL still flags it because it does not model redact_cache_key as a sanitizer."
   },
   {
     "rule": "py/clear-text-logging-sensitive-data",
     "path": "src/urbanlens/dashboard/services/core/locks.py",
-    "fingerprint": "c75da7d43967e992:1",
+    "fingerprint": "9ef4535254a55db3:1",
     "language": "python",
-    "reason": "Logs a lock's cache key, a constant name per job."
+    "reason": "Logs a lock's cache key through redact_cache_key, which drops every segment past the leading name segments. CodeQL still flags it because it does not model redact_cache_key as a sanitizer."
   },
   {
     "rule": "py/clear-text-storage-sensitive-data",
