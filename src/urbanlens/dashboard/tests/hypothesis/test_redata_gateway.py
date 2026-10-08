@@ -1065,6 +1065,38 @@ class LookupNationalParksTests(SimpleTestCase):
             gateway.lookup_national_parks("parcel-uuid")
 
 
+class LookupLandUseAreasTests(SimpleTestCase):
+    def test_hits_the_parcel_scoped_land_use_areas_endpoint(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={})
+        _gateway(session).lookup_land_use_areas("parcel-uuid")
+        args, _kwargs = session.get.call_args
+        self.assertEqual(args[0], "https://redata.example.test/api/v1/parcels/parcel-uuid/land-use-areas/")
+
+    def test_returns_each_category_area(self) -> None:
+        area = {"name": "FORT BRAGG", "geoid": None, "geometry": {"type": "Polygon", "coordinates": []}}
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"military_installation": area})
+        self.assertEqual(_gateway(session).lookup_land_use_areas("parcel-uuid"), {"military_installation": area})
+
+    def test_drops_values_that_are_not_areas(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"national_park": None, "military_installation": "FORT"})
+        self.assertEqual(_gateway(session).lookup_land_use_areas("parcel-uuid"), {})
+
+    def test_a_body_that_is_not_an_object_is_no_areas(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body=[])
+        self.assertEqual(_gateway(session).lookup_land_use_areas("parcel-uuid"), {})
+
+    def test_a_404_names_its_status(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(404, raise_on_json=True)
+        with self.assertRaises(PropertyRecordsUnavailableError) as caught:
+            _gateway(session).lookup_land_use_areas("parcel-uuid")
+        self.assertEqual(caught.exception.status_code, 404)
+
+
 class DownloadExtractedImageTests(SimpleTestCase):
     def test_returns_bytes_and_content_type(self) -> None:
         session = MagicMock()
