@@ -465,6 +465,10 @@ lat = 40.834722
 lng = -74.505278
 built = 1876
 status = "standing"
+# The campus's one listing is the Illumination Gas Plant of the NJ State Asylum for the Insane (NRHP 00000653, about
+# 400 m off); its name does not say "Greystone", so the check matches the number. REData returns it since 0.3.7 (live
+# 2026-10-08: nps_nrhp and nj_shpo, 500 m).
+nrhp = "00000653"
 
 [[site]]
 key = "napa-state-hospital"
