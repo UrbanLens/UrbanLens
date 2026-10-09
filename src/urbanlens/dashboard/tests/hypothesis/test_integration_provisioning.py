@@ -11,6 +11,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
+from urbanlens.core.tests.environment import OffProductionMixin
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKey, ApiKeyScope, EmailVerification, TOTPDevice
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.notifications.meta.delivery_preference import DeliveryPreference
@@ -288,7 +289,7 @@ class BootstrapAdminGuardTests(TestCase):
         self.assertIsNone(self._bootstrap_admin_id())
 
 
-class CommandTests(TestCase):
+class CommandTests(OffProductionMixin, TestCase):
     """The management command's own behaviour: output, and the production locks."""
 
     def test_json_output_is_a_manifest_the_runner_can_read(self):
@@ -358,7 +359,7 @@ class CommandTests(TestCase):
         self.assertTrue(User.objects.filter(username=username_for("primary")).exists())
 
 
-class HeavySeedingTests(TestCase):
+class HeavySeedingTests(OffProductionMixin, TestCase):
     """`--heavy-pins`, and the two ways it could lie.
 
     The load harness reads the shared label's id and the account's pin count out of the manifest this writes."""
@@ -429,7 +430,7 @@ class HeavySeedingTests(TestCase):
         self.assertIn("Seeding", err.getvalue())
 
 
-class SubscriberProvisioningTests(TestCase):
+class SubscriberProvisioningTests(OffProductionMixin, TestCase):
     """`--subscriber-roles`: one account that holds property_owners, and every other account that must not."""
 
     def _user(self, role: str) -> User:
@@ -563,7 +564,7 @@ class SubscriberProvisioningTests(TestCase):
         self.assertIn(f"export UL_E2E_SUBSCRIBER_FEATURES={SiteFeature.PROPERTY_OWNERS.value}", out.getvalue())
 
 
-class SignupVerifyPathTests(TestCase):
+class SignupVerifyPathTests(OffProductionMixin, TestCase):
     def setUp(self) -> None:
         super().setUp()
         User.objects.create(username="operator", is_active=True)
