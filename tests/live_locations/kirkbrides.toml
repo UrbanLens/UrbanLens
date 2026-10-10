@@ -604,11 +604,14 @@ name = "Northern Michigan Asylum"
 wikipedia = "Traverse City State Hospital"
 place = "Traverse City, Michigan"
 state = "MI"
-lat = 44.755278
-lng = -85.640556
+lat = 44.756319
+lng = -85.643569
 built = 1885
 status = "standing"
 nrhp = "78001499"
+# On Kirkbride Hall, the centre block of Building 50 (OSM way 377009480, wikidata Q7836154; 2026-10-10). Wikipedia's
+# coordinate (44.755278, -85.640556) fell 3 m inside the north edge of parcel 51-150-001-11, which holds no building
+# (REData T17); the Kirkbride is about 260 m west of it.
 
 [[site]]
 key = "agnews-developmental-center"
