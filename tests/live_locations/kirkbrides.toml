@@ -399,9 +399,13 @@ lat = 39.064722
 lng = -95.710973
 built = 1872
 status = "standing"
-# The Kirkbride's centre building went in June 2010 (Wikipedia). A new multi-wing residential-type building with
-# outbuildings stands on the point, under construction in the Esri aerial of 2023-10-21; OSM does not have it yet
-# (its nearest building is 163 m).
+# The Kirkbride's centre building went in June 2010 (Wikipedia). The point is kept on the historic site (Wikipedia's
+# coordinate) on purpose: a parcel is expected there, and no current building on it is the right answer for the
+# hospital (REData T17: the parcel is Kanza Education and Science Park block C lot 1; its newer apartment complex is
+# under construction in the Esri aerial of 2023-10-21 and not yet in OSM, whose nearest building is 163 m).
+# `status = "standing"` describes the campus (buildings stand within its 1.5 km), not the Kirkbride, so the building
+# and footprint checks still run on its neighbouring buildings. The schema has no way to say "parcel expected,
+# no building at the point" or "demolished historic building"; `demolished` would skip every building check.
 
 [[site]]
 key = "winnebago-mental-health-institute"
