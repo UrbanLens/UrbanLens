@@ -17,7 +17,7 @@ grep -i 'encryption' docs/INDEX.md    # by keyword
 grep -E '\| (live|actionable) ' docs/INDEX.md   # plans and ideas still in play
 ```
 
-**Next free id:** `PL11` · `X32` · `I8` · `R32` · `N50`
+**Next free id:** `PL12` · `X32` · `I8` · `R32` · `N50`
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
@@ -137,6 +137,7 @@ the detail.
 | PL8 | live | 2026-10-05 | Converting this app's Leaflet maps to MapLibre GL JS is a real multi-week body of work, not built; the punch list so it does not need re-deriving; tracked in #317 | [`docs/designs/leaflet-to-maplibre-migration.md`](designs/leaflet-to-maplibre-migration.md) |
 | PL9 | live | 2026-10-08 | Every REData answer UrbanLens can use, surfaced, cached for as long as it is true, and checked against real campuses; tracked in #318 | [`docs/notes/redata-integration-programme.md`](notes/redata-integration-programme.md) |
 | PL10 | live | 2026-10-05 | A provider refusing or failing UrbanLens is backed off automatically (background work first, live calls keep a trickle), probed, alerted through `notify`, and listed on the api-limits page; the UrbanLens half of REData's PL13; tracked in #319 | [`docs/notes/provider-health.md`](notes/provider-health.md) |
+| PL11 | live | 2026-10-10 | UrbanLens will read parcels and buildings from REData as separate dated facts (presence, status, existence bounds, lineage), ask for any date with `as_of`, and drop cached answers when REData's change feed says they changed; tracked in #381 | [`docs/designs/redata-dated-parcels-and-buildings.md`](designs/redata-dated-parcels-and-buildings.md) |
 | N26 | current | 2026-09-21 | The audit of the basemap and performance range: 30 findings, 23 fixed, five closed with a number or a decision, two refuted and one open, and what measurement took back - `vector_layer_not_served` is live and not dead, the external API's deferred write-source saves no query, and two findings were declined with numbers | [`docs/notes/basemap-and-performance-audit-2026-09-21.md`](notes/basemap-and-performance-audit-2026-09-21.md) |
 | X28 | holds | 2026-09-21 | 1,000 concurrent users demand ~4.0 app cores against a 4-core limit, so p95 goes from 231 ms at 500 users to 6.2 s with nothing failing; the database is at 1.75 of 4 cores and is no longer the wall, and basemap tiles are 56% of requests for 6% of CPU; 12 workers on the same 4 cores peak at 3,180MiB and take search_panel from 554 to 473 ms | [`docs/notes/capacity-ladder-to-1000-users-measured.md`](notes/capacity-ladder-to-1000-users-measured.md) |
 | X29 | holds | 2026-09-23 | The loading background is a fixed sixteen-tile `z=2` picture of the world cut from the active base's own tiles, so zooming and panning cost nothing: 0 refetched across six base/theme combinations and eight gestures each, 16/16 from browser cache on a revisit, gap fill 1.4-71 from the loaded map against 99-397 for the white it replaces - and `fromDiskCache` alone read every cache hit as a miss | [`docs/notes/map-loading-underlay-measured.md`](notes/map-loading-underlay-measured.md) |
