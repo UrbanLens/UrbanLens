@@ -92,20 +92,14 @@ RUN mkdir -p \
     /app/src/urbanlens/downloads/exports \
     /app/src/urbanlens/frontend/static \
     /app/src/backups \
-    /app/src/logs \
     /app/src/urbanlens/dashboard/frontend \
     /app/src/urbanlens/core/frontend && \
-    touch \
-    /app/src/logs/app.log \
-    /app/src/logs/debugging.log \
-    /app/src/logs/test.log && \
     chown -R appuser:appuser \
     /app/src/urbanlens/downloads \
     /app/src/urbanlens/frontend \
     /app/src/urbanlens/dashboard/frontend \
     /app/src/urbanlens/core/frontend \
     /app/src/backups \
-    /app/src/logs \
     /var/log/urbanlens
 
 # collectstatic imports settings, which refuse to load a deployment missing these; nothing here connects to them.
