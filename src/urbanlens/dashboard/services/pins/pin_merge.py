@@ -48,6 +48,7 @@ from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropert
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.row_merge import repoint_references
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 
 if TYPE_CHECKING:
@@ -277,39 +278,6 @@ def _pin_label(pin: Pin) -> str:
     return pin.effective_name or f"Pin {pin.pk}"
 
 
-def _repoint_references(duplicate: Model, kept: Model) -> None:
-    """Point every row that references *duplicate* at *kept*, so deleting *duplicate* takes nothing with it.
-    Generic over the duplicate's reverse relations - a pending share is referenced by reshares, bundled shares, direct-message links and exposure rows, an owner by the sales that list it - so a relation added later is carried without this module having to learn about it.
-    A row that would collide with one *kept* already has is left alone; it then goes wherever its ``on_delete`` would have sent it, which is no worse than before.
-
-    Args:
-        duplicate: The row about to be deleted.
-        kept: Its twin, which stays.
-    """
-    for relation in duplicate._meta.related_objects:  # noqa: SLF001
-        remote = relation.field
-        if relation.many_to_many:
-            through = remote.remote_field.through
-            column = remote.m2m_reverse_field_name()
-            rows = through._base_manager.filter(**{column: duplicate.pk})  # noqa: SLF001
-        else:
-            column = remote.name
-            rows = relation.related_model._base_manager.filter(**{column: duplicate.pk})  # noqa: SLF001
-            if relation.related_model is type(kept):
-                # A self-reference from the kept row itself would become a loop.
-                rows = rows.exclude(pk=kept.pk)
-        try:
-            with transaction.atomic():
-                rows.update(**{column: kept.pk})
-        except IntegrityError:
-            for pk in list(rows.values_list("pk", flat=True)):
-                try:
-                    with transaction.atomic():
-                        rows.model._base_manager.filter(pk=pk).update(**{column: kept.pk})  # noqa: SLF001
-                except IntegrityError:
-                    continue
-
-
 def _join_text(kept: str | None, extra: str | None) -> str | None:
     """Append *extra* to *kept* as its own paragraph, unless it adds nothing.
 
@@ -390,7 +358,7 @@ def _fold_owner(duplicate: PinOwner, kept: PinOwner) -> None:
             setattr(kept, name, theirs)
     kept.notes = _join_text(_join_text(kept.notes, duplicate.notes), "\n".join(differing)) or ""
     kept.save()
-    _repoint_references(duplicate, kept)
+    repoint_references(duplicate, kept)
     duplicate.delete()
 
 
@@ -471,7 +439,7 @@ def _fold_share(duplicate: PinShare, kept: PinShare) -> None:
             setattr(kept, column, getattr(duplicate, column))
     kept.save()
     kept.images.add(*duplicate.images.all())
-    _repoint_references(duplicate, kept)
+    repoint_references(duplicate, kept)
     duplicate.delete()
 
 
@@ -927,7 +895,7 @@ def _fold_visit(duplicate: PinVisit, kept: PinVisit) -> None:
         MarkupMap.objects.filter(pk=duplicate.markup_map_id, pin__isnull=True).update(pin=kept.pin_id)
     kept.save()
     kept.participants.add(*duplicate.participants.all())
-    _repoint_references(duplicate, kept)
+    repoint_references(duplicate, kept)
     duplicate.delete()
 
 

@@ -142,6 +142,28 @@ class Rekeyed:
     pins: int
 
 
+def rewrite_building_refs(old_key: str, new_key: str) -> tuple[int, int]:
+    """Point every floorplan and swept-building record that names ``old_key`` at ``new_key``.
+
+    Args:
+        old_key: The building key being retired.
+        new_key: The key that now stands for the same building.
+
+    Returns:
+        How many floorplans and how many pins were rewritten.
+    """
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    floorplans = Floorplan.objects.filter(building_ref=old_key).update(building_ref=new_key)
+    pins = 0
+    for pin in Pin.objects.filter(auto_nested_buildings__contains=[{"ref": old_key}]).only("pk", "auto_nested_buildings").select_for_update():
+        entries = [({**entry, "ref": new_key} if isinstance(entry, dict) and entry.get("ref") == old_key else entry) for entry in pin.auto_nested_buildings]
+        Pin.objects.filter(pk=pin.pk).update(auto_nested_buildings=entries)
+        pins += 1
+    return floorplans, pins
+
+
 def rekey_place(place: Place, new_key: str) -> Rekeyed | None:
     """File ``place`` under ``new_key``, with every floorplan and swept-building record that named its old key.
 
@@ -154,9 +176,6 @@ def rekey_place(place: Place, new_key: str) -> Rekeyed | None:
     Returns:
         What moved, or None when another place already holds ``new_key`` or the key is unchanged.
     """
-    from urbanlens.dashboard.models.floorplans.model import Floorplan
-    from urbanlens.dashboard.models.pin.model import Pin
-
     old_key = place.provider_key
     if not old_key or old_key == new_key:
         return None
@@ -169,12 +188,7 @@ def rekey_place(place: Place, new_key: str) -> Rekeyed | None:
         except IntegrityError:
             # Another writer filed a place under new_key since the check above.
             return None
-        floorplans = Floorplan.objects.filter(building_ref=old_key).update(building_ref=new_key)
-        pins = 0
-        for pin in Pin.objects.filter(auto_nested_buildings__contains=[{"ref": old_key}]).only("pk", "auto_nested_buildings").select_for_update():
-            entries = [({**entry, "ref": new_key} if isinstance(entry, dict) and entry.get("ref") == old_key else entry) for entry in pin.auto_nested_buildings]
-            Pin.objects.filter(pk=pin.pk).update(auto_nested_buildings=entries)
-            pins += 1
+        floorplans, pins = rewrite_building_refs(old_key, new_key)
     place.provider_key = new_key
     logger.info("overture refs: place %s re-keyed %s -> %s (%d floorplans, %d pins)", place.pk, old_key, new_key, floorplans, pins)
     return Rekeyed(place=place.pk, old=old_key, new=new_key, floorplans=floorplans, pins=pins)
@@ -468,4 +482,5 @@ __all__ = [
     "migrate_legacy_refs",
     "redata_building_places",
     "rekey_place",
+    "rewrite_building_refs",
 ]
