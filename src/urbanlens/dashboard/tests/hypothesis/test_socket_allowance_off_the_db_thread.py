@@ -14,10 +14,10 @@ from unittest import mock
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
-from django.test import TransactionTestCase
 from model_bakery import baker
 
 from urbanlens.core.tests.fake_redis import FakeRedis
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.services.security import socket_budget
 

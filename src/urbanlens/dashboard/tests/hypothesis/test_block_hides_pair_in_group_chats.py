@@ -18,7 +18,6 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
-from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -26,7 +25,7 @@ from oauth2_provider.models import get_access_token_model
 
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.oauth import first_party_application
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.e2ee import GroupKey

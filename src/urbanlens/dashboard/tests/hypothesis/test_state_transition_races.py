@@ -13,11 +13,10 @@ import threading
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.test import TransactionTestCase
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.friendship.meta import FriendshipType, Permission

@@ -7,9 +7,10 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.db import connections
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,

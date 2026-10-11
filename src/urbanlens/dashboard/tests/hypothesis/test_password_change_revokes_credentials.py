@@ -13,7 +13,6 @@ from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
-from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes
@@ -26,7 +25,7 @@ from oauth2_provider.models import (
     get_refresh_token_model,
 )
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key, generate_api_key
 
 Application = get_application_model()

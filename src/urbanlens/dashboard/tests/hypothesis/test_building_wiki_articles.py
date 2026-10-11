@@ -15,11 +15,11 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.db import transaction
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.article.model import (
     EDIT_SUMMARY_IMAGES_LOCALIZED,
     EDIT_SUMMARY_SEEDED_FROM_WIKIPEDIA,

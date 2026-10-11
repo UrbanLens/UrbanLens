@@ -9,14 +9,13 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.gis.geos import Point
-from django.test import TransactionTestCase
 from django.urls import reverse
 from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.features import grant_alpha_features
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import GameSessionConsumer
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind

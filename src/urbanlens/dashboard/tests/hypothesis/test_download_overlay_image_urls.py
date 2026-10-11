@@ -17,13 +17,12 @@ from django.core.management import CommandError, call_command, get_commands
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.db.utils import ProgrammingError
-from django.test import TransactionTestCase
 from model_bakery import baker
 from PIL import Image as PILImage
 import pytest
 import requests
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 

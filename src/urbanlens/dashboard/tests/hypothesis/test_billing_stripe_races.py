@@ -16,10 +16,11 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.db import transaction
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.billing import pricing, stripe_client, webhooks

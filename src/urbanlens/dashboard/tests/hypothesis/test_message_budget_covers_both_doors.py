@@ -9,11 +9,11 @@ from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.model import Friendship

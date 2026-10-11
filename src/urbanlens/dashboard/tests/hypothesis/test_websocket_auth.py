@@ -7,11 +7,11 @@ from datetime import timedelta
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser, User
-from django.test import TransactionTestCase
 from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model, get_application_model
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key

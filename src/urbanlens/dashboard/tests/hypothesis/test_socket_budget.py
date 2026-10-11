@@ -30,13 +30,13 @@ from unittest import mock
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests import socket_clients
 from urbanlens.core.tests.fake_redis import FakeRedis
 from urbanlens.core.tests.nginx_config import misplaced_directives
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 from urbanlens.dashboard.services.security import socket_budget
 

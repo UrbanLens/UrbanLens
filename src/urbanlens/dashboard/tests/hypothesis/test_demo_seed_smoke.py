@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django import test as django_test
 from django.contrib.auth.models import User
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
 from urbanlens.dashboard.services.demo.seeding import seed_demo_account
@@ -62,7 +61,7 @@ class DemoSeedSmokeTests(TestCase):
             self.assertNotEqual(settings.bootstrap_admin_user_id, user.pk)
 
 
-class SeedingCommitOrderingTests(django_test.TransactionTestCase):
+class SeedingCommitOrderingTests(TransactionTestCase):
     """
     The Celery patch has to survive past the actual transaction commit.
 

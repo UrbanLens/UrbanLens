@@ -15,9 +15,9 @@ import threading
 from django.contrib.auth.models import User
 from django.db import connection
 from django.db.models.signals import pre_delete
-from django.test import TransactionTestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.pins.pin_edit import delete_pin
