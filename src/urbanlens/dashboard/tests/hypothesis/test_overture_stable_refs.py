@@ -327,12 +327,25 @@ class MigrationTests(_PlacesTestCase):
         Place.objects.filter(pk=orphan.pk).update(provider="redata", provider_key=_OLD)
 
         def locate(latitude: float, longitude: float) -> str:
-            raise PropertyRecordsUnavailableError("no_parcel", "none here")
+            raise PropertyRecordsUnavailableError("no_parcel", "none here", status_code=404)
 
         report = self._migrate(
             {}, buildings=[_record(_NEW, _square(0.2, 0.2), stable_ref=_STABLE)], locate_parcel=locate
         )
         self.assertEqual(report.places[0].outcome, overture_refs.NO_MATCH)
+        self.assertEqual(Place.objects.get(pk=orphan.pk).provider_key, _OLD)
+
+    def test_a_throttled_parcel_lookup_is_unavailable_not_unmatched(self) -> None:
+        orphan = make_place(PlaceKind.BUILDING, _square(0.2, 0.2))
+        Place.objects.filter(pk=orphan.pk).update(provider="redata", provider_key=_OLD)
+
+        def locate(latitude: float, longitude: float) -> str:
+            raise PropertyRecordsUnavailableError("rate_limited", "throttled upstream for another 12s")
+
+        report = self._migrate(
+            {}, buildings=[_record(_NEW, _square(0.2, 0.2), stable_ref=_STABLE)], locate_parcel=locate
+        )
+        self.assertEqual(report.places[0].outcome, overture_refs.UNAVAILABLE)
         self.assertEqual(Place.objects.get(pk=orphan.pk).provider_key, _OLD)
 
     def test_floorplans_and_swept_buildings_no_place_holds_are_moved(self) -> None:
