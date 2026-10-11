@@ -293,7 +293,12 @@ def _redata_parcel_key(place: Place, locate_parcel: ParcelLocator | None) -> str
     """The REData parcel to match a building place's footprint against.
 
     The parent's key when the parent is a REData parcel. Otherwise (a parcel drawn by hand, or from another source)
-    REData's parcel at the place's centroid, so a building under such a parcel is still matched.
+    REData's parcel at the place's centroid, so a building under such a parcel is still matched. Empty when REData
+    answers that no parcel is there (a 404).
+
+    Raises:
+        PropertyRecordsUnavailableError: REData could not answer (throttled, busy, down), so the place is
+            unavailable this run, not unmatched.
     """
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 
@@ -305,7 +310,9 @@ def _redata_parcel_key(place: Place, locate_parcel: ParcelLocator | None) -> str
     centroid = place.geometry.centroid
     try:
         return locate_parcel(centroid.y, centroid.x) or ""
-    except PropertyRecordsUnavailableError:
+    except PropertyRecordsUnavailableError as exc:
+        if exc.status_code != 404:
+            raise
         logger.info("overture refs: no REData parcel at place %s", place.pk, exc_info=True)
         return ""
 
@@ -333,7 +340,12 @@ def _classify(
         row.outcome, row.detail = AMBIGUOUS, ", ".join(str(candidate) for candidate in answer.get("candidates") or [])
         return row
     else:
-        parcel_key = _redata_parcel_key(place, locate_parcel) if fetch_buildings is not None else ""
+        try:
+            parcel_key = _redata_parcel_key(place, locate_parcel) if fetch_buildings is not None else ""
+        except PropertyRecordsUnavailableError:
+            logger.info("overture refs: REData could not locate a parcel for place %s", place.pk, exc_info=True)
+            row.outcome = UNAVAILABLE
+            return row
         if fetch_buildings is None or not parcel_key:
             row.detail = "no REData parcel to match the footprint against"
             return row
