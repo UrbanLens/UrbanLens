@@ -216,6 +216,53 @@ class MigrationTests(_PlacesTestCase):
         report = self._migrate({}, buildings=[_record(_NEW, _square(0.21, 0.21, 0.05), stable_ref=_STABLE)])
         self.assertEqual(report.places[0].outcome, overture_refs.NO_MATCH)
 
+    def test_a_wing_inside_an_overture_envelope_is_ambiguous_not_moved_onto_it(self) -> None:
+        wing = self._building_place(_OLD, _square(0.2, 0.2, 0.04))
+        buildings = [
+            _record("county:wing-1", _square(0.2, 0.2, 0.04), stable_ref="county:wing-1"),
+            _record(_NEW, _square(0.16, 0.16, 0.12), stable_ref=_STABLE),
+        ]
+        report = self._migrate({}, buildings=buildings)
+        self.assertEqual(report.places[0].outcome, overture_refs.AMBIGUOUS)
+        self.assertEqual(Place.objects.get(pk=wing.pk).provider_key, _OLD)
+
+    def test_a_place_now_another_sources_building_is_not_moved(self) -> None:
+        place = self._building_place(_OLD, _square(0.2, 0.2))
+        report = self._migrate({}, buildings=[_record("cris:1", _square(0.2, 0.2), stable_ref="cris:1")])
+        self.assertEqual((report.places[0].outcome, report.places[0].detail), (overture_refs.NO_MATCH, "cris:1"))
+        self.assertEqual(Place.objects.get(pk=place.pk).provider_key, _OLD)
+
+    def test_a_building_still_served_under_the_places_ref_matches_whatever_its_shape(self) -> None:
+        courtyard = MultiPolygon(
+            Polygon(
+                (
+                    (0.2, 0.2),
+                    (0.5, 0.2),
+                    (0.5, 0.5),
+                    (0.45, 0.5),
+                    (0.45, 0.25),
+                    (0.25, 0.25),
+                    (0.25, 0.5),
+                    (0.2, 0.5),
+                    (0.2, 0.2),
+                )
+            ),
+            srid=4326,
+        )
+        place = self._building_place(_OLD, courtyard)
+        report = self._migrate({}, buildings=[_record(_OLD, courtyard, stable_ref=_STABLE)])
+        self.assertEqual([(row.outcome, row.new) for row in report.places], [(overture_refs.FOOTPRINT, _STABLE)])
+        self.assertEqual(Place.objects.get(pk=place.pk).provider_key, _STABLE)
+
+    def test_a_dry_run_reports_what_apply_will_do_when_two_places_resolve_alike(self) -> None:
+        self._building_place(_OLD, _square(0.2, 0.2))
+        self._building_place(_NEW, _square(0.5, 0.5))
+        table = {_OLD: _resolved(_STABLE), _NEW: _resolved(_STABLE)}
+        dry = [row.outcome for row in self._migrate(table, apply=False).places]
+        applied = [row.outcome for row in self._migrate(table).places]
+        self.assertEqual(dry, applied)
+        self.assertEqual(applied, [overture_refs.RESOLVED, overture_refs.DUPLICATE])
+
     def test_ambiguous_unavailable_and_duplicate_places_are_left(self) -> None:
         ambiguous = self._building_place(_OLD, _square(0.2, 0.2))
         unavailable = self._building_place(_NEW, _square(0.5, 0.5))

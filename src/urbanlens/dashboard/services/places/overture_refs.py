@@ -241,22 +241,32 @@ class MigrationReport:
 
 
 def _footprint_match(place: Place, buildings: list[dict[str, Any]]) -> tuple[str, list[str]]:
-    """The stable Overture refs among ``buildings`` whose footprint and ``place``'s outline each hold the other's centroid."""
+    """The building in ``buildings`` that ``place`` stands for, by footprint.
+
+    A building REData still serves under the place's own ref is it. Otherwise it is the one building, of any source,
+    whose footprint and the place's outline each hold the other's centroid, and only when that building is an
+    Overture one: a second match (a wing inside an envelope) is ambiguous, and a match from another source means the
+    place is no longer an Overture building's.
+    """
     from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
 
+    for building in buildings:
+        if str(building.get("ref") or "").strip() == place.provider_key and (key := building_key(building)).startswith(OVERTURE_PREFIX) and not is_legacy_overture_ref(key):
+            return FOOTPRINT, [key]
     if place.geometry is None:
         return NO_MATCH, []
     outline = place.geometry
     matches: list[str] = []
     for building in buildings:
-        key = building_key(building)
-        if not key.startswith(OVERTURE_PREFIX) or is_legacy_overture_ref(key):
-            continue
         footprint = building_footprint(building)
         if footprint is not None and footprint.contains(outline.centroid) and outline.contains(footprint.centroid):
-            matches.append(key)
+            matches.append(building_key(building) or "(no ref)")
     matches = sorted(set(matches))
-    return (FOOTPRINT if len(matches) == 1 else AMBIGUOUS if matches else NO_MATCH), matches
+    if len(matches) > 1:
+        return AMBIGUOUS, matches
+    if matches and matches[0].startswith(OVERTURE_PREFIX) and not is_legacy_overture_ref(matches[0]):
+        return FOOTPRINT, matches
+    return NO_MATCH, matches
 
 
 def _classify(place: Place, *, resolver: RedataResolver, fetch_buildings: BuildingsFetcher | None, buildings_by_parcel: dict[str, list[dict[str, Any]] | None]) -> LegacyPlace:
@@ -305,7 +315,7 @@ def migrate_legacy_refs(*, apply: bool, resolver: RedataResolver, fetch_building
     A place moves to the stable ref REData resolves its key to. A key REData never recorded (served before its
     2026-10-11 release) is matched by footprint against the parent parcel's current buildings: the one stable
     Overture building whose footprint and the place's outline each hold the other's centroid. More than one match is
-    ambiguous, and a stable ref another place already holds is a duplicate for ``merge_duplicate_building_places``;
+    ambiguous, and a stable ref another place already holds is a duplicate to merge;
     both leave the place unchanged, as does a REData that cannot answer. Nothing is deleted, and running it again
     re-keys only what is still legacy.
 
@@ -322,8 +332,13 @@ def migrate_legacy_refs(*, apply: bool, resolver: RedataResolver, fetch_building
 
     buildings_by_parcel: dict[str, list[dict[str, Any]] | None] = {}
     rows: list[LegacyPlace] = []
+    claimed: set[str] = set()
     for place in legacy_keyed_places().select_related("parent").order_by("pk"):
         row = _classify(place, resolver=resolver, fetch_buildings=fetch_buildings, buildings_by_parcel=buildings_by_parcel)
+        if row.new and row.new in claimed:
+            row.outcome, row.detail = DUPLICATE, f"{row.new} goes to an earlier place in this run"
+        elif row.outcome in (RESOLVED, FOOTPRINT):
+            claimed.add(row.new)
         if apply and row.outcome in (RESOLVED, FOOTPRINT) and rekey_place(place, row.new) is None:
             row.outcome, row.detail = DUPLICATE, f"{row.new} was taken while this ran"
         rows.append(row)

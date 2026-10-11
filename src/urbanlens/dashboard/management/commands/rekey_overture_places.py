@@ -1,8 +1,7 @@
 """Move building places, floorplans and swept-building records off Overture's legacy content-hash refs (REData P98).
 
 Each legacy key is resolved through REData's ``/buildings/resolve/``; one REData never recorded is matched by footprint
-against its parcel's current buildings. Ambiguous matches, and stable refs another place already holds (duplicates for
-``merge_duplicate_building_places``), are reported and left alone. Never deletes, and safe to run again.
+against its parcel's current buildings. Ambiguous matches, and stable refs another place already holds (duplicates, to be merged), are reported and left alone. Never deletes, and safe to run again.
 
 Dry-run by default; ``--apply`` writes. ``--check`` writes nothing and exits 1 while any legacy ref remains.
 """

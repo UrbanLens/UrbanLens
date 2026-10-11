@@ -66,7 +66,7 @@ REASON_BLOCKED = "blocked"
 REASON_SOURCE_ERROR = "source_error"
 
 #: How long a resolved and an unresolved building-ref answer are kept (see ``RedataGateway.resolve_building_ref``).
-_RESOLVED_REF_SECONDS = 30 * 24 * 3600
+_RESOLVED_REF_SECONDS = 24 * 3600
 _UNRESOLVED_REF_SECONDS = 3600
 #: REData's own outbound pacing refused the call before it reached the county
 #: source - distinct from ``REASON_SOURCE_ERROR`` (the source itself failed),
@@ -895,7 +895,7 @@ class RedataGateway(Gateway):
         """Map a building ref REData once served to its stable ``overture:<gers_id>``.
 
         Transitional, as REData's endpoint is (its P98): used only to move places and floorplans off Overture's
-        legacy content-hash refs, and removed with them. A resolved answer is kept for 30 days, since a served hash
+        legacy content-hash refs, and removed with them. A resolved answer is kept for a day, since a served hash
         names one footprint for good; any other answer for an hour.
 
         Args:
