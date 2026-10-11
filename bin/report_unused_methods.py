@@ -5,7 +5,7 @@ report_unused_methods.py
 Find function and method definitions in a Python codebase that are never
 referenced anywhere else in the code, so they can be reviewed for removal.
 
-The report goes to docs/audits/unused_functions.txt unless -o says otherwise.
+The report goes to docs/internal/audits/unused_functions.txt unless -o says otherwise.
 
 Usage:
     python bin/report_unused_methods.py [DIRECTORY] [options]
@@ -796,7 +796,7 @@ DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "audits" / "u
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("directory", nargs="?", default=".", help="Directory to scan (default: current directory)")
-    parser.add_argument("-o", "--output", default=str(DEFAULT_OUTPUT), help="Report file path (default: docs/audits/unused_functions.txt)")
+    parser.add_argument("-o", "--output", default=str(DEFAULT_OUTPUT), help="Report file path (default: docs/internal/audits/unused_functions.txt)")
     parser.add_argument("--json", action="store_true", help="Write the report as JSON instead of text")
     parser.add_argument("--exclude-dir", action="append", default=[], metavar="NAME", help="Extra directory name to skip (repeatable)")
     parser.add_argument(
