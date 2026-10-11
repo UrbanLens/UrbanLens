@@ -1012,7 +1012,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         Places lookup is never placed from the client-supplied ``lat``/``lng``
         here - those preview-time coordinates come from a free heuristic
         (decoding the Maps URL's embedded S2 cell) that's wrong roughly a
-        third of the time (see ``docs/designs/redata-cid-resolution.md``). Instead
+        third of the time. Instead
         it's queued and handed off to ``tasks.resolve_deferred_pin_locations``
         once every list has been walked, so it only ever gets placed once its real
         coordinates are known. This keeps this generator itself free of any

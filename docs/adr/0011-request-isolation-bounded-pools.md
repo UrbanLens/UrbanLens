@@ -5,7 +5,7 @@ date: 2026-09-15
 
 # One user's request must not reach another's: bounded pools with named budgets
 
-Formerly `D11`. Detail: [`docs/designs/request-isolation-and-connection-budget.md`](../designs/request-isolation-and-connection-budget.md).
+Formerly `D11`.
 
 Jess's requirement is that no action a user takes may affect the site's availability for other users. This is guaranteed by bounding every pool and naming its budget, not by making individual endpoints cheaper. The WSGI tier moved from gevent to gthread (3 workers × 4 threads), so connection demand is a chosen number and persistent connections work. Endpoints that can legitimately take seconds run in their own `app-heavy` pool, with per-session and total connection limits. Each process tier connects as its own Postgres role, with a connection limit and statement timeout. Celery work is split into queue classes (ADR-0013).
 

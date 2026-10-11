@@ -136,7 +136,7 @@ jobs:
         run: python3 bin/check_pin_not_published_to_wiki.py
       - name: Code cites only docs/ paths that exist
         run: python3 bin/check_docs_refs.py
-      - name: docs/INDEX.md and docs/adr/ follow their numbering rules
+      - name: docs/adr/ and the docs index follow their numbering rules
         run: python3 bin/check_docs_index.py
       - name: Every TypeScript file belongs to a tsconfig project
         run: python3 bin/check_typescript_coverage.py

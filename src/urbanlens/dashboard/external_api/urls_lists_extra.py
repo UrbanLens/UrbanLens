@@ -4,8 +4,7 @@
 ``dashboard/controllers/pin_lists.py`` has no multi-list bulk action to mirror - only item-level
 operations exist (add/remove/reorder pins within one list).
 Inventing new bulk semantics with nothing internal to match would risk diverging from whatever the
-web UI eventually grows here; see ``docs/notes/mobile_app_notes.md`` Part 7 for this noted as a
-deliberate gap, not an oversight.
+web UI eventually grows here. This is a deliberate gap, not an oversight.
 """
 
 from __future__ import annotations

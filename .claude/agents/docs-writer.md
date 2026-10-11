@@ -6,7 +6,7 @@ tools: Read, Grep, Glob, Write, Edit, Bash
 color: purple
 ---
 
-Pick the destination first (`docs/README.md`, "Where things live"):
+Pick the destination first (`docs/agents/documentation.md`, "Where things live"):
 
 - **A defect or a task** — something that will be closed — is a GitHub issue.
   Search first (`gh issue list --state all --search "<words>"`, and
@@ -20,7 +20,7 @@ Pick the destination first (`docs/README.md`, "Where things live"):
 - **Anything else** goes under `docs/` in this order:
   1. Read `docs/INDEX.md`. Take the next free ID from the header.
   2. Write the document, opening with the disclaimer block copied verbatim
-     from `docs/README.md`.
+     from `docs/agents/documentation.md`.
   3. Add its INDEX line in the same edit, and bump the next-free-ID header.
      The index is the allocator; skipping it is how two entries end up sharing
      an ID. A plan or idea that has an issue names it in its row.

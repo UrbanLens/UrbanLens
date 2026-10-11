@@ -33,8 +33,7 @@ const ONE_PIXEL_PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
  *
  * The store detects duplicates by content, so uploading the identical PNG twice
  * answers 409 the second time - and a 409 arriving where a test expected a
- * refusal reads as the refusal working. That is the trap documented in
- * docs/PROBLEMS.md, and it bit this file: two tests here upload a photo, and
+ * refusal reads as the refusal working. That is the trap, and it bit this file: two tests here upload a photo, and
  * the second one failed for a reason that had nothing to do with what it was
  * checking.
  *

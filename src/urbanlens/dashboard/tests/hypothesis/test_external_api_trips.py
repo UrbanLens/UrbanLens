@@ -590,8 +590,7 @@ class TripActivityTests(_TripApiTestCase):
         """effective_title must go through the same masking as latitude/longitude.
 
         Regression for TripActivitySerializer sourcing the raw, unmasked ``activity.effective_title`` model
-        property instead of the row's already-masked ``display_title`` - see docs/audits/GOALS_CODE_AUDIT.md
-        ("Trip activities sourcing")."""
+        property instead of the row's already-masked ``display_title``."""
         pin = Pin.objects.create(profile=self.profile, location=self.location, name="My Secret Cabin")
         activity = TripActivity.objects.create(
             trip=self.trip, location=self.location, pin=pin, added_by=self.profile, title="", location_hidden=True

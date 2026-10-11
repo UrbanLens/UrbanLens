@@ -120,7 +120,6 @@ extend-exclude = [
     "logs",
     "node_modules",
     "__pycache__",
-    "docs/reports",
 ]
 #max-complexity = 10
 output-format = 'concise'
@@ -275,11 +274,6 @@ unfixable = ["RUF100"]
     "T201", # these are CLI scripts; printing is the point
     "S607", # they invoke `git`/`docker` through PATH, which is the point of a dev script
 ]
-# Claude Code hook scripts: stdlib-only CLI entry points invoked by the harness.
-".claude/**/*.py" = [
-    "T201",   # they report to the agent on stdout
-    "INP001", # not a package
-]
 # Cost tests assert a budget and report the measurement behind it, so a run under
 # `-s` says what the number actually is rather than only whether it passed.
 "**/tests/**/test_*_cost.py" = [
@@ -333,7 +327,7 @@ dev = [
     "pre-commit~=4.6.0",
     # Server-side interop tests for the direct-message E2EE blob formats -
     # verifies the documented Argon2id/secretbox/sealed-box layouts round-trip
-    # against the browser's libsodium implementation (see docs/designs/e2ee.md).
+    # against the browser's libsodium implementation.
     "pynacl~=1.6.2",
     "pytest>=9.1.1",
     "pytest-django>=4.12,<4.15",
@@ -456,14 +450,14 @@ ignore_missing_model_attributes = true
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "urbanlens.UrbanLens.settings.test"
-# tests/contract and tests/live_locations are on the path so each suite's conftest
-# and test modules can share a helper module by plain import. Neither is in
-# `testpaths`, so this affects imports only, never what a plain `pytest` collects.
-pythonpath = ["src", "tests/contract", "tests/live_locations"]
+# tests/contract is on the path so its conftest and test modules can share a
+# helper module by plain import. It is not in `testpaths`, so this affects
+# imports only, never what a plain `pytest` collects.
+pythonpath = ["src", "tests/contract"]
 # `tests/` is deliberately outside this. The Playwright suite under
-# tests/integration/ is not Python, tests/contract/ needs either a running
-# deployment or an explicit opt-in to fuzzing, and tests/live_locations/ calls a
-# real REData, so none belongs in the run a pre-commit hook or a plain `pytest` performs.
+# tests/integration/ is not Python, and tests/contract/ needs either a running
+# deployment or an explicit opt-in to fuzzing, so neither belongs in the run a
+# pre-commit hook or a plain `pytest` performs.
 testpaths = ["src/urbanlens"]
 # -p no:randomly: pytest-randomly is installed but off unless asked for.
 # Shuffling was probed across three seeds on a subset and found no order
@@ -556,7 +550,7 @@ pytest_add_cli_args_test_selection = [
     # services.profile.identity_visibility. Its presence here (instead of the
     # files that actually do) is why every one of this module's ~105 mutants
     # reported "no tests" rather than a real killed/survived verdict - fixed
-    # 2026-08-22, see docs/PROBLEMS.md.
+    # 2026-08-22.
     "src/urbanlens/dashboard/tests/hypothesis/test_identity_visibility.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_dm_share_live_updates.py",
     "src/urbanlens/dashboard/tests/hypothesis/test_map_pin_share_detection_integration.py",

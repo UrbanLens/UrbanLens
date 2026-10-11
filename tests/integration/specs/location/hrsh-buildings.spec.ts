@@ -94,7 +94,7 @@ test.describe("Hudson River State Hospital - buildings on the property", () => {
 
         expect(
             outside.map((child) => `${child.name} (${child.latitude}, ${child.longitude})`),
-            "these automatically created child pins are outside the parcel they were created under. docs/PROBLEMS.md records an open " +
+            "these automatically created child pins are outside the parcel they were created under. there is an open " +
                 "defect where building-place provisioning passes REData's unfiltered parcel cache, so off-property records can become " +
                 "places inside this parcel's access domain - this is what that would look like from outside",
         ).toEqual([]);

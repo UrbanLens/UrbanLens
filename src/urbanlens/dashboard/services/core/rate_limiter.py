@@ -136,7 +136,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         calls_per_30_days=None,
         notes=(
-            "Batch CID->coordinate resolution via POST /places/resolve-cids/ (see docs/designs/redata-cid-resolution.md), "
+            "Batch CID->coordinate resolution via POST /places/resolve-cids/, "
             "plus reading (GET /places/cid/{cid}/) and downloading (GET /places/cid/{cid}/media/{id}/download/) a resolved "
             "CID's deep-scraped place detail - see plugins.builtin.redata_place_details."
         ),

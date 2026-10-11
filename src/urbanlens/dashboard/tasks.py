@@ -4291,8 +4291,7 @@ def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None
 
     Runs the actual ``async_to_sync(channel_layer.group_send)`` call here, on ``celery-worker``'s
     prefork pool, rather than inline in whatever gunicorn gevent greenlet handled the request that
-    triggered it - see ``services.core.channel_broadcast`` and docs/PROBLEMS.md's gevent/asyncio entry
-    for why calling into asyncio directly from a gevent-scheduled request can raise
+    triggered it - see ``services.core.channel_broadcast`` for why calling into asyncio directly from a gevent-scheduled request can raise
     ``SynchronousOnlyOperation`` on a *different*, unrelated concurrent request.
 
     Args:

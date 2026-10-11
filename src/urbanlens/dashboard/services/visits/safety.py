@@ -1240,8 +1240,7 @@ def apply_checkin_edit(
     with transaction.atomic():
         # Re-fetch under a row lock before reading a single lock flag.
         # The flags are derived from `escalated_at`/`status`, which the escalation beat task flips
-        # from another process entirely - and that task holds no lock of its own (see
-        # docs/PROBLEMS.md on the un-locked 5-minute check-in beats).
+        # from another process entirely - and that task holds no lock of its own.
         locked = SafetyCheckin.objects.select_for_update().get(pk=checkin.pk)
 
         # Refuse outright once archival is scheduled.

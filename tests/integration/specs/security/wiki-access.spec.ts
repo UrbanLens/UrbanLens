@@ -1,5 +1,5 @@
 /**
- * Wiki access is earned only by pinning the place (docs/GOALS.md, "Wiki access"). A wiki the viewer
+ * Wiki access is earned only by pinning the place (docs/PRIVACY_MODEL.md). A wiki the viewer
  * has not earned must be indistinguishable from one that does not exist, on every route, and must
  * never surface through search.
  */

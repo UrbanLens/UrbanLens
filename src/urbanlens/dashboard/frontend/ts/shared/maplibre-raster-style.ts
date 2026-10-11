@@ -1,6 +1,6 @@
 /**
- * Builds a minimal MapLibre style document for a raster tile source - the D17
- * (docs/designs/basemap-self-hosting-fallback.md) mechanism: MapLibre's
+ * Builds a minimal MapLibre style document for a raster tile source - the
+ * docs/adr/0017-basemap-self-hosting-fallback.md mechanism: MapLibre's
  * "raster" source type is a drop-in for what Leaflet's TileLayer already
  * does, so drawing one of this app's existing vendor/proxy URLs needs no
  * vector data, no hosted style API, and (for self-hosters with no REData

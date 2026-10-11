@@ -227,8 +227,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
         preference = spotguessr_overview.get_preference(profile)
         # Whichever mode the player most recently played, not hardcoded to Photos - a rating for a Named
         # Place/Street View-only player was updating correctly all along, the homepage chip just never looked at
-        # the right row (see git history for the report - it predates the convention of filing these in
-        # docs/PROBLEMS.md and has no entry there).
+        # the right row (see git history for the report).
         own_rating = spotguessr_overview.most_recent_rating(profile)
 
         # An invite notification links here with ?session=<id> (there's no dedicated per-session page - this

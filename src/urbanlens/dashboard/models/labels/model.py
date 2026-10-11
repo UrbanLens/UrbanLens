@@ -319,11 +319,11 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
             Index(fields=["custom_icon_upload"], name="idxdb_label_held_icon", condition=~Q(custom_icon_upload="")),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
             # Matches `name__icontains`'s compiled form exactly (`UPPER(name::text) LIKE ...`) - a plain
-            # index on `name` is not usable for that predicate at all. Measured against P123: this does not
+            # index on `name` is not usable for that predicate at all. Measured: this does not
             # change the scan strategy (Postgres still seq-scans the table at this size either way), but the
             # expression index gives ANALYZE a real cardinality estimate for the predicate instead of a fixed
             # default, which changes how the enclosing query plans and removes the growth for a matching term.
-            # See docs/archive/PROBLEMS-ARCHIVE.md (formerly P123) and this migration's test for the measured
+            # See this migration's test for the measured
             # before/after.
             GinIndex(OpClass(Upper(Cast("name", output_field=TextField())), name="gin_trgm_ops"), name="idxdb_label_name_upper_trgm"),
         ]

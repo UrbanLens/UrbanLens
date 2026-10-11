@@ -1,4 +1,4 @@
-"""A contact hears about a check-in only once they were alerted that its owner missed it (GOALS.md, "Safety check-ins")."""
+"""A contact hears about a check-in only once they were alerted that its owner missed it."""
 
 from __future__ import annotations
 

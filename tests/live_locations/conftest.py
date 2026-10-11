@@ -12,10 +12,17 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 from typing import TYPE_CHECKING, Any
 
-from live_sites import InconclusiveError, LiveRedata, Site, load_sites, select_sites, settled
 import pytest
+
+# The suite's modules share `live_sites` by plain import. pytest runs with
+# `--import-mode=importlib`, which puts nothing on the path, so this directory
+# adds itself before anything imports from it.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from live_sites import InconclusiveError, LiveRedata, Site, load_sites, select_sites, settled  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator

@@ -21,7 +21,7 @@ grep -E '\| (live|actionable) ' docs/INDEX.md   # plans and ideas still in play
 
 Ids are allocated here and never reused or renumbered. Add the row in the same
 commit as the entry, so a duplicate id becomes a merge conflict rather than a
-silent collision. `docs/README.md` has the record types, the status values for
+silent collision. `docs/agents/documentation.md` has the record types, the status values for
 each, and the house style. Every prefix numbers a whole document.
 
 **Not listed here:**

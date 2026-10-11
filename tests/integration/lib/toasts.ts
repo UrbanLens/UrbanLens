@@ -1,5 +1,5 @@
 /**
- * Reading the toast notifications the app reports every result through. `AGENTS.md` states the rule
+ * Reading the toast notifications the app reports every result through. The rule
  * these helpers encode: results and errors surface as toasts.
  */
 

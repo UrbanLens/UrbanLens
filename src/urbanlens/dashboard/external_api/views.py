@@ -1660,8 +1660,7 @@ class PinSuggestionActionApiView(ExternalApiView):
     Applies the suggestion's own defaults - its ``suggested_name`` for a brand-new pin, no label or
     candidate-photo selection.
     The web review queue's richer accept dialog (name override, label picker, candidate
-    Immich/local-scan photo picker) is not mirrored here in this pass; see
-    ``docs/notes/mobile_app_notes.md``.
+    Immich/local-scan photo picker) is not mirrored here in this pass.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

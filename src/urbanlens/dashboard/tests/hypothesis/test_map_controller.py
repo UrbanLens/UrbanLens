@@ -187,7 +187,7 @@ class ViewMapContextTests(TestCase):
 class RootPinCountQueryTests(TestCase):
     """MapController.view_map's ``pin_count`` is computed as ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that query returns exactly the number of root pins created, for arbitrary N.
 
-    Kept in its own class, entirely separate from any Django test-client usage: per this repo's AGENTS.md,
+    Kept in its own class, entirely separate from any Django test-client usage:
     hypothesis's per-example DB flush (via hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
     safely with self.client's session state."""
 

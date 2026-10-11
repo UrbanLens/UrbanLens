@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: T201 - a hook the harness runs; it reports to the agent on stdout
 """PreToolUse guard: stop an agent editing files it should not edit.
 
 Registered in .claude/settings.json for Edit|Write|NotebookEdit|Bash. Claude

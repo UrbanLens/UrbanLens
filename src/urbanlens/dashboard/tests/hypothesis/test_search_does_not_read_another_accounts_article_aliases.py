@@ -16,8 +16,7 @@ Two independent variants, because ``pin`` and ``wiki`` are separate ``OneToOneFi
 **Fixed 2026-09-17.** Both paths cross two segments in (``pin``/``wiki`` themselves are single-valued;
 ``aliases`` is the to-many hop), so this also confirms the bounded, materialised semi-join fixes the
 non-matching variant too, not just the matching one - see
-``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism
-and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism.
 """
 
 from __future__ import annotations

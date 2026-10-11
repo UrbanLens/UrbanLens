@@ -1,3 +1,4 @@
+# ruff: noqa: T201, INP001 - a one-off benchmark script kept beside its report
 """Benchmark the Overpass mirror pool against the self-hosted instance.
 
 Runs the same Overpass QL programs against every endpoint, recording

@@ -90,8 +90,8 @@ class CitationResolutionTests(SimpleTestCase):
         self.assertEqual(broken_code, {"GUIDE.md": ["bin/tool.py"]})
 
     def test_a_bare_name_resolves_against_docs_as_well_as_the_root(self) -> None:
-        """`PROBLEMS.md` means `docs/PROBLEMS.md` in most of this codebase."""
-        root = self._repo({"docs/PROBLEMS.md": "# problems\n", "src/app.py": '"""see PROBLEMS.md."""\n'})
+        """`FEATURES.md` means `docs/FEATURES.md` in most of this codebase."""
+        root = self._repo({"docs/FEATURES.md": "# features\n", "src/app.py": '"""see FEATURES.md."""\n'})
         broken_code, _ = self.checker.broken_citations(root)
         self.assertEqual(broken_code, {})
 
@@ -100,12 +100,12 @@ class CitationResolutionTests(SimpleTestCase):
         root = self._repo(
             {
                 ".gitignore": "docs/scratch/\n",
-                "docs/scratch/NOTES.md": "# local only\n",
-                "src/app.py": '"""see docs/scratch/NOTES.md."""\n',
+                "docs/scratch/SCRATCH.md": "# local only\n",
+                "src/app.py": '"""see docs/scratch/SCRATCH.md."""\n',
             },
         )
         broken_code, _ = self.checker.broken_citations(root)
-        self.assertIn("docs/scratch/NOTES.md", broken_code)
+        self.assertIn("docs/scratch/SCRATCH.md", broken_code)
 
     def test_a_citation_from_a_document_is_reported_but_not_fatal(self) -> None:
         root = self._repo({"docs/a.md": "see docs/gone.md\n"})

@@ -31,6 +31,17 @@ _EARLIER: dict[str, tuple[dict[str, Any], ...]] = {
     service: earlier for service, _current, earlier in _MIGRATION.DEFAULTS
 }
 _CASES = [(service, old) for service, earlier in _EARLIER.items() for old in earlier]
+#: Defaults changed after 0068 froze them, with no migration of their own. Only wording an admin reads: the CID
+#: lookup's note stopped citing a document that is not published, and a row written earlier keeps the old sentence.
+_CHANGED_SINCE_0_9_0: dict[str, dict[str, Any]] = {
+    "redata_cid_lookup": {
+        "notes": (
+            "Batch CID->coordinate resolution via POST /places/resolve-cids/, plus reading (GET /places/cid/{cid}/) and "
+            "downloading (GET /places/cid/{cid}/media/{id}/download/) a resolved CID's deep-scraped place detail - see "
+            "plugins.builtin.redata_place_details."
+        ),
+    },
+}
 _OVERPASS = "overpass"
 #: What v0.3.0b0 and v0.4.0b3 wrote for Overpass: the case that prompted the migration.
 _OVERPASS_V030 = next(old for old in _EARLIER[_OVERPASS] if old["calls_per_minute"] == 2)
@@ -88,7 +99,8 @@ class TheFrozenDataTests(TestCase):
         declared = rate_limiter.all_service_defaults()
         for service, current in _CURRENT.items():
             with self.subTest(service=service):
-                self.assertEqual({field: getattr(declared[service], field) for field in _FIELDS}, current)
+                expected = {**current, **_CHANGED_SINCE_0_9_0.get(service, {})}
+                self.assertEqual({field: getattr(declared[service], field) for field in _FIELDS}, expected)
 
     def test_overpass_v0_3_0s_two_a_minute_is_among_them(self) -> None:
         self.assertEqual((_OVERPASS_V030["calls_per_minute"], _OVERPASS_V030["calls_per_day"]), (2, 500))

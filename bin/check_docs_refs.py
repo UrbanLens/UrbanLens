@@ -13,13 +13,13 @@ import sys
 #: open-ended so prose like "the docs/ directory" cannot match.
 _CITATION = re.compile(r"(?:\.\./)*(?:[A-Za-z0-9_.-]+/)?docs/[A-Za-z0-9_./-]+\.(?:md|rst|json|txt|py)")
 
-#: A markdown file named on its own - ``ROADMAP.md``, ``TODO.md``. The
+#: A markdown file named on its own - ``CHANGELOG.md``, ``TODO.md``. The
 #: ``docs/``-prefixed form above cannot see these, which is how eleven citations
-#: of a root ``TODO.md`` survived its rename to ``ROADMAP.md`` in ``3f12e875``.
+#: of a root ``TODO.md`` survived its rename in ``3f12e875``.
 #: Capitalised because that is the convention for the repository-level documents
 #: this is about, and lowercase would match every ``readme.md`` in prose.
-#: Resolved against ``docs/`` as well as the root, since a bare ``PROBLEMS.md``
-#: means ``docs/PROBLEMS.md`` in 22 files here and is not a defect.
+#: Resolved against ``docs/`` as well as the root, since a bare ``FEATURES.md``
+#: means ``docs/FEATURES.md`` here and is not a defect.
 _BARE_CITATION = re.compile(r"(?<![\w./-])([A-Z][A-Za-z0-9_-]*\.md)\b")
 
 #: Files whose citations are checked. Everything else is prose about prose.
@@ -41,6 +41,9 @@ _SKIP_FILES = {
     # documents since moved (docs/redata.md, docs/redata-cid-resolution.md). The
     # text has to match those rows exactly, so it cannot be repointed.
     "src/urbanlens/dashboard/migrations/0068_rate_limit_rows_from_any_release_take_0_9_0_defaults.py",
+    # Names the index it audits, which is kept out of the public mirror; the
+    # checker handles its absence, so the name is an input, not a pointer.
+    "bin/check_docs_index.py",
 }
 
 #: Build output that happens to be tracked. Minified bundles contain runs like
@@ -64,7 +67,7 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     """Whether `citation` names something that exists.
 
     Tried against the repo root and against the citing file's own directory, because both spellings are in use:
-    prose cites `docs/NOTES.md` from the root, while code passes a path relative to itself
+    prose cites `docs/FEATURES.md` from the root, while code passes a path relative to itself
     (`join(import.meta.dir, "../../../../../../docs/...")`).
 
     A path into a sibling checkout counts as resolved when that checkout is absent: this repository cannot vouch

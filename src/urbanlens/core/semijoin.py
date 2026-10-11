@@ -4,8 +4,8 @@ A predicate written through a to-many path - ``aliases__name__icontains`` - comp
 Postgres is free to drive that join from whichever side its cost estimate likes. The far side is
 the whole site's copy of that table, so a plan that starts there makes one account's query cost
 proportional to every other account's data. That is a capacity defect rather than a latency one:
-adding users makes everyone slower. See ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for
-the measurements, and ``docs/PROBLEMS.md`` P132 for what it still costs at capacity scale.
+adding users makes everyone slower. See UrbanLens#281 ("a global search read the whole site's rows") for
+what it still costs at capacity scale.
 
 The mechanism lives here rather than in the one service that first needed it because the shape is
 not search-specific: any query bounded by "what this profile owns" and filtered through a relation
@@ -275,7 +275,7 @@ def probe_statement(model: type[Model], condition: Q, outer_pks: list[Any]) -> l
     anything but a literal list.
 
     Resolved as its own statement rather than left as a subquery for the caller to combine.
-    Measured directly (docs/archive/PROBLEMS-ARCHIVE.md, formerly P123): the bound alone is not
+    Measured directly: the bound alone is not
     enough while it stays a nested subquery - inverting the query to drive from the related model
     still lets Postgres choose to scan that model's whole table once the crossing relation's own
     table is small (a correct choice at that size, but one that reintroduces growth as the
