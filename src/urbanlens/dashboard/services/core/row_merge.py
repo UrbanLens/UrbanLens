@@ -6,19 +6,44 @@ Shared by the pin merge (``services.pins.pin_merge``) and the duplicate building
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import IntegrityError, transaction
+from django.db.models import Field
 from django.db.models.fields.files import FieldFile
 
 if TYPE_CHECKING:
-    from django.db.models import Model
+    from django.db.models import ManyToManyField, Model
 
 
 #: Hard ceiling on a parent walk, so a corrupted tree ends the walk rather than hanging it.
 _MAX_TREE_DEPTH = 64
+
+
+def column_field(row: Model | type[Model], name: str) -> Field:
+    """
+    The concrete field *name* of *row*'s model.
+
+    ``_meta.get_field`` also returns reverse relations; the merges only ever name columns.
+
+    Raises:
+        TypeError: *name* is a reverse relation.
+    """
+    found = row._meta.get_field(name)  # noqa: SLF001
+    if not isinstance(found, Field):
+        raise TypeError(f"{row._meta.label}.{name} is a reverse relation, not a column")  # noqa: SLF001
+    return found
+
+
+def _m2m_link(remote: Any) -> tuple[type[Model], str]:
+    """The through model of a many-to-many field, and the through column that names the related row."""
+    m2m = cast("ManyToManyField[Any, Any]", remote)
+    through = m2m.remote_field.through
+    if through is None:
+        raise TypeError(f"{m2m} has no through model")
+    return through, m2m.m2m_reverse_field_name()
 
 
 def _ancestor_ids(row: Model, parent_field: str) -> list[int]:
@@ -33,7 +58,7 @@ def _ancestor_ids(row: Model, parent_field: str) -> list[int]:
         Ancestor pks, stopping at the top, at a repeat, or at the depth ceiling.
     """
     manager = type(row)._base_manager  # noqa: SLF001
-    attname = row._meta.get_field(parent_field).attname  # noqa: SLF001
+    attname = column_field(row, parent_field).attname
     seen: list[int] = []
     current = manager.filter(pk=row.pk).values_list(attname, flat=True).first()
     while current is not None and current not in seen and current != row.pk and len(seen) < _MAX_TREE_DEPTH:
@@ -55,8 +80,7 @@ def repoint_references(duplicate: Model, kept: Model) -> None:
     for relation in duplicate._meta.related_objects:  # noqa: SLF001
         remote = relation.field
         if relation.many_to_many:
-            through = remote.remote_field.through
-            column = remote.m2m_reverse_field_name()
+            through, column = _m2m_link(remote)
             rows = through._base_manager.filter(**{column: duplicate.pk})  # noqa: SLF001
         else:
             column = remote.name
@@ -91,8 +115,8 @@ def remaining_references(target: Model) -> dict[str, list[Model]]:
     for relation in target._meta.related_objects:  # noqa: SLF001
         remote = relation.field
         if relation.many_to_many:
-            model = remote.remote_field.through
-            rows = list(model._base_manager.filter(**{remote.m2m_reverse_field_name(): target.pk}))  # noqa: SLF001
+            model, column = _m2m_link(remote)
+            rows = list(model._base_manager.filter(**{column: target.pk}))  # noqa: SLF001
         else:
             model = relation.related_model
             queryset = model._base_manager.filter(**{remote.name: target.pk})  # noqa: SLF001
