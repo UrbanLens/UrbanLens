@@ -914,7 +914,7 @@ class RedataGateway(Gateway):
         body = self._get_json("/api/v1/buildings/resolve/", params={"ref": ref})
         if not isinstance(body, dict) or not isinstance(body.get("status"), str):
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unreadable building ref resolution.")
-        set_or_skip(key, body, _RESOLVED_REF_SECONDS if body["status"] == "resolved" else _UNRESOLVED_REF_SECONDS, label="building ref resolution", alias=DEFAULT_CACHE_ALIAS)
+        set_or_skip(key, body, _RESOLVED_REF_SECONDS if body["status"] == "resolved" and body.get("stable_ref") else _UNRESOLVED_REF_SECONDS, label="building ref resolution", alias=DEFAULT_CACHE_ALIAS)
         return body
 
     def lookup_boundaries(self, parcel_uuid: str) -> ParcelBoundaries:

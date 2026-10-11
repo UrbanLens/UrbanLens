@@ -149,15 +149,23 @@ class ProvisioningTests(_PlacesTestCase):
         self.assertEqual(places[0].provider_key, "cris:02714.000098")
         self.assertEqual(resolver.asked, [])
 
-    def test_the_resolver_stops_asking_after_redata_fails(self) -> None:
+    def test_the_resolver_rides_out_one_failure_and_stops_after_three_in_a_row(self) -> None:
         resolver = overture_refs.RedataResolver()
+        down = PropertyRecordsUnavailableError("source_error", "down")
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway:
-            gateway.return_value.resolve_building_ref.side_effect = PropertyRecordsUnavailableError(
-                "source_error", "down"
-            )
+            gateway.return_value.resolve_building_ref.side_effect = [down, _resolved(_STABLE), down, down, down]
             self.assertIsNone(resolver(_OLD))
-            self.assertIsNone(resolver(_NEW))
-        self.assertEqual(gateway.return_value.resolve_building_ref.call_count, 1)
+            self.assertEqual(resolver(_NEW), _STABLE)
+            for ref in (
+                "overture:cccccccccccc",
+                "overture:dddddddddddd",
+                "overture:eeeeeeeeeeee",
+                "overture:ffffffffffff",
+            ):
+                self.assertIsNone(resolver(ref))
+        self.assertEqual(gateway.return_value.resolve_building_ref.call_count, 5)
+        self.assertTrue(resolver.unavailable)
+        self.assertEqual(resolver.failed, 4)
 
 
 class MigrationTests(_PlacesTestCase):

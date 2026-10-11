@@ -17,7 +17,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.place.model import Place, PlaceKind
@@ -63,14 +63,24 @@ def legacy_keyed_places() -> PlaceQuerySet:
 class RedataResolver:
     """A :data:`Resolver` over REData's ``/buildings/resolve/``, memoized for one run.
 
-    Any failure reads as "cannot resolve", and stops further calls for the rest of the run: a REData that does not
-    serve the endpoint yet answers every ref the same way.
+    A failure reads as "cannot resolve" for that ref. :data:`MAX_CONSECUTIVE_FAILURES` failures in a row stop further
+    calls for the rest of the run: a REData that does not serve the endpoint yet answers every ref the same way, while
+    one transient error should not cost the rest of a migration.
     """
+
+    #: Failures in a row after which a run stops asking.
+    MAX_CONSECUTIVE_FAILURES = 3
 
     def __init__(self) -> None:
         """Start with nothing resolved."""
         self._answers: dict[str, dict[str, Any] | None] = {}
-        self._unavailable = False
+        self._failures = 0
+        self.failed = 0
+
+    @property
+    def unavailable(self) -> bool:
+        """Whether this run has stopped asking REData."""
+        return self._failures >= self.MAX_CONSECUTIVE_FAILURES
 
     def answer(self, ref: str) -> dict[str, Any] | None:
         """REData's full answer for ``ref``, or None when it could not be asked.
@@ -85,14 +95,16 @@ class RedataResolver:
 
         if ref in self._answers:
             return self._answers[ref]
-        if self._unavailable:
+        if self.unavailable:
             return None
         try:
             answer: dict[str, Any] | None = RedataGateway().resolve_building_ref(ref)
         except PropertyRecordsUnavailableError:
-            logger.info("overture refs: REData could not resolve %s; not asking again this run", ref, exc_info=True)
-            self._unavailable = True
-            answer = None
+            self._failures += 1
+            self.failed += 1
+            logger.info("overture refs: REData could not resolve %s (%d in a row)", ref, self._failures, exc_info=True)
+            return None
+        self._failures = 0
         self._answers[ref] = answer
         return answer
 
@@ -151,7 +163,12 @@ def rekey_place(place: Place, new_key: str) -> Rekeyed | None:
     with transaction.atomic():
         if Place.objects.filter(provider=place.provider, provider_key=new_key, kind=place.kind).exclude(pk=place.pk).exists():
             return None
-        Place.objects.filter(pk=place.pk).update(provider_key=new_key, updated=timezone.now())
+        try:
+            with transaction.atomic():
+                Place.objects.filter(pk=place.pk).update(provider_key=new_key, updated=timezone.now())
+        except IntegrityError:
+            # Another writer filed a place under new_key since the check above.
+            return None
         floorplans = Floorplan.objects.filter(building_ref=old_key).update(building_ref=new_key)
         pins = 0
         for pin in Pin.objects.filter(auto_nested_buildings__contains=[{"ref": old_key}]).only("pk", "auto_nested_buildings").select_for_update():

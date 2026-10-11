@@ -54,7 +54,8 @@ class Command(BaseCommand):
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
         apply: bool = options["apply"]
-        report = overture_refs.migrate_legacy_refs(apply=apply, resolver=overture_refs.RedataResolver(), fetch_buildings=lambda uuid: RedataGateway().lookup_buildings(uuid))
+        resolver = overture_refs.RedataResolver()
+        report = overture_refs.migrate_legacy_refs(apply=apply, resolver=resolver, fetch_buildings=lambda uuid: RedataGateway().lookup_buildings(uuid))
         verb = "re-keyed" if apply else "would re-key"
         for row in report.places:
             moved = row.outcome in (overture_refs.RESOLVED, overture_refs.FOOTPRINT)
@@ -66,5 +67,7 @@ class Command(BaseCommand):
             self.stdout.write(f"  swept buildings {ref}: {verb} to {stable}")
         counts = ", ".join(f"{outcome} {count}" for outcome, count in sorted(report.outcomes().items())) or "none"
         self.stdout.write(f"{len(report.places)} legacy-keyed place(s): {counts}.")
+        if resolver.failed:
+            self.stderr.write(f"REData could not answer {resolver.failed} resolve call(s){' and stopped being asked' if resolver.unavailable else ''}; run again.")
         if not apply and (report.places or report.floorplans or report.pins):
             self.stdout.write("Nothing was written. Run with --apply to re-key.")
