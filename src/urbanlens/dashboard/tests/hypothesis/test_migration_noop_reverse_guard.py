@@ -151,6 +151,11 @@ REVIEWED: dict[str, str] = {
         "named the sender's own pin, which the share never consented to pass on, so a reverse must not restore it; "
         "the rewritten messages are ordinary strings to the old code."
     ),
+    "0076_place_merges.py": (
+        "recount_parcels_with_superseded_buildings recomputes building_child_count, a stored count, to leave out "
+        "superseded buildings. A reverse keeps the lower counts; the old code reads them as ordinary integers and "
+        "recounts a parcel the next time its children change."
+    ),
 }
 
 
