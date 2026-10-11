@@ -74,6 +74,49 @@ class LabelDefinitionTests(TestCase):
         self.assertFalse(definition["is_active"])
 
 
+class LabelDefinitionsTests(TestCase):
+    """The batched builder gives each label exactly the parents ``label.parents`` would, in one query."""
+
+    def setUp(self) -> None:
+        self.profile = _profile()
+        self.hospital = ensure_label(profile=self.profile, name="Hospital", kind=KIND_CATEGORY)
+        self.asylum = ensure_label(profile=self.profile, name="Asylum", kind=KIND_CATEGORY)
+        self.morgue = ensure_label(profile=self.profile, name="Morgue", kind=KIND_CATEGORY)
+        self.notable = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
+        visited = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS)
+        # One parent shared by two children, a child with several parents, a non-suggestable parent, and an orphan.
+        self.morgue.parents.add(self.hospital, self.notable, visited)
+        self.asylum.parents.add(self.notable)
+        self.labels = [self.morgue, self.asylum, self.hospital, self.notable]
+
+    def test_matches_each_labels_own_parents(self) -> None:
+        batched = redata_suggestions._label_definitions(self.labels, is_active=True)
+
+        self.assertEqual(
+            [definition["parent_ids"] for definition in batched],
+            [[str(u) for u in label.parents.suggestable().values_list("uuid", flat=True)] for label in self.labels],
+        )
+        self.assertEqual(
+            [definition["external_id"] for definition in batched], [str(label.uuid) for label in self.labels]
+        )
+        self.assertEqual(len(batched[0]["parent_ids"]), 2)
+
+    def test_reads_every_parent_in_one_query(self) -> None:
+        with self.assertNumQueries(1):
+            redata_suggestions._label_definitions(self.labels, is_active=True)
+
+    def test_queueing_many_labels_costs_what_queueing_one_does(self) -> None:
+        with (
+            _redata_configured(),
+            self.captureOnCommitCallbacks(),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
+        ):
+            with self.assertNumQueries(1):
+                redata_suggestions.queue_label_definitions_sync(self.labels[:1])
+            with self.assertNumQueries(1):
+                redata_suggestions.queue_label_definitions_sync(self.labels)
+
+
 class ProfileIdsForLabelTests(TestCase):
     def test_owned_label_maps_to_its_one_owner(self) -> None:
         profile = _profile()
