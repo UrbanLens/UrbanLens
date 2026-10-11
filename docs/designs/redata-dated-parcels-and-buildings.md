@@ -56,19 +56,34 @@ are unaffected. UrbanLens uses each item only when REData's `GET /capabilities/`
 | Building `conflicts` | Sources that disagree, such as a register saying demolished while a footprint source still shows the building. |
 | `revision` | Bumped whenever REData's reconciled answer for that parcel or building changes. |
 | `GET /parcels/{uuid}/history/`, `GET /buildings/{uuid}/`, `GET /buildings/{uuid}/history/` | Timelines of a parcel's or a building's states. |
-| `GET /buildings/resolve/?ref=` | Any `ref` REData ever served → its `building_uuid`. |
+| `GET /buildings/resolve/?ref=` | A source ref → its `building_uuid`. Never a legacy Overture hash: by then none remains (below). |
 | `GET /changes/?since=<cursor>` | Parcels and buildings whose answer changed, in order. REData keeps the whole feed indefinitely, so every cursor UrbanLens was given stays valid, however long it was away. |
 
 Served once REData's Phase 0 is released, and safe to ignore: each `sources[]` entry of a building
 gains `source_as_of` (`{not_before, not_after, basis}` or `null`: the source's own date for that record),
-and an Overture source's `attributes` gain `gers_id`. No existing field changes value. An Overture `ref`
-stays a content hash that can change between Overture releases (REData `P98`); it becomes stable only
-through `building_uuid` and `/buildings/resolve/`.
+and an Overture source's `attributes` gain `gers_id`. No existing field changes value.
+
+**Overture refs (REData `P98`, Jess 2026-10-11).** An Overture `ref` is a content hash that changes
+between Overture releases, and it has no lasting value. While UrbanLens 0.8 is in production REData keeps
+serving it, plus two transitional items:
+
+- `stable_ref` on every building: the `ref` it will have once Overture refs become
+  `overture:<gers_id>`, and equal to `ref` for any other building;
+- `GET /buildings/resolve/?ref=`, which maps a hash REData served since 2026-10-11 to its
+  `overture:<gers_id>` (`resolved`, `ambiguous` or `unknown`).
+
+UrbanLens 0.9 keys building places, floorplans and swept-building records on `stable_ref`, else `ref`
+(`services/places/overture_refs.py`). It re-keys a place still on a hash rather than creating a second
+one, and `rekey_overture_places` moves the existing ones, matching a hash REData never recorded by
+footprint. A separate command, not yet built, will merge the duplicate places the drift already made. After
+0.9 is in production, REData switches `ref` itself and removes the hash, `stable_ref`, the aliases and
+the resolver; P98 lists the steps and their zero-references checks.
 
 ## What UrbanLens does with it
 
 1. **Identity.** Key building places, child pins and floorplan references on `building_uuid`. Map
-   existing `provider_key` values once, through `/buildings/resolve/`.
+   existing `provider_key` values once, through `/buildings/resolve/`. Every Overture `provider_key` is
+   `overture:<gers_id>` by then (above).
 2. **Presence.** Show "no building on this lot", "buildings demolished", "not yet mapped" or
    "unknown" from `building_presence`. Stop falling back to OSM and CRIS lists when presence is
    settled.
