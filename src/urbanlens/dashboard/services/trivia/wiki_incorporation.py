@@ -61,7 +61,8 @@ def _slice_existing(content: str) -> str:
 
 
 def _draft_paragraph(*, place_name: str, prompt: str, answer: str, existing_article: str, raise_refusal: bool = False) -> str | None:
-    """Call the writing gateway; return the raw answer text, ``""`` for a blank question or answer, or None on failure/unavailability.
+    """
+    Call the writing gateway; return the raw answer text, ``""`` for a blank question or answer, or None on failure/unavailability.
 
     Raises:
         RequestCancelledError: With ``raise_refusal``, when the call was refused before it was made."""
@@ -113,7 +114,8 @@ def _mark_processed(question: TriviaQuestion) -> None:
 
 
 def incorporate_question_into_wiki(question: TriviaQuestion, *, raise_refusal: bool = False) -> bool:
-    """Draft, sanitize, safety-check, and append one well-upvoted question's fact to its wiki.
+    """
+    Draft, sanitize, safety-check, and append one well-upvoted question's fact to its wiki.
     Skipped without any AI call when the question is already processed, isn't a still-approved ``USER_SUBMITTED`` question, has no location wiki, or hasn't crossed :data:`WIKI_INCORPORATION_SCORE_THRESHOLD`.
 
     Args:
@@ -175,7 +177,8 @@ def incorporate_question_into_wiki(question: TriviaQuestion, *, raise_refusal: b
 
 
 def sweep_questions_for_wiki_incorporation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
-    """Consider a bounded batch of not-yet-processed, well-upvoted questions for wiki incorporation.
+    """
+    Consider a bounded batch of not-yet-processed, well-upvoted questions for wiki incorporation.
 
     Nothing is marked processed for a call refused before it was made (over its limit, switched off, or not made in
     this environment), and the sweep stops at the first such refusal: the remaining questions wait for the next run.

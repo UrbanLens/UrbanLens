@@ -20,7 +20,8 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
-        """Record the layer, never the tile coordinate.
+        """
+        Record the layer, never the tile coordinate.
 
         Args:
             url: The tile or catalogue URL about to be requested.
@@ -36,7 +37,8 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
         return f"{prefix}{marker}{layer}/" if layer else f"{prefix}{marker}"
 
     def list_sources(self) -> list[dict[str, Any]]:
-        """Return REData's basemap layer catalogue.
+        """
+        Return REData's basemap layer catalogue.
         Documented as "called once per session by whatever then requests tiles", so callers are expected to cache it rather than ask per map.
 
         Returns:
@@ -61,7 +63,8 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
         return [row for row in rows if isinstance(row, dict) and row.get("id")]
 
     def download_tile(self, layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
-        """Fetch one basemap tile.
+        """
+        Fetch one basemap tile.
 
         Args:
             layer: Layer id from :meth:`list_sources`.

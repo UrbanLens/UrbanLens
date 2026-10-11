@@ -35,7 +35,8 @@ class CidLookupEntry:
     url: str | None = None
 
     def as_request(self) -> str | dict[str, str]:
-        """This entry as ``resolve-cids`` takes it: the bare cid, or ``{"cid", "url"}`` when the URL is known.
+        """
+        This entry as ``resolve-cids`` takes it: the bare cid, or ``{"cid", "url"}`` when the URL is known.
 
         The cid travels as decimal digits, never a JSON number, so no JSON reader on the way can hand
         it to a float64 (REData P120). REData resolves a place more reliably from its own URL.
@@ -83,7 +84,8 @@ class RedataCidGateway(Gateway):
         return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json", "Content-Type": "application/json"}
 
     def resolve_cids(self, cids: Sequence[int | CidLookupEntry]) -> RedataCidBatchResult:
-        """Resolve a batch of Google Maps CIDs to coordinates via REData.
+        """
+        Resolve a batch of Google Maps CIDs to coordinates via REData.
 
         Args:
             cids: CIDs to resolve (the decimal value after the ``:0x`` in a
@@ -180,7 +182,8 @@ class RedataCidGateway(Gateway):
             raise GatewayRequestError("REData returned an unparseable response.") from exc
 
     def get_place_detail(self, cid: int) -> dict[str, Any] | None:
-        """Read REData's cached deep-scrape record for an already-resolved CID.
+        """
+        Read REData's cached deep-scrape record for an already-resolved CID.
 
         Args:
             cid: The Google Maps CID (see :meth:`resolve_cids`/:class:`CidLookupEntry`).
@@ -215,7 +218,8 @@ class RedataCidGateway(Gateway):
             raise GatewayRequestError("REData returned an unparseable response.") from exc
 
     def download_media(self, cid: int, media_id: int) -> tuple[bytes, str]:
-        """Download one deep-scraped media item's actual file bytes.
+        """
+        Download one deep-scraped media item's actual file bytes.
 
         Args:
             cid: The place's Google Maps CID.

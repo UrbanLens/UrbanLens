@@ -33,7 +33,8 @@ _QUOTED = re.compile(r"'[^']*'")
 
 
 def normalize_sql(sql: str, *, width: int = 130) -> str:
-    """Reduce a statement to its shape, so repeated executions collapse together.
+    """
+    Reduce a statement to its shape, so repeated executions collapse together.
 
     Args:
         sql: The executed statement.
@@ -45,7 +46,8 @@ def normalize_sql(sql: str, *, width: int = 130) -> str:
 
 
 def queries_that_grew(before: Iterable[dict[str, Any]], after: Iterable[dict[str, Any]]) -> list[tuple[int, int, str]]:
-    """Which normalised statements ran more times in *after* than in *before*.
+    """
+    Which normalised statements ran more times in *after* than in *before*.
 
     Args:
         before: Captured queries from the smaller data set.
@@ -60,13 +62,15 @@ def queries_that_grew(before: Iterable[dict[str, Any]], after: Iterable[dict[str
 
 
 class QueryScalingMixin(SeedScalingMixin):
-    """Mixin for Django ``TestCase``s asserting an endpoint's query count is flat.
+    """
+    Mixin for Django ``TestCase``s asserting an endpoint's query count is flat.
 
     Subclasses implement :meth:`seed_rows`; everything else is provided.
     """
 
     def measure(self, url: str, **extra: Any) -> tuple[list[dict[str, Any]], int]:
-        """Fetch *url*, returning its captured queries and response body length.
+        """
+        Fetch *url*, returning its captured queries and response body length.
 
         Args:
             url: The URL to fetch. **extra: Passed to the test client (headers, auth).
@@ -87,7 +91,8 @@ class QueryScalingMixin(SeedScalingMixin):
         growth_waiver: str = "",
         **extra: Any,
     ) -> None:
-        """Assert *url* costs the same number of queries at two data sizes.
+        """
+        Assert *url* costs the same number of queries at two data sizes.
 
         Args:
             url: The URL to measure. tolerance: Extra queries allowed at the larger size before this is treated as slope rather than noise....

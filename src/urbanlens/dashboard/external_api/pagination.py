@@ -1,4 +1,5 @@
-"""Page-number pagination for the external API's *browse* list endpoints.
+"""
+Page-number pagination for the external API's *browse* list endpoints.
 
 Deliberately distinct from the pin sync feed (``services.pins.pin_sync``, served by
 ``views.PinsView``/``PinTombstonesView``), which is cursor-based on ``(updated, pk)`` and hands back
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 
 
 class ExternalApiPagination(PageNumberPagination):
-    """The external API's standard page-number pagination.
+    """
+    The external API's standard page-number pagination.
 
     ``page_size`` is a compromise between round-trips and payload size on a mobile connection;
     ``max_page_size`` bounds what a caller can ask for, so ``?page_size=100000`` degrades to 100 rather
@@ -38,7 +40,8 @@ class ExternalApiPagination(PageNumberPagination):
 
 
 def stable_ordering(queryset: QuerySet[Any] | list[Any]) -> QuerySet[Any] | list[Any]:
-    """Append a primary-key tie-break so paging cannot repeat or drop rows.
+    """
+    Append a primary-key tie-break so paging cannot repeat or drop rows.
 
     - **Lists.** Already materialised in a fixed order by their caller.
     - **``distinct()`` queries.** ``SELECT DISTINCT`` requires every ``ORDER BY`` term to appear in the
@@ -69,7 +72,8 @@ def stable_ordering(queryset: QuerySet[Any] | list[Any]) -> QuerySet[Any] | list
 
 
 class PaginatedListMixin:
-    """Adds one-call paginated list responses to an ``APIView``-based external view.
+    """
+    Adds one-call paginated list responses to an ``APIView``-based external view.
 
     ``ExternalApiView`` extends ``APIView`` rather than ``GenericAPIView`` (the external surface is
     hand-rolled end to end - see the serializers module docstring for why), so it has no
@@ -91,7 +95,8 @@ class PaginatedListMixin:
         page_builder: Callable[[list[Any]], list[Any]] | None = None,
         row_builder: Callable[[Any], Any] | None = None,
     ) -> Response:
-        """Serialize one page of *queryset* into the standard envelope.
+        """
+        Serialize one page of *queryset* into the standard envelope.
 
         Args:
             queryset: The rows to page through. A primary-key tie-break is appended by

@@ -1,4 +1,5 @@
-"""Vault → Photos: organizing photos into visits, upload issues, and the lightbox's per-photo actions.
+"""
+Vault → Photos: organizing photos into visits, upload issues, and the lightbox's per-photo actions.
 
 The gallery page, its grid pages and its uploads are ``controllers.vault_media``, shared with Documents.
 """
@@ -45,7 +46,8 @@ _PROCESSING_STATUS_MAX_IDS = 100
 
 
 def _attention_cards(profile: Profile) -> list[dict]:
-    """Build the render context for each photo in the "needs attention" queue.
+    """
+    Build the render context for each photo in the "needs attention" queue.
 
     Args:
         profile: The viewing profile whose unfiled photos to surface.
@@ -90,7 +92,8 @@ def _photo_issues(profile: Profile) -> dict:
 
 
 def organize_context(profile: Profile) -> dict[str, Any]:
-    """The organize queue's cards and the upload-issue panels, as the Photos page and its queue refresh render them.
+    """
+    The organize queue's cards and the upload-issue panels, as the Photos page and its queue refresh render them.
 
     Args:
         profile: The viewing profile.
@@ -102,7 +105,8 @@ def organize_context(profile: Profile) -> dict[str, Any]:
 
 
 def _toast(message: str, level: str = "success", *, status: int = 200, refresh_queue: bool = False) -> HttpResponse:
-    """Return an empty HTMX response that removes the swapped card and fires a toast.
+    """
+    Return an empty HTMX response that removes the swapped card and fires a toast.
 
     Uses the global ``showToast`` HX-Trigger handler wired up in ``themes/base.html``.
 
@@ -127,7 +131,8 @@ def _toast(message: str, level: str = "success", *, status: int = 200, refresh_q
 
 
 def _render_card(request: HttpRequest, image: Image, *, toast: str, level: str = "info") -> HttpResponse:
-    """Re-render a photo card unchanged, with a toast - used when an action can't proceed.
+    """
+    Re-render a photo card unchanged, with a toast - used when an action can't proceed.
 
     Args:
         request: The current request.
@@ -146,7 +151,8 @@ def _render_card(request: HttpRequest, image: Image, *, toast: str, level: str =
 
 
 def _render_failure_card(request: HttpRequest, failure: PhotoUploadFailure, toast: str, level: str = "warning") -> HttpResponse:
-    """Re-render one upload-failure card unchanged, with a toast.
+    """
+    Re-render one upload-failure card unchanged, with a toast.
 
     A refusal reached from a card-swapping button must put the card back - returning ``_toast`` there
     would report the problem and remove the card anyway, leaving nothing to act on.
@@ -166,7 +172,8 @@ def _render_failure_card(request: HttpRequest, failure: PhotoUploadFailure, toas
 
 
 class VaultPinAlbumsView(LoginRequiredMixin, View):
-    """Read-only listing of the profile's albums from across all of their pins.
+    """
+    Read-only listing of the profile's albums from across all of their pins.
 
     GET /vault/photos/pin-albums/
 
@@ -178,7 +185,8 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render one card per album across every pin this profile owns.
+        """
+        Render one card per album across every pin this profile owns.
 
         Args:
             request: The HTTP request.
@@ -215,13 +223,15 @@ class VaultPinAlbumsView(LoginRequiredMixin, View):
 
 
 class PhotoQueueView(LoginRequiredMixin, View):
-    """The "needs attention" queue, re-fetched after uploads as ingestion lands.
+    """
+    The "needs attention" queue, re-fetched after uploads as ingestion lands.
 
     GET /vault/photos/queue/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render just the organize-queue partial.
+        """
+        Render just the organize-queue partial.
 
         Args:
             request: The HTTP request.
@@ -249,7 +259,8 @@ def _received_attachment_json(image: Image) -> dict[str, Any]:
 
 
 class PhotoProcessingView(LoginRequiredMixin, View):
-    """Which of the requester's uploads, or photos sent to them, have finished processing.
+    """
+    Which of the requester's uploads, or photos sent to them, have finished processing.
 
     GET /vault/photos/processing/?ids=1,2,3
 
@@ -259,7 +270,8 @@ class PhotoProcessingView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
-        """Report each named upload as still processing, settled, or gone.
+        """
+        Report each named upload as still processing, settled, or gone.
 
         Args:
             request: The HTTP request, with a comma-separated ``ids`` query param.
@@ -299,7 +311,8 @@ class PhotoProcessingView(LoginRequiredMixin, View):
 
 
 class PhotoActionView(LoginRequiredMixin, View):
-    """Organize/lightbox actions on a single Image, each returning an HTMX card-removing response.
+    """
+    Organize/lightbox actions on a single Image, each returning an HTMX card-removing response.
 
     POST /vault/photos/<image_id>/<action>/
 
@@ -339,7 +352,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         return _toast("Suggestion dismissed.", "info", refresh_queue=True)
 
     def create_pin(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
-        """Create a pin and log a visit, honouring the confirmation dialog's placement.
+        """
+        Create a pin and log a visit, honouring the confirmation dialog's placement.
 
         The confirmation dialog posts the (possibly dragged) ``latitude``/``longitude`` and an optional
         ``name``.
@@ -397,7 +411,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         return _toast("Photo deleted.", "info", refresh_queue=True)
 
     def send_to_wiki(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
-        """File this photo onto a wiki the user has access to, from the lightbox's wiki picker.
+        """
+        File this photo onto a wiki the user has access to, from the lightbox's wiki picker.
 
         Unlike ``log-visit`` (pin filing, one-shot for an unfiled photo), a photo may be re-sent to a
         different wiki at any time - mirrors ``PinGalleryBulkView``'s ``send_to_wiki`` bulk action, minus
@@ -426,7 +441,8 @@ class PhotoActionView(LoginRequiredMixin, View):
         return _toast(f"Sent to {wiki.name or 'the wiki'}.")
 
     def share(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
-        """Share this photo with a friend via direct message, from the lightbox's friend picker.
+        """
+        Share this photo with a friend via direct message, from the lightbox's friend picker.
 
         The already-attached check and the send are done under a row lock on *image* (``select_for_update``)
         so two near-simultaneous shares of the same never-yet-attached photo can't both see it as unattached
@@ -477,7 +493,8 @@ class PhotoActionView(LoginRequiredMixin, View):
     }
 
     def post(self, request: HttpRequest, image_id: int, action: str) -> HttpResponse:
-        """Dispatch to the handler named by ``action``.
+        """
+        Dispatch to the handler named by ``action``.
 
         Args:
             request: The HTTP request.
@@ -502,13 +519,15 @@ class PhotoActionView(LoginRequiredMixin, View):
 
 
 class PhotoPinSearchView(LoginRequiredMixin, View):
-    """Autocomplete over the user's own pins, for manually filing a photo.
+    """
+    Autocomplete over the user's own pins, for manually filing a photo.
 
     GET /vault/photos/pin-search/?q=&image_id=
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render pin suggestions as file-to-this-pin buttons.
+        """
+        Render pin suggestions as file-to-this-pin buttons.
 
         Args:
             request: The HTTP request carrying ``q`` and ``image_id``.
@@ -530,7 +549,8 @@ class PhotoPinSearchView(LoginRequiredMixin, View):
 
 
 class PhotoAssociationsView(LoginRequiredMixin, View):
-    """GET: where one of the requesting user's own photos is filed and which albums hold it.
+    """
+    GET: where one of the requesting user's own photos is filed and which albums hold it.
 
     GET /vault/photos/<image_id>/associations/
 
@@ -552,7 +572,8 @@ class PhotoAssociationsView(LoginRequiredMixin, View):
 
 
 class PhotoWikiSearchView(LoginRequiredMixin, View):
-    """Autocomplete over the wikis the user has access to, for the lightbox's "Send to a wiki" picker.
+    """
+    Autocomplete over the wikis the user has access to, for the lightbox's "Send to a wiki" picker.
 
     GET /vault/photos/wiki-search/?q=&image_id=
     """
@@ -573,7 +594,8 @@ class PhotoWikiSearchView(LoginRequiredMixin, View):
 
 
 class PhotoShareFriendsView(LoginRequiredMixin, View):
-    """The friend-picker list for the lightbox's "Share with a friend" dialog.
+    """
+    The friend-picker list for the lightbox's "Share with a friend" dialog.
 
     GET /vault/photos/share-friends/?image_id=
 
@@ -594,7 +616,8 @@ class PhotoShareFriendsView(LoginRequiredMixin, View):
 
 
 class PhotoPinConfirmView(LoginRequiredMixin, View):
-    """Render the "confirm where this pin goes" dialog body for a geotagged photo.
+    """
+    Render the "confirm where this pin goes" dialog body for a geotagged photo.
 
     GET /vault/photos/<image_id>/confirm-pin/
 
@@ -604,7 +627,8 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, image_id: int) -> HttpResponse:
-        """Render the placement/naming form for the photo's pin.
+        """
+        Render the placement/naming form for the photo's pin.
 
         Args:
             request: The HTTP request.
@@ -622,7 +646,8 @@ class PhotoPinConfirmView(LoginRequiredMixin, View):
 
 
 class PhotoUploadFailureCreateView(LoginRequiredMixin, View):
-    """Record a client-side load/processing failure so it can be retried later.
+    """
+    Record a client-side load/processing failure so it can be retried later.
 
     POST /vault/photos/failures/
     """
@@ -658,14 +683,16 @@ class PhotoUploadFailureDismissView(LoginRequiredMixin, View):
 
 
 class PhotoUploadFailureRetryView(LoginRequiredMixin, View):
-    """Re-run processing for an upload whose task died.
+    """
+    Re-run processing for an upload whose task died.
 
     Only for a failure that still has its stored row - a rejected upload never became one, and retrying
     that means picking the file again, which is what the file input on those cards is for.
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
-        """Queue the re-run, or say why not.
+        """
+        Queue the re-run, or say why not.
 
         Args:
             request: The HTMX request.
@@ -689,7 +716,8 @@ class PhotoUploadFailureDiscardView(LoginRequiredMixin, View):
     """Throw away the photo behind a failed upload, at its owner's request."""
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
-        """Delete the stored row and close the failure.
+        """
+        Delete the stored row and close the failure.
 
         Args:
             request: The HTMX request.

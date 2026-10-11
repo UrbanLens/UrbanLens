@@ -1,4 +1,5 @@
-"""A PDF or DjVu an archive search found is listed under Article > Sources, from the gallery's own cached row (P260).
+"""
+A PDF or DjVu an archive search found is listed under Article > Sources, from the gallery's own cached row (P260).
 
 The Media gallery leaves documents out (P196), and only Commons and CRIS listed documents under Sources, so a document
 among the Library of Congress, Internet Archive, Smithsonian, Digital Commonwealth or Chronicling America results was

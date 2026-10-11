@@ -135,7 +135,8 @@ class SubscriptionRole(abstract.DashboardModel):
 
     @classmethod
     def unique_slug(cls, name: str) -> str:
-        """Derive a unique slug from an admin-entered role name.
+        """
+        Derive a unique slug from an admin-entered role name.
 
         Args:
             name: The role name to slugify.
@@ -239,7 +240,8 @@ class UserSubscription(abstract.DashboardModel):
         self.expires_at = None if months is None else timezone.now() + timedelta(days=months * 30)
 
     def revoke(self, *, by: User | None = None) -> None:
-        """End the grant now.
+        """
+        End the grant now.
 
         Args:
             by: The admin revoking it, if a person is.
@@ -277,7 +279,8 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
 
 
 def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
-    """Roles the user currently holds via a paid (Stripe-backed) subscription.
+    """
+    Roles the user currently holds via a paid (Stripe-backed) subscription.
     Only counts ``RoleSubscription`` rows that are active/trialing *and* have cleared their role's pay-what-you-want threshold (see ``services.billing.pricing.role_pwyw_threshold_cents`` - re-evaluated at each successful Stripe charge, so a dynamic-threshold role can silently stop granting access without the row itself changing status).
     """
     from urbanlens.dashboard.models.billing import RoleSubscription
@@ -287,14 +290,16 @@ def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
 
 
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
-    """Return whether the user has the feature, via the admin permission, the site default or an active role.
+    """
+    Return whether the user has the feature, via the admin permission, the site default or an active role.
     Anonymous users never have subscription-backed features.
     """
     return str(feature) in user_features(user)
 
 
 def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
-    """Every feature the user has, via the admin permission, the site default or an active role.
+    """
+    Every feature the user has, via the admin permission, the site default or an active role.
 
     Remembered per account rather than per page - see
     :mod:`~urbanlens.dashboard.models.subscriptions.access_state`, which also lists the acts that
@@ -307,7 +312,8 @@ def user_features(user: AbstractBaseUser | AnonymousUser) -> frozenset[str]:
 
 
 def user_features_from_database(user: User) -> frozenset[str]:
-    """:func:`user_features`, read from the database instead of the shared cache.
+    """
+    :func:`user_features`, read from the database instead of the shared cache.
 
     For a writer inside the transaction that changed a grant: the cache is retired on commit, so until then
     :func:`user_features` can still answer with the standing from before the change.
@@ -319,7 +325,8 @@ def user_features_from_database(user: User) -> frozenset[str]:
 
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
-    """Return the subscription roles the user currently holds, admin-granted or paid.
+    """
+    Return the subscription roles the user currently holds, admin-granted or paid.
 
     Args:
         user: The user to look up; anonymous users hold no roles.

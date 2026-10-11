@@ -1,4 +1,5 @@
-"""Undo handler for MarkupMap.
+"""
+Undo handler for MarkupMap.
 Inbound attachments (a comment's or message's ``markup_map`` FK) are ``SET_NULL`` and already nulled by the time the stash could run, so they are out of scope by construction rather than by choice."""
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ MODEL_LABEL = "markup_map"
 
 @register
 class MarkupMapUndoHandler(UndoHandler):
-    """Restores a map's own fields and every annotation drawn on it.
+    """
+    Restores a map's own fields and every annotation drawn on it.
     ``MarkupMap`` carries no unique constraints, so restore never refuses over a collision - same reasoning as ``LabelUndoHandler``."""
 
     model_label = MODEL_LABEL
@@ -65,7 +67,8 @@ class MarkupMapUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[MarkupMap]:
-        """Recreate the maps and their annotations.
+        """
+        Recreate the maps and their annotations.
 
         Raises:
             UndoExpiredError: If the owning profile was deleted during the retention window."""

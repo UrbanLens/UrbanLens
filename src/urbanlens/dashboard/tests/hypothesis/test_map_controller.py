@@ -185,7 +185,8 @@ class ViewMapContextTests(TestCase):
 
 
 class RootPinCountQueryTests(TestCase):
-    """MapController.view_map's ``pin_count`` is computed as ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that query returns exactly the number of root pins created, for arbitrary N.
+    """
+    MapController.view_map's ``pin_count`` is computed as ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that query returns exactly the number of root pins created, for arbitrary N.
 
     Kept in its own class, entirely separate from any Django test-client usage:
     hypothesis's per-example DB flush (via hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
@@ -295,7 +296,8 @@ class MapPinsMetaTests(TestCase):
 
 
 class PinSuggestionsIntroDialogTests(TestCase):
-    """The new-user "suggested pins near you" dialog shows at most once, and only
+    """
+    The new-user "suggested pins near you" dialog shows at most once, and only
     once there's actually a pending suggestion to point at - see
     Profile.map_pin_suggestions_intro_seen and MapController.view_map."""
 

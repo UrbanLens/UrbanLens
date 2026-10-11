@@ -1,4 +1,5 @@
-"""OSM buildings found inside a property carry their footprints, not just a centre point.
+"""
+OSM buildings found inside a property carry their footprints, not just a centre point.
 
 The footprint is what a building place, a child pin's outline and the floorplan editor's seeded walls
 are made from; the parcel-buildings fallback used to ask Overpass for centres only."""

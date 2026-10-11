@@ -51,7 +51,8 @@ class SweepDispatchTests(TestCase):
     @given(chunk_size=st.integers(min_value=-5, max_value=8))
     @hypothesis_settings(max_examples=15, deadline=None)
     def test_dispatch_partitions_every_profile_into_exactly_one_chunk(self, chunk_size: int) -> None:
-        """No profile may be swept twice or - the original bug - not at all.
+        """
+        No profile may be swept twice or - the original bug - not at all.
 
         Includes non-positive ``chunk_size`` values: the implementation clamps these to 1 rather than handing a
         zero step to ``range()``, and that clamp is only exercised if a test actually passes one through."""
@@ -72,7 +73,8 @@ class SweepDispatchTests(TestCase):
             self.assertLessEqual(len(covered), 4)
 
     def test_dispatch_gate_keys_off_is_active_not_row_existence(self) -> None:
-        """The signals' gate, applied here too: no active award, no fan-out.
+        """
+        The signals' gate, applied here too: no active award, no fan-out.
 
         Deactivating (not deleting) the achievement, then reactivating the same row, proves the gate reads
         ``is_active`` rather than merely whether the table has any rows - a check like
@@ -94,7 +96,8 @@ class SweepDispatchTests(TestCase):
             self.assertEqual(len(covering), 1, f"profile {pk} must fall in exactly one chunk, got {covering}")
 
     def test_broker_failure_on_one_chunk_does_not_inflate_count_or_abort_the_rest(self) -> None:
-        """A None return (broker unreachable for that enqueue) must not count as dispatched.
+        """
+        A None return (broker unreachable for that enqueue) must not count as dispatched.
 
         Also proves the dispatch loop keeps going after one failure - a crashed/unreachable chunk must cost only
         itself, not the rest of the night's sweep."""
@@ -145,7 +148,8 @@ class SweepDispatchTests(TestCase):
 
 
 class SweepChunkQueryCostTests(TestCase):
-    """A chunk is priced in metrics, not profiles.
+    """
+    A chunk is priced in metrics, not profiles.
 
     With bulk metrics, a chunk's query count must be a function of the active metric count alone - the same for
     4 profiles as for 12."""

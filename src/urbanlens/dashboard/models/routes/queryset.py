@@ -22,7 +22,8 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
     """QuerySet for Route records."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """Filter to routes owned by a specific profile.
+        """
+        Filter to routes owned by a specific profile.
 
         Args:
             profile: The owning profile.
@@ -33,7 +34,8 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
         return self.filter(profile=profile)
 
     def in_date_range(self, start: datetime.date, end: datetime.date) -> Self:
-        """Filter to routes that started within an inclusive date range.
+        """
+        Filter to routes that started within an inclusive date range.
 
         Args:
             start: Earliest allowed start date.
@@ -45,7 +47,8 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
         return self.filter(started_at__date__range=(start, end))
 
     def intersecting_bbox(self, min_lat: float, min_lng: float, max_lat: float, max_lng: float) -> Self:
-        """Filter to routes whose path overlaps a lat/lng bounding box.
+        """
+        Filter to routes whose path overlaps a lat/lng bounding box.
         Uses the cheaper index-only ``bboverlaps`` lookup rather than a full ``intersects`` test, since this is meant for coarse map-viewport scoping.
 
         Args:
@@ -62,7 +65,8 @@ class RouteQuerySet(abstract.FrontendDashboardQuerySet["Route"]):
         return self.filter(path__bboverlaps=bbox)
 
     def passing_within(self, point: Point, distance: Distance) -> Self:
-        """Filter to routes whose path passes within ``distance`` of ``point``.
+        """
+        Filter to routes whose path passes within ``distance`` of ``point``.
         Named distinctly from ``PinQuerySet.near_point`` (a different signature - a bare ``radius_km: float`` rather than a ``Distance``) so the two are never mistaken for interchangeable proximity helpers.
 
         Args:

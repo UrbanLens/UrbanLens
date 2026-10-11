@@ -29,7 +29,8 @@ _URL_IS_SAFE_PATH = re.compile(r"^/(?![/\\])[^\s\\]*$")
 
 
 class NotificationLog(abstract.FrontendDashboardModel):
-    """Records a notification sent to a specific user profile.
+    """
+    Records a notification sent to a specific user profile.
     Extends ``FrontendDashboardModel`` (rather than ``DashboardModel``) purely for its ``uuid``: the external API addresses a notification by uuid, and exposing the sequential integer pk instead would leak both site-wide notification volume and a trivially walkable neighbour space.
     """
 
@@ -88,7 +89,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
     objects = NotificationManager()
 
     def save(self, *args, **kwargs):
-        """Clip ``title`` to its column width before writing.
+        """
+        Clip ``title`` to its column width before writing.
         Titles are assembled from user-controlled names - a wiki, an achievement, a group - several of whose own columns are as wide as this one, leaving the surrounding text as pure overflow.
         A title is display text, so clipping is preferable to failing the write, and doing it here covers the call sites that do not know how long the name they interpolated can be.
         """
@@ -111,7 +113,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
     @cached_property
     def _friend_request_friendship(self):
-        """The Friendship row backing a friend_request notification, or None.
+        """
+        The Friendship row backing a friend_request notification, or None.
 
         Cached per-instance since both `is_friend_request_pending` and
         `friend_request_resolution` need it and templates commonly read both.
@@ -133,7 +136,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
     @property
     def friend_request_resolution(self) -> str | None:
-        """Returns "accepted"/"declined" once a friend_request notification's underlying request has been resolved one way or the other, else None (still pending, or this isn't a friend_request notification).
+        """
+        Returns "accepted"/"declined" once a friend_request notification's underlying request has been resolved one way or the other, else None (still pending, or this isn't a friend_request notification).
         Without this, a friend_request notification's Accept/Decline buttons disappear once resolved (see `is_friend_request_pending`) but the title/ message stayed frozen at "Sarah wants to be your friend." forever after - looking like a dangling, unactionable request instead of a settled one.
         """
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
@@ -160,7 +164,8 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
 
 class NotificationPreference(abstract.DashboardModel):
-    """Per-user delivery preferences for each notification type.
+    """
+    Per-user delivery preferences for each notification type.
     Site/email delivery is a single ``DeliveryPreference`` choice per type (see below).
     WhatsApp and SMS are independent on/off toggles instead of being folded into that enum: each is billed per message sent (unlike email), so they default off, and a 4-way combined enum would need 16 string values to cover every combination - a plain boolean per channel is simpler and keeps the existing site/email columns untouched.
     """

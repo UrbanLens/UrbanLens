@@ -31,7 +31,8 @@ _FILE_EXTENSION = re.compile(r"\.[A-Za-z0-9]{2,4}$")
 
 @dataclass(slots=True, kw_only=True)
 class WikimediaGateway(MediaProvider):
-    """Searches Wikimedia Commons for freely licensed images.
+    """
+    Searches Wikimedia Commons for freely licensed images.
     Only call this when the pin has a meaningful name - coordinate-only names produce low-quality Commons results."""
 
     service_key: ClassVar[str] = "wikimedia"
@@ -53,7 +54,8 @@ class WikimediaGateway(MediaProvider):
         self.session.headers.update({"User-Agent": USER_AGENT})
 
     def search_images(self, query: str) -> list[dict[str, Any]]:
-        """Search Commons for images matching *query* and return thumbnail info.
+        """
+        Search Commons for images matching *query* and return thumbnail info.
 
         Args:
             query: Human-readable wiki/place name used as the search term.
@@ -69,7 +71,8 @@ class WikimediaGateway(MediaProvider):
     # -- private ----------------------------------------------------------------
 
     def _search_files(self, query: str) -> list[str]:
-        """Return up to _MAX_RESULTS file titles from a Commons full-text search.
+        """
+        Return up to _MAX_RESULTS file titles from a Commons full-text search.
 
         Raises:
             Exception: Commons could not be asked (see ``is_source_outage``).
@@ -102,7 +105,8 @@ class WikimediaGateway(MediaProvider):
         return results
 
     def _fetch_image_info_batch(self, titles: list[str]) -> list[dict[str, Any]]:
-        """Fetch image info and coordinates for a single batch of at most _TITLES_BATCH_SIZE titles.
+        """
+        Fetch image info and coordinates for a single batch of at most _TITLES_BATCH_SIZE titles.
 
         Images and paged documents (PDF, DjVu) are kept; sound and video are not.
 

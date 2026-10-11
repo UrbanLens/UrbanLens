@@ -1,4 +1,5 @@
-"""Google Images plugin: a Media-gallery photo tab sourced from Google Image Search, via REData.
+"""
+Google Images plugin: a Media-gallery photo tab sourced from Google Image Search, via REData.
 Searched by the pin's address only - never by its user-given name, which may be a nickname or physical description that doesn't match anything Google would associate with the place."""
 
 from __future__ import annotations

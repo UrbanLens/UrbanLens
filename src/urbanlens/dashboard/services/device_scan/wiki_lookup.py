@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 def wikis_containing_point(point: Point) -> list[Wiki]:
-    """Every wiki (including child wikis) whose official geometry contains *point*.
+    """
+    Every wiki (including child wikis) whose official geometry contains *point*.
     Reads ``Place.geometry``, which only the provider chain and boundary voting ever write - never a user- or community-drawn shape, so a device sighting can't be attributed to somebody's inflated drawing.
 
     Args:

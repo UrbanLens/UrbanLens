@@ -18,7 +18,8 @@ COORDINATE_MERGE_DISTANCE_METERS = 15.0
 
 
 def record_tentative_answers(round_: ConsensusRound, distinct_answers: list[ConsensusAnswer]) -> list[ConsensusTentativeAnswer]:
-    """Upsert one ``ConsensusTentativeAnswer`` per distinct submitted value in ``distinct_answers``.
+    """
+    Upsert one ``ConsensusTentativeAnswer`` per distinct submitted value in ``distinct_answers``.
     Unserialised, both reads miss and both write, which splits one value's support across two rows so it never reaches the promotion threshold, and the row-level ``+=`` loses an increment on top of that."""
     from urbanlens.dashboard.models.wiki.model import Wiki
 

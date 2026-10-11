@@ -87,7 +87,8 @@ def _poll_attempt(request: HttpRequest) -> int:
 
 
 def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any]) -> dict[str, Any]:
-    """Write ``final_entry`` into session history in place of the pending marker for ``turn_id``, once.
+    """
+    Write ``final_entry`` into session history in place of the pending marker for ``turn_id``, once.
 
     Consume-gated (``cache.add``) so two browser tabs polling the same turn both render the same final
     content, but only the first to arrive here appends it to history - the second is a no-op past the
@@ -116,7 +117,8 @@ def _resolve_turn(request: HttpRequest, turn_id: str, final_entry: dict[str, Any
 
 
 def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
-    """This turn's task result if it has finished, else ``None`` (still running).
+    """
+    This turn's task result if it has finished, else ``None`` (still running).
 
     Reads the turn-result cache first so a repeat poll never depends on the Celery backend, which the
     first poll to see a finished turn deliberately clears - see ``services.ai.turns.store_turn_result``.
@@ -141,7 +143,8 @@ def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
 
 
 def _session_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The session-visible shape of a turn's proposals - never ``args``.
+    """
+    The session-visible shape of a turn's proposals - never ``args``.
 
     ``args`` only ever needs to be read back by the confirm view, from the cache-backed store
     (``store_turn_proposals``) - the session copy exists purely to render a confirm button (or its
@@ -165,7 +168,8 @@ def _update_session_proposal(request: HttpRequest, turn_id: str, n: int, *, stat
 
 
 class AssistantView(LoginRequiredMixin, View):
-    """The assistant page.
+    """
+    The assistant page.
 
     GET /assistant/
     """
@@ -187,7 +191,8 @@ class AssistantView(LoginRequiredMixin, View):
 
 
 class AssistantOverlayBodyView(LoginRequiredMixin, View):
-    """Lazily-loaded body of the global assistant overlay dialog (see themes/base.html).
+    """
+    Lazily-loaded body of the global assistant overlay dialog (see themes/base.html).
 
     GET /assistant/overlay/
 
@@ -212,7 +217,8 @@ class AssistantOverlayBodyView(LoginRequiredMixin, View):
 
 
 class AssistantMessageView(LoginRequiredMixin, View):
-    """Enqueue one chat message and return the log with a pending bubble for it.
+    """
+    Enqueue one chat message and return the log with a pending bubble for it.
 
     POST /assistant/message/   body: ``message``
     """
@@ -268,7 +274,8 @@ class AssistantMessageView(LoginRequiredMixin, View):
 
 
 class AssistantTurnPollView(LoginRequiredMixin, View):
-    """Poll one in-flight turn; renders just that one bubble (outerHTML swap).
+    """
+    Poll one in-flight turn; renders just that one bubble (outerHTML swap).
 
     GET /assistant/turn/<turn_id>/
     """
@@ -312,7 +319,8 @@ class AssistantTurnPollView(LoginRequiredMixin, View):
 
 
 class AssistantProposalConfirmView(LoginRequiredMixin, View):
-    """Confirm (and actually run) one write-tool proposal from a resolved turn.
+    """
+    Confirm (and actually run) one write-tool proposal from a resolved turn.
 
     POST /assistant/turn/<turn_id>/confirm/<n>/
 
@@ -362,7 +370,8 @@ class AssistantProposalConfirmView(LoginRequiredMixin, View):
 
 
 class AssistantResetView(LoginRequiredMixin, View):
-    """Clear the conversation.
+    """
+    Clear the conversation.
 
     POST /assistant/reset/
 

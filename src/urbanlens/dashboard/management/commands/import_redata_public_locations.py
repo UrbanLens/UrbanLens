@@ -1,4 +1,5 @@
-"""Pull REData's public-locations catalog into a demo instance.
+"""
+Pull REData's public-locations catalog into a demo instance.
 
 Companion to ``import_public_locations`` - both write into the same manifest via
 ``services.demo.locations.merge_into_manifest``, so running either, in any order, any number of
@@ -27,7 +28,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        """Fetch REData's catalog and merge it into the demo instance.
+        """
+        Fetch REData's catalog and merge it into the demo instance.
 
         Raises:
             CommandError: Not a demo instance and not explicitly overridden.

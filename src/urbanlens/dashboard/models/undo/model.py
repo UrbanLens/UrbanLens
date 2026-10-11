@@ -1,4 +1,5 @@
-"""UndoAction - a durable, restorable record of a destructive action.
+"""
+UndoAction - a durable, restorable record of a destructive action.
 Storing the payload in the same durable row as the rest of the undo index removes that whole failure mode: this row's own ``created`` timestamp is the single source of truth for whether it's still restorable.
 ``undone_at`` is the redo stack: undoing an entry stamps it rather than deleting it, so the same payload can be applied forward again.
 """
@@ -28,7 +29,8 @@ class UndoKind(TextChoices):
 
 
 class UndoAction(abstract.FrontendDashboardModel):
-    """One restorable action a profile can undo (and then redo).
+    """
+    One restorable action a profile can undo (and then redo).
 
     Attributes:
         model_label: Registry key of the ``UndoHandler`` (see

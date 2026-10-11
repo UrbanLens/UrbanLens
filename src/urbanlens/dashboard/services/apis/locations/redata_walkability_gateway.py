@@ -21,7 +21,8 @@ class RedataWalkabilityGateway(RedataLocationContextGateway):
         *,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch the EPA National Walkability Index for the block group at a point.
+        """
+        Fetch the EPA National Walkability Index for the block group at a point.
 
         Args:
             latitude: WGS-84 latitude.

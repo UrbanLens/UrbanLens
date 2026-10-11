@@ -85,7 +85,8 @@ class RedataReferenceDocumentsGatewaySearchTests(SimpleTestCase):
 
 
 class _ProviderMediaMappingMixin(_MixinBase):
-    """Shared assertions for each thin archive provider, run against a mocked
+    """
+    Shared assertions for each thin archive provider, run against a mocked
     ``RedataReferenceDocumentsGateway.search`` so these stay pure unit tests."""
 
     provider_cls: type[MediaProvider]
@@ -171,7 +172,8 @@ class _ProviderMediaMappingMixin(_MixinBase):
         self.assertEqual(self.provider_cls.service_key, self.redata_provider)
 
     def test_quoting_is_left_to_redata_not_double_applied(self) -> None:
-        """REData applies each provider's own quote_phrases server-side - this
+        """
+        REData applies each provider's own quote_phrases server-side - this
         provider must not re-quote on top of it."""
         self.assertFalse(self.provider_cls.quote_name)
         self.assertFalse(self.provider_cls.quote_locality)

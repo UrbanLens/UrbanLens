@@ -18,7 +18,8 @@ BASE = "/dashboard/api/external/v1/wikis"
 
 
 def disable_throttling(test_case) -> None:
-    """Turn off the external API's rate limits for the duration of *test_case*.
+    """
+    Turn off the external API's rate limits for the duration of *test_case*.
 
     :data:`WIKI_ROUTES` is walked once per invisibility case over a single credential, which is far past the
     burst allowance - without this the tail of the list comes back 429 and the visibility gate these tests exist
@@ -32,7 +33,8 @@ def disable_throttling(test_case) -> None:
 
 
 def grant_wiki_scopes(user) -> None:
-    """Add the wiki scopes to *user*'s API keys.
+    """
+    Add the wiki scopes to *user*'s API keys.
 
     ``_default_api_key_scopes`` deliberately grants only profile/pins/push to a newly issued PAT - the wiki
     scopes are opt-in and, until a scope-picker UI exists, reachable only through OAuth2."""

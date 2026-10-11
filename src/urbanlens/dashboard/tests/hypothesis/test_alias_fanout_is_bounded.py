@@ -1,4 +1,5 @@
-"""Adding one alias to a community wiki must not scale with who else pinned the place.
+"""
+Adding one alias to a community wiki must not scale with who else pinned the place.
 
 A wiki belongs to a location, and a location has one pin per person who
 saved it. ``sync_wiki_alias_to_pins`` mirrored a new wiki alias onto every
@@ -50,7 +51,8 @@ class _FanOutCase(TestCase):
         return pins
 
     def _add_a_wiki_alias(self, name: str) -> tuple[WikiAlias, int]:
-        """Add one alias the way a request does, returning it and the query count.
+        """
+        Add one alias the way a request does, returning it and the query count.
 
         The capture has to be the *outer* context: context managers exit in
         reverse, so with it inside, the on-commit callbacks - which are the
@@ -94,7 +96,8 @@ class TheRequestDoesNotWalkEveryOtherProfilesPinTests(_FanOutCase):
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 class TheFanOutStillHappensTests(_FanOutCase):
-    """The half that stops the tests above passing against a deleted feature.
+    """
+    The half that stops the tests above passing against a deleted feature.
 
     Eager, so the task the signal now hands off to actually runs - which also
     makes this the test that the hand-off is wired to a task that works, not
@@ -124,7 +127,8 @@ class TheFanOutStillHappensTests(_FanOutCase):
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 class TheFanOutSurvivesBeingRunTwiceTests(_FanOutCase):
-    """A bulk task that dies halfway is re-run, so a second pass must be a no-op.
+    """
+    A bulk task that dies halfway is re-run, so a second pass must be a no-op.
 
     Every write is a ``get_or_create``, which is what makes that true - asserted
     rather than assumed, because the answer changes the day somebody reaches for

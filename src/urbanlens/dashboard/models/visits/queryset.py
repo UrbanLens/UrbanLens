@@ -15,7 +15,8 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet["PinVisit"]):
     """QuerySet for PinVisit records."""
 
     def for_pin(self, pin_id: int) -> Self:
-        """Filter to visits for a specific pin.
+        """
+        Filter to visits for a specific pin.
 
         Args:
             pin_id: Primary key of the pin.
@@ -26,7 +27,8 @@ class VisitQuerySet(abstract.FrontendDashboardQuerySet["PinVisit"]):
         return self.filter(pin_id=pin_id)
 
     def owned_by(self, profile: Profile) -> Self:
-        """Visits logged against *profile*'s own pins.
+        """
+        Visits logged against *profile*'s own pins.
 
         The bound is the pin ids rather than ``pin__profile=profile``, because the latter is a
         join and Postgres is free to start it from the visit table: at capacity scale it does, a

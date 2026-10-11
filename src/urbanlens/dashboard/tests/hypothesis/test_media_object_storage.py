@@ -38,7 +38,8 @@ _REAL_KEY = "pin_images/a7/Kd3xq8Lm2Zpq/2026-4f1c8ab29e1d4f0.jpg"
 
 
 def _object_storage_settings(**overrides: object) -> dict[str, object]:
-    """Settings that put the app on the object-store backend.
+    """
+    Settings that put the app on the object-store backend.
 
     Args:
         **overrides: Extra settings to apply alongside.
@@ -56,7 +57,8 @@ def _object_storage_settings(**overrides: object) -> dict[str, object]:
 
 
 class FakeObjectStorage(Storage):
-    """An in-memory stand-in for a remote store, so no test opens a socket.
+    """
+    An in-memory stand-in for a remote store, so no test opens a socket.
 
     Deliberately *not* a ``FileSystemStorage`` subclass: the gate picks its byte source by asking whether the
     default storage is one, so a fake that inherits from it would take the filesystem branch and test nothing."""
@@ -108,7 +110,8 @@ class GatedUrlTests(SimpleTestCase):
     )
     @hypothesis_settings(max_examples=50, deadline=None)
     def test_url_matches_the_filesystem_backend_exactly(self, segments: list[str]) -> None:
-        """Whatever the name, both backends render the same URL.
+        """
+        Whatever the name, both backends render the same URL.
 
         This is the property that makes the switch invisible to every existing
         call site - and the one that stops a presigned URL reaching a template.
@@ -216,7 +219,8 @@ class LocalByteDeliveryTests(SimpleTestCase):
                 source.response()
 
     def test_the_accel_hand_off_does_not_re_open_the_file(self) -> None:
-        """nginx serves the bytes, so a vanished file is nginx's 404 to answer, not this
+        """
+        nginx serves the bytes, so a vanished file is nginx's 404 to answer, not this
         process's - and re-checking here would cost a stat on every media request."""
         from urbanlens.dashboard.controllers.media import LocalMediaSource
 
@@ -283,7 +287,8 @@ class ObjectByteDeliveryTests(SimpleTestCase):
         self.assertEqual(storage.opened, [])
 
     def test_the_accel_target_names_no_host_of_its_own(self) -> None:
-        """nginx pins its upstream; this header must not be able to move it.
+        """
+        nginx pins its upstream; this header must not be able to move it.
 
         An absolute URL here would turn any bug that can influence a stored path into server-side request
         forgery performed by the one process that sits inside the cluster."""
@@ -343,7 +348,8 @@ class ObjectStorageCheckTests(SimpleTestCase):
         self.assertIn("exports/", messages[0].msg)
 
     def test_the_warning_names_every_subtree_written_beside_the_storage_backend(self) -> None:
-        """The import preview and confirmed-import artifacts are kept under MEDIA_ROOT too, so a
+        """
+        The import preview and confirmed-import artifacts are kept under MEDIA_ROOT too, so a
         deployment that mounts only the subtrees W002 names would lose them between containers."""
         from urbanlens.dashboard.services.pins import confirmed_import, import_preview
 
@@ -373,7 +379,8 @@ class ObjectStorageCheckTests(SimpleTestCase):
             self.assertIn("dashboard.E012", [message.id for message in self._run()])
 
     def test_the_settings_it_reads_actually_exist(self) -> None:
-        """An override that invents a setting proves nothing about production.
+        """
+        An override that invents a setting proves nothing about production.
 
         Every name the check consults is read off the real settings module here, so a rename cannot leave the
         check passing against a setting no deployment has."""
@@ -392,7 +399,8 @@ class ObjectStorageCheckTests(SimpleTestCase):
 def _object_settings_with(
     *, backend: str = _GATED_BACKEND, options: dict[str, object] | None = None
 ) -> dict[str, object]:
-    """Object-store settings with one field swapped, for the negative cases.
+    """
+    Object-store settings with one field swapped, for the negative cases.
 
     Args:
         backend: Dotted path for ``STORAGES["default"]["BACKEND"]``.

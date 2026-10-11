@@ -1,4 +1,5 @@
-"""A socket's allowance lives in Dragonfly, so checking it has no business on the thread every socket's database work shares.
+"""
+A socket's allowance lives in Dragonfly, so checking it has no business on the thread every socket's database work shares.
 
 A notification socket opens on every page view and closes on the next, so its claim and release are among the busiest
 calls daphne makes. On asgiref's one thread-sensitive executor they queue behind every other socket's user and profile

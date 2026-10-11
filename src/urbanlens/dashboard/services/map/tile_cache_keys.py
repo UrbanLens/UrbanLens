@@ -1,4 +1,5 @@
-"""Where a proxied tile lives in the cache, spelled once.
+"""
+Where a proxied tile lives in the cache, spelled once.
 
 Both tile proxies and the load-run seeder address the same bytes, and they addressed them by each
 writing the same f-string. A seeder that drifts from a proxy is invisible - the map still draws,
@@ -13,7 +14,8 @@ from __future__ import annotations
 
 
 def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
-    """Cache key for one proxied basemap tile.
+    """
+    Cache key for one proxied basemap tile.
 
     Carries the vendor's fingerprint, so repointing a layer at a different endpoint reads as a miss
     rather than serving the previous vendor's bytes for the rest of their week-long TTL. See
@@ -38,7 +40,8 @@ def basemap_tile_cache_key(layer: str, z: int, x: int, y: int) -> str:
 
 
 def historical_tile_cache_key(georeference_uuid: str, z: int, x: int, y: int) -> str:
-    """Cache key for one warped historical-map overlay tile.
+    """
+    Cache key for one warped historical-map overlay tile.
 
     Args:
         georeference_uuid: REData georeference whose pyramid the tile comes from.

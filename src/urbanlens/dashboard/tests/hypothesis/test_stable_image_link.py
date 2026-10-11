@@ -1,4 +1,5 @@
-"""A uuid-addressed image link that survives the upload's re-encode (P142).
+"""
+A uuid-addressed image link that survives the upload's re-encode (P142).
 
 An article embeds its inline images by URL. The upload's raw file is deleted when the re-encode lands,
 so the link has to name the row, not the file.

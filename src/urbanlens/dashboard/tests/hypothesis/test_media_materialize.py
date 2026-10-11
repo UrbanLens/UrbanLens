@@ -86,7 +86,8 @@ class MaterializeMediaItemTests(TestCase):
         self.assertEqual(image.caption, "x" * 500)
 
     def test_sends_descriptive_user_agent(self) -> None:
-        """Wikimedia Commons 403s the default python-requests UA; materialize
+        """
+        Wikimedia Commons 403s the default python-requests UA; materialize
         must send the same descriptive UrbanLens agent the API gateways use."""
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()
@@ -213,7 +214,8 @@ class MaterializeMediaItemTests(TestCase):
             )
 
     def test_without_pin_dedupes_purely_by_location_source_and_url(self) -> None:
-        """Existing behavior (media_send_to_wiki) - a shared, community
+        """
+        Existing behavior (media_send_to_wiki) - a shared, community
         materialization dedupes regardless of who triggered it."""
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()
@@ -229,7 +231,8 @@ class MaterializeMediaItemTests(TestCase):
         mocked.assert_called_once()
 
     def test_with_pin_scopes_dedup_to_the_marking_profile(self) -> None:
-        """The core correctness fix: a personal "mark relevant" materialization
+        """
+        The core correctness fix: a personal "mark relevant" materialization
         must never reuse another profile's copy of the same external item,
         even though it's the same (location, source, source_url)."""
         pin_a = baker.make(Pin, profile=self.profile, location=self.location)
@@ -473,7 +476,8 @@ class MediaRelevanceMaterializesTests(TestCase):
         )
 
     def test_dropping_onto_the_map_materializes_and_sets_coordinates(self) -> None:
-        """The drag/drop-onto-map flow (map-annotations.ts's drop handler)
+        """
+        The drag/drop-onto-map flow (map-annotations.ts's drop handler)
         sends latitude/longitude alongside is_relevant=True, so the freshly
         materialized Image never has a moment with no coordinates."""
         with mock.patch(
@@ -525,7 +529,8 @@ class MediaRelevanceMaterializesTests(TestCase):
         mocked.assert_not_called()
 
     def test_marking_relevant_without_coordinates_leaves_them_unset(self) -> None:
-        """Existing (non-drag) relevance-marking path - no latitude/longitude
+        """
+        Existing (non-drag) relevance-marking path - no latitude/longitude
         keys sent at all - must keep behaving exactly as before."""
         with mock.patch(
             "urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()

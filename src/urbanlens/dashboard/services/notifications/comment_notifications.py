@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 def comment_url(comment: Any) -> str:
-    """Build the page URL (with ``#comment-<id>`` anchor) for any comment kind.
+    """
+    Build the page URL (with ``#comment-<id>`` anchor) for any comment kind.
     Dispatches on which foreign key the instance actually carries rather than on its class, so a ``TripComment`` and a ``Comment`` can both be passed without the caller having to know which it holds.
 
     Args:
@@ -39,7 +40,8 @@ def comment_url(comment: Any) -> str:
 
 
 def _recipient_of(comment: Any) -> Profile | None:
-    """Return the profile that authored *comment*, whichever field holds it.
+    """
+    Return the profile that authored *comment*, whichever field holds it.
 
     Args:
         comment: A ``Comment`` (which names its author ``profile``) or a ``TripComment`` (which names it ``author``).
@@ -52,7 +54,8 @@ def _recipient_of(comment: Any) -> Profile | None:
 
 
 def _actor_names(recipient: Profile, actor: Profile) -> tuple[str, str]:
-    """How *actor* may be named to *recipient*, as (display name, handle).
+    """
+    How *actor* may be named to *recipient*, as (display name, handle).
     The comment list resolves authors through ``resolve_visible_identities`` and the template renders the masked name when it says to, so naming the actor outright here would contradict the very thread the notification links to.
 
     Args:
@@ -69,7 +72,8 @@ def _actor_names(recipient: Profile, actor: Profile) -> tuple[str, str]:
 
 
 def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None:
-    """Tell the author of *parent_comment* that *actor* replied to it.
+    """
+    Tell the author of *parent_comment* that *actor* replied to it.
 
     Args:
         actor: The profile that posted the reply.
@@ -94,7 +98,8 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
 
 
 def notify_reaction(actor: Profile, comment: Any) -> None:
-    """Tell a comment's author that *actor* reacted to it.
+    """
+    Tell a comment's author that *actor* reacted to it.
 
     Args:
         actor: The profile that just added a reaction.

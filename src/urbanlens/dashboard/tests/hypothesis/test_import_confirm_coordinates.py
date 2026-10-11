@@ -1,4 +1,5 @@
-"""The confirm step takes each pin's coordinates back from the client, so it checks them as the preview does (P282).
+"""
+The confirm step takes each pin's coordinates back from the client, so it checks them as the preview does (P282).
 
 The preview never offers a place off the globe, but the confirm request is the client's own JSON, and Python's JSON
 parser reads ``Infinity`` and ``NaN``. A latitude past the poles became a Location there.

@@ -112,7 +112,8 @@ class VideoLocationStripTests(TestCase):
         self.assertNotIn("location", _location_tags(stored))
 
     def test_a_location_tag_we_cannot_parse_is_still_stripped(self) -> None:
-        """The scrub must key off the tag's presence, not off it being readable.
+        """
+        The scrub must key off the tag's presence, not off it being readable.
 
         ``extract_video_metadata`` parses ISO 6709; a tag in any other notation yields no coordinates."""
         out = Path(tempfile.mkdtemp(dir=self._media_root)) / "odd.mkv"

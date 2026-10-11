@@ -135,7 +135,8 @@ class ComputeServiceBudgetTests(TestCase):
         self.assertEqual(compute_service_budget("svc_both"), 3)
 
     def test_failed_but_not_geo_filtered_calls_still_count(self) -> None:
-        """A call that went out and failed remotely still spent quota - only calls the
+        """
+        A call that went out and failed remotely still spent quota - only calls the
         limiter itself skipped (geo-filtered/rate-limited/service-disabled) are excluded."""
         self._limit("svc_failed", calls_per_day=100)
         for _ in range(20):
@@ -143,7 +144,8 @@ class ComputeServiceBudgetTests(TestCase):
         self.assertEqual(compute_service_budget("svc_failed"), 70)
 
     def test_both_daily_and_30_day_limits_combine_via_minimum(self) -> None:
-        """Real services (e.g. google_geocoding) configure calls_per_day AND
+        """
+        Real services (e.g. google_geocoding) configure calls_per_day AND
         calls_per_30_days together; the budget must be the min of both arms, not
         just whichever branch happens to run last."""
         self._limit("svc_both", calls_per_day=5, calls_per_30_days=9999)
@@ -460,7 +462,8 @@ class RunEnrichmentCycleTests(TestCase):
         self.assertEqual(summary.get("skipped"), "outside_window")
 
     def test_force_bypasses_outside_window_too(self) -> None:
-        """force=True must bypass the window check, not just the enabled toggle
+        """
+        force=True must bypass the window check, not just the enabled toggle
         (test_disabled_setting_skips_cycle_unless_forced covers that one) - both
         checks live under one `if not force:` guard that a mutation could split."""
         baker.make(Pin, profile=_make_profile(), location=_make_location())
@@ -584,7 +587,8 @@ class RunEnrichmentCycleTests(TestCase):
 
 
 class PlacePhotosStopAtTheFirstRefusalTests(RedataConfiguredMixin, TestCase):
-    """The hourly cycle's place-photo backfill against a REData whose Places budget is spent.
+    """
+    The hourly cycle's place-photo backfill against a REData whose Places budget is spent.
 
     Production (0.8.0) logged 31 ``places/search/nearby`` 503s in 13 h, in a burst at :12-:14 past every hour: the
     cycle went on to the next location after Google's own 429 relayed by REData, and stopped only at REData's
@@ -743,7 +747,8 @@ class EnrichmentSourceRegistryTests(SimpleTestCase):
         self.assertEqual(len(keys), len(set(keys)))
 
     def test_duplicate_key_from_a_plugin_is_dropped_in_favor_of_the_core_source(self) -> None:
-        """Docstring contract: 'deduplicated by key (first wins)'. Never exercised
+        """
+        Docstring contract: 'deduplicated by key (first wins)'. Never exercised
         elsewhere since no real registered source collides today."""
         from urbanlens.dashboard.plugins.registry import plugin_registry
 
@@ -765,7 +770,8 @@ class EnrichmentSourceRegistryTests(SimpleTestCase):
 
 
 class SelfReportedSkipTests(SimpleTestCase):
-    """self_reported_skip - a source's own "can't run at all" gate.
+    """
+    self_reported_skip - a source's own "can't run at all" gate.
 
     The "service_disabled" branch is exercised end-to-end by
     RunEnrichmentCycleTests.test_service_disabled_on_api_limits_page_skips_source; the gate()-based
@@ -836,7 +842,8 @@ class ScheduledEnrichmentTaskTests(TestCase):
         self.assertIsNone(cache.get(RUN_LOCK_CACHE_KEY))
 
     def test_soft_time_limit_winds_down_cleanly_and_releases_lock(self) -> None:
-        """Deliberately not autoretried (see tasks.py's comment above the task):
+        """
+        Deliberately not autoretried (see tasks.py's comment above the task):
         SoftTimeLimitExceeded must be swallowed into a "timed_out" skip marker, and
         the lock must still be released via the finally block."""
         from celery.exceptions import SoftTimeLimitExceeded

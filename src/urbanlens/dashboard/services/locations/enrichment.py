@@ -1,4 +1,5 @@
-"""Scheduled background enrichment of Locations (and thereby pins and wikis).
+"""
+Scheduled background enrichment of Locations (and thereby pins and wikis).
 Most external data is fetched lazily - a Private Pin page schedules a panel fetch, a new wiki triggers :func:`~urbanlens.dashboard.tasks.enrich_wiki_location`, and so on."""
 
 from __future__ import annotations
@@ -49,7 +50,8 @@ _DENSITY_SCORE_CAP = 20
 
 
 class EnrichmentSource(ABC):
-    """One kind of background-enrichable data for a Location.
+    """
+    One kind of background-enrichable data for a Location.
     Core sources are registered in :func:`enrichment_sources`; integrations contribute theirs via ``UrbanLensPlugin.get_enrichment_sources`` so new enrichment kinds can be added without touching this module.
 
     Attributes:
@@ -68,7 +70,8 @@ class EnrichmentSource(ABC):
     refreshes_names: ClassVar[bool] = False
 
     def gate(self) -> bool:
-        """Whether this source is usable at all on this install (e.g. API key set).
+        """
+        Whether this source is usable at all on this install (e.g. API key set).
 
         Returns:
             True when the source can run; False skips it for the whole cycle.
@@ -77,7 +80,8 @@ class EnrichmentSource(ABC):
 
     @abstractmethod
     def missing_filter(self) -> Q:
-        """Filter selecting Locations that still lack this source's data.
+        """
+        Filter selecting Locations that still lack this source's data.
         This is the per-source completion tracker: it must consider only this source's own marker (its ``LocationCache`` row, a stamped column, ...) so sources are tracked independently of one another.
 
         Returns:
@@ -85,7 +89,8 @@ class EnrichmentSource(ABC):
 
     @abstractmethod
     def enrich(self, location: Location) -> bool:
-        """Fetch and persist this source's data for one location.
+        """
+        Fetch and persist this source's data for one location.
 
         Args:
             location: The location to enrich.
@@ -126,7 +131,8 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
         return True
 
     def stale_after(self, data: dict | None) -> timedelta | None:
-        """How soon a payload should go stale, when sooner than the site-wide window.
+        """
+        How soon a payload should go stale, when sooner than the site-wide window.
 
         Args:
             data: The payload :meth:`fetch` returned.
@@ -138,7 +144,8 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
 
     @abstractmethod
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Fetch this source's payload for one location.
+        """
+        Fetch this source's payload for one location.
 
         Args:
             location: The location to fetch data for.
@@ -152,7 +159,8 @@ class LocationCacheEnrichmentSource(EnrichmentSource):
 
 
 class AddressEnrichmentSource(EnrichmentSource):
-    """Backfills street-address components via the Google Geocoding API.
+    """
+    Backfills street-address components via the Google Geocoding API.
     Because a failed geocode leaves the address columns empty, completion is tracked with a dedicated ``address_backfill`` LocationCache marker rather than the columns themselves - one attempt per location, ever."""
 
     key: ClassVar[str] = "address"
@@ -193,7 +201,8 @@ class AddressEnrichmentSource(EnrichmentSource):
 
 
 class BoundaryEnrichmentSource(EnrichmentSource):
-    """Generates default property/building boundaries via the boundary provider chain.
+    """
+    Generates default property/building boundaries via the boundary provider chain.
     ``generate_location_boundaries`` stamps ``generated_at`` even when nothing is found, so each location is attempted exactly once."""
 
     key: ClassVar[str] = "boundary"
@@ -228,7 +237,8 @@ class BoundaryEnrichmentSource(EnrichmentSource):
 
 
 def enrichment_sources() -> list[EnrichmentSource]:
-    """Every active enrichment source: core ones plus plugin contributions.
+    """
+    Every active enrichment source: core ones plus plugin contributions.
 
     Returns:
         Sources in registration order, deduplicated by ``key`` (first wins).
@@ -253,7 +263,8 @@ def enrichment_sources() -> list[EnrichmentSource]:
 
 
 def compute_service_budget(service: str, site_settings: SiteSettings | None = None) -> int | None:
-    """How many API calls background enrichment may spend on a service right now.
+    """
+    How many API calls background enrichment may spend on a service right now.
     Geo-filtered rows never hit the network, so they are excluded just as the rate limiter excludes them.
 
     Args:
@@ -304,7 +315,8 @@ def compute_service_budget(service: str, site_settings: SiteSettings | None = No
 
 
 def stagger_seconds(source: EnrichmentSource) -> float:
-    """Pause between one source's consecutive enrichments, from its per-minute limits.
+    """
+    Pause between one source's consecutive enrichments, from its per-minute limits.
 
     Args:
         source: The enrichment source about to run a batch.
@@ -329,7 +341,8 @@ def stagger_seconds(source: EnrichmentSource) -> float:
 
 
 def enrichment_window_open(site_settings: SiteSettings, *, now: datetime | None = None) -> bool:
-    """Whether the admin-scheduled daily run window currently allows enrichment.
+    """
+    Whether the admin-scheduled daily run window currently allows enrichment.
 
     Args:
         site_settings: Current settings holding the configured hours.
@@ -350,7 +363,8 @@ def enrichment_window_open(site_settings: SiteSettings, *, now: datetime | None 
 
 
 def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: GeoBoundary | None = None) -> list[Location]:
-    """Pick the Locations most worth enriching next, highest impact first.
+    """
+    Pick the Locations most worth enriching next, highest impact first.
     Only locations somebody actually references (a pin or a wiki) are considered; orphaned Location rows can wait for lazy loading.
     A location a new pin's bootstrap is filling is left to it (``services.pins.bootstrap``), so the run's cap goes to backfill.
 
@@ -403,7 +417,8 @@ def prioritized_location_candidates(missing: Q, *, limit: int, geo_boundary: Geo
 
 
 def _nearby_density_score(location: Location) -> int:
-    """Capped count of other Locations within ~2 km, as a high-traffic-area proxy.
+    """
+    Capped count of other Locations within ~2 km, as a high-traffic-area proxy.
 
     Args:
         location: The candidate location.
@@ -422,7 +437,8 @@ def _nearby_density_score(location: Location) -> int:
 
 
 def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
-    """Run one background-enrichment pass across every source.
+    """
+    Run one background-enrichment pass across every source.
     Official names and aliases are re-resolved once per touched location at the end, reading only the freshly cached data (no extra API calls).
 
     Args:
@@ -545,7 +561,8 @@ def run_enrichment_cycle(*, force: bool = False, sleep: Callable[[float], None] 
 
 
 def self_reported_skip(source: EnrichmentSource) -> str | None:
-    """Why a source can't run at all this cycle, or None when it can.
+    """
+    Why a source can't run at all this cycle, or None when it can.
 
     Args:
         source: The enrichment source to check.
@@ -560,7 +577,8 @@ def self_reported_skip(source: EnrichmentSource) -> str | None:
 
 
 def refresh_official_names(location_ids: Iterable[int]) -> int:
-    """Re-resolve official names and aliases for freshly enriched locations.
+    """
+    Re-resolve official names and aliases for freshly enriched locations.
     Reads only cached candidates (the rows enrichment just wrote), so this makes no API calls of its own.
 
     Args:
@@ -583,7 +601,8 @@ def refresh_official_names(location_ids: Iterable[int]) -> int:
 
 
 def last_run_summary() -> dict[str, Any] | None:
-    """The most recent cycle's summary, for the site-admin page.
+    """
+    The most recent cycle's summary, for the site-admin page.
 
     Returns:
         The summary dict cached by :func:`run_enrichment_cycle`, or None when no cycle has completed since the cache was last cleared."""

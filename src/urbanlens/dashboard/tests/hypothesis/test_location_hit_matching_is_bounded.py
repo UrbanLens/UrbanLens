@@ -1,4 +1,5 @@
-"""Matching a photo library against a profile's pins ran one PostGIS query per photo.
+"""
+Matching a photo library against a profile's pins ran one PostGIS query per photo.
 
 N21 H01's remaining half. The queue half is fixed (the sweep declares
 `Queue.BULK`, so it no longer holds an interactive slot) and the double-press

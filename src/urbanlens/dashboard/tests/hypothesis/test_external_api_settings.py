@@ -244,7 +244,8 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
 
 
 class SettingsNameAndContactTests(_SettingsApiTestCase):
-    """``first_name``/``last_name`` and the six contact methods, via /settings/.
+    """
+    ``first_name``/``last_name`` and the six contact methods, via /settings/.
 
     These live on ``User`` (name) and ``Profile`` (contact) respectively, but both are meant to look like an
     ordinary settings field to a client - see ``services.profile.profile_settings``'s docstring on why they're
@@ -317,7 +318,8 @@ class SettingsNameAndContactTests(_SettingsApiTestCase):
         self.assertEqual(self.profile.phone_number, "")
 
     def test_email_and_username_remain_unwritable(self) -> None:
-        """Login identity stays off the allowlist even though name/contact are now on it.
+        """
+        Login identity stays off the allowlist even though name/contact are now on it.
 
         Neither is a declared ``SettingsPatchSerializer`` field, so - like any other undeclared key - it is
         silently dropped rather than rejected; see ``test_patch_ignores_a_field_outside_the_allowlist`` for the

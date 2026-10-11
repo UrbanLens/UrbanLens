@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 class SessionDeparture(TextChoices):
-    """How a participant who was playing left a game already under way.
+    """
+    How a participant who was playing left a game already under way.
 
     Blank for anyone still playing, and for anyone who left before play began - an invitee who declined, or a
     player who left the lobby - since they never played.
@@ -28,7 +29,8 @@ class DepartableParticipant(Protocol):
 
 
 def finishers_first[ParticipantT: DepartableParticipant](participants: Iterable[ParticipantT]) -> list[ParticipantT]:
-    """``participants`` with everyone who departed after everyone who finished, each group in its given order.
+    """
+    ``participants`` with everyone who departed after everyone who finished, each group in its given order.
 
     A departed player ranked by points alone could head the scoreboard of a game they did not finish.
 

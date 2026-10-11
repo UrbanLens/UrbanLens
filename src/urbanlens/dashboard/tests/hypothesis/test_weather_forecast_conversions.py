@@ -188,7 +188,8 @@ class OpenMeteoDateUtcTests(SimpleTestCase):
         self.assertNotIn("date_utc", slots[0])
 
     def test_each_slot_uses_its_own_dates_offset_across_a_dst_transition(self) -> None:
-        """One fixed offset cannot anchor a five-day window that crosses a transition.
+        """
+        One fixed offset cannot anchor a five-day window that crosses a transition.
 
         Applying the single reported ``utc_offset_seconds`` to both put half the forecast an hour out, which is
         enough for ``_build_activity_forecasts`` to pick the wrong morning or evening slot."""
@@ -213,7 +214,8 @@ class OpenMeteoDateUtcTests(SimpleTestCase):
 
     @given(st.integers(min_value=-14 * 3600, max_value=14 * 3600))
     def test_date_utc_round_trips_the_payload_offset(self, offset_seconds: int) -> None:
-        """For any real-world offset, ``date_utc`` is the local wall clock
+        """
+        For any real-world offset, ``date_utc`` is the local wall clock
         re-anchored in that offset and converted to UTC.
         """
         slots = self._slots_for(self._payload(offset_seconds))

@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def ensure_location_address(location: Location | None) -> bool:
-    """Populate address fields on a Location that has coordinates but no street data.
+    """
+    Populate address fields on a Location that has coordinates but no street data.
     Calls the Google Geocoding API (with GeocodedLocation as an intermediate cache), then writes the parsed components back to the Location row so the next request reads directly from the DB with no API call.
 
     Args:
@@ -66,7 +67,8 @@ _MUNICIPAL_PREFIX = re.compile(r"^(?:town|city|village|township|borough|municipa
 
 
 def _openstreetmap_admin_address(location: Location, lat: float, lng: float) -> bool:
-    """Fill the administrative address fields from Nominatim when Google could not.
+    """
+    Fill the administrative address fields from Nominatim when Google could not.
 
     Never the street: the nearest OSM way is as likely a campus service road as the postal street, and the
     street feeds every search query.
@@ -109,7 +111,8 @@ def _openstreetmap_admin_address(location: Location, lat: float, lng: float) -> 
 
 
 def _google_address(location: Location, lat: float, lng: float) -> bool:
-    """Fill the address from Google's reverse geocode; False when there is no key or no answer.
+    """
+    Fill the address from Google's reverse geocode; False when there is no key or no answer.
 
     Raises:
         Exception: Google could not be asked (see ``is_source_outage``).

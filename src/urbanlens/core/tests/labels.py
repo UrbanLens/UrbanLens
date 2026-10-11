@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 
 def ensure_label(*, profile: Profile | None, name: str, kind: str, **attrs: Any) -> Label:
-    """Return the label with this (profile, name, kind), creating it if absent.
+    """
+    Return the label with this (profile, name, kind), creating it if absent.
 
     Args:
         profile: Owner, or None for a global label.

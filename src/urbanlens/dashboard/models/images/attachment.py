@@ -1,4 +1,5 @@
-"""Which pins and wikis a photo is attached to.
+"""
+Which pins and wikis a photo is attached to.
 ``Image`` carries a single ``pin`` and a single ``wiki`` foreign key, which says a photo belongs to at most one of each.
 Deleting a pin takes its own attachment rows and nothing else - the ``Image`` survives, along with every other thing citing it - so a photo cited by a floorplan cannot be destroyed by tidying up somewhere unrelated.
 """
@@ -24,7 +25,8 @@ class ImageAttachmentManager(_ImageAttachmentManagerBase):
 
 
 class ImageAttachment(abstract.DashboardModel):
-    """One photo's attachment to one pin, or to one wiki.
+    """
+    One photo's attachment to one pin, or to one wiki.
     Exactly one of ``pin``/``wiki`` is set: a row is an attachment to a specific thing, and "attached to both" is two rows, which is what makes counting references to a photo a single query rather than a special case per owner.
 
     Attributes:

@@ -1,4 +1,5 @@
-"""P269: a profile-addressed URL must cost the same for an account the requester cannot see as for no account at all.
+"""
+P269: a profile-addressed URL must cost the same for an account the requester cannot see as for no account at all.
 
 Usernames are guessable and profile slugs come from them, so a hidden account that answered 404 after more queries
 than a missing one told anyone timing the two that the username is registered.
@@ -49,7 +50,8 @@ _API_NAMESPACES = {"external_api"}
 
 
 def _shape(queries: list[dict], probe: str) -> list[str]:
-    """The statements a request ran, with the probed slug or uuid, savepoint names and clock readings made comparable.
+    """
+    The statements a request ran, with the probed slug or uuid, savepoint names and clock readings made comparable.
 
     An API key's usage log is pruned by row id now and then, whatever the request named, so it is left out.
     """
@@ -63,7 +65,8 @@ def _shape(queries: list[dict], probe: str) -> list[str]:
 
 
 def _profile_slug_routes() -> list[tuple[str, str, dict[str, object]]]:
-    """Every named route addressed by a profile's slug, namespaced where it is: its name, the slug's argument, and
+    """
+    Every named route addressed by a profile's slug, namespaced where it is: its name, the slug's argument, and
     stand-ins for its other arguments."""
     found: dict[str, tuple[str, dict[str, object]]] = {}
 

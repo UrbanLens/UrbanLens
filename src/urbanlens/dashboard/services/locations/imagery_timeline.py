@@ -1,4 +1,5 @@
-"""Flatten REData's imagery timeline into one chronology a UI can scrub.
+"""
+Flatten REData's imagery timeline into one chronology a UI can scrub.
 REData answers with two shapes because its sources genuinely differ, and neither can be expressed as the other:"""
 
 from __future__ import annotations
@@ -7,7 +8,8 @@ from typing import Any
 
 
 def flatten_timeline(envelope: dict[str, Any]) -> list[dict[str, Any]]:
-    """Merge dated captures and continuous ranges into one chronology.
+    """
+    Merge dated captures and continuous ranges into one chronology.
 
     Args:
         envelope: The body of ``GET /imagery/timeline/``.
@@ -61,7 +63,8 @@ def flatten_timeline(envelope: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _resolved_flag(capture: dict[str, Any]) -> Any:
-    """Read ``capture_date_resolved``, which REData keeps in the capture's asset's ``attributes``.
+    """
+    Read ``capture_date_resolved``, which REData keeps in the capture's asset's ``attributes``.
 
     Args:
         capture: One ``captures`` entry: ``{"captured_on", "provider", "asset": {..., "attributes": {...}}}``.
@@ -74,7 +77,8 @@ def _resolved_flag(capture: dict[str, Any]) -> Any:
 
 
 def _sort_key(entry: dict[str, Any]) -> str:
-    """Sortable date for one offering, newest first.
+    """
+    Sortable date for one offering, newest first.
     Non-string dates are coerced rather than compared raw: one integer year in an otherwise valid envelope would otherwise raise ``TypeError`` mid-sort and take down the whole carousel, which is a poor trade for a malformed field on one capture.
 
     Args:
@@ -90,7 +94,8 @@ def _sort_key(entry: dict[str, Any]) -> str:
 
 
 def timeline_years(envelope: dict[str, Any]) -> list[int]:
-    """Years with imagery, newest first.
+    """
+    Years with imagery, newest first.
     Falls back to deriving them from dated captures, so a deployment whose REData predates that field still gets a usable answer rather than none.
 
     Args:

@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 
 def _posted_ids(data: Mapping[str, Any], name: str) -> list[int]:
-    """The ids a JSON body lists under *name*.
+    """
+    The ids a JSON body lists under *name*.
 
     Raises:
         ValueError: One of them is not an id.
@@ -64,7 +65,8 @@ def create_uploaded_photo(
     *,
     album=None,
 ) -> tuple[Image | None, JsonResponse]:
-    """Store the request's uploaded photo against *owner*.
+    """
+    Store the request's uploaded photo against *owner*.
 
     Shared by the pin gallery, the wiki gallery, and an album's upload button (pin, wiki, or Vault) so
     all of them answer with the same body and the same status codes - the client code that renders an
@@ -102,7 +104,8 @@ def create_uploaded_photo(
 
 
 def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki | Profile, profile: Profile) -> JsonResponse:
-    """Store the request's uploaded photo against *owner* and return the gallery JSON.
+    """
+    Store the request's uploaded photo against *owner* and return the gallery JSON.
 
     Args:
         request: The upload request; reads the ``image`` file and ``caption``.
@@ -121,7 +124,8 @@ def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki | Profile, prof
 
 
 def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
-    """Images for a pin's gallery, optionally including child-pin photos.
+    """
+    Images for a pin's gallery, optionally including child-pin photos.
 
     With ``?children=1`` (the pin page's "show child pin details" toggle) photos uploaded to any
     descendant child pin are included too, so the parent's gallery shows the whole place.
@@ -150,7 +154,8 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
 
 
 def _wiki_gallery_images(request: HttpRequest, wiki: Wiki, profile: Profile):
-    """Images for a wiki's gallery, optionally including child-wiki photos.
+    """
+    Images for a wiki's gallery, optionally including child-wiki photos.
 
     With ``?children=1`` (the wiki page's "show child pin details" toggle) photos uploaded to any
     descendant child wiki are included too.
@@ -241,7 +246,8 @@ _TOO_MANY_IMAGES = f"Select at most {MAX_BULK_IMAGES} photos at a time."
 
 
 class PinGalleryBulkView(LoginRequiredMixin, View):
-    """Bulk actions over a pin's own gallery photos: delete, or send to wiki.
+    """
+    Bulk actions over a pin's own gallery photos: delete, or send to wiki.
 
     Backs the Photo gallery's multi-select floating toolbar.
     Only the profile's own uploads on this pin are eligible - selecting someone else's (child-pin, in
@@ -290,7 +296,8 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
 
 
 def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wiki: bool) -> JsonResponse:
-    """Delete a batch of photos, and say how many were unlinked instead.
+    """
+    Delete a batch of photos, and say how many were unlinked instead.
 
     The batch mechanics are shared: storage files go first, because Django has no bulk API for them, and
     the DB rows go in one delete rather than one per row.
@@ -318,7 +325,8 @@ def _delete_owned_images(images: QuerySet[Image], *, unlink_from_pin_when_on_wik
 
 
 class VaultGalleryBulkView(LoginRequiredMixin, View):
-    """Bulk actions over the profile's own Vault photos. Delete only.
+    """
+    Bulk actions over the profile's own Vault photos. Delete only.
 
     POST /vault/photos/bulk/
 
@@ -332,7 +340,8 @@ class VaultGalleryBulkView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
-        """Delete the requested photos, if they are this profile's.
+        """
+        Delete the requested photos, if they are this profile's.
 
         Args:
             request: JSON body with ``action`` and ``image_ids``.
@@ -365,7 +374,8 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
     """Set or clear a pin's hero-banner cover photo."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> JsonResponse:
-        """Set (or, given a null ``image_id``, clear) the pin's cover photo.
+        """
+        Set (or, given a null ``image_id``, clear) the pin's cover photo.
 
         Args:
             request: Incoming HTTP request.
@@ -432,7 +442,8 @@ class PinImageView(LoginRequiredMixin, View):
         return JsonResponse(payload)
 
     def delete(self, request: HttpRequest, pin_slug: str, image_id: int) -> HttpResponse:
-        """Take a photo off this pin, and off the wiki only if asked.
+        """
+        Take a photo off this pin, and off the wiki only if asked.
 
         Now the wiki keeps the photo unless the owner says otherwise; silence means no.
 
@@ -533,7 +544,8 @@ class WikiGalleryJsonView(LoginRequiredMixin, View):
 
 
 class WikiCoverPhotoView(LoginRequiredMixin, View):
-    """Set or clear a wiki's hero-banner cover photo.
+    """
+    Set or clear a wiki's hero-banner cover photo.
 
     Any profile with a pin at the wiki's location may set it - the wiki is community content editable by
     everyone who can see it (comments, markup, aliases share the same access rule; see

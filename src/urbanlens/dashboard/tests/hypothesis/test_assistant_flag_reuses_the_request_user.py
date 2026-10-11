@@ -1,4 +1,5 @@
-"""``assistant_enabled_flag`` must not refetch the profile and user the request is already holding.
+"""
+``assistant_enabled_flag`` must not refetch the profile and user the request is already holding.
 
 Measured on a map request: the tag issued 4 of 24 queries and 28% of the SQL. ``get_or_create`` always selects,
 ignoring the descriptor cache the middleware filled, and the profile it returns carries no cached ``user``, so

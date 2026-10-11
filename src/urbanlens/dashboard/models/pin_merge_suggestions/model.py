@@ -31,7 +31,8 @@ class PinMergeSuggestionStatus(abstract.TextChoices):
 
 
 class PinMergeSuggestion(abstract.DashboardModel):
-    """A proposal that two of a profile's own pins are the same place and should merge.
+    """
+    A proposal that two of a profile's own pins are the same place and should merge.
     Always self-directed - pin_a and pin_b always belong to the same profile (never a cross-profile suggestion; unlike VisitSuggestion, this never routes through a NotificationLog to another user). pin_a/pin_b carry no ordering meaning - either may end up the survivor; see ``suggested_survivor`` for the precomputed recommendation the UI preselects, which the accepting user may always override.
 
     Attributes:
@@ -70,7 +71,8 @@ class PinMergeSuggestion(abstract.DashboardModel):
 
     @property
     def is_actionable(self) -> bool:
-        """Whether this suggestion is still awaiting a response.
+        """
+        Whether this suggestion is still awaiting a response.
 
         Returns:
             True when status is pending.
@@ -78,7 +80,8 @@ class PinMergeSuggestion(abstract.DashboardModel):
         return self.status == PinMergeSuggestionStatus.PENDING
 
     def __str__(self) -> str:
-        """Return a human-readable description of this suggestion.
+        """
+        Return a human-readable description of this suggestion.
 
         Returns:
             String like "Pin merge suggestion for <profile_id>: <pin_a_id> + <pin_b_id>".

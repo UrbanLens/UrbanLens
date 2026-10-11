@@ -27,7 +27,8 @@ class MarkupMapShareDialogView(LoginRequiredMixin, View):
     """GET /markup-maps/<uuid:map_uuid>/share/ - friend-picker dialog."""
 
     def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Render the friend-picker dialog.
+        """
+        Render the friend-picker dialog.
 
         Args:
             request: HttpRequest.
@@ -49,7 +50,8 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
     """POST /markup-maps/<uuid:map_uuid>/share/send/"""
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Share the caller's map with a connected friend.
+        """
+        Share the caller's map with a connected friend.
 
         Args:
             request: HttpRequest with ``profile_id`` and optional ``message``.
@@ -86,7 +88,8 @@ class MarkupMapShareDetailView(LoginRequiredMixin, View):
     """GET /map-shares/<int:share_id>/ - the recipient's view of a shared map."""
 
     def get(self, request: HttpRequest, share_id: int) -> HttpResponse:
-        """Render the shared-map detail page for its recipient.
+        """
+        Render the shared-map detail page for its recipient.
 
         Args:
             request: HttpRequest.

@@ -1,4 +1,5 @@
-"""A near-point ``limit`` bounds what UrbanLens keeps, whether or not REData applied it.
+"""
+A near-point ``limit`` bounds what UrbanLens keeps, whether or not REData applied it.
 
 REData's near-point endpoints parsed ``limit`` without applying it, so every row in the radius was written into the
 ``LocationCache`` JSON, and a panel's "most recent N" was really "all of them".

@@ -96,7 +96,8 @@ class MemoryEventsDateRangeTests(TestCase):
 
 
 class PhotoMemoryEventTests(TestCase):
-    """get_memory_events() must surface geotagged photos, not silently drop them.
+    """
+    get_memory_events() must surface geotagged photos, not silently drop them.
 
     Regression test: _photos_for_range annotated a queryset field named ``effective_taken_at``, colliding with
     the real read-only ``Image.effective_taken_at`` property - Django raised AttributeError trying to setattr
@@ -123,7 +124,8 @@ class PhotoMemoryEventTests(TestCase):
         self.assertEqual(events[0].occurred_at, taken_at)
 
     def test_a_photo_with_no_exif_time_falls_back_to_filename_taken_at(self):
-        """Matches Image.effective_taken_at's own fallback chain exactly - a
+        """
+        Matches Image.effective_taken_at's own fallback chain exactly - a
         photo with no EXIF time but a filename-parsed date still counts."""
         filename_taken_at = timezone.make_aware(datetime.datetime(2024, 6, 10, 9, 0, 0))
         self._make_photo(taken_at=None, filename_taken_at=filename_taken_at)
@@ -142,7 +144,8 @@ class PhotoMemoryEventTests(TestCase):
 
 
 class VisitBoundingBoxTests(TestCase):
-    """A map-scoped timeline keeps the visits inside its viewport.
+    """
+    A map-scoped timeline keeps the visits inside its viewport.
 
     The filter once named ``pin__latitude``, which Pin does not have; the aggregator swallowed the
     FieldError, so every bbox'd timeline silently lost all its visits.

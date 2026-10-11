@@ -22,7 +22,8 @@ class OllamaVisionKeywordProvider(PhotoKeywordProvider):
     service_key = "ollama"
 
     def is_available_for(self, image: Image) -> bool:
-        """Requires a configured Ollama server and the uploader's AI toggle.
+        """
+        Requires a configured Ollama server and the uploader's AI toggle.
 
         Args:
             image: The uploaded image.
@@ -38,7 +39,8 @@ class OllamaVisionKeywordProvider(PhotoKeywordProvider):
         return bool(settings.ollama_base_url)
 
     def generate(self, image: Image) -> list[KeywordResult]:
-        """Downscale the photo and ask the local Ollama vision model for keywords.
+        """
+        Downscale the photo and ask the local Ollama vision model for keywords.
 
         Args:
             image: The uploaded image.

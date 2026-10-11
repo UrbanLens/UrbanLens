@@ -1,4 +1,5 @@
-"""Unified label controller for tag, category, status, and people label CRUD.
+"""
+Unified label controller for tag, category, status, and people label CRUD.
 
 All organize label kinds are ``Label`` rows distinguished by ``kind``.
 Views read ``label_kind`` from the URL (see ``urls.py``).
@@ -199,7 +200,8 @@ _KIND_CONFIG: dict[str, _KindConfig] = {
 
 
 def _config(kind: str) -> _KindConfig:
-    """Return configuration for an organize label kind.
+    """
+    Return configuration for an organize label kind.
 
     Args:
         kind: Label kind string (tag, category, status, or user).
@@ -219,7 +221,8 @@ def _kind_from_url(url_kind: str) -> str | None:
 
 
 def _label_id_from_kwargs(kwargs: dict[str, Any]) -> int:
-    """Extract a label PK from URL kwargs.
+    """
+    Extract a label PK from URL kwargs.
 
     Args:
         kwargs: URL keyword arguments from the view.
@@ -240,7 +243,8 @@ def _label_id_from_kwargs(kwargs: dict[str, Any]) -> int:
 
 
 def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
-    """Whether *profile* may auto-tag labels of this kind at all.
+    """
+    Whether *profile* may auto-tag labels of this kind at all.
 
     Written out separately (as they were), the two can drift into rendering a control the server
     silently ignores, or ignoring one the server would have accepted.
@@ -275,7 +279,8 @@ def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = Non
 
 
 def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
-    """Return True if adding ``proposed_parent_id`` as a parent of ``label`` would create a cycle.
+    """
+    Return True if adding ``proposed_parent_id`` as a parent of ``label`` would create a cycle.
 
     Thin wrapper kept for this module's many call sites (which check one candidate at a time, in both
     the parent and the child direction).
@@ -292,7 +297,8 @@ def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
 
 
 def _rows_window(request: HttpRequest) -> tuple[RowsCursor | None, int | None]:
-    """Where a rows render starts and how many rows it holds.
+    """
+    Where a rows render starts and how many rows it holds.
 
     A sentinel names the row to continue after, and ``all`` asks for every remaining row. Otherwise the render
     starts at the top and keeps as many rows as the client says it had loaded, so a write does not drop the
@@ -358,7 +364,8 @@ def _render_rows(request: HttpRequest, kind: str, profile: Profile, extra: dict 
 
 
 def _new_candidate_oob_html(request: HttpRequest, label: Label, ns: str) -> str:
-    """Render OOB suggestion buttons adding ``label`` to the "new-<ns>" create
+    """
+    Render OOB suggestion buttons adding ``label`` to the "new-<ns>" create
     dialog's parent/child picker, so a just-created label is immediately
     selectable for the next one without a page refresh.
     """
@@ -401,7 +408,8 @@ def _owned_label(request: HttpRequest, label_id: int, kind: str, *, require_owne
 
 
 def _parse_ids_json(request: HttpRequest) -> tuple[list[int], dict[str, Any]] | HttpResponse:
-    """Parse a JSON body containing an ``ids`` list.
+    """
+    Parse a JSON body containing an ``ids`` list.
 
     Bounded by ``settings.LABEL_BULK_EDIT_MAX_IDS``: every bulk label view reached
     through here does per-id work against the database, and the list is whatever
@@ -435,7 +443,8 @@ def _label_order(value: object, default: int) -> int:
 
 
 def _posted_ids(value: object) -> list[int]:
-    """The non-negative integer ids in a posted list.
+    """
+    The non-negative integer ids in a posted list.
 
     Raises:
         BadRequest: ``value`` was sent but is not a list.
@@ -468,7 +477,8 @@ def _parse_bulk_payload(data: dict) -> dict:
 
 
 def _over_the_bulk_ceiling(payload: dict) -> HttpResponse | None:
-    """Refuse a parent/child list longer than the bulk ceiling.
+    """
+    Refuse a parent/child list longer than the bulk ceiling.
 
     Args:
         payload: The result of :func:`_parse_bulk_payload`.
@@ -503,7 +513,8 @@ def _apply_bulk_fields(label: Label, payload: dict) -> list[str]:
 
 
 def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
-    """Return the submitted custom-icon file, if any.
+    """
+    Return the submitted custom-icon file, if any.
 
     ``_icon_picker.html`` names its file input ``custom_icon-<picker_id>`` (scoped per widget instance)
     rather than a bare ``custom_icon``, so that two icon pickers rendered on the same page can never
@@ -516,7 +527,8 @@ def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
 
 
 def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
-    """The submitted icon, checked, or the reason it was refused.
+    """
+    The submitted icon, checked, or the reason it was refused.
 
     **Every path that stores a label icon must go through this.** The edit view validated its upload and
     the create view did not, so the same file that was refused with a 400 on one URL was written to disk
@@ -544,7 +556,8 @@ def _validated_custom_icon(request: HttpRequest) -> tuple[Any, str | None]:
 
 
 def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[list[str], str | None]:
-    """Update label custom_icon from POST (upload or clear).
+    """
+    Update label custom_icon from POST (upload or clear).
 
     Returns:
         A tuple of (the fields it set, a user-facing error message if the uploaded icon failed a
@@ -568,7 +581,8 @@ def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> tuple[li
 
 
 def _global_conversion_error(label: Label, new_kind: str) -> str | None:
-    """Why *label* may not become *new_kind*, or None when it may.
+    """
+    Why *label* may not become *new_kind*, or None when it may.
 
     A global label sits on pins, wikis and photos across the site, and a category or a status is always
     profile-scoped, so converting one would leave everyone else's rows carrying a label owned by the editor.
@@ -579,7 +593,8 @@ def _global_conversion_error(label: Label, new_kind: str) -> str | None:
 
 
 def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> bool:
-    """Apply a kind change to a label. Returns True if kind changed.
+    """
+    Apply a kind change to a label. Returns True if kind changed.
 
     Raises:
         ValueError: The conversion would take a global label away from its bearers; callers ask
@@ -974,7 +989,8 @@ class _MergeEditRefusedError(Exception):
 
 
 def _apply_merge_edits(target: Label, edits: dict[str, str], profile: Profile, singular_title: str) -> None:
-    """Write the fields a merge dialog changed on its surviving label, and no others.
+    """
+    Write the fields a merge dialog changed on its surviving label, and no others.
 
     Runs after the merge, so the target may take the name of a source the merge just deleted.
 
@@ -1144,7 +1160,8 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
 
 
 class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
-    """Convert labels to another kind (JSON POST).
+    """
+    Convert labels to another kind (JSON POST).
 
     ``bulk-convert/`` swaps tag↔category. ``bulk-convert-status/`` sets ``target_kind`` to status.
     """
@@ -1312,7 +1329,8 @@ def _membership_panel_ctx(
     labels_override: QuerySet[Label] | None = None,
     dialog_only: bool = False,
 ) -> dict:
-    """Build template context for label_membership_panel.html.
+    """
+    Build template context for label_membership_panel.html.
 
     Args:
         dialog_only: Skip the header and applied-labels chip list entirely, rendering just the add-label
@@ -1342,7 +1360,8 @@ def _membership_label_id(request: HttpRequest) -> int | None:
 
 
 def _organize_label_from_create(request: HttpRequest, profile: Profile) -> Label | HttpResponse:
-    """Create a personal tag from POSTed ``name``, or reuse the existing one of that name.
+    """
+    Create a personal tag from POSTed ``name``, or reuse the existing one of that name.
 
     Mirrors ``LabelImageMembershipView._label_from_create`` for the pin/wiki "Add Labels" dialogs, which
     offer no kind picker - a quick-created label is always a plain ``KIND_TAG``, matching the model's
@@ -1550,7 +1569,8 @@ class LabelLocationMembershipView(LoginRequiredMixin, View):
 
 
 class LabelImageMembershipView(LoginRequiredMixin, View):
-    """Add or remove media labels on a photo/video/document (HTMX panel).
+    """
+    Add or remove media labels on a photo/video/document (HTMX panel).
 
     Unlike pin/location membership, this is scoped to the owner's own media labels (kind='media') only -
     media labels help find the item in search, they never apply to pins or wikis.

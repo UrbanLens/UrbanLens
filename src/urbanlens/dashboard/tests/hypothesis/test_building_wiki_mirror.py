@@ -134,7 +134,8 @@ class BuildingImportRequestTests(TestCase):
         )
 
     def test_a_wiki_side_failure_does_not_fail_the_import(self) -> None:
-        """Pins are already created by then; a 500 reports failure for work that was done.
+        """
+        Pins are already created by then; a 500 reports failure for work that was done.
 
         The guarantee is structural: the view hands the mirror to ``safely_enqueue_task`` rather than calling it
         in-request, so a real worker (a separate process) runs it and nothing it does can reach this response."""

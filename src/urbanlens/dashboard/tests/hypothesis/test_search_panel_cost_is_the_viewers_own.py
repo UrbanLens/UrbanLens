@@ -1,4 +1,5 @@
-"""What one global search costs, measured across the whole provider fan-out rather than one provider.
+"""
+What one global search costs, measured across the whole provider fan-out rather than one provider.
 
 The ``test_search_does_not_read_another_accounts_*`` family each drive a single provider directly,
 so a provider added later is covered by nothing until someone writes its file, and neither the
@@ -112,7 +113,8 @@ class _WholePanelCase(TestCase):
             cursor.execute(f"ANALYZE {Pin._meta.db_table}")  # noqa: S608
 
     def search(self) -> tuple[int, list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]]]:
-        """Run one whole search as the panel does, capturing every statement it issued.
+        """
+        Run one whole search as the panel does, capturing every statement it issued.
 
         The profile is re-fetched first because the wiki access scope memoises onto the Profile
         instance: reusing one would measure a warm cache the panel's own request never has.

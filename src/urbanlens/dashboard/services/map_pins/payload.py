@@ -1,4 +1,5 @@
-"""Efficient, bounded map-pin payload generation.
+"""
+Efficient, bounded map-pin payload generation.
 `serialize` takes a model instance and is what `services.pins.pin_sync` and `services.pins.pin_detail` use, because they layer sync-only and detail-only fields on top and read arbitrary `Pin` properties to do it."""
 
 from __future__ import annotations
@@ -55,7 +56,8 @@ class LabelView:
 
     @classmethod
     def from_model(cls, label: Label) -> LabelView:
-        """Build a view from a `Label`, reading the customization it prefetched.
+        """
+        Build a view from a `Label`, reading the customization it prefetched.
 
         Args:
             label: A label from a queryset built by
@@ -76,7 +78,8 @@ class LabelView:
         )
 
     def as_dictionary_entry(self) -> dict[str, Any]:
-        """This label as the client's label dictionary holds it.
+        """
+        This label as the client's label dictionary holds it.
 
         Returns:
             The facts a chip needs, plus the `kind` that separates a status from a category."""
@@ -84,7 +87,8 @@ class LabelView:
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any], customization: Mapping[str, Any] | None) -> LabelView:
-        """Build a view from a label's columns and this profile's override row.
+        """
+        Build a view from a label's columns and this profile's override row.
 
         Args:
             row: ``id``, ``kind``, ``name``, ``order``, ``icon``, ``color`` and
@@ -117,7 +121,8 @@ class LabelView:
 
 
 def display_label_views[LabelT: _HasKind](labels: Sequence[LabelT]) -> list[LabelT]:
-    """The labels that display as chips, in the order given.
+    """
+    The labels that display as chips, in the order given.
 
     Args:
         labels: The pin's labels, already ordered.
@@ -146,7 +151,8 @@ def _winning_display_label(*, pin_icon: str | None, pin_custom_icon_url: str | N
 
 
 def resolve_icon(*, pin_icon: str | None, pin_custom_icon_url: str | None, labels: Sequence[LabelView]) -> str | None:
-    """The icon the map draws for a pin: its own, else the winning label's.
+    """
+    The icon the map draws for a pin: its own, else the winning label's.
 
     Args:
         pin_icon: The pin's own icon override.
@@ -168,7 +174,8 @@ def resolve_icon(*, pin_icon: str | None, pin_custom_icon_url: str | None, label
 
 
 def resolve_color(*, pin_color: str | None, pin_icon: str | None, pin_custom_icon_url: str | None, labels: Sequence[LabelView]) -> str | None:
-    """The colour the map draws for a pin: its own, else the winning label's.
+    """
+    The colour the map draws for a pin: its own, else the winning label's.
 
     Args:
         pin_color: The pin's own colour override.
@@ -207,7 +214,8 @@ def _build_payload(
     cover_photo_url: str | None,
     labels: Sequence[LabelView],
 ) -> dict[str, Any]:
-    """Assemble the payload both paths return.
+    """
+    Assemble the payload both paths return.
 
     Args:
         name: Already resolved."""
@@ -295,7 +303,8 @@ class MapPinPayloadService:
         self._label_views: dict[int, LabelView] = {}
 
     def _irrelevant_item_keys_for_profile(self) -> QuerySet[MediaRelevance, str]:
-        """This profile's own "not relevant" votes, as a subquery to embed.
+        """
+        This profile's own "not relevant" votes, as a subquery to embed.
         Only a materialized community-gallery photo (``media_item_key`` set) can appear here - see ``services.media.media_relevance.effective_relevance``'s own docs on why a plain personal upload is trusted by default instead.
 
         Returns:
@@ -303,7 +312,8 @@ class MapPinPayloadService:
         return MediaRelevance.objects.filter(profile=self.profile, is_relevant=False).values_list("item_key", flat=True)
 
     def _annotations(self) -> dict[str, Any]:
-        """The computed columns both paths select.
+        """
+        The computed columns both paths select.
         ``child_count`` is a scalar subquery rather than ``Count(distinct=True)``: aggregating over a join makes the planner sort the whole join product, and the fan-out inflates every other column's row count on the way."""
         latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
         children = Pin.objects.filter(parent_pin_id=OuterRef("pk")).order_by().values("parent_pin_id").annotate(total=Count("pk")).values("total")
@@ -319,7 +329,8 @@ class MapPinPayloadService:
         }
 
     def prepare_queryset(self, query: QuerySet[Pin]) -> QuerySet[Pin]:
-        """Annotate and join *query* for the model-instance path.
+        """
+        Annotate and join *query* for the model-instance path.
         The map's own paths use :meth:`page` and :meth:`all`, which read columns instead.
 
         Args:
@@ -341,7 +352,8 @@ class MapPinPayloadService:
         return query.annotate(**self._annotations()).order_by("pk").values(*self._PROJECTION_FIELDS, *self._annotations())
 
     def _label_views_for(self, pin_ids: Sequence[int]) -> dict[int, list[LabelView]]:
-        """This batch's labels, resolved once per distinct label and shared by pin.
+        """
+        This batch's labels, resolved once per distinct label and shared by pin.
 
         Args:
             pin_ids: The pins to resolve labels for.
@@ -364,7 +376,8 @@ class MapPinPayloadService:
         return by_pin
 
     def _resolve_label_views(self, label_ids: set[int]) -> None:
-        """Build a :class:`LabelView` for each of these labels not already held.
+        """
+        Build a :class:`LabelView` for each of these labels not already held.
 
         Args:
             label_ids: The labels to resolve. Views this service instance has
@@ -375,7 +388,8 @@ class MapPinPayloadService:
             self._store_label_views(Label.objects.filter(pk__in=missing), LabelCustomization.objects.filter(profile=self.profile, label_id__in=missing))
 
     def _store_label_views(self, labels: QuerySet[Label], customizations: QuerySet[LabelCustomization]) -> list[int]:
-        """Build and hold a :class:`LabelView` for each of *labels*.
+        """
+        Build and hold a :class:`LabelView` for each of *labels*.
 
         Args:
             labels: The labels to read.
@@ -392,7 +406,8 @@ class MapPinPayloadService:
         return read
 
     def label_dictionary_for(self, payloads: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-        """The labels *payloads* name, resolved from what building them already read.
+        """
+        The labels *payloads* name, resolved from what building them already read.
         The streamed document's head goes out before its first pin, so it carries :meth:`vocabulary_dictionary` and uses this for any label a batch names outside it.
 
         Args:
@@ -410,7 +425,8 @@ class MapPinPayloadService:
         return entries
 
     def vocabulary_dictionary(self) -> dict[str, dict[str, Any]]:
-        """Every chip-bearing label the profile can see, keyed by id as a string.
+        """
+        Every chip-bearing label the profile can see, keyed by id as a string.
         Read from the labels rather than from the pins carrying them, so its cost follows the vocabulary, not the account. A pin can still name a label outside it; :meth:`label_dictionary_for` covers that one once the pin is built.
 
         Returns:
@@ -462,7 +478,8 @@ class MapPinPayloadService:
         ]
 
     def page(self, query: QuerySet[Pin], *, cursor: int | None = None, limit: int | None = None, include_total: bool = False) -> MapPinPage:
-        """One keyset page of payloads, built without instantiating a model.
+        """
+        One keyset page of payloads, built without instantiating a model.
 
         Args:
             query: Pins to serialize, already scoped to the requesting profile.
@@ -484,7 +501,8 @@ class MapPinPayloadService:
         return MapPinPage(pins=self._serialize_rows(rows), next_cursor=next_cursor, total=total)
 
     def all(self, query: QuerySet[Pin]) -> list[dict[str, Any]]:
-        """Every matching pin's payload, read in bounded batches.
+        """
+        Every matching pin's payload, read in bounded batches.
 
         Args:
             query: Pins to serialize, already scoped to the requesting profile.
@@ -508,7 +526,8 @@ class MapPinPayloadService:
             cursor = rows[-1]["pk"]
 
     def display_labels(self, pin: Pin) -> list[Label]:
-        """The pin's labels that display as chips, in prefetch order.
+        """
+        The pin's labels that display as chips, in prefetch order.
         Reads ``pin.labels.all()``, which ``prepare_queryset`` prefetches with the profile's per-label customizations applied - so calling this on a prepared pin costs no additional query.
 
         Args:
@@ -521,7 +540,8 @@ class MapPinPayloadService:
         return display_label_views(list(pin.labels.all()))
 
     def serialize(self, pin: Pin) -> dict[str, Any]:
-        """The payload for one already-loaded pin.
+        """
+        The payload for one already-loaded pin.
         The map uses :meth:`page`/:meth:`all` instead, which produce the identical dict from columns.
 
         Args:
@@ -561,7 +581,8 @@ class MapPinPayloadService:
 
 
 def _row_cover_photo_url(row: dict[str, Any]) -> str | None:
-    """The projection's form of `Image.thumb_url`, falling back the same way.
+    """
+    The projection's form of `Image.thumb_url`, falling back the same way.
     Mirrors `MapPinPayloadService._cover_photo_url`: the pin's own cover photo wins, through thumbnail then original then remote source, and only a pin without one falls through to the annotated earliest relevant photo."""
     if row["cover_photo_id"] is not None:
         # Having a cover photo is decided by the FK, never by whether one of its URL columns is
@@ -578,7 +599,8 @@ def _row_cover_photo_url(row: dict[str, Any]) -> str | None:
 
 
 def _fallback_photo_url(pair: dict[str, Any] | None) -> str | None:
-    """The URL of the annotated fallback photo, thumbnail first.
+    """
+    The URL of the annotated fallback photo, thumbnail first.
 
     Args:
         pair: The ``fallback_photo`` annotation - ``{"thumbnail": ..., "image": ...}``, either of which may be empty, or None when the pin has no photo to fall back to.

@@ -34,7 +34,8 @@ MAX_CUSTOM_FIELD_TEXT_LENGTH = 5_000
 
 
 def column_max_length(model: type[Model], field_name: str) -> int:
-    """The declared width of `model.field_name`'s column.
+    """
+    The declared width of `model.field_name`'s column.
     Django's Model ``_meta`` API is the documented way to ask this; the suppression is here, once, so callers needing a column's own width do not each repeat it.
 
     Args:
@@ -54,7 +55,8 @@ def column_max_length(model: type[Model], field_name: str) -> int:
 
 
 def column_length_error(model: type[Model], field_name: str, value: str | None, field_label: str) -> str | None:
-    """Return an error if `value` will not fit `model.field_name`'s column.
+    """
+    Return an error if `value` will not fit `model.field_name`'s column.
     The constants above cover `TextField`s, whose limit exists only as a Django validator.
 
     Args:
@@ -69,7 +71,8 @@ def column_length_error(model: type[Model], field_name: str, value: str | None, 
 
 
 def text_length_error(value: str | None, max_length: int, field_label: str) -> str | None:
-    """Return a human-readable error if `value` exceeds `max_length`.
+    """
+    Return a human-readable error if `value` exceeds `max_length`.
 
     Args:
         value: The text to check (may be `None` or empty).

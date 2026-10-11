@@ -28,7 +28,8 @@ NEARBY_CACHE_SECONDS = 300
 
 
 def _markers_cache_key(account: ImmichAccount) -> str:
-    """Cache key for one account's whole geolocated library.
+    """
+    Cache key for one account's whole geolocated library.
 
     Stamped the same way as :func:`_cache_key`, and deliberately carries no
     point: the download is a property of the account, so every pin in the
@@ -38,7 +39,8 @@ def _markers_cache_key(account: ImmichAccount) -> str:
 
 
 def _library_markers(gateway: ImmichGateway, account: ImmichAccount) -> list[MapMarker]:
-    """Every geolocated asset in the library, fetched once per account.
+    """
+    Every geolocated asset in the library, fetched once per account.
 
     Args:
         gateway: The account's gateway, used only on a cache miss.
@@ -70,7 +72,8 @@ def _library_markers(gateway: ImmichGateway, account: ImmichAccount) -> list[Map
 
 
 def _cache_key(account: ImmichAccount, point: tuple[float, float]) -> str:
-    """Cache key for one account's neighbourhood around one point.
+    """
+    Cache key for one account's neighbourhood around one point.
     Scoped to the account, not the profile, and stamped with the account's ``updated`` timestamp - reconnecting to a different server or rotating the key must not serve the previous server's library."""
     latitude, longitude = point
     # Microseconds, not seconds: reconnecting to a different server inside the
@@ -80,7 +83,8 @@ def _cache_key(account: ImmichAccount, point: tuple[float, float]) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Neighbourhood:
-    """One pin's measured surroundings in an Immich library.
+    """
+    One pin's measured surroundings in an Immich library.
 
     Attributes:
         nearest: ``(distance in metres, marker)`` pairs, closest first.
@@ -91,7 +95,8 @@ class Neighbourhood:
 
 
 def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[float, float], *, limit: int = NEARBY_ASSET_LIMIT) -> Neighbourhood:
-    """The library's geolocated assets nearest ``point``, closest first.
+    """
+    The library's geolocated assets nearest ``point``, closest first.
 
     Args:
         gateway: The account's gateway, used only on a cache miss.
@@ -117,7 +122,8 @@ def nearby_assets(gateway: ImmichGateway, account: ImmichAccount, point: tuple[f
 
 
 def within_radius(neighbourhood: Neighbourhood, radius_m: float) -> list[MapMarker]:
-    """The subset of ``neighbourhood`` inside ``radius_m``, still closest first.
+    """
+    The subset of ``neighbourhood`` inside ``radius_m``, still closest first.
 
     Args:
         neighbourhood: Output of :func:`nearby_assets`.

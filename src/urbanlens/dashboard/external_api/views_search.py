@@ -1,4 +1,5 @@
-"""External-API view for global search across every domain the caller may read.
+"""
+External-API view for global search across every domain the caller may read.
 
 Nothing here re-implements matching, ranking, or access scoping - a second implementation of "which
 pins may this profile see" would drift from the first, and the direction it drifts in is invisible
@@ -60,7 +61,8 @@ SEARCH_SECTION_SCOPES: dict[str, frozenset[ApiKeyScope]] = {
 
 
 class GlobalSearchView(ExternalApiView):
-    """GET: search pins, photos, wikis, articles, trips, visits, messages, maps, check-ins and comments at
+    """
+    GET: search pins, photos, wikis, articles, trips, visits, messages, maps, check-ins and comments at
     once.
 
     The payload is grouped rather than paginated.
@@ -79,7 +81,8 @@ class GlobalSearchView(ExternalApiView):
 
     @extend_schema(parameters=[GlobalSearchQuerySerializer], responses={200: GlobalSearchResponseSerializer, 400: ErrorSerializer})
     def get(self, request: Request) -> Response:
-        """Run one scoped global search and return its grouped results.
+        """
+        Run one scoped global search and return its grouped results.
 
         Args:
             request: GET carrying ``q`` (the query, may be blank or absent), ``types`` (comma-separated

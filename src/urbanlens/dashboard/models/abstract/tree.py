@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 
 class TreeQuerySetMixin(QuerySet[Any, Any]):
-    """``with_descendants`` / ``with_ancestors`` as one recursive query each, whatever the depth.
+    """
+    ``with_descendants`` / ``with_ancestors`` as one recursive query each, whatever the depth.
 
     The expansion is returned as ``pk IN (WITH RECURSIVE ...)`` over a fresh queryset, so callers keep
     composing it and nothing is evaluated until they do. ``UNION`` rather than ``UNION ALL`` is what
@@ -26,7 +27,8 @@ class TreeQuerySetMixin(QuerySet[Any, Any]):
     tree_parent_field: ClassVar[str]
 
     def with_descendants(self) -> Self:
-        """This queryset's rows plus every row nested below them.
+        """
+        This queryset's rows plus every row nested below them.
 
         Returns:
             A fresh queryset over the rows and their full subtrees.
@@ -34,7 +36,8 @@ class TreeQuerySetMixin(QuerySet[Any, Any]):
         return self._tree_closure("down")
 
     def with_ancestors(self) -> Self:
-        """This queryset's rows plus every row above them, up to the roots.
+        """
+        This queryset's rows plus every row above them, up to the roots.
 
         Returns:
             A fresh queryset over the rows and their full ancestor chains.
@@ -42,7 +45,8 @@ class TreeQuerySetMixin(QuerySet[Any, Any]):
         return self._tree_closure("up")
 
     def ancestors_of(self, node: Model, *, select_related: Sequence[str] = ()) -> list[Any]:
-        """*node*'s ancestors, nearest parent first, read in one query.
+        """
+        *node*'s ancestors, nearest parent first, read in one query.
 
         Args:
             node: The row whose chain to read.
@@ -65,7 +69,8 @@ class TreeQuerySetMixin(QuerySet[Any, Any]):
         return chain
 
     def lineage_ids(self, node: Model) -> set[object]:
-        """*node*'s primary key and its ancestors': the rows that may not be nested beneath it.
+        """
+        *node*'s primary key and its ancestors': the rows that may not be nested beneath it.
 
         Args:
             node: The prospective parent.
@@ -78,7 +83,8 @@ class TreeQuerySetMixin(QuerySet[Any, Any]):
         return set(self.filter(pk=node.pk).with_ancestors().values_list("pk", flat=True))
 
     def would_close_cycle(self, node: Model, new_parent: Model | None) -> bool:
-        """Whether making *new_parent* the parent of *node* would make *node* its own ancestor.
+        """
+        Whether making *new_parent* the parent of *node* would make *node* its own ancestor.
 
         Args:
             node: The row being reparented.

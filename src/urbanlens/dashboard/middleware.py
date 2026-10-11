@@ -32,7 +32,8 @@ VIEWER_INDEPENDENT_ATTR = "_ul_viewer_independent"
 
 
 def mark_viewer_independent(response: HttpResponse) -> HttpResponse:
-    """Declare that this response's body does not depend on who asked for it.
+    """
+    Declare that this response's body does not depend on who asked for it.
 
     The declaration has to be acted on later than a view can reach. A view runs before the session,
     auth and cookie layers, and each of those adds something that means "this answer was built for
@@ -58,7 +59,8 @@ class MediaOriginCookieMiddleware:
     """Mint and refresh the media-origin cookie for authenticated requests."""
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
-        """Store the next handler in the chain.
+        """
+        Store the next handler in the chain.
 
         Args:
             get_response: The downstream handler.
@@ -66,7 +68,8 @@ class MediaOriginCookieMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Add, refresh, or clear the media cookie on the response.
+        """
+        Add, refresh, or clear the media cookie on the response.
 
         Args:
             request: The current request.
@@ -97,7 +100,8 @@ _SCRIPT_REQUEST_HEADERS = ("Sec-Fetch-Mode", "HX-Request", "X-Requested-With")
 
 
 def is_script_request(request: HttpRequest) -> bool:
-    """Whether a script sent *request*, rather than the browser navigating.
+    """
+    Whether a script sent *request*, rather than the browser navigating.
 
     Args:
         request: The incoming request.
@@ -113,7 +117,8 @@ def is_script_request(request: HttpRequest) -> bool:
 
 
 def is_login_gate(response: HttpResponse) -> bool:
-    """Whether *response* is ``redirect_to_login`` sending the viewer to sign in and come back.
+    """
+    Whether *response* is ``redirect_to_login`` sending the viewer to sign in and come back.
 
     Args:
         response: A view's response.
@@ -129,14 +134,16 @@ def is_login_gate(response: HttpResponse) -> bool:
 
 
 class ScriptLoginRefusalMiddleware:
-    """Answer a script's request that needs a login with a 401, not the login redirect.
+    """
+    Answer a script's request that needs a login with a 401, not the login redirect.
 
     ``fetch()`` and htmx follow the redirect, so the login page arrived as a 200 and a caller checking only the status
     reported an unsaved write as saved.
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
-        """Store the next handler in the chain.
+        """
+        Store the next handler in the chain.
 
         Args:
             get_response: The downstream handler.
@@ -144,7 +151,8 @@ class ScriptLoginRefusalMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Swap an anonymous script request's login redirect for a refusal.
+        """
+        Swap an anonymous script request's login redirect for a refusal.
 
         Args:
             request: The current request.
@@ -174,7 +182,8 @@ class SecurityHeadersMiddleware:
 
     @staticmethod
     def _drop_per_viewer_headers(response: HttpResponse) -> None:
-        """Strip what the layers below added that ties this response to one viewer.
+        """
+        Strip what the layers below added that ties this response to one viewer.
 
         Runs here because this middleware sits second in ``MIDDLEWARE``, so its response phase is
         the last of ours to see the headers - after sessions, auth and the media cookie have each
@@ -229,7 +238,8 @@ PREVIEW_SCOPE: frozenset[str] = frozenset(
 
 
 class ProfilePreviewMiddleware:
-    """Render the owner's profile page as a throwaway ghost viewer during preview.
+    """
+    Render the owner's profile page as a throwaway ghost viewer during preview.
 
     The ghost is a real ``User`` with real relationship rows, created and rolled back per request, because
     visibility is decided in SQL as well as in Python (``Profile.visibility_permits_q``) and only rows satisfy
@@ -237,7 +247,8 @@ class ProfilePreviewMiddleware:
     """
 
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
-        """Store the downstream handler.
+        """
+        Store the downstream handler.
 
         Args:
             get_response: The next middleware/view callable in the chain.
@@ -245,7 +256,8 @@ class ProfilePreviewMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Dispatch the request, simulating the ghost viewer when in scope.
+        """
+        Dispatch the request, simulating the ghost viewer when in scope.
 
         Args:
             request: The incoming HTTP request.
@@ -270,7 +282,8 @@ class ProfilePreviewMiddleware:
         return self._respond_as_ghost(request, state)
 
     def _view_naming_previewed_profile(self, request: HttpRequest, state: dict) -> str | None:
-        """The view this request resolves to, when its URL names the previewed profile.
+        """
+        The view this request resolves to, when its URL names the previewed profile.
 
         Args:
             request: The incoming HTTP request.
@@ -292,7 +305,8 @@ class ProfilePreviewMiddleware:
         return match.view_name if names_owner else None
 
     def _is_page_navigation(self, request: HttpRequest) -> bool:
-        """Whether this looks like a full-page navigation.
+        """
+        Whether this looks like a full-page navigation.
 
         Args:
             request: The incoming HTTP request.
@@ -305,7 +319,8 @@ class ProfilePreviewMiddleware:
         return "text/html" in request.headers.get("Accept", "")
 
     def _blocked_response(self, request: HttpRequest) -> HttpResponse:
-        """Reject a write attempted during preview.
+        """
+        Reject a write attempted during preview.
 
         Args:
             request: The incoming HTTP request.
@@ -326,7 +341,8 @@ class ProfilePreviewMiddleware:
         return response
 
     def _respond_as_ghost(self, request: HttpRequest, state: dict) -> HttpResponse:
-        """Run the request as a ghost user inside a rolled-back transaction.
+        """
+        Run the request as a ghost user inside a rolled-back transaction.
 
         Args:
             request: The incoming HTTP request.
@@ -360,7 +376,8 @@ class ProfilePreviewMiddleware:
         return response
 
     def _inject_banner(self, response: HttpResponse, mode: str) -> None:
-        """Insert the preview banner before </body> of an HTML response.
+        """
+        Insert the preview banner before </body> of an HTML response.
 
         Args:
             response: The rendered response to decorate (modified in place).
@@ -393,7 +410,8 @@ class WriteSourceMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        """Run the request with the write source bound to the signed-in profile.
+        """
+        Run the request with the write source bound to the signed-in profile.
 
         Nothing here is decided unless the request writes. Naming the writer up front cost every
         authenticated request a ``dashboard_profiles`` query, and asking whether there *was* one
@@ -409,7 +427,8 @@ class WriteSourceMiddleware:
 
 
 class NulCharacterRefusalMiddleware:
-    """Answer a request whose query, form or URL arguments hold a NUL character with a 400, before the view runs.
+    """
+    Answer a request whose query, form or URL arguments hold a NUL character with a 400, before the view runs.
 
     Postgres refuses a NUL in text, so a view passing one to a query or a write fails with a 500. An uploaded file's
     bytes are not read. A JSON body is refused where it is decoded, by ``request_body.decode_json``.
@@ -425,7 +444,8 @@ class NulCharacterRefusalMiddleware:
         return self.get_response(request)
 
     def process_view(self, request: HttpRequest, view_func: Callable[..., HttpResponse], view_args: tuple[object, ...], view_kwargs: dict[str, object]) -> HttpResponse | None:
-        """Refuse the request when a NUL is in what the view would read.
+        """
+        Refuse the request when a NUL is in what the view would read.
 
         Args:
             request: The current request.
@@ -446,7 +466,8 @@ class NulCharacterRefusalMiddleware:
 
 
 class StorageUnavailableMiddleware:
-    """Answer a request that media storage failed under with a 503 and ``Retry-After``, not a 500.
+    """
+    Answer a request that media storage failed under with a 503 and ``Retry-After``, not a 500.
 
     Upload paths refuse in their own shape; this covers any view that let a storage failure escape. The body is plain
     text, which both the htmx error toast and ``fetchJson`` show as written.
@@ -459,7 +480,8 @@ class StorageUnavailableMiddleware:
         return self.get_response(request)
 
     def process_exception(self, request: HttpRequest, exception: Exception) -> HttpResponse | None:
-        """Turn a storage failure into a 503 the client can retry.
+        """
+        Turn a storage failure into a 503 the client can retry.
 
         Args:
             request: The current request.
@@ -511,7 +533,8 @@ class RequestTelemetryMiddleware:
         cpu_ms: float,
         stats: _SqlStats,
     ) -> None:
-        """Emit one line with wall, CPU, and SQL time for a slow request.
+        """
+        Emit one line with wall, CPU, and SQL time for a slow request.
 
         Args:
             request: The request being reported.

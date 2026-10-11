@@ -16,7 +16,8 @@ SITE_ADMIN_GROUP_NAME = "site_admin"
 
 
 def ensure_site_admin_group_permissions(group: Group) -> None:
-    """Attach site-admin panel permissions to ``group`` if missing.
+    """
+    Attach site-admin panel permissions to ``group`` if missing.
     ``view_site_admin`` is not declared on a model ``Meta.permissions`` and is created here so callers (migrations and runtime promotion) stay aligned.
 
     Args:
@@ -41,7 +42,8 @@ def ensure_site_admin_group_permissions(group: Group) -> None:
 
 
 def add_user_to_site_admin_group(user: User) -> None:
-    """Add ``user`` to the site_admin auth group.
+    """
+    Add ``user`` to the site_admin auth group.
 
     Args:
         user: The user to promote.
@@ -52,7 +54,8 @@ def add_user_to_site_admin_group(user: User) -> None:
 
 
 def promote_first_user_if_needed(user: User) -> bool:
-    """Grant site admin to the first user created on a fresh site.
+    """
+    Grant site admin to the first user created on a fresh site.
     Uses ``SiteSettings.bootstrap_admin_user`` as the authoritative record so concurrent sign-ups cannot both claim the role.
 
     Args:
@@ -95,7 +98,8 @@ def promote_first_user_if_needed(user: User) -> bool:
 
 
 def should_redirect_to_site_admin(user: User) -> bool:
-    """Return True when ``user`` should be sent to the site admin page after login.
+    """
+    Return True when ``user`` should be sent to the site admin page after login.
 
     Args:
         user: The authenticated user.
@@ -110,7 +114,8 @@ def should_redirect_to_site_admin(user: User) -> bool:
 
 
 def complete_site_admin_onboarding(user: User) -> None:
-    """Mark the bootstrap admin's first-visit redirect as complete.
+    """
+    Mark the bootstrap admin's first-visit redirect as complete.
 
     Args:
         user: The user viewing the site admin page.

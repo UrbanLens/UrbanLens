@@ -11,7 +11,8 @@ CATEGORY_FIELDS = ("history_enabled", "community_enabled", "external_apis_enable
 
 
 class WelcomeOnboardingForm(forms.ModelForm):
-    """One checkbox per feature category, plus a required Terms of Service agreement.
+    """
+    One checkbox per feature category, plus a required Terms of Service agreement.
 
     ``customize_features`` is a UI-only field (not persisted) holding whether the "I want to disable some features"
     accordion is expanded: the page hides the box itself and ``<details data-mirrors-open>`` keeps it equal to the
@@ -70,7 +71,8 @@ class WelcomeOnboardingForm(forms.ModelForm):
             self.fields["customize_features"].widget.attrs["checked"] = True
 
     def save(self, commit: bool = True) -> Profile:
-        """Apply the bulk toggles directly onto their underlying "enabled" settings.
+        """
+        Apply the bulk toggles directly onto their underlying "enabled" settings.
 
         Community's own cascade (pin/visibility forcing) happens in
         ``Profile.save()`` itself, so nothing extra is needed for it here.

@@ -47,7 +47,8 @@ class LocaldateBoundaryTests(SimpleTestCase):
                 self.assertEqual(timezone.localdate(), datetime.date(2026, 8, 15))
 
     def test_date_today_does_not_follow_the_active_timezone(self) -> None:
-        """The behaviour the nine call sites had, pinned so the distinction stays visible.
+        """
+        The behaviour the nine call sites had, pinned so the distinction stays visible.
 
         The axis is ``timezone.activate()`` - the per-request zone the locale middleware sets - not
         ``override_settings(TIME_ZONE=...)``."""

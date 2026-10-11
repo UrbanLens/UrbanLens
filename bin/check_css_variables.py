@@ -34,7 +34,8 @@ _BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
 
 
 def strip_comments(text: str) -> str:
-    """Return `text` with its `//` and `/* */` comments blanked out.
+    """
+    Return `text` with its `//` and `/* */` comments blanked out.
 
     Args:
         text: Stylesheet source.
@@ -45,7 +46,8 @@ def strip_comments(text: str) -> str:
 
 
 def undefined_properties(sources: dict[str, str], runtime: dict[str, str]) -> dict[str, list[str]]:
-    """Which custom properties are read but never set.
+    """
+    Which custom properties are read but never set.
 
     Args:
         sources: Stylesheet path -> contents.

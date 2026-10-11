@@ -1,4 +1,5 @@
-"""How many ids one reorder request may name.
+"""
+How many ids one reorder request may name.
 
 A drag-and-drop reorder submits the *complete* desired order, so the ceiling
 cannot be a constant chosen for the size of the statement: any number low enough
@@ -28,7 +29,8 @@ UNLIMITED_TRIP_FALLBACK = 10_000
 
 
 def reorder_id_ceiling(configured: int, unlimited_fallback: int) -> int:
-    """The most ids a reorder of this container may name.
+    """
+    The most ids a reorder of this container may name.
 
     Args:
         configured: The container's own item limit, where 0 means unlimited.

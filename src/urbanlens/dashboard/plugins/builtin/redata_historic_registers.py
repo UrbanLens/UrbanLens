@@ -1,4 +1,5 @@
-"""Historic-register plugin: what the state and city inventories say about a pin, via REData.
+"""
+Historic-register plugin: what the state and city inventories say about a pin, via REData.
 UrbanLens reached exactly one of them, New York's CRIS, and only inside New York."""
 
 from __future__ import annotations
@@ -88,7 +89,8 @@ class RegisterRow(TypedDict):
 
 
 def register_label(provider: str) -> str:
-    """A human name for a register tag.
+    """
+    A human name for a register tag.
 
     Args:
         provider: REData's provider tag, e.g. ``"md_mihp"``.
@@ -99,7 +101,8 @@ def register_label(provider: str) -> str:
 
 
 def register_rows(resources: list[Any]) -> list[RegisterRow]:
-    """Normalize REData cultural-resource rows into display rows.
+    """
+    Normalize REData cultural-resource rows into display rows.
     Reads only the fields REData standardizes across every provider - never the per-provider ``attributes`` blob, which is what ties ``cris_buildings`` to one inventory.
 
     Args:
@@ -171,7 +174,8 @@ def national_register_listing(pin: Pin, resources: list[dict[str, Any]], *, one_
 
 
 def national_register_note(pin: Pin, resources: list[dict[str, Any]], *, one_building: bool = False) -> str | None:
-    """Name the National Register listing that is most plausibly this place.
+    """
+    Name the National Register listing that is most plausibly this place.
 
     A near-point search also finds neighbours' listings, so one whose boundary holds the pin wins, then a site-level
     record, then the one sharing the most words with the place's name, then the nearest.
@@ -205,7 +209,8 @@ def national_register_note(pin: Pin, resources: list[dict[str, Any]], *, one_bui
 
 
 def _meta_entries(row: RegisterRow) -> list[dict[str, str]]:
-    """One register row as card metadata entries: the row, linked when it carries NPS's record, then its National
+    """
+    One register row as card metadata entries: the row, linked when it carries NPS's record, then its National
     Archives record when it has one."""
     entry = {"label": row["register"], "value": f"{row['name']} - {row['detail']}" if row["detail"] else row["name"]}
     if "href" in row:
@@ -255,7 +260,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         return envelope
 
     def transform_rows(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Keep only the standardized fields this card renders - see :data:`_KEPT_FIELDS` - and a National Register
+        """
+        Keep only the standardized fields this card renders - see :data:`_KEPT_FIELDS` - and a National Register
         row's National Archives record, when its ``attributes.NARA_URL`` is one."""
         from urbanlens.dashboard.services.locations.national_register import nara_record_url
 
@@ -275,7 +281,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         self._link_listings(pin, data)
 
     def link_own_listings(self, pin: Pin) -> None:
-        """Add NPS's record of each National Register listing that is this pin's own to its links and its wiki's.
+        """
+        Add NPS's record of each National Register listing that is this pin's own to its links and its wiki's.
 
         Args:
             pin: The pin whose cached rows to read.
@@ -299,7 +306,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         return not is_site_scope(pin) and self.nesting_site(pin) is not None
 
     def own_resources(self, pin: Pin, data: dict | None, *, one_building: bool) -> list[dict[str, Any]]:
-        """The cached rows describing this pin: for one building of a site, only that building's own records.
+        """
+        The cached rows describing this pin: for one building of a site, only that building's own records.
 
         Args:
             pin: The pin being read.
@@ -319,7 +327,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         return bool(register_rows((data or {}).get(self.payload_key) or []))
 
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
-        """This place's own register listings, for the Property Records Overview.
+        """
+        This place's own register listings, for the Property Records Overview.
 
         Only a record that is the place's own counts, by the rule its links follow: for one building of a site, that
         building's records; otherwise a listing whose boundary holds the place or whose own point stands on it. A
@@ -352,7 +361,8 @@ class HistoricRegisterPanelSource(RedataInfoPanelSource):
         return OverviewSummary(fields=fields, notes=[note] if note else [])
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """List what each register says, site-level records first for a parcel pin.
+        """
+        List what each register says, site-level records first for a parcel pin.
         Structure rows are not dropped, only ordered after: a campus whose only records are its buildings should still show them."""
         from urbanlens.dashboard.services.locations.national_register import nara_record_field, nps_record_url, reference_number
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope

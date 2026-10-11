@@ -1,4 +1,5 @@
-"""Session orchestration: solo + multiplayer lifecycle, round generation, answer scoring.
+"""
+Session orchestration: solo + multiplayer lifecycle, round generation, answer scoring.
 
 The one place ``controllers.trivia``/``consumers.TriviaSessionConsumer`` call
 into - mirrors ``services.spotguessr.session``'s shape exactly, including the
@@ -54,7 +55,8 @@ POINTS_FOR_CORRECT_ANSWER = 1000
 
 
 class TriviaError(Exception):
-    """Raised for an invalid Trivia session/round/answer operation.
+    """
+    Raised for an invalid Trivia session/round/answer operation.
 
     The message is for logs, not the response: HTTP-facing callers must
     catch a subclass (or this base class) and author their own user-facing
@@ -139,7 +141,8 @@ class TriviaConfig:
 
     @property
     def geo_bounds(self) -> GEOSGeometry | None:
-        """The configured geographic restriction as a GEOS geometry, or None.
+        """
+        The configured geographic restriction as a GEOS geometry, or None.
 
         Split at the antimeridian here, not per query: callers run planar
         ``__within`` lookups, so an area drawn across the date line would
@@ -184,7 +187,8 @@ def start_multiplayer_session(
     *,
     total_rounds: int = DEFAULT_ROUNDS_PER_SESSION,
 ) -> TriviaSession:
-    """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
+    """
+    Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
 
     The host joins immediately; each invitee gets an INVITED row plus a
     notification. Mirrors ``spotguessr.session.start_multiplayer_session``.
@@ -206,7 +210,8 @@ def start_multiplayer_session(
 
 
 def invite_to_session(session: TriviaSession, host: Profile, invitee: Profile) -> TriviaSessionParticipant:
-    """Invite one friend to a lobby session, notifying them.
+    """
+    Invite one friend to a lobby session, notifying them.
 
     Host-only, friends-only (matching the SpotGuessr precedent) - inviting a
     non-friend is rejected server-side, not just hidden in a picker UI.
@@ -263,7 +268,8 @@ def _notify_invite(host: Profile, invitee: Profile, session: TriviaSession) -> N
 
 
 def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParticipant:
-    """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
+    """
+    Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
 
     Idempotent for a profile that's already JOINED (harmless re-POST, or a
     reconnecting participant). Only actually-new joins are rejected once the
@@ -303,7 +309,8 @@ def join_session(session: TriviaSession, profile: Profile) -> TriviaSessionParti
 
 
 def begin_session(session: TriviaSession, host: Profile) -> TriviaRound | None:
-    """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
+    """
+    Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
     Group eligibility is only checkable once the roster locks. If nothing is
     eligible, the session stays ACTIVE (it never played) - report
@@ -329,7 +336,8 @@ def begin_session(session: TriviaSession, host: Profile) -> TriviaRound | None:
 
 
 def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
-    """Return the session's current round, creating the next one once the prior round is fully answered.
+    """
+    Return the session's current round, creating the next one once the prior round is fully answered.
 
     Only JOINED participants count - an invitee who never accepted is not a
     player.
@@ -379,7 +387,8 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
 
 
 def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> TriviaAnswer:
-    """Score and record ``profile``'s answer for ``round_``.
+    """
+    Score and record ``profile``'s answer for ``round_``.
 
     Rates and backfills ``NO_REACTION`` votes once everyone answered, then
     advances (mirrors ``spotguessr.session.submit_guess``, including the
@@ -459,7 +468,8 @@ def _every_joined_participant_has_answered(round_: TriviaRound) -> bool:
 
 
 def _finish_round(round_: TriviaRound, completed_answers: list[TriviaAnswer]) -> None:
-    """Rate, backfill vote signal, and broadcast the reveal for a just-completed round.
+    """
+    Rate, backfill vote signal, and broadcast the reveal for a just-completed round.
 
     Shared by the answer/stall-sweep/host-end/removal paths, so
     ``completed_answers`` may be a subset of the roster or empty. A
@@ -483,7 +493,8 @@ def _advance_or_complete(session: TriviaSession) -> None:
 
 
 def force_reveal_round(round_: TriviaRound) -> None:
-    """Force a stalled round to completion without waiting for every participant to answer.
+    """
+    Force a stalled round to completion without waiting for every participant to answer.
 
     Called by the stall-sweep Celery task for a round open too long - the
     safety net for a participant who closed their tab. Mirrors
@@ -516,7 +527,8 @@ def force_reveal_round(round_: TriviaRound) -> None:
 
 
 def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
-    """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
+    """
+    Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
     Ends the whole session on request, from LOBBY or ACTIVE - the host never
     waits out a stalled player. An open round is revealed first from existing
@@ -550,7 +562,8 @@ def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
 
 
 def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str, removed_by: Profile | None = None) -> None:
-    """Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
+    """
+    Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
 
     Shared by ``leave_session`` and ``kick_participant``, which differ only in who may call them and ``reason``.
     Locks the session, then the open round, then the participant: ``submit_answer`` takes the round before a
@@ -615,7 +628,8 @@ def _remove_participant(session: TriviaSession, participant: TriviaSessionPartic
 
 
 def leave_session(session: TriviaSession, profile: Profile) -> None:
-    """``profile`` voluntarily leaves the session - or declines an invitation to it.
+    """
+    ``profile`` voluntarily leaves the session - or declines an invitation to it.
 
     Works from either ``INVITED`` or ``JOINED``: "leave" covers both a
     joined player backing out mid-game and an invitee simply declining.
@@ -640,7 +654,8 @@ def leave_session(session: TriviaSession, profile: Profile) -> None:
 
 
 def kick_participant(session: TriviaSession, host: Profile, target_profile: Profile) -> None:
-    """Host-only: remove another participant from the session.
+    """
+    Host-only: remove another participant from the session.
 
     The host can't remove themselves this way (use ``end_session_now``
     instead - kicking the host would just trigger a host transfer, which
@@ -684,7 +699,8 @@ def complete_session(session: TriviaSession) -> TriviaSession:
 
 
 def session_summary(session: TriviaSession) -> dict:
-    """A JSON-ready summary: rounds played and each player's total.
+    """
+    A JSON-ready summary: rounds played and each player's total.
 
     A player who left or was removed mid-game is listed with their ``departure``, after everyone who finished.
     """

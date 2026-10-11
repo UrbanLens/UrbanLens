@@ -23,7 +23,8 @@ class _MultipleFileInput(forms.ClearableFileInput):
 
 
 class _MultipleFileField(forms.FileField):
-    """FileField variant that returns a list of uploaded files.
+    """
+    FileField variant that returns a list of uploaded files.
 
     Wraps Django's FileField so each file in a multi-file upload is validated
     individually while the field as a whole returns a list.
@@ -34,7 +35,8 @@ class _MultipleFileField(forms.FileField):
         super().__init__(*args, **kwargs)
 
     def clean(self, data, initial=None):
-        """Validate each uploaded file and return a list.
+        """
+        Validate each uploaded file and return a list.
 
         Args:
             data: List of uploaded file objects from the widget.
@@ -60,7 +62,8 @@ class _MultipleFileField(forms.FileField):
         return cleaned_files
 
     def _validate_upload(self, uploaded_file) -> None:
-        """Reject an uploaded file that is too large or has an unsupported extension.
+        """
+        Reject an uploaded file that is too large or has an unsupported extension.
 
         This is a defense-in-depth check at the form layer - the consuming view feeds these bytes into
         archive detection/extraction, which should never see an oversized or clearly-unsupported file in the

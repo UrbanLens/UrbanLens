@@ -24,7 +24,8 @@ _PROVIDERS = ("nifc_wildfires", "fema_disasters")
 
 
 def _fire_name(event: dict, year: str) -> str:
-    """The fire's own name, without the year this row already labels it with.
+    """
+    The fire's own name, without the year this row already labels it with.
 
     Args:
         event: One ``nifc_wildfires`` hazard event.

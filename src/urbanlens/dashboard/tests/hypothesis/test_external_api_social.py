@@ -16,7 +16,8 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the Authorization header kwargs for the test client.
+    """
+    Build the Authorization header kwargs for the test client.
 
     Args:
         raw_key: The plaintext API key.
@@ -27,7 +28,8 @@ def _bearer(raw_key: str) -> dict:
 
 
 def _key_with_scopes(user: User, *scopes: ApiKeyScope) -> str:
-    """Issue an API key granting exactly ``scopes``.
+    """
+    Issue an API key granting exactly ``scopes``.
 
     Newly issued keys deliberately do not carry the social/notification scopes (see
     ``_default_api_key_scopes``), so every test that needs one must opt in explicitly - which is itself the
@@ -55,7 +57,8 @@ class SocialScopeEnforcementTests(TestCase):
         self.other = Profile.objects.get(user=baker.make(User))
 
     def test_default_api_key_does_not_grant_social_scopes(self) -> None:
-        """A freshly issued key must not reach the social surface at all.
+        """
+        A freshly issued key must not reach the social surface at all.
 
         This is the cross-domain "no widening, no backfill" rule: adding social scopes to the default grant
         would silently hand every already-issued integration access to the owner's friends list."""
@@ -160,7 +163,8 @@ class FriendshipTransitionMatrixTests(TestCase):
         self.assertEqual(friendship.status, "Blocked")
 
     def test_mute_sets_the_flag_and_keeps_the_friendship(self) -> None:
-        """Mute is the one action here that is NOT a status transition.
+        """
+        Mute is the one action here that is NOT a status transition.
 
         The endpoint now moves the caller's own mute column and leaves the relationship intact."""
         friendship = self._pending_request()

@@ -21,7 +21,8 @@ from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the Authorization header kwargs for the test client.
+    """
+    Build the Authorization header kwargs for the test client.
 
     Args:
         raw_key: The plaintext API key.
@@ -39,7 +40,8 @@ class ExternalInvitePrivacyTests(TestCase):
         self.url = reverse("external_api:friend_invites")
 
     def _inviter_key(self) -> str:
-        """Create a fresh inviter and return an API key granting social:write.
+        """
+        Create a fresh inviter and return an API key granting social:write.
 
         A distinct inviter per case keeps the shared per-user outbound-email budget from coupling the four cases
         together - a rate limit tripped by case 3 would otherwise change case 4's response for reasons that have
@@ -54,7 +56,8 @@ class ExternalInvitePrivacyTests(TestCase):
         return raw_key
 
     def _invite(self, raw_key: str, email: str):
-        """POST one invitation.
+        """
+        POST one invitation.
 
         Args:
             raw_key: The caller's API key. email: The address to invite.

@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 
 class LabelNameConflictError(Exception):
-    """A label of that name and kind is already visible to the profile.
+    """
+    A label of that name and kind is already visible to the profile.
 
     Attributes:
         conflict: The existing label, the profile's own before a global one.
@@ -32,7 +33,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
     """QuerySet for Label with visibility and ordering helpers."""
 
     def bulk_create(self, objs, *args, **kwargs):
-        """Create labels in bulk, coercing each colour first.
+        """
+        Create labels in bulk, coercing each colour first.
         ``bulk_create`` does not call ``save()``, so the model's coercion has to be repeated here or a bulk path stores what a single write would reject.
 
         Args:
@@ -50,7 +52,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         return super().bulk_create(objs, *args, **kwargs)
 
     def bulk_update(self, objs, fields, *args, **kwargs):
-        """Update labels in bulk, coercing each colour first.
+        """
+        Update labels in bulk, coercing each colour first.
         The third path past ``save()``, and the one the external API's bulk edit uses.
         That endpoint validates its input and 400s on a bad colour, so this is the backstop for every other caller.
 
@@ -79,7 +82,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         return self.filter(Q(profile__isnull=True) | Q(profile=profile))
 
     def named(self, profile: Profile | int, name: str, kind: str) -> Self:
-        """Labels of *kind* visible to *profile* whose name matches *name* case-insensitively, own before global.
+        """
+        Labels of *kind* visible to *profile* whose name matches *name* case-insensitively, own before global.
 
         The lookup every create-by-name must use: it matches the ``(lower(name), profile, kind)`` constraint, and it
         also sees a global label a personal one would shadow. A profile-scoped kind (category, status) only ever
@@ -97,7 +101,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         return scope.filter(name__iexact=name.strip(), kind=kind).order_by(F("profile").asc(nulls_last=True))
 
     def resolve_or_create(self, profile: Profile, name: str, kind: str, *, defaults: dict[str, Any] | None = None) -> tuple[Label, bool]:
-        """Return the label *profile* sees under *name*, creating a personal one when there is none.
+        """
+        Return the label *profile* sees under *name*, creating a personal one when there is none.
 
         Args:
             profile: The owner of a created label, and whose own labels win over global ones.
@@ -129,7 +134,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
             return existing, False
 
     def create_unique(self, *, profile: Profile, name: str, kind: str, **fields: Any) -> Label:
-        """Create a personal label, refusing a name the profile already sees.
+        """
+        Create a personal label, refusing a name the profile already sees.
 
         For write paths that report a collision instead of reusing the existing label. A concurrent insert of the
         same name is reported the same way as one that was already there.
@@ -197,7 +203,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         return self.filter(kind=KIND_MEDIA)
 
     def suggestable(self) -> Self:
-        """Return only tag/category labels - the sole kinds ever synced to REData's label-suggestion service.
+        """
+        Return only tag/category labels - the sole kinds ever synced to REData's label-suggestion service.
 
         Status, people, and media labels are never sent (per the explicit
         product decision - see ``services.labels.redata_suggestions``).
@@ -222,7 +229,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         )
 
     def with_hierarchy(self) -> Self:
-        """Prefetch parents/children without computing pin or location counts.
+        """
+        Prefetch parents/children without computing pin or location counts.
         For callers that render no stats at all. Deferring the stats of a page that does render them is not worth it: measured at 120 labels, the counts cost ~16ms against ~100ms to render the cards they sit in (X25).
         """
         from urbanlens.dashboard.models.labels.model import Label
@@ -233,7 +241,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         )
 
     def with_pin_counts(self) -> Self:
-        """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
+        """
+        Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
         Each count is a correlated subquery rather than a sibling `Count()` on the same queryset - annotating `pins` and `wikis` together would join both M2M tables in before grouping, producing a row per (pin, wiki) pair per label (a cartesian fan-out) that `distinct=True` only fixes after the fact.
         """
         from urbanlens.dashboard.models.labels.model import Label
@@ -253,7 +262,8 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet["Label"]):
         )
 
     def in_display_order(self) -> Self:
-        """Rank order, then name.
+        """
+        Rank order, then name.
         Not called `ordered`: Django's `QuerySet.ordered` is a bool property, and a method of the same name shadows it, so anything reading it as a bool - `Paginator` does, via `getattr(object_list, "ordered", None)` - sees a truthy bound method instead of the property's answer.
         """
         return self.order_by("-order", "name")

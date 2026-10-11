@@ -1,4 +1,5 @@
-"""OAuth clients are provisioned by the site, not registered by accounts, and every token belongs to an account.
+"""
+OAuth clients are provisioned by the site, not registered by accounts, and every token belongs to an account.
 
 django-oauth-toolkit mounts its application management pages beside the token endpoints. Left open, any account
 could register a client of any grant type: a password-grant client trades a username and password for tokens

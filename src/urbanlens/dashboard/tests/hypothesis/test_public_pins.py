@@ -53,7 +53,8 @@ def _make_eligible_location(
     name: str = "Old Mill Sanatorium",
     pinners: int = 2,
 ) -> tuple[Location, Wiki, list[Profile]]:
-    """Build a location that passes every eligibility criterion at defaults.
+    """
+    Build a location that passes every eligibility criterion at defaults.
 
     Returns the location, its wiki, and the pin-holding profiles (who are
     also the vulnerability voters).
@@ -354,7 +355,8 @@ class SuggestionSyncTests(TestCase):
         self.assertEqual(sync_public_pin_suggestions(), 0)
 
     def test_evaluate_backfills_suggestions_even_when_nothing_passes_this_run(self) -> None:
-        """A profile created after a location already passed must still be caught up.
+        """
+        A profile created after a location already passed must still be caught up.
 
         ``evaluate_public_pin_candidates`` used to call ``sync_public_pin_suggestions`` only when
         ``counters["passed"]`` was nonzero for *this* run - so a location that passed in an earlier beat tick

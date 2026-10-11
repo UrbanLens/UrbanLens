@@ -80,7 +80,8 @@ class ExtractedFile(NamedTuple):
 
 
 class SpooledFile(NamedTuple):
-    """A single file extracted from an archive to disk.
+    """
+    A single file extracted from an archive to disk.
 
     Attributes:
         name: The entry's base name.
@@ -92,11 +93,13 @@ class SpooledFile(NamedTuple):
 
 
 class ExtractionBudget:
-    """One allowance for everything extracted from a single upload.
+    """
+    One allowance for everything extracted from a single upload.
     Charging is against bytes actually read rather than the size the archive declares."""
 
     def __init__(self, max_bytes: int = _MAX_UNCOMPRESSED_BYTES, max_files: int = _MAX_FILE_COUNT) -> None:
-        """Start an allowance.
+        """
+        Start an allowance.
 
         Args:
             max_bytes: Total uncompressed bytes permitted across the upload.
@@ -106,7 +109,8 @@ class ExtractionBudget:
         self.remaining_files = max_files
 
     def claim_file(self) -> None:
-        """Account for one extracted entry.
+        """
+        Account for one extracted entry.
 
         Raises:
             ValueError: The upload holds more supported files than permitted.
@@ -116,7 +120,8 @@ class ExtractionBudget:
             raise ValueError(f"Archive contains more than {_MAX_FILE_COUNT} supported files.")
 
     def read_limit(self) -> int:
-        """The most one entry may read: the per-file cap, or less when the upload has less left.
+        """
+        The most one entry may read: the per-file cap, or less when the upload has less left.
 
         Returns:
             Bytes an entry may read before its size alone decides the outcome.
@@ -124,7 +129,8 @@ class ExtractionBudget:
         return min(_MAX_SINGLE_FILE_BYTES, max(self.remaining_bytes, 0))
 
     def claim_bytes(self, size: int) -> None:
-        """Account for *size* uncompressed bytes.
+        """
+        Account for *size* uncompressed bytes.
 
         Args:
             size: Bytes to deduct from the remaining allowance.
@@ -138,7 +144,8 @@ class ExtractionBudget:
 
 
 def is_archive(data: bytes) -> bool:
-    """Returns True if *data* starts with ZIP or GZIP magic bytes.
+    """
+    Returns True if *data* starts with ZIP or GZIP magic bytes.
 
     Args:
         data: Raw bytes to inspect, or at least their first four.
@@ -149,7 +156,8 @@ def is_archive(data: bytes) -> bool:
 
 
 def is_archive_file(stream: IO[bytes]) -> bool:
-    """Whether a file starts with ZIP or GZIP magic bytes, leaving it where it was.
+    """
+    Whether a file starts with ZIP or GZIP magic bytes, leaving it where it was.
 
     Args:
         stream: A seekable binary file.
@@ -164,7 +172,8 @@ def is_archive_file(stream: IO[bytes]) -> bool:
 
 
 def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list[ExtractedFile]:
-    """Safely extract supported files from a ZIP or TGZ archive.
+    """
+    Safely extract supported files from a ZIP or TGZ archive.
 
     Args:
         data: Raw bytes of the archive.
@@ -179,7 +188,8 @@ def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list
 
 
 def iter_archive(data: bytes | IO[bytes], budget: ExtractionBudget | None = None) -> Iterator[ExtractedFile]:
-    """Extract supported files from a ZIP or TGZ archive one at a time, as each is asked for.
+    """
+    Extract supported files from a ZIP or TGZ archive one at a time, as each is asked for.
 
     A caller that lets go of an entry before asking for the next holds one entry, not the archive.
 
@@ -197,7 +207,8 @@ def iter_archive(data: bytes | IO[bytes], budget: ExtractionBudget | None = None
 
 
 def spool_archive(source: IO[bytes], directory: str, budget: ExtractionBudget) -> Iterator[SpooledFile]:
-    """Extract supported files from a ZIP or TGZ archive to disk one at a time, as each is asked for.
+    """
+    Extract supported files from a ZIP or TGZ archive to disk one at a time, as each is asked for.
 
     An entry is copied a chunk at a time, so the per-entry cap bounds a file on disk rather than one in memory.
 
@@ -261,7 +272,8 @@ def _copy(source: IO[bytes], out: IO[bytes], limit: int) -> int:
 
 
 def validate_content_type(name: str, data: bytes | IO[bytes]) -> str | None:
-    """Validate file content and return its format string, or ``None`` if unsupported.
+    """
+    Validate file content and return its format string, or ``None`` if unsupported.
 
     The whole file is read, a chunk at a time, but only its start is kept: the format is judged on that, while
     the whole must be UTF-8 (unless it is binary WKB) and, when it looks like JSON, one well-formed JSON value.
@@ -393,7 +405,8 @@ class ZipDirectoryTooLargeError(zipfile.BadZipFile):
 
 
 class _DirectoryReadBound:
-    """A file whose reads are refused past a size while ``zipfile`` opens it.
+    """
+    A file whose reads are refused past a size while ``zipfile`` opens it.
 
     ``zipfile`` reads the central directory in one read of the size the end record gives, and parses entries until
     that many bytes are used, whatever count the record claims. Refusing that read refuses the directory before any
@@ -442,7 +455,8 @@ class _DirectoryReadBound:
 
 @contextmanager
 def open_zip(source: IO[bytes]) -> Iterator[zipfile.ZipFile]:
-    """``zipfile.ZipFile`` over *source*, refusing a central directory over :data:`MAX_ZIP_DIRECTORY_BYTES` unread.
+    """
+    ``zipfile.ZipFile`` over *source*, refusing a central directory over :data:`MAX_ZIP_DIRECTORY_BYTES` unread.
 
     Args:
         source: A seekable binary file holding the archive.

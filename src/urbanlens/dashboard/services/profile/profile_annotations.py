@@ -1,4 +1,5 @@
-"""Private annotations one profile keeps about another: nickname and trust rating.
+"""
+Private annotations one profile keeps about another: nickname and trust rating.
 Extracted from ``controllers.userprofile``'s ``ProfileNicknameView`` and ``ProfileTrustView``, which held the only implementation and returned rendered HTML - unusable from an API credential."""
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ class AnnotationError(ValueError):
 
 
 class SelfAnnotationError(AnnotationError):
-    """The author and the subject are the same profile.
+    """
+    The author and the subject are the same profile.
     Kept as its own class because it is the one refusal that is about *who* is being annotated rather than about the value submitted."""
 
 
@@ -46,7 +48,8 @@ class TrustRatingOutOfRangeError(AnnotationError):
 
 @dataclass(frozen=True, slots=True)
 class ProfileAnnotations:
-    """Everything one viewer privately records about one subject.
+    """
+    Everything one viewer privately records about one subject.
     A read model rather than a row: ``nickname`` and ``trust`` come from two different tables and ``note_count`` from a third, and a client rendering a profile header wants all three without three round trips."""
 
     #: The private nickname the viewer assigned, or None when they assigned none.
@@ -58,7 +61,8 @@ class ProfileAnnotations:
 
 
 def require_distinct(author: Profile, subject: Profile, message: str) -> None:
-    """Refuse an annotation a profile is trying to write about itself.
+    """
+    Refuse an annotation a profile is trying to write about itself.
     Public because the HTMX widgets treat a blank submission as "clear this" rather than as a value, and must still refuse a self-annotation on that path - so they need the check without going through :func:`set_nickname`.
 
     Args:
@@ -73,7 +77,8 @@ def require_distinct(author: Profile, subject: Profile, message: str) -> None:
 
 
 def get_annotations(author: Profile, subject: Profile) -> ProfileAnnotations:
-    """Return everything ``author`` privately records about ``subject``.
+    """
+    Return everything ``author`` privately records about ``subject``.
     Never raises for a self-lookup: a profile reading its own annotations gets the (normally empty) rows it wrote about itself, which is both harmless and simpler for a client than a special case.
 
     Args:
@@ -92,7 +97,8 @@ def get_annotations(author: Profile, subject: Profile) -> ProfileAnnotations:
 
 
 def set_nickname(author: Profile, subject: Profile, nickname: str) -> ProfileNickname:
-    """Set or replace ``author``'s private nickname for ``subject``.
+    """
+    Set or replace ``author``'s private nickname for ``subject``.
 
     Args:
         author: The profile assigning the nickname.
@@ -123,7 +129,8 @@ def set_nickname(author: Profile, subject: Profile, nickname: str) -> ProfileNic
 
 
 def clear_nickname(author: Profile, subject: Profile) -> None:
-    """Remove ``author``'s nickname for ``subject``, if any. Idempotent, so a retried DELETE is safe.
+    """
+    Remove ``author``'s nickname for ``subject``, if any. Idempotent, so a retried DELETE is safe.
 
     Args:
         author: The profile whose nickname is being cleared.
@@ -132,7 +139,8 @@ def clear_nickname(author: Profile, subject: Profile) -> None:
 
 
 def set_trust(author: Profile, subject: Profile, rating: int) -> ProfileTrust:
-    """Set or replace ``author``'s private trust rating for ``subject``.
+    """
+    Set or replace ``author``'s private trust rating for ``subject``.
 
     Args:
         author: The profile giving the rating.
@@ -159,7 +167,8 @@ def set_trust(author: Profile, subject: Profile, rating: int) -> ProfileTrust:
 
 
 def clear_trust(author: Profile, subject: Profile) -> None:
-    """Remove ``author``'s trust rating for ``subject``, if any.
+    """
+    Remove ``author``'s trust rating for ``subject``, if any.
 
     Args:
         author: The profile whose rating is being cleared.

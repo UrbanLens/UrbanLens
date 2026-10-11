@@ -1,4 +1,5 @@
-"""Lists of a pin's child pins cost the same queries for a few children as for many (P296).
+"""
+Lists of a pin's child pins cost the same queries for a few children as for many (P296).
 
 Each child read its labels for its icon, and an unnamed one its location's wiki for its name: on dev, the pin page's
 detail-pin overlay ran 596 queries for a 517-child campus, its detail-pin list 120 for a 359-child one, and the main

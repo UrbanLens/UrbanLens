@@ -13,7 +13,8 @@ from urbanlens.dashboard.models.undo.model import UndoAction
 
 
 class UndoHistoryRowCostTests(RenderTimeScalingMixin, TestCase):
-    """The settings-page undo panel lists every active entry with no cap or slice.
+    """
+    The settings-page undo panel lists every active entry with no cap or slice.
 
     P69 left it that way on the theory that the 7-day retention window bounds it regardless of
     account age, not because a row was measured and found cheap. This puts a number on it.
@@ -27,7 +28,8 @@ class UndoHistoryRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Add *count* more active, undoable entries to the profile's stack.
+        """
+        Add *count* more active, undoable entries to the profile's stack.
 
         Args:
             count: How many rows to add.

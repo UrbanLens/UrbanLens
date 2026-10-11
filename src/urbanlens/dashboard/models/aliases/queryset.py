@@ -23,7 +23,8 @@ class AliasQuerySet(abstract.DashboardQuerySet[_AliasT]):
     owner_field: ClassVar[str] = ""
 
     def resolve_or_create(self, owner: Model | int, name: str, *, defaults: dict[str, Any] | None = None) -> tuple[_AliasT | None, bool]:
-        """Return the owner's alias for *name*, creating it when there is none.
+        """
+        Return the owner's alias for *name*, creating it when there is none.
 
         The name is sanitized the way ``save()`` will store it before the lookup, and matched case-insensitively
         like the ``lower(name)`` constraint, so an alias that differs only by case, whitespace or a dropped symbol

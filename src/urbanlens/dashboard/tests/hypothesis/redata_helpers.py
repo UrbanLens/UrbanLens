@@ -38,7 +38,8 @@ def detail_unresolved_body(*, retry_after: object = None, resource_uuid: str = "
 
 
 def detail_withheld_error(answer: str) -> PropertyRecordsUnavailableError:
-    """The error :class:`RedataGateway` raises when ``fetch-detail`` gives ``answer`` (one of :data:`DETAIL_WITHHELD_ANSWERS`).
+    """
+    The error :class:`RedataGateway` raises when ``fetch-detail`` gives ``answer`` (one of :data:`DETAIL_WITHHELD_ANSWERS`).
 
     Built by the gateway itself, from a mocked response, so a caller is tested against the real error and not a guess at it.
     """
@@ -69,7 +70,8 @@ class RedataConfiguredMixin:
 
 
 class EveryPanelGateConfiguredMixin(RedataConfiguredMixin):
-    """Also sets the Azure Maps key, so no Private Pin panel's gate refuses a pin for want of configuration.
+    """
+    Also sets the Azure Maps key, so no Private Pin panel's gate refuses a pin for want of configuration.
 
     The page leaves out a panel whose gate refuses the pin (P53); a test about every panel's markup needs them all.
     """

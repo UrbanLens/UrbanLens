@@ -53,7 +53,8 @@ GEOCODE_UPSTREAM_RATE = Rate(limit=20, window_seconds=3600)
 
 
 def _settings_redirect(anchor: str) -> HttpResponse:
-    """Redirect to the settings page, landing on the tab containing ``anchor``.
+    """
+    Redirect to the settings page, landing on the tab containing ``anchor``.
 
     The page's tab-switching JS resolves an id fragment to its containing ``.settings-tab-panel`` and
     activates that tab, so a plain section id is enough to land the user back where they were instead of
@@ -69,7 +70,8 @@ def _settings_redirect(anchor: str) -> HttpResponse:
 
 
 def _e2ee_enrolled(profile: Profile) -> bool:
-    """Return True when the profile has a direct-message encryption key bundle.
+    """
+    Return True when the profile has a direct-message encryption key bundle.
 
     Args:
         profile: The profile whose enrollment to check.
@@ -83,7 +85,8 @@ def _e2ee_enrolled(profile: Profile) -> bool:
 
 
 def _security_context(user: User, request: HttpRequest) -> dict:
-    """Context for the Security section (passkeys, TOTP status, backup codes) and the Advanced tab's
+    """
+    Context for the Security section (passkeys, TOTP status, backup codes) and the Advanced tab's
     separate API Keys section.
 
     Thin wrapper around ``services.auth.two_factor.security_settings_context`` and
@@ -99,7 +102,8 @@ def _security_context(user: User, request: HttpRequest) -> dict:
 
 class SettingsView(LoginRequiredMixin, View):
     def _build_map_center_context(self, profile: Profile) -> dict:
-        """Return preview coordinates and centroid for the map-center settings section.
+        """
+        Return preview coordinates and centroid for the map-center settings section.
 
         Uses the cached centroid (map_center_latitude/longitude on the profile) to avoid the expensive O(n²)
         haversine computation on every page GET.
@@ -397,7 +401,8 @@ class SettingsView(LoginRequiredMixin, View):
 
 @login_required
 def geocode_address(request: HttpRequest) -> JsonResponse:
-    """Return lat/lng for a free-text address or 'lat,lng' string.
+    """
+    Return lat/lng for a free-text address or 'lat,lng' string.
 
     Accepts: GET ?address=<text>. A coordinate string is answered locally; anything else spends one unit of the
     profile's ``GEOCODE_UPSTREAM_RATE``.
@@ -468,7 +473,8 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
 
 
 class PrivacyFieldView(LoginRequiredMixin, View):
-    """Change one privacy setting: the profile page's privacy hints.
+    """
+    Change one privacy setting: the profile page's privacy hints.
 
     POST /dashboard/settings/privacy/<field>/  body: ``value``
 
@@ -497,7 +503,8 @@ class PrivacyFieldView(LoginRequiredMixin, View):
 
 
 class SaveMapDarkModeView(LoginRequiredMixin, View):
-    """POST endpoint to persist the user's map dark-mode preference.
+    """
+    POST endpoint to persist the user's map dark-mode preference.
 
     Accepts a single ``mode`` field: 'light', 'dark', or 'system'.
     """
@@ -512,7 +519,8 @@ class SaveMapDarkModeView(LoginRequiredMixin, View):
 
 
 class SaveMapPositionView(LoginRequiredMixin, View):
-    """POST endpoint to save the user's last map pan/zoom for REMEMBER mode.
+    """
+    POST endpoint to save the user's last map pan/zoom for REMEMBER mode.
 
     Accepts lat, lng (float strings) and zoom (integer string).
     Only writes to the profile when map_center_mode is 'remember'; ignores the request silently

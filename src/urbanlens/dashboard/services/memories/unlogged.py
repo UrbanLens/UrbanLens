@@ -17,7 +17,8 @@ UNLOGGED_VISIT_LIMIT = 60
 
 
 def unlogged_visited_pins(profile: Profile, *, limit: int = UNLOGGED_VISIT_LIMIT) -> list[Pin]:
-    """Return the profile's visited-but-unlogged pins, most-recently-visited first.
+    """
+    Return the profile's visited-but-unlogged pins, most-recently-visited first.
 
     Args:
         profile: The owner whose pins to inspect.

@@ -18,7 +18,8 @@ _NEWS_SEARCH_PATH = "/api/v1/search/news/"
 
 
 def _extract_results(body: Any) -> list[dict[str, Any]]:
-    """Pull the ``results`` list out of a search response body, defensively.
+    """
+    Pull the ``results`` list out of a search response body, defensively.
 
     Args:
         body: The raw decoded JSON body from :meth:`RedataLocationContextGateway.get_json`.
@@ -32,7 +33,8 @@ def _extract_results(body: Any) -> list[dict[str, Any]]:
 
 
 def _news_answer(body: Any) -> LocationContextEnvelope:
-    """A ``/search/news/`` body as an envelope.
+    """
+    A ``/search/news/`` body as an envelope.
 
     From REData 0.3.7 the body says whether GDELT answered (``complete``) and what each provider did (``providers``).
     A body without them, from an older REData, is read as complete, as it always was.
@@ -52,13 +54,15 @@ def _news_answer(body: Any) -> LocationContextEnvelope:
 
 
 class RedataSearchGateway(RedataLocationContextGateway):
-    """REST client for REData's general web-search endpoint (and, via
+    """
+    REST client for REData's general web-search endpoint (and, via
     :meth:`search_news`, its separate GDELT-backed news endpoint)."""
 
     service_key: ClassVar[str] = "redata_search_web"
 
     def search_web(self, query: str, *, max_results: int = 10, images: bool = False) -> list[dict[str, Any]]:
-        """Search the web through REData's ordered provider fallback chain.
+        """
+        Search the web through REData's ordered provider fallback chain.
 
         Args:
             query: The search string.
@@ -83,7 +87,8 @@ class RedataSearchGateway(RedataLocationContextGateway):
         return _extract_results(self.get_json(_WEB_SEARCH_PATH, params))
 
     def search_news(self, query: str, *, max_results: int = 10, months: int | None = None) -> LocationContextEnvelope:
-        """Search recent news coverage through REData's news chain: GDELT, then SearXNG's news category.
+        """
+        Search recent news coverage through REData's news chain: GDELT, then SearXNG's news category.
 
         Args:
             query: The search string.

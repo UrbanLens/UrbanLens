@@ -98,7 +98,8 @@ class ConcealedRenderTests(TestCase):
         self.assertEqual(leaked, [], f"concealed wiki page leaked: {leaked}")
 
     def test_provider_content_still_reaches_the_page(self) -> None:
-        """The one assertion here that fails if resolve_fields regresses.
+        """
+        The one assertion here that fails if resolve_fields regresses.
 
         Rule 2 is "show automatically fetched content", and until this existed nothing tested it: every other
         assertion in this file is negative, so stubbing resolve_fields to return {} left them all green while
@@ -106,7 +107,8 @@ class ConcealedRenderTests(TestCase):
         self.assertIn(AUTOMATIC_BLURB, self._render_concealed())
 
     def test_the_page_still_renders_the_automatic_name(self) -> None:
-        """Positive control, and a tell in its own right.
+        """
+        Positive control, and a tell in its own right.
 
         A concealed wiki showing *no* name is not what a brand-new wiki looks like - every creation path names
         it from the location - so a blank title would announce the concealment as loudly as the leak would."""
@@ -115,7 +117,8 @@ class ConcealedRenderTests(TestCase):
         self.assertIn("Provider Name", body)
 
     def test_security_indicators_resolve_to_unknown(self) -> None:
-        """Rule 3, asserted on the values rather than on the rendered page.
+        """
+        Rule 3, asserted on the values rather than on the rendered page.
 
         The About card suppresses itself entirely when a concealed wiki has no description, dates or links, so
         the chips are unreachable from the rendered HTML and an assertion there proves nothing."""
@@ -168,7 +171,8 @@ class ConcealedHistoryTests(TestCase):
         self.assertNotIn("CANARY-STRANGER-EDIT", self._history())
 
     def test_your_own_edit_does_not_carry_the_hidden_prior_value(self) -> None:
-        """The leak a read gate cannot close.
+        """
+        The leak a read gate cannot close.
 
         Your own edit row is content the rules promise always to show you - and its "from" side holds whatever
         the stranger had written there."""
@@ -186,7 +190,8 @@ class ConcealedHistoryTests(TestCase):
 
 
 class ConcealedPanelTests(TestCase):
-    """The HTMX panels, which the page-level test never touches.
+    """
+    The HTMX panels, which the page-level test never touches.
 
     Aliases, comments and links load from their own endpoints after the page renders, so a canary planted for
     the main view is never in that response."""
@@ -222,7 +227,8 @@ class ConcealedPanelTests(TestCase):
         self.assertNotIn("CANARY-ALIAS", self._get("location.wiki.aliases"))
 
     def test_the_comment_panel_omits_a_strangers_comment(self) -> None:
-        """Comments are where people write down how they got in.
+        """
+        Comments are where people write down how they got in.
 
         The stranger needs a pin here, and that is not incidental."""
         baker.make(Pin, profile=self.stranger, location=self.location, parent_pin=None)
@@ -274,7 +280,8 @@ class ConcealedMediaTests(TestCase):
         return response.content.decode()
 
     def test_the_photo_map_layer_omits_a_strangers_upload(self) -> None:
-        """This layer plots photos at their capture coordinates.
+        """
+        This layer plots photos at their capture coordinates.
 
         An unfiltered payload does not merely list other people's
         contributions - it maps where they stood.
@@ -295,7 +302,8 @@ class ConcealedMediaTests(TestCase):
         self.assertNotIn("CANARY-UPLOAD", self._get("location.wiki.gallery.json"))
 
     def test_concealment_keeps_provider_media_the_viewer_can_already_see(self) -> None:
-        """Positive control, scoped to what this layer is actually responsible for.
+        """
+        Positive control, scoped to what this layer is actually responsible for.
 
         An earlier version attributed the provider row to a stranger and expected it through, which the app does
         not do - and the reason is worth keeping."""
@@ -326,7 +334,8 @@ class ConcealedMediaTests(TestCase):
 
 
 class FriendVisibilityTests(TestCase):
-    """Rule 5 at render level: a friend's contribution must still arrive.
+    """
+    Rule 5 at render level: a friend's contribution must still arrive.
 
     Every other assertion in this file is negative, so a bug that concealed too much would be invisible to the
     whole suite."""

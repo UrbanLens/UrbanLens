@@ -58,7 +58,8 @@ def _limits() -> dict[str, int]:
 
 
 def _declared_web_concurrency() -> dict[str, int]:
-    """Every worker count this repository declares, by where it is declared.
+    """
+    Every worker count this repository declares, by where it is declared.
 
     Compose's default is the one a local checkout runs and the smallest of them; a deployment that
     overrides it upward is the one whose arithmetic can actually reach a role's limit, and that
@@ -83,7 +84,8 @@ class TheRequestThreadPopulationIsBoundedTests(SimpleTestCase):
         self.assertRegex(_start_command(), r"(-k|--worker-class)\s+gthread\b")
 
     def test_the_web_tier_fits_inside_its_role_with_room_to_spare(self) -> None:
-        """Arithmetic rather than a hardcoded expectation, so raising WEB_CONCURRENCY or the thread count fails here.
+        """
+        Arithmetic rather than a hardcoded expectation, so raising WEB_CONCURRENCY or the thread count fails here.
 
         Checked against every declared worker count, not only compose's: production overrides it
         upward, so reading compose alone lets a production-only overcommit pass.
@@ -203,7 +205,8 @@ class EveryTierHasItsOwnConnectionBudgetTests(SimpleTestCase):
 
 
 class TheSocketTierKeepsItsDatabaseConnectionTests(SimpleTestCase):
-    """Channels closes an expired connection around every database hop, and daphne makes every hop on one thread.
+    """
+    Channels closes an expired connection around every database hop, and daphne makes every hop on one thread.
 
     At ``CONN_MAX_AGE=0`` that is a Postgres login per hop, several per handshake, queued behind each other."""
 
@@ -281,7 +284,8 @@ class TheDatabaseSaysWhoIsConnectedTests(SimpleTestCase):
         self.assertIn("UL_PROCESS_ROLE", base)
 
     def test_the_setting_reaches_django(self) -> None:
-        """Asserted against live settings, not the source, so a typo in the key fails.
+        """
+        Asserted against live settings, not the source, so a typo in the key fails.
 
         `OPTIONS` is passed to the driver verbatim; a misspelled key is accepted by Django and rejected by
         psycopg at connect time, which is a runtime failure rather than a config one."""
@@ -298,7 +302,8 @@ class TheDatabaseSaysWhoIsConnectedTests(SimpleTestCase):
 
 
 class TheRequestPathOutweighsBackgroundWorkTests(SimpleTestCase):
-    """Ceilings alone let a Celery worker and the request path compete as equals.
+    """
+    Ceilings alone let a Celery worker and the request path compete as equals.
 
     A weight decides who yields when that runs short."""
 

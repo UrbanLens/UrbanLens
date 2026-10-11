@@ -62,7 +62,8 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
             self._run(entries)
 
     def test_sibling_prefix_escape_is_rejected(self) -> None:
-        """The variant a bare startswith(extract_dir) check accepts: an entry
+        """
+        The variant a bare startswith(extract_dir) check accepts: an entry
         resolving into a SIBLING directory whose name shares the extract
         dir's prefix ("job1" vs "job1evil")."""
         entries = _valid_entries()
@@ -71,7 +72,8 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
             self._run(entries, extract_dirname="job1")
 
     def test_absolute_path_member_is_rejected_or_contained(self) -> None:
-        """Absolute members must never land outside the extract dir. zipfile
+        """
+        Absolute members must never land outside the extract dir. zipfile
         strips the leading slash on extraction, so either rejection or
         in-dir containment is acceptable - what matters is no file appears
         at the absolute path."""
@@ -90,7 +92,8 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
         self.assertIn("too many files", str(ctx.exception))
 
     def test_declared_size_over_ceiling_is_rejected(self) -> None:
-        """A decompression bomb must be refused from its declared sizes alone,
+        """
+        A decompression bomb must be refused from its declared sizes alone,
         before any bytes are written to disk."""
         with (
             mock.patch.object(import_data, "_extraction_size_ceiling", return_value=10),
@@ -100,7 +103,8 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
         self.assertIn("too large", str(ctx.exception))
 
     def test_caps_admit_ordinary_archives(self) -> None:
-        """The real ceilings are far above any legitimate export - a normal
+        """
+        The real ceilings are far above any legitimate export - a normal
         archive passes with the production values untouched."""
         self.assertTrue(self._run(_valid_entries()))
 
@@ -143,7 +147,8 @@ class ExtractedFileScanningTests(SimpleTestCase):
         self.assertTrue(self._run(entries))
 
     def test_content_type_mismatch_is_rejected(self) -> None:
-        """A file claiming to be a photo (.jpg extension) whose real bytes are
+        """
+        A file claiming to be a photo (.jpg extension) whose real bytes are
         a PDF (magic bytes %PDF) must be rejected - the same check that
         catches a spoofed direct upload via images.image_upload_error."""
         entries = _valid_entries()
@@ -156,7 +161,8 @@ class ExtractedFileScanningTests(SimpleTestCase):
         self.assertIn("doesn't match its file type", str(ctx.exception))
 
     def test_json_files_are_never_scanned_or_sniffed(self) -> None:
-        """manifest.json/pins.json are the export's own structured data, not a
+        """
+        manifest.json/pins.json are the export's own structured data, not a
         user media upload - even with malware_error_for_upload mocked to flag
         everything, a JSON-only archive must still pass."""
         with mock.patch(
@@ -195,7 +201,8 @@ class ExtractedFileScanningTests(SimpleTestCase):
 
 
 class ImportConnectionsTrustTests(TestCase):
-    """connections.json rows are treated as requests, never as facts - an
+    """
+    connections.json rows are treated as requests, never as facts - an
     import must not create friendship state the importer couldn't create
     through the UI."""
 
@@ -223,7 +230,8 @@ class ImportConnectionsTrustTests(TestCase):
         return row
 
     def test_forged_incoming_accepted_row_creates_nothing(self) -> None:
-        """The archive claiming another user befriended the importer must
+        """
+        The archive claiming another user befriended the importer must
         not materialize a row 'from' that user."""
         self._import_rows([self._row(direction="incoming")])
         self.assertFalse(Friendship.objects.exists())
@@ -251,7 +259,8 @@ class ImportConnectionsTrustTests(TestCase):
         self.assertEqual(Friendship.objects.get().status, FriendshipStatus.BLOCKED)
 
     def test_anonymized_pending_rows_are_skipped(self) -> None:
-        """Rows the export intentionally stripped identity from have nothing
+        """
+        Rows the export intentionally stripped identity from have nothing
         to act on."""
         result = self._import_rows([self._row(other_user_uuid=None, status="pending")])
         self.assertFalse(Friendship.objects.exists())
@@ -264,7 +273,8 @@ class ImportConnectionsTrustTests(TestCase):
 
 
 class ImportPinUuidTrustTests(TestCase):
-    """A foreign pin uuid in pins.json must neither block the import nor map
+    """
+    A foreign pin uuid in pins.json must neither block the import nor map
     the importer's data onto the other user's pin."""
 
     def test_foreign_pin_uuid_imports_as_a_fresh_pin(self) -> None:

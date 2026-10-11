@@ -1,4 +1,5 @@
-"""Channels WebSocket middleware accepting PAT/OAuth2 credentials, not just sessions.
+"""
+Channels WebSocket middleware accepting PAT/OAuth2 credentials, not just sessions.
 
 ``channels.auth.AuthMiddlewareStack`` only ever populates ``scope["user"]`` from Django's session
 cookie, so a native client authenticating the way ``external_api`` does over HTTP - a PAT-style
@@ -38,7 +39,8 @@ class ApiKeyAuthMiddleware:
         self.inner = inner
 
     async def __call__(self, scope, receive, send):
-        """Resolve a query-string credential, publishing both the user and the credential itself.
+        """
+        Resolve a query-string credential, publishing both the user and the credential itself.
 
         Args:
             scope: The incoming ASGI connection scope.
@@ -68,7 +70,8 @@ class ApiKeyAuthMiddleware:
         return values[0] if values else None
 
     async def _resolve(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
-        """Resolve *token* as either a PAT key or an OAuth2 access token.
+        """
+        Resolve *token* as either a PAT key or an OAuth2 access token.
 
         Args:
             token: The raw ``?key=`` value presented by the client.
@@ -82,7 +85,8 @@ class ApiKeyAuthMiddleware:
         return await database_sync_to_async(self._resolve_oauth2_token)(token)
 
     async def _resolve_api_key(self, token: str) -> tuple[AbstractBaseUser, Any] | None:
-        """Resolve a PAT key, keeping the verification off the shared thread.
+        """
+        Resolve a PAT key, keeping the verification off the shared thread.
 
         ``database_sync_to_async`` is thread-sensitive by default, so every call to it in this process
         runs in the one executor thread all of Channels' database work queues on. A current-format key
@@ -108,7 +112,8 @@ class ApiKeyAuthMiddleware:
 
     @staticmethod
     def _resolve_oauth2_token(token: str) -> tuple[AbstractBaseUser, Any] | None:
-        """Resolve a django-oauth-toolkit access token to its user and the token row.
+        """
+        Resolve a django-oauth-toolkit access token to its user and the token row.
 
         Args:
             token: The raw access-token string.

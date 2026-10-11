@@ -1,4 +1,5 @@
-"""Immich plugin: rate-limit defaults for the per-user photo import integration.
+"""
+Immich plugin: rate-limit defaults for the per-user photo import integration.
 This plugin registers the service's rate-limit defaults so calls are throttled and logged like every other external API."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ class ImmichPlugin(UrbanLensPlugin):
     order: ClassVar[int] = 40
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Immich API.
+        """
+        Rate-limit defaults for the Immich API.
 
         Returns:
             Defaults for the ``immich`` service key."""

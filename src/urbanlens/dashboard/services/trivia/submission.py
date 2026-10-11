@@ -1,4 +1,5 @@
-"""User-submitted trivia question intake.
+"""
+User-submitted trivia question intake.
 A submitted question is created PENDING_REVIEW and classified asynchronously (see services.trivia.classifier's module docstring for why the submitter is never notified either way, by design - so they can't iteratively probe the filter)."""
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ MAX_ANSWER_LENGTH = 255
 
 
 def submit_user_question(profile: Profile, location: Location, prompt: str, answer: str) -> TriviaQuestion:
-    """Create a user-submitted question and enqueue it for classification.
+    """
+    Create a user-submitted question and enqueue it for classification.
     Enqueues on commit so a rolled-back transaction never schedules a task against a row that was never actually saved.
 
     Args:
@@ -49,7 +51,8 @@ def _enqueue_classification(question_id: int) -> None:
 
 
 def classify_and_update(question: TriviaQuestion) -> None:
-    """Run the shared content classifier on a PENDING_REVIEW question and record its verdict.
+    """
+    Run the shared content classifier on a PENDING_REVIEW question and record its verdict.
 
     Args:
         question: The question to classify."""

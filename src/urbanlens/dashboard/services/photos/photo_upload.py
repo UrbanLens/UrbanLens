@@ -21,14 +21,16 @@ logger = logging.getLogger(__name__)
 
 
 class PhotoUploadError(Exception):
-    """An upload the caller may not perform, carrying the status to answer with.
+    """
+    An upload the caller may not perform, carrying the status to answer with.
 
     Attributes:
         message: User-facing explanation, safe to return to an untrusted caller.
         status: The HTTP status the calling view should respond with (400 for an unusable file, 403 for a feature the account lacks, 409 for a duplicate, 413 for a quota overrun, 429 while another upload holds the reservation)."""
 
     def __init__(self, message: str, status: int, *, retry_after: int | None = None) -> None:
-        """Store the user-facing message and the HTTP status it maps to.
+        """
+        Store the user-facing message and the HTTP status it maps to.
 
         Args:
             message: User-facing explanation of the refusal.
@@ -68,7 +70,8 @@ class PhotoUploadError(Exception):
 
 
 def _resolve_media_type(file_obj: UploadedFile, profile: Profile) -> MediaKind:
-    """Classify an upload as photo/video/document and enforce the per-account gates.
+    """
+    Classify an upload as photo/video/document and enforce the per-account gates.
 
     Args:
         file_obj: The uploaded file, whose ``content_type`` and name extension are both consulted (documents are commonly served as ``application/octet-stream``, so the extension is the fallback).
@@ -107,7 +110,8 @@ def upload_photo(
     visit: PinVisit | None = None,
     wiki: Wiki | None = None,
 ) -> Image:
-    """Admit one uploaded file as an ``Image`` row and queue its metadata ingestion.
+    """
+    Admit one uploaded file as an ``Image`` row and queue its metadata ingestion.
 
     Args:
         profile: The uploading profile; the file counts against its quota.

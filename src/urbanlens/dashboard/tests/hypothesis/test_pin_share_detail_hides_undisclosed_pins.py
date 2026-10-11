@@ -63,7 +63,8 @@ class PinShareDetailDisclosureTests(TestCase):
         self.assertNotIn("pin", response.context, "the template must not be handed the sender's live pin")
 
     def test_a_detected_share_still_renders_the_place_it_recorded(self):
-        """The page is not blank - the exposure it documents is still shown.
+        """
+        The page is not blank - the exposure it documents is still shown.
 
         The map reads ``share.shared_location``, the snapshot taken when the share happened, so it neither
         depends on the live pin nor follows it if the sender moves it later."""
@@ -75,7 +76,8 @@ class PinShareDetailDisclosureTests(TestCase):
         self.assertEqual(response.context["share"].shared_location_id, self.location.pk)
 
     def test_a_pending_share_names_the_place_not_the_pin(self):
-        """An explicit offer is previewed from what the share carries; the sender's name for the pin is not
+        """
+        An explicit offer is previewed from what the share carries; the sender's name for the pin is not
         part of it unless they typed it as ``shared_name``."""
         share = self._share(PinShareStatus.PENDING)
 

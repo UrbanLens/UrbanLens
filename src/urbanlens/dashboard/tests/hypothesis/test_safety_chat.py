@@ -17,7 +17,8 @@ from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 
 
 def _run(coro):
-    """Run *coro* via async_to_sync, not a bare asyncio.run().
+    """
+    Run *coro* via async_to_sync, not a bare asyncio.run().
 
     database_sync_to_async's thread-sensitive mode needs the CurrentThreadExecutor that only async_to_sync's
     sync->async->sync bridge sets up; a coroutine driven by plain asyncio.run() has nothing pumping that queue,

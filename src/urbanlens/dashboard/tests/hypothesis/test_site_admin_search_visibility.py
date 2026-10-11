@@ -138,7 +138,8 @@ class AdminSearchVisibilityTests(TestCase):
     # --- the fields are gated independently --------------------------------
 
     def test_a_hidden_email_does_not_hide_a_visible_username(self) -> None:
-        """Per-field, not per-row: one masked field must not remove the whole account
+        """
+        Per-field, not per-row: one masked field must not remove the whole account
         from a directory an admin needs in order to manage quotas and deletions."""
         user = self._make(
             username="zzsearch-mixed",
@@ -163,7 +164,8 @@ class AdminSearchVisibilityTests(TestCase):
         self.assertEqual(self._search("zzsearch-admin"), {self.admin.username})
 
     def test_the_unsearched_listing_still_shows_hidden_accounts(self) -> None:
-        """The fix restricts *matching*, not membership - an admin browsing the
+        """
+        The fix restricts *matching*, not membership - an admin browsing the
         directory must still see that a hidden account exists."""
         user = self._make(
             username="zzsearch-listed",

@@ -1,4 +1,5 @@
-"""P229: a subscriber sees the official owner's contact, the record's former owners and the official sale history.
+"""
+P229: a subscriber sees the official owner's contact, the record's former owners and the official sale history.
 
 On the dev stack HRSH's record named "EFG/DRA Heritage LLC" with a mailing address, and the Private Pin page showed the
 subscriber the name and nothing else: the Ownership card and Sale History tab there listed only the pin's own notes.

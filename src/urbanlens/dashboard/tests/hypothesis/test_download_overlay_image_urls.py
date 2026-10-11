@@ -1,4 +1,5 @@
-"""Downloading the image of an overlay that still draws only from an external ``image_url``, so migration
+"""
+Downloading the image of an overlay that still draws only from an external ``image_url``, so migration
 0033_v0_8_0_indexes can run.
 
 The command runs against a database stopped at 0032_v0_8_0, where the column exists but the model no longer declares it.
@@ -144,7 +145,8 @@ class NothingIsDeletedTests(_UrlOnlyOverlayCase):
         self.fetch.assert_not_called()
 
     def test_a_page_returned_in_place_of_the_image_is_not_linked(self) -> None:
-        """The pipeline deletes a file it can't open and the overlay's image FK cascades, so linking it would delete
+        """
+        The pipeline deletes a file it can't open and the overlay's image FK cascades, so linking it would delete
         the overlay once the file was processed."""
         overlay = self._overlay()
         self.fetch = _download(b"<!doctype html><title>Hotlinking not permitted</title>")
@@ -197,7 +199,8 @@ class TheMigrationNamesTheCommandTests(TestCase):
 
 
 class TheOperatorsPathTests(TransactionTestCase):
-    """0033 stops, the command runs against the 0032 schema with the current code, then 0033 applies and the
+    """
+    0033 stops, the command runs against the 0032 schema with the current code, then 0033 applies and the
     upload pipeline processes the image, as ``requeue_stalled_pending_uploads`` would have it do."""
 
     @staticmethod

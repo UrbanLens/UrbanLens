@@ -24,7 +24,8 @@ if TYPE_CHECKING:
 
 @dataclass(slots=True, kw_only=True)
 class _BareGateway(MediaProvider):
-    """A MediaProvider with every flag left at its base default.
+    """
+    A MediaProvider with every flag left at its base default.
 
     search_terms() (the only thing exercised here) never makes an HTTP call, so the auto-assigned service_key's
     rate-limiter session wrapper (see Gateway.__post_init__) is harmless - it's constructed but never used."""
@@ -135,7 +136,8 @@ class _CountingGateway(_BareGateway):
 
 
 class MediaProviderCacheKeyTests(SimpleTestCase):
-    """get_media() only reuses a cache row written for the *same* query.
+    """
+    get_media() only reuses a cache row written for the *same* query.
 
     LocationCache.get_fresh judges freshness by age alone, so without this a provider whose query construction
     was tightened for relevance would keep serving results fetched by the old, noisy query for the rest of the
@@ -200,13 +202,15 @@ class LibraryOfCongressMediaProviderRelevanceFlagsTests(SimpleTestCase):
         self.assertFalse(LibraryOfCongressMediaProvider.include_address)
 
     def test_reject_address_derived_names_defaults_off_for_other_providers(self) -> None:
-        """Only LOC opts in - other providers' relevance ranking may handle a
+        """
+        Only LOC opts in - other providers' relevance ranking may handle a
         street address in the query fine (e.g. a phrase-matching search)."""
         self.assertFalse(_BareGateway.reject_address_derived_names)
 
 
 class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
-    """Regression guard: Internet Archive has the same word-independent-OR relevance ranking symptom as LOC (a generic street-type word like "Road" coincidentally matches unrelated nationwide items), fixed the same way.
+    """
+    Regression guard: Internet Archive has the same word-independent-OR relevance ranking symptom as LOC (a generic street-type word like "Road" coincidentally matches unrelated nationwide items), fixed the same way.
 
     Unlike the deleted direct gateway, REData now builds the actual upstream query (including any phrase-quoting
     archive.org's parser needs) - this provider just passes a clean, unquoted name + locality as ``q``."""
@@ -221,13 +225,15 @@ class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
         self.assertFalse(InternetArchiveMediaProvider.search_with_country)
 
     def test_name_and_locality_are_not_quoted(self) -> None:
-        """Quoting is now REData's job (per its own ``query_styles`` per
+        """
+        Quoting is now REData's job (per its own ``query_styles`` per
         provider) - double-quoting here would be quoting REData's own quoting."""
         self.assertFalse(InternetArchiveMediaProvider.quote_name)
         self.assertFalse(InternetArchiveMediaProvider.quote_locality)
 
     def test_address_is_actually_omitted_from_the_query(self) -> None:
-        """The exact reported scenario: name "Summit Road" pulled in unrelated
+        """
+        The exact reported scenario: name "Summit Road" pulled in unrelated
         nationwide results once the street address was included."""
         loc = _location(
             street_number="1000",
@@ -255,7 +261,8 @@ class SmithsonianMediaProviderRelevanceFlagsTests(SimpleTestCase):
         self.assertFalse(SmithsonianMediaProvider.search_with_country)
 
     def test_name_and_locality_are_not_quoted(self) -> None:
-        """Smithsonian's Solr-family parser needs quotes, but REData applies
+        """
+        Smithsonian's Solr-family parser needs quotes, but REData applies
         them server-side now (per its own ``query_styles``) - quoting here too
         would double-apply it on top of REData's."""
         self.assertFalse(SmithsonianMediaProvider.quote_name)

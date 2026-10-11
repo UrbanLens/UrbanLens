@@ -44,7 +44,8 @@ def _wants_yes(request: HttpRequest) -> bool:
 
 
 class TripInvitationView(View):
-    """The invitee's page: join the trip, and become friends with the inviter, as separate answers.
+    """
+    The invitee's page: join the trip, and become friends with the inviter, as separate answers.
 
     GET /trips/invitations/<token>/
     """

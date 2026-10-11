@@ -18,7 +18,8 @@ class UpdateTaskProgressTests(SimpleTestCase):
         self.assertTrue(task.update_state.called)
 
     def test_a_non_oserror_backend_failure_also_does_not_propagate(self) -> None:
-        """redis-py raises its own ConnectionError, which is not an OSError - so
+        """
+        redis-py raises its own ConnectionError, which is not an OSError - so
         narrowing this handler to OSError would leave the common case uncaught."""
         task = mock.Mock()
         task.update_state.side_effect = RuntimeError("kombu blew up")

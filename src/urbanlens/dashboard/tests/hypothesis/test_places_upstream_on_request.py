@@ -1,4 +1,5 @@
-"""Place search, place details and the Places layer call their upstreams under the request-path policy.
+"""
+Place search, place details and the Places layer call their upstreams under the request-path policy.
 
 N29 G5-25, G5-28, G6-1. Before: autocomplete called Google/REData on every keystroke with no cache,
 throttle or deadline; a nearby-places miss called three sources one after another (about 70 s worst

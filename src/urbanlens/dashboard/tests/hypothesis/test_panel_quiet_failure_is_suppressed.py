@@ -1,4 +1,5 @@
-"""A panel fetch that returns without landing anything is a failure, not a reason to fetch again.
+"""
+A panel fetch that returns without landing anything is a failure, not a reason to fetch again.
 
 A source that hits an outage leaves its store empty on purpose, so the outage is not cached as "nothing here". It
 used to return normally, which released the single-flight marker without a skip key, so the page's next poll (every

@@ -1,4 +1,5 @@
-"""Moving building places off Overture's legacy content-hash refs, onto ``overture:<gers_id>``.
+"""
+Moving building places off Overture's legacy content-hash refs, onto ``overture:<gers_id>``.
 
 REData served an Overture building's ``ref`` as a hash of its name and position, which changes whenever an Overture
 release reshapes or renames the building (REData P98). Places keyed on it, and floorplans and swept-building records
@@ -61,7 +62,8 @@ def legacy_keyed_places() -> PlaceQuerySet:
 
 
 class RedataResolver:
-    """A :data:`Resolver` over REData's ``/buildings/resolve/``, memoized for one run.
+    """
+    A :data:`Resolver` over REData's ``/buildings/resolve/``, memoized for one run.
 
     A failure reads as "cannot resolve" for that ref. :data:`MAX_CONSECUTIVE_FAILURES` failures in a row stop further
     calls for the rest of the run: a REData that does not serve the endpoint yet answers every ref the same way, while
@@ -83,7 +85,8 @@ class RedataResolver:
         return self._failures >= self.MAX_CONSECUTIVE_FAILURES
 
     def answer(self, ref: str) -> dict[str, Any] | None:
-        """REData's full answer for ``ref``, or None when it could not be asked.
+        """
+        REData's full answer for ``ref``, or None when it could not be asked.
 
         Args:
             ref: The ref to resolve.
@@ -109,7 +112,8 @@ class RedataResolver:
         return answer
 
     def __call__(self, ref: str) -> str | None:
-        """The stable ref ``ref`` resolves to, or None.
+        """
+        The stable ref ``ref`` resolves to, or None.
 
         Args:
             ref: The ref to resolve.
@@ -143,7 +147,8 @@ class Rekeyed:
 
 
 def rewrite_building_refs(old_key: str, new_key: str) -> tuple[int, int]:
-    """Point every floorplan and swept-building record that names ``old_key`` at ``new_key``.
+    """
+    Point every floorplan and swept-building record that names ``old_key`` at ``new_key``.
 
     Args:
         old_key: The building key being retired.
@@ -165,7 +170,8 @@ def rewrite_building_refs(old_key: str, new_key: str) -> tuple[int, int]:
 
 
 def rekey_place(place: Place, new_key: str) -> Rekeyed | None:
-    """File ``place`` under ``new_key``, with every floorplan and swept-building record that named its old key.
+    """
+    File ``place`` under ``new_key``, with every floorplan and swept-building record that named its old key.
 
     Never deletes, and never takes a key another place holds: that is a duplicate to merge, not a re-key.
 
@@ -195,7 +201,8 @@ def rekey_place(place: Place, new_key: str) -> Rekeyed | None:
 
 
 def key_for_building(building: dict[str, Any], footprint: GEOSGeometry | None, *, resolver: Resolver | None) -> str:
-    """The key to file a REData building under, re-keying the place that already stands for it if that place is still
+    """
+    The key to file a REData building under, re-keying the place that already stands for it if that place is still
     on a legacy Overture ref.
 
     The existing place is found by the building's own legacy ``ref``, or, when the hash has drifted since, among the
@@ -275,7 +282,8 @@ class MigrationReport:
 
 
 def _footprint_match(place: Place, buildings: list[dict[str, Any]]) -> tuple[str, list[str]]:
-    """The building in ``buildings`` that ``place`` stands for, by footprint.
+    """
+    The building in ``buildings`` that ``place`` stands for, by footprint.
 
     A building REData still serves under the place's own ref is it. Otherwise it is the one building, of any source,
     whose footprint and the place's outline each hold the other's centroid, and only when that building is an
@@ -304,7 +312,8 @@ def _footprint_match(place: Place, buildings: list[dict[str, Any]]) -> tuple[str
 
 
 def _redata_parcel_key(place: Place, locate_parcel: ParcelLocator | None) -> str:
-    """The REData parcel to match a building place's footprint against.
+    """
+    The REData parcel to match a building place's footprint against.
 
     The parent's key when the parent is a REData parcel. Otherwise (a parcel drawn by hand, or from another source)
     REData's parcel at the place's centroid, so a building under such a parcel is still matched. Empty when REData
@@ -390,7 +399,8 @@ def migrate_legacy_refs(
     fetch_buildings: BuildingsFetcher | None,
     locate_parcel: ParcelLocator | None = None,
 ) -> MigrationReport:
-    """Re-key every building place, floorplan and swept-building record still on a legacy Overture ref.
+    """
+    Re-key every building place, floorplan and swept-building record still on a legacy Overture ref.
 
     A place moves to the stable ref REData resolves its key to. A key REData never recorded (served before its
     2026-10-11 release) is matched by footprint against its REData parcel's current buildings (the parent, or when

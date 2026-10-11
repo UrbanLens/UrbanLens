@@ -1,4 +1,5 @@
-"""Facts - a confidence-tracked piece of data about a Location, Wiki, or Image.
+"""
+Facts - a confidence-tracked piece of data about a Location, Wiki, or Image.
 A ``Fact`` is the *resolved* current state (value, confidence, status) for one ``(subject, key)`` pair - e.g.
 It is never written to directly; it is always recomputed from its ``FactEvidence`` trail (see ``services.facts.confidence``) by whichever source contributed a new observation (SpotGuessr guesses, Consensus answers, manual wiki edits, future AI extraction - see ``services.facts.evidence``).
 """
@@ -29,7 +30,8 @@ from urbanlens.dashboard.models.facts.queryset import FactEvidenceManager, FactM
 
 
 class FactDataType(abstract.TextChoices):
-    """How a Fact/FactEvidence's value is stored and compared.
+    """
+    How a Fact/FactEvidence's value is stored and compared.
 
     Snapshotted onto each row at creation time from ``services.facts.
     registry.FactKeyDefinition.data_type`` - old rows stay interpretable even
@@ -62,7 +64,8 @@ class FactStatus(abstract.TextChoices):
 
 
 class FactSourceKind(abstract.TextChoices):
-    """Broad category of where one piece of ``FactEvidence`` came from.
+    """
+    Broad category of where one piece of ``FactEvidence`` came from.
 
     ``source_name`` (a free slug on ``FactEvidence``) narrows within a kind -
     e.g. ``PLAYER_ATTRIBUTED``/``"consensus"`` vs. a future
@@ -89,7 +92,8 @@ _VALUE_FIELD_BY_DATA_TYPE: dict[str, str] = {
 
 
 def value_field_name(data_type: str) -> str:
-    """The ``value_*`` column that stores a value of ``data_type``.
+    """
+    The ``value_*`` column that stores a value of ``data_type``.
 
     Args:
         data_type: A ``FactDataType`` value.
@@ -107,7 +111,8 @@ def value_field_name(data_type: str) -> str:
 
 
 class TypedValueModel(abstract.DashboardModel):
-    """Abstract base carrying one typed-value column per ``FactDataType``, plus get/set helpers.
+    """
+    Abstract base carrying one typed-value column per ``FactDataType``, plus get/set helpers.
 
     Shared by ``Fact`` (the resolved current value) and ``FactEvidence`` (one
     observed value) so the five value columns and their dispatch logic are
@@ -134,7 +139,8 @@ class TypedValueModel(abstract.DashboardModel):
 
 
 class Fact(TypedValueModel):
-    """The resolved current value/confidence/status for one ``(subject, key)`` pair.
+    """
+    The resolved current value/confidence/status for one ``(subject, key)`` pair.
     Never written to directly - always recomputed from ``self.evidence`` by ``services.facts.confidence.recompute``, queued async (``tasks.recompute_fact_confidence``) after every new ``FactEvidence`` row.
 
     Attributes:
@@ -175,7 +181,8 @@ class Fact(TypedValueModel):
     objects = FactManager()
 
     def save(self, *args, **kwargs) -> None:
-        """Derive ``subject_type`` and enforce "exactly one subject FK set" before saving.
+        """
+        Derive ``subject_type`` and enforce "exactly one subject FK set" before saving.
         Backstopped, as an unbypassable floor, by a DB ``CHECK`` constraint added in migration ``0020_facts`` - mirrors ``Location``'s own immutable-fields enforcement (both in ``save()`` and via a DB trigger).
 
         Raises:
@@ -212,7 +219,8 @@ class Fact(TypedValueModel):
 
 
 class FactEvidence(TypedValueModel):
-    """One append-only observation contributing toward a Fact's confidence.
+    """
+    One append-only observation contributing toward a Fact's confidence.
     Never mutated or deleted once created - a bad observation is soft-invalidated via ``superseded`` instead (mirrors ``WikiEdit.reverted``), so the evidence trail always reflects exactly what was submitted and when.
 
     Attributes:

@@ -29,7 +29,8 @@ _ALWAYS_EXCLUDED_DOMAINS = ("urbanlens.org",)
 
 
 def is_own_site_url(url: str) -> bool:
-    """True when ``url`` points at this deployment's own domain (or urbanlens.org).
+    """
+    True when ``url`` points at this deployment's own domain (or urbanlens.org).
     Most pages on this site require being logged in, so archiving them on the Wayback Machine wouldn't produce anything a future anonymous visitor could actually read - checked before submitting any link a user adds for a pin/wiki.
 
     Args:
@@ -59,7 +60,8 @@ class WaybackMachineGateway(Gateway):
     paid_service: ClassVar[bool] = False
 
     def get_availability(self, url: str, *, timestamp: str | None = None) -> dict[str, Any]:
-        """Return the closest archived snapshot for a URL.
+        """
+        Return the closest archived snapshot for a URL.
 
         Args:
             url: The URL to look up.
@@ -77,7 +79,8 @@ class WaybackMachineGateway(Gateway):
         return response.json()
 
     def search_cdx(self, url: str, **params: Any) -> list[Any]:
-        """Search the CDX index for captures of a URL or URL pattern.
+        """
+        Search the CDX index for captures of a URL or URL pattern.
 
         Args:
             url: URL or URL prefix/pattern to search for.  Supports ``*`` wildcards
@@ -94,7 +97,8 @@ class WaybackMachineGateway(Gateway):
         return response.json()
 
     def get_memento_timemap(self, url: str, *, output: str = "json", **params: Any) -> list[Any] | str:
-        """Return a Memento TimeMap listing archived captures for a URL.
+        """
+        Return a Memento TimeMap listing archived captures for a URL.
 
         Args:
             url: The URL to retrieve the TimeMap for.
@@ -112,7 +116,8 @@ class WaybackMachineGateway(Gateway):
         return response.text
 
     def save_url(self, url: str, **params: Any) -> dict[str, Any]:
-        """Ask the Wayback Machine to archive a URL now.
+        """
+        Ask the Wayback Machine to archive a URL now.
 
         Args:
             url: The URL to archive.

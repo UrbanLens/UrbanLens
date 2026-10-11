@@ -1,4 +1,5 @@
-"""The basemap layers this deployment can offer, from REData's tile catalogue.
+"""
+The basemap layers this deployment can offer, from REData's tile catalogue.
 
 Two consumers, one builder: ``BasemapTileCatalogueView`` serves this over HTTP for a client that
 asks after the page has loaded, and ``{% basemap_tile_catalogue %}`` embeds it in the document so
@@ -47,7 +48,8 @@ _LAYER_ID = re.compile(r"[-a-zA-Z0-9_]+")
 
 
 def tile_url_template(layer: str) -> str:
-    """Leaflet-style template for one layer, pointing at this deployment's proxy.
+    """
+    Leaflet-style template for one layer, pointing at this deployment's proxy.
 
     Args:
         layer: The layer id.
@@ -74,7 +76,8 @@ def tile_url_template(layer: str) -> str:
 
 
 def forget_basemap_tile_catalogue() -> None:
-    """Drop the cached catalogue, so the next reader asks REData again rather than keeping a day of
+    """
+    Drop the cached catalogue, so the next reader asks REData again rather than keeping a day of
     layers this deployment has since turned out to be unable to serve.
 
     A map draws what the catalogue named and nothing else, so a catalogue that outlives the
@@ -85,7 +88,8 @@ def forget_basemap_tile_catalogue() -> None:
 
 
 def _await_catalogue() -> list[dict[str, Any]]:
-    """Wait out whoever holds the refill, rather than making a second identical call.
+    """
+    Wait out whoever holds the refill, rather than making a second identical call.
 
     Returns:
         The catalogue the holder published, or empty if it gave up or is still going.
@@ -103,7 +107,8 @@ def _await_catalogue() -> list[dict[str, Any]]:
 
 
 def hosted_basemap_tiles() -> str | None:
-    """The tile template this deployment's browsers fetch the street and dark basemaps' tiles from, when not our own.
+    """
+    The tile template this deployment's browsers fetch the street and dark basemaps' tiles from, when not our own.
 
     Protomaps' hosted API, fetched by the browser directly - the key travels in the URL, which is how a Protomaps key
     is meant to be used: its dashboard restricts the origins it answers. Only the tiles move. The style, glyphs and
@@ -128,7 +133,8 @@ def hosted_basemap_tiles() -> str | None:
 
 
 def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
-    """How deep the layer goes, given who is actually being fetched.
+    """
+    How deep the layer goes, given who is actually being fetched.
 
     A layer named in the vendor table never reaches REData, so REData's depth describes an endpoint
     that is not being used - too shallow and the client upscales levels the vendor would have drawn,
@@ -146,7 +152,8 @@ def _depth_of_the_bytes(published: Any, vendor_depth: int | None) -> Any:
 
 
 def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rewrite REData's sources into the entries a browser on this deployment can use.
+    """
+    Rewrite REData's sources into the entries a browser on this deployment can use.
 
     Args:
         sources: REData's catalogue, as returned by the gateway.
@@ -219,7 +226,8 @@ def _offered_layers(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
-    """REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
+    """
+    REData's layer catalogue, rewritten into what a browser on this deployment can actually use.
 
     A vendor ``url_template`` is deliberately not passed through: it needs REData's key, and handing
     the browser a template it cannot use would produce a layer that silently fails to load. What is
@@ -282,7 +290,8 @@ def basemap_tile_catalogue(*, allow_fetch: bool = True) -> list[dict[str, Any]]:
 
 
 def catalogue_for_viewer(*, authenticated: bool, allow_fetch: bool = True) -> list[dict[str, Any]]:
-    """:func:`basemap_tile_catalogue`, filtered to what this viewer can actually fetch.
+    """
+    :func:`basemap_tile_catalogue`, filtered to what this viewer can actually fetch.
 
     ``url_template`` points at :class:`~urbanlens.dashboard.controllers.basemap_tiles.BasemapTileView`,
     which is login-required, so offering it to a signed-out visitor (a public share page) would swap

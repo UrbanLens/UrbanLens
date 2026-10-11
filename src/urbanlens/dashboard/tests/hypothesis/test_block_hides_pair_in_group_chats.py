@@ -1,4 +1,5 @@
-"""Two people who blocked each other share a group chat without seeing each other in it (I7, rulings 1b and 2b).
+"""
+Two people who blocked each other share a group chat without seeing each other in it (I7, rulings 1b and 2b).
 
 Adding either to a group the other is in is allowed and refuses nothing. From the moment of the block, each
 stops receiving what the other sends - thread, inbox preview, unread count, notification, live frame,

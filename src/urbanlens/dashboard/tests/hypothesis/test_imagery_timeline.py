@@ -144,7 +144,8 @@ class TimelineYearsTests(SimpleTestCase):
 
 
 class HistoricalCarouselSlideTests(SimpleTestCase):
-    """Dated captures reach the satellite carousel; ranges deliberately do not.
+    """
+    Dated captures reach the satellite carousel; ranges deliberately do not.
 
     `/imagery/` answers "what can I show for this point now"."""
 

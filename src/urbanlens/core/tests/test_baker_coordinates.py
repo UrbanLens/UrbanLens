@@ -1,4 +1,5 @@
-"""A baked location is on the globe (P50).
+"""
+A baked location is on the globe (P50).
 
 Baker filled ``Location.latitude`` with up to 99.999999, past the pole for about one location in ten, and code that
 checks a coordinate refused those at random: an export/import round trip lost its pin once in ten runs.

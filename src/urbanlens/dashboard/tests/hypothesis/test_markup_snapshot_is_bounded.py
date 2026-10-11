@@ -1,4 +1,5 @@
-"""The snapshot composer writes markup rows with no ceiling at either axis.
+"""
+The snapshot composer writes markup rows with no ceiling at either axis.
 
 The fourth door onto ``PinMarkup``, and the one the H39 audit line actually
 named. ``controllers/markup.py`` refuses an oversized ``geometry`` at both of
@@ -88,7 +89,8 @@ class PointCountIsBoundedTests(TestCase):
 
 
 class TheWriteDoorIsBoundedTests(TestCase):
-    """The rows actually written, through a real caller.
+    """
+    The rows actually written, through a real caller.
 
     The sanitizer is the shared choke point, but nothing proves a caller
     routes through it until a caller does.
@@ -123,7 +125,8 @@ class TheWriteDoorIsBoundedTests(TestCase):
 
 
 class TheReadSideIsBoundedTests(TestCase):
-    """`to_snapshot` is the fifth door, and the one other people pay for.
+    """
+    `to_snapshot` is the fifth door, and the one other people pay for.
 
     `MarkupJsonView` is capped, but `MarkupMap.to_snapshot()` is a separate
     read path with no ceiling of its own, and `Comment.map_snapshot` calls it
@@ -175,7 +178,8 @@ class TheReadSideIsBoundedTests(TestCase):
 
 
 class CloningInheritsTheReadCeilingTests(TestCase):
-    """ "Add to my maps" copies what the reader shows, not what the row count says.
+    """
+    "Add to my maps" copies what the reader shows, not what the row count says.
 
     `clone_markup_map` round-trips through `to_snapshot()`, so the read ceiling
     bounds the clone as well. Pinned rather than left implicit: the alternative

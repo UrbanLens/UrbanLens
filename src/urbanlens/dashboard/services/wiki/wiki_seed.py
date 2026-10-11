@@ -37,7 +37,8 @@ _HEADING_MD_PREFIX = {"h2": "##", "h3": "###", "h4": "####", "h5": "#####", "h6"
 
 
 def takes_wikipedia_article(wiki: Wiki) -> bool:
-    """Whether a Wikipedia match at the wiki's point may describe the wiki.
+    """
+    Whether a Wikipedia match at the wiki's point may describe the wiki.
 
     Not for a campus building's wiki, nor anything else nested under another wiki without a property's place of its
     own (``name_tiers.wiki_scope``): the article found at its point is its campus's or a neighbour's
@@ -55,7 +56,8 @@ def takes_wikipedia_article(wiki: Wiki) -> bool:
 
 
 def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
-    """Write the wiki's first article from a cached Wikipedia match, if applicable.
+    """
+    Write the wiki's first article from a cached Wikipedia match, if applicable.
 
     Args:
         location: The location to seed a wiki article for.
@@ -84,7 +86,8 @@ def seed_wiki_article_from_wikipedia(location: Location) -> Article | None:
 
 
 def is_untouched_wikipedia_seed(article: Article) -> bool:
-    """Whether an article is still exactly what Wikipedia seeded, so nobody's writing is lost by removing it.
+    """
+    Whether an article is still exactly what Wikipedia seeded, so nobody's writing is lost by removing it.
 
     Its first revision is the seed, and every later one is ``localize_article_images`` changing nothing but image
     addresses; no revision has an editor, and the article holds the last revision's text.
@@ -115,7 +118,8 @@ def _without_image_addresses(content: str) -> str:
 
 
 def drop_misplaced_wikipedia_seed(wiki: Wiki) -> bool:
-    """Remove a wiki's article when Wikipedia seeded it untouched and the wiki no longer takes one (it was nested).
+    """
+    Remove a wiki's article when Wikipedia seeded it untouched and the wiki no longer takes one (it was nested).
 
     Args:
         wiki: The wiki, as it stands now.
@@ -140,7 +144,8 @@ def drop_misplaced_wikipedia_seed(wiki: Wiki) -> bool:
 
 
 def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
-    """Write a pin's first article from a cached Wikipedia match, if applicable.
+    """
+    Write a pin's first article from a cached Wikipedia match, if applicable.
 
     Args:
         pin: The pin to seed an article for.
@@ -175,7 +180,8 @@ def seed_pin_article_from_wikipedia(pin: Pin) -> Article | None:
 
 
 def seed_pin_from_cached_wikipedia(pin: Pin) -> None:
-    """Give a pin the article and link its location's cached Wikipedia match offers.
+    """
+    Give a pin the article and link its location's cached Wikipedia match offers.
 
     Called only for the pin owner's own activity: a match another account's lookup cached reaches
     this pin when its owner next opens it.
@@ -198,7 +204,8 @@ def seed_pin_from_cached_wikipedia(pin: Pin) -> None:
 
 
 def _seed_content_for_location(location: Location) -> str | None:
-    """Build seed-ready Markdown from the location's cached Wikipedia match, if any.
+    """
+    Build seed-ready Markdown from the location's cached Wikipedia match, if any.
 
     Args:
         location: The location whose cached "wikipedia" LocationCache row to read.
@@ -226,7 +233,8 @@ def _seed_content_for_location(location: Location) -> str | None:
 
 
 def apply_wikipedia_cover_if_missing(*, pin: Pin | None = None, location: Location | None = None) -> None:
-    """Use the Wikipedia lead image as the cover when the pin or wiki has none yet.
+    """
+    Use the Wikipedia lead image as the cover when the pin or wiki has none yet.
 
     An existing cover is left alone. A failed download does not affect the article.
 
@@ -293,7 +301,8 @@ def _store_cover_from_url(url: str, *, pin: Pin | None, wiki: Wiki | None) -> No
 
 
 def _lead_image_markdown(article_data: dict) -> str:
-    """Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image of this site's copy.
+    """
+    Render the article's lead thumbnail (already cached alongside the extract) as a Markdown image of this site's copy.
 
     Args:
         article_data: The cached Wikipedia article dict (``title``/``thumbnail``).
@@ -310,7 +319,8 @@ def _lead_image_markdown(article_data: dict) -> str:
 
 
 def _infobox_markdown(pairs: object) -> str:
-    """Render a Wikipedia infobox's label/value fact pairs as a Markdown bullet list.
+    """
+    Render a Wikipedia infobox's label/value fact pairs as a Markdown bullet list.
 
     Args:
         pairs: The cached ``infobox`` value (``list[list[str]]`` when present) - typed loosely since it comes back out of a JSONField and may be missing/None for a location cached before this field existed, or genuinely empty when the article had no infobox.
@@ -332,7 +342,8 @@ def _infobox_markdown(pairs: object) -> str:
 
 
 def _attribution_line(article_data: dict) -> str:
-    """Build the CC BY-SA attribution footer required to reuse Wikipedia content.
+    """
+    Build the CC BY-SA attribution footer required to reuse Wikipedia content.
 
     Args:
         article_data: The cached Wikipedia article dict (``title``/``url``).
@@ -348,7 +359,8 @@ def _attribution_line(article_data: dict) -> str:
 
 
 def _extract_html_to_markdown(html: str) -> str:
-    """Convert a WikipediaGateway extract to Markdown source.
+    """
+    Convert a WikipediaGateway extract to Markdown source.
     The input is always sanitized HTML restricted to a small, known tag set (see ``_ALLOWED_TAGS`` in ``services.apis.assets.wikipedia``) - this only needs to handle exactly those tags, not arbitrary HTML.
 
     Args:
@@ -413,7 +425,8 @@ def _definition_list_markdown(dl_el: HtmlElement) -> str:
 
 
 def _inline_markdown(el: HtmlElement) -> str:
-    """Render one element's text + inline children (b/i/em/strong/sup/sub/br) to Markdown.
+    """
+    Render one element's text + inline children (b/i/em/strong/sup/sub/br) to Markdown.
     sup/sub have no Markdown equivalent - kept as plain text rather than emitting raw HTML the renderer would otherwise escape literally (see services.wiki.articles.render_article, which doesn't enable raw HTML passthrough)."""
     parts: list[str] = []
     if el.text:

@@ -1,4 +1,5 @@
-"""Outbound calls to provider hosts still go through the same guard as user-chosen ones.
+"""
+Outbound calls to provider hosts still go through the same guard as user-chosen ones.
 
 Every caller today builds these urls on a fixed host - Google's avatar CDN, Discord, Gravatar,
 web.archive.org - but the fetch itself must not trust that: a redirect, or a future caller passing

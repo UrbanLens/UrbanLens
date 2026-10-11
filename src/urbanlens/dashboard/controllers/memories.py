@@ -68,7 +68,8 @@ _VISITS_BULK_ACTIONS = [
 
 
 class _ShareGroup(TypedDict):
-    """One place's entry in the Sharing page's ``share_groups`` list.
+    """
+    One place's entry in the Sharing page's ``share_groups`` list.
 
     ``pin`` is None for location-only shares (e.g. coordinates detected in a DM the sender never pinned)
     - ``place_label`` always carries a displayable name either way.
@@ -91,7 +92,8 @@ class _MapShareGroup(TypedDict):
 
 
 class _IncomingShareGroup(TypedDict):
-    """One pin's entry in the Sharing page's ``incoming_share_groups`` list.
+    """
+    One pin's entry in the Sharing page's ``incoming_share_groups`` list.
 
     Unlike :class:`_ShareGroup`, there's no chain/reshare count here - the chain machinery is rooted at
     the *sender's* side, and the recipient only ever sees their own inbound shares of a given pin. Nor is
@@ -110,7 +112,8 @@ class _IncomingMapShareGroup(TypedDict):
 
 
 def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tuple[str | None, str | None]:
-    """Resolve a human label and link for one (kind, host) attachment entry.
+    """
+    Resolve a human label and link for one (kind, host) attachment entry.
 
     Args:
         kind: One of ``safety_checkin`` / ``comment`` / ``trip_comment`` / ``visit`` /
@@ -141,7 +144,8 @@ def _attachment_label_url(kind: str, host: Any, *, markup_map: MarkupMap) -> tup
 
 
 def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]:
-    """Resolve a human label and link for the map's single "primary" attachment.
+    """
+    Resolve a human label and link for the map's single "primary" attachment.
 
     Args:
         markup_map: The map to inspect.
@@ -157,7 +161,8 @@ def _map_attachment_info(markup_map: MarkupMap) -> tuple[str | None, str | None]
 
 
 def _map_attachment_entries(markup_map: MarkupMap) -> list[dict[str, str]]:
-    """Resolve a label + link for every place a map is currently attached to.
+    """
+    Resolve a label + link for every place a map is currently attached to.
 
     Unlike :func:`_map_attachment_info` (the single "primary" link shown under a map's title), this
     lists every comment, trip comment, safety check-in, visit, and direct message referencing the map -
@@ -178,7 +183,8 @@ def _map_attachment_entries(markup_map: MarkupMap) -> list[dict[str, str]]:
 
 
 def _unlogged_band_context(profile: Profile) -> dict[str, object]:
-    """Build the context the unlogged-visits band needs, shared by every view that renders it.
+    """
+    Build the context the unlogged-visits band needs, shared by every view that renders it.
 
     Args:
         profile: The viewing profile whose visited-but-unlogged pins to surface.
@@ -194,7 +200,8 @@ def _unlogged_band_context(profile: Profile) -> dict[str, object]:
 
 
 def _toast(message: str, level: str = "success", *, unlogged_count: int | None = None) -> HttpResponse:
-    """Return an empty HTMX response that removes the swapped card and fires a toast.
+    """
+    Return an empty HTMX response that removes the swapped card and fires a toast.
 
     Args:
         message: Text to display in the toast.
@@ -226,7 +233,8 @@ def _parse_date(value: str | None, default: datetime.date) -> datetime.date:
 
 
 def _parse_datetime(value: str | None) -> datetime.datetime | None:
-    """Parse the feed's exclusive page cursor, or None when absent or unusable.
+    """
+    Parse the feed's exclusive page cursor, or None when absent or unusable.
 
     Args:
         value: An ISO-8601 timestamp from the query string.
@@ -259,7 +267,8 @@ def _parse_bbox(request: HttpRequest) -> BBox | None:
 
 
 def _active_span(earliest: datetime.date | None, today: datetime.date) -> tuple[int, str]:
-    """Describe how long a profile has been active in the largest sensible time unit.
+    """
+    Describe how long a profile has been active in the largest sensible time unit.
 
     Picks the coarsest unit (years, months, weeks, days) that still yields a count of at least one, so a
     brand-new account whose only memory is a few months old reads "3 months active" instead of a
@@ -312,7 +321,8 @@ def _earliest_memory_date(profile: Profile) -> datetime.date | None:
 
 
 def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
-    """Build the Memories page's hero-stat tiles (distance, places, photos, trips, active span).
+    """
+    Build the Memories page's hero-stat tiles (distance, places, photos, trips, active span).
 
     Shared by the initial page render and ``MemoriesHeroStatsView`` (the latter lets the tiles refresh
     in place after an in-page action like logging a visit or adding photos, instead of only updating on
@@ -353,13 +363,15 @@ def _compute_hero_stats(profile: Profile) -> tuple[dict[str, object], bool]:
 
 
 class MemoriesView(LoginRequiredMixin, View):
-    """Memories page - map + timeline of everywhere a profile has been.
+    """
+    Memories page - map + timeline of everywhere a profile has been.
 
     GET /memories/
     """
 
     def get(self, request: HttpRequest):
-        """Render the Memories page with hero stats and scrubber bounds.
+        """
+        Render the Memories page with hero stats and scrubber bounds.
 
         Args:
             request: The HTTP request.
@@ -393,7 +405,8 @@ class MemoriesView(LoginRequiredMixin, View):
 
 
 class MemoriesHeroStatsView(LoginRequiredMixin, View):
-    """HTMX partial - the hero-stat tiles at the top of the Memories page.
+    """
+    HTMX partial - the hero-stat tiles at the top of the Memories page.
 
     GET /memories/hero-stats/
 
@@ -403,7 +416,8 @@ class MemoriesHeroStatsView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest):
-        """Render the hero-stats partial.
+        """
+        Render the hero-stats partial.
 
         Args:
             request: The HTTP request.
@@ -417,7 +431,8 @@ class MemoriesHeroStatsView(LoginRequiredMixin, View):
 
 
 class MemoriesFeedDataView(LoginRequiredMixin, View):
-    """Aggregated map/timeline data for the Memories page.
+    """
+    Aggregated map/timeline data for the Memories page.
 
     GET /memories/data/?start=YYYY-MM-DD&end=YYYY-MM-DD&bbox=minLat,minLng,maxLat,maxLng
 
@@ -428,7 +443,8 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest):
-        """Return MemoryEvents for the requested date range/viewport as JSON.
+        """
+        Return MemoryEvents for the requested date range/viewport as JSON.
 
         Args:
             request: The HTTP request.
@@ -481,13 +497,15 @@ class MemoriesFeedDataView(LoginRequiredMixin, View):
 
 
 class MemoriesOnThisDayView(LoginRequiredMixin, View):
-    """HTMX partial - memories from this month/day in past years.
+    """
+    HTMX partial - memories from this month/day in past years.
 
     GET /memories/on-this-day/
     """
 
     def get(self, request: HttpRequest):
-        """Render the "on this day" callout partial.
+        """
+        Render the "on this day" callout partial.
 
         Args:
             request: The HTTP request.
@@ -516,7 +534,8 @@ class MemoriesOnThisDayView(LoginRequiredMixin, View):
 
 
 class MemoriesVisitView(LoginRequiredMixin, View):
-    """Log a dated visit for a marked-but-unlogged pin, or add details to an existing one.
+    """
+    Log a dated visit for a marked-but-unlogged pin, or add details to an existing one.
 
     GET /memories/visit/<pin_slug>/ → render the add-visit form (dialog body)
     GET /memories/visit/<pin_slug>/<visit_id>/ → render the edit-visit form for an existing visit
@@ -534,7 +553,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
         return pin, profile
 
     def get(self, request: HttpRequest, pin_slug: str, visit_id: int | None = None) -> HttpResponse:
-        """Render the visit form for the shared Memories dialog.
+        """
+        Render the visit form for the shared Memories dialog.
 
         Args:
             request: The HTTP request.
@@ -564,7 +584,8 @@ class MemoriesVisitView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/_visit_form.html", context)
 
     def post(self, request: HttpRequest, pin_slug: str, visit_id: int | None = None) -> HttpResponse:
-        """Create or update a dated PinVisit and return the refreshed band.
+        """
+        Create or update a dated PinVisit and return the refreshed band.
 
         Args:
             request: The HTTP request.
@@ -655,13 +676,15 @@ class MemoriesVisitView(LoginRequiredMixin, View):
 
 
 class MemoriesVisitsView(LoginRequiredMixin, View):
-    """The "log your visits" subpage of Memories - pins marked visited with no dated record.
+    """
+    The "log your visits" subpage of Memories - pins marked visited with no dated record.
 
     GET /memories/visits/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the unlogged-visits page.
+        """
+        Render the unlogged-visits page.
 
         Args:
             request: The HTTP request.
@@ -687,7 +710,8 @@ class MemoriesVisitsView(LoginRequiredMixin, View):
 
 
 class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
-    """Lightweight JSON of every visited-but-unlogged pin, for the Visits page map.
+    """
+    Lightweight JSON of every visited-but-unlogged pin, for the Visits page map.
 
     GET /memories/visits/map-data/
 
@@ -712,7 +736,8 @@ class MemoriesVisitsMapDataView(LoginRequiredMixin, View):
 
 
 class MemoriesVisitsBulkActionView(LoginRequiredMixin, View):
-    """Quick-log or un-mark many visited-but-unlogged pins at once.
+    """
+    Quick-log or un-mark many visited-but-unlogged pins at once.
 
     POST /memories/visits/bulk/<action>/, JSON body
 
@@ -780,7 +805,8 @@ _MEMORIES_MAPS_PAGE_SIZE = 24
 
 
 def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[PinShare]], Page]:
-    """One page of pin shares, grouped by the place each is about.
+    """
+    One page of pin shares, grouped by the place each is about.
 
     Grouping happens in the database rather than after fetching everything, so the page pays for its own
     twenty places instead of for every share the account has ever made or received.
@@ -813,7 +839,8 @@ def _place_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tup
 
 
 def _map_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple[list[list[MarkupMapShare]], Page]:
-    """One page of map shares, grouped by the map each is about.
+    """
+    One page of map shares, grouped by the map each is about.
 
     The map-share sibling of :func:`_place_grouped_page`; simpler only because a map share always names
     a map.
@@ -839,7 +866,8 @@ def _map_grouped_page(request: HttpRequest, shares: Any, *, param: str) -> tuple
 
 
 def _sent_share_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
-    """The "Shared by you" half of the Sharing page, one page of each list.
+    """
+    The "Shared by you" half of the Sharing page, one page of each list.
 
     Args:
         request: The current request; carries both page numbers.
@@ -880,7 +908,8 @@ def _sent_share_context(request: HttpRequest, profile: Profile) -> dict[str, Any
 
 
 def _received_share_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
-    """The "Shared with you" half, one page of each list.
+    """
+    The "Shared with you" half, one page of each list.
 
     Args:
         request: The current request; carries both page numbers.
@@ -909,7 +938,8 @@ def _received_share_context(request: HttpRequest, profile: Profile) -> dict[str,
 
 
 def _share_counts(profile: Profile) -> dict[str, int]:
-    """How many shares each toggle button reports.
+    """
+    How many shares each toggle button reports.
 
     Counted rather than measured off the rendered lists: those are one page each now, and the buttons
     name the totals.
@@ -929,7 +959,8 @@ def _share_counts(profile: Profile) -> dict[str, int]:
 
 
 class MemoriesSharingView(LoginRequiredMixin, View):
-    """The "Sharing" subpage of Memories - every pin and map shared to/from the user.
+    """
+    The "Sharing" subpage of Memories - every pin and map shared to/from the user.
 
     GET /memories/sharing/
 
@@ -942,7 +973,8 @@ class MemoriesSharingView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the sharing history page.
+        """
+        Render the sharing history page.
 
         Args:
             request: The HTTP request.
@@ -965,13 +997,15 @@ class MemoriesSharingView(LoginRequiredMixin, View):
 
 
 class MemoriesSharingSentView(LoginRequiredMixin, View):
-    """HTMX partial: one page of the "Shared by you" lists.
+    """
+    HTMX partial: one page of the "Shared by you" lists.
 
     GET /memories/sharing/sent/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the sent half on its own, for a pagination click.
+        """
+        Render the sent half on its own, for a pagination click.
 
         Args:
             request: The HTTP request.
@@ -984,7 +1018,8 @@ class MemoriesSharingSentView(LoginRequiredMixin, View):
 
 
 class MemoriesSharingReceivedView(LoginRequiredMixin, View):
-    """HTMX partial: one page of the "Shared with you" lists.
+    """
+    HTMX partial: one page of the "Shared with you" lists.
 
     GET /memories/sharing/received/
 
@@ -992,7 +1027,8 @@ class MemoriesSharingReceivedView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the received half on its own.
+        """
+        Render the received half on its own.
 
         Args:
             request: The HTTP request.
@@ -1005,7 +1041,8 @@ class MemoriesSharingReceivedView(LoginRequiredMixin, View):
 
 
 class MemoriesMapsView(LoginRequiredMixin, View):
-    """The "Maps" subpage of Memories - every markup map the user has drawn.
+    """
+    The "Maps" subpage of Memories - every markup map the user has drawn.
 
     GET /memories/maps/
 
@@ -1014,7 +1051,8 @@ class MemoriesMapsView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the markup maps page.
+        """
+        Render the markup maps page.
 
         Args:
             request: The HTTP request.
@@ -1050,7 +1088,8 @@ class MemoriesMapsView(LoginRequiredMixin, View):
         )
 
     def _card(self, markup_map: MarkupMap) -> dict[str, object]:
-        """Build the template context for one map card.
+        """
+        Build the template context for one map card.
 
         Args:
             markup_map: The map to describe.
@@ -1072,7 +1111,8 @@ class MemoriesMapsView(LoginRequiredMixin, View):
 
 
 class MemoriesJournalView(LoginRequiredMixin, View):
-    """The "Journal" subpage of Memories - visit notes, ratings, and comments by date.
+    """
+    The "Journal" subpage of Memories - visit notes, ratings, and comments by date.
 
     GET /memories/journal/
 
@@ -1082,7 +1122,8 @@ class MemoriesJournalView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the journal page.
+        """
+        Render the journal page.
 
         Args:
             request: The HTTP request.
@@ -1106,7 +1147,8 @@ class MemoriesJournalView(LoginRequiredMixin, View):
 
 
 class MemoriesUnloggedActionView(LoginRequiredMixin, View):
-    """Dismiss or un-mark a card in the "log your visits" queue.
+    """
+    Dismiss or un-mark a card in the "log your visits" queue.
 
     POST /memories/unlogged/<pin_slug>/<action>/
 
@@ -1132,7 +1174,8 @@ class MemoriesUnloggedActionView(LoginRequiredMixin, View):
     _ACTIONS = {"dismiss": dismiss, "unmark": unmark}
 
     def post(self, request: HttpRequest, pin_slug: str, action: str) -> HttpResponse:
-        """Dispatch to the handler named by ``action``.
+        """
+        Dispatch to the handler named by ``action``.
 
         Args:
             request: The HTTP request.

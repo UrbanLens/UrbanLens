@@ -80,7 +80,8 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
     _RAISE_METHODS = ("notify", "create", "deliver_notification")
 
     def _accepted_sites(self) -> list[tuple[str, bool]]:
-        """Every call raising FRIEND_ACCEPTED, and whether it names the actor.
+        """
+        Every call raising FRIEND_ACCEPTED, and whether it names the actor.
 
         Returns:
             ``(location, sets_source_profile)`` per site, in file order.
@@ -109,7 +110,8 @@ class EveryFriendAcceptedSiteSetsSourceProfileTests(SimpleTestCase):
         self.assertEqual([location for location, names_actor in self._accepted_sites() if not names_actor], [])
 
     def test_the_scan_still_finds_the_sites(self) -> None:
-        """Guard against the check above passing because it matched nothing.
+        """
+        Guard against the check above passing because it matched nothing.
 
         Counts what the AST walk actually found rather than a separate string
         search, rather than trusting it just because nothing failed above:

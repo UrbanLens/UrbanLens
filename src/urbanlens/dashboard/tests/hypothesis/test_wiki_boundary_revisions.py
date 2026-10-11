@@ -1,4 +1,5 @@
-"""A wiki boundary edit references immutable outline snapshots rather than carrying WKT (N29 G4-29).
+"""
+A wiki boundary edit references immutable outline snapshots rather than carrying WKT (N29 G4-29).
 
 Each edit stored the whole outline twice as WKT text inside ``WikiEdit.changes`` - up to 50,000 vertices each - and
 the web, API and revert paths each wrote it their own way. Outlines now live once each in ``BoundaryRevision``, and

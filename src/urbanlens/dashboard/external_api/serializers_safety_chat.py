@@ -1,4 +1,5 @@
-"""Serializers for the *watcher* half of safety check-ins: chat, invites, partnered check-ins.
+"""
+Serializers for the *watcher* half of safety check-ins: chat, invites, partnered check-ins.
 
 It is deliberately absent from every payload in ``serializers.py`` (see
 :class:`~urbanlens.dashboard.external_api.serializers.SafetyCheckinContactSerializer`) and must stay
@@ -29,7 +30,8 @@ if TYPE_CHECKING:
 
 
 class SafetyCheckinMessageSerializer(serializers.Serializer):
-    """One message in a check-in's shared chat (read-only).
+    """
+    One message in a check-in's shared chat (read-only).
 
     ``is_mine`` is resolved against a ``viewer`` profile passed in the serializer context.
     It is computed server-side rather than left to the client because a client comparing usernames would
@@ -49,7 +51,8 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
     def get_sender_kind(self, obj: SafetyCheckinMessage) -> str:
-        """Return what kind of participant sent this message.
+        """
+        Return what kind of participant sent this message.
 
         Args:
             obj: The message being serialized.
@@ -67,7 +70,8 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
         return "unknown"
 
     def get_sender_username(self, obj: SafetyCheckinMessage) -> str | None:
-        """Return the sending account's username, or null when there is no account.
+        """
+        Return the sending account's username, or null when there is no account.
 
         Args:
             obj: The message being serialized.
@@ -78,7 +82,8 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
         return obj.sender_profile.username if obj.sender_profile is not None else None
 
     def get_sender_profile_uuid(self, obj: SafetyCheckinMessage) -> str | None:
-        """Return the sending account's profile uuid, or null when there is no account.
+        """
+        Return the sending account's profile uuid, or null when there is no account.
 
         Args:
             obj: The message being serialized.
@@ -89,7 +94,8 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
         return str(obj.sender_profile.uuid) if obj.sender_profile is not None else None
 
     def get_is_mine(self, obj: SafetyCheckinMessage) -> bool:
-        """Whether the requesting credential's owner sent this message.
+        """
+        Whether the requesting credential's owner sent this message.
 
         Args:
             obj: The message being serialized.
@@ -102,7 +108,8 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
 
 
 class SafetyCheckinMessageCreateSerializer(serializers.Serializer):
-    """Validates an untrusted chat message submission.
+    """
+    Validates an untrusted chat message submission.
 
     The bounds mirror ``services.visits.safety.create_chat_message`` rather than replacing it.
     ``MAX_CHAT_MESSAGE_LENGTH`` is imported rather than restated so the two cannot drift into
@@ -122,7 +129,8 @@ class SafetyCheckinMessageListResponseSerializer(serializers.Serializer):
 
 
 class SafetyPartnerRoleSerializer(serializers.Serializer):
-    """The caller's own partner row on someone else's check-in (read-only).
+    """
+    The caller's own partner row on someone else's check-in (read-only).
 
     It carries the check-in's ``title`` even though the caller may not have accepted yet, because that
     is already disclosed: the invitation notification and email both name the check-in
@@ -142,7 +150,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
     accepted_at = serializers.DateTimeField(read_only=True, allow_null=True)
 
     def get_checkin_uuid(self, obj: SafetyCheckinPartner) -> str:
-        """Return the uuid of the check-in this invitation is for.
+        """
+        Return the uuid of the check-in this invitation is for.
 
         Args:
             obj: The partner row being serialized.
@@ -155,7 +164,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return str(obj.checkin.uuid)
 
     def get_checkin_title(self, obj: SafetyCheckinPartner) -> str:
-        """Return the check-in's title.
+        """
+        Return the check-in's title.
 
         Args:
             obj: The partner row being serialized.
@@ -167,7 +177,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return obj.checkin.title
 
     def get_checkin_status(self, obj: SafetyCheckinPartner) -> str:
-        """Return the check-in's lifecycle status.
+        """
+        Return the check-in's lifecycle status.
 
         Args:
             obj: The partner row being serialized.
@@ -179,7 +190,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return obj.checkin.status
 
     def get_checkin_by(self, obj: SafetyCheckinPartner) -> str:
-        """Return the check-in's deadline.
+        """
+        Return the check-in's deadline.
 
         Args:
             obj: The partner row being serialized.
@@ -190,7 +202,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return obj.checkin.checkin_by.isoformat()
 
     def get_owner_username(self, obj: SafetyCheckinPartner) -> str:
-        """Return the username of the person the check-in is about.
+        """
+        Return the username of the person the check-in is about.
 
         Args:
             obj: The partner row being serialized.
@@ -201,7 +214,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return obj.checkin.profile.username
 
     def get_owner_profile_uuid(self, obj: SafetyCheckinPartner) -> str:
-        """Return the check-in owner's profile uuid.
+        """
+        Return the check-in owner's profile uuid.
 
         Args:
             obj: The partner row being serialized.
@@ -212,7 +226,8 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
         return str(obj.checkin.profile.uuid)
 
     def get_invited_by_username(self, obj: SafetyCheckinPartner) -> str | None:
-        """Return the username of whoever sent the invitation.
+        """
+        Return the username of whoever sent the invitation.
 
         Args:
             obj: The partner row being serialized.
@@ -233,7 +248,8 @@ class SafetyPartnerInviteListResponseSerializer(serializers.Serializer):
 
 
 class _PartneredCheckinOwnerFieldsMixin:
-    """Adds the check-in owner's identity to a check-in payload.
+    """
+    Adds the check-in owner's identity to a check-in payload.
 
     Every owner-facing check-in serializer omits the owner, because there the owner is always the
     caller.
@@ -243,7 +259,8 @@ class _PartneredCheckinOwnerFieldsMixin:
     """
 
     def get_owner_username(self, obj: SafetyCheckin) -> str:
-        """Return the username of the person this check-in is about.
+        """
+        Return the username of the person this check-in is about.
 
         Args:
             obj: The check-in being serialized.
@@ -254,7 +271,8 @@ class _PartneredCheckinOwnerFieldsMixin:
         return obj.profile.username
 
     def get_owner_profile_uuid(self, obj: SafetyCheckin) -> str:
-        """Return the profile uuid of the person this check-in is about.
+        """
+        Return the profile uuid of the person this check-in is about.
 
         Args:
             obj: The check-in being serialized.
@@ -266,7 +284,8 @@ class _PartneredCheckinOwnerFieldsMixin:
 
 
 class PartneredCheckinSummarySerializer(_PartneredCheckinOwnerFieldsMixin, SafetyCheckinSummarySerializer):
-    """A watched check-in as it appears in the partner's list.
+    """
+    A watched check-in as it appears in the partner's list.
 
     Identical to the owner's own list row plus the owner's identity - a partner watching several people
     needs to tell the rows apart, and deliberately no thinner than the owner's row otherwise, because an
@@ -278,7 +297,8 @@ class PartneredCheckinSummarySerializer(_PartneredCheckinOwnerFieldsMixin, Safet
 
 
 class PartneredCheckinDetailSerializer(_PartneredCheckinOwnerFieldsMixin, SafetyCheckinDetailSerializer):
-    """The full document for a check-in the caller watches as an accepted partner.
+    """
+    The full document for a check-in the caller watches as an accepted partner.
 
     Serving a thinner payload here would mean the mobile client showed a watcher less than the website
     already does, and the two would drift on which fields are "partner-safe".

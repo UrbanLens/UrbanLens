@@ -58,7 +58,8 @@ _FALLBACK_MAX_FRAME_CHARS = 65_536
 
 
 def _credential_is_still_valid(credential: Any) -> bool:
-    """Whether *credential* can still authenticate, re-read from the DB.
+    """
+    Whether *credential* can still authenticate, re-read from the DB.
 
     Args:
         credential: The ``ApiKey``/``AccessToken`` resolved at connect time, or
@@ -82,7 +83,8 @@ def _credential_is_still_valid(credential: Any) -> bool:
 
 
 def _session_password_unchanged(user_id: int, password_at_connect: str) -> bool:
-    """Whether a session connection's account is still active under the password it connected with.
+    """
+    Whether a session connection's account is still active under the password it connected with.
 
     Django signs a session with a hash of the password, so a changed password is exactly what ended the session
     over HTTP; a socket has no later request to fail on, so it asks here.
@@ -108,7 +110,8 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return self.scope.get(CREDENTIAL_SCOPE_KEY)
 
     def credential_allows(self, *scopes: str) -> bool:
-        """Whether this connection may exercise *scopes*.
+        """
+        Whether this connection may exercise *scopes*.
 
         Args:
             *scopes: The :class:`~urbanlens.dashboard.models.account.model.ApiKeyScope`
@@ -129,7 +132,8 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return credential_grants(credential, scopes)
 
     def start_credential_revalidation(self) -> None:
-        """Start re-checking that whatever authenticated this connection still does.
+        """
+        Start re-checking that whatever authenticated this connection still does.
 
         A credential connection re-reads its ``ApiKey``/``AccessToken``; a session connection checks that the
         account's password is the one it connected under. Anonymous connections are not checked.
@@ -139,7 +143,8 @@ class CredentialScopeMixin(_CredentialScopeBase):
         self._credential_revalidation_task = asyncio.create_task(self._revalidate_credential_periodically())
 
     def remember_session_password(self) -> bool:
-        """Record the password a session connection authenticated under, for ``session_password_unchanged``.
+        """
+        Record the password a session connection authenticated under, for ``session_password_unchanged``.
 
         Returns:
             Whether this is a signed-in session connection (False for a credential or an anonymous one).
@@ -152,7 +157,8 @@ class CredentialScopeMixin(_CredentialScopeBase):
         return True
 
     def session_password_unchanged(self) -> bool:
-        """Whether a session connection's account still has the password it connected under. Blocking; DB.
+        """
+        Whether a session connection's account still has the password it connected under. Blocking; DB.
 
         Returns:
             True unless ``remember_session_password`` recorded a password that has since changed.
@@ -192,7 +198,8 @@ class CredentialScopeMixin(_CredentialScopeBase):
 
 
 class SocketAllowanceMixin(_CredentialScopeBase):
-    """Bounds how many connections one account may hold open at once.
+    """
+    Bounds how many connections one account may hold open at once.
 
     ``InboundVolumeMixin`` bounds how fast a connection may send. It charges an
     idle socket nothing, because an idle socket sends nothing - while it still
@@ -218,7 +225,8 @@ class SocketAllowanceMixin(_CredentialScopeBase):
     _socket_slot_task: asyncio.Task[None] | None = None
 
     async def websocket_connect(self, message: dict[str, Any]) -> None:
-        """Refuse the handshake before ``connect()`` when there is no channel layer.
+        """
+        Refuse the handshake before ``connect()`` when there is no channel layer.
 
         Channels gives a consumer a ``channel_name`` only when a layer is configured, and every
         consumer here claims its allowance and joins a group with that name, so without one the
@@ -236,7 +244,8 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         await super().websocket_connect(message)
 
     def connection_identity(self) -> str:
-        """Who this connection is charged to.
+        """
+        Who this connection is charged to.
 
         Returns:
             A stable per-account key, or "" when the connection cannot be
@@ -249,7 +258,8 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         return f"user:{user_id}" if user_id else ""
 
     async def claim_socket_slot(self) -> bool:
-        """Take a place in this account's allowance, if there is one.
+        """
+        Take a place in this account's allowance, if there is one.
 
         Call after authenticating and before ``accept()``: a refused connection
         should never have joined a group.
@@ -285,7 +295,8 @@ class SocketAllowanceMixin(_CredentialScopeBase):
         await sync_to_async(socket_budget.release, thread_sensitive=False)(identity, self.channel_name)
 
     async def _renew_socket_slot_periodically(self) -> None:
-        """Keep this connection's claim from being swept while it is still live.
+        """
+        Keep this connection's claim from being swept while it is still live.
 
         A claim expires so that a worker which went away stops costing the
         account part of its allowance. These sockets outlive that window by
@@ -311,7 +322,8 @@ class SocketAllowanceMixin(_CredentialScopeBase):
 
 
 class InboundVolumeMixin(_CredentialScopeBase):
-    """Bounds how large and how fast one connection's inbound frames may be.
+    """
+    Bounds how large and how fast one connection's inbound frames may be.
 
     Authorization on these sockets is thorough - participation is verified
     before any group is joined, credential scope is checked, credentials are
@@ -356,7 +368,8 @@ class InboundVolumeMixin(_CredentialScopeBase):
         return min(candidates) if candidates else _FALLBACK_MAX_FRAME_CHARS
 
     async def accept_frame(self, text_data: str | None, bytes_data: bytes | None = None) -> dict[str, Any] | None:
-        """Size-check, budget-check, and decode one inbound frame.
+        """
+        Size-check, budget-check, and decode one inbound frame.
 
         Args:
             text_data: The raw frame, as Channels delivered it.
@@ -393,7 +406,8 @@ class InboundVolumeMixin(_CredentialScopeBase):
         return data
 
     async def charge_fanout(self) -> bool:
-        """Charge one fanout frame that writes no row.
+        """
+        Charge one fanout frame that writes no row.
 
         Returns:
             True when the frame may proceed. False once the budget is spent,
@@ -427,7 +441,8 @@ class InboundVolumeMixin(_CredentialScopeBase):
 
 
 class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
-    """Pushes on-site notifications to a logged-in user's open tabs as they are created.
+    """
+    Pushes on-site notifications to a logged-in user's open tabs as they are created.
 
     Mounted at ``ws/notifications/``. Authentication comes from the session
     cookie via Channels' ``AuthMiddlewareStack``, or from a ``?key=``
@@ -511,7 +526,8 @@ class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, Async
         """Ignore client frames; server-to-client only."""
 
     async def notification_new(self, event):
-        """Deliver one broadcasted notification.
+        """
+        Deliver one broadcasted notification.
 
         Args:
             event: The group-send event, with a ``notification`` dict payload.
@@ -520,7 +536,8 @@ class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, Async
 
     @database_sync_to_async
     def _get_profile_id(self):
-        """Resolve the session user's profile id.
+        """
+        Resolve the session user's profile id.
 
         Returns:
             The primary key of the user's Profile.
@@ -532,7 +549,8 @@ class UserNotificationConsumer(SocketAllowanceMixin, CredentialScopeMixin, Async
 
 
 class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
-    """Real-time direct-message channel for a logged-in user.
+    """
+    Real-time direct-message channel for a logged-in user.
 
     Those two scopes are in ``external_api.permissions.OAUTH2_ONLY_SCOPES``, so ``credential_grants``
     refuses them outright to a PAT-style ``ulk_`` key regardless of what its ``scopes`` list says: a
@@ -618,7 +636,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         await sync_to_async(refresh_profile_presence, thread_sensitive=False)(self.profile_id, self.channel_name)
 
     def volume_identity(self) -> str:
-        """Budget per sender.
+        """
+        Budget per sender.
 
         Keyed on the profile rather than the connection, which is the point of the shared tier: this socket
         is per-profile, and one account opening fifty tabs would otherwise get fifty budgets.
@@ -626,7 +645,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         return f"dm:{self.profile_id}"
 
     async def receive(self, text_data=None, bytes_data=None):
-        """Persist an incoming message; the service broadcasts it to both parties.
+        """
+        Persist an incoming message; the service broadcasts it to both parties.
 
         Args:
             text_data: JSON string with ``recipient`` (profile slug), ``body``, and optional
@@ -752,7 +772,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
 
     async def dm_message(self, event):
-        """Deliver a broadcasted message to this connection.
+        """
+        Deliver a broadcasted message to this connection.
 
         Args:
             event: The group-send event, with a ``message`` dict payload.
@@ -760,7 +781,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         await self.send(text_data=json.dumps(event["message"]))
 
     async def dm_reaction(self, event):
-        """Deliver a broadcasted reaction-summary update to this connection.
+        """
+        Deliver a broadcasted reaction-summary update to this connection.
 
         Args:
             event: The group-send event, with a ``message`` dict payload (``{"type": "reaction",
@@ -770,7 +792,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
     @database_sync_to_async
     def _mark_group_thread_open(self, group_uuid):
-        """Record that this connection currently has a group thread open.
+        """
+        Record that this connection currently has a group thread open.
 
         Args:
             group_uuid: UUID string of the group chat being viewed.
@@ -785,7 +808,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
     @database_sync_to_async
     def _create_group_message(self, group_uuid, body, ciphertext, nonce, key_version):
-        """Resolve the group and create the message through the shared service.
+        """
+        Resolve the group and create the message through the shared service.
 
         Args:
             group_uuid: UUID string of the target group chat.
@@ -810,7 +834,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
     @database_sync_to_async
     def _mark_thread_open(self, recipient_slug):
-        """Record that this connection currently has the thread with `recipient_slug` open.
+        """
+        Record that this connection currently has the thread with `recipient_slug` open.
 
         Args:
             recipient_slug: URL slug of the conversation partner being viewed.
@@ -824,7 +849,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
     @database_sync_to_async
     def _get_profile_id(self):
-        """Resolve (creating if needed) the session user's profile id.
+        """
+        Resolve (creating if needed) the session user's profile id.
 
         Returns:
             The primary key of the user's Profile.
@@ -836,7 +862,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
     @database_sync_to_async
     def _create_message(self, recipient_slug, body, *, ciphertext, nonce, key_version, image_ids, markup_map_uuid, reply_to_id):
-        """Resolve the recipient and create the message through the shared service.
+        """
+        Resolve the recipient and create the message through the shared service.
 
         Args:
             recipient_slug: URL slug of the recipient profile.
@@ -873,7 +900,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
 
 class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
-    """Real-time chat for a safety check-in, shared by the owner, every accepted partner, and every emergency contact.
+    """
+    Real-time chat for a safety check-in, shared by the owner, every accepted partner, and every emergency contact.
 
     The session route additionally joins a second, narrower group carrying live-location updates
     (``services.visits.safety._broadcast_live_location``) - contacts never join it, matching the
@@ -899,7 +927,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
     max_frame_chars = 32_768
 
     def volume_identity(self) -> str:
-        """Budget per sender per check-in.
+        """
+        Budget per sender per check-in.
 
         Compared with ``is None`` rather than truthiness so a falsy-but-real id cannot fall through to the
         branch that would raise on the other route.
@@ -999,7 +1028,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
                 logger.exception("Safety chat failed to leave group %s cleanly", self.location_group_name)
 
     async def _revalidate_access_periodically(self):
-        """Periodically re-check that this session-route connection is still authorized.
+        """
+        Periodically re-check that this session-route connection is still authorized.
 
         Closes the connection with code 4404 the moment it isn't - a backstop for when
         ``partner_access_revoked`` (services.visits.safety._broadcast_partner_access_revoked) never arrives.
@@ -1018,7 +1048,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
 
     @database_sync_to_async
     def _is_still_authorized(self):
-        """Re-check owner-or-accepted-partner status - and credential validity - fresh from the DB.
+        """
+        Re-check owner-or-accepted-partner status - and credential validity - fresh from the DB.
 
         Returns:
             True if this connection may continue: its credential (when it has one) is still unrevoked and
@@ -1045,7 +1076,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         return is_owner_or_accepted_partner(checkin, profile)
 
     async def receive(self, text_data=None, bytes_data=None):
-        """Persist an incoming chat message and broadcast it to the check-in's group.
+        """
+        Persist an incoming chat message and broadcast it to the check-in's group.
 
         Args:
             text_data: JSON string with a ``body`` field, or a ``{"type": "ping"}`` keep-alive.
@@ -1111,7 +1143,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
             await self.send(text_data=json.dumps({"type": "error", "detail": "Your message was saved but couldn't be delivered live. It'll appear on refresh."}))
 
     async def chat_message(self, event):
-        """Deliver a broadcasted message to this connection.
+        """
+        Deliver a broadcasted message to this connection.
 
         Args:
             event: The group-send event, with a ``message`` dict payload.
@@ -1119,7 +1152,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         await self.send(text_data=json.dumps(event["message"]))
 
     async def status_update(self, event):
-        """Deliver a check-in status change (escalated/found-safe) to this connection.
+        """
+        Deliver a check-in status change (escalated/found-safe) to this connection.
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
@@ -1128,7 +1162,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         await self.send(text_data=json.dumps(event["payload"]))
 
     async def location_update(self, event):
-        """Deliver a live-location update to this connection.
+        """
+        Deliver a live-location update to this connection.
 
         Only ever received on the session route's location group - see ``connect()``'s
         ``location_group_name`` gate.
@@ -1140,7 +1175,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         await self.send(text_data=json.dumps(event["payload"]))
 
     async def archive_scheduled(self, event):
-        """Deliver a check-in's archival countdown to this connection.
+        """
+        Deliver a check-in's archival countdown to this connection.
 
         Delivered on the main ``safety_checkin_{pk}`` group - shared by the owner, its accepted partners,
         and its contacts, all of whom "were able to see" the check-in and so all get the same countdown.
@@ -1152,7 +1188,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         await self.send(text_data=json.dumps(event["payload"]))
 
     async def checkin_archived(self, event):
-        """Deliver the "this check-in is now archived" event to this connection.
+        """
+        Deliver the "this check-in is now archived" event to this connection.
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
@@ -1161,7 +1198,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         await self.send(text_data=json.dumps(event["payload"]))
 
     async def partner_access_revoked(self, event):
-        """Force-close this connection if it belongs to the just-removed partner.
+        """
+        Force-close this connection if it belongs to the just-removed partner.
 
         This is the only way to revoke an already-open socket's access: permission is otherwise checked
         once, at ``connect()`` time, in ``_resolve()``.
@@ -1177,7 +1215,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
         await self.close(code=4404)
 
     async def contact_access_revoked(self, event):
-        """Force-close this connection if it belongs to the just-removed contact.
+        """
+        Force-close this connection if it belongs to the just-removed contact.
 
         Delivered to every connection on the check-in's group; only the one whose bound contact matches acts
         on it.
@@ -1192,7 +1231,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
 
     @database_sync_to_async
     def _resolve(self, checkin_uuid, token):
-        """Resolve the check-in and, for the contact route, the authorizing contact.
+        """
+        Resolve the check-in and, for the contact route, the authorizing contact.
 
         Args:
             checkin_uuid: UUID of the check-in (session route).
@@ -1230,7 +1270,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
 
     @database_sync_to_async
     def _create_message(self, body):
-        """Create the chat message and serialize it for broadcast.
+        """
+        Create the chat message and serialize it for broadcast.
 
         Args:
             body: Message text.
@@ -1263,7 +1304,8 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
 
 
 class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, CredentialScopeMixin, AsyncWebsocketConsumer):
-    """Shared real-time sync for one participant-based game session.
+    """
+    Shared real-time sync for one participant-based game session.
 
     Both ``GameSessionConsumer`` (SpotGuessr) and ``TriviaSessionConsumer`` (Trivia) are one
     channel-layer group per session, every participant (JOINED or still just INVITED) joining the same
@@ -1289,7 +1331,8 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
 
     @database_sync_to_async
     def _is_participant(self, session_id, user) -> bool:
-        """Whether ``user``'s profile actively participates in ``session_id``.
+        """
+        Whether ``user``'s profile actively participates in ``session_id``.
 
         False for a nonexistent session and for one the profile is not (or no longer) part of alike.
         """
@@ -1303,7 +1346,8 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
         raise NotImplementedError
 
     def volume_identity(self) -> str:
-        """Budget per participant per session.
+        """
+        Budget per participant per session.
 
         Scoped to the session rather than to the profile: someone playing two games at once is doing
         something legitimate, and a shared per-profile budget would have one game's chat throttle the
@@ -1313,7 +1357,8 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
 
     @database_sync_to_async
     def _connection_profile_id(self, user) -> int:
-        """This connection's profile pk, resolved once at connect.
+        """
+        This connection's profile pk, resolved once at connect.
 
         Held so ``participant_left`` can tell whether a removal is about *this*
         socket without a query per broadcast.
@@ -1411,7 +1456,8 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
                 logger.exception("%s socket failed to leave group %s cleanly", self.game_label, self.group_name)
 
     async def receive(self, text_data=None, bytes_data=None):
-        """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket acts
+        """
+        Persist an incoming chat message and broadcast it - the only client-to-server frame this socket acts
         on.
 
         Args:
@@ -1503,7 +1549,8 @@ class _ParticipantSessionConsumer(SocketAllowanceMixin, InboundVolumeMixin, Cred
 
 
 class GameSessionConsumer(_ParticipantSessionConsumer):
-    """Real-time sync for one SpotGuessr session, shared by every participant (UL-392).
+    """
+    Real-time sync for one SpotGuessr session, shared by every participant (UL-392).
 
     Mounted at ``ws/spotguessr/session/<int:session_id>/``.
     ``_ParticipantSessionConsumer`` documents everything about this socket that isn't
@@ -1524,7 +1571,8 @@ class GameSessionConsumer(_ParticipantSessionConsumer):
 
     @database_sync_to_async
     def _send_chat_message(self, body):
-        """Save and broadcast one chat message from this connection's profile.
+        """
+        Save and broadcast one chat message from this connection's profile.
 
         Broadcasting happens inside ``services.spotguessr.chat.send_chat_message`` itself (not here) since
         the save-then-broadcast choke point is shared with any future non-WebSocket sender.
@@ -1539,7 +1587,8 @@ class GameSessionConsumer(_ParticipantSessionConsumer):
 
 
 class TriviaSessionConsumer(_ParticipantSessionConsumer):
-    """Real-time sync for one Trivia session, shared by every participant.
+    """
+    Real-time sync for one Trivia session, shared by every participant.
 
     Mounted at ``ws/trivia/session/<int:session_id>/``.
     See ``_ParticipantSessionConsumer`` for everything about this socket that isn't Trivia-specific.
@@ -1559,7 +1608,8 @@ class TriviaSessionConsumer(_ParticipantSessionConsumer):
 
     @database_sync_to_async
     def _send_chat_message(self, body):
-        """Save and broadcast one chat message from this connection's profile.
+        """
+        Save and broadcast one chat message from this connection's profile.
 
         Broadcasting happens inside ``services.trivia.chat.send_chat_message`` itself (not here) since the
         save-then-broadcast choke point is shared with any future non-WebSocket sender.
@@ -1574,7 +1624,8 @@ class TriviaSessionConsumer(_ParticipantSessionConsumer):
 
 
 class ConsensusSessionConsumer(_ParticipantSessionConsumer):
-    """Real-time sync for one competitive Consensus session, shared by every participant.
+    """
+    Real-time sync for one competitive Consensus session, shared by every participant.
 
     Solo sessions never open a socket at all.
     """
@@ -1593,7 +1644,8 @@ class ConsensusSessionConsumer(_ParticipantSessionConsumer):
 
     @database_sync_to_async
     def _send_chat_message(self, body):
-        """Save and broadcast one chat message from this connection's profile.
+        """
+        Save and broadcast one chat message from this connection's profile.
 
         Broadcasting happens inside ``services.consensus.chat.send_chat_message`` itself (not here) since
         the save-then-broadcast choke point is shared with any future non-WebSocket sender.

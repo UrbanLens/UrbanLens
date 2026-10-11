@@ -1,4 +1,5 @@
-"""Registered native-client push destinations (UnifiedPush endpoints, FCM tokens).
+"""
+Registered native-client push destinations (UnifiedPush endpoints, FCM tokens).
 The browser gets live notifications over the Channels WebSocket (``models.notifications.signals``); a native app in the background does not hold a socket open, so it registers a push destination here instead and the server delivers through it (``services.notifications.push``).
 """
 
@@ -20,7 +21,8 @@ class PushTransport(TextChoices):
 
 
 class PushDevice(abstract.FrontendDashboardModel):
-    """One native client's push destination, owned by a profile.
+    """
+    One native client's push destination, owned by a profile.
     ``address`` is the UnifiedPush endpoint URL (or FCM registration token) - treated as an opaque, secret-ish value: anyone holding a UnifiedPush URL can send to that device, so it is never exposed through any read API.
     """
 
@@ -51,7 +53,8 @@ class PushDevice(abstract.FrontendDashboardModel):
 
     @property
     def dispatch_enabled(self) -> bool:
-        """Whether ``services.notifications.push`` will actually send to this device. Only UnifiedPush is dispatched.
+        """
+        Whether ``services.notifications.push`` will actually send to this device. Only UnifiedPush is dispatched.
 
         Returns:
             True when this device's transport is dispatched today.

@@ -70,7 +70,8 @@ class PinCoverPhotoEligibilityTests(TestCase):
         self.assertEqual(self.pin.cover_photo_id, own_image.pk)
 
     def test_visible_photo_from_the_same_location_is_still_accepted(self) -> None:
-        """The Location half of the rule keeps working for photos the viewer may see.
+        """
+        The Location half of the rule keeps working for photos the viewer may see.
 
         "May see" is two gates, not one: the owner has to have shared the photo, and their setting has to admit
         this viewer."""

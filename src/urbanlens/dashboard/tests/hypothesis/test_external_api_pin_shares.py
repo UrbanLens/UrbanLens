@@ -32,7 +32,8 @@ class PinShareRespondApiTests(TestCase):
         self.share = self._make_share(self.profile)
 
     def _make_share(self, recipient: Profile) -> PinShare:
-        """Create a pending share of the sender's pin, exposure included.
+        """
+        Create a pending share of the sender's pin, exposure included.
 
         The exposure is recorded here because that is what happens in production at share creation - and it is
         exactly the row the acceptance path must not duplicate.
@@ -53,7 +54,8 @@ class PinShareRespondApiTests(TestCase):
         return share
 
     def _headers(self, raw_key: str | None = None) -> dict:
-        """Bearer-header kwargs for the fixture key, or an explicitly given one.
+        """
+        Bearer-header kwargs for the fixture key, or an explicitly given one.
 
         Args:
             raw_key: A raw key to use instead of the fixture's.
@@ -63,7 +65,8 @@ class PinShareRespondApiTests(TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _respond(self, action: str, *, share_id: int | None = None, raw_key: str | None = None):
-        """POST one accept/reject decision.
+        """
+        POST one accept/reject decision.
 
         Args:
             action: The raw ``action`` value to submit. share_id: The share to address; defaults to the fixture share. raw_key: A raw key to use...
@@ -76,7 +79,8 @@ class PinShareRespondApiTests(TestCase):
         )
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
-        """Issue a second key carrying exactly *scopes*.
+        """
+        Issue a second key carrying exactly *scopes*.
 
         Args:
             scopes: Raw scope values to store on the row.
@@ -109,7 +113,8 @@ class PinShareRespondApiTests(TestCase):
         self.assertEqual(new_pin.source_share_id, self.share.pk)
 
     def test_accept_does_not_record_a_second_location_exposure(self) -> None:
-        """The provenance trap, asserted directly.
+        """
+        The provenance trap, asserted directly.
 
         ``record_share_exposure`` already fired when the share was created."""
         before = LocationExposure.objects.count()
@@ -128,7 +133,8 @@ class PinShareRespondApiTests(TestCase):
         self.assertFalse(Pin.objects.filter(profile=self.profile).exists())
 
     def test_responding_twice_is_a_400_and_does_not_re_run_acceptance(self) -> None:
-        """A retried accept must not create a second pin.
+        """
+        A retried accept must not create a second pin.
 
         "Already handled" is safe to say here precisely because the scoped
         lookup already proved the share is addressed to this caller.
@@ -165,7 +171,8 @@ class PinShareRespondApiTests(TestCase):
         self.assertEqual(unknown.json(), foreign.json())
 
     def test_an_unrecognized_action_is_a_400_and_leaves_the_share_pending(self) -> None:
-        """The service would answer "Unknown action." with a 200; the API must not.
+        """
+        The service would answer "Unknown action." with a 200; the API must not.
 
         Silently succeeding is worse than failing here: a client sending ``"Accept"`` would believe the share
         had been accepted while it sat pending forever."""

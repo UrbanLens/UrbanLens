@@ -26,7 +26,8 @@ class RedataPublicLocationsGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_public_locations"
 
     def list_public_locations(self, *, kind: str | None = None, country: str | None = None, state: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
-        """List catalog entries, optionally filtered - no coordinate required.
+        """
+        List catalog entries, optionally filtered - no coordinate required.
 
         Args:
             kind: One of :data:`PUBLIC_LOCATION_KINDS`, or None for every kind.

@@ -46,7 +46,8 @@ class SafetyWikiOptionOracleTests(TestCase):
         self.assertNotIn("community wiki", body)
 
     def test_a_stranger_gets_the_same_answer_as_for_empty_space(self) -> None:
-        """The gated response is indistinguishable from "no wiki covers this point".
+        """
+        The gated response is indistinguishable from "no wiki covers this point".
 
         Asserting only "the name is absent" would still pass if the fragment said "a wiki here is hidden from
         you", which is the same disclosure in different words."""
@@ -61,7 +62,8 @@ class SafetyWikiOptionOracleTests(TestCase):
         self.assertEqual(gated.strip(), empty.strip())
 
     def test_someone_who_has_pinned_the_place_still_gets_the_toggle(self) -> None:
-        """Positive control: the feature still works for the people it is for.
+        """
+        Positive control: the feature still works for the people it is for.
 
         Without this, deleting the view's body would pass the two tests above.
         """

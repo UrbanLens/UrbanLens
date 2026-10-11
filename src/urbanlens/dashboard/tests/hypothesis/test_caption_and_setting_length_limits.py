@@ -96,7 +96,8 @@ class SafetyPhotoCaptionLengthTests(TestCase):
 
 
 class MapOverlayCaptionLengthTests(TestCase):
-    """The overlay's submitted *name* becomes the Image caption, and is bounded.
+    """
+    The overlay's submitted *name* becomes the Image caption, and is bounded.
 
     `_image_from_request`'s upload branch hands `request.POST["name"]` to `upload_photo` as the caption, and
     that service checks the column width (`photo_upload.py:142`) before anything reaches the database."""
@@ -116,7 +117,8 @@ class MapOverlayCaptionLengthTests(TestCase):
         return self.client.post(self.url, {"name": name, "image": upload}, **headers)
 
     def test_an_overlong_overlay_name_is_refused(self) -> None:
-        """Refused as a rendered error, not a status code.
+        """
+        Refused as a rendered error, not a status code.
 
         `fail()` answers 400 only for the JSON caller (the lightbox's "use as floorplan overlay"); the HTMX
         dialog gets 200 with the message swapped into the list partial."""
@@ -138,7 +140,8 @@ class MapOverlayCaptionLengthTests(TestCase):
         self.assertFalse(Image.objects.filter(caption=oversized).exists())
 
     def test_a_name_at_the_exact_length_limit_is_accepted(self) -> None:
-        """The positive edge, and the anti-vacuity control.
+        """
+        The positive edge, and the anti-vacuity control.
 
         Without it the 400 above could equally come from the route rejecting
         every upload - which is what a "drivable" claim has to rule out.

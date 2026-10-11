@@ -88,7 +88,8 @@ class ClassifyTriviaQuestionTests(TestCase):
         self.assertEqual(verdict.reason, "ai_unavailable")
 
     def test_prompt_and_answer_are_wrapped_as_inert_user_data(self) -> None:
-        """wrap_user_data marks submitted text as data, not instructions, for the model to see -
+        """
+        wrap_user_data marks submitted text as data, not instructions, for the model to see -
         the gateway's own send_prompt (mocked away here) does the separate injection-scan/sanitize pass."""
         captured = {}
 
@@ -108,7 +109,8 @@ class ClassifyTriviaQuestionTests(TestCase):
 
 
 class ClassifyTriviaQuestionProfileGateTests(TestCase):
-    """The real ``get_gateway`` (unmocked) requires the submitter to hold ``SiteFeature.AI``.
+    """
+    The real ``get_gateway`` (unmocked) requires the submitter to hold ``SiteFeature.AI``.
 
     A submission from a profile without the feature fails closed exactly like a site-wide AI outage does
     (``ai_unavailable``) - per ``SiteSettings.ai_trivia_moderation_enabled``'s own help text, that holds the

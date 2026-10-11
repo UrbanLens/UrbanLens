@@ -1,4 +1,5 @@
-"""Nominatim plugin: OpenStreetMap place metadata panel on the Private Pin page.
+"""
+Nominatim plugin: OpenStreetMap place metadata panel on the Private Pin page.
 Reconstructing this panel's shape from an unspecified per-provider ``attributes`` blob would be guesswork rather than a documented contract, so this stays a direct OpenStreetMap Nominatim integration."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ _USEFUL_FIELDS = ("website", "phone", "email", "opening_hours", "operator", "wik
 
 
 def wikipedia_url(tag_value: str) -> str:
-    """Turn OSM's ``wikipedia`` tag into a real article URL.
+    """
+    Turn OSM's ``wikipedia`` tag into a real article URL.
     Returning the wrong host for either form produces a dead link, which is worse than no link at all - hence the explicit split rather than blind concatenation.
 
     Args:
@@ -44,7 +46,8 @@ def wikipedia_url(tag_value: str) -> str:
 
 
 class _SemicolonSplitNameProvider(LocationCacheNameProvider):
-    """Splits a semicolon-separated multi-value tag into separate candidates.
+    """
+    Splits a semicolon-separated multi-value tag into separate candidates.
     Left as one string, ``sanitize_name`` would strip the semicolon - not split on it - running the two names together into one garbled string instead of producing two real aliases."""
 
     def candidates(self, location: Location) -> list[str | None]:
@@ -75,7 +78,8 @@ class NominatimPanelSource(LocationCachePanelSource):
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     def fetch(self, pin: Pin) -> None:
-        """Reverse-geocode the pin's coordinates and cache the place metadata.
+        """
+        Reverse-geocode the pin's coordinates and cache the place metadata.
         Nominatim's panel data lands lazily (only once the Private Pin page is viewed), well after a Location's ``official_name`` is first resolved at creation time."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag
@@ -127,7 +131,8 @@ class NominatimPanelSource(LocationCachePanelSource):
         )
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The reverse-geocoded OSM place metadata as an information card, or None.
+        """
+        The reverse-geocoded OSM place metadata as an information card, or None.
 
         Args:
             pin: The pin whose panel is being read.
@@ -174,7 +179,8 @@ class NominatimPanelSource(LocationCachePanelSource):
 
     @staticmethod
     def _add_osm_link(pin: Pin, location: Location, osm_url: str) -> None:
-        """Add the OSM way/node/relation URL to the pin's (and wiki's) links, if not already there.
+        """
+        Add the OSM way/node/relation URL to the pin's (and wiki's) links, if not already there.
 
         Args:
             pin: The pin whose links should include this URL.
@@ -196,7 +202,8 @@ class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
     service_keys: ClassVar[tuple[str, ...]] = ("nominatim",)
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Reverse-geocode a location's coordinates via Nominatim.
+        """
+        Reverse-geocode a location's coordinates via Nominatim.
 
         Args:
             location: The location to reverse-geocode.
@@ -212,7 +219,8 @@ class NominatimEnrichmentSource(LocationCacheEnrichmentSource):
         return place, f"{lat},{lng}"
 
     def enrich(self, location: Location) -> bool:
-        """Reverse-geocode via the base implementation, then sync OSM tags onto the Location's Place.
+        """
+        Reverse-geocode via the base implementation, then sync OSM tags onto the Location's Place.
         A separate step from :meth:`fetch` because tag storage needs ``location.place`` (unavailable from ``fetch``'s location-in/payload-out contract) and reads back the row :meth:`fetch` just wrote rather than re-deriving it."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, PlaceExternalTag

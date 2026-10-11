@@ -21,7 +21,8 @@ _VALID_KINDS = frozenset({"explainer", "tour"})
 
 @dataclass(frozen=True, slots=True)
 class DismissalEntry:
-    """One explainer or onboarding-tour card the user just dismissed, per the client's own ring.
+    """
+    One explainer or onboarding-tour card the user just dismissed, per the client's own ring.
 
     Attributes:
         id: The explainer's ``data-explainer-id``, or the tour card's own id.
@@ -60,7 +61,8 @@ def _entry_from_dict(item: Any) -> DismissalEntry | None:
 
 
 def dismissals_from_list(data: list[Any] | None) -> tuple[DismissalEntry, ...]:
-    """Rebuild verified :class:`DismissalEntry` objects from a Celery-safe list of dicts.
+    """
+    Rebuild verified :class:`DismissalEntry` objects from a Celery-safe list of dicts.
     Every entry is re-validated and re-capped, matching :func:`parse_dismissals_json` - a malformed or oversized item is dropped, never raised, since this also runs on ``ai-worker`` against whatever the web view enqueued.
 
     Args:
@@ -80,7 +82,8 @@ def dismissals_to_list(entries: tuple[DismissalEntry, ...]) -> list[dict[str, An
 
 
 def parse_dismissals_json(raw: str) -> tuple[DismissalEntry, ...]:
-    """Parse the request body's raw ``dismissals`` JSON string into verified entries.
+    """
+    Parse the request body's raw ``dismissals`` JSON string into verified entries.
     Never raises - a missing, malformed, or oversized payload just yields fewer (or zero) entries, the same way an unresolvable page path yields no page context.
 
     Args:

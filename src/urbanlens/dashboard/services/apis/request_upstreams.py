@@ -1,4 +1,5 @@
-"""Every upstream a view calls while the user waits, with its deadline and per-account rate.
+"""
+Every upstream a view calls while the user waits, with its deadline and per-account rate.
 
 Kept in one module so the budgets can be read and compared side by side. Each class has its own slots
 (see :class:`~urbanlens.dashboard.services.core.request_upstream.RequestUpstream`).
@@ -90,7 +91,8 @@ class RedataMediaUpstream(RequestUpstream):
 
 
 class LandUseAreasUpstream(RequestUpstream):
-    """The Private Pin map's Land Use layer: the pin's parcel, then its Special Land Use Area boundaries, from REData.
+    """
+    The Private Pin map's Land Use layer: the pin's parcel, then its Special Land Use Area boundaries, from REData.
 
     A parcel REData has not met runs its whole tier pipeline; one that outruns the deadline still lands in the parcel
     lookup's shared answer, so the next toggle is quick.
@@ -110,7 +112,8 @@ class FlickrAlbumUpstream(RequestUpstream):
 
 
 class RemoteTileUpstream(RequestUpstream):
-    """The first download of a foreign map tile this site keeps (``services.map.remote_tiles``).
+    """
+    The first download of a foreign map tile this site keeps (``services.map.remote_tiles``).
 
     A map asks for a whole viewport at once; a request over the slots answers "busy" and the tile layer retries.
     """

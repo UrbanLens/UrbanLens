@@ -79,7 +79,8 @@ class PinListPanelViewportScopingTests(TestCase):
         self.assertNotContains(response, "Outside Pin")
 
     def test_pagination_extra_query_carries_bounds_forward(self) -> None:
-        """pagination_extra_query feeds _pagination_controls.html's extra_query, so a page-2+
+        """
+        pagination_extra_query feeds _pagination_controls.html's extra_query, so a page-2+
         click doesn't silently drop back to the unscoped pin set - see _pin_list_panel.html."""
         response = self.client.get(self._url(bounds="39.0,-75.0,41.0,-73.0"))
         self.assertIn("bounds=39.0", response.context["pagination_extra_query"])
@@ -98,7 +99,8 @@ class PinListPanelViewportScopingTests(TestCase):
 
 
 class PinListPanelPageSizeTests(TestCase):
-    """MapController.pin_list_panel's page_size param - see _pinListAdjustPageSize
+    """
+    MapController.pin_list_panel's page_size param - see _pinListAdjustPageSize
     in map/index.html, which measures how many rows actually fit in the sidebar's
     scrollable container and sends that back instead of using a fixed page size."""
 

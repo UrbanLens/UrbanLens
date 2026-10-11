@@ -1,4 +1,5 @@
-"""``Comment.objects.visible_to`` must admit exactly what ``comment_is_visible`` admits.
+"""
+``Comment.objects.visible_to`` must admit exactly what ``comment_is_visible`` admits.
 
 The comment endpoints built a whole thread - every reply, reaction, markup map
 and a per-author permission check - and paginated the built list, because the

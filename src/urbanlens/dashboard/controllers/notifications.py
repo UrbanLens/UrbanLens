@@ -49,7 +49,8 @@ _HISTORY_PAGE_SIZE = 30
 
 
 def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
-    """Return the profile's preference row, creating the default one if absent.
+    """
+    Return the profile's preference row, creating the default one if absent.
 
     Thin alias kept for this module's existing callers; the implementation lives in
     ``services.notifications.notification_center`` so the external API shares it.
@@ -96,7 +97,8 @@ def action_taken_response(
     notification: NotificationLog | None = None,
     extra_triggers: dict[str, Any] | None = None,
 ) -> HttpResponse:
-    """HTMX response after the user answers an actionable notification.
+    """
+    HTMX response after the user answers an actionable notification.
 
     From the bell dropdown (``surface=inbox``, the default), returns an empty body so HTMX can animate
     the row out.
@@ -155,7 +157,8 @@ def _render_dropdown(request: HttpRequest, profile: Profile) -> HttpResponse:
 
 
 class NotificationDropdownView(LoginRequiredMixin, View):
-    """GET /notifications/dropdown/ - renders the bell dropdown partial.
+    """
+    GET /notifications/dropdown/ - renders the bell dropdown partial.
 
     Action buttons (accept/decline friend request, pin share, visit suggestion) are gated on the
     underlying request's own pending state, not on notification read/unread, so this doesn't hide

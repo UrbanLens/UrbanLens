@@ -81,7 +81,8 @@ class ConversationQueryScalingTests(TestCase):
 
 
 class ConversationListQueryScalingTests(TestCase):
-    """The sidebar conversation list must not query per conversation.
+    """
+    The sidebar conversation list must not query per conversation.
 
     Closes a gap left open by the listing survey: ``messages.list`` measured "flat" there only because the seed
     grew pins and labels, not conversations, so the list it rendered never changed size."""
@@ -108,7 +109,8 @@ class ConversationListQueryScalingTests(TestCase):
         return len(ctx.captured_queries)
 
     def test_conversation_list_does_not_scale_with_conversation_count(self) -> None:
-        """Was about eleven queries per conversation - 45 for 2, 155 for 12.
+        """
+        Was about eleven queries per conversation - 45 for 2, 155 for 12.
 
         Each row renders ``conv.display_name``/``display_avatar_url``, which call ``display_identity_for`` ->
         ``resolve_visible_identity`` per partner, and that re-evaluated the viewer's friendships, trip
@@ -129,7 +131,8 @@ class ConversationListQueryScalingTests(TestCase):
 
 
 class ConversationLastMessageReactionPrefetchTests(TestCase):
-    """conversations_for/group_conversations_for must prefetch each row's last_message reactions (and, for groups, shares).
+    """
+    conversations_for/group_conversations_for must prefetch each row's last_message reactions (and, for groups, shares).
 
     ``build_direct_message_payload``/``build_group_message_payload`` (the external API's inbox serializers) call
     ``reaction_summary(message)`` (and, for groups, ``message.share_for(viewer)``) for every row's

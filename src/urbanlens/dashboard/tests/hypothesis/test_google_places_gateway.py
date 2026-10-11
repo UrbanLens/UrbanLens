@@ -41,7 +41,8 @@ def test_search_nearby_uses_the_given_field_mask_instead() -> None:
 
 
 def test_find_nearest_place_id_requests_only_the_place_id_field() -> None:
-    """The only field this lookup ever reads is `id` - it must never pay for
+    """
+    The only field this lookup ever reads is `id` - it must never pay for
     the default mask's Enterprise-tier rating/userRatingCount."""
     response = Mock()
     response.json.return_value = {"places": [{"id": "place123"}]}
@@ -67,7 +68,8 @@ def test_find_nearest_place_id_returns_none_when_nothing_found() -> None:
 
 
 def test_get_place_details_fields_is_a_required_argument() -> None:
-    """No default - a caller can no longer accidentally omit fields and have
+    """
+    No default - a caller can no longer accidentally omit fields and have
     the legacy endpoint return (and bill for) every field."""
     gw = _gateway(Mock())
 

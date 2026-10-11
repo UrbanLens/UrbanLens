@@ -1,4 +1,5 @@
-"""Tests for services.billing.banking - the pay-what-you-want usage ledger that can
+"""
+Tests for services.billing.banking - the pay-what-you-want usage ledger that can
 keep granting access after a subscription stops being actively billed."""
 
 from __future__ import annotations
@@ -73,7 +74,8 @@ class AdvanceUsageLedgerTests(TestCase):
         self.assertEqual(self.sub.usage_covered_until, self.start + timedelta(days=30))
 
     def test_does_not_advance_past_the_period_containing_as_of(self) -> None:
-        """Plenty of balance for many future periods, but ticking stops at the end of the
+        """
+        Plenty of balance for many future periods, but ticking stops at the end of the
         period as_of currently falls in - it doesn't pre-consume periods that haven't
         started yet, even though the balance could easily afford them."""
         RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=100_000)
@@ -103,7 +105,8 @@ class AdvanceUsageLedgerTests(TestCase):
         self.assertEqual(self.sub.usage_covered_until, self.start + timedelta(days=60))
 
     def test_period_starting_one_instant_after_as_of_is_not_entered(self) -> None:
-        """One microsecond before the same boundary, that second period must not be
+        """
+        One microsecond before the same boundary, that second period must not be
         entered yet - pins the other side of the cutoff pinned above."""
         RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=100_000)
         self.sub.refresh_from_db()
@@ -113,7 +116,8 @@ class AdvanceUsageLedgerTests(TestCase):
         self.assertEqual(self.sub.usage_covered_until, self.start + timedelta(days=30))
 
     def test_price_change_only_affects_periods_ticked_after_the_change(self) -> None:
-        """A dynamic-threshold role's cost can move between periods - each period is priced
+        """
+        A dynamic-threshold role's cost can move between periods - each period is priced
         as of its own start, not the price in effect when advance_usage_ledger is finally called."""
         role = baker.make(
             SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=True, pwyw_minimum_cents=None
@@ -219,7 +223,8 @@ class ApplyRefundTests(TestCase):
         self.assertEqual(self.sub.total_paid_cents, 0)
 
     def test_consumed_periods_are_forgiven_not_reversed(self) -> None:
-        """A refund stops future periods from being affordable but never claws back
+        """
+        A refund stops future periods from being affordable but never claws back
         access the ledger already granted - amount_used_cents and usage_covered_until
         stay exactly where the last tick left them."""
         _set_created(self.sub, timezone.now() - timedelta(days=31))
@@ -236,7 +241,8 @@ class ApplyRefundTests(TestCase):
         self.assertEqual(self.sub.usage_covered_until, covered_before)
 
     def test_two_refunds_from_stale_instances_both_land(self) -> None:
-        """Stripe delivers concurrently, and both handlers hold their own instance.
+        """
+        Stripe delivers concurrently, and both handlers hold their own instance.
 
         Two partial refunds on one charge arrive at once, each handler having read ``total_paid_cents`` before
         the other wrote."""
@@ -277,7 +283,8 @@ class ApplyRefundTests(TestCase):
 
 
 class RefundRoundTripPropertyTests(TestCase):
-    """apply_payment then apply_refund of the same amount is a no-op on the banked
+    """
+    apply_payment then apply_refund of the same amount is a no-op on the banked
     balance, and never rewinds what the ledger already consumed."""
 
     def setUp(self) -> None:

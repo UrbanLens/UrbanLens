@@ -47,7 +47,8 @@ class CidResolutionResult:
 
 
 def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
-    """Resolve a batch of CIDs to coordinates via whichever provider is configured.
+    """
+    Resolve a batch of CIDs to coordinates via whichever provider is configured.
 
     Args:
         cids: Google Maps CIDs to resolve.
@@ -64,7 +65,8 @@ def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> 
 
 
 def _usable_cids(cids: list[int], urls_by_cid: dict[int, str]) -> tuple[list[int], dict[int, str]]:
-    """Split *cids* into those worth a lookup and those refused, before any provider spends anything on them.
+    """
+    Split *cids* into those worth a lookup and those refused, before any provider spends anything on them.
 
     A cid its own URL would replace is refused too: the caller keys its pins by the cid it passed,
     so an answer for the URL's cid would never reach them. Canonicalise first (see

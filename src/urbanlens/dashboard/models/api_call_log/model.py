@@ -9,7 +9,8 @@ from urbanlens.dashboard.models.api_call_log.queryset import ApiCallLogManager
 
 
 class ApiCallLog(abstract.DashboardModel):
-    """Log entry for one external API call, or for a minute of a tallied service's calls.
+    """
+    Log entry for one external API call, or for a minute of a tallied service's calls.
 
     The ``created`` timestamp (from the base model) is the call time; for a rolled-up row, the start of the minute
     its ``calls`` were made in (``services.core.call_tally``).
@@ -115,7 +116,8 @@ class ApiCallLog(abstract.DashboardModel):
 
     @classmethod
     def prune_older_than_days(cls, days: int = 90) -> int:
-        """Delete log entries older than ``days`` days.
+        """
+        Delete log entries older than ``days`` days.
 
         Args:
             days: Entries older than this many days are deleted. The default

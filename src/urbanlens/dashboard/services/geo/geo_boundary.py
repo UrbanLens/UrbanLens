@@ -40,7 +40,8 @@ class BoundaryNotLoadedError(LookupError):
 
 @contextmanager
 def remote_loading_deferred() -> Iterator[None]:
-    """Make an unresolved remote boundary raise :class:`BoundaryNotLoadedError` instead of fetching itself.
+    """
+    Make an unresolved remote boundary raise :class:`BoundaryNotLoadedError` instead of fetching itself.
 
     For a caller that must answer from what is already known, such as the Private Pin page's panel probe.
     """
@@ -53,7 +54,8 @@ def remote_loading_deferred() -> Iterator[None]:
 
 @dataclass(slots=True)
 class GeoBoundary:
-    """A geographic region, lazily resolved to a GEOS polygon and memoized.
+    """
+    A geographic region, lazily resolved to a GEOS polygon and memoized.
 
     Attributes:
         _loader: Zero-argument callable returning the boundary's geometry (or None when it couldn't be resolved).
@@ -68,7 +70,8 @@ class GeoBoundary:
     _retry_after: float | None = field(default=None, init=False, repr=False)
 
     def _geometry(self) -> Polygon | MultiPolygon | None:
-        """Resolve the geometry once, or report unavailable until a retry is due.
+        """
+        Resolve the geometry once, or report unavailable until a retry is due.
         A loader that *raises* has not answered, and is only honoured for :data:`_FAILED_LOAD_RETRY_SECONDS`, because the two are otherwise indistinguishable to every caller and the second one heals on its own.
 
         Returns:
@@ -105,7 +108,8 @@ class GeoBoundary:
         return self._geometry()
 
     def contains(self, lat: float | None, lng: float | None) -> bool:
-        """Return True if (lat, lng) falls within this boundary.
+        """
+        Return True if (lat, lng) falls within this boundary.
 
         Args:
             lat: WGS-84 latitude.
@@ -127,7 +131,8 @@ class GeoBoundary:
 
     @classmethod
     def from_bboxes(cls, boxes: Sequence[BBox]) -> GeoBoundary:
-        """Build a boundary from a union of lat/lng bounding boxes (pure math, no I/O).
+        """
+        Build a boundary from a union of lat/lng bounding boxes (pure math, no I/O).
 
         Args:
             boxes: Each box as (lat_min, lat_max, lng_min, lng_max).
@@ -148,7 +153,8 @@ class GeoBoundary:
 
     @classmethod
     def from_wkt(cls, wkt: str) -> GeoBoundary:
-        """Build a boundary from a hand-authored WKT polygon/multipolygon (pure parsing, no I/O).
+        """
+        Build a boundary from a hand-authored WKT polygon/multipolygon (pure parsing, no I/O).
 
         Args:
             wkt: Well-known text, e.g. ``"POLYGON((...))"``.
@@ -200,7 +206,8 @@ USA: GeoBoundary = GeoBoundary.from_bboxes(_USA_BBOXES)
 
 
 def state_boundary(state_abbr: str) -> GeoBoundary:
-    """Return a lazily-loaded boundary for one US state, from Census TIGERweb.
+    """
+    Return a lazily-loaded boundary for one US state, from Census TIGERweb.
 
     Args:
         state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).

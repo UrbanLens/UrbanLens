@@ -40,7 +40,8 @@ _DEFAULT_MIN_COMMITS = 5
 
 
 def _git(*args: str) -> str:
-    """Run a git command and return its output.
+    """
+    Run a git command and return its output.
 
     Args:
         *args: Arguments after ``git``.
@@ -51,7 +52,8 @@ def _git(*args: str) -> str:
 
 
 def fix_density(since: str, min_commits: int, top: int) -> None:
-    """Print the files whose history is most heavily repair.
+    """
+    Print the files whose history is most heavily repair.
 
     Args:
         since: Git date to start from.
@@ -93,7 +95,8 @@ def fix_density(since: str, min_commits: int, top: int) -> None:
 
 
 def incomplete_fixes(since: str, top: int) -> None:
-    """Print fixes whose own message suggests they covered one of several sites.
+    """
+    Print fixes whose own message suggests they covered one of several sites.
 
     Args:
         since: Git date to start from.
@@ -123,7 +126,8 @@ def incomplete_fixes(since: str, top: int) -> None:
 
 
 def main(argv: list[str]) -> int:
-    """Print both reports.
+    """
+    Print both reports.
 
     Args:
         argv: Command-line arguments.

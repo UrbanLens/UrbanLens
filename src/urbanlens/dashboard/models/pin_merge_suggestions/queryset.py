@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
 
 def _default_survivor(pin_a: Pin, pin_b: Pin) -> Pin:
-    """Recommend which pin should survive a merge, absent an origin-specific choice.
+    """
+    Recommend which pin should survive a merge, absent an origin-specific choice.
     More visit history wins (a pin with more logged visits has more of the user's data riding on its identity); tie-broken by more photos; tie-broken by older creation date.
 
     Args:
@@ -36,7 +37,8 @@ class PinMergeSuggestionQuerySet(abstract.DashboardQuerySet["PinMergeSuggestion"
     """QuerySet for PinMergeSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """Filter to suggestions belonging to a given profile.
+        """
+        Filter to suggestions belonging to a given profile.
 
         Args:
             profile: Owner profile.
@@ -47,7 +49,8 @@ class PinMergeSuggestionQuerySet(abstract.DashboardQuerySet["PinMergeSuggestion"
         return self.filter(profile=profile)
 
     def for_pin(self, pin: Pin) -> Self:
-        """Filter to suggestions that mention a given pin, on either side.
+        """
+        Filter to suggestions that mention a given pin, on either side.
 
         Args:
             pin: The pin to look for.
@@ -58,7 +61,8 @@ class PinMergeSuggestionQuerySet(abstract.DashboardQuerySet["PinMergeSuggestion"
         return self.filter(Q(pin_a=pin) | Q(pin_b=pin))
 
     def pending(self) -> Self:
-        """Filter to suggestions still awaiting a response.
+        """
+        Filter to suggestions still awaiting a response.
 
         Returns:
             Filtered queryset.
@@ -84,7 +88,8 @@ class PinMergeSuggestionManager(_PinMergeSuggestionManagerBase["PinMergeSuggesti
         reason: str = "",
         suggested_survivor: Pin | None = None,
     ) -> PinMergeSuggestion:
-        """Find-or-create a pending suggestion for this pair of pins.
+        """
+        Find-or-create a pending suggestion for this pair of pins.
         The pair is looked up order-independently - a pending suggestion for ``(pin_b, pin_a)`` counts as already covering ``(pin_a, pin_b)`` - so a trigger that re-fires on the same collision (e.g. a repeated re-import run) never creates duplicate rows.
 
         Args:

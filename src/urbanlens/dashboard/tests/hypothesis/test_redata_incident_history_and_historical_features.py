@@ -96,7 +96,8 @@ class IncidentHistoryPanelRenderTests(TestCase):
         self.assertTrue(kwargs.get("force_refresh"))
 
     def test_the_free_panel_does_not_force_refresh(self) -> None:
-        """Anti-vacuity: force_refresh must stay scoped to the paid panel. Forcing it on
+        """
+        Anti-vacuity: force_refresh must stay scoped to the paid panel. Forcing it on
         the free panel too would silently regress its whole caching benefit.
         """
         from urbanlens.dashboard.plugins.builtin.redata_incidents import PoliceIncidentsPanelSource

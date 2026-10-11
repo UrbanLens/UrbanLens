@@ -1,4 +1,5 @@
-"""A failed verification email must not hand the link to whoever submitted the form.
+"""
+A failed verification email must not hand the link to whoever submitted the form.
 
 Following the link activates the account, so printing it on the page would let anyone sign up as somebody else
 whenever the mail server is down. Signup and resend now send from a background task, so the link never reaches

@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 
 @contextmanager
 def handler_output(*logger_names: str) -> Iterator[io.StringIO]:
-    """Everything the configured stream handlers of ``logger_names`` write while the block runs.
+    """
+    Everything the configured stream handlers of ``logger_names`` write while the block runs.
 
     Swaps each handler's stream rather than adding a handler of its own, so a record passes the real filters and
     formatter on its way to the buffer. ``""`` names the root logger.

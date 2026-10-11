@@ -1,4 +1,5 @@
-"""Serializers and response builders for the external API's messaging surface.
+"""
+Serializers and response builders for the external API's messaging surface.
 
 Split from ``serializers.py`` because messaging carries a constraint the rest of the external API
 does not: **the server must never widen what it can see about a conversation.** The builder
@@ -42,7 +43,8 @@ MAX_MEMBER_SLUGS = 50
 
 
 class MessageBodySerializer(serializers.Serializer):
-    """The plaintext-or-ciphertext half of any message payload.
+    """
+    The plaintext-or-ciphertext half of any message payload.
 
     Exactly one side is ever populated: a plaintext message reports ``ciphertext``/``nonce`` as ``""``
     and ``key_version`` as ``0``; an encrypted one reports ``body`` as ``""``.
@@ -57,7 +59,8 @@ class MessageBodySerializer(serializers.Serializer):
 
 
 class DirectMessageShareSerializer(serializers.Serializer):
-    """The `@pin` / `@trip` / `@friend` offer attached to a message, if any.
+    """
+    The `@pin` / `@trip` / `@friend` offer attached to a message, if any.
 
     Identifiers only - resolving them is a separate, separately-authorized request.
     In particular a pin share exposes the ``PinShare`` id rather than the pin's coordinates, so
@@ -72,7 +75,8 @@ class DirectMessageShareSerializer(serializers.Serializer):
 
 
 class DirectMessageSerializer(MessageBodySerializer):
-    """One message as seen *by one particular viewer*.
+    """
+    One message as seen *by one particular viewer*.
 
     Viewer-dependent by construction, not incidentally: ``tombstone`` reflects the sender's retention
     setting applied to this viewer (the sender keeps seeing their own message forever; the recipient
@@ -112,7 +116,8 @@ class DirectMessageSerializer(MessageBodySerializer):
 
 
 class ConversationSerializer(serializers.Serializer):
-    """One row of the unified inbox - a one-to-one thread or a group chat.
+    """
+    One row of the unified inbox - a one-to-one thread or a group chat.
 
     One shape for both kinds so a client renders a single merged, recency- ordered list (which is what
     ``all_conversations_for`` returns).
@@ -158,7 +163,8 @@ class GroupMemberSerializer(serializers.Serializer):
 
 
 class MessageSendSerializer(serializers.Serializer):
-    """Validates an untrusted "send a message" payload.
+    """
+    Validates an untrusted "send a message" payload.
 
     Mirrors the invariants ``create_direct_message`` enforces server-side rather than replacing them -
     this is the first line of defense on untrusted input, and the service remains the authority
@@ -186,7 +192,8 @@ class MessageSendSerializer(serializers.Serializer):
     client_uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs: dict) -> dict:
-        """Enforce the content and share invariants.
+        """
+        Enforce the content and share invariants.
 
         Args:
             attrs: The deserialized payload.
@@ -226,7 +233,8 @@ class MessageSendSerializer(serializers.Serializer):
 
 
 class GroupMessageSendSerializer(MessageSendSerializer):
-    """Validates a "send a message into a group" payload.
+    """
+    Validates a "send a message into a group" payload.
 
     Identical to :class:`MessageSendSerializer` except that it **refuses** the fields the group path
     cannot honor, rather than accepting and dropping them.
@@ -239,7 +247,8 @@ class GroupMessageSendSerializer(MessageSendSerializer):
     unsupported_fields: ClassVar[tuple[str, ...]] = ("image_ids", "image_uuids", "markup_map_id", "reply_to_id", "shared_pin_id", "shared_trip_slug", "shared_profile_slug")
 
     def validate(self, attrs: dict) -> dict:
-        """Reject fields the group path would otherwise discard.
+        """
+        Reject fields the group path would otherwise discard.
 
         Args:
             attrs: The deserialized payload.
@@ -279,7 +288,8 @@ class GroupMembersSerializer(serializers.Serializer):
 
 
 class ReactionSerializer(serializers.Serializer):
-    """Validates a reaction toggle.
+    """
+    Validates a reaction toggle.
 
     Length-capped here; ``services.messaging.direct_messages.is_safe_reaction_emoji`` remains the
     authority on whether the glyph is render-safe, since reactions are relayed verbatim into other
@@ -291,7 +301,8 @@ class ReactionSerializer(serializers.Serializer):
 
 
 class ReactionResultSerializer(serializers.Serializer):
-    """What a reaction toggle did, plus the target's resulting summary.
+    """
+    What a reaction toggle did, plus the target's resulting summary.
 
     ``action`` reports the transition rather than the state, matching the 1:1 reaction endpoint it
     mirrors; ``reactions`` is the authoritative post-write summary, so a client that ignores ``action``
@@ -303,7 +314,8 @@ class ReactionResultSerializer(serializers.Serializer):
 
 
 class MuteStateSerializer(serializers.Serializer):
-    """One conversation's notification-mute state.
+    """
+    One conversation's notification-mute state.
 
     The response body for the mute endpoints, which are PUT/DELETE rather than a toggling POST: a
     retried request over a flaky link must land on the state the caller asked for, not the opposite of
@@ -322,7 +334,8 @@ class RetentionSettingsSerializer(serializers.Serializer):
 
 
 class PageSerializer(serializers.Serializer):
-    """The list envelope shared by this surface's paginated endpoints.
+    """
+    The list envelope shared by this surface's paginated endpoints.
 
     ``next``/``previous``/``count`` are nullable because the message-thread endpoint is cursor-paginated
     rather than page-numbered: it can offer a "further back" link but has no page count and no notion of
@@ -337,7 +350,8 @@ class PageSerializer(serializers.Serializer):
 
 
 def _share_payload(message: DirectMessage) -> dict[str, Any] | None:
-    """Build the share sub-payload for a message, or None when it carries no share.
+    """
+    Build the share sub-payload for a message, or None when it carries no share.
 
     Args:
         message: The message whose attached share to describe.
@@ -360,7 +374,8 @@ def _share_payload(message: DirectMessage) -> dict[str, Any] | None:
 
 
 def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dict[str, Any]:
-    """Render one direct message for one viewer.
+    """
+    Render one direct message for one viewer.
 
     Starts from ``services.messaging.direct_messages.serialize_direct_message`` rather than reading the
     model directly, so the identity masking that function applies (the sender's name resolved through
@@ -415,7 +430,8 @@ def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dic
 
 
 def build_group_message_payload(message: GroupMessage, viewer: Profile, *, blocks: SharedSpaceBlocks | None = None) -> dict[str, Any]:
-    """Render one group message into the same envelope as a direct message.
+    """
+    Render one group message into the same envelope as a direct message.
 
     The fields a group message has no analogue for are reported as the empty/None value rather than
     omitted, so the shape stays stable: ``recipient_slug`` (a group message has no single recipient),
@@ -478,7 +494,8 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile, *, block
 
 
 def build_conversation_payload(conversation: dict[str, Any], viewer: Profile, *, blocks: SharedSpaceBlocks | None = None) -> dict[str, Any]:
-    """Normalize one ``all_conversations_for`` row into the unified inbox shape.
+    """
+    Normalize one ``all_conversations_for`` row into the unified inbox shape.
 
     Args:
         conversation: A row from ``services.messaging.direct_messages.conversations_for``

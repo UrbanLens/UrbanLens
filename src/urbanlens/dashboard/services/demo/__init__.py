@@ -1,4 +1,5 @@
-"""The public demo instance: seeding, and the conventions that make it purgeable.
+"""
+The public demo instance: seeding, and the conventions that make it purgeable.
 A demo instance runs the same image against its own database, seeded entirely with synthetic data, and is never pointed at a database holding real user content."""
 
 from __future__ import annotations

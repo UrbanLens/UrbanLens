@@ -15,7 +15,8 @@ _SCRIPT_RE = re.compile(r"<script\b[^>]*>.*?</script\s*>", re.DOTALL | re.IGNORE
 
 
 def _rendered_markup(response) -> str:
-    """The response body with ``<script>`` blocks removed.
+    """
+    The response body with ``<script>`` blocks removed.
 
     The hero's click-to-edit wiring script names every class and placeholder it manipulates - including building
     ``>Add when you started exploring...<`` as a string literal - so it matches any "is this placeholder on the
@@ -96,7 +97,8 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         self.assertNotIn("Add your area...", _rendered_markup(response))
 
     def test_edit_profile_page_keeps_the_plain_form_field_not_the_inline_editor(self) -> None:
-        """The hero body is shared with Edit Profile, which already has a real
+        """
+        The hero body is shared with Edit Profile, which already has a real
         <input name="area"> below it - the inline click-to-edit affordance
         must not also appear there and double up on the same field."""
         self.profile.area = "Rochester, NY"

@@ -1,4 +1,5 @@
-"""A location standing on one of its campus's buildings opens that building's wiki, never the campus's (P261).
+"""
+A location standing on one of its campus's buildings opens that building's wiki, never the campus's (P261).
 
 A building with no place of its own resolves onto its parcel, whose wiki another location holds, so
 ``Wiki.objects.existing_for_location`` used to hand every such location the campus's wiki.

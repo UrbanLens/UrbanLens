@@ -1,4 +1,5 @@
-"""PlaceExternalTag - raw classification data external providers attach to a Place.
+"""
+PlaceExternalTag - raw classification data external providers attach to a Place.
 Strictly separate from the user-facing ``Label`` system (see ``models.labels.model.Label``, whose ``kind=KIND_CATEGORY`` already covers a different, user-curated notion of "category").
 This is provider vocabulary - OpenStreetMap tags, Overture Maps building attributes - captured so it can eventually inform label suggestions, icon selection, and search; none of that is built yet, this only captures and displays the raw data.
 """
@@ -27,7 +28,8 @@ class ExternalTagSource(abstract.TextChoices):
 
 
 class ExtractedTag(NamedTuple):
-    """One classification tag pulled from a provider's already-fetched response.
+    """
+    One classification tag pulled from a provider's already-fetched response.
 
     An intermediate value, not a model - built by the extraction helpers in
     ``services.locations.external_tags`` and consumed by
@@ -41,7 +43,8 @@ class ExtractedTag(NamedTuple):
 
 
 class PlaceExternalTag(abstract.DashboardModel):
-    """One classification tag an external provider attaches to a Place.
+    """
+    One classification tag an external provider attaches to a Place.
     Raw provider vocabulary - OpenStreetMap tags, Overture Maps building attributes - strictly separate from the user-facing ``Label`` system.
 
     Attributes:
@@ -85,7 +88,8 @@ class PlaceExternalTag(abstract.DashboardModel):
 
     @classmethod
     def is_fresh_for(cls, place: Place, source: str) -> bool:
-        """Whether ``place`` already has a recent-enough tag set from ``source``.
+        """
+        Whether ``place`` already has a recent-enough tag set from ``source``.
         Lets ingestion skip re-deriving and rewriting tags when a different Location on the same Place already synced within the configured window - a Place is coarse and stable (a building's classification doesn't change hour to hour), so there is no need to redo this work on every nearby fetch.
 
         Args:
@@ -107,7 +111,8 @@ class PlaceExternalTag(abstract.DashboardModel):
 
     @classmethod
     def sync_for_source(cls, place: Place, source: str, tags: Sequence[ExtractedTag]) -> None:
-        """Replace ``place``'s tags from one source with ``tags``, in one transaction.
+        """
+        Replace ``place``'s tags from one source with ``tags``, in one transaction.
         A full replace rather than a per-row upsert, so a tag the provider no longer reports on a later refetch doesn't linger - mirrors ``LocationCache.set``'s "replace the whole payload for this source" idiom.
 
         Args:

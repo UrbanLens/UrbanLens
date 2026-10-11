@@ -50,7 +50,8 @@ class SeedScalingMixin(_Base):
     extra_analyzed_tables: tuple[str, ...] = ()
 
     def seed(self, count: int) -> None:
-        """Create *count* rows, then make the planner aware they exist.
+        """
+        Create *count* rows, then make the planner aware they exist.
 
         Args:
             count: How many rows to add."""
@@ -61,7 +62,8 @@ class SeedScalingMixin(_Base):
 
     @staticmethod
     def _written_tables(statements: Iterable[str]) -> set[str]:
-        """The tables a batch of statements wrote to.
+        """
+        The tables a batch of statements wrote to.
 
         Derived from the seed's own SQL rather than declared per test class: the set that needs re-analysing is
         exactly the set that was written, a test cannot forget to update it, and it stays right when a signal
@@ -80,7 +82,8 @@ class SeedScalingMixin(_Base):
         return written
 
     def analyze(self, tables: set[str]) -> None:
-        """Refresh planner statistics for exactly *tables*.
+        """
+        Refresh planner statistics for exactly *tables*.
 
         Takes the complete set rather than deriving any of it, so a caller - or a test watching this - sees the
         same list the database does. :meth:`seed` is where the policy of what to include lives.
@@ -95,7 +98,8 @@ class SeedScalingMixin(_Base):
             cursor.execute(f"ANALYZE {quoted}")
 
     def seed_rows(self, count: int) -> None:
-        """Create *count* more of whatever the endpoint under test lists.
+        """
+        Create *count* more of whatever the endpoint under test lists.
 
         The rows created here must be the rows the endpoint renders.
 
@@ -106,7 +110,8 @@ class SeedScalingMixin(_Base):
     def assert_seed_exercised_endpoint(
         self, url: str, small_body: int, large_body: int, *, expect_growth: bool, growth_waiver: str
     ) -> None:
-        """Fail unless the seed changed what *url* renders.
+        """
+        Fail unless the seed changed what *url* renders.
 
         Args:
             url: The URL that was measured, for the message. small_body: Response length at ``first_batch`` rows. large_body: Response length at...

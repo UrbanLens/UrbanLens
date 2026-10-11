@@ -1,4 +1,5 @@
-"""Nearby reference documents plugin: the Wikipedia articles and Wikidata entities about a place, on Article > Sources.
+"""
+Nearby reference documents plugin: the Wikipedia articles and Wikidata entities about a place, on Article > Sources.
 
 REData's ``reference-documents/`` is the only coordinate search among its reference sources; the archives the Media
 gallery searches by name (``media_archives``) are reached through ``reference-documents/search/``. A document is listed
@@ -135,7 +136,8 @@ class NearbyReferenceDocumentsSource(DocumentPanelSource):
         return listed
 
     def download_document(self, document: SourceDocument) -> tuple[bytes, str]:
-        """Never proxied: an article or entity is read on its own page.
+        """
+        Never proxied: an article or entity is read on its own page.
 
         Raises:
             DocumentUnavailableError: Always.

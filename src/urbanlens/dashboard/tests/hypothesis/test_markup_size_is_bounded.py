@@ -1,4 +1,5 @@
-"""Markup geometry is whatever the client posts, and the reader returns all of it.
+"""
+Markup geometry is whatever the client posts, and the reader returns all of it.
 
 Two halves of N21 H39, and they compound. Nothing caps how many coordinate pairs
 one markup item carries - `geometry` is a JSONField written from the request body
@@ -158,7 +159,8 @@ class TheListingIsCappedTests(_MarkupCase):
 
 
 class AMapCannotOutgrowItsReaderTests(_MarkupCase):
-    """Items are created one at a time, and nothing counted how many there were.
+    """
+    Items are created one at a time, and nothing counted how many there were.
 
     The listing ceiling alone leaves a gap with teeth on a standalone map: it
     can pass the ceiling one item at a time, and a snapshot round-trip - the

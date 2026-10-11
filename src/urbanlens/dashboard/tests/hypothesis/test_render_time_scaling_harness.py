@@ -19,7 +19,8 @@ class _AchievementSeedMixin(SeedScalingMixin):
     """Both pages list every achievement, so both seed the same way."""
 
     def seed_rows(self, count: int) -> None:
-        """Create *count* more achievements.
+        """
+        Create *count* more achievements.
 
         Args:
             count: How many rows to add.
@@ -64,7 +65,8 @@ class ExpensiveRowsFailTests(_AchievementSeedMixin, RenderTimeScalingMixin, Test
 
 @override_settings(ROOT_URLCONF=_URLCONF)
 class QueryCountCannotSeeItTests(_AchievementSeedMixin, QueryScalingMixin, TestCase):
-    """The argument for this mixin existing at all, in executable form.
+    """
+    The argument for this mixin existing at all, in executable form.
 
     The expensive page reads its rows in one query however many there are, so it is flat by every measure the
     query mixin has - and it is the page the render mixin above refuses."""
@@ -75,7 +77,8 @@ class QueryCountCannotSeeItTests(_AchievementSeedMixin, QueryScalingMixin, TestC
 
 @override_settings(ROOT_URLCONF=_URLCONF)
 class PreSeededBaselineTests(_AchievementSeedMixin, RenderTimeScalingMixin, TestCase):
-    """Seeding in `setUp` silently disarms this measurement, and cannot be caught.
+    """
+    Seeding in `setUp` silently disarms this measurement, and cannot be caught.
 
     The icon-grid page measures 4.1-5.8 baselines per row from empty and 0.070-0.083 with a dozen rows already
     rendered - a collapse of roughly sixty-fold, and the difference between failing by 40x and passing."""

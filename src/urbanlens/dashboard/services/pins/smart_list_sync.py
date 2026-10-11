@@ -1,4 +1,5 @@
-"""Smart-list membership, kept current off the request.
+"""
+Smart-list membership, kept current off the request.
 
 A pin save or label change used to re-evaluate the pin against every smart list its owner had, in the request's
 commit hook, once per pin per signal. At 25 smart lists over 2,000 pins a bulk edit of 500 pins took about 84,000
@@ -68,7 +69,8 @@ def _running_key(profile_id: int) -> str:
 
 
 def request_smart_list_sync(pin: Pin) -> None:
-    """Record that *pin*'s smart-list membership needs re-evaluating, and queue its account's sync once this commits.
+    """
+    Record that *pin*'s smart-list membership needs re-evaluating, and queue its account's sync once this commits.
 
     Args:
         pin: The pin that was saved, or whose labels changed.
@@ -83,7 +85,8 @@ def request_smart_list_sync(pin: Pin) -> None:
 
 
 def queue_smart_list_sync(profile_id: int, *, countdown: int | None = None) -> bool:
-    """Queue *profile_id*'s sync, unless one is already queued and has not started.
+    """
+    Queue *profile_id*'s sync, unless one is already queued and has not started.
 
     A change made inside a batch task (an import, an enrichment pass) syncs on the bulk queue, as every signal's
     follow-on work does (``follow_on_queue``). So does an account past ``settings.MAX_SMART_LISTS_PER_SYNC`` smart
@@ -105,7 +108,8 @@ def queue_smart_list_sync(profile_id: int, *, countdown: int | None = None) -> b
 
 
 def release_queued_claim(profile_id: int) -> None:
-    """Let the next change queue a sync for *profile_id*, as a starting sync does.
+    """
+    Let the next change queue a sync for *profile_id*, as a starting sync does.
 
     Args:
         profile_id: The account.
@@ -126,7 +130,8 @@ def _queue_for(profile_id: int) -> str:
 
 @contextmanager
 def running_sync(profile_id: int) -> Iterator[bool]:
-    """Hold *profile_id*'s sync lock for the block, if no other sync does.
+    """
+    Hold *profile_id*'s sync lock for the block, if no other sync does.
 
     Args:
         profile_id: The account.
@@ -142,7 +147,8 @@ def running_sync(profile_id: int) -> Iterator[bool]:
 
 
 def drain_smart_list_sync_requests(profile_id: int, *, batch_size: int = BATCH_SIZE, max_batches: int = MAX_BATCHES_PER_RUN) -> int | None:
-    """Apply *profile_id*'s outstanding requests, oldest first.
+    """
+    Apply *profile_id*'s outstanding requests, oldest first.
 
     Deletes exactly the rows each pass read, so a request written for the same pin during the pass outlives it.
 
@@ -178,7 +184,8 @@ def drain_smart_list_sync_requests(profile_id: int, *, batch_size: int = BATCH_S
 
 
 def queue_stale_requests() -> int:
-    """Queue a sync for every account holding a request its own sync never drained.
+    """
+    Queue a sync for every account holding a request its own sync never drained.
 
     A sync can be lost: a refused enqueue whose claim then lapsed, enqueues suppressed while demo data was seeded,
     or a worker that died mid-run.
@@ -197,7 +204,8 @@ def queue_stale_requests() -> int:
 
 
 def membership_pending(pin_list: PinList) -> bool:
-    """Whether *pin_list* may not yet reflect its owner's latest pin changes.
+    """
+    Whether *pin_list* may not yet reflect its owner's latest pin changes.
 
     True for a smart list with rules while any of its owner's pins awaits a sync. The request does not say which
     lists it will change, so every such list says so.

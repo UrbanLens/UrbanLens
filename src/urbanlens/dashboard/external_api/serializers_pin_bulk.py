@@ -1,4 +1,5 @@
-"""Request/response types for multi-pin bulk actions: delete, merge, edit.
+"""
+Request/response types for multi-pin bulk actions: delete, merge, edit.
 
 Mirrors ``dashboard/controllers/pin_bulk.py`` (the main map's multi-select toolbar), with two
 deliberate departures from that internal surface, both made for consistency with the rest of this
@@ -24,7 +25,8 @@ class PinBulkDeleteSerializer(serializers.Serializer):
 
 
 class PinBulkDeleteResponseSerializer(serializers.Serializer):
-    """The outcome of a bulk delete (schema-only).
+    """
+    The outcome of a bulk delete (schema-only).
 
     ``undo_uuid`` restores every deleted pin (and any child pins swept up with it) via the existing
     generic undo surface - ``POST undo/{undo_uuid}/restore/`` - rather than a bespoke restore endpoint
@@ -40,7 +42,8 @@ class PinBulkDeleteResponseSerializer(serializers.Serializer):
 
 
 class PinBulkMergeSerializer(serializers.Serializer):
-    """Validates a bulk pin-merge request.
+    """
+    Validates a bulk pin-merge request.
 
     ``target_uuid`` becomes (or stays) the top-level pin; every resolvable
     ``source_uuids`` entry becomes one of its detail pins.
@@ -61,7 +64,8 @@ class PinBulkMergeResponseSerializer(serializers.Serializer):
 
 
 class PinBulkEditSerializer(serializers.Serializer):
-    """Validates a bulk pin-edit request. Every field but ``uuids`` is optional.
+    """
+    Validates a bulk pin-edit request. Every field but ``uuids`` is optional.
 
     ``rating`` writes/clears a :class:`~urbanlens.dashboard.models.reviews.model.Review` for the caller
     against each selected pin, the same underlying write ``PUT``/``DELETE`` ``pins/{pin_slug}/review/``

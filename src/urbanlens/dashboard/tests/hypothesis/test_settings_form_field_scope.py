@@ -66,7 +66,8 @@ class SettingsFormFieldScopeTests(TestCase):
         self.assertFalse(self.profile.track_pin_visits, "a field the form turned off was not written")
 
     def test_every_profile_settings_form_declares_its_fields(self) -> None:
-        """The completeness arm.
+        """
+        The completeness arm.
 
         The scoped save derives its field list from ``Meta.fields``."""
         undeclared = sorted(form.__name__ for form in ProfileSettingsForm.__subclasses__() if not form._meta.fields)

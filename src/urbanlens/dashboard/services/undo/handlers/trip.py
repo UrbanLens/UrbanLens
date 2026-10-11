@@ -60,7 +60,8 @@ class TripUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Trip]:
-        """Recreate trips and their membership rosters.
+        """
+        Recreate trips and their membership rosters.
 
         Raises:
             UndoExpiredError: If the creator, or any roster member's profile, was independently deleted during the retention window, since recreating the row would otherwise fail with an uncaught ``IntegrityError`` - both FKs are non-nullable-in-practice..."""

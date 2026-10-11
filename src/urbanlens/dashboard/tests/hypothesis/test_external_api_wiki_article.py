@@ -97,7 +97,8 @@ class ArticleConflictTests(WikiArticleTestCase):
         self.assertEqual(get_article(wiki=self.wiki).content, "Original body")
 
     def test_omitted_base_revision_is_rejected(self) -> None:
-        """Unlike the internal form, the field is required - see serializers_wiki.
+        """
+        Unlike the internal form, the field is required - see serializers_wiki.
 
         Omitting it is a 400 (a missing required field), not a 409; either way
         the write is refused, which is the property that matters.

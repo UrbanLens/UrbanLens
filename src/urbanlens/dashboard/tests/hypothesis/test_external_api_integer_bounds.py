@@ -1,4 +1,5 @@
-"""External API integers past their database column are refused with a 4xx and nothing written.
+"""
+External API integers past their database column are refused with a 4xx and nothing written.
 
 Django adapts an ``IntegerField`` write as psycopg's ``Int4``, whose C binary dumper kept only the low 32 bits: 2**31
 was stored as -2**31 and 2**32 + 1 as 1, without an error. ``core/integer_dumpers.py`` now refuses such a write at the
@@ -62,7 +63,8 @@ _PNG_BYTES = base64.b64decode(
 
 
 class IntegerColumnWriteTests(TestCase):
-    """The parse bounds answer 400; behind them the database layer refuses rather than wrapping
+    """
+    The parse bounds answer 400; behind them the database layer refuses rather than wrapping
     (``core/integer_dumpers.py``), which turns a missed bound into a 500 instead of a wrong number."""
 
     def test_a_write_past_the_integer_column_is_refused_rather_than_wrapped(self) -> None:

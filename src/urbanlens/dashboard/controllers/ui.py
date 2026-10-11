@@ -1,4 +1,5 @@
-"""Shared UI fragments that are the same for every user and every page.
+"""
+Shared UI fragments that are the same for every user and every page.
 
 A fragment belongs here when it is derived from module constants rather than
 from the request: it can then be rendered once per process, cached in the
@@ -19,7 +20,8 @@ IMMUTABLE_MAX_AGE = 31_536_000
 
 
 class IconPickerGridView(LoginRequiredMixin, View):
-    """The icon picker's catalogue of buttons, shared by every picker on every page.
+    """
+    The icon picker's catalogue of buttons, shared by every picker on every page.
 
     GET /dashboard/ui/icon-picker-grid/?v=<hash>
 

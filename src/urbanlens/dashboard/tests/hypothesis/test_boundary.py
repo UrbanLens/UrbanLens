@@ -238,7 +238,8 @@ class PinPropertyResolutionTests(TestCase):
         self.assertFalse(polygon.intersects(_BIG))
 
     def test_detail_pin_exactly_on_the_parent_boundary_edge_still_inherits(self) -> None:
-        """The containment gate is ``contains() or touches()`` - a point exactly on the
+        """
+        The containment gate is ``contains() or touches()`` - a point exactly on the
         edge (not strictly inside) must still count, or a detail pin sitting right on its
         parent's line would wrongly fall through to its own circle."""
         baker.make(
@@ -392,7 +393,8 @@ class PinBuildingResolutionTests(TestCase):
 
 
 class ScopeGateResolutionTests(TestCase):
-    """The scope gate stops a mismatched request from falling through to a shape.
+    """
+    The scope gate stops a mismatched request from falling through to a shape.
 
     A marker whose place says nothing about the requested boundary type (here: a specific building on a
     multi-building campus, asked for the *property* boundary - see ``services.places.scope.place_polygon``) must
@@ -433,7 +435,8 @@ class ScopeGateResolutionTests(TestCase):
 
 
 class FootprintlessBuildingTests(TestCase):
-    """P264: a building place with no footprint still takes an outline drawn on its wiki.
+    """
+    P264: a building place with no footprint still takes an outline drawn on its wiki.
 
     ``place_polygon`` is None both for a place the type does not apply to and for a building whose footprint is
     unknown; only the first rules a drawn outline out.
@@ -584,7 +587,8 @@ class WikiResolutionTests(TestCase):
         self.assertEqual(polygon.wkt, _MEDIUM.wkt)
 
     def test_concealed_viewer_never_sees_the_wiki_drawing(self) -> None:
-        """A wiki-scoped Boundary row records no author, so concealment hides it outright
+        """
+        A wiki-scoped Boundary row records no author, so concealment hides it outright
         rather than risk showing a stranger's edit back as if it were automatic."""
         baker.make(
             "dashboard.Boundary",

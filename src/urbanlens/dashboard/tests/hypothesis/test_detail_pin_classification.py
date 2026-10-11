@@ -100,7 +100,8 @@ class DetailPinEditTypeTests(TestCase):
         self.child.refresh_from_db()
 
     def test_a_json_float_literal_opacity_is_ignored_rather_than_a_500(self) -> None:
-        """`json.loads` accepts the bare literal `Infinity`; `int(float("inf"))` raises OverflowError.
+        """
+        `json.loads` accepts the bare literal `Infinity`; `int(float("inf"))` raises OverflowError.
 
         This view parses the body itself rather than through DRF (whose parser rejects the literal outright), so
         the value really does reach `safe_int`."""

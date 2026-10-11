@@ -1,4 +1,5 @@
-"""One compressed shard of a downloadable building dataset, read within a size cap.
+"""
+One compressed shard of a downloadable building dataset, read within a size cap.
 
 Google's Open Buildings and Microsoft's footprints publish their buildings as gzip shards that run to gigabytes where
 the data is dense, so a shard is read only up to a cap, and one that is missing or past it is not asked for again.
@@ -24,7 +25,8 @@ UNUSABLE_SHARD_SECONDS = 30 * 24 * 60 * 60
 
 
 def read_shard(session: requests.Session, url: str, *, max_bytes: int, what: str) -> bytes | None:
-    """A shard's compressed body, or None when it is missing or past *max_bytes*; either is remembered.
+    """
+    A shard's compressed body, or None when it is missing or past *max_bytes*; either is remembered.
 
     Runs inside the boundary panel-fetch Celery task, whose soft time limit is the real budget; the (connect, read)
     timeout keeps a dead connection from spending it.

@@ -25,7 +25,8 @@ _PERIOD = timedelta(days=30)
 
 @contextmanager
 def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
-    """Hold a row lock on this subscription for the body of the block.
+    """
+    Hold a row lock on this subscription for the body of the block.
 
     Args:
         role_subscription: The subscription to lock.
@@ -40,7 +41,8 @@ def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
 
 
 def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.datetime | None = None) -> None:
-    """Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
+    """
+    Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
 
     Args:
         role_subscription: The subscription to advance.
@@ -76,7 +78,8 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
 
 
 def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: datetime.datetime | None = None) -> None:
-    """Record a successful pay-what-you-want charge and advance its usage ledger.
+    """
+    Record a successful pay-what-you-want charge and advance its usage ledger.
 
     Args:
         role_subscription: The subscription to credit.
@@ -94,7 +97,8 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
 
 
 def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int) -> None:
-    """Claw back a refunded (or lost-dispute) amount from the banked balance, in full.
+    """
+    Claw back a refunded (or lost-dispute) amount from the banked balance, in full.
     Policy: the refunded amount comes straight out of ``total_paid_cents`` (clamped at zero), so future periods simply stop being affordable.
 
     Args:

@@ -11,7 +11,8 @@ from urbanlens.dashboard.models import abstract
 
 
 class DirectMessageTemporaryAccess(abstract.DashboardModel):
-    """Grants `granted_to` a time-boxed ability to view `profile`'s profile page.
+    """
+    Grants `granted_to` a time-boxed ability to view `profile`'s profile page.
     Used when one chat participant recommends a friend to the other: the recipient of the recommendation counts as a "friend" of the recommended profile, for profile-view purposes only, until `expires_at` - long enough to decide whether to actually send a friend request.
     """
 
@@ -38,7 +39,8 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
 
     @classmethod
     def grants_access(cls, profile_id: int, viewer_id: int) -> bool:
-        """Return True if an active grant lets `viewer_id` view `profile_id`'s profile.
+        """
+        Return True if an active grant lets `viewer_id` view `profile_id`'s profile.
         A BLOCKED relationship in either direction vetoes the grant even while it is unexpired - a block placed after the recommendation was made must kill the access immediately, and recommendations to a blocked party are refused at creation time as well (see ``services.messaging.direct_message_shares.recommend_friend_in_message``).
 
         Args:
@@ -63,7 +65,8 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
 
     @classmethod
     def granted_profile_pks(cls, profile_ids: set[int], viewer_id: int) -> set[int]:
-        """Batch equivalent of :meth:`grants_access` for many profiles at once.
+        """
+        Batch equivalent of :meth:`grants_access` for many profiles at once.
         Same rule, same veto: an unexpired grant to ``viewer_id``, cancelled by a BLOCKED relationship in either direction.
 
         Args:
@@ -93,7 +96,8 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
 
     @classmethod
     def granting_profile_pks(cls, viewer_id: int) -> set[int]:
-        """Every profile holding an unexpired grant to ``viewer_id``, unfiltered.
+        """
+        Every profile holding an unexpired grant to ``viewer_id``, unfiltered.
         Neither of the batch methods above answers this: both narrow to a candidate set the caller already has, and this exists for the caller that is still deciding what its candidate set *is* - see ``Profile.related_profile_ids``.
         Its only consumer wants a superset, and the veto would be re-applied by the real check anyway; leaving a blocked grantor in costs one row for that check to reject.
 
@@ -107,7 +111,8 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
 
     @classmethod
     def granting_viewer_pks(cls, profile_id: int, viewer_ids: set[int]) -> set[int]:
-        """The mirror of :meth:`granted_profile_pks`: one profile, many viewers.
+        """
+        The mirror of :meth:`granted_profile_pks`: one profile, many viewers.
         Same rule, same veto.
         Exists because the two batch shapes are genuinely different questions: rendering a list of people asks "which of these can I see", while notifying a group about one sender asks "which of these people can see them".
 

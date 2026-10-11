@@ -1,4 +1,5 @@
-"""What a model wrote, where a building or a cached lookup is, which map tile someone looked at, and whose address or
+"""
+What a model wrote, where a building or a cached lookup is, which map tile someone looked at, and whose address or
 login it was stay out of log lines.
 
 Pin names name undisclosed sites and coordinates locate them (``services.security.redact``); a trivia question is
@@ -205,7 +206,8 @@ class AHistoricalMapTileCallTests(SimpleTestCase):
 
 
 class ALoginCounterTests(TestCase):
-    """A failed login for an identifier that names no account is counted under what was typed: a username, an email
+    """
+    A failed login for an identifier that names no account is counted under what was typed: a username, an email
     address, or now and then a password typed into the wrong field."""
 
     _TYPED = "quokka.keeper@example.org"

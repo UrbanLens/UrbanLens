@@ -21,7 +21,8 @@ AGREEMENT_KM = 1.0
 
 
 def reference_centroid(points: list[tuple[float, float]], radius_km: float = RADIUS_KM) -> tuple[float, float]:
-    """The pairwise scan, kept as the definition of the right answer.
+    """
+    The pairwise scan, kept as the definition of the right answer.
 
     Args:
         points: ``(latitude, longitude)`` pairs.
@@ -40,7 +41,8 @@ def reference_centroid(points: list[tuple[float, float]], radius_km: float = RAD
 
 
 def blob(rng: random.Random, count: int, latitude: float, longitude: float, spread: float) -> list[tuple[float, float]]:
-    """A loose scatter of points around one place.
+    """
+    A loose scatter of points around one place.
 
     Args:
         rng: Seeded source of randomness, so failures reproduce.

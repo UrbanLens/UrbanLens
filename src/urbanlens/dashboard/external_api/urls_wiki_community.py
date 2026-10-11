@@ -1,4 +1,5 @@
-"""External-API routes for the community-governance side of location wikis.
+"""
+External-API routes for the community-governance side of location wikis.
 
 Every route here inherits the same non-negotiable rule as ``views_wiki``: resolution goes through
 ``services.wiki.wiki_access.resolve_visible_wiki``, so a wiki the caller has not earned access to is

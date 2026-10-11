@@ -25,7 +25,8 @@ class EmptyPolygonGeometryError(InvalidPolygonGeoJSONError):
 
 
 class TooComplexGeometryError(InvalidPolygonGeoJSONError):
-    """The payload parsed, but is larger than one drawn region may be.
+    """
+    The payload parsed, but is larger than one drawn region may be.
 
     A subclass rather than a new hierarchy, because every caller already turns
     :class:`InvalidPolygonGeoJSONError` into a 400 and a new failure mode here
@@ -45,7 +46,8 @@ MAX_REGION_VERTICES = 50_000
 
 
 def _refuse_if_too_complex(geom: MultiPolygon) -> None:
-    """Refuse a region larger than the dissolve can be asked to handle.
+    """
+    Refuse a region larger than the dissolve can be asked to handle.
 
     Args:
         geom: The parsed multipolygon.
@@ -66,7 +68,8 @@ def geometry_to_geojson(geom) -> dict | None:
 
 
 def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
-    """Parse a GeoJSON geometry into a MultiPolygon.
+    """
+    Parse a GeoJSON geometry into a MultiPolygon.
 
     Args:
         polygon_geojson: A GeoJSON Polygon or MultiPolygon geometry dict.
@@ -107,7 +110,8 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
 
 
 def dissolve_polygons(polygons: list[Polygon]) -> MultiPolygon:
-    """Merge any polygons that intersect (overlap, touch, or contain) into single components.
+    """
+    Merge any polygons that intersect (overlap, touch, or contain) into single components.
     Chained overlaps merge into one component, and a self-intersecting polygon is repaired rather than refused.
 
     Args:

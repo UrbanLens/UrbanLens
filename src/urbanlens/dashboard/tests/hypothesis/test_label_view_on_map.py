@@ -82,7 +82,8 @@ class LabelRowsEmptyLabelButtonTests(TestCase):
         return self.client.get(reverse("label.rows", kwargs={"label_kind": kind}))
 
     def _card(self, response, label_id: int) -> str:
-        """Return just one label's card markup.
+        """
+        Return just one label's card markup.
 
         The tag rows also carry every seeded global tag, most of which have no pins and so legitimately render
         disabled - assertions about a specific label have to be scoped to its own card."""
@@ -122,7 +123,8 @@ class LabelRowsEmptyLabelButtonTests(TestCase):
         self.assertNotContains(response, label_map_url(child.id))
 
     def test_the_first_paint_renders_the_same_button_state_as_the_rows_endpoint(self) -> None:
-        """The page computes the real totals, so an empty label is greyed out on the
+        """
+        The page computes the real totals, so an empty label is greyed out on the
         first paint rather than after a backfill. Both halves are asserted because
         the two render paths draw the same cards and must not disagree.
         """

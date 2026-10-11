@@ -1,4 +1,5 @@
-"""Georeferenced image overlays drawn on a pin's or wiki's map.
+"""
+Georeferenced image overlays drawn on a pin's or wiki's map.
 A user pins a historical map image - a Sanborn fire-insurance sheet, a site plan, a hand-drawn survey - onto the live map and drags its four corners until its streets line up with the real ones.
 Scans are never axis-aligned or square to north, and a flatbed scan of a century-old sheet is usually a little trapezoidal, so four independently-placed corners (a full projective transform) are the honest unit rather than a bounding box plus a rotation.
 """
@@ -33,7 +34,8 @@ CORNERS = ("nw", "ne", "se", "sw")
 
 
 class MapImageOverlay(abstract.FrontendDashboardModel):
-    """One image georeferenced onto a pin's or wiki's map by its four corners.
+    """
+    One image georeferenced onto a pin's or wiki's map by its four corners.
 
     Attributes:
         uuid: Stable public identifier (used in URLs).
@@ -146,7 +148,8 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
 
     @property
     def source_url(self) -> str:
-        """The URL the browser should load the image from.
+        """
+        The URL the browser should load the image from.
 
         Returns:
             The stored file's URL, or ``""`` for a tile overlay or an image with no file yet.
@@ -157,7 +160,8 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
 
     @property
     def image_link(self) -> str | None:
-        """The backing ``Image`` row's stable link (``media.image``), or None for a tile overlay.
+        """
+        The backing ``Image`` row's stable link (``media.image``), or None for a tile overlay.
 
         ``source_url`` names the upload's raw file while it is being re-encoded, because the aligner opens on it
         at once; the renderer falls back to this link if that file is gone by the time it loads.
@@ -176,7 +180,8 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         ]
 
     def set_corners(self, corners: list[list[float]] | list[tuple[float, float]]) -> None:
-        """Assign all four corners at once.
+        """
+        Assign all four corners at once.
 
         Args:
             corners: Four ``[lat, lng]`` pairs in :data:`CORNERS` order.
@@ -193,7 +198,8 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             setattr(self, f"{name}_longitude", float(longitude))
 
     def to_json(self) -> dict:
-        """Compact serialisation for the map's overlay renderer and edit dialog.
+        """
+        Compact serialisation for the map's overlay renderer and edit dialog.
 
         Returns:
             dict with uuid, name, url, the backing row's stable link, corners,

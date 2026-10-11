@@ -26,7 +26,8 @@ _ERROR_DETAIL_CHARS = 300
 
 
 def _error_detail(response: requests.Response) -> str:
-    """Cloudflare's own ``code: message`` pairs from an error body, or the HTTP reason when it has none.
+    """
+    Cloudflare's own ``code: message`` pairs from an error body, or the HTTP reason when it has none.
 
     Args:
         response: A non-2xx Workers AI response.

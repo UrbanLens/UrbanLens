@@ -1,4 +1,5 @@
-"""A route or a visit an import builds is on the globe, whatever coordinates the file held (P284).
+"""
+A route or a visit an import builds is on the globe, whatever coordinates the file held (P284).
 
 P282 checked every coordinate an import turns into a pin. The same files also make routes, whose ``path`` is stored,
 and visits, matched to the nearest pin; an infinite, NaN or out-of-range point reached both.

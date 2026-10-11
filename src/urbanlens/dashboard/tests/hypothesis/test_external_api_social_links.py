@@ -167,7 +167,8 @@ class SocialLinksPutTests(_SocialLinksTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_put_rejects_a_javascript_scheme_even_once_scheme_defaulting_is_applied(self) -> None:
-        """A scheme-less submission defaults to https - that must not let a dangerous raw scheme sneak through first.
+        """
+        A scheme-less submission defaults to https - that must not let a dangerous raw scheme sneak through first.
 
         Naively prepending "https://" to any scheme-less handle would turn this into
         "https://javascript:alert(1)", whose netloc parses to the deceptively harmless-looking hostname

@@ -1,4 +1,5 @@
-"""The global-search panel takes whatever the client types, as fast as it types it.
+"""
+The global-search panel takes whatever the client types, as fast as it types it.
 
 Two findings on the same view (N21 H42 and H49). The panel is fired per
 keystroke, and each fire hands one query to ~11 providers, each running a
@@ -76,7 +77,8 @@ class ThePanelIsThrottledTests(_PanelCase):
         self.assertIn("GET", getattr(resolve(self.url).func, "throttle_methods", frozenset()))
 
     def test_the_rate_refuses_once_its_budget_is_spent(self) -> None:
-        """Asserted against the rate rather than by issuing the requests.
+        """
+        Asserted against the rate rather than by issuing the requests.
 
         A storm of `limit + 5` real requests renders that many pages, which takes
         longer than the rate's own window, so the counter rolls over halfway

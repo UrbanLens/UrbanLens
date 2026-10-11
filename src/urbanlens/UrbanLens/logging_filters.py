@@ -19,7 +19,8 @@ def _redact(text: str) -> str:
 
 
 def mark_retry_later(request: HttpRequest) -> None:
-    """Keep this request's 503 out of ``django.request``'s errors; for a view whose 503 means "not yet, ask again".
+    """
+    Keep this request's 503 out of ``django.request``'s errors; for a view whose 503 means "not yet, ask again".
 
     Args:
         request: The request being answered with 503 and ``Retry-After``.
@@ -28,7 +29,8 @@ def mark_retry_later(request: HttpRequest) -> None:
 
 
 class HealthCheckAccessLogFilter(logging.Filter):
-    """Drop ASGI access log lines for the health endpoint.
+    """
+    Drop ASGI access log lines for the health endpoint.
 
     Args:
         record: The log record to evaluate.
@@ -46,14 +48,16 @@ class HealthCheckAccessLogFilter(logging.Filter):
 
 
 class SecretRedactionFilter(logging.Filter):
-    """Replace the credentials and coordinates in any URL a record would print, and any email address, in its message and its traceback.
+    """
+    Replace the credentials and coordinates in any URL a record would print, and any email address, in its message and its traceback.
 
     Belongs on every handler: a ``requests`` error's text is its URL, query-string API key included, so any logger
     handed one carries it, and an SMTP refusal's text names the addresses it refused.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Redact ``record`` in place, so every later handler writes the redacted text.
+        """
+        Redact ``record`` in place, so every later handler writes the redacted text.
 
         Args:
             record: The log record about to be written.
@@ -93,7 +97,8 @@ class RetryLaterFilter(logging.Filter):
     """Drop ``django.request``'s record of a 503 its view marked with :data:`RETRY_LATER_ATTRIBUTE`."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Keep every record but a marked request's 503.
+        """
+        Keep every record but a marked request's 503.
 
         Args:
             record: A ``django.request`` record, which carries ``status_code`` and ``request``.

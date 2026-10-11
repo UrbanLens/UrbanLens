@@ -1,4 +1,5 @@
-"""Bounding a filter that crosses a to-many relation to rows the caller can already see.
+"""
+Bounding a filter that crosses a to-many relation to rows the caller can already see.
 
 A predicate written through a to-many path - ``aliases__name__icontains`` - compiles to a join, and
 Postgres is free to drive that join from whichever side its cost estimate likes. The far side is
@@ -35,7 +36,8 @@ if TYPE_CHECKING:
 
 
 def crosses_many(model: type[Model], path: str) -> bool:
-    """Whether an ORM path from *model* passes through a relation that can match several rows.
+    """
+    Whether an ORM path from *model* passes through a relation that can match several rows.
 
     Args:
         model: The model the path starts from.
@@ -75,7 +77,8 @@ class Crossing:
 
 
 def _many_to_many_crossing(walked: list[str], part: str, field: Any) -> Crossing | None:
-    """The crossing for a many-to-many step, driven from its join table.
+    """
+    The crossing for a many-to-many step, driven from its join table.
 
     The far model is the wrong side to drive from - filtering every label on the site by name and
     joining back is the cost this module exists to avoid - but the join table is indexed by the
@@ -101,7 +104,8 @@ def _many_to_many_crossing(walked: list[str], part: str, field: Any) -> Crossing
 
 
 def resolve_crossing(model: type[Model], path: str) -> Crossing | None:
-    """Split *path* at the to-many step a probe should drive from, when it has one this shape.
+    """
+    Split *path* at the to-many step a probe should drive from, when it has one this shape.
 
     Args:
         model: The model the path starts from.
@@ -128,7 +132,8 @@ def resolve_crossing(model: type[Model], path: str) -> Crossing | None:
 
 
 def restate(condition: Q, strip: str, rewrite: str = "") -> Q | None:
-    """*condition*, rewritten to read against the table the probe drives from.
+    """
+    *condition*, rewritten to read against the table the probe drives from.
 
     Args:
         condition: A predicate whose every key runs through the crossing.
@@ -173,7 +178,8 @@ class ProbeScope:
         self._anchors: dict[tuple[type[Model], str, int], tuple[object, dict[Any, list[Any]]]] = {}
 
     def pks_of(self, queryset: QuerySet[Any, Any]) -> list[Any]:
-        """The primary keys *queryset* selects, fetched once per scope.
+        """
+        The primary keys *queryset* selects, fetched once per scope.
 
         A caller probes once per term per field path against the same access-scoped queryset, and
         each probe needs the same list to bound itself by. Fetching it per probe was a dozen
@@ -193,7 +199,8 @@ class ProbeScope:
         return pks
 
     def anchors_of(self, model: type[Model], prefix: str, outer_pks: list[Any]) -> dict[Any, list[Any]]:
-        """Which of *outer_pks* reach each row at the end of the to-one *prefix*, read once per scope.
+        """
+        Which of *outer_pks* reach each row at the end of the to-one *prefix*, read once per scope.
 
         A probe that crosses further out than its own model - a pin matching through its location's
         wiki's aliases - has to bound the far table by wiki ids, not pin ids, and then map the
@@ -232,7 +239,8 @@ _SEQSCAN_OFF = "SELECT prior, set_config('enable_seqscan', 'off', true) FROM (SE
 
 @contextmanager
 def probe_scope() -> Iterator[ProbeScope]:
-    """Hold ``enable_seqscan = off`` and one pk cache for the block, entering once however nested.
+    """
+    Hold ``enable_seqscan = off`` and one pk cache for the block, entering once however nested.
 
     An operation issues a semi-join probe per term per field path. Setting and resetting the
     session around each made two thirds of one search's statements session settings rather than
@@ -268,7 +276,8 @@ def probe_scope() -> Iterator[ProbeScope]:
 
 
 def probe_statement(model: type[Model], condition: Q, outer_pks: list[Any]) -> list[Any]:
-    """Primary keys among *outer_pks* whose rows satisfy *condition*, as a join from *model*.
+    """
+    Primary keys among *outer_pks* whose rows satisfy *condition*, as a join from *model*.
 
     The general form, for the paths :func:`probe_relation` cannot restate. It still joins, so it
     still lets the planner start from the far table; what it does not do is let the bound be
@@ -321,7 +330,8 @@ def probe_statement(model: type[Model], condition: Q, outer_pks: list[Any]) -> l
 
 
 def probe_relation(model: type[Model], path: str, condition: Q, outer_pks: list[Any]) -> list[Any] | None:
-    """The same question as :func:`probe_statement`, asked of the crossing's own table.
+    """
+    The same question as :func:`probe_statement`, asked of the crossing's own table.
 
     ``pk__in=outer_pks`` bounds which rows of *model* may answer, but it does not bound what the
     planner reads to decide: with the condition written through the relation, both tables are in

@@ -1,4 +1,5 @@
-"""Built-in photo keywording plugins.
+"""
+Built-in photo keywording plugins.
 Three independent strategies, each storing its own ``ImageKeyword`` rows so they coexist and can be regenerated separately:"""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ class MetadataKeywordProvider(PhotoKeywordProvider):
     label = "Embedded metadata keywords"
 
     def is_available_for(self, image: Image) -> bool:
-        """Only when the upload task recorded keywords.
+        """
+        Only when the upload task recorded keywords.
 
         An empty record cannot tell a file with none from one rewritten before it was read, so it never
         replaces the keywords a photo already has.
@@ -41,7 +43,8 @@ class MetadataKeywordProvider(PhotoKeywordProvider):
         return bool(image.embedded_keywords)
 
     def generate(self, image: Image) -> list[KeywordResult]:
-        """Return the keywords recorded on the row; the stored file is never opened here.
+        """
+        Return the keywords recorded on the row; the stored file is never opened here.
 
         Args:
             image: The uploaded image.
@@ -77,7 +80,8 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
     service_key = "ai_photo_keywords"
 
     def is_available_for(self, image: Image) -> bool:
-        """Gate on the AI photo processing subscription, every AI toggle, and this environment calling hosted AI.
+        """
+        Gate on the AI photo processing subscription, every AI toggle, and this environment calling hosted AI.
 
         Args:
             image: The uploaded image.
@@ -100,7 +104,8 @@ class AiVisionKeywordProvider(PhotoKeywordProvider):
         return user_has_feature(profile.user, SiteFeature.AI_PHOTO_PROCESSING)
 
     def generate(self, image: Image) -> list[KeywordResult]:
-        """Downscale the photo and ask the AI provider for descriptive keywords.
+        """
+        Downscale the photo and ask the AI provider for descriptive keywords.
 
         Args:
             image: The uploaded image.
@@ -157,7 +162,8 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
     service_key = "cloudflare_image_classifier"
 
     def is_available_for(self, image: Image) -> bool:
-        """Requires configured Cloudflare credentials, the uploader's external-APIs toggle, and this environment calling Cloudflare.
+        """
+        Requires configured Cloudflare credentials, the uploader's external-APIs toggle, and this environment calling Cloudflare.
 
         Args:
             image: The uploaded image.
@@ -177,7 +183,8 @@ class ClassifierKeywordProvider(PhotoKeywordProvider):
         return bool(settings.cloudflare_worker_ai_endpoint and settings.cloudflare_ai_api_key)
 
     def generate(self, image: Image) -> list[KeywordResult]:
-        """Downscale the photo and classify its content into keyword labels.
+        """
+        Downscale the photo and classify its content into keyword labels.
 
         Args:
             image: The uploaded image.

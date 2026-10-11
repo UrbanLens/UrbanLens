@@ -1,4 +1,5 @@
-"""QuerySets and managers for the reputation ledger.
+"""
+QuerySets and managers for the reputation ledger.
 
 Scoping and aggregation only - what a contribution is *worth* is decided by the
 rule registry in ``services.reputation``.
@@ -20,7 +21,8 @@ if TYPE_CHECKING:
 
 
 def _pk_of(value: Model | int) -> int:
-    """Return a primary key from either a model instance or a bare pk.
+    """
+    Return a primary key from either a model instance or a bare pk.
     Signal handlers only ever hold ``instance.profile_id``, and fetching the whole row to scope a query would add a query to every contributing write.
     """
     return value if isinstance(value, int) else value.pk
@@ -34,14 +36,16 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
         return self.filter(profile_id=_pk_of(profile))
 
     def counting(self) -> Self:
-        """Rows that currently contribute to a total.
+        """
+        Rows that currently contribute to a total.
         Excludes retracted rows and rows the scorer has not valued yet.
         ``value`` is null between the synchronous write and the deferred scoring pass, so "unscored" and "worth nothing" are different states and must not be summed together.
         """
         return self.filter(retracted=False, value__isnull=False)
 
     def unscored(self) -> Self:
-        """Rows written but not yet valued, oldest first.
+        """
+        Rows written but not yet valued, oldest first.
 
         The nightly sweep drains these, which is what makes a lost Celery
         enqueue survivable - the contribution itself was never at risk,
@@ -62,7 +66,8 @@ class ReputationEventQuerySet(abstract.DashboardQuerySet["ReputationEvent"]):
         return self.filter(wiki_id=_pk_of(wiki))
 
     def total_value(self) -> Decimal:
-        """Sum the weighted value of the counting rows in this queryset.
+        """
+        Sum the weighted value of the counting rows in this queryset.
         ``weight`` is 1 for almost every row; it is how an ending that should reduce standing without erasing it is expressed (D9), as against ``retracted``, which removes the row from this sum entirely.
         """
         weighted = ExpressionWrapper(F("value") * F("weight"), output_field=DecimalField(max_digits=18, decimal_places=4))

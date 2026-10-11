@@ -54,7 +54,8 @@ class ApiKeyCreateViewTests(TestCase):
         self.assertNotContains(second_response, api_key.prefix)
 
     def test_non_htmx_create_reveals_the_key_once_on_the_redirected_settings_page(self) -> None:
-        """The default (non-htmx) flow redirects to the settings page, which does
+        """
+        The default (non-htmx) flow redirects to the settings page, which does
         the actual reveal - the session flash must survive that redirect and
         still be gone by the next render."""
         create_response = self.client.post(reverse("settings.security.api_keys.create"), {"name": "Zapier"})
@@ -141,7 +142,8 @@ class ApiKeysSettingsPageContentTests(TestCase):
 
 
 class ApiKeyListPaginationTests(TestCase):
-    """P69: the key list grows forever, because revoking never removes a row.
+    """
+    P69: the key list grows forever, because revoking never removes a row.
 
     Revoked keys are shown on purpose - ``revoke_all_api_keys``' docstring says so, and an owner needs to see
     that a key went away - which is exactly why the list cannot be trimmed and has to page instead."""
@@ -161,7 +163,8 @@ class ApiKeyListPaginationTests(TestCase):
         return made
 
     def _listed(self, response) -> list[str]:
-        """The key names this response actually rendered, newest first.
+        """
+        The key names this response actually rendered, newest first.
 
         By name rather than by counting list items: the API-key list reuses the passkey list's classes, so a
         count would also pick up the Security section's passkeys on a full settings page."""

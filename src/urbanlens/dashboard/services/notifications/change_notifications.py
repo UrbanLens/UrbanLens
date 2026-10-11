@@ -1,4 +1,5 @@
-"""Notifications that something shared changed: a trip's details or activities, a place's community wiki.
+"""
+Notifications that something shared changed: a trip's details or activities, a place's community wiki.
 
 A burst of changes folds into one notification per recipient. While a recipient's notification of one actor's changes
 to one trip or wiki is unread and was last added to within :data:`FOLD_WINDOW`, the next change raises its count
@@ -39,7 +40,8 @@ FOLD_WINDOW = timedelta(minutes=30)
 
 @dataclass(frozen=True)
 class ChangeNotice:
-    """What one change tells one recipient.
+    """
+    What one change tells one recipient.
 
     Attributes:
         title: Names the changed thing and nothing about the change; text alerts carry the title alone.
@@ -66,7 +68,8 @@ def announce_change(
     recipients: Iterable[Profile | int],
     notice_for: Callable[[Profile], ChangeNotice | None],
 ) -> int:
-    """Tell each recipient of a change, folding it into their unread notification of the same burst.
+    """
+    Tell each recipient of a change, folding it into their unread notification of the same burst.
 
     The actor never hears of their own change, nor does anyone a block joins them with, and a recipient who muted
     the actor or switched the type off hears nothing. The actor is named as each recipient may see them.
@@ -165,7 +168,8 @@ def _enqueue(task_name: str, *args: object) -> None:
 
 
 def announce_trip_change(trip: Trip, actor: Profile, change: str) -> None:
-    """Tell a trip's members that ``actor`` changed it, once the change commits.
+    """
+    Tell a trip's members that ``actor`` changed it, once the change commits.
 
     Args:
         trip: The changed trip.
@@ -176,7 +180,8 @@ def announce_trip_change(trip: Trip, actor: Profile, change: str) -> None:
 
 
 def notify_trip_change(trip: Trip, actor: Profile, change: str) -> int:
-    """Tell a trip's joined members of a change; the worker side of :func:`announce_trip_change`.
+    """
+    Tell a trip's joined members of a change; the worker side of :func:`announce_trip_change`.
 
     Args:
         trip: The changed trip.
@@ -203,7 +208,8 @@ def notify_trip_change(trip: Trip, actor: Profile, change: str) -> int:
 
 
 def announce_wiki_change(wiki: Wiki, actor: Profile, change: str, *, fields: Collection[str] = ()) -> None:
-    """Tell the people who pinned a wiki's place that ``actor`` changed it, once the change commits.
+    """
+    Tell the people who pinned a wiki's place that ``actor`` changed it, once the change commits.
 
     Args:
         wiki: The changed wiki.
@@ -232,7 +238,8 @@ _EDIT_PHRASES: dict[str, str] = {
 
 
 def describe_wiki_edit(changes: Collection[str], *, is_revert: bool = False) -> str:
-    """What a recorded wiki edit did, completing "<actor> ...".
+    """
+    What a recorded wiki edit did, completing "<actor> ...".
 
     Args:
         changes: The edit's ``WikiEdit.changes`` keys.
@@ -251,7 +258,8 @@ def describe_wiki_edit(changes: Collection[str], *, is_revert: bool = False) -> 
 
 
 def announce_wiki_edit(edit: WikiEdit) -> None:
-    """Announce a person's recorded wiki edit, once it commits; an automated one (no editor) announces nothing.
+    """
+    Announce a person's recorded wiki edit, once it commits; an automated one (no editor) announces nothing.
 
     Args:
         edit: The new edit.
@@ -263,7 +271,8 @@ def announce_wiki_edit(edit: WikiEdit) -> None:
 
 
 def wiki_audience(wiki: Wiki) -> list[int]:
-    """The profiles that pinned a wiki's place, as the wiki's community count reckons them.
+    """
+    The profiles that pinned a wiki's place, as the wiki's community count reckons them.
 
     Root pins only: child pins are mostly nested automatically under a site someone pinned, and a campus's thirty
     building wikis are not thirty places that person chose to follow.
@@ -282,7 +291,8 @@ def wiki_audience(wiki: Wiki) -> list[int]:
 
 
 def notify_wiki_change(wiki: Wiki, actor: Profile, change: str, fields: Collection[str] = ()) -> int:
-    """Tell a wiki's audience of a change; the worker side of :func:`announce_wiki_change`.
+    """
+    Tell a wiki's audience of a change; the worker side of :func:`announce_wiki_change`.
 
     A recipient under concealment hears only of a change by someone whose contributions concealment shows them, and
     of a field edit only when it touched a field concealment does not always blank. The wiki is named as that

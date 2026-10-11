@@ -104,7 +104,8 @@ class LabelMembershipVisibilityTests(TestCase):
 
 
 class MapEndpointLabelVisibilityTests(TestCase):
-    """The map add/quick-edit endpoints must apply the same label visibility
+    """
+    The map add/quick-edit endpoints must apply the same label visibility
     rule as the label membership panels - a guessed foreign label id must not
     attach (and thereby expose the name of) another user's private label."""
 
@@ -228,7 +229,8 @@ class TripCommentReactionMembershipTests(TestCase):
         self.assertEqual(self._react().status_code, 200)
 
     def test_non_member_cannot_react(self) -> None:
-        """A non-member is told the trip does not exist, rather than refused.
+        """
+        A non-member is told the trip does not exist, rather than refused.
 
         This answered 403 until the trip lookup moved to ``services.trips.trip_access.get_trip_for_viewer``,
         which reports a trip the viewer has no standing access to as simply not found - a 403 confirms the slug

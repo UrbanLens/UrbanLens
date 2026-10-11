@@ -70,7 +70,8 @@ class UnknownPinFieldsError(PinEditError):
 
 
 class ConflictingVisitedFieldsError(PinEditError):
-    """``visited`` and an explicit ``last_visited`` were submitted together.
+    """
+    ``visited`` and an explicit ``last_visited`` were submitted together.
     The two make contradictory claims about the same fact, so neither may be allowed to silently win."""
 
 
@@ -79,7 +80,8 @@ class PinReparentError(ValueError):
 
 
 class ReparentLocationConflictError(PinReparentError):
-    """Detaching would leave two top-level pins sharing one Location.
+    """
+    Detaching would leave two top-level pins sharing one Location.
     Raised only when detaching (``new_parent=None``): the pin's own Location already has another top-level pin for this profile, and two root pins may never share one Location per profile."""
 
 
@@ -92,7 +94,8 @@ class PinMoveError(ValueError):
 
 
 class PinHasChildrenError(ValueError):
-    """A delete was requested without saying what to do with the pin's children.
+    """
+    A delete was requested without saying what to do with the pin's children.
 
     Attributes:
         descendant_count: Size of the pin's subtree below it."""
@@ -103,7 +106,8 @@ class PinHasChildrenError(ValueError):
 
 
 def _normalize_text(value: Any) -> str | None:
-    """Collapse a submitted free-text value to a stored value or ``None``.
+    """
+    Collapse a submitted free-text value to a stored value or ``None``.
 
     Args:
         value: The submitted value - a string, or ``None`` for an explicit clear.
@@ -115,7 +119,8 @@ def _normalize_text(value: Any) -> str | None:
 
 
 def _replace_pin_labels(pin: Pin, labels: Sequence[Label]) -> None:
-    """Make *labels* the pin's complete set of organize labels.
+    """
+    Make *labels* the pin's complete set of organize labels.
 
     Args:
         pin: The pin whose labels are being replaced.
@@ -144,7 +149,8 @@ def apply_pin_edits(
     labels: Sequence[Label] | None = None,
     visited: bool | None = None,
 ) -> list[str]:
-    """Apply a partial edit to *pin*, in one transaction, with its side effects.
+    """
+    Apply a partial edit to *pin*, in one transaction, with its side effects.
     Absent means untouched: only the keys actually present in *fields* are written, so a single-control quick edit (a star click) cannot clobber a field the user never saw.
 
     Args:
@@ -205,7 +211,8 @@ def apply_pin_edits(
 
 
 def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None:
-    """Repoint *pin* to a new/existing Location at the given coordinates.
+    """
+    Repoint *pin* to a new/existing Location at the given coordinates.
     Coordinates live on ``Location`` (not ``Pin``), so this repoints ``pin.location`` rather than writing through a serializer.
 
     Args:
@@ -233,7 +240,8 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
 
 
 def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
-    """Change *pin*'s parent, enforcing the same invariants as the map UI.
+    """
+    Change *pin*'s parent, enforcing the same invariants as the map UI.
 
     Args:
         pin: The pin to reparent.
@@ -257,7 +265,8 @@ def reparent_pin(pin: Pin, new_parent: Pin | None) -> None:
 
 
 def _promote_children(instance: Pin) -> list[int]:
-    """Re-parent *instance*'s direct children ahead of its deletion.
+    """
+    Re-parent *instance*'s direct children ahead of its deletion.
     A child whose Location already has another top-level pin nests under that pin instead (top-level pins are unique per Location+profile).
 
     Args:
@@ -287,7 +296,8 @@ def _promote_children(instance: Pin) -> list[int]:
 
 
 def _finish_deferred_promotions(profile_id: int, deferred_ids: list[int]) -> None:
-    """Finish promoting the children held back by :func:`_promote_children`.
+    """
+    Finish promoting the children held back by :func:`_promote_children`.
     Runs after the parent pin's row is gone, so its root slot is free.
 
     Args:
@@ -307,7 +317,8 @@ class PinDeletion:
 
 
 def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
-    """Delete *pin*, asking the caller what to do with its child pins first.
+    """
+    Delete *pin*, asking the caller what to do with its child pins first.
 
     Args:
         pin: The pin to delete.

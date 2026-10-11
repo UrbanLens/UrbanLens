@@ -1,4 +1,5 @@
-"""API-key bearer-token authentication for the external API.
+"""
+API-key bearer-token authentication for the external API.
 
 Wired into ``external_api`` views only - never added to
 ``REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]`` in settings, so it has no
@@ -24,7 +25,8 @@ if TYPE_CHECKING:
 
 
 class ApiKeyAuthentication(BaseAuthentication):
-    """Authenticates a request bearing ``Authorization: Bearer <api-key>``.
+    """
+    Authenticates a request bearing ``Authorization: Bearer <api-key>``.
 
     On success, DRF stashes the returned ``(user, auth)`` tuple as ``request.user``/``request.auth`` -
     ``external_api.permissions.HasApiKeyScope`` reads ``request.auth`` (the ``ApiKey`` row) to check its
@@ -34,7 +36,8 @@ class ApiKeyAuthentication(BaseAuthentication):
     keyword = "Bearer"
 
     def authenticate(self, request: Request) -> tuple[User, ApiKey] | None:
-        """Resolve the bearer token in ``Authorization``, if present.
+        """
+        Resolve the bearer token in ``Authorization``, if present.
 
         Args:
             request: The incoming DRF request.

@@ -1,4 +1,5 @@
-"""The egress policy itself (D26): which category each environment may call, and on what share.
+"""
+The egress policy itself (D26): which category each environment may call, and on what share.
 
 Every UrbanLens host shares one residential address with production REData, so a keyless API's per-address
 tolerance and a billed API's free tier are one budget, and production is meant to spend it. These pin the

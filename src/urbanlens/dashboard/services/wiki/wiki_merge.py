@@ -1,4 +1,5 @@
-"""Automatic parent/child nesting between community Wikis, following place lineage.
+"""
+Automatic parent/child nesting between community Wikis, following place lineage.
 This merge should happen "without needing user confirmation"."""
 
 from __future__ import annotations
@@ -14,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def wiki_property_polygon(wiki: Wiki):
-    """The wiki's real property boundary, or None when only the fallback circle exists.
+    """
+    The wiki's real property boundary, or None when only the fallback circle exists.
 
     Args:
         wiki: The wiki whose property boundary to resolve.
@@ -33,7 +35,8 @@ def wiki_property_polygon(wiki: Wiki):
 
 
 def _nestable_child_wikis(wiki: Wiki):
-    """Root wikis that belong under this one.
+    """
+    Root wikis that belong under this one.
     Only direct children - a grandchild attaches to its own parent when that level reconciles, which is what keeps the tree a tree rather than flattening every descendant onto the outermost ancestor.
 
     Args:
@@ -60,7 +63,8 @@ def _nestable_child_wikis(wiki: Wiki):
 
 
 def _containing_root_wiki(wiki: Wiki) -> Wiki | None:
-    """The wiki of the nearest ancestor place that has one.
+    """
+    The wiki of the nearest ancestor place that has one.
 
     Args:
         wiki: The wiki looking for a bigger container.
@@ -84,7 +88,8 @@ def _containing_root_wiki(wiki: Wiki) -> Wiki | None:
 
 
 def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
-    """The nearest wiki on the place a placeless wiki's point stands on, or on a place containing that one.
+    """
+    The nearest wiki on the place a placeless wiki's point stands on, or on a place containing that one.
 
     A building's wiki is placeless when its point resolves onto its parcel, which the parcel's wiki already holds,
     and a building place with no wiki of its own still sits ``PART_OF`` its parcel. On a campus, a wiki standing on
@@ -117,7 +122,8 @@ def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
 
 
 def absorb_wiki(parent: Wiki, child: Wiki) -> None:
-    """Nest ``child`` under ``parent`` and log it on the parent's edit history.
+    """
+    Nest ``child`` under ``parent`` and log it on the parent's edit history.
 
     A Wikipedia article seeded while the child was a root, and untouched since, goes when the child turns out to be
     one of the parent's buildings (``wiki_seed.drop_misplaced_wikipedia_seed``).
@@ -141,7 +147,8 @@ def absorb_wiki(parent: Wiki, child: Wiki) -> None:
 
 
 def reconcile_wiki_nesting(wiki: Wiki) -> int:
-    """Automatically nest this wiki under a bigger one, and absorb smaller ones into it.
+    """
+    Automatically nest this wiki under a bigger one, and absorb smaller ones into it.
 
     Args:
         wiki: The wiki whose place was just (re)resolved.
@@ -174,7 +181,8 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
 
 
 def claim_parcel_for_location_wiki(location: Location) -> bool:
-    """Give the placeless top-level wiki standing at a location the parcel the location now stands on.
+    """
+    Give the placeless top-level wiki standing at a location the parcel the location now stands on.
 
     A wiki made before its location's boundary arrived is created placeless. Until it holds its parcel it is not the
     property's page: a pin elsewhere on the parcel gets a wiki of its own, and the campus's building wikis are never
@@ -203,7 +211,8 @@ def claim_parcel_for_location_wiki(location: Location) -> bool:
 
 
 def reconcile_wiki_nesting_for_location(location: Location) -> int:
-    """Reconcile nesting for a Location's wiki, if it has one.
+    """
+    Reconcile nesting for a Location's wiki, if it has one.
 
     Args:
         location: The Location whose boundaries were just (re)generated.

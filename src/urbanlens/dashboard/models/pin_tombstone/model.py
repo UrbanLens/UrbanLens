@@ -1,4 +1,5 @@
-"""Durable record of pin deletions, for delta-sync clients.
+"""
+Durable record of pin deletions, for delta-sync clients.
 Pins are hard-deleted (recoverable only via the 7-day undo stash, which mints a brand-new uuid on restore - see ``services.undo.handlers.pin``).
 """
 

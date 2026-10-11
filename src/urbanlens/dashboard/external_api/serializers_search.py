@@ -1,4 +1,5 @@
-"""Serializers for the external API's global-search surface.
+"""
+Serializers for the external API's global-search surface.
 
 Hand-rolled and schema-only on the response side, matching the rest of this package: nothing here is
 a ``ModelSerializer``, because a search result is not a model row - it is a
@@ -29,7 +30,8 @@ MAX_SECTION_LIMIT = 50
 
 
 class GlobalSearchQuerySerializer(serializers.Serializer):
-    """Validates the ``q``/``types``/``limit`` query parameters.
+    """
+    Validates the ``q``/``types``/``limit`` query parameters.
 
     A search box fires a request per keystroke, so answering the first character with a 400 would make
     every session start with an error the user never caused.
@@ -43,7 +45,8 @@ class GlobalSearchQuerySerializer(serializers.Serializer):
 
 
 def parse_result_types(raw: str | None) -> frozenset[str] | None:
-    """Parse the ``types`` parameter into the result types to search.
+    """
+    Parse the ``types`` parameter into the result types to search.
 
     Args:
         raw: The raw comma-separated value, or None when the parameter was absent entirely.

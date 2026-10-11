@@ -1,4 +1,5 @@
-"""Tests for the Trivia multiplayer lobby lifecycle: invite, join, begin, joined-only round/answer logic.
+"""
+Tests for the Trivia multiplayer lobby lifecycle: invite, join, begin, joined-only round/answer logic.
 
 Mirrors test_spotguessr_multiplayer.py's shape and coverage exactly, adapted
 to Trivia's question-based (rather than location-based) rounds.

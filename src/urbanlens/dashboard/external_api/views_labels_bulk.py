@@ -1,4 +1,5 @@
-"""External-API wrappers for label priority reorder and bulk delete/edit/convert.
+"""
+External-API wrappers for label priority reorder and bulk delete/edit/convert.
 
 See ``serializers_labels_bulk``'s docstring for the one structural departure
 from the internal views this mirrors (``dashboard/controllers/organize.py``,
@@ -45,7 +46,8 @@ def _owned_editable_labels(profile, uuids: list) -> list[Label]:
 
 
 class LabelReorderView(ExternalApiView):
-    """POST: set the caller's display-priority order across their own tag/category/status labels.
+    """
+    POST: set the caller's display-priority order across their own tag/category/status labels.
 
     ``uuids`` is the complete desired order, first = highest priority.
     Global labels named in the request are left untouched (see
@@ -111,7 +113,8 @@ class LabelBulkDeleteView(ExternalApiView):
 
 
 class LabelBulkEditView(ExternalApiView):
-    """POST: apply the same icon/color/description/order and/or parent-hierarchy change to several labels.
+    """
+    POST: apply the same icon/color/description/order and/or parent-hierarchy change to several labels.
 
     Every field but ``uuids`` is optional and independent.
     See ``serializers_labels_bulk.LabelBulkEditSerializer`` for exact null/absent semantics.
@@ -187,7 +190,8 @@ class LabelBulkEditView(ExternalApiView):
 
 
 class LabelBulkConvertView(ExternalApiView):
-    """POST: convert several of the caller's own labels to another kind at once.
+    """
+    POST: convert several of the caller's own labels to another kind at once.
 
     A label already at ``target_kind`` is left untouched.
     A ``status`` label cannot be converted to anything else - the internal UI has no path out of

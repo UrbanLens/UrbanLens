@@ -1,4 +1,5 @@
-"""Opaque ``(timestamp, pk)`` cursors for keyset-paginated feeds.
+"""
+Opaque ``(timestamp, pk)`` cursors for keyset-paginated feeds.
 Keyset pagination is what every browse/sync feed on the external API uses instead of page numbers: concurrent inserts reorder page-numbered results under the reader, silently dropping or duplicating rows."""
 
 from __future__ import annotations
@@ -15,7 +16,8 @@ class InvalidCursorError(ValueError):
 
 
 def encode_cursor(stamp: datetime, pk: int) -> str:
-    """Encode a ``(timestamp, pk)`` keyset position as a URL-safe token.
+    """
+    Encode a ``(timestamp, pk)`` keyset position as a URL-safe token.
 
     Args:
         stamp: The row's ordering timestamp.
@@ -27,7 +29,8 @@ def encode_cursor(stamp: datetime, pk: int) -> str:
 
 
 def decode_cursor(cursor: str) -> tuple[datetime, int]:
-    """Decode a token back into its keyset position.
+    """
+    Decode a token back into its keyset position.
 
     Args:
         cursor: A token previously produced by :func:`encode_cursor`.

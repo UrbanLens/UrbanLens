@@ -1,4 +1,5 @@
-"""Each import parser that now reads a file a piece at a time reads what its whole-file predecessor read (P95).
+"""
+Each import parser that now reads a file a piece at a time reads what its whole-file predecessor read (P95).
 
 The predecessors are kept here as the reference the streaming parsers must agree with, over generated documents.
 ``READ_CHUNK_BYTES`` is lowered so a few bytes make a chunk and every boundary a document has gets crossed.
@@ -473,7 +474,8 @@ class LocationHistoryAgreesWithJsonLoadsTests(SimpleTestCase):
 
 
 class ACsvCellPastTheStdlibLimitIsReadTests(SimpleTestCase):
-    """``csv`` refuses a cell over 128 KiB by default - a per-element cap of its own, which Jess's P95 ruling (no
+    """
+    ``csv`` refuses a cell over 128 KiB by default - a per-element cap of its own, which Jess's P95 ruling (no
     element is capped) rules out. The limit is lifted at startup; a ``csv.Error`` still fails only its own file."""
 
     _KML = (
@@ -508,7 +510,8 @@ class ACsvCellPastTheStdlibLimitIsReadTests(SimpleTestCase):
 
 
 class ALargeCsvRecordIsReadTests(SimpleTestCase):
-    """P95, Jess's ruling of 2026-10-02: no element is capped, so one huge CSV record previews like a small one.
+    """
+    P95, Jess's ruling of 2026-10-02: no element is capped, so one huge CSV record previews like a small one.
 
     Each shape is over 1 MiB, the bound an earlier change put on a record and then removed. ``csv`` builds a record
     whole, so what holds a record is the worker's memory, the upload's budget and the 1 GB entry cap, not a limit here.
@@ -1042,7 +1045,8 @@ class ShapefileAgreesWithTheWholeFrameTests(SimpleTestCase):
         self.assertEqual(names, ["n0", "n1", "n4", "n5", "n6", "n7"])
 
     def test_a_null_attribute_is_left_out_rather_than_read_as_nan(self) -> None:
-        """Where the whole frame differed: it read a null text field as ``nan``, and an integer column holding
+        """
+        Where the whole frame differed: it read a null text field as ``nan``, and an integer column holding
         a null as floats."""
         records = [(False, [b"", b"", b"", b"?", b""]), (False, [b"", b"7", b"", b"?", b""])]
         with tempfile.TemporaryDirectory() as directory:

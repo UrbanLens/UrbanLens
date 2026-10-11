@@ -88,7 +88,8 @@ class RevivedRequestDirectionTests(TestCase):
         self.assertEqual(pair.count(), 1, "reviving a removed friendship produced a second row for the same pair")
 
     def test_a_mute_follows_its_owner_when_the_row_is_reoriented(self) -> None:
-        """`muted_by_*` are positional, so they have to travel with the ends.
+        """
+        `muted_by_*` are positional, so they have to travel with the ends.
 
         Which column belongs to a viewer depends on which end of the row they are."""
         request_or_accept_friendship(self.alice, self.bob)
@@ -110,7 +111,8 @@ class RevivedRequestDirectionTests(TestCase):
 
 
 class StatusesThatCannotBeRevivedTests(TestCase):
-    """The other end of the same rule.
+    """
+    The other end of the same rule.
 
     Only the first of those is right: `can_request` admits `Declined` and `Removed` and nothing else, so for
     `Blocked` and `Ignored` the correct behaviour is a *refusal*, and re-orienting one of those rows would be

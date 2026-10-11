@@ -42,7 +42,8 @@ def is_configured() -> bool:
 
 
 def configure() -> None:
-    """Point the Stripe SDK at the configured secret key, or raise if unset.
+    """
+    Point the Stripe SDK at the configured secret key, or raise if unset.
 
     Every entry point that reaches the SDK calls this first: the key is process-global, so a worker that has not run
     it has none.
@@ -65,7 +66,8 @@ def configure() -> None:
 
 
 def idempotency_key(kind: str, *parts: object) -> str:
-    """A Stripe idempotency key for one local action.
+    """
+    A Stripe idempotency key for one local action.
 
     Namespaced by ``SITE_URL`` because deployments can share a Stripe account while numbering their rows alike. Callers
     include the request's parameters in *parts*: Stripe refuses a reused key whose parameters differ.
@@ -82,7 +84,8 @@ def idempotency_key(kind: str, *parts: object) -> str:
 
 
 def lock_billing_owner(user: User) -> None:
-    """Take the row lock that serialises one user's billing writes: customer creation and new subscriptions.
+    """
+    Take the row lock that serialises one user's billing writes: customer creation and new subscriptions.
 
     Call inside ``transaction.atomic``.
 
@@ -93,7 +96,8 @@ def lock_billing_owner(user: User) -> None:
 
 
 def ensure_customer(user: User) -> BillingCustomer:
-    """Return the user's BillingCustomer, creating the Stripe Customer + row if needed.
+    """
+    Return the user's BillingCustomer, creating the Stripe Customer + row if needed.
 
     Args:
         user: The user to look up or create a Stripe Customer for.
@@ -119,7 +123,8 @@ def ensure_customer(user: User) -> BillingCustomer:
 
 
 def ensure_product(role: SubscriptionRole) -> str:
-    """Return the role's Stripe Product id, creating it (and persisting it) if needed.
+    """
+    Return the role's Stripe Product id, creating it (and persisting it) if needed.
 
     Args:
         role: The role to look up or create a Stripe Product for.
@@ -148,7 +153,8 @@ def ensure_product(role: SubscriptionRole) -> str:
 
 
 def create_checkout_session(user: User, role: SubscriptionRole, amount_cents: int, success_url: str, cancel_url: str) -> stripe.checkout.Session:
-    """Create a Checkout Session for subscribing *user* to *role* at *amount_cents*/month.
+    """
+    Create a Checkout Session for subscribing *user* to *role* at *amount_cents*/month.
 
     Args:
         user: The subscribing user.
@@ -196,7 +202,8 @@ def create_checkout_session(user: User, role: SubscriptionRole, amount_cents: in
 
 
 def update_pledge(role_subscription: RoleSubscription, new_amount_cents: int) -> stripe.Subscription:
-    """Change an existing pay-what-you-want subscription's pledge amount.
+    """
+    Change an existing pay-what-you-want subscription's pledge amount.
     Takes effect at the next billing cycle (``proration_behavior="none"``) rather than immediately reprorating/charging - matches the site's own "the following month" framing for when a changed pledge starts counting toward a dynamic threshold.
 
     Args:
@@ -235,7 +242,8 @@ def update_pledge(role_subscription: RoleSubscription, new_amount_cents: int) ->
 
 
 def cancel_at_period_end(role_subscription: RoleSubscription) -> stripe.Subscription:
-    """Cancel a subscription at the end of its current billing period.
+    """
+    Cancel a subscription at the end of its current billing period.
 
     Args:
         role_subscription: The subscription to cancel.
@@ -251,7 +259,8 @@ def cancel_at_period_end(role_subscription: RoleSubscription) -> stripe.Subscrip
 
 
 def create_billing_portal_session(user: User, return_url: str) -> str:
-    """Create a Stripe billing portal session for *user* and return its URL.
+    """
+    Create a Stripe billing portal session for *user* and return its URL.
 
     Args:
         user: The user managing their billing (must already have a BillingCustomer).

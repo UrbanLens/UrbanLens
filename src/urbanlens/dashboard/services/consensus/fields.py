@@ -49,7 +49,8 @@ class RoundContent:
 
 @dataclass(frozen=True)
 class ConsensusFieldStrategy:
-    """Everything field-kind-specific about generating, applying, and comparing a round's answer.
+    """
+    Everything field-kind-specific about generating, applying, and comparing a round's answer.
 
     Attributes:
         kind: The ``ConsensusFieldKind`` value this strategy implements.
@@ -100,7 +101,8 @@ def _wiki_field_strategy(
     normalize: Callable[[Any], Any] = _text_normalize,
     agrees: Callable[[Any, Any], bool] = _text_agrees,
 ) -> ConsensusFieldStrategy:
-    """Shared factory for the four plain Wiki-attribute field kinds (name/description/indoor_outdoor/pin_type).
+    """
+    Shared factory for the four plain Wiki-attribute field kinds (name/description/indoor_outdoor/pin_type).
 
     Args:
         written_fields: Columns ``set_value`` actually assigns, when that is not just ``field_name``."""
@@ -362,7 +364,8 @@ def all_kinds() -> list[str]:
 
 
 def _fits_where_stored(kind: str, value: str) -> bool:
-    """Whether a text answer fits the answer row, and the wiki column a name or alias is applied to.
+    """
+    Whether a text answer fits the answer row, and the wiki column a name or alias is applied to.
 
     Each is measured as written: the answer row also keeps a normalized copy, and names and aliases are sanitized
     on save - both can come out longer than what was typed.
@@ -384,7 +387,8 @@ def _fits_where_stored(kind: str, value: str) -> bool:
 
 
 def validate_value(kind: str, value: str) -> bool:
-    """Whether ``value`` is a structurally acceptable text submission for ``kind`` (before applying it).
+    """
+    Whether ``value`` is a structurally acceptable text submission for ``kind`` (before applying it).
 
     Closed-vocabulary kinds must be one of their choices; every other text kind must fit where it is stored.
     Coordinates are validated by their own controller parsing, not here.

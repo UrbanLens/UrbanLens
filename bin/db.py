@@ -90,7 +90,8 @@ class Db:
 
     @log_path.setter
     def log_path(self, user_input_path: str) -> None:
-        """Sanitize and set the log path.
+        """
+        Sanitize and set the log path.
 
         Args:
             user_input_path: User-supplied path.
@@ -106,7 +107,8 @@ class Db:
 
     @data_path.setter
     def data_path(self, user_input_path: str) -> None:
-        """Sanitize and set the data directory path.
+        """
+        Sanitize and set the data directory path.
 
         Args:
             user_input_path: User-supplied path.
@@ -130,7 +132,8 @@ class Db:
         return Path(self._data_path).parent / "tmp" / "socket"
 
     def __init__(self, data_path: str = DEFAULT_DATA_PATH, log_path: str = DEFAULT_LOG_PATH):
-        """Set up the Db object.
+        """
+        Set up the Db object.
 
         Args:
             data_path: Postgres data directory (sanitized).
@@ -164,7 +167,8 @@ class Db:
         pg_wait: bool = False,
         **kwargs,
     ) -> subprocess.CompletedProcess:
-        """Build and run a pg_ctl command.
+        """
+        Build and run a pg_ctl command.
 
         Args:
             command: The pg_ctl subcommand.
@@ -187,7 +191,8 @@ class Db:
         return subprocess.run(cmd, **kwargs)  # noqa: PLW1510  # nosec B603
 
     def execute_sql(self, sql: str, database: str | None = None) -> int:
-        """Run SQL via psql; return the exit code.
+        """
+        Run SQL via psql; return the exit code.
 
         Args:
             sql: The SQL statement to execute.
@@ -257,7 +262,8 @@ class Db:
         return self.execute_sql("SELECT pid, relation::regclass, mode, granted FROM pg_locks WHERE NOT granted;")
 
     def backup(self) -> int:
-        """Back up the database to a timestamped SQL file.
+        """
+        Back up the database to a timestamped SQL file.
 
         Returns:
             int: The PID of the pg_dump process, or -1 on failure.
@@ -308,7 +314,8 @@ class Db:
             time.sleep(5)
 
     def is_running(self) -> bool:
-        """Return True when the server is running.
+        """
+        Return True when the server is running.
 
         Returns:
             True if running, False otherwise.
@@ -322,7 +329,8 @@ class Db:
         return child.returncode == 0
 
     def sanitize_path(self, user_input_path: str) -> str:
-        """Sanitize user input for shell use.
+        """
+        Sanitize user input for shell use.
 
         Args:
             user_input_path: The user input to turn into a path.
@@ -335,7 +343,8 @@ class Db:
         return re.sub(r"[^a-zA-Z0-9/_.-]", "", user_input_path)
 
     def run_action(self, action: "Actions") -> None:
-        """Dispatch to the method matching the action name.
+        """
+        Dispatch to the method matching the action name.
 
         Args:
             action: The action to run.
@@ -396,7 +405,8 @@ class DbInitializer:
         check: bool = True,
         variables: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
-        """Run SQL via psql.
+        """
+        Run SQL via psql.
 
         Args:
             sql: The SQL statement to execute.
@@ -436,7 +446,8 @@ class DbInitializer:
         return subprocess.run(cmd, env=self._psql_env(), check=check, stdout=subprocess.PIPE, stderr=subprocess.PIPE)  # nosec B603
 
     def _check_role_exists(self) -> bool:
-        """Return True when the role exists (COUNT(*) distinguishes empty SELECT).
+        """
+        Return True when the role exists (COUNT(*) distinguishes empty SELECT).
 
         Returns:
             bool: True if the role exists, False otherwise.
@@ -464,7 +475,8 @@ class DbInitializer:
         self.execute_sql(f"CREATE ROLE {self._quote_identifier(self.db_user)} WITH LOGIN SUPERUSER")
 
     def check_db(self) -> bool:
-        """Return True when the database exists (direct connect; missing DB exits non-zero).
+        """
+        Return True when the database exists (direct connect; missing DB exits non-zero).
 
         Returns:
             bool: True if the database exists and is reachable, False otherwise.
@@ -507,7 +519,8 @@ class DbInitializer:
         self.enable_postgis()
 
     def run_migrations(self) -> None:
-        """Run Django migrations with UL_DB_PASS available.
+        """
+        Run Django migrations with UL_DB_PASS available.
 
         Raises:
             subprocess.CalledProcessError: if migrations fail.
@@ -519,7 +532,8 @@ class DbInitializer:
 
 
 class Actions(Enum):
-    """Command-line actions for this script.
+    """
+    Command-line actions for this script.
 
     Attributes:
         status: check the DB status

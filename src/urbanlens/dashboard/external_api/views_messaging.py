@@ -1,4 +1,5 @@
-"""External API endpoints for direct messages and group chats.
+"""
+External API endpoints for direct messages and group chats.
 
 Every view here is credential-only (``ExternalApiView``), and every one requires a
 ``messages:read``/``messages:write`` scope - which ``permissions.OAUTH2_ONLY_SCOPES`` restricts to
@@ -144,7 +145,8 @@ def _paginate_built(
     serializer_class: type[BaseSerializer],
     view: Any,
 ) -> Response:
-    """Page a list of raw rows, then build payloads for *only* that page.
+    """
+    Page a list of raw rows, then build payloads for *only* that page.
 
     These lists don't: conversation rows need normalizing (and that normalization issues per-row
     identity-masking queries), so paging first and building second keeps the cost proportional to the
@@ -167,7 +169,8 @@ def _paginate_built(
 
 
 def _resolve_peer(peer_slug: str, profile: Profile) -> Profile | None:
-    """Resolve a conversation partner's slug to a profile the caller may address.
+    """
+    Resolve a conversation partner's slug to a profile the caller may address.
 
     A partner with no history with the caller and whose DM settings reject them answers as "no such
     conversation", exactly like an invented slug - anything else is an existence oracle for precisely the
@@ -186,7 +189,8 @@ def _resolve_peer(peer_slug: str, profile: Profile) -> Profile | None:
 
 
 def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:
-    """Resolve the caller, the group, and the caller's active membership in it.
+    """
+    Resolve the caller, the group, and the caller's active membership in it.
 
     Group uuids are unguessable, but a distinguishable answer would still turn a leaked uuid into a
     membership oracle - and a *removed* member must not be able to confirm the group still exists
@@ -211,7 +215,8 @@ def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, Gr
 
 
 def _thread_response(request: Request, messages: list[Any], has_more_older: bool, builder: Callable[[Any], dict[str, Any]]) -> Response:
-    """Build the cursor-paginated envelope for one page of a message thread.
+    """
+    Build the cursor-paginated envelope for one page of a message thread.
 
     Keying off ``before=<id>`` - the same ``before_id`` cursor ``thread_page`` already takes - makes
     each request name an absolute position in the thread that new arrivals cannot move.
@@ -235,7 +240,8 @@ def _thread_response(request: Request, messages: list[Any], has_more_older: bool
 
 
 def _thread_limit(request: Request, default: int) -> int:
-    """Read and clamp the caller's requested page size.
+    """
+    Read and clamp the caller's requested page size.
 
     Args:
         request: The request carrying an optional ``limit`` query param.
@@ -252,7 +258,8 @@ def _thread_limit(request: Request, default: int) -> int:
 
 
 def _before_id(request: Request) -> int | None:
-    """Read the ``before`` cursor from the query string.
+    """
+    Read the ``before`` cursor from the query string.
 
     Args:
         request: The request.
@@ -267,7 +274,8 @@ def _before_id(request: Request) -> int | None:
 
 
 class ConversationsView(ExternalApiView):
-    """GET: the caller's unified inbox - one-to-one threads and group chats merged.
+    """
+    GET: the caller's unified inbox - one-to-one threads and group chats merged.
 
     Backed by ``all_conversations_for``, the same function the web sidebar
     uses, so ordering and unread counts can't drift between surfaces.
@@ -543,7 +551,8 @@ class MessageSettingsView(ExternalApiView):
 
 
 def _group_payload(group: GroupChat, *, member_count: int, is_muted: bool) -> dict[str, Any]:
-    """Build the ``GroupChatSerializer`` shape for one group.
+    """
+    Build the ``GroupChatSerializer`` shape for one group.
 
     Args:
         group: The group chat.
@@ -794,7 +803,8 @@ class GroupMembersView(ExternalApiView):
     }
 
     def _membership_or_none(self, request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat] | None:
-        """Resolve the caller and group when the caller is an active member.
+        """
+        Resolve the caller and group when the caller is an active member.
 
         Args:
             request: The authenticated request.
@@ -936,7 +946,8 @@ class GroupMembersView(ExternalApiView):
 
 
 class GroupPinShareView(ExternalApiView):
-    """POST: share one of the caller's pins into a group chat.
+    """
+    POST: share one of the caller's pins into a group chat.
 
     Fans out one ``PinShare`` (and therefore one ``LocationExposure``) per connected member through
     ``share_pin_in_group_message`` - the same path the web group composer uses.
@@ -1021,7 +1032,8 @@ class GroupMessageReactionView(ExternalApiView):
         responses={200: ReactionResultSerializer, 400: ErrorSerializer, 404: ErrorSerializer},
     )
     def post(self, request: Request, group_uuid: UUID, message_id: int) -> Response:
-        """Add or remove the caller's reaction on one message in this group.
+        """
+        Add or remove the caller's reaction on one message in this group.
 
         Args:
             request: The authenticated request carrying ``emoji``.
@@ -1077,7 +1089,8 @@ class GroupMessageDetailView(ExternalApiView):
         responses={204: None, 403: ErrorSerializer, 404: ErrorSerializer},
     )
     def delete(self, request: Request, group_uuid: UUID, message_id: int) -> Response:
-        """Delete one message in this group for everyone.
+        """
+        Delete one message in this group for everyone.
 
         Args:
             request: The authenticated request.
@@ -1126,7 +1139,8 @@ class GroupLeaveView(ExternalApiView):
         responses={204: None, 404: ErrorSerializer},
     )
     def post(self, request: Request, group_uuid: UUID) -> Response:
-        """Leave this group.
+        """
+        Leave this group.
 
         Gating on active membership alone would answer the retry with 404 - which a client cannot
         distinguish from "that group never existed" - and gating on nothing would let a leaked uuid be
@@ -1167,7 +1181,8 @@ class ConversationMuteView(ExternalApiView):
 
     @extend_schema(responses={200: MuteStateSerializer, 404: ErrorSerializer})
     def get(self, request: Request, peer_slug: str) -> Response:
-        """Report whether the caller has muted this conversation.
+        """
+        Report whether the caller has muted this conversation.
 
         Args:
             request: The authenticated request.
@@ -1194,7 +1209,8 @@ class ConversationMuteView(ExternalApiView):
         responses={200: MuteStateSerializer, 404: ErrorSerializer},
     )
     def put(self, request: Request, peer_slug: str) -> Response:
-        """Mute this conversation, idempotently.
+        """
+        Mute this conversation, idempotently.
 
         Args:
             request: The authenticated request.
@@ -1207,7 +1223,8 @@ class ConversationMuteView(ExternalApiView):
 
     @extend_schema(request=None, responses={200: MuteStateSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, peer_slug: str) -> Response:
-        """Unmute this conversation, idempotently.
+        """
+        Unmute this conversation, idempotently.
 
         Args:
             request: The authenticated request.
@@ -1219,7 +1236,8 @@ class ConversationMuteView(ExternalApiView):
         return self._set(request, peer_slug, muted=False)
 
     def _set(self, request: Request, peer_slug: str, *, muted: bool) -> Response:
-        """Drive this conversation's mute flag to `muted`.
+        """
+        Drive this conversation's mute flag to `muted`.
 
         Args:
             request: The authenticated request.
@@ -1247,7 +1265,8 @@ class GroupMuteView(ExternalApiView):
 
     @extend_schema(responses={200: MuteStateSerializer, 404: ErrorSerializer})
     def get(self, request: Request, group_uuid: UUID) -> Response:
-        """Report whether the caller has muted this group.
+        """
+        Report whether the caller has muted this group.
 
         Args:
             request: The authenticated request.
@@ -1273,7 +1292,8 @@ class GroupMuteView(ExternalApiView):
         responses={200: MuteStateSerializer, 404: ErrorSerializer},
     )
     def put(self, request: Request, group_uuid: UUID) -> Response:
-        """Mute this group, idempotently.
+        """
+        Mute this group, idempotently.
 
         Args:
             request: The authenticated request.
@@ -1287,7 +1307,8 @@ class GroupMuteView(ExternalApiView):
 
     @extend_schema(request=None, responses={200: MuteStateSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, group_uuid: UUID) -> Response:
-        """Unmute this group, idempotently.
+        """
+        Unmute this group, idempotently.
 
         Args:
             request: The authenticated request.
@@ -1300,7 +1321,8 @@ class GroupMuteView(ExternalApiView):
         return self._set(request, group_uuid, muted=False)
 
     def _set(self, request: Request, group_uuid: UUID, *, muted: bool) -> Response:
-        """Drive this membership's mute flag to `muted`.
+        """
+        Drive this membership's mute flag to `muted`.
 
         Args:
             request: The authenticated request.

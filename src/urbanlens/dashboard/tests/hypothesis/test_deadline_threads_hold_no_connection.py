@@ -1,4 +1,5 @@
-"""A deadline thread must not keep a database connection the web tier's budget never counted.
+"""
+A deadline thread must not keep a database connection the web tier's budget never counted.
 
 ``ul_web``'s limit is sized to the request threads, each keeping its connection. ``call_with_deadline`` runs on a
 64-thread pool of its own; if a call there that touched the ORM left its connection open, every pool thread that

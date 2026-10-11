@@ -1,4 +1,5 @@
-"""Helpers for keeping sensitive values out of application logs.
+"""
+Helpers for keeping sensitive values out of application logs.
 That is the whole point: a hash - even a keyed one - is a function of its input, so anyone who can guess the input can confirm it."""
 
 from __future__ import annotations
@@ -138,7 +139,8 @@ _TOKENS_LOCK = threading.Lock()
 
 
 def _tag(value: str) -> str:
-    """Return a stable random token for ``value``.
+    """
+    Return a stable random token for ``value``.
     The same value yields the same token for as long as it stays in the cache, so repeated log lines still correlate.
 
     Args:
@@ -159,7 +161,8 @@ def _tag(value: str) -> str:
 
 
 def redact_secret(value: str | None) -> str:
-    """Return a log-safe token standing in for an API key, token, or secret.
+    """
+    Return a log-safe token standing in for an API key, token, or secret.
 
     Args:
         value: The raw secret value, or ``None``/empty if unset.
@@ -172,7 +175,8 @@ def redact_secret(value: str | None) -> str:
 
 
 def redact_text(value: str | None) -> str:
-    """Return a log-safe token standing in for a place- or person-identifying string.
+    """
+    Return a log-safe token standing in for a place- or person-identifying string.
     Location and pin names in this app are user-submitted and often correspond to undisclosed urbex sites, so they must not appear in logs verbatim - nor in any form an attacker could match against a wordlist.
 
     Args:
@@ -186,7 +190,8 @@ def redact_text(value: str | None) -> str:
 
 
 def redact_filename(value: str | None) -> str:
-    """Return a log-safe token standing in for a user-supplied file name.
+    """
+    Return a log-safe token standing in for a user-supplied file name.
     Uploaded and archived file names are private user content (they are often the name of a place). The token keeps the lower-cased extension - only when it is plain alphanumerics - and the length, which is what is useful for debugging, and a stable tag so one file correlates across log lines.
 
     Args:
@@ -203,7 +208,8 @@ def redact_filename(value: str | None) -> str:
 
 
 def redact_coordinate(value: object) -> str:
-    """Return a log-safe token standing in for a latitude/longitude value.
+    """
+    Return a log-safe token standing in for a latitude/longitude value.
     Coordinates are the lowest-entropy sensitive value this app handles - a regional sweep is a few hundred million candidates - so they must never be logged in any form derived from the number itself, rounded included.
 
     Args:
@@ -217,7 +223,8 @@ def redact_coordinate(value: object) -> str:
 
 
 def redact_params(params: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a copy of a request-params mapping safe to pass to a logger.
+    """
+    Return a copy of a request-params mapping safe to pass to a logger.
     Fail-closed: a parameter is passed through only if its name is in :data:`_PASSTHROUGH_PARAM_NAMES`.
 
     Args:
@@ -251,7 +258,8 @@ def _is_record_id(name: str, value: object) -> bool:
 
 
 def redact_call_arguments(function: Callable[..., object] | None, args: Sequence[object], kwargs: Mapping[str, object]) -> dict[str, Any]:
-    """A call's arguments by parameter name, safe to pass to a logger.
+    """
+    A call's arguments by parameter name, safe to pass to a logger.
 
     Record ids pass through, so a failure can be traced to its row. Everything else is redacted as
     :func:`redact_params` would a request parameter of the same name.
@@ -272,7 +280,8 @@ def redact_call_arguments(function: Callable[..., object] | None, args: Sequence
 
 
 def is_sensitive_param_name(name: str) -> bool:
-    """Whether a request parameter named ``name`` carries a credential.
+    """
+    Whether a request parameter named ``name`` carries a credential.
 
     Args:
         name: The parameter name, in any case and with any separators.
@@ -341,7 +350,8 @@ def _redact_mapping_entry(match: re.Match[str]) -> str:
 
 
 def redact_urls(text: str) -> str:
-    """Return ``text`` with the credentials, coordinates and search text it carries replaced by tokens.
+    """
+    Return ``text`` with the credentials, coordinates and search text it carries replaced by tokens.
 
     Covers query parameters (plain and percent-encoded), coordinate pairs in a URL's path, ``user:password@``
     userinfo, credential and coordinate entries of a logged dict or JSON object, and precise ``lat, lng`` pairs
@@ -370,7 +380,8 @@ _KEY_NAME_SEGMENT = re.compile(r"[A-Za-z_-]+")
 
 
 def redact_cache_key(key: str) -> str:
-    """Return a log-safe stand-in for a cache or lock key: its leading name segments, then a token for the rest.
+    """
+    Return a log-safe stand-in for a cache or lock key: its leading name segments, then a token for the rest.
     A key names its subject after a fixed prefix - ``redata:context:<lat>,<lng>`` keys a lookup by the point it is
     about - so nothing past the prefix is logged in any form derived from it.
 
@@ -396,7 +407,8 @@ LOGGED_TILE_MAX_ZOOM = 12
 
 
 def redact_tile(z: int, x: int, y: int) -> str:
-    """Return a map tile's ``z/x/y``, coarsened to its ancestor at :data:`LOGGED_TILE_MAX_ZOOM` when it is deeper.
+    """
+    Return a map tile's ``z/x/y``, coarsened to its ancestor at :data:`LOGGED_TILE_MAX_ZOOM` when it is deeper.
     A tile someone's map asked for is where they were looking, and at zoom 18 that is one building.
 
     Args:
@@ -420,7 +432,8 @@ _EMAIL_ADDRESS = re.compile(r"(?<![\w.%+-])[\w.%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-
 
 
 def redact_email_addresses(text: str) -> str:
-    """Return ``text`` with each email address in it replaced by a :func:`_tag` token.
+    """
+    Return ``text`` with each email address in it replaced by a :func:`_tag` token.
 
     Args:
         text: A log message, exception message or traceback.

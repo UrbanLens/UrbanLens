@@ -113,7 +113,8 @@ def start_competitive_session(
     total_rounds: int = DEFAULT_ROUNDS_PER_SESSION,
     vote_threshold: float = ConsensusSession.DEFAULT_VOTE_THRESHOLD,
 ) -> ConsensusSession:
-    """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
+    """
+    Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
 
     Raises:
         NotFriendError: An invitee isn't a friend of ``host``; nothing is created and nobody is notified.
@@ -132,7 +133,8 @@ def start_competitive_session(
 
 
 def invite_to_session(session: ConsensusSession, host: Profile, invitee: Profile) -> ConsensusSessionParticipant:
-    """Invite one friend to a lobby session, notifying them.
+    """
+    Invite one friend to a lobby session, notifying them.
 
     Raises:
         NotHostError: ``host`` isn't this session's host.
@@ -179,7 +181,8 @@ def _notify_invite(host: Profile, invitee: Profile, session: ConsensusSession) -
 
 
 def join_session(session: ConsensusSession, profile: Profile) -> ConsensusSessionParticipant:
-    """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
+    """
+    Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
 
     Raises:
         NotInvitedError: ``profile`` was never invited.
@@ -201,7 +204,8 @@ def join_session(session: ConsensusSession, profile: Profile) -> ConsensusSessio
 
 
 def begin_session(session: ConsensusSession, host: Profile) -> ConsensusRound | None:
-    """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
+    """
+    Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
     Raises:
         NotHostError: the caller isn't the host.
@@ -243,7 +247,8 @@ def _known_value_for_comparison(round_: ConsensusRound) -> Any | None:
 
 
 def get_or_create_round(session: ConsensusSession) -> ConsensusRound | None:
-    """Return the session's current round, creating the next one once the prior round has fully settled.
+    """
+    Return the session's current round, creating the next one once the prior round has fully settled.
     Only JOINED participants count, and only an ACTIVE session is dealt a new round."""
     if session.status != ConsensusSessionStatus.ACTIVE:
         return None
@@ -291,7 +296,8 @@ def _get_joined_participant(session: ConsensusSession, profile: Profile) -> Cons
 
 
 def submit_answer(round_: ConsensusRound, profile: Profile, value: str | Point | None) -> ConsensusAnswer:
-    """Submit (or, with ``value=None``, skip) ``profile``'s answer for ``round_``.
+    """
+    Submit (or, with ``value=None``, skip) ``profile``'s answer for ``round_``.
 
     Args:
         round_: The round being answered.
@@ -487,7 +493,8 @@ def _finish_round(round_: ConsensusRound, answers: list[ConsensusAnswer]) -> Non
 
 
 def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: ConsensusAnswer) -> ConsensusVote:
-    """Cast a vote during a competitive round's disagreement sub-phase, resolving it once everyone has voted.
+    """
+    Cast a vote during a competitive round's disagreement sub-phase, resolving it once everyone has voted.
 
     Raises:
         NotJoinedError: ``profile`` isn't a JOINED participant.
@@ -522,7 +529,8 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
 
 
 def resolve_vote(round_: ConsensusRound, *, advance: bool = True) -> None:
-    """Tally a round's votes and resolve its disagreement sub-phase - winner-take-more, or tentative.
+    """
+    Tally a round's votes and resolve its disagreement sub-phase - winner-take-more, or tentative.
 
     Args:
         round_: The round whose vote to resolve; a no-op unless it is VOTE_OPEN.
@@ -568,7 +576,8 @@ def _advance_or_complete(session: ConsensusSession) -> None:
 
 
 def force_reveal_round(round_: ConsensusRound, *, advance: bool = True) -> None:
-    """Force a stalled answer-collection round to completion without waiting for every participant.
+    """
+    Force a stalled answer-collection round to completion without waiting for every participant.
 
     Args:
         round_: The round to reveal; a no-op unless it is PENDING.
@@ -598,7 +607,8 @@ def force_resolve_vote(round_: ConsensusRound) -> None:
 
 
 def end_session_now(session: ConsensusSession, host: Profile) -> ConsensusSession:
-    """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
+    """
+    Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
     Raises:
         NotHostError: the caller isn't the host.

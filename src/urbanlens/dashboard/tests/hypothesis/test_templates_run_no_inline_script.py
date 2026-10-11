@@ -1,4 +1,5 @@
-"""No template carries a program or an ``on*=`` handler, so the CSP can drop ``'unsafe-inline'`` (P34).
+"""
+No template carries a program or an ``on*=`` handler, so the CSP can drop ``'unsafe-inline'`` (P34).
 
 Behaviour is named in markup (``data-*`` attributes, JSON islands) and lives in the bundles. A JSON island is data, so
 it may stay inline.

@@ -1,4 +1,5 @@
-"""Gateway for REData's ``GET /locations/context/``: what REData already holds for one coordinate, many domains at once.
+"""
+Gateway for REData's ``GET /locations/context/``: what REData already holds for one coordinate, many domains at once.
 
 The endpoint never fetches: a provider REData has not asked for the point reports ``not_cached`` and leaves its
 domain ``complete: false``. It is charged only to the key's default pool, not the lookup pool the per-domain
@@ -26,7 +27,8 @@ _CONTEXT_PATH = "/api/v1/locations/context/"
 
 @dataclass(frozen=True, slots=True)
 class LocationsContext:
-    """REData's cached answers for one coordinate.
+    """
+    REData's cached answers for one coordinate.
 
     Attributes:
         domains: Each returned domain's envelope, keyed by REData's domain tag (``media``, ``street_view``, ...).
@@ -37,7 +39,8 @@ class LocationsContext:
     omitted: tuple[str, ...] = ()
 
     def settled(self, domain: str) -> LocationContextEnvelope | None:
-        """A domain's envelope when every provider covering the point answered from cache.
+        """
+        A domain's envelope when every provider covering the point answered from cache.
 
         Args:
             domain: REData's domain tag.
@@ -70,7 +73,8 @@ class RedataLocationsContextGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_locations_context"
 
     def get_context(self, latitude: float, longitude: float, domains: Sequence[str]) -> LocationsContext:
-        """Read what REData holds for a coordinate in each of ``domains``.
+        """
+        Read what REData holds for a coordinate in each of ``domains``.
 
         Args:
             latitude: WGS-84 latitude.

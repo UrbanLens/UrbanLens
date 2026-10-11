@@ -1,4 +1,5 @@
-"""Tests for RedataRoutingGateway against REData's shipped contract
+"""
+Tests for RedataRoutingGateway against REData's shipped contract
 (``../REData/docs/api-reference.md``, "POST /routes/ - route between waypoints").
 """
 

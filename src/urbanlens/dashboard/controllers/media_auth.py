@@ -27,7 +27,8 @@ PRIVATE_MEDIA_MAX_AGE_SECONDS = 300
 
 
 def mark_private_media[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:
-    """Forbid shared caches from storing a per-viewer media response.
+    """
+    Forbid shared caches from storing a per-viewer media response.
 
     Django emits ``Vary: Cookie`` on them, which is the correct signal, but it is not a sufficient one -
     plenty of shared caches (CDNs in particular) honour only ``Vary: Accept-Encoding`` and otherwise key
@@ -44,7 +45,8 @@ def mark_private_media[ResponseT: HttpResponseBase](response: ResponseT) -> Resp
 
 
 class MediaThrottledError(Exception):
-    """A credential-authenticated media fetch that exceeded its rate budget.
+    """
+    A credential-authenticated media fetch that exceeded its rate budget.
 
     Raised out of :meth:`CredentialOrSessionMediaMixin.resolve_media_profile` rather than returned as a
     response, because the throttle verdict arrives in the middle of *identifying* the requester and the
@@ -54,7 +56,8 @@ class MediaThrottledError(Exception):
 
 
 class CredentialOrSessionMediaMixin:
-    """Identify the requester of a byte-serving view by session or by credential.
+    """
+    Identify the requester of a byte-serving view by session or by credential.
 
     It never decides whether that person may see the requested file - each view keeps its own
     authorization policy, and a credential holder is put through the byte-for-byte identical policy the
@@ -67,7 +70,8 @@ class CredentialOrSessionMediaMixin:
     media_scope: ClassVar[ApiKeyScope] = ApiKeyScope.MEDIA_READ
 
     def resolve_media_profile(self, request: HttpRequest) -> Profile | None:
-        """Identify the profile making this request, by credential or by session.
+        """
+        Identify the profile making this request, by credential or by session.
 
         **A presented credential wins over an ambient session.** Checking the session first meant a request
         carrying both a cookie and an ``Authorization`` header was served as the *cookie's* account, with
@@ -110,7 +114,8 @@ class CredentialOrSessionMediaMixin:
         return profile
 
     def profile_from_media_cookie(self, request: HttpRequest) -> Profile | None:
-        """Identify the requester from the media-origin cookie.
+        """
+        Identify the requester from the media-origin cookie.
 
         Both cookies travel together there (the media cookie carries an explicit ``Domain``), and the media
         cookie is refreshed lazily, so a stale one left over from a previous login would otherwise outrank
@@ -144,7 +149,8 @@ class CredentialOrSessionMediaMixin:
         return profile
 
     def profile_from_credential(self, request: HttpRequest) -> tuple[object, object] | None:
-        """Authenticate an API key or OAuth2 token and require :attr:`media_scope`.
+        """
+        Authenticate an API key or OAuth2 token and require :attr:`media_scope`.
 
         Args:
             request: The current request.
@@ -183,7 +189,8 @@ class CredentialOrSessionMediaMixin:
         return None
 
     def enforce_media_throttle(self, request: HttpRequest, credential: object) -> None:
-        """Count this fetch against the credential's media budget.
+        """
+        Count this fetch against the credential's media budget.
 
         Args:
             request: The current request; ``auth`` is set on it so the throttle's per-credential cache key
@@ -200,7 +207,8 @@ class CredentialOrSessionMediaMixin:
             raise MediaThrottledError
 
     def media_auth_failure_response(self, request: HttpRequest) -> HttpResponseBase:
-        """The response for a request this mixin could not identify.
+        """
+        The response for a request this mixin could not identify.
 
         Args:
             request: The current request.
@@ -223,7 +231,8 @@ class CredentialOrSessionMediaMixin:
         return redirect_to_login(request.get_full_path(), str(settings.LOGIN_URL))
 
     def media_throttled_response(self) -> HttpResponse:
-        """The response for a credential that exceeded its media budget.
+        """
+        The response for a credential that exceeded its media budget.
 
         Returns:
             A plain-text 429.

@@ -1,4 +1,5 @@
-"""Per-group symmetric keys, sealed individually to each member's public key.
+"""
+Per-group symmetric keys, sealed individually to each member's public key.
 The server stores only the sealed envelopes and can open none of them.
 """
 
@@ -36,7 +37,8 @@ class GroupKey(abstract.DashboardModel):
         group_id: int
 
     def __str__(self) -> str:
-        """Return a human-readable description of this key version.
+        """
+        Return a human-readable description of this key version.
 
         Returns:
             String like "GroupKey(group=3, v2)".
@@ -51,7 +53,8 @@ class GroupKey(abstract.DashboardModel):
 
 
 class GroupKeyEnvelope(abstract.DashboardModel):
-    """One member's sealed copy of one group key version.
+    """
+    One member's sealed copy of one group key version.
 
     ``wrapped_key`` is a base64 ``crypto_box_seal`` blob addressed to the
     member's identity public key; only that member's private key can open it.
@@ -79,7 +82,8 @@ class GroupKeyEnvelope(abstract.DashboardModel):
         profile_id: int | None
 
     def __str__(self) -> str:
-        """Return a human-readable description of this envelope.
+        """
+        Return a human-readable description of this envelope.
 
         Returns:
             String like "GroupKeyEnvelope(key=3, profile=7)".

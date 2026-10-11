@@ -44,7 +44,8 @@ _CONCEALMENT_OVERFETCH = 4
 
 
 class ConcealedWikiText:
-    """The alias and place-tag text a concealed viewer may see, read for a whole batch of candidate wikis at once.
+    """
+    The alias and place-tag text a concealed viewer may see, read for a whole batch of candidate wikis at once.
 
     Filled by :func:`_concealment_survivors` for every concealed candidate before any is re-checked, so the
     over-fetched batch costs one alias query and one tag query rather than two per candidate.
@@ -56,7 +57,8 @@ class ConcealedWikiText:
         self._tags: dict[int, list[str]] = {}
 
     def load(self, wikis: Iterable[Any]) -> None:
-        """Read the alias and tag text of every wiki in *wikis* not already read.
+        """
+        Read the alias and tag text of every wiki in *wikis* not already read.
 
         Args:
             wikis: Wiki rows with ``location`` selected.
@@ -83,7 +85,8 @@ class ConcealedWikiText:
                 self._tags[pk].append(humanize_tag_value(value).lower())
 
     def haystacks(self, wiki: Any) -> list[str]:
-        """Lowercased name/description/alias/tag text the viewer may actually see on *wiki*.
+        """
+        Lowercased name/description/alias/tag text the viewer may actually see on *wiki*.
         What a concealed viewer's own search may match against is exactly what the page would render them, never the live row.
 
         Args:
@@ -105,7 +108,8 @@ def _terms_survive(terms: list[str], haystacks: list[str]) -> bool:
 
 
 def _concealed_wiki_survives(wiki: Any, text: ConcealedWikiText, terms: list[str]) -> bool:
-    """Whether *wiki*'s name/description/aliases, as *viewer* would actually see them, still match *terms*.
+    """
+    Whether *wiki*'s name/description/aliases, as *viewer* would actually see them, still match *terms*.
     Called only once :func:`concealment_active` has already said this wiki is concealed for this viewer.
 
     Args:
@@ -121,7 +125,8 @@ def _concealed_wiki_survives(wiki: Any, text: ConcealedWikiText, terms: list[str
 
 
 def _concealed_article_survives(article: Any, text: ConcealedWikiText, terms: list[str]) -> bool:
-    """Whether an article's viewer-visible content and host still match *terms* once its wiki is concealed.
+    """
+    Whether an article's viewer-visible content and host still match *terms* once its wiki is concealed.
     Only called for wiki-hosted articles a concealment gate has already fired for.
 
     Args:
@@ -142,7 +147,8 @@ def _concealed_article_survives(article: Any, text: ConcealedWikiText, terms: li
 
 
 def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
-    """Whether *comment* is one of *viewer*'s own or a friend's, per the same rule ``conceal_rows`` applies elsewhere.
+    """
+    Whether *comment* is one of *viewer*'s own or a friend's, per the same rule ``conceal_rows`` applies elsewhere.
 
     Args:
         comment: A candidate Comment row.
@@ -156,7 +162,8 @@ def _concealed_comment_survives(comment: Any, viewer: Profile) -> bool:
 
 
 def _concealment_survivors(queryset: Any, viewer: Profile, limit: int, wiki_of, survives, text: ConcealedWikiText | None = None) -> list:
-    """Fetch up to *limit* SQL-matched candidates, re-fetching with headroom only if concealment needs it.
+    """
+    Fetch up to *limit* SQL-matched candidates, re-fetching with headroom only if concealment needs it.
 
     Args:
         queryset: The already SQL-matched, ordered, unsliced queryset.
@@ -215,7 +222,8 @@ _PLACE_FIELDS = (
 
 
 def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP047
-    """*condition* as a semi-join when *path* crosses a to-many relation.
+    """
+    *condition* as a semi-join when *path* crosses a to-many relation.
 
     Thin wrapper over
     :meth:`~urbanlens.dashboard.models.abstract.queryset.DashboardQuerySet.semijoin`, which is
@@ -235,7 +243,8 @@ def _semijoin(queryset: _QS | None, path: str, condition: Q) -> Q:  # noqa: UP04
 
 
 def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q] | None = None, queryset: _QS | None = None) -> Q:  # noqa: UP047
-    """Build the standard text predicate: every term in at least one field.
+    """
+    Build the standard text predicate: every term in at least one field.
 
     Args:
         terms: Lowercased search terms (AND-ed together).
@@ -260,7 +269,8 @@ def term_filter(terms: list[str], fields: list[str], *, extra: Callable[[str], Q
 
 
 def place_filter(location_path: str, place: str) -> Q:
-    """Build a predicate matching a place name against Location address fields.
+    """
+    Build a predicate matching a place name against Location address fields.
 
     Args:
         location_path: ORM path prefix to the Location relation (e.g. ``"location"`` or ``"pin__location"``).
@@ -275,7 +285,8 @@ def place_filter(location_path: str, place: str) -> Q:
 
 
 def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
-    """Build an inclusive date-range predicate for a DateTimeField.
+    """
+    Build an inclusive date-range predicate for a DateTimeField.
 
     Args:
         field_path: ORM path to the datetime field.
@@ -289,7 +300,8 @@ def date_range_filter(field_path: str, parsed: ParsedQuery) -> Q:
 
 
 def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float = NEAR_ME_RADIUS_KM) -> Q:
-    """Build a bounding-box predicate for a "near me" query.
+    """
+    Build a bounding-box predicate for a "near me" query.
     Approximates a circle of ``radius_km`` around the searching user's known location with a lat/lng box, since Location stores plain decimals rather than a PostGIS point field.
 
     Args:
@@ -314,7 +326,8 @@ def distance_filter(location_path: str, parsed: ParsedQuery, *, radius_km: float
 
 
 def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[str, Concat | Exists], Q]:
-    """Build the annotation and predicate to match a person by name.
+    """
+    Build the annotation and predicate to match a person by name.
 
     Args:
         other_path: ORM path prefix to the Profile being matched (e.g. ``"sender"``, ``"recipient"``, ``"source_share__from_profile"``).
@@ -343,7 +356,8 @@ def person_match(other_path: str, person: str, viewer: Profile) -> tuple[dict[st
 
 
 def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labels") -> _QS:  # noqa: UP047
-    """Filter *queryset* by `label:`/`-label:` (aliases `tag`, `labels`).
+    """
+    Filter *queryset* by `label:`/`-label:` (aliases `tag`, `labels`).
 
     Args:
         queryset: The already access-scoped queryset.
@@ -366,7 +380,8 @@ def apply_label_clause(queryset: _QS, parsed: ParsedQuery, relation: str = "labe
 
 
 def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dict[str, Concat | Exists], Q] | None:
-    """The annotation/Q pair for `by:`/`author:`/`creator:`, or None when unset.
+    """
+    The annotation/Q pair for `by:`/`author:`/`creator:`, or None when unset.
 
     Args:
         path: ORM path prefix to the Profile being matched (e.g. ``"profile"``, ``"creator"``, ``"last_edited_by"``, ``"sender"``).
@@ -383,7 +398,8 @@ def author_clause(path: str, parsed: ParsedQuery, profile: Profile) -> tuple[dic
 
 
 def apply_pin_has_clause(queryset: _QS, parsed: ParsedQuery) -> _QS:  # noqa: UP047
-    """Filter a Pin queryset by `has:`/`-has:` (see the operator's choice list).
+    """
+    Filter a Pin queryset by `has:`/`-has:` (see the operator's choice list).
     Each recognized choice is applied as its own ``Exists()``/``isnull`` check - mirroring ``PinQuerySet.filter_by_criteria``'s existing ``has_links`` pattern - so choices compose safely regardless of order.
 
     Args:
@@ -439,7 +455,8 @@ _UNIVERSAL_SORT_FIELDS: dict[str, str] = {"recent": "-updated", "updated": "-upd
 
 
 def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None = None, visited_field: str | None = None) -> tuple[_QS, bool]:  # noqa: UP047
-    """Reorder *queryset* for `sort:`, when this provider understands the requested mode.
+    """
+    Reorder *queryset* for `sort:`, when this provider understands the requested mode.
 
     Args:
         queryset: The already filtered/access-scoped queryset.
@@ -462,7 +479,8 @@ def apply_sort(queryset: _QS, parsed: ParsedQuery, *, location_path: str | None 
 
 
 class SearchProvider(ABC):
-    """One result type's search implementation.
+    """
+    One result type's search implementation.
 
     Attributes:
         slug: The RESULT_TYPES slug this provider serves.
@@ -473,7 +491,8 @@ class SearchProvider(ABC):
 
     @abstractmethod
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
-        """Run this provider's search.
+        """
+        Run this provider's search.
 
         Args:
             profile: The requesting user's profile; results must be scoped to
@@ -487,7 +506,8 @@ class SearchProvider(ABC):
         raise NotImplementedError
 
     def apply_text(self, queryset: _QS, parsed: ParsedQuery, fields: list[str], *, location_path: str | None = None, tag_path: str | None = None, extra: Callable[[str], Q] | None = None) -> _QS:
-        """Apply term matching plus fuzzy title matching and relevance ordering.
+        """
+        Apply term matching plus fuzzy title matching and relevance ordering.
         "Belnear Medical Center" matches "near me" as a literal substring), since otherwise a result literally named after the phrase could be silently dropped.
 
         Args:
@@ -541,7 +561,8 @@ class SearchProvider(ABC):
 
     @staticmethod
     def score_of(obj: object) -> float:
-        """Relevance score for an ORM row: fuzzy similarity plus a near-me bonus.
+        """
+        Relevance score for an ORM row: fuzzy similarity plus a near-me bonus.
         The near-me bonus dominates the 0-1 fuzzy range so a proximity match always outranks a distant one at equal text relevance, without ever excluding the distant one outright."""
         value = getattr(obj, "search_sim", None)
         try:
@@ -992,7 +1013,8 @@ class VisitSearchProvider(SearchProvider):
 
 
 def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
-    """Map profile pk to the name *viewer* is allowed to see for that person.
+    """
+    Map profile pk to the name *viewer* is allowed to see for that person.
     Resolved for the whole batch in one call rather than per row: the resolver recomputes the viewer's allowed-subject set each time it is invoked.
 
     Args:
@@ -1011,7 +1033,8 @@ def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
 
 
 class DirectMessageSearchProvider(SearchProvider):
-    """The user's direct messages.
+    """
+    The user's direct messages.
     Only plaintext bodies are searchable: end-to-end encrypted messages never reach the server in readable form, so they cannot be matched here."""
 
     slug = "messages"
@@ -1279,7 +1302,8 @@ class CommentSearchProvider(SearchProvider):
 
 
 def default_providers() -> list[SearchProvider]:
-    """The full provider chain, in the order sections render.
+    """
+    The full provider chain, in the order sections render.
 
     Returns:
         Fresh provider instances (they are stateless, but new instances keep the engine trivially thread-safe)."""

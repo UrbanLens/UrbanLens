@@ -17,7 +17,8 @@ class PinTombstoneQuerySet(abstract.DashboardQuerySet["PinTombstone"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.pin_tombstone.model.PinTombstone`."""
 
     def for_profile(self, profile: Profile) -> PinTombstoneQuerySet:
-        """Restrict to tombstones for pins that belonged to ``profile``.
+        """
+        Restrict to tombstones for pins that belonged to ``profile``.
 
         Args:
             profile: The profile whose deleted pins to look up.
@@ -28,7 +29,8 @@ class PinTombstoneQuerySet(abstract.DashboardQuerySet["PinTombstone"]):
         return self.filter(profile=profile)
 
     def deleted_since(self, since: datetime) -> PinTombstoneQuerySet:
-        """Restrict to pins deleted at or after ``since``.
+        """
+        Restrict to pins deleted at or after ``since``.
         ``created`` is the deletion moment - a tombstone row is written in the same transaction as the pin's hard delete and never updated afterwards.
 
         Args:
@@ -47,7 +49,8 @@ class PinTombstoneManager(_PinTombstoneManagerBase["PinTombstone"]):
     """Manager for :class:`~urbanlens.dashboard.models.pin_tombstone.model.PinTombstone`."""
 
     def record(self, *, profile_id: int, pin_uuid) -> None:
-        """Record that the pin identified by ``pin_uuid`` was deleted.
+        """
+        Record that the pin identified by ``pin_uuid`` was deleted.
         Idempotent - recording the same uuid twice keeps the original deletion timestamp, which is the correct sync semantic (the client cares that the pin is gone, not that a second delete was attempted).
 
         Args:
@@ -57,7 +60,8 @@ class PinTombstoneManager(_PinTombstoneManagerBase["PinTombstone"]):
         self.get_or_create(pin_uuid=pin_uuid, defaults={"profile_id": profile_id})
 
     def prune_older_than(self, cutoff: timedelta) -> int:
-        """Delete tombstones older than ``cutoff``, returning how many were removed.
+        """
+        Delete tombstones older than ``cutoff``, returning how many were removed.
         A sync client whose last sync predates the oldest retained tombstone can no longer trust deletions incrementally and must full-resync; any scheduled pruning must therefore keep tombstones at least as long as the longest plausible client offline window.
 
         Args:

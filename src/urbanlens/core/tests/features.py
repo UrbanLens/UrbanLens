@@ -12,7 +12,8 @@ ALPHA_TESTER_ROLE_SLUG = "test-alpha-testers"
 
 
 def grant_alpha_features(user: User) -> None:
-    """Grant ``SiteFeature.ALPHA_FEATURES`` to the user via a role subscription.
+    """
+    Grant ``SiteFeature.ALPHA_FEATURES`` to the user via a role subscription.
 
     Reuses one shared "Alpha testers" role per test, so entitling several users in a single fixture cannot
     collide on the role's unique slug.

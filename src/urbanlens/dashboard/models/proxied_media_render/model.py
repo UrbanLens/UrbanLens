@@ -16,7 +16,8 @@ def proxied_media_render_path(instance: ProxiedMediaRender, filename: str) -> st
 
 
 class ProxiedMediaRender(abstract.DashboardModel):
-    """One size of one proxied file (a CRIS attachment, a LoopNet photo), as an image a browser can show.
+    """
+    One size of one proxied file (a CRIS attachment, a LoopNet photo), as an image a browser can show.
 
     Rows exist only for renderings that succeeded; a file that cannot be rendered is remembered in the cache instead,
     so a later fix to the renderer gets another try.

@@ -1,4 +1,5 @@
-"""An article whose coordinates are on the pin's parcel is that parcel's article.
+"""
+An article whose coordinates are on the pin's parcel is that parcel's article.
 
 Reproduces the HRSH courtyard pin on staging: the lookup ran with the name hint "Courtyard Drive" and the
 locality "Fairview" (OSM's census-designated place), the article's lead names neither, and the match was cached

@@ -1,4 +1,5 @@
-"""0101 moves wiki boundary edits from inline WKT to revision ids, and its reverse must restore the WKT.
+"""
+0101 moves wiki boundary edits from inline WKT to revision ids, and its reverse must restore the WKT.
 
 The pre-migration code reads ``WikiEdit.changes["boundary_<type>"]`` as WKT, so a no-op reverse would leave it
 reading integers.

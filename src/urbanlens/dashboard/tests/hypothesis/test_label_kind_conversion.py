@@ -45,7 +45,8 @@ class LabelKindChangeHierarchyWarningTests(TestCase):
         self.assertNotContains(response, _HIERARCHY_WARNING)
 
     def test_converting_kind_actually_clears_parents(self) -> None:
-        """The warning text describes real behavior, not just a UI hint -
+        """
+        The warning text describes real behavior, not just a UI hint -
         confirm parents are genuinely cleared on a kind conversion."""
         parent = baker.make(Label, profile=self.profile, kind="tag", name="Parent")
         child = baker.make(Label, profile=self.profile, kind="tag", name="Child")

@@ -1,4 +1,5 @@
-"""An end-of-check-in notice that fails to build or send is sent by a later sweep, once, rather than lost.
+"""
+An end-of-check-in notice that fails to build or send is sent by a later sweep, once, rather than lost.
 
 Each contact is claimed (``resolution_notified_at``) before it is told, so two senders can never both tell it. A
 claim that outlives a failure would mean someone searching is never told to stop, so a failure must leave the

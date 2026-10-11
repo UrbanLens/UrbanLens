@@ -1,4 +1,5 @@
-"""A parcel's owners, sales, tax payments and liens are read across REData's pages, not just the first.
+"""
+A parcel's owners, sales, tax payments and liens are read across REData's pages, not just the first.
 
 These four endpoints are page-number paginated (100 rows a page by default). A parcel with a long tax history lost
 everything past the first page, which is exactly the delinquency record the card exists to show.

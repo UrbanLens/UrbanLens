@@ -1,4 +1,5 @@
-"""In-round photo capture for Consensus - reuses the existing upload pipeline.
+"""
+In-round photo capture for Consensus - reuses the existing upload pipeline.
 This module only handles the other direction: recording a photo a player uploads *during* a round."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
-"""Tests for controllers.billing_webhooks.StripeWebhookView - signature verification,
+"""
+Tests for controllers.billing_webhooks.StripeWebhookView - signature verification,
 idempotency, and dispatch. stripe.Webhook.construct_event is mocked; no real network
 access or signature computation occurs."""
 
@@ -82,7 +83,8 @@ class StripeWebhookViewTests(TestCase):
         self.assertFalse(StripeWebhookEvent.objects.exists())
 
     def test_malformed_payload_value_error_is_rejected_and_nothing_is_stored(self) -> None:
-        """construct_event raises plain ValueError (not SignatureVerificationError) for a
+        """
+        construct_event raises plain ValueError (not SignatureVerificationError) for a
         body that isn't valid JSON at all - a distinct branch of the view's except tuple."""
         with mock.patch("stripe.Webhook.construct_event", side_effect=ValueError("invalid payload")):
             response = self.client.post(

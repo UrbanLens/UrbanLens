@@ -1,4 +1,5 @@
-"""External-API routes for label actions beyond single-label CRUD and customization.
+"""
+External-API routes for label actions beyond single-label CRUD and customization.
 
 Priority reorder and the bulk delete/edit/convert actions live here instead, mirroring how
 ``urls_pin_extra.py`` splits pin actions away from the frozen pin CRUD routes.

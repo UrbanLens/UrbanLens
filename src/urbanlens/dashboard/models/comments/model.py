@@ -14,7 +14,8 @@ from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGT
 
 
 class Comment(LocationMentioningModel, abstract.FrontendDashboardModel):
-    """A user comment on a Pin or a Wiki (community) page.
+    """
+    A user comment on a Pin or a Wiki (community) page.
 
     Exactly one of ``pin`` or ``wiki`` must be non-null.
     ``parent`` is set only for replies (depth-1 threading).
@@ -86,7 +87,8 @@ class Comment(LocationMentioningModel, abstract.FrontendDashboardModel):
 
     @property
     def map_data(self) -> dict | None:
-        """Client snapshot of the attached markup map, if any.
+        """
+        Client snapshot of the attached markup map, if any.
         Kept as a property so templates and viewer JS that consumed the old ``map_data`` JSON column keep working against the MarkupMap relation.
 
         Returns:

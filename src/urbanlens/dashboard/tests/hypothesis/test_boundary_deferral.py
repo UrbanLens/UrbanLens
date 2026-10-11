@@ -1,4 +1,5 @@
-"""A provider that refused for now is not a provider that found nothing.
+"""
+A provider that refused for now is not a provider that found nothing.
 
 Reproduces the HRSH courtyard pin on staging (41.73266, -73.92736): REData's Dutchess budget was
 spent, the parcel lookup was refused, and the miss was stamped as "no parcel here" for the whole

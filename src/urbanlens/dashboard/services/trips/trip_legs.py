@@ -73,7 +73,8 @@ def _cache_key(origin: tuple[float, float], destination: tuple[float, float]) ->
 
 
 def compute_legs(sequence: list[tuple[int, tuple[float, float]]], *, max_live_calls: int = _MAX_LIVE_CALLS) -> dict[int, TripLeg]:
-    """Compute driving legs between consecutive stops in ``sequence``.
+    """
+    Compute driving legs between consecutive stops in ``sequence``.
 
     Args:
         sequence: Ordered ``(activity_id, (latitude, longitude))`` stops - only include stops whose coordinates the viewer may see.

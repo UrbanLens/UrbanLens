@@ -44,7 +44,8 @@ _PROFILE_PRESENTATION_FIELDS = {
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the Authorization header kwargs for the test client.
+    """
+    Build the Authorization header kwargs for the test client.
 
     Args:
         raw_key: The plaintext API key.
@@ -58,7 +59,8 @@ class GatedVisibilityFieldListTests(TestCase):
     """The gated-field tuple is the single source of truth for the API surface."""
 
     def test_the_real_field_count_is_twelve(self) -> None:
-        """Pins the count an earlier requirements doc got wrong (it claimed nine).
+        """
+        Pins the count an earlier requirements doc got wrong (it claimed nine).
 
         If a thirteenth gated field is added this test fails loudly, which is the intended prompt to confirm the
         new field really should be exposed rather than silently shipping it."""
@@ -105,7 +107,8 @@ class ProfileDetailVisibilityTests(TestCase):
         api_key.save(update_fields=["scopes"])
 
     def _get(self, slug: str):
-        """GET one profile by slug.
+        """
+        GET one profile by slug.
 
         Args:
             slug: The profile slug to fetch.
@@ -209,7 +212,8 @@ class ProfileDetailVisibilityTests(TestCase):
         self.assertEqual(self.profile.area, "Rust Belt")
 
     def test_community_off_coerces_visibility_via_profile_save(self) -> None:
-        """The model's own gating must apply, not be reimplemented in the view.
+        """
+        The model's own gating must apply, not be reimplemented in the view.
 
         Exercised through ``PATCH /settings/``, which is where the visibility fields live."""
         settings_key, settings_raw = generate_api_key(self.user, "Settings client")
@@ -233,7 +237,8 @@ class ProfileDetailVisibilityTests(TestCase):
                 self.assertEqual(getattr(self.profile, name), VisibilityChoice.NO_ONE)
 
     def test_visibility_fields_are_not_writable_through_the_profile_endpoint(self) -> None:
-        """A ``social:write`` credential must not be able to rewrite privacy settings.
+        """
+        A ``social:write`` credential must not be able to rewrite privacy settings.
 
         The complement of the test above: the fields moved to ``/settings/`` (behind ``settings:write``) must
         not still be honoured here."""
@@ -263,7 +268,8 @@ class ProfileDetailVisibilityTests(TestCase):
 
 
 class ProfileSettingsOverlapTests(SimpleTestCase):
-    """The profile-write and settings-write surfaces must stay disjoint.
+    """
+    The profile-write and settings-write surfaces must stay disjoint.
 
     Named by ``ProfileUpdateSerializer``'s own docstring, which points here for the guarantee."""
 

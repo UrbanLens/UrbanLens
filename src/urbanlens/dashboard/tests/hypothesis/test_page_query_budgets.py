@@ -27,7 +27,8 @@ class PageQueryBudgetTests(TestCase):
         self._seed(_SMALL)
 
     def _seed(self, count: int) -> list[Pin]:
-        """Add *count* pins, each with its own location and a couple of labels.
+        """
+        Add *count* pins, each with its own location and a couple of labels.
 
         Coordinates advance from a running offset rather than restarting at zero: ``Location`` is unique on
         (latitude, longitude), so a second seeding pass that reused the first pass's grid would collide instead

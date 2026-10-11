@@ -39,7 +39,8 @@ class _AmplificationTestCase(TestCase):
         return Location.objects.create(latitude=40.0 + self._coord / 10000, longitude=-74.0 - self._coord / 10000)
 
     def assert_flat(self, build_one, measure, *, baseline: int = 3, extra: int = 3) -> None:
-        """Assert the query count does not grow when ``extra`` more items are added.
+        """
+        Assert the query count does not grow when ``extra`` more items are added.
 
         A warm-up call is measured and discarded first: the first request of a test populates per-process caches
         (the SiteSettings memo, session and permission lookups), so comparing against it reports a *decrease*
@@ -70,7 +71,8 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
     """The map's pin payload - the single highest-traffic serialization in the app."""
 
     def _pin_with_labels(self) -> Pin:
-        """A pin carrying the profile's labels - the same ones every time.
+        """
+        A pin carrying the profile's labels - the same ones every time.
 
         Minting a fresh pair per pin measured two things at once: the payload's
         cost per *pin*, which is what this asserts, and the cost of a label the
@@ -104,7 +106,8 @@ class MapPinPayloadAmplificationTests(_AmplificationTestCase):
         self.assert_flat(self._pin_with_labels, measure)
 
     def test_it_is_flat_in_label_count_too(self) -> None:
-        """A label nobody has seen costs a fixed pair of batched reads, not one per label.
+        """
+        A label nobody has seen costs a fixed pair of batched reads, not one per label.
 
         The half the test above deliberately holds still, asserted on its own so
         holding it still does not lose the coverage.
@@ -171,7 +174,8 @@ class PinDetailPageAmplificationTests(_AmplificationTestCase):
 
 
 class WikiPageAmplificationTests(_AmplificationTestCase):
-    """The community wiki page against its own content.
+    """
+    The community wiki page against its own content.
 
     The viewer needs a pin at the location: wiki visibility is gated on discovery (``location_visible_to``), so
     without one every request here would 404 and the measurement would be of an error page."""
@@ -264,7 +268,8 @@ class TripDetailAmplificationTests(_AmplificationTestCase):
 
 
 class ExternalApiListAmplificationTests(_AmplificationTestCase):
-    """The API serializes the same objects through a different path than the HTML
+    """
+    The API serializes the same objects through a different path than the HTML
     pages, so it can carry its own amplification even where the page is clean."""
 
     def setUp(self) -> None:

@@ -1,4 +1,5 @@
-"""External API writes that cross an account boundary or a pin hierarchy: answering a shared pin, merging pins,
+"""
+External API writes that cross an account boundary or a pin hierarchy: answering a shared pin, merging pins,
 RSVPing to a trip (P29).
 
 Each asserts the authorised caller's write lands, that anyone else is refused with a 404 and nothing changes, that

@@ -242,7 +242,8 @@ class RestructureOfferGatingTests(TestCase):
         self.assertContains(response, "Tool Shed")
 
     def test_offered_even_when_only_one_building_is_unpinned(self) -> None:
-        """Any building this would create and the user doesn't have is worth offering.
+        """
+        Any building this would create and the user doesn't have is worth offering.
 
         Pins the *outer* two, leaving "Main Hall" - deliberately not ``_BUILDINGS[1:]``, which would leave Main
         Hall unpinned while parking a pin on its exact centroid (it sits inside the Tool Shed footprint, so that
@@ -509,7 +510,8 @@ class RestructureApplyTests(TestCase):
 
 
 class RestructureWikiMirrorTests(TestCase):
-    """The wiki mirror, which now runs *after* the request that triggered it.
+    """
+    The wiki mirror, which now runs *after* the request that triggered it.
 
     These therefore exercise the mirror directly, and the view's job is only to enqueue it."""
 
@@ -657,13 +659,15 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
         self.assertContains(response, "Add 2 buildings")
 
     def test_the_panel_buttons_count_matches_what_the_dialog_would_add(self) -> None:
-        """The button's own promise - see PinController.parcel_buildings - must
+        """
+        The button's own promise - see PinController.parcel_buildings - must
         never offer to add more than the dialog it opens actually will."""
         response = self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": self.pin.slug}))
         self.assertEqual(response.context["unpinned_count"], 2)
 
     def test_import_does_not_provision_places_for_boundary_excluded_buildings(self) -> None:
-        """The POST path must not undo the dialog's boundary filter.
+        """
+        The POST path must not undo the dialog's boundary filter.
 
         Building places join the parcel's wiki/access domain, so an off-property survey-zone record is not
         harmless just because no child pin was created for it."""
@@ -675,7 +679,8 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
         )
 
     def test_a_building_already_pinned_outside_the_boundary_still_shows_on_the_property_panel(self) -> None:
-        """The boundary gate is for *suggestions* only - a building the owner
+        """
+        The boundary gate is for *suggestions* only - a building the owner
         already pinned by hand stays visible regardless of where the parcel
         data says it sits (see building_rows' own boundary_polygon docstring)."""
         nameless = next(b for b in _BUILDINGS if b["building_number"] == "22")
@@ -693,7 +698,8 @@ class MissingBuildingsParcelBoundaryTests(TestCase):
 
 
 class BuildingUnderExistingRootPinTests(TestCase):
-    """A building whose centroid already carries one of the owner's *top-level* pins.
+    """
+    A building whose centroid already carries one of the owner's *top-level* pins.
 
     The reported bug."""
 
@@ -748,7 +754,8 @@ class BuildingUnderExistingRootPinTests(TestCase):
 
 
 class RestructureNestChoiceTests(TestCase):
-    """The organize dialog's per-pin include/exclude choice.
+    """
+    The organize dialog's per-pin include/exclude choice.
 
     Covers controllers.pin_restructure.PinRestructureApplyView.post's nest_selection/nest_keys handling."""
 
@@ -833,7 +840,8 @@ class RestructureNestChoiceTests(TestCase):
 
 
 class EmptyImportIsNotReportedAsSuccessTests(TestCase):
-    """An import that created nothing must not claim it did.
+    """
+    An import that created nothing must not claim it did.
 
     ``create_building_pins`` skips a building whose point is already pinned, so a selection made entirely of
     those returned 0 - and the response still said "Added 0 building pins." over a *success* toast, which is
@@ -865,7 +873,8 @@ class EmptyImportIsNotReportedAsSuccessTests(TestCase):
 
 
 class OrganizeDialogQueryScalingTests(QueryScalingMixin, TestCase):
-    """The organize dialog must not query per candidate pin.
+    """
+    The organize dialog must not query per candidate pin.
 
     Its own use case is a campus or hospital complex pinned building by building, so a large candidate list is
     the normal case rather than the extreme one - and ``nestable_root_pins`` offers up to 500 of them."""

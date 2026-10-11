@@ -41,7 +41,8 @@ def _custom_fields(pin: Pin) -> list[dict[str, Any]]:
 
 
 def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
-    """Assemble the full detail payload for one pin, owned by *profile*.
+    """
+    Assemble the full detail payload for one pin, owned by *profile*.
 
     Args:
         pin: The pin to serialize.

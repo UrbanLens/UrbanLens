@@ -1,4 +1,5 @@
-"""External API writes on a pin's own notes, names, links, visits, comments, rating and article (P29).
+"""
+External API writes on a pin's own notes, names, links, visits, comments, rating and article (P29).
 
 Each asserts the owner's write lands, that another account's key is answered 404 and nothing changes, that a row of
 another pin is not reachable through the owner's pin, that anonymous and a key without the write scope are refused,

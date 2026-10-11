@@ -47,7 +47,8 @@ def _profile() -> Profile:
 
 
 def _token_for(user: User, scope: str = READ_WRITE) -> str:
-    """Issue a first-party OAuth2 access token.
+    """
+    Issue a first-party OAuth2 access token.
 
     Messaging scopes are in ``permissions.OAUTH2_ONLY_SCOPES``, so an OAuth2 token is the only credential that
     can reach any of these endpoints - a PAT is refused even holding the same scope strings (asserted below)."""
@@ -71,7 +72,8 @@ def _open_dms(*profiles: Profile) -> None:
 
 
 def _befriend(first: Profile, second: Profile) -> None:
-    """Connect two profiles with exactly one Friendship row.
+    """
+    Connect two profiles with exactly one Friendship row.
 
     One row, never one per direction: ``Friendship.objects.between()`` resolves the pair with ``.get()``, so a
     reciprocal second row makes every connection check raise ``MultipleObjectsReturned``."""
@@ -137,7 +139,8 @@ class GroupMessageReactionTests(GroupControlsBaseTestCase):
         self.assertFalse(Reaction.objects.filter(group_message=self.message).exists())
 
     def test_reaction_is_recorded_against_the_group_message_host(self) -> None:
-        """The row lands on ``group_message``, not on some other reactable host.
+        """
+        The row lands on ``group_message``, not on some other reactable host.
 
         Reaction is one table with a nullable FK per host; writing to the wrong
         one would still "work" and would then aggregate against a stranger.
@@ -162,7 +165,8 @@ class GroupMessageReactionTests(GroupControlsBaseTestCase):
         self.assertFalse(Reaction.objects.filter(group_message=self.message).exists())
 
     def test_unusable_emoji_is_refused_before_the_message_is_looked_up(self) -> None:
-        """A junk emoji must not become a probe for which message ids exist.
+        """
+        A junk emoji must not become a probe for which message ids exist.
 
         Resolving the message first would answer 404 for an id the caller
         cannot see and 400 for one they can, which is an oracle.
@@ -186,7 +190,8 @@ class GroupMessageReactionTests(GroupControlsBaseTestCase):
         self.assertEqual(self._post_json(self.url, {"emoji": "👍"}, self.stranger_auth).status_code, 404)
 
     def test_removed_member_can_no_longer_react(self) -> None:
-        """An ended membership row is not membership.
+        """
+        An ended membership row is not membership.
 
         The row survives a removal (it records the window they could see), so a
         guard that merely looked for a row would keep letting them react.
@@ -195,7 +200,8 @@ class GroupMessageReactionTests(GroupControlsBaseTestCase):
         self.assertEqual(self._post_json(self.url, {"emoji": "👍"}, self.member_auth).status_code, 404)
 
     def test_message_id_from_another_group_is_404(self) -> None:
-        """The lookup is scoped to the group in the path, not to the id alone.
+        """
+        The lookup is scoped to the group in the path, not to the id alone.
 
         The caller is an active member of *both* groups, so only the ``group=`` term in the lookup can reject
         this - which is exactly the term a ``pk``-only implementation omits."""
@@ -282,7 +288,8 @@ class GroupMessageDeleteTests(GroupControlsBaseTestCase):
         self.assertEqual(self.client.delete(self.url, **self.stranger_auth).status_code, 404)
 
     def test_scope_query_param_is_ignored(self) -> None:
-        """There is no group analogue of the one-to-one ``?scope=self``.
+        """
+        There is no group analogue of the one-to-one ``?scope=self``.
 
         A group message has no per-member copy to hide, so honouring the parameter would mean inventing
         semantics that diverge from the direct-message contract clients already implement."""
@@ -310,7 +317,8 @@ class GroupLeaveTests(GroupControlsBaseTestCase):
         self.assertIsNone(self.group.membership_for(self.member))
 
     def test_repeat_leave_is_204(self) -> None:
-        """Idempotent for someone who was a member - a lost response is not a failure.
+        """
+        Idempotent for someone who was a member - a lost response is not a failure.
 
         Answering the retry 404 would be indistinguishable from "that group never existed", which is precisely
         the ambiguity a retrying mobile client cannot resolve."""
@@ -431,7 +439,8 @@ class SetGroupMutedServiceTests(GroupControlsBaseTestCase):
     """``services.messaging.group_chats.set_group_muted`` writes narrowly."""
 
     def test_write_does_not_clobber_a_concurrent_removal(self) -> None:
-        """``update_fields`` is load-bearing, not a micro-optimization.
+        """
+        ``update_fields`` is load-bearing, not a micro-optimization.
 
         The membership row carries ``left_at``/``removed_by`` alongside ``muted``."""
         stale = GroupChatMembership.objects.get(group=self.group, profile=self.member)
@@ -496,7 +505,8 @@ class ConversationMuteTests(GroupControlsBaseTestCase):
         self.assertEqual(self.client.get(reverse_url, **self.member_auth).json(), {"is_muted": False})
 
     def test_reserved_peer_slug_is_404(self) -> None:
-        """A profile whose slug collides with a route literal is not a peer.
+        """
+        A profile whose slug collides with a route literal is not a peer.
 
         ``messages/<peer_slug>/`` is a catch-all, so a user who managed to hold the slug "groups" would
         otherwise be addressable at a path that reads like the group namespace."""
@@ -553,7 +563,8 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
         return response.json()["results"]
 
     def test_recipient_sees_the_pin_share_id_they_must_respond_to(self) -> None:
-        """Without this field the share card has no id to accept or reject.
+        """
+        Without this field the share card has no id to accept or reject.
 
         The recipient's own ``PinShare`` is the one they may answer at ``/pin-shares/<id>/respond/``; a group
         share creates one per member, so there is no single shared id to report."""
@@ -591,7 +602,8 @@ class GroupMessagePayloadTests(GroupControlsBaseTestCase):
         self.assertEqual(row["reactions"], [{"emoji": "❤️", "count": 1, "slugs": [self.member.slug or ""]}])
 
     def test_reactions_survive_the_conversation_list_serializer(self) -> None:
-        """The inbox row runs the payload through ``DirectMessageSerializer``.
+        """
+        The inbox row runs the payload through ``DirectMessageSerializer``.
 
         A field the builder emits but the serializer does not declare is silently dropped there while still
         appearing in the thread - the kind of surface-dependent shape drift that costs a client author an

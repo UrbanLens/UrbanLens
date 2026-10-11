@@ -61,7 +61,8 @@ def _profile(request) -> Profile:
 
 
 def comment_image_error(image_file) -> str | None:
-    """Validate an image attached to a comment before accepting it.
+    """
+    Validate an image attached to a comment before accepting it.
 
     Args:
         image_file: The uploaded file from ``request.FILES.get("image")``.
@@ -77,7 +78,8 @@ def comment_image_error(image_file) -> str | None:
 
 
 def start_comment_image_scan(comment) -> None:
-    """Mark a newly-uploaded comment image pending and queue its background malware scan.
+    """
+    Mark a newly-uploaded comment image pending and queue its background malware scan.
 
     Call immediately after saving a brand-new image upload onto a comment (never for one attached via
     "Choose Existing" - that file was already scanned on its original upload, see
@@ -97,7 +99,8 @@ def start_comment_image_scan(comment) -> None:
 
 
 def _discard_comment_image(comment) -> None:
-    """Remove a deleted comment's stored photo from disk.
+    """
+    Remove a deleted comment's stored photo from disk.
 
     Each comment owns its file outright: :func:`attach_existing_comment_image` *copies* rather than
     sharing storage, precisely so one deletion cannot strand another row's image.
@@ -114,7 +117,8 @@ def _discard_comment_image(comment) -> None:
 
 
 def existing_image_error(existing_image_id: str, profile: Profile) -> str | None:
-    """Refuse a "Choose Existing" photo that is still the unprocessed upload.
+    """
+    Refuse a "Choose Existing" photo that is still the unprocessed upload.
 
     Args:
         existing_image_id: The ``Image.pk`` submitted by the picker, or "".
@@ -131,7 +135,8 @@ def existing_image_error(existing_image_id: str, profile: Profile) -> str | None
 
 
 def attach_existing_comment_image(comment: Comment | TripComment, existing_image_id: str, profile: Profile) -> None:
-    """Copy one of the poster's own already-uploaded photos onto a comment.
+    """
+    Copy one of the poster's own already-uploaded photos onto a comment.
 
     Copies the file rather than pointing the comment at the same storage the source ``Image`` uses, so
     deleting either later doesn't orphan the other - deliberately skips re-running
@@ -158,7 +163,8 @@ def attach_existing_comment_image(comment: Comment | TripComment, existing_image
 
 
 def create_comment_with_image[C: (Comment, TripComment)](create: Callable[[], C], image: UploadedFile | None, existing_image_id: str, profile: Profile) -> C:
-    """Create a comment and store its photo in one transaction, so a photo storage refuses leaves no comment behind.
+    """
+    Create a comment and store its photo in one transaction, so a photo storage refuses leaves no comment behind.
 
     Args:
         create: Inserts the comment.
@@ -187,7 +193,8 @@ def create_comment_with_image[C: (Comment, TripComment)](create: Callable[[], C]
 
 
 class CommentImagePickerView(LoginRequiredMixin, View):
-    """GET /comments/images/picker/ - list the caller's own uploaded photos to attach.
+    """
+    GET /comments/images/picker/ - list the caller's own uploaded photos to attach.
 
     Companion to the plain upload flow for comment/Notes image attachments
     (``#comment-image-composer``'s "Choose Existing" tab): lets the poster reuse one of their own photos
@@ -198,7 +205,8 @@ class CommentImagePickerView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the picker list of the caller's own photo uploads.
+        """
+        Render the picker list of the caller's own photo uploads.
 
         Args:
             request: The HTTP request, optionally carrying a ``q`` search term.
@@ -221,7 +229,8 @@ _PROCESSING_STATUS_MAX_IDS = 100
 
 
 class CommentImageProcessingView(LoginRequiredMixin, View, ABC):
-    """Which of the requester's own comment images have finished processing.
+    """
+    Which of the requester's own comment images have finished processing.
 
     GET ...?ids=1,2,3 - polled by the author's placeholder (``_comment_body.html``) until the re-encode,
     which replaces the file, lands.
@@ -232,7 +241,8 @@ class CommentImageProcessingView(LoginRequiredMixin, View, ABC):
         """The requester's comments among *ids* that carry an image."""
 
     def get(self, request: HttpRequest) -> JsonResponse:
-        """Report each named comment image as still processing or settled.
+        """
+        Report each named comment image as still processing or settled.
 
         Args:
             request: The HTTP request, with a comma-separated ``ids`` query param.
@@ -339,7 +349,8 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, replies_
 
 
 def _pin_comments_context(pin, profile: Profile, request: HttpRequest) -> dict:
-    """Build the Notes panel context for a pin, aggregating child pins' notes on ``?children=1``.
+    """
+    Build the Notes panel context for a pin, aggregating child pins' notes on ``?children=1``.
 
     - a note left on a child pin must not be invisible from the parent's own Notes tab just because it
       happens to live on a nested row. Posting and deleting still ...
@@ -452,7 +463,8 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
 
 
 def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bool = False) -> QuerySet[Comment]:
-    """The wiki's comments as *profile* is entitled to see them at page scope.
+    """
+    The wiki's comments as *profile* is entitled to see them at page scope.
 
     One function rather than the same two lines at each of the three call sites: the GET had them and
     the POST and DELETE re-renders did not, so posting a comment handed a concealed viewer the whole
@@ -478,7 +490,8 @@ def _visible_wiki_comments(wiki: Wiki, profile: Profile, *, include_children: bo
 
 
 def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comment] | None:
-    """The queryset a concealed viewer's replies must be prefetched from.
+    """
+    The queryset a concealed viewer's replies must be prefetched from.
 
     Narrowing the top level is not enough.
 
@@ -500,7 +513,8 @@ def _visible_wiki_reply_prefetch(wiki: Wiki, profile: Profile) -> QuerySet[Comme
 
 
 def _wiki_comment_addressable_by(wiki: Wiki, profile: Profile, comment_id: int | str) -> Comment:
-    """Return one wiki comment *profile* may address by id, or 404.
+    """
+    Return one wiki comment *profile* may address by id, or 404.
 
     Addressing a sequential id also needs the per-comment gates (author ``comment_visibility``, pending
     malware scan, ``@loc`` mention) or a guessed id is an existence oracle for comments the listing
@@ -750,7 +764,8 @@ class _ReactionData(TypedDict):
 
 
 def _aggregate_reactions(reactions_qs, profile: Profile | None = None, *, conceal: bool = False) -> dict[str, _ReactionData]:
-    """Group reactions by emoji → {count, reacted_by: list of profile_ids}.
+    """
+    Group reactions by emoji → {count, reacted_by: list of profile_ids}.
 
     Args:
         reactions_qs: The comment's reactions.

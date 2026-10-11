@@ -1,4 +1,5 @@
-"""Re-encode an image held in a model's file field: a comment image, an icon or an avatar.
+"""
+Re-encode an image held in a model's file field: a comment image, an icon or an avatar.
 
 The swap is a conditional update on the stored name, so a row edited or deleted meanwhile keeps what it has, and
 whichever file lost is deleted, or swept once no row names it.
@@ -40,7 +41,8 @@ SWEPT_FIELDS = (
 
 
 def read_at_most(handle: IO[bytes], max_bytes: int) -> bytes | None:
-    """The whole of an open stored file, or None when it holds more than *max_bytes*.
+    """
+    The whole of an open stored file, or None when it holds more than *max_bytes*.
 
     Never asks for more than one byte past the limit, so a file that grew past the ceiling its upload passed, or one a
     future writer stored without that check, costs this process no more memory than a file at the ceiling.
@@ -57,7 +59,8 @@ def read_at_most(handle: IO[bytes], max_bytes: int) -> bytes | None:
 
 
 def delete_unnamed_file(storage: Storage, name: str) -> bool:
-    """Delete a file its row no longer names, leaving it to :func:`sweep_unnamed_files` when storage refuses.
+    """
+    Delete a file its row no longer names, leaving it to :func:`sweep_unnamed_files` when storage refuses.
 
     A refused delete does not undo or fail what made the row stop naming the file.
 
@@ -77,7 +80,8 @@ def delete_unnamed_file(storage: Storage, name: str) -> bool:
 
 
 def sweep_unnamed_files() -> int:
-    """Delete the files in each :data:`SWEPT_FIELDS` directory that no file field storing there names.
+    """
+    Delete the files in each :data:`SWEPT_FIELDS` directory that no file field storing there names.
 
     A file younger than the task hard time limit may be waiting for the row that will name it to commit, and one an
     undo record inside the retention window mentions may be named again by a restore, so both are kept.
@@ -123,7 +127,8 @@ def sweep_unnamed_files() -> int:
 
 
 def _may_delete(storage: Storage, path: str) -> bool:
-    """Whether a file no row names is old enough, and absent from every undo record that could still restore it.
+    """
+    Whether a file no row names is old enough, and absent from every undo record that could still restore it.
 
     A younger file may be waiting for the row that will name it to commit.
 
@@ -157,7 +162,8 @@ class SweepReport:
 
 
 def sweep_unnamed_image_files(*, delete: bool) -> SweepReport:
-    """Find the files under ``pin_images/`` that none of an Image row's four file columns names.
+    """
+    Find the files under ``pin_images/`` that none of an Image row's four file columns names.
 
     Not in :data:`SWEPT_FIELDS`: Image files sit in nested per-upload directories and are named by four columns, so
     this walks the whole tree and reads every row's names, a cost sized to the table rather than to an hourly beat.
@@ -224,7 +230,8 @@ def reencode_stored_field(
     only_if: dict[str, Any] | None = None,
     also_set: dict[str, Any] | None = None,
 ) -> Reencoded:
-    """Replace a row's stored image with one re-encoded from its pixels.
+    """
+    Replace a row's stored image with one re-encoded from its pixels.
 
     Args:
         rows: The rows the row is found in, e.g. ``Label.objects.all()``.
@@ -272,7 +279,8 @@ def reencode_stored_field(
 
 
 def clear_stored_field(rows: QuerySet[Any], pk: int, field: str, stored_name: str, *, also_set: dict[str, Any] | None = None) -> bool:
-    """Empty a row's file field and delete the file, if the row still holds that file.
+    """
+    Empty a row's file field and delete the file, if the row still holds that file.
 
     Args:
         rows: The rows the row is found in.

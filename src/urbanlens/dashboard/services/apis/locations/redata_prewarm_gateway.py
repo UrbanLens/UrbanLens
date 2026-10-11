@@ -19,7 +19,8 @@ _TIMEOUT_SECONDS = 10
 
 
 class PrewarmNotPermittedError(LocationContextUnavailableError):
-    """This key may not prewarm: it lacks the ``locations:prewarm`` scope, or this REData has no such endpoint.
+    """
+    This key may not prewarm: it lacks the ``locations:prewarm`` scope, or this REData has no such endpoint.
 
     Settled until the key or the deployment changes, so it is an answer rather than an outage.
     """
@@ -35,7 +36,8 @@ class RedataPrewarmGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_prewarm"
 
     def prewarm(self, latitude: float, longitude: float) -> dict[str, Any]:
-        """Ask REData to fetch every free source for a coordinate in the background.
+        """
+        Ask REData to fetch every free source for a coordinate in the background.
 
         Args:
             latitude: WGS-84 latitude.

@@ -1,4 +1,5 @@
-"""Gateway for Microsoft's Global ML Building Footprints dataset.
+"""
+Gateway for Microsoft's Global ML Building Footprints dataset.
 Microsoft has changed this scheme before, so if lookups start turning up empty, double check the zoom level implied by the QuadKey values in the current CSV against ``quadkey_zoom`` below."""
 
 from __future__ import annotations
@@ -73,7 +74,8 @@ def quadkeys_for_bbox(bbox: BBox, *, zoom: int) -> set[str]:
 
 @dataclass(slots=True, kw_only=True)
 class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
-    """Fetch building footprint polygons from Microsoft's open dataset.
+    """
+    Fetch building footprint polygons from Microsoft's open dataset.
 
     Attributes:
         quadkey_zoom: Bing tile zoom level the current dataset-links.csv is partitioned at."""
@@ -96,7 +98,8 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
         return {row["Location"] for row in self._load_dataset_links() if row.get("Location")}
 
     def get_buildings(self, bbox: BBox, *, country: str | None = None) -> list[dict]:
-        """Download and return building footprint Features overlapping ``bbox``.
+        """
+        Download and return building footprint Features overlapping ``bbox``.
 
         Args:
             bbox: Area of interest.
@@ -143,7 +146,8 @@ def _features_within(lines: Iterable[bytes], bbox: BBox) -> Iterator[dict]:
 
 
 def _far_from(line: bytes, bbox: BBox) -> bool:
-    """Whether a GeoJSON line's first vertex lies too far from *bbox* for its building to overlap it.
+    """
+    Whether a GeoJSON line's first vertex lies too far from *bbox* for its building to overlap it.
 
     Only a single polygon is judged by its first vertex: a later part of a multi-part geometry can lie anywhere.
     """

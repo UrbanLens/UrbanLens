@@ -27,7 +27,8 @@ class RatingChange:
 
 @transaction.atomic
 def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> dict[int, RatingChange]:
-    """Update every participant's PlayerModeRating and the round's LocationModeRating.
+    """
+    Update every participant's PlayerModeRating and the round's LocationModeRating.
     ``services.spotguessr.session._finish_round`` is the only caller and enforces this.
 
     Returns:

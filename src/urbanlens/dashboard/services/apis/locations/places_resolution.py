@@ -34,7 +34,8 @@ def _redata_configured() -> bool:
 
 
 def active_provider() -> str:
-    """Which provider answers place lookups on this install, so an answer can be cached per provider.
+    """
+    Which provider answers place lookups on this install, so an answer can be cached per provider.
 
     Returns:
         :data:`PROVIDER_REDATA` or :data:`PROVIDER_GOOGLE`.
@@ -43,7 +44,8 @@ def active_provider() -> str:
 
 
 def search_nearby_landmarks(latitude: float, longitude: float, radius: float, included_types: list[str], *, api_key: str) -> list[dict[str, Any]]:
-    """Search for landmark-type places near a coordinate (``controllers.maps``'s nearby-places endpoint).
+    """
+    Search for landmark-type places near a coordinate (``controllers.maps``'s nearby-places endpoint).
 
     Args:
         latitude: WGS-84 latitude.
@@ -79,7 +81,8 @@ def search_nearby_landmarks(latitude: float, longitude: float, radius: float, in
 # pin-add-autocomplete flow ever needs - merging it with this function's full field list would
 # silently make every pin-add pay for Enterprise-tier fields it never uses, the exact SKU-tier cost
 def get_place_details_full(place_id: str, *, api_key: str) -> dict[str, Any]:
-    """Fetch full place details for the VIP-only pin-detail panel (``controllers.maps.place_details``).
+    """
+    Fetch full place details for the VIP-only pin-detail panel (``controllers.maps.place_details``).
 
     Args:
         place_id: The Google Place id.
@@ -108,7 +111,8 @@ def get_place_details_full(place_id: str, *, api_key: str) -> dict[str, Any]:
 
 
 def find_nearest_place_photos(latitude: float, longitude: float, *, api_key: str) -> tuple[str | None, list[str]]:
-    """Find the nearest place's id and its photo identifiers (``plugins.builtin.google_places``'s Media-gallery panel).
+    """
+    Find the nearest place's id and its photo identifiers (``plugins.builtin.google_places``'s Media-gallery panel).
 
     Args:
         latitude: WGS-84 latitude.
@@ -146,7 +150,8 @@ class PhotoNotFoundError(Exception):
 
 
 def download_photo(photo_identifier: str, *, api_key: str) -> tuple[bytes, str]:
-    """Download one photo's actual image bytes (``controllers.media_proxy.GoogleMapsPhotoProxyView``).
+    """
+    Download one photo's actual image bytes (``controllers.media_proxy.GoogleMapsPhotoProxyView``).
 
     Args:
         photo_identifier: An opaque identifier from :func:`find_nearest_place_photos`.
@@ -172,7 +177,8 @@ def download_photo(photo_identifier: str, *, api_key: str) -> tuple[bytes, str]:
 
 
 def autocomplete_predictions(query: str, *, api_key: str) -> list[dict[str, str]]:
-    """Predictions-as-you-type (``services.map_pins.autocomplete.search_google_places``).
+    """
+    Predictions-as-you-type (``services.map_pins.autocomplete.search_google_places``).
 
     Args:
         query: User's partial search text.
@@ -201,7 +207,8 @@ def autocomplete_predictions(query: str, *, api_key: str) -> list[dict[str, str]
 
 
 def resolve_place_coordinates(place_id: str, *, api_key: str) -> tuple[float | None, float | None, str | None]:
-    """Look up coordinates for a place_id selected from autocomplete (``services.map_pins.autocomplete.resolve_google_place``).
+    """
+    Look up coordinates for a place_id selected from autocomplete (``services.map_pins.autocomplete.resolve_google_place``).
 
     Args:
         place_id: Google Places ``place_id`` from an autocomplete prediction.
@@ -231,7 +238,8 @@ def resolve_place_coordinates(place_id: str, *, api_key: str) -> tuple[float | N
 
 
 def resolve_name_from_nearby(latitude: float, longitude: float, radius: float, *, api_key: str) -> str | None:
-    """Resolve a place name from nearby-search results (``services.locations.google.GooglePlacesNameResolver``).
+    """
+    Resolve a place name from nearby-search results (``services.locations.google.GooglePlacesNameResolver``).
 
     Args:
         latitude: WGS-84 latitude.

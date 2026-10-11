@@ -145,7 +145,8 @@ class GetStreetViewSingleTests(SimpleTestCase):
         self.assertEqual(len(google.searched), 1)
 
     def test_zero_results_keeps_sweeping_the_radius(self) -> None:
-        """ZERO_RESULTS is a genuine "no pano here" answer, unlike OVER_QUERY_LIMIT -
+        """
+        ZERO_RESULTS is a genuine "no pano here" answer, unlike OVER_QUERY_LIMIT -
         it must still expand the search radius rather than failing immediately."""
         google = _FakeStreetView(pano_at=100)
 

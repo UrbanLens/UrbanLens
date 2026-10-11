@@ -60,7 +60,8 @@ class AsPushPayloadTests(SimpleTestCase):
 
 
 class PushSignalTests(TestCase):
-    """The post_save receiver hands inserts (and only inserts) to send_group_message after commit.
+    """
+    The post_save receiver hands inserts (and only inserts) to send_group_message after commit.
 
     Channel-layer/Celery delivery itself - including "no layer configured" and "delivery failed" tolerance - is
     send_group_message's contract, covered by test_channel_broadcast.py, not re-tested here."""

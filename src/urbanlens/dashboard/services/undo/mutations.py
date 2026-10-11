@@ -1,4 +1,5 @@
-"""One-liners that stash reversible mutations from write paths.
+"""
+One-liners that stash reversible mutations from write paths.
 Call sites pass the live objects; this module builds the payload and description so each controller does not re-learn the handler's schema."""
 
 from __future__ import annotations
@@ -162,7 +163,8 @@ def stash_label_remove(profile: Profile, *, target: str, target_id: int, label: 
 
 
 def stash_album_add(profile: Profile, album: Album, image_ids: Sequence[int], *, source_album_id: int | None = None) -> None:
-    """Record adding photos to an album.
+    """
+    Record adding photos to an album.
 
     Args:
         source_album_id: When this add is a move from another album, undo also puts the photos back there."""

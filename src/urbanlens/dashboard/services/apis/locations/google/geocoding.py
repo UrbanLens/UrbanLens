@@ -54,7 +54,8 @@ LOCALITY_PLACE_TYPES: frozenset[str] = frozenset(
 
 
 def parse_address_components(address_components: list[dict[str, Any]]) -> dict[str, str]:
-    """Flatten a geocoding result's ``address_components`` into a type -> value map.
+    """
+    Flatten a geocoding result's ``address_components`` into a type -> value map.
 
     Args:
         address_components: The ``address_components`` list from a single Google Geocoding API result.
@@ -226,7 +227,8 @@ class GoogleGeocodingGateway(Gateway):
             logger.exception("Error caching geocoded location for %s", redact_params(request_data))
 
     def get_place_name(self, latitude: float | Decimal, longitude: float | Decimal) -> str | None:
-        """Return the formatted address of the most relevant non-administrative geocoding result.
+        """
+        Return the formatted address of the most relevant non-administrative geocoding result.
 
         Args:
             latitude: WGS-84 latitude.
@@ -295,7 +297,8 @@ class GoogleGeocodingGateway(Gateway):
 
     @staticmethod
     def get_cached_coordinates_by_cid(cid: int) -> tuple[float, float] | None:
-        """Read a previously-resolved CID's coordinates from the cache, without ever calling the API.
+        """
+        Read a previously-resolved CID's coordinates from the cache, without ever calling the API.
 
         Args:
             cid: Decimal CID value derived from the hex identifier in a Google
@@ -323,7 +326,8 @@ class GoogleGeocodingGateway(Gateway):
         return float(lat), float(lng)
 
     def get_coordinates_by_cid(self, cid: int) -> tuple[float | None, float | None]:
-        """Look up coordinates by Google Maps CID via the Places Details API.
+        """
+        Look up coordinates by Google Maps CID via the Places Details API.
 
         Args:
             cid: Decimal CID value derived from the hex identifier in the URL.
@@ -383,7 +387,8 @@ class GoogleGeocodingGateway(Gateway):
         return float(lat), float(lng)
 
     def _imprecise_guess_s2_cell(self, s2_hex: str) -> tuple[float | None, float | None]:
-        """Decode an S2 cell ID hex string to (latitude, longitude).
+        """
+        Decode an S2 cell ID hex string to (latitude, longitude).
         Only use it for quick previews of likely coordinates when we don't want to contact an external API to get precise ones.
 
         Args:
@@ -403,7 +408,8 @@ class GoogleGeocodingGateway(Gateway):
         return None, None
 
     def extract_coordinates_from_url(self, url: str, *, offline: bool = False) -> tuple[float | None, float | None]:
-        """Extract latitude and longitude from a Google Maps URL.
+        """
+        Extract latitude and longitude from a Google Maps URL.
 
         Args:
             url: Google Maps URL to parse.

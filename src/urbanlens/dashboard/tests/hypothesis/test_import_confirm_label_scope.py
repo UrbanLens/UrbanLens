@@ -1,4 +1,5 @@
-"""A confirmed import may attach only the labels its importer could have picked.
+"""
+A confirmed import may attach only the labels its importer could have picked.
 
 The import dialog offers ``Label.objects.visible_to(profile).location_labels()``,
 and the confirm step takes ``label_ids`` back from the client per list and per

@@ -1,4 +1,5 @@
-"""Live push of newly created notifications to the recipient's open browser tabs.
+"""
+Live push of newly created notifications to the recipient's open browser tabs.
 
 When a ``NotificationLog`` row is inserted, every browser session the recipient
 has open (subscribed via ``UserNotificationConsumer`` at ``ws/notifications/``)
@@ -23,7 +24,8 @@ PUSH_MESSAGE_LIMIT = 300
 
 
 def notification_group_name(profile_id: int) -> str:
-    """Build the channel-layer group name for one profile's live notifications.
+    """
+    Build the channel-layer group name for one profile's live notifications.
     Every open browser session of that profile joins this group, so a single ``group_send`` reaches all of the user's tabs at once.
 
     Args:
@@ -36,7 +38,8 @@ def notification_group_name(profile_id: int) -> str:
 
 
 def as_push_payload(notification: NotificationLog) -> dict[str, Any]:
-    """Serialize a notification into the JSON payload pushed to browsers.
+    """
+    Serialize a notification into the JSON payload pushed to browsers.
 
     Args:
         notification: The freshly created notification.
@@ -60,7 +63,8 @@ def as_push_payload(notification: NotificationLog) -> dict[str, Any]:
 
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_live_push")
 def push_notification_to_browser(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
-    """Broadcast a newly created notification to the recipient's browser sessions.
+    """
+    Broadcast a newly created notification to the recipient's browser sessions.
     The broadcast runs after the transaction commits, so the browser's follow-up unread-count fetch is guaranteed to see the new row.
 
     Args:
@@ -77,7 +81,8 @@ def push_notification_to_browser(sender: type[NotificationLog], instance: Notifi
 
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_text_alerts")
 def enqueue_text_alerts(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
-    """Queue the delayed WhatsApp/SMS alert for a new notification, per the recipient's toggles.
+    """
+    Queue the delayed WhatsApp/SMS alert for a new notification, per the recipient's toggles.
     The scheduling helper no-ops cheaply for types without toggles and for recipients who left them off (the default), and the delayed task re-checks read-state before ever sending.
 
     Args:
@@ -98,7 +103,8 @@ def enqueue_text_alerts(sender: type[NotificationLog], instance: NotificationLog
 
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_native_push")
 def enqueue_native_push(sender: type[NotificationLog], instance: NotificationLog, created: bool, **kwargs: Any) -> None:
-    """Enqueue delivery of a new notification to the recipient's native devices.
+    """
+    Enqueue delivery of a new notification to the recipient's native devices.
     The WebSocket broadcast above only reaches open browser tabs; a native app in the background needs a real push (UnifiedPush/ntfy - see ``services.notifications.push``).
 
     Args:

@@ -1,4 +1,5 @@
-"""The ``fix_float_rounded_cids`` cleanup: dry run by default, and only CIDs a float64 visibly rounded.
+"""
+The ``fix_float_rounded_cids`` cleanup: dry run by default, and only CIDs a float64 visibly rounded.
 
 A ``GooglePlace`` row with a float-shaped CID is reported but kept: it holds coordinates, so the CID
 resolved, and a real CID has that shape about once in a few hundred.

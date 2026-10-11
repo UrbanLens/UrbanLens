@@ -1,4 +1,5 @@
-"""A county building footprint REData delivers in Esri ring form is used, not dropped.
+"""
+A county building footprint REData delivers in Esri ring form is used, not dropped.
 
 REData's ``Parcel`` exposes ``parcel_geometry`` as GeoJSON, but has no top-level ``building_geometry``: the county
 footprint reaches UrbanLens only inside ``record_payload``, as ``{"format": "esri_rings", "rings": [...]}``. The

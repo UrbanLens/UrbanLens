@@ -64,7 +64,8 @@ def _encode_cursor(stamp: datetime, pk: int) -> str:
 
 
 def _decode_cursor(cursor: str) -> tuple[datetime, int]:
-    """Decode a cursor token back into its keyset position.
+    """
+    Decode a cursor token back into its keyset position.
 
     Args:
         cursor: A token previously produced by :func:`_encode_cursor`.
@@ -104,7 +105,8 @@ def sync_pins_page(
     limit: int | None = None,
     include_total: bool = False,
 ) -> PinSyncPage:
-    """Return one page of the profile's pins changed at or after ``modified_since``.
+    """
+    Return one page of the profile's pins changed at or after ``modified_since``.
     Serves *all* of the profile's pins - root and detail/child alike - unlike the web map's root-only payload; a sync client mirrors the full dataset and reconstructs the hierarchy from each pin's ``parent_uuid``.
 
     Args:
@@ -168,7 +170,8 @@ def sync_tombstones_page(
     cursor: str | None = None,
     limit: int | None = None,
 ) -> TombstoneSyncPage:
-    """Return one page of the profile's pin deletions at or after ``deleted_since``.
+    """
+    Return one page of the profile's pin deletions at or after ``deleted_since``.
 
     Args:
         profile: The profile whose deletions to page through.

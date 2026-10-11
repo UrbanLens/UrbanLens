@@ -58,7 +58,8 @@ class RedataMediaGateway(RedataLocationContextGateway):
         is_aerial: bool = False,
         force_refresh: bool = False,
     ) -> list[dict[str, Any]]:
-        """Look up media items near a coordinate.
+        """
+        Look up media items near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -108,7 +109,8 @@ class RedataMediaGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Look up media items near a coordinate, keeping whether every provider answered.
+        """
+        Look up media items near a coordinate, keeping whether every provider answered.
 
         Args:
             latitude: WGS-84 latitude.
@@ -145,7 +147,8 @@ class RedataMediaGateway(RedataLocationContextGateway):
         return envelope
 
     def download(self, media_uuid: str) -> tuple[bytes, str]:
-        """REData's mirrored copy of one media item's image (``cached_url`` names it once it exists).
+        """
+        REData's mirrored copy of one media item's image (``cached_url`` names it once it exists).
 
         Args:
             media_uuid: The item's REData ``uuid``.
@@ -172,7 +175,8 @@ class _RedataStreetViewProvider(StreetViewProvider):
         return redata_configured()
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide | SlideSignal]:
-        """Yield one dated slide per capture *date* from this provider, newest first.
+        """
+        Yield one dated slide per capture *date* from this provider, newest first.
 
         The three networks share one REData answer for the point (``services.locations.redata_point_data``) rather
         than each asking for its own.

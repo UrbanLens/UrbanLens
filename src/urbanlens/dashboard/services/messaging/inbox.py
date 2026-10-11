@@ -23,7 +23,8 @@ _ITER_PAGE = 100
 
 
 class InboxFeed:
-    """A profile's conversations, newest activity first, supporting ``len()`` and slicing.
+    """
+    A profile's conversations, newest activity first, supporting ``len()`` and slicing.
 
     One ``UNION`` of the per-partner direct-message aggregate and the annotated group memberships is
     ordered and cut by the database; only the rows in the requested slice are then built into
@@ -55,7 +56,8 @@ class InboxFeed:
         return self._index().count()
 
     def __getitem__(self, index: slice) -> list[dict[str, Any]]:
-        """One slice of the conversations, cut in SQL; bounds counted from the end need the whole inbox.
+        """
+        One slice of the conversations, cut in SQL; bounds counted from the end need the whole inbox.
 
         Args:
             index: The slice to take.

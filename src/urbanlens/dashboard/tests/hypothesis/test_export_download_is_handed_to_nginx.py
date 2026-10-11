@@ -1,4 +1,5 @@
-"""A multi-gigabyte download must not occupy a worker for its whole duration.
+"""
+A multi-gigabyte download must not occupy a worker for its whole duration.
 
 `ExportDownloadView` answered with a `FileResponse` over the export ZIP, so the
 bytes travelled through gunicorn. nginx absorbs a response up to
@@ -126,7 +127,8 @@ class ExportDownloadHandOffTests(TestCase):
 
     @override_settings(MEDIA_X_ACCEL=True)
     def test_a_traversal_never_reaches_the_view_at_all(self) -> None:
-        """Two independent reasons the hand-off cannot escape its location.
+        """
+        Two independent reasons the hand-off cannot escape its location.
 
         The route captures ``[^/]+``, so a path separator cannot be smuggled
         through the URL, and the view parses what does arrive as a uuid before
@@ -140,7 +142,8 @@ class ExportDownloadHandOffTests(TestCase):
 
 
 class TheInternalLocationCarriesItsOwnHeadersTests(SimpleTestCase):
-    """nginx drops these four when it follows an X-Accel-Redirect, measured.
+    """
+    nginx drops these four when it follows an X-Accel-Redirect, measured.
 
     `media.conf.template` says so in as many words and sets them; `django.conf`
     aliases the same volume from the same kind of internal location and set

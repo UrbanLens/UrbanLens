@@ -1,4 +1,5 @@
-"""An answer REData says is missing a source is shown, marked partial, and asked for again within the hour.
+"""
+An answer REData says is missing a source is shown, marked partial, and asked for again within the hour.
 
 A partial answer cached for the whole window hides what the missing source would have added for days: a Media tab
 without YouTube, a building list without Overture's footprints. Only an answer with nothing in it was guarded before.
@@ -372,7 +373,8 @@ def _outage() -> Exception:
 
 
 class PropertyRecordTests(_Case):
-    """The sections asked for beside the parcel record: liens, tax, owners, sales, assessments, demographics, parks.
+    """
+    The sections asked for beside the parcel record: liens, tax, owners, sales, assessments, demographics, parks.
 
     The record itself was already kept briefly when REData answered it in part. A section REData could not answer was
     left out and the record cached for the whole window, so the liens or tax history it lacked stayed hidden for days.
@@ -565,7 +567,8 @@ _ANY_SECTION = {"count": 0, "complete": True, "results": [], "providers": [], "n
 
 
 class SectionRefusalTests(_Case):
-    """Only a section REData could not answer for now is named; one it refused for good is not (review finding 1).
+    """
+    Only a section REData could not answer for now is named; one it refused for good is not (review finding 1).
 
     Asked through the real gateway, so each refusal is classified as REData's status code makes it.
     """

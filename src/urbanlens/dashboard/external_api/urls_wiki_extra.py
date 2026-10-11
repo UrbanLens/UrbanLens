@@ -1,4 +1,5 @@
-"""External-API routes for wiki-attached data that has no controller of its own.
+"""
+External-API routes for wiki-attached data that has no controller of its own.
 
 This module is the third bucket: data that hangs off a wiki but was never wired into a template view
 internally - ``WikiOwner``/``WikiPropertySale`` have full models and querysets

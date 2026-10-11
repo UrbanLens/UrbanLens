@@ -1,4 +1,5 @@
-"""External-facing pin-detail panel endpoints: enrichment data as JSON.
+"""
+External-facing pin-detail panel endpoints: enrichment data as JSON.
 
 Exposes exactly the panels that have opted in via a non-empty ``PanelSource.api_kinds`` - see
 ``services.pins.external_data`` for why that, rather than whether ``api_payload`` happens to return
@@ -31,7 +32,8 @@ _POLL_AFTER_SUPPRESSED_SECONDS = 60
 
 
 class PinPanelsListView(OwnedPinMixin, ExternalApiView):
-    """GET: every API-exposed panel available on this pin, with its readiness.
+    """
+    GET: every API-exposed panel available on this pin, with its readiness.
 
     Only panels with non-empty ``api_kinds`` are listed.
     A source gated by ``gate(pin)`` (e.g. no coordinates to work with) or by a subscription feature the

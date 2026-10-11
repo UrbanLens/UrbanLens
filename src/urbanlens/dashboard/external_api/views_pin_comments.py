@@ -1,4 +1,5 @@
-"""External-API reactions on a pin's own comment thread.
+"""
+External-API reactions on a pin's own comment thread.
 
 Two decisions worth stating, because both look like they could go the other way:
 Reacting under a community scope would let a key granted only "edit community wikis" write to
@@ -33,7 +34,8 @@ if TYPE_CHECKING:
     delete=extend_schema(responses={200: CommentReactionsSerializer, 400: ErrorSerializer, 404: ErrorSerializer}),
 )
 class PinCommentReactionView(OwnedPinRequiredMixin, _ReactionMixin, ExternalApiView):
-    """PUT to add an emoji reaction to a comment on the caller's pin; DELETE to remove it.
+    """
+    PUT to add an emoji reaction to a comment on the caller's pin; DELETE to remove it.
 
     Both handlers are inherited from ``_ReactionMixin`` and are declarative rather than toggling, so a
     retry over a flaky mobile link cannot undo the reaction the first (successful but unacknowledged)
@@ -55,7 +57,8 @@ class PinCommentReactionView(OwnedPinRequiredMixin, _ReactionMixin, ExternalApiV
     reaction_summarizer = staticmethod(aggregate_reactions)
 
     def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[Comment, Profile]:
-        """Resolve the pin comment being reacted to, or 404.
+        """
+        Resolve the pin comment being reacted to, or 404.
 
         Every gate is expressed as a lookup rather than a permission branch: ``get_owned_pin_lite`` filters
         on the credential owner, ``pin=pin`` scopes the comment id to that pin, and

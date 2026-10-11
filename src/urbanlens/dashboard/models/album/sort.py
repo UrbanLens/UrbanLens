@@ -1,4 +1,5 @@
-"""How an album's photos are ordered.
+"""
+How an album's photos are ordered.
 
 Date and name sorts are live queries over photo metadata, so a later upload or caption edit
 moves that photo without rewriting ``AlbumItem.order``. Custom order is the exception: ``order``
@@ -32,7 +33,8 @@ class AlbumSort(TextChoices):
 
 @dataclass(frozen=True, slots=True)
 class AlbumSortSpec:
-    """One sort method's SQL and in-memory key.
+    """
+    One sort method's SQL and in-memory key.
 
     Attributes:
         sort: The :class:`AlbumSort` this describes.
@@ -46,7 +48,8 @@ class AlbumSortSpec:
     order_by: tuple
 
     def apply[QS: QuerySet](self, queryset: QS) -> QS:
-        """Return *queryset* ordered by this method.
+        """
+        Return *queryset* ordered by this method.
 
         Generic over the queryset's own type so chaining a custom queryset's own methods
         after this one keeps that type.
@@ -60,7 +63,8 @@ class AlbumSortSpec:
         return queryset.order_by(*self.order_by)
 
     def sorted_items(self, items: Sequence[AlbumItem]) -> list[AlbumItem]:
-        """Sort already-loaded membership rows the same way SQL would.
+        """
+        Sort already-loaded membership rows the same way SQL would.
 
         Used when several albums are listed in one query and each album may
         use a different method.
@@ -111,7 +115,8 @@ ALBUM_SORT_SPECS: dict[str, AlbumSortSpec] = {
 
 
 def album_sort_spec(sort: str) -> AlbumSortSpec:
-    """Return the spec for *sort*, falling back to uploaded for an unknown value.
+    """
+    Return the spec for *sort*, falling back to uploaded for an unknown value.
 
     Args:
         sort: An :class:`AlbumSort` value.

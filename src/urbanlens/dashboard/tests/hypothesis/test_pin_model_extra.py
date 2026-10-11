@@ -24,7 +24,8 @@ class PinEffectiveColorTests(SimpleTestCase):
         return pin
 
     def _mock_labels(self, mock_labels: MagicMock, labels: list[MagicMock]) -> None:
-        """Stand in for ``labels.all()``.
+        """
+        Stand in for ``labels.all()``.
 
         The stub sits on ``all`` itself because ``icon_source_label`` filters and sorts in Python (to stay on
         the prefetch cache) instead of calling ``.exclude()``/``.order_by()``."""
@@ -265,7 +266,8 @@ class PinToDetailJsonTests(TestCase):
 
 
 class PinNameAliasSaveTests(TestCase):
-    """Pin.save keeps the alias list in sync with the current name.
+    """
+    Pin.save keeps the alias list in sync with the current name.
 
     Pins are no longer auto-renamed from external sources; the invariant is that every meaningful persisted name
     (user-typed or not) has an alias row."""

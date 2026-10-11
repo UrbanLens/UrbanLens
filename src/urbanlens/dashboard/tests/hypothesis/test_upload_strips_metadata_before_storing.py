@@ -59,7 +59,8 @@ def _stored_exif(image: Image) -> dict:
 
 
 def _process(image: Image) -> Image:
-    """Run the sandboxed task that reads and strips *image*, then refresh it.
+    """
+    Run the sandboxed task that reads and strips *image*, then refresh it.
 
     Neither ``upload_photo`` nor ``upload_photo_for_owner`` runs this synchronously any more - see the module
     docstring - so every test below that wants the *processed* result calls this after uploading."""
@@ -184,7 +185,8 @@ class VisitTrackingOptOutTests(UploadStripTestCase):
 
 
 class DedupStillMatchesTheUploadedBytesTests(UploadStripTestCase):
-    """The checksum identifies what the user sent, not what we stored.
+    """
+    The checksum identifies what the user sent, not what we stored.
 
     Stripping changes the bytes, so a checksum taken after it would differ for
     every upload and the duplicate check would never fire again.
@@ -203,7 +205,8 @@ class DedupStillMatchesTheUploadedBytesTests(UploadStripTestCase):
 
 
 class UnstrippableFormatsTests(UploadStripTestCase):
-    """A format ``downscale_stored_image`` cannot rewrite is still accepted.
+    """
+    A format ``downscale_stored_image`` cannot rewrite is still accepted.
 
     Stored exactly as uploaded until (or unless) the task's re-encode produces a
     format it can rewrite - acceptance never depends on that.

@@ -27,7 +27,8 @@ class MediaFamilyCheckTests(SimpleTestCase):
         )
 
     def test_an_unregistered_directory_is_reported(self):
-        """A file field under a directory nobody authorized is an error.
+        """
+        A file field under a directory nobody authorized is an error.
 
         Proved against a stand-in field rather than a real model, so the test
         keeps working when the registry gains families.
@@ -71,7 +72,8 @@ class UnguessableUploadPathTests(SimpleTestCase):
     @given(filename=_FILENAMES)
     @hypothesis_settings(max_examples=50, deadline=None)
     def test_two_uploads_of_one_filename_never_share_a_path(self, filename: str):
-        """The same name uploaded twice lands in two different directories.
+        """
+        The same name uploaded twice lands in two different directories.
 
         Without this, the first person to upload ``IMG_4821.jpg`` occupies the
         one path everybody else's ``IMG_4821.jpg`` would be guessed at.
@@ -117,7 +119,8 @@ class UnguessableUploadPathTests(SimpleTestCase):
         )
     )
     def test_a_camera_filename_never_survives_into_storage(self, filename: str):
-        """The uploaded name - camera-generated or not - never reaches the stored path.
+        """
+        The uploaded name - camera-generated or not - never reaches the stored path.
 
         It now reads ``Image.original_filename`` instead (captured off to the side before this runs - see
         ``Image.save``), specifically so this function no longer has to leak anything recognisable into the URL
@@ -147,7 +150,8 @@ class _AnyProfile:
 
 
 def _resolve(field: FileField) -> tuple[str | None, str | None]:
-    """Resolve a field's media family the way the check does.
+    """
+    Resolve a field's media family the way the check does.
 
     Args:
         field: The file field to inspect.

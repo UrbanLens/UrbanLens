@@ -363,7 +363,8 @@ class SpotGuessrPhotoFeedbackViewTests(TestCase):
         self.assertEqual(feedback.kind, GamePhotoFeedbackKind.THUMBS_UP)
 
     def test_explicit_reaction_overrides_the_automatic_no_reaction_backfill(self) -> None:
-        """Solo play completes (and backfills NO_REACTION for) the round the
+        """
+        Solo play completes (and backfills NO_REACTION for) the round the
         instant its one guess is submitted - an explicit reaction afterward
         must still win."""
         from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
@@ -424,7 +425,8 @@ class SpotGuessrSettingsViewTests(TestCase):
 
 
 class SpotGuessrMultiplayerGuessRevealTests(TestCase):
-    """The answer must stay hidden from an early guesser until every joined participant has guessed.
+    """
+    The answer must stay hidden from an early guesser until every joined participant has guessed.
 
     By design, guess.submitted carries no coordinates or score,
     and the answer only goes out with round.revealed."""

@@ -1,4 +1,5 @@
-"""Two simultaneous deliveries of one Stripe event must credit the payment once (P57).
+"""
+Two simultaneous deliveries of one Stripe event must credit the payment once (P57).
 
 `StripeWebhookView.post` re-reads the event row under `select_for_update` before handling it. The sequential tests in
 `test_billing_webhook_idempotency.py` run on one connection, where that lock never contends, so a dropped lock passes
@@ -116,7 +117,8 @@ class WebhookEventLockTests(TransactionTestCase):
         self.assertIsNotNone(StripeWebhookEvent.objects.get(stripe_event_id="evt_same").processed_at)
 
     def test_two_simultaneous_distinct_events_are_both_credited(self) -> None:
-        """The handler is reached by both threads at once when nothing should stop them, so the test above is not
+        """
+        The handler is reached by both threads at once when nothing should stop them, so the test above is not
         passing because the second delivery never got there."""
         statuses = self._deliver_concurrently(_event("evt_a", 400), _event("evt_b", 700))
 

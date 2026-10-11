@@ -43,7 +43,8 @@ def _get_or_create(location: Location, *, dedupe_key: str, prompt: str, answer: 
 
 
 def _year_built_questions(location: Location, buildings: list[dict], *, complete: bool) -> list[TriviaQuestion]:
-    """One question per named building whose records date that building itself.
+    """
+    One question per named building whose records date that building itself.
 
     A year that is the parcel's, or whose basis REData did not say (``services.pins.build_dates.own_build_year``),
     would assert one building's year from its parcel's, so it asks nothing. A question the records no longer support
@@ -112,7 +113,8 @@ def _building_count_question(location: Location, buildings: list[dict]) -> Trivi
 
 
 def generate_deterministic_questions(location: Location) -> list[TriviaQuestion]:
-    """Generate (or return already-generated) deterministic questions for ``location``.
+    """
+    Generate (or return already-generated) deterministic questions for ``location``.
 
     Args:
         location: The location to generate questions for.

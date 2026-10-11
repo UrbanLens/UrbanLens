@@ -1,4 +1,5 @@
-"""Historical features plugin: mapped buildings/roads/etc. that once stood near a pin, via REData.
+"""
+Historical features plugin: mapped buildings/roads/etc. that once stood near a pin, via REData.
 Retrospectively-traced built environment - mostly demolished, mostly never formally designated - covering what stood on or near a site before it looked the way it does today."""
 
 from __future__ import annotations

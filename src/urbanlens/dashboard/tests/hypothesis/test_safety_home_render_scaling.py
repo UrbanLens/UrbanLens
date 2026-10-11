@@ -13,7 +13,8 @@ from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckin
 
 
 class SafetyHomeRowCostTests(RenderTimeScalingMixin, TestCase):
-    """The safety overview page lists every check-in the profile owns with no cap or slice.
+    """
+    The safety overview page lists every check-in the profile owns with no cap or slice.
 
     P69 left it that way on the theory that ``SafetyPreference.auto_delete_after_days`` bounds it
     (it's nullable and defaults to "never", so in practice it often doesn't), not because a row was
@@ -28,7 +29,8 @@ class SafetyHomeRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Add *count* more resolved check-ins, each with a couple of emergency contacts.
+        """
+        Add *count* more resolved check-ins, each with a couple of emergency contacts.
 
         Args:
             count: How many rows to add.

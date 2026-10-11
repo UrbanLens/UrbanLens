@@ -1,4 +1,5 @@
-"""Deleting a pin while a background task writes to it neither fails the delete nor leaves the write behind.
+"""
+Deleting a pin while a background task writes to it neither fails the delete nor leaves the write behind.
 
 Django collects a pin's children in Python and the foreign keys are checked at commit, so a child committed between
 the collect and the commit made the delete fail: on the v0.8.0 location run, deleting a pin two seconds after

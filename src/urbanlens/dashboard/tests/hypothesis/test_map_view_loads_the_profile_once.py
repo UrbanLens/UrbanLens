@@ -1,4 +1,5 @@
-"""A map request selects the viewer's profile row once.
+"""
+A map request selects the viewer's profile row once.
 
 Measured: the row was selected three times - the middleware's descriptor read, ``view_map``'s own
 ``get_or_create``, and the assistant template tag's. ``get_or_create`` selects whether or not the

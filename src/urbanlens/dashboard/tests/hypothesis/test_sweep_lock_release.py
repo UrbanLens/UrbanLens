@@ -82,7 +82,8 @@ class SweepLockReleaseTests(SimpleTestCase):
         self.assertIsNotNone(acquire_lock(_KEY, 60), "a crashed sweep left its lock behind")
 
     def test_an_expired_lock_with_no_new_holder_does_not_warn(self) -> None:
-        """The overrun warning means "two runs overlapped" and is worth acting on.
+        """
+        The overrun warning means "two runs overlapped" and is worth acting on.
         Raising it for a lock that simply expired with nobody waiting - or for a
         second release of the same token - buries the real signal in noise."""
         token = acquire_lock(_KEY, 30)

@@ -1,4 +1,5 @@
-"""Tests for SavedFilterMatchCountsView - live per-filter pin counts for the
+"""
+Tests for SavedFilterMatchCountsView - live per-filter pin counts for the
 map toolbar's icon-less filter badges (an icon-less filter shows a count
 instead of a generic fallback icon, so multiple icon-less filters are
 distinguishable from each other).
@@ -44,7 +45,8 @@ class SavedFilterMatchCountsViewTests(TestCase):
         return f"{base}?{query}"
 
     def test_a_profile_with_only_its_defaults_counts_them_all_at_zero(self) -> None:
-        """A new profile starts with two default saved filters (see
+        """
+        A new profile starts with two default saved filters (see
         labels.signals.create_default_saved_filters), so "nothing of its own"
         means the defaults - each matching nothing, since it has no pins."""
         response = self.client.get(self._url())

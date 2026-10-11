@@ -1,4 +1,5 @@
-"""An unearned wiki's 404 must carry exactly what a nonexistent location's does.
+"""
+An unearned wiki's 404 must carry exactly what a nonexistent location's does.
 
 Production renders one template for both, but a DEBUG deployment prints the exception message, so a
 message on only one branch tells a stranger which slugs are real."""

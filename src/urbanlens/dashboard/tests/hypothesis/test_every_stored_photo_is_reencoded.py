@@ -1,4 +1,5 @@
-"""Every stored photo, and every copy made from one, carries none of the uploader's metadata.
+"""
+Every stored photo, and every copy made from one, carries none of the uploader's metadata.
 
 ``downscale_stored_image`` rewrote a photo only when it resized, converted, or found an EXIF block, and kept the
 original when a rewrite came out larger. A photo whose only metadata was XMP, IPTC, a JPEG comment or PNG text -

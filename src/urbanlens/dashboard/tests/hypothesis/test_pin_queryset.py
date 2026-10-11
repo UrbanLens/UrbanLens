@@ -216,7 +216,8 @@ class PinManagerGetNearbyOrCreateProximityTests(TestCase):
 
 
 class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
-    """get_nearby_or_create() must also dedupe against an existing *child* pin.
+    """
+    get_nearby_or_create() must also dedupe against an existing *child* pin.
 
     Import previously only looked for a root pin (parent_pin__isnull=True) at the Location, so importing a
     placemark that matched an existing child/child pin's coordinates silently created a brand-new, disconnected

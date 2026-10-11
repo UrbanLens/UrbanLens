@@ -1,4 +1,5 @@
-"""Tests for the shared lightbox's Batch 4 additions: pin/wiki/album association
+"""
+Tests for the shared lightbox's Batch 4 additions: pin/wiki/album association
 display and the "File to a pin" / "Send to a wiki" / "Share with a friend"
 actions (services.media.images.image_associations, PhotoAssociationsView,
 PhotoWikiSearchView, PhotoShareFriendsView, and PhotoActionView's
@@ -186,7 +187,8 @@ class PhotoAssociationsViewTests(TestCase):
 
 
 class PhotoPinSearchViewLightboxModeTests(TestCase):
-    """The lightbox=1 branch _pin_search_results.html adds for the lightbox's
+    """
+    The lightbox=1 branch _pin_search_results.html adds for the lightbox's
     "File to a pin" picker - distinct from the organize queue's own hx-post
     branch, which has no #photo-card-<id> to swap into inside the lightbox.
     """
@@ -315,7 +317,8 @@ class SendToWikiActionTests(TestCase):
 
 
 def _upload_real_photo(owner, profile, name="photo.jpg"):
-    """A real uploaded Image with an actual stored file.
+    """
+    A real uploaded Image with an actual stored file.
 
     Needed anywhere the share action's DM broadcast path runs for real (it serializes the attached image's
     .image.url) - a bare baker.make(Image) row has no file behind it and raises there, which a bare baker

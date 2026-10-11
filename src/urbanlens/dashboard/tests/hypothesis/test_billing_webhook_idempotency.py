@@ -91,7 +91,8 @@ class StripeWebhookReplayTests(TestCase):
 
     @mock.patch("stripe.Subscription.retrieve")
     def test_a_delivery_that_fails_after_crediting_does_not_double_credit_on_retry(self, retrieve: mock.Mock) -> None:
-        """The crash-after-side-effect case Stripe's retry policy guarantees will happen.
+        """
+        The crash-after-side-effect case Stripe's retry policy guarantees will happen.
 
         If the credit commits but the "processed" marker does not, the redelivery sees an unprocessed event and
         credits a second time."""

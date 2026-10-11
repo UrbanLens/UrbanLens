@@ -1,4 +1,5 @@
-"""External-API views for trip settings and Google Calendar export.
+"""
+External-API views for trip settings and Google Calendar export.
 
 **Settings had no write path at all.** The four permission levels were readable in the trip detail
 payload and editable only through the site's own HTMX form, so a native client could show a trip's
@@ -84,7 +85,8 @@ _CALENDAR_BUSY_RETRY_AFTER_SECONDS = 60
 
 
 class TripSettingsView(TripScopedApiView):
-    """PATCH: change one or more of a trip's four permission levels.
+    """
+    PATCH: change one or more of a trip's four permission levels.
 
     Answers with the full trip detail rather than a bare acknowledgement, because the levels are not
     what a client renders from - the derived ``viewer.can_*`` booleans are, and those depend on the
@@ -98,7 +100,8 @@ class TripSettingsView(TripScopedApiView):
         responses={200: TripDetailSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
     )
     def patch(self, request: Request, trip_slug: str) -> Response:
-        """Apply a presence-keyed permission update and return the refreshed trip.
+        """
+        Apply a presence-keyed permission update and return the refreshed trip.
 
         Args:
             request: The authenticated request.
@@ -121,7 +124,8 @@ class TripSettingsView(TripScopedApiView):
 
 
 class TripCalendarExportView(TripScopedApiView):
-    """POST: mirror a trip onto the caller's Google Calendar. DELETE: take it back off.
+    """
+    POST: mirror a trip onto the caller's Google Calendar. DELETE: take it back off.
 
     Both directions operate on the *caller's own* calendar - each member of a shared trip exports to
     their own, and one member's export says nothing about anyone else's.
@@ -132,7 +136,8 @@ class TripCalendarExportView(TripScopedApiView):
     throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, CalendarExportThrottle]
 
     def _blocked(self, request: Request, *, error_code: str, message: str) -> Response:
-        """Answer 409 with the site route that re-establishes consent.
+        """
+        Answer 409 with the site route that re-establishes consent.
 
         Args:
             request: The authenticated request, used to absolutize the URL.
@@ -148,7 +153,8 @@ class TripCalendarExportView(TripScopedApiView):
         return Response({"error": message, "error_code": error_code, "authorization_url": authorization_url}, status=409)
 
     def _account_or_blocked(self, request: Request) -> GoogleCalendarAccount | Response:
-        """Resolve the caller's calendar account, or the 409 explaining its absence.
+        """
+        Resolve the caller's calendar account, or the 409 explaining its absence.
 
         Returns the response in place of the account - the same shape ``controllers.trip.trip_or_not_found``
         uses - so the caller's guard is a single ``isinstance`` rather than a two-value unpack whose second
@@ -166,7 +172,8 @@ class TripCalendarExportView(TripScopedApiView):
         return account
 
     def _gateway_failure(self, request: Request, account: GoogleCalendarAccount, exc: Exception) -> Response:
-        """Translate a calendar failure into the right status for a client.
+        """
+        Translate a calendar failure into the right status for a client.
 
         Keeping a connection Google has already rejected around would make every subsequent request repeat
         the identical failure, and would leave the trip detail payload reporting ``connected: true`` for a
@@ -201,7 +208,8 @@ class TripCalendarExportView(TripScopedApiView):
         return Response({"error": _GATEWAY_FAILURE_MESSAGE}, status=502)
 
     def _status_response(self, trip: Trip, profile: Profile, extra: dict[str, Any]) -> Response:
-        """Answer 200 with the refreshed status block plus this method's summary.
+        """
+        Answer 200 with the refreshed status block plus this method's summary.
 
         The status is re-read rather than assembled from what the write returned, so ``auto_sync`` and
         ``last_synced`` reflect the row as it now stands - including the auto-sync flag POST may have
@@ -230,7 +238,8 @@ class TripCalendarExportView(TripScopedApiView):
         },
     )
     def post(self, request: Request, trip_slug: str) -> Response:
-        """Create or refresh this trip's events on the caller's calendar.
+        """
+        Create or refresh this trip's events on the caller's calendar.
 
         Args:
             request: The authenticated request.
@@ -290,7 +299,8 @@ class TripCalendarExportView(TripScopedApiView):
         },
     )
     def delete(self, request: Request, trip_slug: str) -> Response:
-        """Remove this trip's events from the caller's calendar.
+        """
+        Remove this trip's events from the caller's calendar.
 
         Args:
             request: The authenticated request.

@@ -29,7 +29,8 @@ class GetExactOrCreateTests(TestCase):
     """``Location.objects.get_exact_or_create`` keys on stored precision."""
 
     def test_sub_precision_difference_reuses_the_same_row(self) -> None:
-        """The regression: these round to one stored coordinate pair, so they
+        """
+        The regression: these round to one stored coordinate pair, so they
         must resolve to one row rather than colliding on insert."""
         first, created_first = Location.objects.get_exact_or_create(42.00000014, -73.00000014)
         second, created_second = Location.objects.get_exact_or_create(42.00000006, -73.00000006)
@@ -68,7 +69,8 @@ class GetExactOrCreateTests(TestCase):
     )
     @_db_settings
     def test_resolution_agrees_exactly_with_stored_coordinates(self, lat: float, lon: float, nudge: float) -> None:
-        """The real invariant: two submissions share a row precisely when they round to the same stored pair.
+        """
+        The real invariant: two submissions share a row precisely when they round to the same stored pair.
 
         Not "any tiny nudge lands on the same row" - a coordinate sitting on a rounding boundary (hypothesis
         finds e.g."""
@@ -88,7 +90,8 @@ class GetExactOrCreateTests(TestCase):
 
 
 class ChildWikiCoordinateCollisionTests(TestCase):
-    """Placing a child wiki where a wiki already sits is refused, not a 500.
+    """
+    Placing a child wiki where a wiki already sits is refused, not a 500.
 
     ``Wiki.location`` is one-to-one, so the old code tried to sidestep the collision by inserting a *second*
     Location at the same coordinates - which the (latitude, longitude) unique constraint forbids outright."""
@@ -160,7 +163,8 @@ class MovePinToCoordinatesTests(TestCase):
         self.assertEqual(self.pin.location_id, existing.pk)
 
     def test_move_reports_a_collision_with_the_owners_other_root_pin(self) -> None:
-        """Two root pins can't share a Location - that's a DB constraint, and
+        """
+        Two root pins can't share a Location - that's a DB constraint, and
         it must surface as a typed error rather than an IntegrityError 500."""
         other = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=50.0, longitude=60.0))
 
@@ -181,7 +185,8 @@ class MovePinToCoordinatesTests(TestCase):
         self.assertEqual(self.pin.location_id, shared.pk)
 
     def test_a_child_pin_may_move_onto_a_location_holding_a_root_pin(self) -> None:
-        """The uniqueness rule is root-pins-only; child pins keep their freedom
+        """
+        The uniqueness rule is root-pins-only; child pins keep their freedom
         to share a parcel, so the collision check must not over-reach."""
         root = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=70.0, longitude=80.0))
         child = baker.make(

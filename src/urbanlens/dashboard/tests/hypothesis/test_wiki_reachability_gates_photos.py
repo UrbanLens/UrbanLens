@@ -20,7 +20,8 @@ from urbanlens.dashboard.services.photos.uploads import upload_photo_for_owner
 
 
 def _jpeg_bytes(colour: tuple[int, int, int] = (10, 20, 30)) -> bytes:
-    """A small JPEG. Vary *colour* when a test needs two distinct uploads - the
+    """
+    A small JPEG. Vary *colour* when a test needs two distinct uploads - the
     upload path rejects a byte-identical second file on the same pin."""
     buf = io.BytesIO()
     PILImage.new("RGB", (60, 40), color=colour).save(buf, format="JPEG")
@@ -122,7 +123,8 @@ class AnonymousViewersTests(WikiReachabilityTestCase):
 
 
 class TripActivityPhotosTests(WikiReachabilityTestCase):
-    """A pin on a trip activity does *not* share its photos with the trip.
+    """
+    A pin on a trip activity does *not* share its photos with the trip.
 
     Adding a place to an itinerary says where the group is going; it is not a per-photo decision, and
     the product's sharing model requires one before a pin's contents reach anybody else."""
@@ -151,7 +153,8 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
         return result
 
     def test_a_trip_member_cannot_see_a_photo_on_an_activity_pin(self) -> None:
-        """Even with both visibility settings wide open.
+        """
+        Even with both visibility settings wide open.
 
         The member's ``viewer_photo_filter`` is ANYONE and the uploader's ``photo_upload_visibility`` is left at
         its permissive default, so membership is the only thing that could admit them - and it must not."""
@@ -170,7 +173,8 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
         self.assertTrue(self._visible(self.photo, self.owner))
 
     def test_a_later_upload_does_not_join_the_trip_either(self) -> None:
-        """The live half of the old grant: photos added after the fact.
+        """
+        The live half of the old grant: photos added after the fact.
 
         A photo uploaded long after the pin went on the itinerary was swept in by the same query, so the
         exposure kept growing with no further act by anyone."""

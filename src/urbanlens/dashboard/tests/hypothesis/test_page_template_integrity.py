@@ -30,7 +30,8 @@ _TEMPLATES_ROOT = Path(settings.TEMPLATES[0]["DIRS"][0])
 
 
 def _template_source(name: str) -> str:
-    """Read one template's raw text.
+    """
+    Read one template's raw text.
 
     Args:
         name: Template name as it would be given to ``render``.
@@ -52,7 +53,8 @@ class PageLanguageTests(SimpleTestCase):
     """WCAG 3.1.1: a page has to say what language it is in."""
 
     def test_every_theme_declares_a_language(self) -> None:
-        """``<html>`` must carry ``lang``.
+        """
+        ``<html>`` must carry ``lang``.
 
         Without it a screen reader guesses which language to pronounce the page in, and guesses wrong for anyone
         whose system language differs. axe reported ``html-has-lang`` at *serious* on all ten scanned pages,
@@ -65,13 +67,15 @@ class PageLanguageTests(SimpleTestCase):
 
 
 class BlockNameTests(SimpleTestCase):
-    """A child block whose name no ancestor defines is silently discarded.
+    """
+    A child block whose name no ancestor defines is silently discarded.
 
     Django treats an unmatched ``{% block %}`` in a child template as dead content rather than an error, so the
     page renders and simply never shows what the block was for."""
 
     def _ancestor_blocks(self, template: Path) -> set[str] | None:
-        """Collect block names defined anywhere up this template's extends chain.
+        """
+        Collect block names defined anywhere up this template's extends chain.
 
         Args:
             template: Path to the child template.
@@ -94,7 +98,8 @@ class BlockNameTests(SimpleTestCase):
 
     @staticmethod
     def _top_level_blocks(source: str) -> list[str]:
-        """Block names declared outside any other block in this template.
+        """
+        Block names declared outside any other block in this template.
 
         Only these can be dropped.
 
@@ -143,7 +148,8 @@ class SubresourceIntegrityTests(SimpleTestCase):
     """Third-party scripts must be pinned to a hash."""
 
     def test_every_cross_origin_script_is_pinned(self) -> None:
-        """A remote ``<script>`` without ``integrity`` is total control of the app.
+        """
+        A remote ``<script>`` without ``integrity`` is total control of the app.
 
         HTMX was loaded from unpkg with no hash while the jQuery and toastr tags either side of it both had one,
         which is the tell that it was an oversight rather than a decision."""

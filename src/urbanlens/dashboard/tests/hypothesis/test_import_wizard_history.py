@@ -1,4 +1,5 @@
-"""Location History, My Activity and GPX tracks go through the live import wizard: preview, then confirm.
+"""
+Location History, My Activity and GPX tracks go through the live import wizard: preview, then confirm.
 
 The preview parses in the sandbox and the confirmed import runs on a worker, both under ``deny``, so a
 parser reached from the confirm side raises rather than passing quietly.
@@ -268,7 +269,8 @@ class ImportWizardHistoryTests(TestCase):
                 self.assertIsNone(single_flight.holder(confirmed_import.guard_key(self.profile.pk)))
 
     def test_confirming_a_large_history_does_not_read_it_in_the_request(self) -> None:
-        """The history is what the import saves, so it grows with the file: 12 MiB for 16 MiB of Location History.
+        """
+        The history is what the import saves, so it grows with the file: 12 MiB for 16 MiB of Location History.
 
         The confirm request used to ``json.load`` it and dump it again, about 3x its size in the web worker. It is
         copied as it is, and the import's worker reads it.

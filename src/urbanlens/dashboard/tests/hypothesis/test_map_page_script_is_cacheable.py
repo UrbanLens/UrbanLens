@@ -1,4 +1,5 @@
-"""The map page's behaviour is a file the browser keeps, not 275 KB re-sent on every visit.
+"""
+The map page's behaviour is a file the browser keeps, not 275 KB re-sent on every visit.
 
 An inline ``<script>`` cannot be cached, cannot be minified by the bundler, and is invisible to the TypeScript
 checks (P83). The map page's single block was 275 KB of a 589 KB response - 69 KB compressed, on every map view -
@@ -87,7 +88,8 @@ class MapPageScriptIsCacheableTests(TestCase):
         self.assertEqual(template_syntax(SCRIPT_FILE.read_text()), [])
 
     def test_every_config_read_is_live_code(self) -> None:
-        """A read inside a string literal is text, not a value, and fails silently.
+        """
+        A read inside a string literal is text, not a value, and fails silently.
 
         ``'history_v1_' + CFG.profileId`` keys one account's stored history; ``'history_v1_CFG.profileId'``
         keys everyone's to the same string, so on a shared browser one account would show another's.

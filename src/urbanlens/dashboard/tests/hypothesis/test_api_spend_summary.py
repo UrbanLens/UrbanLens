@@ -17,7 +17,8 @@ class ApiSpendSummaryTests(TestCase):
     """Recorded per-call costs must reach the totals."""
 
     def test_a_service_priced_per_call_is_counted(self) -> None:
-        """``ai_photo_keywords`` has no flat rate but logs a real cost per call.
+        """
+        ``ai_photo_keywords`` has no flat rate but logs a real cost per call.
 
         Checked before *and* after the calls are logged, on the same service: a stub that always reports every
         registered service as priced would pass the second half alone, and the original bug (keying "priced" off
@@ -65,7 +66,8 @@ class ApiSpendSummaryTests(TestCase):
         self.assertEqual(summary["unpriced_service_count"], len(all_service_defaults()))
 
     def test_a_recorded_zero_cost_counts_as_priced_not_unpriced(self) -> None:
-        """A call that genuinely cost $0.00 recorded a cost - distinct from never recording one.
+        """
+        A call that genuinely cost $0.00 recorded a cost - distinct from never recording one.
 
         ``cost_30d is None`` is the unpriced test in the implementation; a regression to a falsy check (``if not
         cost_30d``) would misclassify this exact case."""

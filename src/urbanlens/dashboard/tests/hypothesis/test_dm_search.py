@@ -87,7 +87,8 @@ class SearchDirectMessagesTests(TestCase):
         self.assertEqual([hit["message"].pk for hit in hits], [in_range.pk])
 
     def test_a_bare_year_is_not_read_as_a_date_filter(self) -> None:
-        """A 4-digit token is ordinary text unless a preposition marks it.
+        """
+        A 4-digit token is ordinary text unless a preposition marks it.
 
         Guards the deliberate narrowness above: "Building 2024" must stay a
         text search rather than silently becoming a date-filtered one.

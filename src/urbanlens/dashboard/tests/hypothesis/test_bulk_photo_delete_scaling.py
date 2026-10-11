@@ -56,7 +56,8 @@ class BulkPhotoDeleteScalingTests(TestCase):
         return len(statements), sum(query["sql"].count("%s") + query["sql"].count(", ") for query in statements)
 
     def test_deleting_a_batch_does_not_carry_the_batch_into_every_row_s_queries(self) -> None:
-        """The cost must grow with the batch, not with the batch squared.
+        """
+        The cost must grow with the batch, not with the batch squared.
 
         One statement legitimately names every row - the DELETE itself."""
         small_statements, small_params = self._delete(self._photos(_SMALL, "small"))

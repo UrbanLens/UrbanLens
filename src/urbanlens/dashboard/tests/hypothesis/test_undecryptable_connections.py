@@ -1,4 +1,5 @@
-"""An encrypted provider connection that this process cannot decrypt is absent to readers but never destroyed by them.
+"""
+An encrypted provider connection that this process cannot decrypt is absent to readers but never destroyed by them.
 
 A process missing a key another process already writes with (a rolling deploy mid key-rotation) reads a
 perfectly good row as undecryptable. Only an explicit disconnect or a reconnect may remove it.

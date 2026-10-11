@@ -1,4 +1,5 @@
-"""What happens to an upload whose processing task died.
+"""
+What happens to an upload whose processing task died.
 A row whose task died kept ``upload_processed_at = None`` forever: the uploader saw a photo that never finished, with no error and no way to retry, and nothing server-side distinguished "still running" from "died three days ago"."""
 
 from __future__ import annotations
@@ -39,7 +40,8 @@ UNRETRIED_DISCARD_AGE: Final[timedelta] = timedelta(days=7)
 
 
 def _failure_url(image: Image) -> str:
-    """Where to send the uploader to act on a failed upload.
+    """
+    Where to send the uploader to act on a failed upload.
 
     Args:
         image: The row that failed.
@@ -55,7 +57,8 @@ def _failure_url(image: Image) -> str:
 
 
 def record_upload_processing_failure(image_id: int, reason: str) -> PhotoUploadFailure | None:
-    """Record that this row's processing died, and tell its owner.
+    """
+    Record that this row's processing died, and tell its owner.
     Idempotent by database constraint rather than by reading first, because the sweep and any future ``task_failure`` receiver can both reach this for one row and a pre-read races between them.
 
     Args:
@@ -108,7 +111,8 @@ def record_upload_processing_failure(image_id: int, reason: str) -> PhotoUploadF
 
 
 def reenqueue_upload(image: Image) -> None:
-    """Put a row back on the processing queue, with the cap its source implies.
+    """
+    Put a row back on the processing queue, with the cap its source implies.
     A profile-less row is provider imagery whose longest-edge cap lived only at the call site that created it, so it is recovered from ``source`` rather than left to the generic default - the same recovery ``requeue_stalled_pending_uploads`` does.
 
     Args:
@@ -121,7 +125,8 @@ def reenqueue_upload(image: Image) -> None:
 
 
 def retry_upload_processing(failure: PhotoUploadFailure, profile: Profile) -> bool:
-    """Re-run processing for a failed upload, at its owner's request.
+    """
+    Re-run processing for a failed upload, at its owner's request.
 
     Args:
         failure: The reviewable row.
@@ -150,7 +155,8 @@ def retry_upload_processing(failure: PhotoUploadFailure, profile: Profile) -> bo
 
 
 def teardown_image_and_siblings(image: Image) -> None:
-    """Delete a row and any deduplicated siblings pointing at its file.
+    """
+    Delete a row and any deduplicated siblings pointing at its file.
     Deleting the original without them leaves rows whose bytes are gone, which ``_clear_orphaned_dedup_siblings`` later un-quarantines and publishes.
 
     Args:
@@ -168,7 +174,8 @@ def teardown_image_and_siblings(image: Image) -> None:
 
 
 def discard_failed_upload(failure: PhotoUploadFailure) -> None:
-    """Throw away the photo behind a failed upload, keeping the record of it.
+    """
+    Throw away the photo behind a failed upload, keeping the record of it.
     The failure row outlives the photo on purpose: the filename is how the uploader recognises which picture went away, and it is the only trace left once the bytes are gone.
 
     Args:

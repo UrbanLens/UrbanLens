@@ -1,4 +1,5 @@
-"""Home's recent pins are read newest-first from an index, not sorted out of the whole account.
+"""
+Home's recent pins are read newest-first from an index, not sorted out of the whole account.
 
 The widget shows six pins. With no index on (profile, created) Postgres read and sorted every pin the account had to
 find them: 17,720 rows of up to 2 KB each for the capacity population's heaviest account, spilling to disk, 27-64 ms

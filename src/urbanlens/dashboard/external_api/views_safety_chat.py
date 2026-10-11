@@ -1,4 +1,5 @@
-"""External-API endpoints for the *watcher* half of a safety check-in.
+"""
+External-API endpoints for the *watcher* half of a safety check-in.
 
 Everything partner-facing is reached by **uuid only**: a check-in's slug is unique per owner, not
 globally (``controllers.safety._get_checkin_as_partner`` has to swallow ``MultipleObjectsReturned``
@@ -67,7 +68,8 @@ logger = logging.getLogger(__name__)
 
 
 class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixin):
-    """GET the shared chat on a check-in the caller may watch; POST a message to it.
+    """
+    GET the shared chat on a check-in the caller may watch; POST a message to it.
 
     Built on :class:`~urbanlens.dashboard.external_api.mixins_safety.SafetyCheckinViewerScopedView`
     rather than the owner-scoped base, because the chat's whole point is that the owner and their
@@ -85,7 +87,8 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
 
     @extend_schema(responses={200: SafetyCheckinMessageListResponseSerializer, 404: ErrorSerializer})
     def get(self, request: Request, checkin_slug: str) -> Response:
-        """Return one page of the check-in's chat, newest first.
+        """
+        Return one page of the check-in's chat, newest first.
 
         Args:
             request: The authenticated request.
@@ -114,7 +117,8 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
 
     @extend_schema(request=SafetyCheckinMessageCreateSerializer, responses={201: SafetyCheckinMessageSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def post(self, request: Request, checkin_slug: str) -> Response:
-        """Post a message to the check-in's chat.
+        """
+        Post a message to the check-in's chat.
 
         A REST-sent message has to reach the live conversation exactly as a web-sent one does, and the only
         way to guarantee that is to not have a second send path at all.
@@ -159,7 +163,8 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
 
 
 class SafetyPartnerScopedView(ExternalApiView):
-    """Base for the endpoints a *partner* addresses, keyed by check-in uuid.
+    """
+    Base for the endpoints a *partner* addresses, keyed by check-in uuid.
 
     The partner surface asks "are you an accepted partner on someone *else's* check-in", and it must
     exclude the owner: an owner reaching a partner-only write would be marking themselves safe through
@@ -167,7 +172,8 @@ class SafetyPartnerScopedView(ExternalApiView):
     """
 
     def resolve_caller(self, request: Request) -> Profile:
-        """The profile the credential belongs to.
+        """
+        The profile the credential belongs to.
 
         Args:
             request: The authenticated request.
@@ -180,7 +186,8 @@ class SafetyPartnerScopedView(ExternalApiView):
         return profile
 
     def invite_not_found(self) -> Response:
-        """The single 404 body every partner-invite lookup miss answers with.
+        """
+        The single 404 body every partner-invite lookup miss answers with.
 
         In particular it must not become "you already declined this", which would confirm the check-in
         exists to anyone who guessed a uuid.
@@ -191,7 +198,8 @@ class SafetyPartnerScopedView(ExternalApiView):
         return Response({"error": "No such invitation."}, status=404)
 
     def checkin_not_found(self) -> Response:
-        """The single 404 body every partnered-check-in lookup miss answers with.
+        """
+        The single 404 body every partnered-check-in lookup miss answers with.
 
         Byte-identical to the owner- and viewer-scoped bases' 404 so that a client probing across surfaces
         cannot learn which one rejected it.
@@ -202,7 +210,8 @@ class SafetyPartnerScopedView(ExternalApiView):
         return Response({"error": "No such check-in."}, status=404)
 
     def partnered_detail_response(self, checkin: SafetyCheckin, *, status: int = 200) -> Response:
-        """Serialize *checkin* as the partner's full detail document.
+        """
+        Serialize *checkin* as the partner's full detail document.
 
         Re-fetching rather than serializing the passed instance is what makes this correct after a write: a
         just-resolved check-in handed straight to the serializer would still carry the prefetch caches and
@@ -226,7 +235,8 @@ class SafetyPartnerScopedView(ExternalApiView):
 
 
 class SafetyPartnerInvitesView(SafetyPartnerScopedView, PaginatedListMixin):
-    """GET the invitations awaiting the caller's answer.
+    """
+    GET the invitations awaiting the caller's answer.
 
     Not a convenience listing - it is the only way the accept and decline endpoints are reachable at
     all.
@@ -239,7 +249,8 @@ class SafetyPartnerInvitesView(SafetyPartnerScopedView, PaginatedListMixin):
 
     @extend_schema(responses={200: SafetyPartnerInviteListResponseSerializer})
     def get(self, request: Request) -> Response:
-        """Return one page of the caller's own pending partner invitations.
+        """
+        Return one page of the caller's own pending partner invitations.
 
         Args:
             request: The authenticated request.
@@ -261,7 +272,8 @@ class SafetyPartnerInviteAcceptView(SafetyPartnerScopedView):
 
     @extend_schema(request=None, responses={200: SafetyPartnerRoleSerializer, 404: ErrorSerializer})
     def post(self, request: Request, checkin_uuid: uuid_module.UUID) -> Response:
-        """Accept the caller's invitation to partner on this check-in.
+        """
+        Accept the caller's invitation to partner on this check-in.
 
         Idempotent by design, and 200 rather than an error on a repeat.
 
@@ -296,7 +308,8 @@ class SafetyPartnerInviteDeclineView(SafetyPartnerScopedView):
 
     @extend_schema(request=None, responses={204: None, 404: ErrorSerializer})
     def post(self, request: Request, checkin_uuid: uuid_module.UUID) -> Response:
-        """Decline the caller's invitation, deleting their partner row.
+        """
+        Decline the caller's invitation, deleting their partner row.
 
         Repeating this is a 404, not another 204, and that is the honest answer rather than a wart:
         declining *deletes* the row, so on the second call there is genuinely no invitation to act on.
@@ -324,7 +337,8 @@ class SafetyPartnerCheckinsView(SafetyPartnerScopedView, PaginatedListMixin):
 
     @extend_schema(operation_id="safety_partner_checkins_list", responses={200: PartneredCheckinListResponseSerializer})
     def get(self, request: Request) -> Response:
-        """Return one page of the check-ins the caller partners on.
+        """
+        Return one page of the check-ins the caller partners on.
 
         Args:
             request: The authenticated request.
@@ -345,7 +359,8 @@ class SafetyPartnerCheckinDetailView(SafetyPartnerScopedView):
 
     @extend_schema(responses={200: PartneredCheckinDetailSerializer, 404: ErrorSerializer})
     def get(self, request: Request, checkin_uuid: uuid_module.UUID) -> Response:
-        """Return the partner's full detail document for one watched check-in.
+        """
+        Return the partner's full detail document for one watched check-in.
 
         Args:
             request: The authenticated request.
@@ -370,7 +385,8 @@ class SafetyPartnerMarkSafeView(SafetyPartnerScopedView):
 
     @extend_schema(request=None, responses={200: PartneredCheckinDetailSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def post(self, request: Request, checkin_uuid: uuid_module.UUID) -> Response:
-        """Mark the check-in's owner safe, as an accepted partner.
+        """
+        Mark the check-in's owner safe, as an accepted partner.
 
         The write this whole surface exists for: it stops the escalation beat from emailing the owner's
         emergency contacts, and it does so from a phone, which is where a partner actually is when they find

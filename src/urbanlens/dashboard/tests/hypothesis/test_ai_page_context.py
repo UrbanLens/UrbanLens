@@ -127,7 +127,8 @@ class PageObjectSerializationTests(TestCase):
 
 
 class RegistryConsistencyTests(SimpleTestCase):
-    """Guards a drift a new resolver could ship without anyone noticing.
+    """
+    Guards a drift a new resolver could ship without anyone noticing.
 
     verify_page_object fails closed for an unknown kind (returns False) - safe, but silent: a resolver whose
     object_kind has no matching _EXISTENCE_CHECKS entry would resolve its page fine and then have that page

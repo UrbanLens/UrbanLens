@@ -92,7 +92,8 @@ class PinUndoHandler(UndoHandler):
 
     @classmethod
     def _resolved_parent_pk(cls, entry: dict[str, Any], in_batch: set[int]) -> int | None:
-        """The old pk of the parent this entry will end up under, or None if it will be a root pin.
+        """
+        The old pk of the parent this entry will end up under, or None if it will be a root pin.
         Three outcomes, matching what :meth:`restore` actually does: no parent recorded; a parent that is part of this same batch (relinked to its new row); or a parent outside the batch, reattached only if it still exists."""
         old_parent_pk = entry["parent_pin_old_pk"]
         if not old_parent_pk:
@@ -105,7 +106,8 @@ class PinUndoHandler(UndoHandler):
 
     @classmethod
     def assert_restorable(cls, payload: list[dict[str, Any]], in_batch: set[int]) -> None:
-        """Refuse the whole batch if anything it references has gone since.
+        """
+        Refuse the whole batch if anything it references has gone since.
 
         Recreating a row whose profile, location, wiki or label was deleted
         during the retention window would fail with an uncaught IntegrityError,
@@ -166,7 +168,8 @@ class PinUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:
-        """Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and labels.
+        """
+        Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and labels.
         Parents are created before their children and the link is set at creation rather than in a second pass.
 
         Raises:

@@ -75,7 +75,8 @@ class NotificationChannelGatingTests(TestCase):
 
 
 class EveryCategoryOffersAWorkingEmailColumnTests(TestCase):
-    """Every category's Email checkbox is a normal, uniformly interactive one.
+    """
+    Every category's Email checkbox is a normal, uniformly interactive one.
 
     All 13 categories now have a real email-sending path behind them (see
     services.notifications.notification_delivery.send_notification_email), so the settings page must not

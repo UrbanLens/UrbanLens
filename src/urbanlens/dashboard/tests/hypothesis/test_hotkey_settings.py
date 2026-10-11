@@ -1,4 +1,5 @@
-"""Tests for the Settings > Shortcuts section: HotkeySettingsForm's JSON
+"""
+Tests for the Settings > Shortcuts section: HotkeySettingsForm's JSON
 cleaning/validation, POST /settings/ section=hotkeys end to end, and that a
 saved override reaches the page as the #ul-hotkeys JSON that hotkeys.ts reads.
 """

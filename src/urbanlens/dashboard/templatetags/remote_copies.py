@@ -9,7 +9,8 @@ register = template.Library()
 
 @register.filter
 def remote_copy(url: str | None, provider: str) -> str:
-    """This site's address for a remote image; an in-app or empty URL is returned as it is.
+    """
+    This site's address for a remote image; an in-app or empty URL is returned as it is.
 
     Args:
         url: The image's address.

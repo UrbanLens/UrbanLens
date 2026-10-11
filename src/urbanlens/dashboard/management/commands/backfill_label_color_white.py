@@ -1,4 +1,5 @@
-"""One-off backfill: labels with no color ("clear") now default to white for new labels.
+"""
+One-off backfill: labels with no color ("clear") now default to white for new labels.
 
 TEMPORARY - delete this command once it has been run against production. It exists
 only to bring existing rows in line with the new default (see LabelCreateView and

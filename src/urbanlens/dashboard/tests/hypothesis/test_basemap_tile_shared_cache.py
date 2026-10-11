@@ -1,4 +1,5 @@
-"""Who may keep a proxied basemap tile: the viewer's browser, for as long as the vendor allows, and nobody else.
+"""
+Who may keep a proxied basemap tile: the viewer's browser, for as long as the vendor allows, and nobody else.
 
 The endpoint is behind a login, so a shared cache holding a tile would hand it to anyone who asked, and its hit or
 miss would say whether somebody here had looked at that coordinate. The browser is the cache that matters anyway:
@@ -56,7 +57,8 @@ class OnlyTheViewersBrowserKeepsATileTests(SimpleTestCase):
             self.assertFalse([d for d in directives if d.startswith("s-maxage")])
 
     def test_the_browser_keeps_it_through_everything_the_layers_below_add(self) -> None:
-        """The session layer adds ``Vary: Cookie`` whenever it is read, and the media cookie middleware sets a
+        """
+        The session layer adds ``Vary: Cookie`` whenever it is read, and the media cookie middleware sets a
         cookie on any authenticated response due a refresh. Neither is visible from the view."""
         response = _keep_for(HttpResponse(b"tile", content_type="image/png"))
         response.headers["Vary"] = "Cookie"
@@ -88,7 +90,8 @@ class OnlyTheViewersBrowserKeepsATileTests(SimpleTestCase):
 
 
 class TheVendorsLifetimeIsTheCeilingTests(SimpleTestCase):
-    """Esri sends ``Cache-Control: max-age=86400``; the browser is told no longer, however long this deployment
+    """
+    Esri sends ``Cache-Control: max-age=86400``; the browser is told no longer, however long this deployment
     keeps the bytes itself."""
 
     def test_every_vendor_layer_is_cut_to_its_vendors_lifetime(self) -> None:
@@ -111,7 +114,8 @@ class OnlyMarkedResponsesAreStrippedTests(SimpleTestCase):
     """The mark is the whole safety boundary: stripping is destructive to anything else."""
 
     def test_a_signed_out_visitors_redirect_keeps_its_cookies(self) -> None:
-        """The tile view answers an anonymous request with `handle_no_permission()`, which never reaches
+        """
+        The tile view answers an anonymous request with `handle_no_permission()`, which never reaches
         `_keep_for`. Stripping that one would drop the session cookie carrying the `next` round trip."""
         response = HttpResponseRedirect("/accounts/login/")
         response.set_cookie("sessionid", "abc")
@@ -123,7 +127,8 @@ class OnlyMarkedResponsesAreStrippedTests(SimpleTestCase):
         self.assertEqual(served.headers["Vary"], "Cookie")
 
     def test_a_503_is_left_unmarked_and_without_a_lifetime(self) -> None:
-        """Slot exhaustion and an unreachable upstream both answer 503 without the stamp. Keeping one would turn a
+        """
+        Slot exhaustion and an unreachable upstream both answer 503 without the stamp. Keeping one would turn a
         passing outage into a blank map region."""
         served = _served(HttpResponse(status=503, headers={"Retry-After": "1"}))
 
@@ -132,7 +137,8 @@ class OnlyMarkedResponsesAreStrippedTests(SimpleTestCase):
 
 
 class TheStripRunsAfterTheLayersItUndoesTests(SimpleTestCase):
-    """Position, not behaviour - but the mechanism is silently inert if it ever moves.
+    """
+    Position, not behaviour - but the mechanism is silently inert if it ever moves.
 
     `SecurityHeadersMiddleware` only sees headers added by middleware listed below it, because the response phase
     runs in reverse. Below `SessionMiddleware` it would strip a `Vary: Cookie` that the session layer then adds

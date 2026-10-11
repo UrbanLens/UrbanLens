@@ -1,4 +1,5 @@
-"""Each scan is its own record; a device's type, name and markers are a summary of all of them (Jess, 2026-09-30).
+"""
+Each scan is its own record; a device's type, name and markers are a summary of all of them (Jess, 2026-09-30).
 
 One account can add evidence but cannot overwrite anyone else's, and repeating itself counts once.
 """

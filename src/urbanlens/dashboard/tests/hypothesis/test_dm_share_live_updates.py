@@ -63,7 +63,8 @@ class DeferBroadcastTests(TestCase):
 
 
 class SharePinBroadcastOrderingTests(TestCase):
-    """share_pin_in_message only broadcasts after the DirectMessageShare exists.
+    """
+    share_pin_in_message only broadcasts after the DirectMessageShare exists.
 
     Broadcasting the plain message first (as the code did before this fix) means the WS payload's `has_share`
     flag is always False - the live share card never renders for the recipient without a manual refresh."""
@@ -90,7 +91,8 @@ class SharePinBroadcastOrderingTests(TestCase):
         self.assertFalse(serialize_direct_message(message)["has_share"])
 
     def test_pin_share_notification_masks_hidden_sender(self) -> None:
-        """Regression: create_pin_share's notification interpolated
+        """
+        Regression: create_pin_share's notification interpolated
         ``sender.username`` directly instead of the recipient-scoped masked
         name every other identity surface already uses."""
         Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
@@ -216,7 +218,8 @@ class MessageShareRespondViewTests(TestCase):
 
 
 class MessageShareTripScopingTests(TestCase):
-    """The trip-invite POST resolves the trip through the caller's own memberships.
+    """
+    The trip-invite POST resolves the trip through the caller's own memberships.
 
     Both cases must be an identical 404 now."""
 
@@ -356,7 +359,8 @@ class ThreadImagePermissionSerializationTests(TestCase):
 
 
 class ShareCompositeAtomicityTests(TestCase):
-    """A refused message rolls back the whole share composite.
+    """
+    A refused message rolls back the whole share composite.
 
     Regression: share_pin_in_message created the PinShare (with its exposure record) and
     invite_to_trip_in_message created the TripMembership BEFORE calling create_direct_message."""
@@ -405,7 +409,8 @@ class ShareCompositeAtomicityTests(TestCase):
 
 
 class RecommendationBlockTests(TestCase):
-    """A block between the recommended profile and the recipient vetoes the recommendation.
+    """
+    A block between the recommended profile and the recipient vetoes the recommendation.
 
     Regression: recommending X to R when X had blocked R (or vice versa) still created the
     DirectMessageTemporaryAccess grant - handing R a 24-hour window of profile access the block exists to
@@ -449,7 +454,8 @@ class RecommendationBlockTests(TestCase):
             recommend_friend_in_message(self.sender, self.recipient, self.recommended, "meet them")
 
     def test_block_refusal_is_indistinguishable_from_recommendations_disabled(self) -> None:
-        """The sender must not be able to tell "blocked" apart from "opted out".
+        """
+        The sender must not be able to tell "blocked" apart from "opted out".
 
         Both routes raise the exact same exception type (``FriendRecommendationUnavailableError``) rather than
         merely the same message text - a catch site dispatches on type now, so that's what actually determines

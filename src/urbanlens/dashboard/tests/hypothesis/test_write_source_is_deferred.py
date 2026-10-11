@@ -1,4 +1,5 @@
-"""Naming the writer of a request's writes costs a query, so it waits until there is a write.
+"""
+Naming the writer of a request's writes costs a query, so it waits until there is a write.
 
 ``WriteSourceMiddleware`` binds the signed-in profile for every request. Resolving that profile up
 front charged a ``dashboard_profiles`` query to requests that write nothing - which is nearly all of
@@ -139,7 +140,8 @@ class MiddlewareAttributionTests(TestCase):
 
 
 class ExternalApiAttributionTests(TestCase):
-    """The API binds its own source, so it defers the same lookup or the saving stops at the door.
+    """
+    The API binds its own source, so it defers the same lookup or the saving stops at the door.
 
     ``ExternalApiView.initial()`` cannot use ``WriteSourceMiddleware`` - it needs the caller DRF
     authenticated, which happens after the middleware has run - so it is a second implementation of
@@ -168,7 +170,8 @@ class ExternalApiAttributionTests(TestCase):
         return self.client.get(path, HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
 
     def test_a_read_resolves_the_profile_once_however_it_authenticated(self) -> None:
-        """The ceiling the binding must not raise, on both authenticators.
+        """
+        The ceiling the binding must not raise, on both authenticators.
 
         Written as "once", not "never", because measurement said so: the number is what the
         authenticator and the view need between them, and a binding that resolved its own copy
@@ -201,7 +204,8 @@ class ExternalApiAttributionTests(TestCase):
                 )
 
     def test_what_it_binds_still_names_the_caller_when_something_asks(self) -> None:
-        """Deferring the lookup must not lose it.
+        """
+        Deferring the lookup must not lose it.
 
         Asserted on the binding rather than on a revision row: nothing the external API writes is a
         versioned model, so a write through it would prove the attribution reached nowhere.
@@ -223,7 +227,8 @@ class ExternalApiAttributionTests(TestCase):
 
 
 class OneRuleDecidesTheWriterTests(TestCase):
-    """The rule naming a request's writer has one definition, and every binder reaches for it.
+    """
+    The rule naming a request's writer has one definition, and every binder reaches for it.
 
     N26 #10: the site and the API each held their own copy, they drifted apart once, and nothing
     failed when they did - a write attributed to SYSTEM that a user actually made is a row that

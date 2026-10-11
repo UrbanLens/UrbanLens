@@ -1,4 +1,5 @@
-"""Tests for VisitQuerySet.for_pin.
+"""
+Tests for VisitQuerySet.for_pin.
 
 All tests require the database - records are created with model_bakery.
 """

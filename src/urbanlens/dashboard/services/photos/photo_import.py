@@ -25,7 +25,8 @@ class PhotoImportMode(TextChoices):
 
 
 def visit_dates_for_pin(pin: Pin, limit: int = MAX_VISIT_DATES) -> list[datetime.date]:
-    """Return a pin's most recent distinct PinVisit calendar dates.
+    """
+    Return a pin's most recent distinct PinVisit calendar dates.
 
     Args:
         pin: The pin whose visit history to read.

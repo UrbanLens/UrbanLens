@@ -73,7 +73,8 @@ class EscalationSurvivesLongWikiNameTests(TestCase):
     # -- completeness -------------------------------------------------------
 
     def test_every_name_a_title_wraps_still_leaves_room_or_is_truncated(self) -> None:
-        """The property, held against the models rather than against today's call sites.
+        """
+        The property, held against the models rather than against today's call sites.
 
         Each pair is (wrapper text length, the column feeding it)."""
         wrapped = {

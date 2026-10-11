@@ -35,7 +35,8 @@ _PDF_BYTES = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the Authorization header kwargs for the test client.
+    """
+    Build the Authorization header kwargs for the test client.
 
     Args:
         raw_key: The plaintext API key.
@@ -46,7 +47,8 @@ def _bearer(raw_key: str) -> dict:
 
 
 def _key_with_scopes(user: User, *scopes: ApiKeyScope) -> str:
-    """Issue an API key granting exactly ``scopes``.
+    """
+    Issue an API key granting exactly ``scopes``.
 
     Args:
         user: The key's owner.
@@ -86,7 +88,8 @@ class _SocialProfileTestCase(TestCase):
         )
 
     def _slug(self, profile: Profile) -> str:
-        """The path segment addressing a profile.
+        """
+        The path segment addressing a profile.
 
         Args:
             profile: The profile to address.
@@ -104,7 +107,8 @@ _MEDIA_ROOT = _MEDIA_TMP.name
 
 
 def _multipart_put(client, url: str, files: dict, headers: dict):
-    """PUT a multipart body through Django's test client.
+    """
+    PUT a multipart body through Django's test client.
 
     ``Client.put`` sends the body verbatim rather than encoding it the way ``Client.post`` does, so a dict
     handed to it arrives as a stringified dict and ``request.FILES`` comes back empty - which looks exactly like
@@ -126,7 +130,8 @@ class AvatarUploadTests(_SocialProfileTestCase):
     """PUT/DELETE ``/profiles/{slug}/avatar/``."""
 
     def _url(self, profile: Profile) -> str:
-        """The avatar route for a profile.
+        """
+        The avatar route for a profile.
 
         Args:
             profile: The profile named in the path.
@@ -136,7 +141,8 @@ class AvatarUploadTests(_SocialProfileTestCase):
         return reverse("external_api:profiles.avatar", kwargs={"profile_slug": self._slug(profile)})
 
     def _put_png(self, profile: Profile, raw_key: str | None = None):
-        """PUT a valid PNG at a profile's avatar route.
+        """
+        PUT a valid PNG at a profile's avatar route.
 
         Args:
             profile: The profile named in the path. raw_key: Credential to use; defaults to the fixture owner's.
@@ -182,7 +188,8 @@ class AvatarUploadTests(_SocialProfileTestCase):
         self.assertEqual(response.json(), {"error": "No file provided."})
 
     def test_content_that_is_not_an_image_is_refused_and_stores_nothing(self) -> None:
-        """Magic-byte sniffing runs here exactly as it does on the web form.
+        """
+        Magic-byte sniffing runs here exactly as it does on the web form.
 
         The payload is a real PDF wearing a ``.png`` name and an ``image/png`` Content-Type."""
         response = _multipart_put(
@@ -197,7 +204,8 @@ class AvatarUploadTests(_SocialProfileTestCase):
         self.assertFalse(self.profile.avatar)
 
     def test_upload_refusals_keep_their_own_status_and_message(self) -> None:
-        """Each status keeps its own hand-authored text, not ``image_upload_error``'s.
+        """
+        Each status keeps its own hand-authored text, not ``image_upload_error``'s.
 
         That message is log-only now (see ``services.profile.avatar``) - a caller-supplied string must never
         reach the response."""
@@ -258,7 +266,8 @@ class AvatarEmojiTests(_SocialProfileTestCase):
     """POST ``/profiles/{slug}/avatar/emoji/``."""
 
     def _url(self, profile: Profile) -> str:
-        """The emoji-avatar route for a profile.
+        """
+        The emoji-avatar route for a profile.
 
         Args:
             profile: The profile named in the path.
@@ -268,7 +277,8 @@ class AvatarEmojiTests(_SocialProfileTestCase):
         return reverse("external_api:profiles.avatar.emoji", kwargs={"profile_slug": self._slug(profile)})
 
     def _post(self, profile: Profile, payload: dict):
-        """POST an emoji-avatar request.
+        """
+        POST an emoji-avatar request.
 
         Args:
             profile: The profile named in the path. payload: The JSON body.
@@ -314,7 +324,8 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
     """GET annotations; PUT/DELETE nickname and trust."""
 
     def _annotations_url(self, profile: Profile) -> str:
-        """The annotations route for a profile.
+        """
+        The annotations route for a profile.
 
         Args:
             profile: The subject named in the path.
@@ -324,7 +335,8 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
         return reverse("external_api:profiles.annotations", kwargs={"profile_slug": self._slug(profile)})
 
     def _nickname_url(self, profile: Profile) -> str:
-        """The nickname route for a profile.
+        """
+        The nickname route for a profile.
 
         Args:
             profile: The subject named in the path.
@@ -334,7 +346,8 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
         return reverse("external_api:profiles.nickname", kwargs={"profile_slug": self._slug(profile)})
 
     def _trust_url(self, profile: Profile) -> str:
-        """The trust route for a profile.
+        """
+        The trust route for a profile.
 
         Args:
             profile: The subject named in the path.
@@ -493,7 +506,8 @@ class ProfileAnnotationTests(_SocialProfileTestCase):
 
 
 class AnnotationsArePrivateToTheirAuthorTests(_SocialProfileTestCase):
-    """The subject of an annotation must never be able to read it.
+    """
+    The subject of an annotation must never be able to read it.
 
     This is the failure a queryset filtered on ``subject`` alone would cause: every author-side test above would
     still pass while the annotated person could read everyone's private opinion of them in one request."""

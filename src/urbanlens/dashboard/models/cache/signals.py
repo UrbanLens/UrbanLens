@@ -26,7 +26,8 @@ def _title(data: object) -> str:
 
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_seed_articles_from_wikipedia")
 def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance: LocationCache, **kwargs) -> None:
-    """Seed the wiki's article, add its Wikipedia link and refresh names whenever a location's Wikipedia match is (re)cached.
+    """
+    Seed the wiki's article, add its Wikipedia link and refresh names whenever a location's Wikipedia match is (re)cached.
 
     The wiki's article is seeded on every write (a no-op once one exists), and neither it nor the link reaches a
     building's wiki (``wiki_seed.takes_wikipedia_article``). A matched title also drops article
@@ -94,7 +95,8 @@ def _names_a_new_building(instance: LocationCache) -> bool:
 
 @receiver(post_save, sender=LocationCache, dispatch_uid="location_cache_refresh_names_on_register_listing")
 def refresh_names_on_register_listing(sender: type[LocationCache], instance: LocationCache, **kwargs) -> None:
-    """Refresh a location's names when a register row arrives naming a listing that contains it, or a CRIS row names its building.
+    """
+    Refresh a location's names when a register row arrives naming a listing that contains it, or a CRIS row names its building.
 
     Register and CRIS rows land from panel fetches and site passes, after the name was first chosen, so this is
     what lets a listing replace an automatic name of a worse tier and a building take its own record's name.

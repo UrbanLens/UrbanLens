@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def competing_places(latitude, longitude, resolved: Place | None) -> list[Place]:
-    """Places that genuinely compete for a coordinate.
+    """
+    Places that genuinely compete for a coordinate.
 
     Args:
         latitude: WGS-84 latitude; None is tolerated.
@@ -33,7 +34,8 @@ def competing_places(latitude, longitude, resolved: Place | None) -> list[Place]
 
 
 def representative_locations(places) -> list[Location]:
-    """One Location per place, for surfaces whose API speaks in locations.
+    """
+    One Location per place, for surfaces whose API speaks in locations.
 
     Args:
         places: The places to represent.
@@ -51,7 +53,8 @@ def representative_locations(places) -> list[Location]:
 
 
 def _shares_lineage(a: Place, b: Place) -> bool:
-    """Whether one of two places is a ``PART_OF`` ancestor of the other.
+    """
+    Whether one of two places is a ``PART_OF`` ancestor of the other.
 
     Args:
         a: One place.
@@ -69,7 +72,8 @@ def _shares_lineage(a: Place, b: Place) -> bool:
 
 
 def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
-    """Locations a pin could plausibly be relinked to instead, if any.
+    """
+    Locations a pin could plausibly be relinked to instead, if any.
 
     Args:
         pin: The viewer's own pin, whose coordinate is being checked.
@@ -99,7 +103,8 @@ def competing_wiki_locations(pin, profile: Profile) -> list[Location]:
 
 
 def linked_wiki_locations(pin, profile: Profile) -> list[Location]:
-    """Every wiki this pin is genuinely associated with, earned only.
+    """
+    Every wiki this pin is genuinely associated with, earned only.
     Replaces the old "one wiki, with a switch button" framing: a pin can legitimately relate to more than one wiki at once, and every one of them is listed rather than picked between.
 
     Args:

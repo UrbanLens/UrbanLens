@@ -44,7 +44,8 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
     """Forward and reverse geocoding via the Azure Maps Geocoding API."""
 
     def geocode_address(self, query: str) -> dict[str, Any] | None:
-        """Forward-geocode a free-text address or place name.
+        """
+        Forward-geocode a free-text address or place name.
 
         Args:
             query: Address or place-name query string.
@@ -65,7 +66,8 @@ class AzureMapsGeocodingGateway(AzureMapsGateway):
         return _normalize_feature(features[0]) if features else None
 
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """Reverse-geocode coordinates to a formatted address.
+        """
+        Reverse-geocode coordinates to a formatted address.
 
         Args:
             latitude: WGS-84 latitude.

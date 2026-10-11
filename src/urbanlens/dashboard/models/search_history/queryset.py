@@ -20,7 +20,8 @@ class SearchHistoryQuerySet(abstract.DashboardQuerySet["SearchHistory"]):
     """QuerySet for remembered global-search queries."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """All history rows belonging to a profile, most recent first.
+        """
+        All history rows belonging to a profile, most recent first.
 
         Args:
             profile: The profile whose search history to return.
@@ -31,7 +32,8 @@ class SearchHistoryQuerySet(abstract.DashboardQuerySet["SearchHistory"]):
         return self.filter(profile=profile).order_by("-last_used")
 
     def recent_for(self, profile: Profile, limit: int = 8) -> list[SearchHistory]:
-        """The profile's most recently used queries.
+        """
+        The profile's most recently used queries.
 
         Args:
             profile: The profile whose history to return.
@@ -50,7 +52,8 @@ class SearchHistoryManager(_SearchHistoryManagerBase["SearchHistory"]):
     """Manager for SearchHistory with the record/prune helper."""
 
     def record(self, profile: Profile, query: str) -> SearchHistory | None:
-        """Remember a search query for a profile, deduplicating repeats.
+        """
+        Remember a search query for a profile, deduplicating repeats.
         Re-running an existing query bumps ``last_used``/``use_count`` instead of inserting a duplicate.
 
         Args:

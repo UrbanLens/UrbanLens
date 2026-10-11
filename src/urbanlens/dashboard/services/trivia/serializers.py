@@ -27,7 +27,8 @@ def serialize_round(round_: TriviaRound) -> dict[str, Any]:
 
 
 def serialize_reveal(round_: TriviaRound, answer: TriviaAnswer) -> dict[str, Any]:
-    """One answer's own result - the HTTP response to whoever just answered.
+    """
+    One answer's own result - the HTTP response to whoever just answered.
     The correct answer is only included once ``round_`` is actually revealed (every joined participant has answered)."""
     data: dict[str, Any] = {
         "round_id": round_.pk,

@@ -19,7 +19,8 @@ from urbanlens.dashboard.tasks import deliver_friend_invitation
 
 
 def make_invitable_user(**kwargs) -> User:
-    """Bake a user with a verified primary address who accepts friend requests from anyone.
+    """
+    Bake a user with a verified primary address who accepts friend requests from anyone.
 
     ``friend_request_visibility`` defaults to ``ANYONE``, so this is a no-op against a freshly baked profile
     today - but it makes each test's dependency on that setting explicit rather than incidental, and keeps these
@@ -128,7 +129,8 @@ class InviteByEmailPrivacyTests(TestCase):
 
 
 class OutgoingRequestWidgetPrivacyTests(TestCase):
-    """The sender's own "pending sent requests" widget must not reveal the target's identity, nor whether an invited email matched a registered account, until the request is accepted - see _friend_list_ctx's docstring.
+    """
+    The sender's own "pending sent requests" widget must not reveal the target's identity, nor whether an invited email matched a registered account, until the request is accepted - see _friend_list_ctx's docstring.
 
     The widget only renders on the "View all friends" page now (the compact profile-page embed dropped it - see
     friend_list_partial.html), so these tests hit friend.page_widget - the endpoint that actually renders
@@ -183,7 +185,8 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         self.assertIn(b"Pending request", unregistered_response)
 
     def test_pending_widget_does_not_show_on_the_compact_profile_embed(self) -> None:
-        """The widget was removed from the main profile page's compact friend list -
+        """
+        The widget was removed from the main profile page's compact friend list -
         it only remains on the dedicated "View all friends" page (see the class docstring)."""
         other = baker.make(User, username="compacttarget", email="compacttarget@example.com")
         Friendship.objects.create(
@@ -209,7 +212,8 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_pending_cards_carry_no_type_revealing_urls_or_ids(self, mock_send) -> None:
-        """The cancel buttons must not distinguish the two pending kinds.
+        """
+        The cancel buttons must not distinguish the two pending kinds.
 
         The first version of this widget rendered identical card BODIES but posted matched-email cancels to
         friend.remove/<target_profile_id> and unmatched ones to a separate cancel-invitation/<pk> URL - so the
@@ -250,7 +254,8 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
 
 
 class CancelPendingViewTests(TestCase):
-    """The unified opaque-token cancel endpoint for pending outgoing requests
+    """
+    The unified opaque-token cancel endpoint for pending outgoing requests
     of BOTH kinds (Friendship and FriendInvitation) - see _pending_cancel_token."""
 
     def setUp(self) -> None:
@@ -313,7 +318,8 @@ class CancelPendingViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_accepted_friendship_is_not_cancellable_via_token(self) -> None:
-        """Only REQUESTED rows are in the recomputed set - an accepted
+        """
+        Only REQUESTED rows are in the recomputed set - an accepted
         friendship's token must not resolve (unfriending has its own flow)."""
         target = baker.make(User, username="acceptedtarget", email="acceptedtarget@example.com", is_active=True)
         friendship = Friendship.objects.create(
@@ -330,7 +336,8 @@ class CancelPendingViewTests(TestCase):
 
 
 class PendingWidgetDoesNotDependOnTheTargetTests(TestCase):
-    """Inviting an address that belongs to an account which cannot be requested must still leave a pending entry.
+    """
+    Inviting an address that belongs to an account which cannot be requested must still leave a pending entry.
 
     Otherwise the sender's own pending count tells them the address is registered: an unregistered address
     always adds one.

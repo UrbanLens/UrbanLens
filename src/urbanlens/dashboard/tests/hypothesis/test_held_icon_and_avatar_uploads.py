@@ -1,4 +1,5 @@
-"""A held icon or avatar is published only while its row still holds it, and a held file is never left behind (P119).
+"""
+A held icon or avatar is published only while its row still holds it, and a held file is never left behind (P119).
 
 ``test_every_icon_and_avatar_is_hidden_until_reencoded`` drives each writer; these drive what can happen between the
 upload and the sandbox worker running.

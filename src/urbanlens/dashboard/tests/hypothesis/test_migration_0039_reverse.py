@@ -15,7 +15,8 @@ _migration = importlib.import_module("urbanlens.dashboard.migrations.0030_v0_7_0
 
 
 def _encrypted_alter_field_count(migration_module, columns: tuple[tuple[str, str], ...]) -> int:
-    """How many of *migration_module*'s ``AlterField`` ops touch one of *columns*.
+    """
+    How many of *migration_module*'s ``AlterField`` ops touch one of *columns*.
 
     0030/0031 are squash migrations bundling unrelated schema changes, so ``Migration.operations`` holds far
     more ``AlterField`` ops than the encryption pass alone - counting all of them drifts every time an unrelated
@@ -73,7 +74,8 @@ _migration_0048 = importlib.import_module("urbanlens.dashboard.migrations.0031_v
 
 
 class Migration0048ReverseTests(SimpleTestCase):
-    """0048 is the same in-place encryption, and reversed to noop until 2026-08-19.
+    """
+    0048 is the same in-place encryption, and reversed to noop until 2026-08-19.
 
     Rolling back below it then *succeeded* while leaving ciphertext in `photo_taking_preference_other`,
     `photo_usage_preference_other` and the saved-contact label, which pre-0048 code reads as plaintext."""
@@ -96,7 +98,8 @@ class Migration0048ReverseTests(SimpleTestCase):
         )
 
     def test_the_reverse_can_tell_ciphertext_from_plaintext(self) -> None:
-        """The `gAAAA%` discriminator is what stops a rollback corrupting real plaintext.
+        """
+        The `gAAAA%` discriminator is what stops a rollback corrupting real plaintext.
 
         A row written after the `AlterField` but before the `RunPython`, or one the forward pass skipped, still
         holds plaintext - decrypting it would raise or garble it."""

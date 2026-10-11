@@ -150,7 +150,8 @@ class WikiMediaVoteViewTests(TestCase):
         )
 
     def test_upvoting_a_photos_tab_item_does_not_re_materialize_it(self) -> None:
-        """The 'photos' source key lists photos already attached to this wiki
+        """
+        The 'photos' source key lists photos already attached to this wiki
         (WikiMediaProviderView._photos) - its url is a local media path, not
         an external provider url, so re-materializing it would be wrong."""
         image = Image.objects.create(
@@ -206,7 +207,8 @@ class WikiMediaVoteViewTests(TestCase):
         )
 
     def test_pin_detail_mark_carries_over_to_the_wiki_score(self) -> None:
-        """A mark made by another user (e.g. on their Private Pin page) already
+        """
+        A mark made by another user (e.g. on their Private Pin page) already
         counts, since MediaRelevance is Location-scoped."""
         other = baker.make(User).profile
         _mark(other, self.location, "wikimedia", "a", True)
@@ -244,7 +246,8 @@ class WikiMediaVoteViewTests(TestCase):
         self.assertEqual(kwargs, {"is_relevant": True})
 
     def test_voting_with_an_image_id_from_another_location_is_ignored(self) -> None:
-        """A client-supplied image_id must be re-scoped to this wiki's location
+        """
+        A client-supplied image_id must be re-scoped to this wiki's location
         before being trusted - otherwise a vote could be attached to an
         unrelated photo elsewhere on the site."""
         other_location = baker.make(Location)

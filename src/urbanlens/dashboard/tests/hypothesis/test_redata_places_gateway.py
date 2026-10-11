@@ -186,7 +186,8 @@ def _every_call(gateway: RedataPlacesGateway) -> dict[str, Callable[[], Any]]:
 
 
 class RateLimitedTests(SimpleTestCase):
-    """REData's ``503 rate_limited`` is its Places budget spent, and ``503 key_budget_exhausted`` this key's share of it.
+    """
+    REData's ``503 rate_limited`` is its Places budget spent, and ``503 key_budget_exhausted`` this key's share of it.
 
     The caller is told how long to leave either, and neither is an answer about the place.
     """
@@ -222,7 +223,8 @@ class RateLimitedTests(SimpleTestCase):
                     )
 
     def test_a_provider_throttle_redata_relays_is_a_rate_limit_too(self) -> None:
-        """Google's own 429, passed on by REData as ``places_api_unavailable``, is the same shared budget saying no.
+        """
+        Google's own 429, passed on by REData as ``places_api_unavailable``, is the same shared budget saying no.
 
         Production (0.8.0) logged 18 of these in 13 h, each followed by the next location's call.
         """

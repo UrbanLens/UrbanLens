@@ -15,7 +15,8 @@ def is_production() -> bool:
 
 
 def production_unlocked(*, force: bool) -> bool:
-    """Whether both locks are open: ``--force``, and the override variable set true.
+    """
+    Whether both locks are open: ``--force``, and the override variable set true.
 
     Each covers a different mistake: ``--force`` a command typed in the wrong terminal, the variable a script that has
     always carried ``--force`` being pointed somewhere new.

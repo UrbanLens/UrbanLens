@@ -34,7 +34,8 @@ def _not_yet(request: HttpRequest, retry_after: int | None = None) -> HttpRespon
 
 
 class RemoteImageCopyView(View):
-    """GET media-copy/<digest>/ - one third-party image, from this site's copy; ``?size=thumb`` for a gallery tile's.
+    """
+    GET media-copy/<digest>/ - one third-party image, from this site's copy; ``?size=thumb`` for a gallery tile's.
 
     Answers 404 for a digest this site never issued, and for a source that failed and is not due another try; the
     page's thumbnail fallback shows an icon tile for both. Answers 503 while the first copy is being made, which

@@ -43,7 +43,8 @@ if TYPE_CHECKING:
 
 
 class Label(HeldUploadModel, abstract.FrontendDashboardModel):
-    """A named label that can be applied to pins.
+    """
+    A named label that can be applied to pins.
     Labels are either global (profile=None, visible to all users) or user-specific (profile set, only visible to that user and alongside global labels).
     """
 
@@ -96,7 +97,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
     _total_pins_memo: int | None = None
 
     def coerce_colors(self) -> None:
-        """Drop `color` to NULL unless it is a colour this application stores.
+        """
+        Drop `color` to NULL unless it is a colour this application stores.
         `choices` is a form-layer constraint, not a database one, so it holds only for the paths that go through a form.
         """
         self.color = clean_color(self.color, default=None)
@@ -106,7 +108,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
         self.icon = clean_icon(self.icon, max_length=column_max_length(Label, "icon"))
 
     def save(self, *args, **kwargs) -> None:
-        """Persist the label, coercing its colour and icon first.
+        """
+        Persist the label, coercing its colour and icon first.
         Enforced here rather than at each write because both are interpolated into markup (a `style="..."` attribute, a chip's HTML), so an arbitrary string reaching either column is a stored injection vector - and the writers are spread across forms, the external API and import.
         """
         self.coerce_colors()
@@ -154,7 +157,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
 
     @classmethod
     def prime_total_pin_counts(cls, labels: Sequence[Label]) -> None:
-        """Precompute :meth:`total_pin_count` for a whole page of labels in one query.
+        """
+        Precompute :meth:`total_pin_count` for a whole page of labels in one query.
 
         The subtree walk and the pin count happen in the database, so neither the hierarchy's edges nor
         its size are loaded into Python. ``UNION`` over ``(root, id)`` dedupes a diamond and ends a cycle,
@@ -194,7 +198,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
             label._total_pins_memo = totals.get(label.pk, 0)  # noqa: SLF001 - seeding this class's own memo on its own instances
 
     def total_pin_count(self) -> int:
-        """Return this label's pin count plus every descendant's pin count (full subtree).
+        """
+        Return this label's pin count plus every descendant's pin count (full subtree).
         Walks the full multi-level hierarchy via ``get_label_and_descendants`` (BFS, cycle-safe) rather than only direct children, matching how map/pin filtering actually expands a parent label to its whole subtree.
 
         Returns:
@@ -220,7 +225,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
         profile: Profile,
         parent_ids: list[str] | list[int],
     ) -> int | None:
-        """Return ``order`` for a new label placed just above its highest-priority parent.
+        """
+        Return ``order`` for a new label placed just above its highest-priority parent.
         When parents are chosen at creation time, the new label is placed immediately above the highest-priority parent among them.
         Hospital at order 20 rather than Pennsylvania at order 35).
 
@@ -242,7 +248,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
 
     @classmethod
     def get_label_and_descendants(cls, label_id: int) -> set[int]:
-        """Return label_id plus all descendant label IDs (cycle-safe).
+        """
+        Return label_id plus all descendant label IDs (cycle-safe).
 
         Used so that filtering pins by a parent label also surfaces pins carrying
         any of its descendant labels.
@@ -296,7 +303,8 @@ class Label(HeldUploadModel, abstract.FrontendDashboardModel):
 
     @property
     def is_global(self) -> bool:
-        """Whether this is a site-wide label rather than one a user owns.
+        """
+        Whether this is a site-wide label rather than one a user owns.
         Reads ``profile_id`` rather than ``profile`` so templates can ask this per row without fetching the owning profile: ``{% if not label.profile %}`` issued one query per label per occurrence, and the Organize page asks it several times for each card.
 
         Returns:

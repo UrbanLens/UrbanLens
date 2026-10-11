@@ -35,7 +35,8 @@ _ALLOWED_ICONS = {value for value, _label in CUSTOM_LAYER_ICON_CHOICES}
 
 
 def _resolve_layer_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, QuerySet[CustomLayer]]:
-    """Resolve the CustomLayer owner (Pin or Wiki) from URL kwargs.
+    """
+    Resolve the CustomLayer owner (Pin or Wiki) from URL kwargs.
 
     Same permission split as ``markup._resolve_owner``'s pin/wiki branches: pin-scoped requires
     ownership, wiki-scoped uses ``resolve_visible_wiki`` (any signed-in user who has pinned the location
@@ -69,7 +70,8 @@ def _owner_kwargs(owner: Pin | Wiki) -> dict:
 
 
 def _get_layer(request: HttpRequest, pin_slug: str | None, location_slug: str | None, layer_uuid: str) -> tuple[Pin | Wiki, QuerySet[CustomLayer], CustomLayer]:
-    """Resolve a single owner-scoped CustomLayer, 404ing if it belongs to someone else.
+    """
+    Resolve a single owner-scoped CustomLayer, 404ing if it belongs to someone else.
 
     Args:
         request: The current HttpRequest.
@@ -85,7 +87,8 @@ def _get_layer(request: HttpRequest, pin_slug: str | None, location_slug: str | 
 
 
 def _share_layer_to_wiki(pin_layer: CustomLayer, profile: Profile) -> tuple[CustomLayer | None, bool]:
-    """Copy a pin-scoped layer's name/color/icon into a wiki-scoped layer.
+    """
+    Copy a pin-scoped layer's name/color/icon into a wiki-scoped layer.
 
     Never creates the wiki itself (same rule ``services.pins.pin_wiki_sync`` follows for sending pins to
     a wiki) and never duplicates: if a wiki layer with the same name already exists, that one is reused
@@ -128,7 +131,8 @@ def _share_layer_to_wiki(pin_layer: CustomLayer, profile: Profile) -> tuple[Cust
 
 
 def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[CustomLayer]) -> HttpResponse:
-    """Render the manage-layers list partial, with an ``HX-Trigger`` for the map JS.
+    """
+    Render the manage-layers list partial, with an ``HX-Trigger`` for the map JS.
 
     URLs are pre-built here (by positional ``args``, so the pin vs. wiki URL name difference is
     invisible to the template) rather than reversed in-template, since ``{% url %}`` can't cleanly take
@@ -187,7 +191,8 @@ def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[Cus
 
 
 class CustomLayerListCreateView(LoginRequiredMixin, View):
-    """List (dialog body) and create custom layers for a pin or wiki.
+    """
+    List (dialog body) and create custom layers for a pin or wiki.
 
     GET /map/pin/<pin_slug>/layers/
     GET /location/<location_slug>/wiki/layers/
@@ -196,7 +201,8 @@ class CustomLayerListCreateView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Render the Manage Layers dialog body.
+        """
+        Render the Manage Layers dialog body.
 
         Args:
             request: HttpRequest.
@@ -210,7 +216,8 @@ class CustomLayerListCreateView(LoginRequiredMixin, View):
         return _render_layer_list(request, owner, qs)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Create a new custom layer for the resolved owner.
+        """
+        Create a new custom layer for the resolved owner.
 
         Args:
             request: HttpRequest with form-encoded ``name``/``color``/``icon``.
@@ -246,14 +253,16 @@ class CustomLayerListCreateView(LoginRequiredMixin, View):
 
 
 class CustomLayerEditView(LoginRequiredMixin, View):
-    """Update or delete a single custom layer.
+    """
+    Update or delete a single custom layer.
 
     POST/DELETE /map/pin/<pin_slug>/layers/<layer_uuid>/
     POST/DELETE /location/<location_slug>/wiki/layers/<layer_uuid>/
     """
 
     def post(self, request: HttpRequest, layer_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Update mutable fields on a custom layer.
+        """
+        Update mutable fields on a custom layer.
 
         Args:
             request: HttpRequest with form-encoded fields.
@@ -287,7 +296,8 @@ class CustomLayerEditView(LoginRequiredMixin, View):
         return _render_layer_list(request, owner, qs)
 
     def delete(self, request: HttpRequest, layer_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Delete a custom layer, un-grouping (not deleting) its items.
+        """
+        Delete a custom layer, un-grouping (not deleting) its items.
 
         Args:
             request: HttpRequest.
@@ -304,14 +314,16 @@ class CustomLayerEditView(LoginRequiredMixin, View):
 
 
 class CustomLayerReorderView(LoginRequiredMixin, View):
-    """Move a custom layer up or down among its owner's other layers.
+    """
+    Move a custom layer up or down among its owner's other layers.
 
     POST /map/pin/<pin_slug>/layers/<layer_uuid>/reorder/
     POST /location/<location_slug>/wiki/layers/<layer_uuid>/reorder/
     """
 
     def post(self, request: HttpRequest, layer_uuid: str, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Swap this layer's ``order`` with its immediate neighbor.
+        """
+        Swap this layer's ``order`` with its immediate neighbor.
 
         Args:
             request: HttpRequest with form-encoded ``direction`` ("up"|"down").
@@ -338,7 +350,8 @@ class CustomLayerReorderView(LoginRequiredMixin, View):
 
 
 class CustomLayerShareToWikiView(LoginRequiredMixin, View):
-    """Copy a pin-scoped layer's name/color/icon into the location's wiki.
+    """
+    Copy a pin-scoped layer's name/color/icon into the location's wiki.
 
     POST /map/pin/<pin_slug>/layers/<layer_uuid>/share-to-wiki/
 
@@ -347,7 +360,8 @@ class CustomLayerShareToWikiView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, layer_uuid: str, pin_slug: str) -> HttpResponse:
-        """Share the layer, then re-render the (unchanged) pin-scoped layer list with a toast.
+        """
+        Share the layer, then re-render the (unchanged) pin-scoped layer list with a toast.
 
         Args:
             request: HttpRequest.

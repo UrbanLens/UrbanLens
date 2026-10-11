@@ -1,4 +1,5 @@
-"""Prepared statements, and the two settings that are both needed to get them.
+"""
+Prepared statements, and the two settings that are both needed to get them.
 
 X27 measured planning at 77.3% of database time for the short SELECTs that are 96% of web
 traffic - 0.306ms planning against 0.090ms execution per call - and pgbench replaying the four
@@ -26,7 +27,8 @@ from urbanlens.UrbanLens.settings._env import DEFAULT_PREPARE_THRESHOLD, prepare
 
 
 class TheThresholdIsReadFromTheEnvironmentTests(SimpleTestCase):
-    """``UL_DB_PREPARE_THRESHOLD`` exists so a deployment that grows a transaction-pooling proxy
+    """
+    ``UL_DB_PREPARE_THRESHOLD`` exists so a deployment that grows a transaction-pooling proxy
     can turn preparation off without a release: a pooler hands a session to whoever asks next, and
     a statement prepared on one session is not there for the next."""
 
@@ -62,7 +64,8 @@ class BothHalvesOfTheConfigurationAreWiredTests(SimpleTestCase):
         self.options = settings.DATABASES["default"]["OPTIONS"]
 
     def test_the_driver_is_psycopg3(self) -> None:
-        """psycopg2 has no server-side binding and no ``prepare_threshold``; under it both keys
+        """
+        psycopg2 has no server-side binding and no ``prepare_threshold``; under it both keys
         below are settings the backend would reject rather than honour."""
         self.assertTrue(is_psycopg3)
 
@@ -79,7 +82,8 @@ class BothHalvesOfTheConfigurationAreWiredTests(SimpleTestCase):
 
 
 class TheServerActuallyPreparesTests(TestCase):
-    """The settings above are psycopg's to interpret, and a release of it could reinterpret them.
+    """
+    The settings above are psycopg's to interpret, and a release of it could reinterpret them.
     Ask the server what it holds rather than trusting the dict."""
 
     #: Comfortably past ``DEFAULT_PREPARE_THRESHOLD`` without depending on its value.
@@ -100,7 +104,8 @@ class TheServerActuallyPreparesTests(TestCase):
         self.assertIn("SELECT $1::int + 1", self._prepared_statements() - before)
 
     def test_one_execution_is_not_prepared(self) -> None:
-        """Anti-vacuity: a driver that prepared everything would pass the test above whatever the
+        """
+        Anti-vacuity: a driver that prepared everything would pass the test above whatever the
         threshold said."""
         if (settings.DATABASES["default"]["OPTIONS"]["prepare_threshold"] or 0) < 2:
             self.skipTest("this deployment prepares on first use, so there is nothing to distinguish")

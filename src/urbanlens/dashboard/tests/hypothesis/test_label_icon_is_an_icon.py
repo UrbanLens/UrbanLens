@@ -1,4 +1,5 @@
-"""A label's icon is an icon, never markup (P128).
+"""
+A label's icon is an icon, never markup (P128).
 
 The add-pin dialog rendered ``Label.icon`` as HTML, and nothing server-side limited the column to the icon
 shapes the picker offers: the external API, the bulk edit and the archive import all stored any 50-character

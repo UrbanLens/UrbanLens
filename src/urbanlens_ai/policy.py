@@ -16,7 +16,8 @@ PROVIDER_MAX_RETRIES = 1
 
 
 def attempt_limits(timeout_seconds: float | None) -> tuple[float, int]:
-    """The per-attempt timeout and retry count for a provider call.
+    """
+    The per-attempt timeout and retry count for a provider call.
 
     A caller with a budget gets one attempt capped at it, since a retry would run past the budget.
 
@@ -81,7 +82,8 @@ _SERVER_TOOL_NAMES = frozenset(
 
 
 class PolicyError(ValueError):
-    """A request violates this service's outbound-request policy.
+    """
+    A request violates this service's outbound-request policy.
 
     Raised (never a bare provider call) so the wsgi layer can return a clean
     400 without a provider ever seeing the request.
@@ -89,7 +91,8 @@ class PolicyError(ValueError):
 
 
 def validate_model(provider: Provider, model: str) -> None:
-    """Reject a model this service does not recognize for ``provider``.
+    """
+    Reject a model this service does not recognize for ``provider``.
 
     Args:
         provider: The target provider.
@@ -108,7 +111,8 @@ def validate_model(provider: Provider, model: str) -> None:
 
 
 def validate_tools(tools: list[ToolSpec]) -> None:
-    """Reject any tool that names a provider's built-in server-side tool.
+    """
+    Reject any tool that names a provider's built-in server-side tool.
 
     Args:
         tools: The tools the caller wants the model to have available.
@@ -121,7 +125,8 @@ def validate_tools(tools: list[ToolSpec]) -> None:
 
 
 def validate_cloudflare_endpoint(endpoint: str) -> None:
-    """Reject a Cloudflare Workers AI endpoint that isn't actually Cloudflare's.
+    """
+    Reject a Cloudflare Workers AI endpoint that isn't actually Cloudflare's.
 
     Args:
         endpoint: The configured ``cloudflare_worker_ai_endpoint`` URL.
@@ -159,7 +164,8 @@ _CLASSIFY_PROVIDERS = frozenset({"cloudflare"})
 
 
 def validate_image(image: object) -> None:
-    """Reject an inlined image that is too large or not valid base64.
+    """
+    Reject an inlined image that is too large or not valid base64.
 
     Args:
         image: The :class:`~urbanlens_ai.schema.ImagePart` to check.
@@ -179,7 +185,8 @@ def validate_image(image: object) -> None:
 
 
 def validate_classify_request(request: ClassifyRequest) -> None:
-    """Run every check this service enforces on an image-classification call.
+    """
+    Run every check this service enforces on an image-classification call.
 
     Args:
         request: The normalized, already-schema-validated classify request.
@@ -193,7 +200,8 @@ def validate_classify_request(request: ClassifyRequest) -> None:
 
 
 def validate_request(request: InferenceRequest) -> None:
-    """Run every check this service enforces before building a provider client.
+    """
+    Run every check this service enforces before building a provider client.
 
     Args:
         request: The normalized, already-schema-validated inference request.

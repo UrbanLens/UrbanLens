@@ -67,7 +67,8 @@ class MapBounds:
     east: float
 
     def contains_point(self, lat: float, lng: float) -> bool:
-        """Whether ``(lat, lng)`` falls within this box.
+        """
+        Whether ``(lat, lng)`` falls within this box.
 
         Args:
             lat: Latitude to test.
@@ -79,7 +80,8 @@ class MapBounds:
         return self.south <= lat <= self.north and self.west <= lng <= self.east
 
     def expanded(self, factor: float) -> MapBounds:
-        """Return a copy of this box scaled about its own center.
+        """
+        Return a copy of this box scaled about its own center.
 
         Args:
             factor: Scale factor (e.g. 5 returns a box 5x as wide/tall).
@@ -93,7 +95,8 @@ class MapBounds:
 
 
 def is_zoomed_in(zoom: float | None, *, threshold: float | None = None) -> bool:
-    """Whether a saved viewport counts as "zoomed in" for detection purposes.
+    """
+    Whether a saved viewport counts as "zoomed in" for detection purposes.
 
     Args:
         zoom: ``MarkupMap.zoom`` (Leaflet zoom level; higher = more zoomed in, a smaller geographic area visible).
@@ -108,7 +111,8 @@ def is_zoomed_in(zoom: float | None, *, threshold: float | None = None) -> bool:
 
 
 def viewport_bounds(center_lat: float, center_lng: float, zoom: float, bearing: float = 0.0) -> MapBounds:
-    """Approximate the visible lat/lng bounds for a saved MarkupMap viewport.
+    """
+    Approximate the visible lat/lng bounds for a saved MarkupMap viewport.
     This is necessarily approximate: the real visible bounds depend on the client's actual container pixel size at save time, which ``MarkupMap`` never persists (only the centre, zoom and bearing are stored).
 
     Args:
@@ -135,7 +139,8 @@ def viewport_bounds(center_lat: float, center_lng: float, zoom: float, bearing: 
 
 
 def geometry_to_geos(geometry: dict | None) -> GEOSGeometry | None:
-    """Convert a ``PinMarkup.geometry`` dict to a GEOS geometry (SRID 4326).
+    """
+    Convert a ``PinMarkup.geometry`` dict to a GEOS geometry (SRID 4326).
 
     Args:
         geometry: The raw geometry dict from a PinMarkup row.
@@ -169,7 +174,8 @@ def geometry_to_geos(geometry: dict | None) -> GEOSGeometry | None:
 
 
 def bearing_degrees(from_lat: float, from_lng: float, to_lat: float, to_lng: float) -> float:
-    """Return the forward azimuth (great-circle bearing) from one point to another.
+    """
+    Return the forward azimuth (great-circle bearing) from one point to another.
 
     Args:
         from_lat: Origin latitude.
@@ -188,7 +194,8 @@ def bearing_degrees(from_lat: float, from_lng: float, to_lat: float, to_lng: flo
 
 
 def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: float = ARROW_BEARING_TOLERANCE_DEGREES) -> bool:
-    """Whether an arrow/line markup item's direction points toward a target point.
+    """
+    Whether an arrow/line markup item's direction points toward a target point.
 
     Args:
         item: A ``line`` or ``arrow`` PinMarkup item.
@@ -214,7 +221,8 @@ def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: fl
 
 
 def shape_overlaps_boundary(item: PinMarkup, boundary: GEOSGeometry) -> bool:
-    """Whether a shape/marker markup item's geometry intersects a pin's boundary.
+    """
+    Whether a shape/marker markup item's geometry intersects a pin's boundary.
 
     Args:
         item: A ``square``/``circle``/``polygon``/``pin``/``text`` PinMarkup item.
@@ -253,7 +261,8 @@ def _candidate_pins(sender: Profile, bounds: MapBounds):
 
 
 def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSGeometry]:
-    """Batch-resolve each pin's effective boundary polygon, keyed by pin id.
+    """
+    Batch-resolve each pin's effective boundary polygon, keyed by pin id.
     This instead fetches each of those in one bulk query for the whole batch and resolves every pin's polygon from the resulting dicts.
 
     Args:
@@ -322,7 +331,8 @@ def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSG
 
 
 def detect_shared_pins(markup_map: MarkupMap, sender: Profile) -> list[Pin]:
-    """Evaluate ``sender``'s own pins against ``markup_map`` and return matches.
+    """
+    Evaluate ``sender``'s own pins against ``markup_map`` and return matches.
 
     Args:
         markup_map: The map being shared.
@@ -387,7 +397,8 @@ def _marked_point(item: PinMarkup) -> tuple[float, float] | None:
 
 
 def marked_places(markup_map: MarkupMap, shared_pins: list[Pin], *, limit: int) -> list[tuple[float, float]]:
-    """The places ``markup_map`` marks outside every pin it was found to share, in drawing order.
+    """
+    The places ``markup_map`` marks outside every pin it was found to share, in drawing order.
 
     A marker or text label marks its point and a property-sized circle its centre. A line, arrow, square or polygon has
     no one point its sender aimed at, so it shares only the pins it calls out.
@@ -416,7 +427,8 @@ def marked_places(markup_map: MarkupMap, shared_pins: list[Pin], *, limit: int) 
 
 
 def sync_pin_inferences(markup_map: MarkupMap) -> list[Pin]:
-    """Recompute ``markup_map.inferred_pins`` from its current geometry.
+    """
+    Recompute ``markup_map.inferred_pins`` from its current geometry.
 
     Args:
         markup_map: The map to (re)sync.

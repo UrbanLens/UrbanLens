@@ -1,4 +1,5 @@
-"""Creating, refreshing and removing the integration suite's accounts.
+"""
+Creating, refreshing and removing the integration suite's accounts.
 Kept out of the management command so the behaviour that matters - what an account has to look like for a headless browser to sign in as it, and what ``--purge`` is allowed to select - is testable without a subprocess."""
 
 from __future__ import annotations
@@ -87,7 +88,8 @@ class ProvisionResult:
     refreshed_roles: list[str] = field(default_factory=list)
 
     def manifest(self, *, site_url: str, environment: str, seeds: dict[str, object] | None = None) -> dict[str, object]:
-        """The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
+        """
+        The JSON document ``UL_E2E_ACCOUNTS_FILE`` points at.
         Keys are snake_case to match the rest of this codebase; the TypeScript loader in ``tests/integration/lib/accounts.ts`` maps them to camelCase rather than having Python emit a foreign convention.
 
         Args:
@@ -111,7 +113,8 @@ class ProvisionResult:
 
 
 def username_for(role: str) -> str:
-    """The username an account for ``role`` always has.
+    """
+    The username an account for ``role`` always has.
     Deterministic rather than random, so re-running provisioning refreshes the same accounts instead of leaving a new pair behind on every run.
 
     Args:
@@ -123,7 +126,8 @@ def username_for(role: str) -> str:
 
 
 def email_for(role: str) -> str:
-    """The undeliverable address an account for ``role`` always has.
+    """
+    The undeliverable address an account for ``role`` always has.
 
     Args:
         role: Role name, e.g. ``primary``.
@@ -140,7 +144,8 @@ def generate_password() -> str:
 
 
 def integration_users() -> Iterable[User]:
-    """Every account this module is allowed to touch.
+    """
+    Every account this module is allowed to touch.
     ``--purge`` deletes what this returns, so the query is the safety boundary: widening it is how a manual staging account gets destroyed by a test run.
 
     Returns:
@@ -166,7 +171,8 @@ def provision_account(
     external_apis: bool = False,
     subscriber: bool = False,
 ) -> tuple[ProvisionedAccount, bool]:
-    """Create or refresh the account for ``role``.
+    """
+    Create or refresh the account for ``role``.
     Idempotent on the username: a second call resets the password, re-applies every precondition, and mints fresh keys, rather than creating a duplicate.
 
     Args:
@@ -227,7 +233,8 @@ def provision(
     external_apis: bool = False,
     subscriber_roles: Collection[str] = (),
 ) -> ProvisionResult:
-    """Provision every role in ``roles``.
+    """
+    Provision every role in ``roles``.
 
     Args:
         roles: Role names to provision.
@@ -254,7 +261,8 @@ def provision(
 
 
 def purge() -> list[str]:
-    """Delete every provisioned integration account and everything it owns.
+    """
+    Delete every provisioned integration account and everything it owns.
     Reuses ``hard_delete_profile`` rather than cascading from ``User.delete()``: that is the path that also removes the profile's stored files, and a purge that leaves uploaded media behind is not a purge.
 
     Returns:
@@ -278,7 +286,8 @@ def purge() -> list[str]:
 
 
 def subscriber_role() -> SubscriptionRole:
-    """The suite's subscriber role, created or reset to exactly :data:`SUBSCRIBER_FEATURES`.
+    """
+    The suite's subscriber role, created or reset to exactly :data:`SUBSCRIBER_FEATURES`.
 
     Returns:
         The role. It has no price, so it is never offered for purchase.
@@ -295,7 +304,8 @@ def subscriber_role() -> SubscriptionRole:
 
 
 def prepare_signed_in_account(user: User, *, external_apis: bool = False) -> Profile:
-    """Put *user* past everything that stands between a session and the application.
+    """
+    Put *user* past everything that stands between a session and the application.
 
     Args:
         user: An integration account.
@@ -321,7 +331,8 @@ def _mark_email_verified(user: User) -> None:
 
 
 def _reconcile_subscription(user: User, *, subscriber: bool) -> None:
-    """Grant or revoke the suite's subscriber role, leaving any other grant alone.
+    """
+    Grant or revoke the suite's subscriber role, leaving any other grant alone.
 
     Revoking matters as much as granting: a non-subscriber spec reads an account that an earlier run may have made a subscriber.
     """
@@ -376,7 +387,8 @@ def _prepare_profile(user: User, *, external_apis: bool) -> Profile:
 
 
 def _silence_email_delivery(profile: Profile) -> None:
-    """Set every notification type to on-site delivery only.
+    """
+    Set every notification type to on-site delivery only.
     Iterates the model's fields rather than naming them, so a notification type added later is covered without anyone remembering to come back here.
 
     Args:
@@ -401,7 +413,8 @@ def _silence_email_delivery(profile: Profile) -> None:
 
 
 def _mint_key(user: User, *, name: str, scopes: Sequence[str]) -> str:
-    """Issue one API key with an explicit scope grant, returning its plaintext.
+    """
+    Issue one API key with an explicit scope grant, returning its plaintext.
     The grant is widened here by a direct update because ``ApiKey.scopes`` is ``editable=False``: not writable through a form, which is the point, but perfectly writable by code that has decided what the grant should be."""
     api_key, raw = generate_api_key(user, name)
     ApiKey.objects.filter(pk=api_key.pk).update(scopes=list(scopes))

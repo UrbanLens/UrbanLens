@@ -1,4 +1,5 @@
-"""A held icon or avatar whose publish never ran is recovered, and a held file nothing can name again is removed (P119).
+"""
+A held icon or avatar whose publish never ran is recovered, and a held file nothing can name again is removed (P119).
 
 ``safely_enqueue_task`` returns None when the broker is unreachable, so without a sweep a held upload whose enqueue
 failed is never published: the owner is told it is processing for ever, and the file stays under ``unprocessed/``.
@@ -430,7 +431,8 @@ class AHeldFileNothingNamesTests(_Case):
 
 
 class AShownFileNothingNamesTests(_Case):
-    """An icon, avatar or comment image no row names is removed, however it was left: a delete storage refused, a label
+    """
+    An icon, avatar or comment image no row names is removed, however it was left: a delete storage refused, a label
     or pin icon a publish replaced, a row deleted outside undo. The media gate serves any icon or avatar path."""
 
     _OLD = (UNDO_RETENTION.days + 2) * 24 * _HOUR

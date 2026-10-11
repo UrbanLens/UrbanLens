@@ -151,7 +151,8 @@ class ConnectionHeadroomTests(_FreshProbesTestCase):
     url = "/health/ready"
 
     def test_it_reports_backends_in_use_and_the_ceiling(self) -> None:
-        """The number P104's postmortem needed and nothing exposed.
+        """
+        The number P104's postmortem needed and nothing exposed.
 
         The outage read 97 of 100 connections in use, and the first anyone knew of it was the site being down; a
         count turns that into something a scrape can watch climb."""
@@ -164,7 +165,8 @@ class ConnectionHeadroomTests(_FreshProbesTestCase):
         self.assertLessEqual(connections["used"], connections["max"])
 
     def test_pressure_is_reported_as_a_field_not_a_status_code(self) -> None:
-        """A readiness probe that 503s under connection pressure causes an outage.
+        """
+        A readiness probe that 503s under connection pressure causes an outage.
 
         It removes the instances that are still serving, which is the opposite of what it is for - and this
         deployment has done it before."""
@@ -186,7 +188,8 @@ class ConnectionHeadroomTests(_FreshProbesTestCase):
         self.assertFalse(report["degraded"])
 
     def test_a_cache_outage_is_degraded_but_not_a_readiness_failure_of_its_own(self) -> None:
-        """`degraded` is the field that distinguishes serving-badly from down.
+        """
+        `degraded` is the field that distinguishes serving-badly from down.
 
         Whether an unreachable cache should fail readiness outright is a separate question this does not change
         - the existing test asserting 503 still holds."""
@@ -197,7 +200,8 @@ class ConnectionHeadroomTests(_FreshProbesTestCase):
         )
 
     def test_unreadable_connection_stats_are_not_a_failure(self) -> None:
-        """`pg_stat_activity` needs a privilege a hardened deployment may not grant.
+        """
+        `pg_stat_activity` needs a privilege a hardened deployment may not grant.
 
         Reporting None there has to mean "not measured", never "degraded" - a probe that fails closed on a
         missing read privilege takes the site down for a permissions choice."""
@@ -222,7 +226,8 @@ class ConnectionHeadroomTests(_FreshProbesTestCase):
 
 
 class TheProbeDeadlineTests(TestCase):
-    """The probes cap their own queries so a slow database cannot hold a worker until nginx gives up.
+    """
+    The probes cap their own queries so a slow database cannot hold a worker until nginx gives up.
     Nothing asserted that the cap was applied, which made it free to drop: a ``SET LOCAL`` with a
     bound parameter is a syntax error under psycopg3's server-side binding (X27), and the probes
     catch ``DatabaseError``, so the whole thing degrades to "database unreachable" rather than
@@ -236,7 +241,8 @@ class TheProbeDeadlineTests(TestCase):
         self.assertEqual(HealthController()._probe_database(), ("ok", "primary"))
 
     def test_the_deadline_is_applied_and_is_scoped_to_the_transaction(self) -> None:
-        """A session-level deadline survives on a ``CONN_MAX_AGE`` connection and caps every real
+        """
+        A session-level deadline survives on a ``CONN_MAX_AGE`` connection and caps every real
         query after it, so transaction scope is half of what makes this safe. Read back through a
         rolled-back savepoint, because the test is itself inside the transaction Django wraps it in:
         a transaction-scoped setting outlives that savepoint only if it was never scoped at all."""
@@ -267,7 +273,8 @@ class TheProbeDeadlineTests(TestCase):
 
 
 class TheDeadlineEndsWithTheProbeTests(_FreshProbesTestCase):
-    """Inside an enclosing transaction - every test case's, or a caller's - the probe's ``atomic()`` is a savepoint,
+    """
+    Inside an enclosing transaction - every test case's, or a caller's - the probe's ``atomic()`` is a savepoint,
     and releasing one leaves a transaction-scoped setting in force. Left there, the two-second deadline caps every
     later query of that transaction, such as the routes ``test_write_route_smoke`` sweeps after the readiness probe.
     The rolled-back case above does not cover a savepoint that is released."""

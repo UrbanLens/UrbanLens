@@ -1,4 +1,5 @@
-"""Callers treat an environment refusal as "not available here" and move on (D26).
+"""
+Callers treat an environment refusal as "not available here" and move on (D26).
 
 The boundary chain skips the source rather than deferring it; a panel says so rather than caching an empty
 answer or vanishing; the name and geocode chains never fall through from REData to a direct provider off
@@ -370,7 +371,8 @@ class _FakeGateway:
 
 
 class AiPathsAreReservedAndLoggedTests(TestCase):
-    """The seven features that called the provider with no ledger row and no gate (2026-10-05 audit).
+    """
+    The seven features that called the provider with no ledger row and no gate (2026-10-05 audit).
 
     The assistant is covered in ``test_ai_assistant``.
     """

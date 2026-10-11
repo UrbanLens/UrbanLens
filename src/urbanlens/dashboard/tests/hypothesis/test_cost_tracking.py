@@ -29,7 +29,8 @@ from urbanlens.dashboard.services.admin.cost_tracking import (
 
 
 def _make_active_user(pin_count: int = 2) -> User:
-    """A user who logged in recently and has *pin_count* root pins - the
+    """
+    A user who logged in recently and has *pin_count* root pins - the
     "active_user_count()" bar (see that function's docstring)."""
     user = baker.make(User, is_active=True, last_login=timezone.now())
     for _ in range(pin_count):

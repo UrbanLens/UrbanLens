@@ -1,4 +1,5 @@
-"""QuerySets/Managers for Trivia models.
+"""
+QuerySets/Managers for Trivia models.
 
 Glicko-2 rating math lives in ``services.games.glicko2`` (reused
 directly); eligibility, question selection, and vote scoring live in
@@ -99,7 +100,8 @@ class TriviaSessionQuerySet(abstract.DashboardQuerySet["TriviaSession"]):
     """QuerySet for TriviaSession."""
 
     def stalled(self, *, cutoff: datetime) -> TriviaSessionQuerySet:
-        """ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.
+        """
+        ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.
         ``get_or_create_round`` never creates a session's next round until its prior one is fully revealed, so at most one round per session can ever match "unrevealed" at a time - this is always that session's current round.
         """
         from urbanlens.dashboard.models.trivia.model import TriviaSessionStatus

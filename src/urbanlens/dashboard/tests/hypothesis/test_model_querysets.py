@@ -501,7 +501,8 @@ class ConversationKeyQuerySetTests(TestCase):
 
 
 class ConversationKeyQuerySetOrderIndependencePropertyTests(TestCase):
-    """Property-based extension of test_between_is_order_independent above:
+    """
+    Property-based extension of test_between_is_order_independent above:
     the canonical low/high-pk pattern must hold for arbitrary generated
     profile pairs (fresh pks each example), not just one hand-picked pair.
     """
@@ -523,7 +524,8 @@ class ConversationKeyQuerySetOrderIndependencePropertyTests(TestCase):
 
 
 class DirectMessageQuerySetOrderIndependencePropertyTests(TestCase):
-    """DirectMessageQuerySet.between() is the same canonical-pair pattern as
+    """
+    DirectMessageQuerySet.between() is the same canonical-pair pattern as
     ConversationKeyQuerySet.between() - a two-way conversation must be found
     regardless of argument order, for arbitrary generated profile pairs and
     message bodies."""
@@ -542,7 +544,8 @@ class DirectMessageQuerySetOrderIndependencePropertyTests(TestCase):
 
 
 class FriendshipQuerySetOrderIndependencePropertyTests(TestCase):
-    """Friendship.objects.between() is the third canonical-pair implementation
+    """
+    Friendship.objects.between() is the third canonical-pair implementation
     in the codebase (alongside ConversationKey's and DirectMessage's) - same
     order-independence property, for arbitrary generated profile pairs and
     friendship statuses."""

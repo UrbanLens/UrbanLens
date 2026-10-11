@@ -1,4 +1,5 @@
-"""External-API endpoints for the map's multi-select actions, over ``services.pins.pin_bulk``.
+"""
+External-API endpoints for the map's multi-select actions, over ``services.pins.pin_bulk``.
 
 The web views in ``controllers/pin_bulk.py`` call the same service; only the request and response shapes differ.
 See ``serializers_pin_bulk``'s docstring for the two places this API's field semantics depart from the web form's.
@@ -38,7 +39,8 @@ def _owned_pins(request: Request, uuids: list) -> list[Pin]:
 
 
 class PinBulkDeleteView(ExternalApiView):
-    """POST: delete several of the caller's own pins (and their detail-pin subtrees) at once.
+    """
+    POST: delete several of the caller's own pins (and their detail-pin subtrees) at once.
 
     Every pin named must belong to the caller; anything else in ``uuids`` is silently ignored rather
     than refused, so a client replaying a queued offline batch doesn't fail the whole request over one
@@ -74,7 +76,8 @@ class PinBulkDeleteView(ExternalApiView):
 
 
 class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
-    """POST: fold several of the caller's own pins into one target as detail pins.
+    """
+    POST: fold several of the caller's own pins into one target as detail pins.
 
     A target that's currently itself a detail pin is promoted to top-level first - merging always leaves
     the target as the new top-level pin - unless that promotion would collide with another top-level pin
@@ -112,7 +115,8 @@ class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
 
 
 class PinBulkEditView(ExternalApiView):
-    """POST: apply the same description, rating, label, and/or parent change to several pins at once.
+    """
+    POST: apply the same description, rating, label, and/or parent change to several pins at once.
 
     Every field but ``uuids`` is optional and independent - send only the ones you're changing.
     See ``serializers_pin_bulk.PinBulkEditSerializer`` for exact null/absent semantics.

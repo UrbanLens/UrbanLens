@@ -36,7 +36,8 @@ class VirusTotalGateway(Gateway):
         self.session.headers.update({"x-apikey": self.api_key or "", "Accept": "application/json"})
 
     def get_file_report(self, sha256: str) -> dict[str, Any] | None:
-        """Look up an existing VirusTotal report for a file by its SHA-256 hash.
+        """
+        Look up an existing VirusTotal report for a file by its SHA-256 hash.
 
         Args:
             sha256: The file's SHA-256 hex digest.

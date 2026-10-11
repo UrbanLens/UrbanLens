@@ -1,4 +1,5 @@
-"""Schema types for the pin-comment reaction endpoint.
+"""
+Schema types for the pin-comment reaction endpoint.
 
 Response-shape declarations only - the reaction endpoints take no request body (the emoji travels in
 the URL path, and PUT/DELETE carry the intent), so there is nothing here to validate, only something
@@ -21,7 +22,8 @@ class ReactionCountSerializer(serializers.Serializer):
 
 
 class CommentReactionsSerializer(serializers.Serializer):
-    """The body both reaction handlers return: the target's full, fresh summary.
+    """
+    The body both reaction handlers return: the target's full, fresh summary.
 
     Deliberately the *whole* summary rather than a delta for the emoji that was just changed.
     A declarative PUT/DELETE that answers with complete state lets a client replace its local copy

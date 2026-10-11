@@ -27,13 +27,15 @@ _VIDEO_LIST_LIMIT = 50
 
 
 class VaultHomeView(LoginRequiredMixin, View):
-    """The Vault landing page.
+    """
+    The Vault landing page.
 
     GET /vault/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the Vault home page.
+        """
+        Render the Vault home page.
 
         Args:
             request: The HTTP request.

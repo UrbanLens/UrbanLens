@@ -59,7 +59,8 @@ class BearingDegreesTests(SimpleTestCase):
     @given(two_distant_coord_pairs())
     @settings(max_examples=200)
     def test_reverse_bearing_is_roughly_opposite(self, pair) -> None:
-        """Bearing(A, B) and Bearing(B, A) should differ by ~180 degrees (mod 360).
+        """
+        Bearing(A, B) and Bearing(B, A) should differ by ~180 degrees (mod 360).
 
         Only approximately true on a sphere for non-antipodal points, which the strategy guarantees by keeping
         the two points within 10 degrees of each other."""

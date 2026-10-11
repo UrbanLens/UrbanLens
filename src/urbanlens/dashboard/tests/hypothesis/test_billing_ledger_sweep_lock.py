@@ -1,4 +1,5 @@
-"""A payment landing while the daily sweep advances the same ledger must not be rewound by it (P57).
+"""
+A payment landing while the daily sweep advances the same ledger must not be rewound by it (P57).
 
 `test_billing_ledger_lock.py` reaches `advance_usage_ledger` only through `apply_payment`, whose outer lock already
 holds the row, so the inner lock is never the one deciding. The sweep (`advance_pwyw_usage_ledgers`) calls it

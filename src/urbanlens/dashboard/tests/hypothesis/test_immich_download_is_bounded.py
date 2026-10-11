@@ -1,4 +1,5 @@
-"""The Immich proxy reads a user-supplied server's whole response into memory.
+"""
+The Immich proxy reads a user-supplied server's whole response into memory.
 
 N21 H24/H38. The *cache* half is already fixed - `bounded_cache.set_if_small`
 refuses to store an oversized body, with a comment noting the server is the

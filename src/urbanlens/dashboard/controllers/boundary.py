@@ -1,4 +1,5 @@
-"""Boundary controller - get, save, and list typed property/building boundaries.
+"""
+Boundary controller - get, save, and list typed property/building boundaries.
 
 Endpoints are JSON-only (no template rendering).
 { "latitude": ..., "longitude": ..., "default_radius_meters": 50, "pending": bool, # never generated
@@ -63,7 +64,8 @@ def _outline_key(polygon: GEOSGeometry) -> bytes:
 
 
 def _distinct_outline_entries(candidates: list[tuple[int, GEOSGeometry | None]], drawn: GEOSGeometry | None, id_key: str) -> list[dict]:
-    """One entry per distinct outline, first come first served, never repeating the one already on the map.
+    """
+    One entry per distinct outline, first come first served, never repeating the one already on the map.
 
     Args:
         candidates: ``(id, outline)`` pairs, the one to keep for a shared outline first.
@@ -84,7 +86,8 @@ def _distinct_outline_entries(candidates: list[tuple[int, GEOSGeometry | None]],
 
 
 def _detail_building_entries(pin: Pin, drawn: GEOSGeometry | None) -> list[dict]:
-    """The building outline of each of this pin's descendants that has one of its own (display-only).
+    """
+    The building outline of each of this pin's descendants that has one of its own (display-only).
 
     A pin standing inside a building resolves onto that building, so an outline is drawn once, for the pin nearest
     the top of the tree.
@@ -104,7 +107,8 @@ def _detail_building_entries(pin: Pin, drawn: GEOSGeometry | None) -> list[dict]
 
 
 def _wiki_detail_building_entries(wiki: Wiki, viewer: Profile, drawn: GEOSGeometry | None) -> list[dict]:
-    """The building outline of each of this wiki's descendant wikis that has one of its own, as ``viewer`` sees it.
+    """
+    The building outline of each of this wiki's descendant wikis that has one of its own, as ``viewer`` sees it.
 
     Args:
         wiki: The parent wiki.
@@ -124,7 +128,8 @@ def _wiki_detail_building_entries(wiki: Wiki, viewer: Profile, drawn: GEOSGeomet
 
 
 def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False, include_children: bool = True) -> dict:
-    """Full boundary payload for a Private Pin page map.
+    """
+    Full boundary payload for a Private Pin page map.
 
     Args:
         pin: The pin.
@@ -153,7 +158,8 @@ def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False, 
 
 
 def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = False, just_drawn: tuple[str, Any] | None = None, viewer: Profile | None = None, include_children: bool = False) -> dict:
-    """Full boundary payload for a wiki page map.
+    """
+    Full boundary payload for a wiki page map.
 
     Args:
         wiki: The wiki whose boundaries to resolve.
@@ -194,7 +200,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
     """API endpoints for a pin's typed boundary data."""
 
     def get_boundaries(self, request: HttpRequest, pin_slug):
-        """Return the effective property/building boundaries for a pin.
+        """
+        Return the effective property/building boundaries for a pin.
 
         Default boundaries are generated lazily: the first view of a pin detail page schedules the provider
         chain in Celery (via the "boundary" panel source) and the map JS polls while ``pending``.
@@ -220,7 +227,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse(_pin_boundary_payload(pin, pending=pending, refreshing=refreshing, include_children=include_children))
 
     def save_boundary(self, request: Request, pin_slug):
-        """Create, update, or clear the user's custom boundary of one type.
+        """
+        Create, update, or clear the user's custom boundary of one type.
 
         Pin rows only ever hold user-drawn geometry - generated polygons live on the shared location-default
         rows.
@@ -285,7 +293,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
 
 
 class WikiBoundaryView(LoginRequiredMixin, View):
-    """Community boundary editor endpoints for the wiki page.
+    """
+    Community boundary editor endpoints for the wiki page.
 
     GET /location/<slug>/wiki/boundary/ → typed boundary payload
     POST /location/<slug>/wiki/boundary/ → {"boundary_type": ..., "polygon": <GeoJSON|null>}

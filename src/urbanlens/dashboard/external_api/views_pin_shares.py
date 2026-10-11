@@ -1,4 +1,5 @@
-"""External-API endpoint for answering a pin someone shared with you.
+"""
+External-API endpoint for answering a pin someone shared with you.
 
 **Scope is ``pins:write``, not ``messages:*``.** The share is *about* a pin - responding creates one
 - and the same ``PinShare`` row is delivered by bare notification as well as by message, so scoping
@@ -38,7 +39,8 @@ class PinShareRespondView(ExternalApiView):
 
     @extend_schema(request=PinShareRespondSerializer, responses={200: PinShareRespondResultSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, share_id: int) -> Response:
-        """Apply the caller's decision to a share addressed to them.
+        """
+        Apply the caller's decision to a share addressed to them.
 
         Args:
             request: The authenticated request carrying ``action``.

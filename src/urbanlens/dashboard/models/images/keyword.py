@@ -1,4 +1,5 @@
-"""ImageKeyword - searchable keywords attached to an uploaded photo.
+"""
+ImageKeyword - searchable keywords attached to an uploaded photo.
 Keywords are produced by photo-keyword plugins (see ``dashboard.services.photos.photo_keywords``).
 Each plugin stores its own rows, attributed via ``source`` (the plugin slug), so multiple keywording strategies - embedded XMP/IPTC tags, AI vision descriptions, content classifiers - can coexist and be regenerated independently.
 """
@@ -48,7 +49,8 @@ class ImageKeyword(abstract.DashboardModel):
 
 
 class ImageKeywordRetry(abstract.DashboardModel):
-    """A keyword source that did not answer for a photo, and when to ask it again (P323).
+    """
+    A keyword source that did not answer for a photo, and when to ask it again (P323).
 
     Written by ``services.photos.photo_keywords.generate_keywords_for_image`` when a source did not answer, deleted
     once it does, and swept by ``services.photos.keyword_retry.sweep``.

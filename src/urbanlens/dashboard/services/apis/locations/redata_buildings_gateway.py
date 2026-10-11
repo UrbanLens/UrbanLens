@@ -17,7 +17,8 @@ class RedataBuildingsGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_buildings"
 
     def find_near(self, latitude: float, longitude: float, *, provider: str, radius_meters: float | None = None) -> list[dict[str, Any]]:
-        """Return building footprints from one REData provider near a coordinate.
+        """
+        Return building footprints from one REData provider near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

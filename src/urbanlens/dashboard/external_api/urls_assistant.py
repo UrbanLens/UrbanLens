@@ -1,4 +1,5 @@
-"""External-API routes for the AI assistant.
+"""
+External-API routes for the AI assistant.
 
 Everything AI-shaped is collected here rather than being scattered next to the resource it talks
 about, because these calls share properties nothing else in this API has.

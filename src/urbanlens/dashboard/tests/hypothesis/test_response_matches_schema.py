@@ -38,7 +38,8 @@ def _bearer(raw_key: str) -> dict[str, str]:
 
 
 def openapi_to_json_schema(node: Any) -> Any:
-    """Translate OpenAPI 3.0's ``nullable`` into something JSON Schema understands.
+    """
+    Translate OpenAPI 3.0's ``nullable`` into something JSON Schema understands.
 
     Necessary, and a trap worth knowing about.
 
@@ -67,7 +68,8 @@ def openapi_to_json_schema(node: Any) -> Any:
 
 
 class NullableTranslationTests(TestCase):
-    """The translation must loosen exactly one thing and nothing else.
+    """
+    The translation must loosen exactly one thing and nothing else.
 
     Folding `nullable` into `type` makes the schema more permissive, and a conversion that overshot - dropping
     types, making everything optional - would leave a test that passes against any response at all."""
@@ -147,7 +149,8 @@ class ResponseSchemaConformanceTests(TestCase):
 
     @staticmethod
     def _response_schema(document: dict, path: str, method: str = "get", status: str = "200") -> dict | None:
-        """The schema declared for `path`'s response, ready to validate against.
+        """
+        The schema declared for `path`'s response, ready to validate against.
 
         Args:
             document: The generated OpenAPI document.

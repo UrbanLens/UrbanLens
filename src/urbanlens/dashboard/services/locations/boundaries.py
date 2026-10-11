@@ -110,7 +110,8 @@ class BoundaryProviderChain:
     )
 
     def get_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> ResolvedBoundaries:
-        """Run the chain and return typed boundaries for a coordinate.
+        """
+        Run the chain and return typed boundaries for a coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -169,7 +170,8 @@ class BoundaryProviderChain:
         return resolved
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | MultiPolygon | None:
-        """Untyped convenience lookup: the property boundary, else the building one.
+        """
+        Untyped convenience lookup: the property boundary, else the building one.
 
         Args:
             latitude: WGS-84 latitude.
@@ -195,7 +197,8 @@ CIRCLE_RETRY_AFTER = timedelta(minutes=10)
 
 
 def generation_lock_key(location_id: int) -> str:
-    """Cache key for the single-flight lock guarding one Location's generation run.
+    """
+    Cache key for the single-flight lock guarding one Location's generation run.
     Shared between :func:`schedule_location_boundary_generation` (which claims it) and ``tasks.generate_boundaries_for_location`` (which releases it in a ``finally``), so the two can never drift out of sync on the exact key string."""
     return f"ul_boundary_generation_{location_id}"
 
@@ -219,7 +222,8 @@ def generation_status(location: Location) -> tuple[bool, bool]:
 
 
 def boundary_generation_ran(location: Location) -> bool:
-    """True when the provider chain has already run for a Location at least once.
+    """
+    True when the provider chain has already run for a Location at least once.
 
     Args:
         location: The Location to check.
@@ -230,7 +234,8 @@ def boundary_generation_ran(location: Location) -> bool:
 
 
 def boundary_generation_stale(location: Location) -> bool:
-    """True when a Location's generated boundary is older than the site's cache window.
+    """
+    True when a Location's generated boundary is older than the site's cache window.
     This only answers the separate question of whether an *existing* generation is due for a background refresh.
 
     Args:
@@ -242,7 +247,8 @@ def boundary_generation_stale(location: Location) -> bool:
 
 
 def schedule_location_boundary_generation(location: Location, profile=None) -> bool:
-    """Ensure default-boundary generation is in flight for a Location, single-flight.
+    """
+    Ensure default-boundary generation is in flight for a Location, single-flight.
 
     Args:
         location: The Location to generate boundaries for.
@@ -279,7 +285,8 @@ _UNLESS_IN_FLIGHT_TTL_SECONDS = 300
 
 
 def generate_unless_in_flight(location: Location, *, name: str | None = None) -> bool:
-    """:func:`generate_location_boundaries`, unless a fetch of this location's boundary is already running.
+    """
+    :func:`generate_location_boundaries`, unless a fetch of this location's boundary is already running.
 
     It holds the boundary panel's flight marker meanwhile, so the pin page and the pin bootstrap wait on this run
     rather than starting their own.
@@ -306,7 +313,8 @@ def generate_unless_in_flight(location: Location, *, name: str | None = None) ->
 
 
 def generate_location_boundaries(location: Location, *, name: str | None = None, force: bool = False, attempt: int = 0) -> Place | None:
-    """Resolve a Location onto a real-world place, provisioning geometry if needed.
+    """
+    Resolve a Location onto a real-world place, provisioning geometry if needed.
     It answers "what is this coordinate standing on?" rather than "what shape should I draw here?", which is the change that stops one property accumulating a copy of its own outline per person who pinned it.
 
     Args:
@@ -354,7 +362,8 @@ def generate_location_boundaries(location: Location, *, name: str | None = None,
 
 
 def _schedule_deferred_retry(location: Location, retry_after: int | None, *, attempt: int, force: bool, backs_off: bool = True) -> None:
-    """Ask the provider chain again once the deferring provider's wait is over.
+    """
+    Ask the provider chain again once the deferring provider's wait is over.
 
     Args:
         location: The Location whose resolution was deferred.
@@ -376,7 +385,8 @@ def _schedule_deferred_retry(location: Location, retry_after: int | None, *, att
 
 
 def _retry_wikipedia_miss(location: Location) -> None:
-    """Ask Wikipedia again once a location has a parcel, if the last answer was a miss.
+    """
+    Ask Wikipedia again once a location has a parcel, if the last answer was a miss.
 
     An article Wikipedia places on the parcel matches it (``plugins.builtin.wikipedia.match_outline``), so a
     miss cached before the parcel was known may no longer be one.

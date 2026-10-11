@@ -38,7 +38,8 @@ _enqueues_suppressed: ContextVar[bool] = ContextVar("enqueues_suppressed", defau
 
 
 class RetryNoticeError(Exception):
-    """Why a task waits to run again, worded for whoever polls it, and how far it had got.
+    """
+    Why a task waits to run again, worded for whoever polls it, and how far it had got.
 
     Passed to ``Task.retry`` as ``exc``, which the result backend keeps as the task's RETRY state. Its arguments
     are its whole state, since the backend rebuilds it from them.
@@ -50,7 +51,8 @@ class RetryNoticeError(Exception):
     """
 
     def __init__(self, message: str, current: int = 0, total: int = 1) -> None:
-        """Store the notice.
+        """
+        Store the notice.
 
         Args:
             message: What the poller is shown.
@@ -65,7 +67,8 @@ class RetryNoticeError(Exception):
 
 @contextmanager
 def suppressed_enqueues() -> Iterator[None]:
-    """Drop every :func:`safely_enqueue_task` call made in this context, without touching the outbox.
+    """
+    Drop every :func:`safely_enqueue_task` call made in this context, without touching the outbox.
 
     Scoped to the current context rather than patched onto the module, so other threads and requests keep
     enqueueing, and callers that imported the function by name are covered too. ``transaction.on_commit``
@@ -79,7 +82,8 @@ def suppressed_enqueues() -> Iterator[None]:
 
 
 def follow_on_queue() -> str | None:
-    """The queue for work a model signal enqueues, given the task (if any) that caused the save.
+    """
+    The queue for work a model signal enqueues, given the task (if any) that caused the save.
 
     A signal fires once per saved row, so an import queues its per-row work once per row. From inside a
     batch job that work goes to ``bulk``, rather than to the interactive worker the safety check-ins share.
@@ -122,7 +126,8 @@ class TaskProgress:
 
 
 def _progress(current: int, total: int) -> tuple[int, int, int]:
-    """Bound a progress count and work out its percentage.
+    """
+    Bound a progress count and work out its percentage.
 
     Args:
         current: Items completed so far.
@@ -137,7 +142,8 @@ def _progress(current: int, total: int) -> tuple[int, int, int]:
 
 
 def update_task_progress(task: Any, *, current: int, total: int, message: str = "") -> None:
-    """Update Celery task metadata in a consistent progress format.
+    """
+    Update Celery task metadata in a consistent progress format.
     Best-effort, and deliberately broad in what it swallows, matching ``channel_broadcast.send_group_message``'s "never raises" contract.
 
     Args:
@@ -161,7 +167,8 @@ def update_task_progress(task: Any, *, current: int, total: int, message: str = 
 
 
 def get_task_progress(task_id: str) -> TaskProgress:
-    """Return normalized task status for polling clients.
+    """
+    Return normalized task status for polling clients.
 
     A task waiting to retry reports its :class:`RetryNoticeError`, when it gave one; any other retry reason is for the logs.
 
@@ -201,7 +208,8 @@ def safely_enqueue_task(
     durable: bool = True,
     **kwargs: Any,
 ) -> AsyncResult | None:
-    """Queue a Celery task with consistent logging and broker exception handling.
+    """
+    Queue a Celery task with consistent logging and broker exception handling.
 
     A durable enqueue the broker refuses is written to the task outbox instead, in the caller's transaction,
     and ``tasks.drain_task_outbox`` queues it once the broker is back. A caller that inspects the result and
@@ -246,7 +254,8 @@ def safely_enqueue_task(
 
 
 def pk_ranges(queryset: QuerySet[Model], chunk_size: int) -> Iterator[tuple[int, int]]:
-    """Consecutive ``(first, last)`` primary-key bounds covering ``queryset``, ``chunk_size`` rows at a time.
+    """
+    Consecutive ``(first, last)`` primary-key bounds covering ``queryset``, ``chunk_size`` rows at a time.
 
     Pages by keyset (``pk > last``), so memory stays at one chunk of keys however large the table is.
 
@@ -270,7 +279,8 @@ def pk_ranges(queryset: QuerySet[Model], chunk_size: int) -> Iterator[tuple[int,
 
 
 def dispatch_pk_ranges(queryset: QuerySet[Model], task: Any, *args: Any, chunk_size: int, durable: bool = True) -> int:
-    """Queue ``task(*args, first_pk, last_pk)`` once per :func:`pk_ranges` range of ``queryset``.
+    """
+    Queue ``task(*args, first_pk, last_pk)`` once per :func:`pk_ranges` range of ``queryset``.
 
     Args:
         queryset: The rows to cover.

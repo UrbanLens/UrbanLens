@@ -28,7 +28,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
 
 class MetricsSettingsExistTests(SimpleTestCase):
-    """The settings the rest of this file overrides are real.
+    """
+    The settings the rest of this file overrides are real.
 
     ``override_settings`` invents any name it is given, so a suite that only ever overrides would pass
     identically against a settings module that never defined these - which is exactly how a guard reading
@@ -73,7 +74,8 @@ class MetricsRouteRegistrationTests(SimpleTestCase):
 
 
 class MetricsDisabledPathTests(TestCase):
-    """The disabled path really is unrouted, through the full request stack.
+    """
+    The disabled path really is unrouted, through the full request stack.
 
     A ``TestCase`` rather than a ``SimpleTestCase`` because the 404 this must fall through to renders the site's
     styled error page, which reads the database - which is itself the proof that nothing intercepted the path
@@ -294,7 +296,8 @@ class MetricsStartupCheckTests(SimpleTestCase):
 
 
 class MetricsInstrumentationGateTests(SimpleTestCase):
-    """Who registers django-prometheus, and what happens when it is absent.
+    """
+    Who registers django-prometheus, and what happens when it is absent.
 
     ``UL_METRICS_ENABLED`` is an operator switch flipped on running deployments, independently of the image
     build that would carry the package."""
@@ -370,7 +373,8 @@ class MetricsInstrumentationGateTests(SimpleTestCase):
 
 
 class MultiprocessModeDisabledTests(SimpleTestCase):
-    """Leaving multiprocess mode has to survive the library being imported first.
+    """
+    Leaving multiprocess mode has to survive the library being imported first.
 
     ``prometheus_client.values`` resolves ``ValueClass`` once, at import, from ``PROMETHEUS_MULTIPROC_DIR`` as
     it stood then."""

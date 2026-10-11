@@ -1,4 +1,5 @@
-"""What differs between the Vault's per-kind media galleries (Photos, Documents).
+"""
+What differs between the Vault's per-kind media galleries (Photos, Documents).
 
 A new gallery needs a spec here, URL routes passing its ``kind``, a page template extending
 ``pages/vault/media_page.html``, a tile partial, and a TypeScript tile renderer.
@@ -13,7 +14,8 @@ from urbanlens.dashboard.models.images.model import MediaKind
 
 @dataclass(frozen=True, slots=True)
 class MediaKindSpec:
-    """One Vault gallery's kind-specific behaviour.
+    """
+    One Vault gallery's kind-specific behaviour.
 
     Attributes:
         kind: The :class:`MediaKind` this gallery lists.
@@ -85,7 +87,8 @@ MEDIA_KIND_SPECS: dict[str, MediaKindSpec] = {
 
 
 def media_kind_spec(kind: str) -> MediaKindSpec:
-    """Return the spec for *kind*.
+    """
+    Return the spec for *kind*.
 
     Args:
         kind: A :class:`MediaKind` value with a Vault gallery.

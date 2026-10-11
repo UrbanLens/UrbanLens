@@ -26,7 +26,8 @@ MAX_EMOJI_CODEPOINTS = 12
 
 @lru_cache(maxsize=1)
 def _catalogue_icons() -> frozenset[str]:
-    """Every icon the picker offers, as the authority on what is storable.
+    """
+    Every icon the picker offers, as the authority on what is storable.
     Loosening the heuristic instead would have admitted the bare ASCII those entries are built on; a set cannot.
 
     Returns:
@@ -37,7 +38,8 @@ def _catalogue_icons() -> frozenset[str]:
 
 
 def _is_emoji_token(text: str) -> bool:
-    """Report whether ``text`` is plausibly a single emoji/short pictographic token.
+    """
+    Report whether ``text`` is plausibly a single emoji/short pictographic token.
 
     Args:
         text: A stripped candidate value.
@@ -65,7 +67,8 @@ def clean_icon(value: object, *, default: None = ..., max_length: int = ...) -> 
 
 
 def clean_icon(value: object, *, default: str | None = None, max_length: int = MAX_ICON_LENGTH) -> str | None:
-    """Return ``value`` when it is an icon this application stores, else ``default``.
+    """
+    Return ``value`` when it is an icon this application stores, else ``default``.
 
     Args:
         value: The raw submitted value, typically straight off ``request.POST`` or a JSON body.

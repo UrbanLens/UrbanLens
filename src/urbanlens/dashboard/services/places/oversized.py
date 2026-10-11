@@ -1,4 +1,5 @@
-"""Taking places too large to be what they claim out of every access domain (P148).
+"""
+Taking places too large to be what they claim out of every access domain (P148).
 
 ``PlaceQuerySet.implausible`` already keeps such a place from resolving or sharing access. This removes what it
 left behind: locations still attached to it, buildings parented under it, wikis nested because of it, and marker
@@ -27,7 +28,8 @@ _SCOPED_PIN_TYPES = (PinType.LOCATION_MARKER, PinType.PARCEL, PinType.BUILDING)
 
 @dataclass(slots=True)
 class DetachOutcome:
-    """What detaching one place changed.
+    """
+    What detaching one place changed.
 
     Attributes:
         place_id: The detached place.
@@ -45,7 +47,8 @@ class DetachOutcome:
 
 
 def places_to_detach() -> list[Place]:
-    """Implausibly large places that still hold anything, largest first.
+    """
+    Implausibly large places that still hold anything, largest first.
 
     Returns:
         The places :func:`detach_oversized_place` would change.
@@ -54,7 +57,8 @@ def places_to_detach() -> list[Place]:
 
 
 def locations_standing_on(place: Place) -> QuerySet[Location]:
-    """Locations on the place, on its children, or anywhere in a domain it roots.
+    """
+    Locations on the place, on its children, or anywhere in a domain it roots.
 
     Args:
         place: The place.
@@ -71,7 +75,8 @@ def _holds_anything(place: Place) -> bool:
 
 @transaction.atomic
 def detach_oversized_place(place: Place) -> DetachOutcome:
-    """Retire an implausibly large place and release everything that shared access through it.
+    """
+    Retire an implausibly large place and release everything that shared access through it.
 
     Children become their own domain roots rather than being deleted, since a building footprint under a bogus
     parcel is usually still a real building. Locations are re-resolved; those left on no place are marked

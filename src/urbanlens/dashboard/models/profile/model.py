@@ -96,7 +96,8 @@ _COMMUNITY_GATED_SYNC_FIELDS = (
 
 
 def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
-    """Great-circle distance between two (latitude, longitude) pairs, in km.
+    """
+    Great-circle distance between two (latitude, longitude) pairs, in km.
 
     Args:
         p1: First (latitude, longitude).
@@ -124,7 +125,8 @@ _MILES_REGION_BBOXES: tuple[tuple[float, float, float, float], ...] = (
 
 
 def _units_for_point(lat: float, lng: float) -> str:
-    """Return the default distance unit for a geographic point.
+    """
+    Return the default distance unit for a geographic point.
 
     Points inside a miles-using region resolve to miles; everything else
     (and any point that cannot be classified) defaults to kilometres.
@@ -661,7 +663,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @property
     def deletion_days_remaining(self) -> int | None:
-        """Whole days left before the hard delete runs, or None if not pending.
+        """
+        Whole days left before the hard delete runs, or None if not pending.
 
         Rounds up so "a few hours left" still reads as 1 day rather than 0.
         """
@@ -690,7 +693,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @property
     def display_supporter_badge(self) -> bool:
-        """Whether the supporter badge should actually be rendered next to this profile's name.
+        """
+        Whether the supporter badge should actually be rendered next to this profile's name.
 
         Requires both an active subscription and the user's own opt-in - the
         two are independent so a badge never appears for a lapsed subscriber
@@ -699,7 +703,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.show_supporter_badge and self.is_supporter
 
     def best_known_point(self) -> tuple[float, float] | None:
-        """Return a representative (lat, lng) for this profile without extra computation.
+        """
+        Return a representative (lat, lng) for this profile without extra computation.
         Uses already-persisted coordinates only - the explicit custom center, the cached pin centroid, or the last remembered map position - so it is cheap and side-effect free (it never triggers the O(n²) centroid computation).
 
         Returns:
@@ -716,7 +721,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @property
     def effective_distance_units(self) -> str:
-        """Return the distance unit to display for this profile.
+        """
+        Return the distance unit to display for this profile.
         An explicit ``distance_units`` choice always wins.
         Otherwise the unit is inferred from the profile's known location, defaulting to kilometres when the location is unknown or not in a miles-using region.
 
@@ -765,7 +771,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
     )
 
     def preference_display(self, field: str) -> str:
-        """Return the human-readable value of one interaction-preference field.
+        """
+        Return the human-readable value of one interaction-preference field.
         Falls back to the paired ``<field>_other`` free-text note when the stored choice is "other" and that note is non-blank; otherwise returns the choice's display label, or "" when the preference is unset.
 
         Args:
@@ -785,7 +792,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @property
     def interaction_preferences(self) -> list[dict[str, str]]:
-        """This profile's answered interaction preferences, for display.
+        """
+        This profile's answered interaction preferences, for display.
 
         Omits any preference left unset entirely, rather than showing a
         blank - see ``PREFERENCE_FIELDS`` for the field/label pairs.
@@ -796,7 +804,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.user.username or "user"
 
     def compute_map_center(self) -> tuple[float, float] | None:
-        """Find the densest geographic cluster of pins and return its centroid.
+        """
+        Find the densest geographic cluster of pins and return its centroid.
         A naive average breaks when the user has pins on multiple continents - the centre point ends up in the ocean between them.
         The largest regional concentration wins instead, which for a single tight collection is the ordinary centroid.
 
@@ -825,7 +834,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return avg_lat, avg_lng
 
     def refresh_map_center(self) -> tuple[float, float] | None:
-        """Recompute the centre and release the pending-recompute claim.
+        """
+        Recompute the centre and release the pending-recompute claim.
 
         The claim is released first: a pin created while the coordinates are being read then finds it clear and
         queues another pass, rather than being silently absorbed into a recompute that had already read past it.
@@ -838,7 +848,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.compute_map_center()
 
     def _served_map_center(self) -> tuple[float, float] | None:
-        """The cached centroid, computed inline only when there is none; a recompute left unfinished is re-queued.
+        """
+        The cached centroid, computed inline only when there is none; a recompute left unfinished is re-queued.
 
         Returns:
             The (latitude, longitude) to render, or None when the account has no locatable pins.
@@ -851,7 +862,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return float(self.map_center_latitude), float(self.map_center_longitude)
 
     def get_map_center(self) -> tuple[float, float] | None:
-        """Return the map center coordinates to use as the initial view.
+        """
+        Return the map center coordinates to use as the initial view.
         In GPS mode, returns None - the browser handles centering via geolocation.
 
         Returns:
@@ -871,7 +883,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self._served_map_center()
 
     def get_map_center_template_context(self) -> dict[str, float | str | None]:
-        """Return template variables for client-side map centering.
+        """
+        Return template variables for client-side map centering.
         Mirrors the main map page: server coordinates when the profile mode supplies them, plus a pin-cluster fallback for GPS mode when the browser denies geolocation.
 
         Returns:
@@ -898,7 +911,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def are_friends(subject: Profile, other: Profile) -> bool:
-        """Return True when the two profiles share an accepted friendship.
+        """
+        Return True when the two profiles share an accepted friendship.
 
         Args:
             subject: One profile of the pair.
@@ -916,7 +930,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def are_blocked(subject: Profile, other: Profile) -> bool:
-        """Return True when either profile has blocked the other.
+        """
+        Return True when either profile has blocked the other.
 
         Args:
             subject: One profile of the pair.
@@ -933,7 +948,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         ).exists()
 
     def has_blocked(self, other: Profile) -> bool:
-        """Return True when this profile placed a block on ``other``.
+        """
+        Return True when this profile placed a block on ``other``.
 
         Args:
             other: The profile that may have been blocked.
@@ -947,7 +963,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def _barred_subject_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
-        """The subjects no setting can show ``viewer``: inactive accounts, and those that have blocked ``viewer``.
+        """
+        The subjects no setting can show ``viewer``: inactive accounts, and those that have blocked ``viewer``.
 
         Args:
             viewer: The profile viewing, or None for an anonymous viewer.
@@ -968,7 +985,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def has_pending_request_to(sender: Profile, recipient: Profile) -> bool:
-        """Return True when ``sender`` has an unanswered friend request to ``recipient``.
+        """
+        Return True when ``sender`` has an unanswered friend request to ``recipient``.
 
         Args:
             sender: The profile that sent the request.
@@ -987,7 +1005,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def _have_common_pin(subject: Profile, other: Profile) -> bool:
-        """Return True when both profiles have pinned at least one shared place.
+        """
+        Return True when both profiles have pinned at least one shared place.
 
         Args:
             subject: One profile of the pair.
@@ -1006,7 +1025,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def _have_common_friend(subject: Profile, other: Profile) -> bool:
-        """Return True when the two profiles share at least one mutual accepted friend.
+        """
+        Return True when the two profiles share at least one mutual accepted friend.
 
         Args:
             subject: One profile of the pair.
@@ -1044,7 +1064,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def _have_common_trip(subject: Profile, other: Profile) -> bool:
-        """Return True when the two profiles are members of at least one shared trip.
+        """
+        Return True when the two profiles are members of at least one shared trip.
 
         Args:
             subject: One profile of the pair.
@@ -1061,7 +1082,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def visibility_permits(visibility: str, subject: Profile, other: Profile, *, allow_pending_request: bool = True) -> bool:
-        """Return True if ``subject``'s ``visibility`` setting permits ``other``.
+        """
+        Return True if ``subject``'s ``visibility`` setting permits ``other``.
         Shared evaluator for every per-field ``VisibilityChoice`` setting on this model (contact info, profile, photos, etc.) so the friend/common-pin/ common-friend/common-trip relationship queries live in exactly one place.
 
         Args:
@@ -1095,7 +1117,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return False
 
     def can_view_photos_from(self, uploader: Profile) -> bool:
-        """Return True if this profile is allowed to see photos uploaded by ``uploader``.
+        """
+        Return True if this profile is allowed to see photos uploaded by ``uploader``.
 
         Both directions are enforced:
         - The uploader's ``photo_upload_visibility`` must permit this viewer.
@@ -1111,7 +1134,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.visibility_permits(self.viewer_photo_filter, self, uploader)
 
     def can_view_comments_from(self, author: Profile) -> bool:
-        """Return True if this profile is allowed to see comments written by ``author``.
+        """
+        Return True if this profile is allowed to see comments written by ``author``.
 
         Evaluated through ``author``'s ``comment_visibility`` setting - a
         comment is community content, but its author may still restrict who
@@ -1126,7 +1150,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.visibility_permits(author.comment_visibility, author, self)
 
     def can_view_contact_info(self, viewer: Profile | None) -> bool:
-        """Return True if viewer may see this profile's contact methods.
+        """
+        Return True if viewer may see this profile's contact methods.
         Unlike most visibility settings, a merely-pending friend request does not unlock this - contact details like a phone number are more sensitive than "who's asking to connect" and wait for an accepted friendship.
 
         Args:
@@ -1146,7 +1171,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return self.visibility_permits(self.contact_visibility, self, viewer, allow_pending_request=False)
 
     def accepts_direct_messages_from(self, sender: Profile) -> bool:
-        """Return True if ``sender`` may send this profile a direct message.
+        """
+        Return True if ``sender`` may send this profile a direct message.
         Short of that, evaluates this profile's ``direct_message_visibility`` setting through the shared ``visibility_permits`` evaluator, with one addition: a profile that has already messaged the sender can always be replied to, regardless of the setting - starting a conversation is an implicit invitation to answer.
 
         Args:
@@ -1170,7 +1196,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def visible_profile_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
-        """Batch equivalent of :meth:`can_view_profile` over many subjects at once.
+        """
+        Batch equivalent of :meth:`can_view_profile` over many subjects at once.
         ``can_view_profile`` costs a fixed number of queries *per subject*, and every relationship helper it reaches rebuilds the **viewer's** own set (pinned locations, accepted friends, trip ids) on each call.
         This resolves the viewer's sets once and answers every subject from them, so the cost is fixed regardless of how many subjects there are.
 
@@ -1185,7 +1212,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def visible_contact_info_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
-        """Batch equivalent of :meth:`can_view_contact_info` over many subjects at once.
+        """
+        Batch equivalent of :meth:`can_view_contact_info` over many subjects at once.
         The contact-info sibling of :meth:`visible_profile_pks`, differing in the two ways ``can_view_contact_info`` differs from ``can_view_profile``: an unanswered friend request does not open the gate (a phone number is more sensitive than "who's asking to connect"), and there is no temporary-access fallback - a ``DirectMessageTemporaryAccess`` grant reveals an identity, never a contact method.
 
         Args:
@@ -1199,7 +1227,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def visible_comment_author_pks(viewer: Profile, authors: Sequence[Profile]) -> set[int]:
-        """Batch equivalent of :meth:`can_view_comments_from` over many authors.
+        """
+        Batch equivalent of :meth:`can_view_comments_from` over many authors.
 
         The comment surfaces memoise this per distinct author, which stops one
         author being resolved twice but not the resolution itself: at
@@ -1217,7 +1246,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def visible_photo_uploader_pks(viewer: Profile, uploaders: Sequence[Profile]) -> set[int]:
-        """Batch equivalent of :meth:`can_view_photos_from` over many uploaders.
+        """
+        Batch equivalent of :meth:`can_view_photos_from` over many uploaders.
 
         Both directions, as the single-pair form enforces them: the uploader's
         ``photo_upload_visibility`` must admit the viewer, **and** the viewer's
@@ -1240,7 +1270,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def accepting_direct_messages_pks(sender: Profile, subjects: Sequence[Profile]) -> set[int]:
-        """Batch equivalent of :meth:`accepts_direct_messages_from` over many subjects.
+        """
+        Batch equivalent of :meth:`accepts_direct_messages_from` over many subjects.
 
         The recipient picker resolves this for every candidate a substring
         turns up, so the per-pair form re-read the *sender's* whole pin table
@@ -1289,7 +1320,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         allow_pending_request: bool,
         temporary_access: bool,
     ) -> set[int]:
-        """Resolve one ``VisibilityChoice`` field over many subjects for one viewer.
+        """
+        Resolve one ``VisibilityChoice`` field over many subjects for one viewer.
         Shared body of :meth:`visible_profile_pks` and :meth:`visible_contact_info_pks`, parameterised by the three things that separate them, so the relationship queries exist once.
 
         Args:
@@ -1404,7 +1436,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         allow_pending_request: bool = True,
         permit_null_author: bool = False,
     ) -> Q:
-        """:meth:`visibility_permits` as a ``Q`` over rows that name their author.
+        """
+        :meth:`visibility_permits` as a ``Q`` over rows that name their author.
 
         The third member of this family, and a genuinely different question
         again. :meth:`visible_profile_pks` answers "which of these subjects may
@@ -1487,7 +1520,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def viewable_q(viewer: Profile | None) -> models.Q:
-        """:meth:`can_view_profile` as a ``Q`` over profiles, so a lookup by slug can ask it in the same statement.
+        """
+        :meth:`can_view_profile` as a ``Q`` over profiles, so a lookup by slug can ask it in the same statement.
 
         A hidden account found first and refused afterwards costs more queries than no account at all, which tells
         anyone timing the two that the username is registered (P269).
@@ -1516,7 +1550,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def reachable_partner_q(profile: Profile) -> models.Q:
-        """``services.messaging.direct_messages.conversation_reachable`` as a ``Q`` over the partners *profile* may address.
+        """
+        ``services.messaging.direct_messages.conversation_reachable`` as a ``Q`` over the partners *profile* may address.
 
         Args:
             profile: The profile opening or writing to a conversation.
@@ -1535,7 +1570,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def accepts_messages_from_q(sender: Profile) -> models.Q:
-        """``services.messaging.direct_messages.can_direct_message`` as a ``Q`` over the profiles *sender* may message.
+        """
+        ``services.messaging.direct_messages.can_direct_message`` as a ``Q`` over the profiles *sender* may message.
 
         Args:
             sender: The profile that would send.
@@ -1560,7 +1596,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def connections_q(profile: Profile) -> models.Q:
-        """``services.social.connections.are_connections`` as a ``Q`` over *profile*'s accepted friends.
+        """
+        ``services.social.connections.are_connections`` as a ``Q`` over *profile*'s accepted friends.
 
         Args:
             profile: Whose connections.
@@ -1578,7 +1615,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def known_to_q(actor: Profile) -> models.Q:
-        """The profiles *actor* could already have come across, as a ``Q``, so an id can be resolved through it (P281).
+        """
+        The profiles *actor* could already have come across, as a ``Q``, so an id can be resolved through it (P281).
 
         Itself, any profile it may see or address a conversation with, and any it has a relationship row with
         that has not blocked it.
@@ -1599,7 +1637,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def friend_requestable_q(actor: Profile) -> models.Q:
-        """``services.social.friendship.may_send_friend_request`` as a ``Q``, over active accounts only (P281).
+        """
+        ``services.social.friendship.may_send_friend_request`` as a ``Q``, over active accounts only (P281).
 
         Args:
             actor: The profile that would send the request.
@@ -1622,7 +1661,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def invitable_q(actor: Profile) -> models.Q:
-        """The profiles *actor* may name in an invite: those it may see, with no block between them, itself included.
+        """
+        The profiles *actor* may name in an invite: those it may see, with no block between them, itself included.
 
         Args:
             actor: The profile inviting.
@@ -1638,7 +1678,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def related_profile_ids(viewer: Profile) -> set[int]:
-        """Every profile that could pass a non-``ANYONE`` visibility gate for ``viewer``.
+        """
+        Every profile that could pass a non-``ANYONE`` visibility gate for ``viewer``.
         Answering "which of these subjects may I see" is :meth:`visible_profile_pks`'s job and stays there; this answers the different question a *queryset* has to ask - which rows are even worth resolving - so that a list can be narrowed in SQL before it is paginated, rather than resolved row by row afterwards.
 
         Args:
@@ -1686,7 +1727,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @staticmethod
     def viewers_who_can_see(subject: Profile, viewers: Sequence[Profile]) -> set[int]:
-        """Batch equivalent of :meth:`can_view_profile` over many *viewers* of one subject.
+        """
+        Batch equivalent of :meth:`can_view_profile` over many *viewers* of one subject.
         The mirror of :meth:`visible_profile_pks`, and a genuinely different question: that one renders a list of people to one viewer, this one shows one person's name to a roomful.
         A group message carries its sender's name, so the name has to be resolved through every recipient's own visibility - once per recipient, which is a query each, twice per send (the notification and the live payload are built separately).
 
@@ -1711,7 +1753,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         allow_pending_request: bool,
         temporary_access: bool,
     ) -> set[int]:
-        """Resolve one of ``subject``'s ``VisibilityChoice`` fields over many viewers.
+        """
+        Resolve one of ``subject``'s ``VisibilityChoice`` fields over many viewers.
 
         The mirror of :meth:`_visible_subject_pks`, parameterised the same way
         and for the same reason: a second copy of this is a second place for
@@ -1802,7 +1845,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @classmethod
     def visible_by_slug(cls, slug: str, viewer: Profile | None) -> Profile | None:
-        """The profile ``slug`` names, if ``viewer`` may see it.
+        """
+        The profile ``slug`` names, if ``viewer`` may see it.
 
         Args:
             slug: A profile slug from a URL.
@@ -1816,7 +1860,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @classmethod
     def visible_by_identifier(cls, identifier: str, viewer: Profile | None) -> Profile | None:
-        """The profile a slug or uuid names, if ``viewer`` may see it; a slug match wins over a uuid match.
+        """
+        The profile a slug or uuid names, if ``viewer`` may see it; a slug match wins over a uuid match.
 
         A sync client may have cached a uuid, which must keep working when the owner renames themselves.
 
@@ -1839,7 +1884,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
     @classmethod
     def reachable_partner_by_slug(cls, slug: str, profile: Profile) -> Profile | None:
-        """The conversation partner ``slug`` names, if ``profile`` may address one with them.
+        """
+        The conversation partner ``slug`` names, if ``profile`` may address one with them.
 
         Args:
             slug: A profile slug from a URL.
@@ -1852,7 +1898,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return cls.objects.select_related("user").filter(cls.reachable_partner_q(profile), slug=slug).first()
 
     def can_view_profile(self, viewer: Profile | None) -> bool:
-        """Return True if viewer may see this profile's identity (name, etc).
+        """
+        Return True if viewer may see this profile's identity (name, etc).
 
         Args:
             viewer: The profile requesting access, or None for anonymous visitors.
@@ -1879,7 +1926,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
         return DirectMessageTemporaryAccess.grants_access(self.pk, viewer.pk)
 
     def can_view_common_pins_with(self, viewer: Profile | None) -> bool:
-        """Return True if viewer may see the specific pins this profile has in common with them.
+        """
+        Return True if viewer may see the specific pins this profile has in common with them.
 
         Args:
             viewer: The profile requesting access, or None for anonymous visitors.
@@ -1916,7 +1964,8 @@ class Profile(HeldUploadModel, abstract.PublicDashboardModel):
 
 
 def queue_map_center_refresh(profile_id: int) -> bool:
-    """Claim *profile_id*'s map-centre recompute and queue it once the current transaction commits.
+    """
+    Claim *profile_id*'s map-centre recompute and queue it once the current transaction commits.
 
     The claim holds an import to one recompute rather than one per pin. A claim older than
     ``MAP_CENTRE_RECLAIM_AFTER`` is retaken, since ``safely_enqueue_task`` can lose an enqueue to an unreachable

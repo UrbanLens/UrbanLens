@@ -1,4 +1,5 @@
-"""A drawn region has to be bounded, because dissolving it runs in the request.
+"""
+A drawn region has to be bounded, because dissolving it runs in the request.
 
 `dissolve_polygons` unions every component of the region inside the request
 that drew it. Nothing capped the count. It comes from a POST body: `parse_region_geojson` reads
@@ -34,7 +35,8 @@ def _square(x: float, y: float, size: float = 0.001) -> Polygon:
 
 
 def _disjoint_squares(count: int) -> dict:
-    """GeoJSON for *count* non-overlapping squares - the worst case for the
+    """
+    GeoJSON for *count* non-overlapping squares - the worst case for the
     dissolve, since nothing merges and every pair is compared."""
     polygons = [_square(index * 0.01, 0.0) for index in range(count)]
     return {"type": "MultiPolygon", "coordinates": [list(polygon.coords) for polygon in polygons]}
@@ -62,7 +64,8 @@ class TheCeilingsExistTests(SimpleTestCase):
         self.assertGreater(MAX_REGION_VERTICES, 0)
 
     def test_a_refusal_is_the_kind_callers_already_handle(self) -> None:
-        """Every caller catches InvalidPolygonGeoJSONError and answers 400. A
+        """
+        Every caller catches InvalidPolygonGeoJSONError and answers 400. A
         new exception outside that hierarchy would be a 500 instead."""
         self.assertTrue(issubclass(TooComplexGeometryError, InvalidPolygonGeoJSONError))
 
@@ -86,7 +89,8 @@ class TheRegionIsBoundedTests(SimpleTestCase):
             parse_multipolygon_geojson(_many_sided(MAX_REGION_VERTICES + 2))
 
     def test_an_ordinary_drawn_region_is_untouched(self) -> None:
-        """The ceilings are a safety net, not a feature limit: what somebody
+        """
+        The ceilings are a safety net, not a feature limit: what somebody
         actually draws has to pass without thinking about them."""
         parsed = parse_multipolygon_geojson(_disjoint_squares(12))
 

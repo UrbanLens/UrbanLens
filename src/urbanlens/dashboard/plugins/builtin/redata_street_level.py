@@ -1,4 +1,5 @@
-"""Street-level photos plugin: one Media-gallery tile per date a volunteer network photographed the pin from the street.
+"""
+Street-level photos plugin: one Media-gallery tile per date a volunteer network photographed the pin from the street.
 
 The same REData answer feeds the street-view carousel (``redata_media_gateway``'s Mapillary, KartaView and Panoramax
 providers), so the tab costs no call of its own. Its tiles open REData's permanent archive of each frame, which still
@@ -57,7 +58,8 @@ def _caption(entry: dict[str, Any], capture: dict[str, Any], network: str) -> st
 
 
 def street_level_item(entry: dict[str, Any]) -> MediaItem | None:
-    """A gallery tile for one cached capture date.
+    """
+    A gallery tile for one cached capture date.
 
     Args:
         entry: A cached date entry (see :meth:`StreetLevelPhotosSource.fetch`).

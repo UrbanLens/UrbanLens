@@ -123,7 +123,8 @@ class DemoMemoriesContentTests(TestCase):
         self.assertTrue(Comment.objects.exclude(image="").exists())
 
     def test_a_trip_has_a_resolvable_date_for_the_memories_timeline(self) -> None:
-        """_trips_for_range filters on Coalesce(start_date, first_activity_date)
+        """
+        _trips_for_range filters on Coalesce(start_date, first_activity_date)
         being non-null - a trip created with neither is silently dropped from
         the timeline. This is the regression that fix guards against."""
         from urbanlens.dashboard.models.trips.model import Trip

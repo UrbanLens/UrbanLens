@@ -25,7 +25,8 @@ schema = load_schema()
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.function_scoped_fixture],
 )
 def test_operation_matches_its_schema(case, contract_headers: dict[str, str]) -> None:
-    """Every generated request produces a response the schema describes.
+    """
+    Every generated request produces a response the schema describes.
 
     Schemathesis's default checks cover the failures that actually reach client authors: a 500, a status code
     the operation never declared, a content type it never declared, and a body that does not validate against
@@ -52,14 +53,16 @@ def document() -> dict:
 
 
 class TestDocumentShape:
-    """Properties of the document itself, independent of any response.
+    """
+    Properties of the document itself, independent of any response.
 
     These need no requests and no database, so they are cheap enough to be
     worth running even when the fuzzing is not.
     """
 
     def test_operation_ids_are_unique(self, document: dict) -> None:
-        """No two operations may share an ``operationId``.
+        """
+        No two operations may share an ``operationId``.
 
         This is the one property a generated client cannot survive losing. drf-spectacular does not fail on a
         collision - it appends ``_2`` to the loser and logs a warning - and *which* operation loses depends on
@@ -99,7 +102,8 @@ class TestDocumentShape:
         assert not undocumented, "operations with no declared responses:\n  " + "\n  ".join(sorted(undocumented))
 
     def test_authenticated_operations_declare_their_security(self, document: dict) -> None:
-        """A documented endpoint that needs a key must say so.
+        """
+        A documented endpoint that needs a key must say so.
 
         The schema once described the entire API as unauthenticated because drf-spectacular could not resolve
         ``ApiKeyAuthentication``; a client generated from it had no way to know a bearer token existed."""
@@ -115,7 +119,8 @@ class TestDocumentShape:
         assert secured, "no operation declares `security`; every endpoint reads as anonymous to a generated client."
 
     def test_authenticated_operations_document_rejection(self, document: dict) -> None:
-        """An operation that can answer 401 has to say so.
+        """
+        An operation that can answer 401 has to say so.
 
         Every authenticated endpoint returns ``401`` to a request without credentials - correctly - and the
         schema documents only ``200``."""

@@ -25,7 +25,8 @@ class PatchPinFieldScopeTests(TestCase):
         self.visited = timezone.now() - datetime.timedelta(days=1)
 
     def _quick_edit(self, **fields) -> None:
-        """POST the quick-edit form, with a concurrent write landing mid-request.
+        """
+        POST the quick-edit form, with a concurrent write landing mid-request.
 
         The write is triggered from ``get_nearby_or_create``, which patch_pin
         calls after loading the pin and before saving it.

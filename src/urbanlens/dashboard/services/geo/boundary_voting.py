@@ -1,4 +1,5 @@
-"""Boundary voting - recency-weighted community choice of the official boundary.
+"""
+Boundary voting - recency-weighted community choice of the official boundary.
 Materializing the winner onto the place (:func:`apply_winning_boundary`) rather than consulting the tally per lookup is deliberate: resolution runs containment in SQL over many places at once and cannot call a Python weighting function per row."""
 
 from __future__ import annotations
@@ -39,12 +40,14 @@ _SOURCE_PRIORITY = {
 
 
 class BoundaryVoteError(Exception):
-    """A boundary vote could not be cast (bad candidate, wrong place...).
+    """
+    A boundary vote could not be cast (bad candidate, wrong place...).
     The message is for logs, not the response: an HTTP-facing catch site should author its own user-facing text rather than relaying it."""
 
 
 def vote_weight(voted_at: datetime, now: datetime | None = None) -> float:
-    """The recency weight of a vote cast (or last changed) at ``voted_at``.
+    """
+    The recency weight of a vote cast (or last changed) at ``voted_at``.
     Votes of identical age get identical weight, and a hypothetical future timestamp is clamped to "just now" rather than given a super-unit weight.
 
     Args:
@@ -64,7 +67,8 @@ def _priority(boundary: Boundary) -> tuple[int, str, int]:
 
 
 def boundary_options(place: Place | None) -> list[Boundary]:
-    """The votable candidate boundaries for a place, in priority order.
+    """
+    The votable candidate boundaries for a place, in priority order.
     Only externally-sourced property candidates with actual, plausibly sized geometry qualify: hand-drawn rows could claim an arbitrary match area, and building footprints have no competing sources.
 
     Args:
@@ -90,7 +94,8 @@ def _weights(place: Place | None, options: list[Boundary], now: datetime | None 
 
 
 def winning_boundary(place: Place | None) -> Boundary | None:
-    """The candidate boundary the community's weighted votes select.
+    """
+    The candidate boundary the community's weighted votes select.
 
     Args:
         place: The place to resolve the winner for.
@@ -105,7 +110,8 @@ def winning_boundary(place: Place | None) -> Boundary | None:
 
 
 def has_consensus(place: Place | None) -> bool:
-    """Whether the community has settled on a boundary for this place.
+    """
+    Whether the community has settled on a boundary for this place.
     Consensus requires at least one vote, and either only one candidate having any votes at all or the leader's summed weight being at least :data:`CONSENSUS_RATIO` times the runner-up's.
 
     Args:
@@ -129,7 +135,8 @@ def has_consensus(place: Place | None) -> bool:
 
 
 def apply_winning_boundary(place: Place | None) -> Boundary | None:
-    """Materialize the vote winner onto ``Place.geometry``.
+    """
+    Materialize the vote winner onto ``Place.geometry``.
     With votes, the winner's polygon overwrites the place's geometry so every resolution and access path respects the community's choice without consulting the tally per lookup.
 
     Args:
@@ -158,7 +165,8 @@ def apply_winning_boundary(place: Place | None) -> Boundary | None:
 
 
 def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) -> BoundaryVote:
-    """Cast or change ``profile``'s vote for one of ``place``'s candidates.
+    """
+    Cast or change ``profile``'s vote for one of ``place``'s candidates.
     The canonical boundary is re-synced immediately so matching reflects the new tally.
 
     Args:
@@ -185,7 +193,8 @@ def cast_boundary_vote(place: Place | None, profile: Profile, boundary_id: int) 
 
 
 def boundary_vote_context(place: Place | None, profile: Profile | None, *, conceal: bool = False) -> dict | None:
-    """Template context for the wiki page's boundary-vote dialog and button.
+    """
+    Template context for the wiki page's boundary-vote dialog and button.
 
     Args:
         place: The wiki's place.

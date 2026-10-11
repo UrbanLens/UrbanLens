@@ -35,7 +35,8 @@ class UndoRoundTripTests(TestCase):
         self.location = baker.make(Location, official_name="Undo Round Trip Place")
 
     def _build(self, model_label: str) -> Any:
-        """Return a populated instance for ``model_label``, or None if unhandled.
+        """
+        Return a populated instance for ``model_label``, or None if unhandled.
 
         Values are set explicitly rather than via ``_fill_optional``: baker cannot
         generate the PostGIS geometry columns several of these models carry.

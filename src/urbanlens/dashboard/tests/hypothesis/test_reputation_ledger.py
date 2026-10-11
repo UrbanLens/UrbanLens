@@ -53,7 +53,8 @@ class LedgerWriteTests(TestCase):
         return ReputationEvent.objects.get(rule_key=rule_key, target_id=target.pk)
 
     def test_a_recorded_row_starts_unscored_rather_than_worth_zero(self) -> None:
-        """Null and zero are different states, and summing must not confuse them.
+        """
+        Null and zero are different states, and summing must not confuse them.
 
         The row is written by the contribution signal, synchronously; scoring
         is the deferred half and has not run.
@@ -65,7 +66,8 @@ class LedgerWriteTests(TestCase):
         self.assertNotIn(event, ReputationEvent.objects.counting())
 
     def test_recording_the_same_contribution_twice_writes_one_row(self) -> None:
-        """Celery runs with acks_late and retries, so every writer can run twice.
+        """
+        Celery runs with acks_late and retries, so every writer can run twice.
 
         The signal has already written this photo's row, so an explicit
         re-record stands in for the retry - and must be refused.
@@ -78,7 +80,8 @@ class LedgerWriteTests(TestCase):
         self.assertEqual(ReputationEvent.objects.for_profile(self.profile).for_rule("photo_upload").count(), 1)
 
     def test_a_first_ever_contributor_is_marked_for_the_sweep(self) -> None:
-        """The staleness flag has to survive there being no totals row yet.
+        """
+        The staleness flag has to survive there being no totals row yet.
 
         Marking was a filter().update(), which silently matches nothing for a profile that has never earned
         anything - so the very first event from a brand-new account would never have been picked up by the sweep
@@ -131,7 +134,8 @@ class ScoringTests(TestCase):
         self.assertGreater(first, second)
 
     def test_a_materialised_external_photo_earns_its_voter_nothing(self) -> None:
-        """`Image.profile` is the voter on a materialised row, not the photographer.
+        """
+        `Image.profile` is the voter on a materialised row, not the photographer.
 
         Scoring one would pay a user for somebody else's work, and a bulk
         import would pay the importer for hundreds of them.
@@ -155,7 +159,8 @@ class ScoringTests(TestCase):
         self.assertTrue(forced.retracted)
 
     def test_metadata_is_a_bonus_and_its_absence_is_never_a_penalty(self) -> None:
-        """EXIF extraction is skipped when the uploader has track_pin_visits off.
+        """
+        EXIF extraction is skipped when the uploader has track_pin_visits off.
 
         A penalty for missing metadata would quietly pay those users less for having a privacy setting enabled,
         so the bonus has to be additive."""
@@ -252,7 +257,8 @@ class RetractionTests(TestCase):
         self.assertFalse(retract_event(self.event, reason="reverted"))
 
     def test_retraction_lowers_the_total_but_never_lifetime_earned(self) -> None:
-        """Anything granting durable standing reads lifetime_earned.
+        """
+        Anything granting durable standing reads lifetime_earned.
 
         Otherwise reverting somebody's contributions becomes a way to take away
         wiki access they already had - the score as a weapon.

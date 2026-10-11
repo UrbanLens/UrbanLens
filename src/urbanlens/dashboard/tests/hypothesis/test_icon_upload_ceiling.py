@@ -1,4 +1,5 @@
-"""An icon upload is refused over its own ceiling before anything reads it, and no stored icon, avatar or comment
+"""
+An icon upload is refused over its own ceiling before anything reads it, and no stored icon, avatar or comment
 image is read into memory past the ceiling its door applied.
 
 An icon is shown at most 256px, yet its only limit was the site-wide upload cap (250 MB by default), so the in-request

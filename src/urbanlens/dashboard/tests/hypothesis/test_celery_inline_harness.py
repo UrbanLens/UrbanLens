@@ -1,4 +1,5 @@
-"""The inline-task helper patched a name none of its callers read.
+"""
+The inline-task helper patched a name none of its callers read.
 
 `tasks_run_inline` exists so a consumer test can assert on a broadcast that only
 becomes true once the Celery task runs. It patched
@@ -117,7 +118,8 @@ class TheOriginalIsRestoredTests(TestCase):
 
 
 class AModuleImportedInsideTheBlockTests(TestCase):
-    """The holders are resolved on entry, so a late import needs restoring too.
+    """
+    The holders are resolved on entry, so a late import needs restoring too.
 
     Three of the twelve modules that bind the name are not imported at Django
     startup. A test that is the first to import one - inside a `tasks_run_inline`

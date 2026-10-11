@@ -64,7 +64,8 @@ def _build_prompt(prompt: str, answer: str, location: Location) -> str:
 
 
 def classify_trivia_question(prompt: str, answer: str, location: Location, *, profile: Profile | None = None, raise_refusal: bool = False) -> ClassifierVerdict:
-    """Judge whether a trivia question is safe to add to the public rotation.
+    """
+    Judge whether a trivia question is safe to add to the public rotation.
 
     Args:
         prompt: The question text.

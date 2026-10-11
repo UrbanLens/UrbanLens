@@ -1,4 +1,5 @@
-"""NY SHPO CRIS plugin: Building USN Point data for pinned locations.
+"""
+NY SHPO CRIS plugin: Building USN Point data for pinned locations.
 The same lookup also returns *site*-level resources (historic districts, National Register listings), cached under a separate ``district`` key."""
 
 from __future__ import annotations
@@ -93,7 +94,8 @@ def attachment_kind(attachment: dict) -> str:
 
 
 def cris_only(resources: list[dict]) -> list[dict]:
-    """Keep only the rows CRIS itself answered.
+    """
+    Keep only the rows CRIS itself answered.
 
     Args:
         resources: Resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -104,7 +106,8 @@ def cris_only(resources: list[dict]) -> list[dict]:
 
 
 def site_resource(resources: list[dict], latitude: float | None = None, longitude: float | None = None) -> dict | None:
-    """Pick the best site-level CRIS resource from a lookup.
+    """
+    Pick the best site-level CRIS resource from a lookup.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -126,7 +129,8 @@ def site_resource(resources: list[dict], latitude: float | None = None, longitud
 
 
 def containing_site_records(resources: list[dict], latitude: float, longitude: float) -> list[dict]:
-    """Every CRIS site record and consultation project whose own boundary holds a point.
+    """
+    Every CRIS site record and consultation project whose own boundary holds a point.
 
     A project reaching farther than ``_MAX_SITE_RADIUS_METERS`` from the point (a road, a transmission line) describes
     no one site and is left out.
@@ -156,7 +160,8 @@ def containing_site_records(resources: list[dict], latitude: float, longitude: f
 
 
 def site_boundary(resources: list[dict], latitude: float, longitude: float) -> BaseGeometry | None:
-    """The site a site-scope page describes: the boundaries of :func:`containing_site_records`, together.
+    """
+    The site a site-scope page describes: the boundaries of :func:`containing_site_records`, together.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -173,7 +178,8 @@ def site_boundary(resources: list[dict], latitude: float, longitude: float) -> B
 
 
 def site_resource_attributes(resources: list[dict], latitude: float | None = None, longitude: float | None = None) -> dict:
-    """Pick the best site-level CRIS resource from a lookup and flatten its attributes.
+    """
+    Pick the best site-level CRIS resource from a lookup and flatten its attributes.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -192,7 +198,8 @@ def site_resource_attributes(resources: list[dict], latitude: float | None = Non
 
 
 def site_contains(site: dict | None, latitude: float, longitude: float) -> bool:
-    """Whether a site record's own boundary contains a point; one found only by search radius does not.
+    """
+    Whether a site record's own boundary contains a point; one found only by search radius does not.
 
     Args:
         site: The site-level resource dict, or None.
@@ -209,7 +216,8 @@ def site_contains(site: dict | None, latitude: float, longitude: float) -> bool:
 
 
 def building_position(building: dict) -> dict[str, float]:
-    """The building's own published position, kept so naming can tell whether it is on the parcel.
+    """
+    The building's own published position, kept so naming can tell whether it is on the parcel.
 
     Args:
         building: A building resource dict.
@@ -224,7 +232,8 @@ def building_position(building: dict) -> dict[str, float]:
 
 
 def nearest_resource(resources: list[dict], resource_type: str, latitude: float, longitude: float) -> dict | None:
-    """The resource of ``resource_type`` closest to a coordinate.
+    """
+    The resource of ``resource_type`` closest to a coordinate.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -251,7 +260,8 @@ def nearest_resource(resources: list[dict], resource_type: str, latitude: float,
 
 
 def own_building_resource(resources: list[dict], location: Location) -> dict | None:
-    """The CRIS building record that is the building at ``location``, never a neighbour's.
+    """
+    The CRIS building record that is the building at ``location``, never a neighbour's.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -272,7 +282,8 @@ def own_building_resource(resources: list[dict], location: Location) -> dict | N
 
 
 def building_resource_for(resources: list[dict], location: Location, *, site_scope: bool = False) -> dict | None:
-    """The building record a fetch at ``location`` caches.
+    """
+    The building record a fetch at ``location`` caches.
 
     Args:
         resources: The resource dicts from :meth:`RedataGateway.lookup_cultural_resources`.
@@ -297,7 +308,8 @@ def resource_name(resource: dict) -> str:
 
 
 def site_polygon(site: dict | None) -> BaseGeometry | None:
-    """The site record's footprint as a shapely geometry, when it publishes an areal one.
+    """
+    The site record's footprint as a shapely geometry, when it publishes an areal one.
 
     Args:
         site: The site-level resource dict, or None.
@@ -338,7 +350,8 @@ def _survey_uuids(resource: dict) -> set[str]:
 
 
 def campus_roster_entry(resource: dict, record: dict | None) -> dict | None:
-    """One campus building as a site-scope payload records it.
+    """
+    One campus building as a site-scope payload records it.
 
     Args:
         resource: The building's lookup row.
@@ -371,7 +384,8 @@ def _with_roster_entry(roster: list[dict], entry: dict | None) -> list[dict]:
 
 
 def own_roster_entry(roster: list[dict], location: Location, *, buildings: list[dict] | None = None) -> dict | None:
-    """The campus building on a site's roster that is the building at ``location``.
+    """
+    The campus building on a site's roster that is the building at ``location``.
 
     Args:
         roster: Entries carrying ``source_latitude``/``source_longitude``, as :func:`campus_roster_entry` makes them.
@@ -447,7 +461,8 @@ _SITE_FETCH_WAIT_SECONDS = 110.0
 
 
 class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource, GalleryMediaSource, DocumentPanelSource):
-    """NY SHPO CRIS "Building USN Point" info for the pin's location. New York only.
+    """
+    NY SHPO CRIS "Building USN Point" info for the pin's location. New York only.
 
     A site-scope pin (a campus) also gathers the inventory forms of every CRIS building on the site, for Article > Sources."""
 
@@ -467,7 +482,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO, PanelApiKind.MEDIA})
 
     def media_is_ready(self, data: dict) -> bool:
-        """True once this row's attachments have actually been fetched.
+        """
+        True once this row's attachments have actually been fetched.
         Without this check, a location that background enrichment reached first showed an empty Media tab for the whole cache window, even though nothing had ever asked CRIS for its photos and inventory forms."""
         # An empty payload is a real "CRIS has nothing here" answer, not a
         # half-filled row - treating it as unready would poll forever.
@@ -478,7 +494,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return f"ulfetch:site:{self.key}:loc{location_id}"
 
     def fetch(self, pin: Pin) -> None:
-        """Find the CRIS resources at this pin and cache their info + attachments.
+        """
+        Find the CRIS resources at this pin and cache their info + attachments.
 
         A site-scope fetch runs once however many callers ask at the same moment, and answers the site's building children as it lands.
 
@@ -640,7 +657,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     @staticmethod
     def _campus_candidates(resources: list[dict], site_detail: dict, polygon: BaseGeometry | None, latitude: float, longitude: float, *, skip: set[str]) -> list[dict]:
-        """The site's other CRIS buildings: those on it nearest first, then the rest of its survey's roster, then any the site record links.
+        """
+        The site's other CRIS buildings: those on it nearest first, then the rest of its survey's roster, then any the site record links.
 
         A survey naming most of the buildings on the site, most of whose positioned buildings lie on it, is CRIS's own
         roster of the site, so its members off the site's boundary or with no published position are the site's too. A
@@ -691,7 +709,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     @staticmethod
     def _campus_records(gateway, candidates: list[dict], *, started: float) -> dict[str, dict]:
-        """The campus buildings' detail records.
+        """
+        The campus buildings' detail records.
 
         A lookup row REData has already detailed costs nothing; the rest cost one detail fetch each, capped by
         ``_MAX_SITE_DETAIL_FETCHES`` and ``_SITE_DETAIL_BUDGET_SECONDS``. One building's failure skips only that building.
@@ -720,7 +739,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return records
 
     def _campus_attachments(self, candidates: list[dict], records: dict[str, dict], *, subject_kind: str = _SUBJECT_BUILDING) -> list[dict]:
-        """The attachments of the site's other records, each tagged with its record and listed only at site scope.
+        """
+        The attachments of the site's other records, each tagged with its record and listed only at site scope.
 
         Args:
             candidates: The records, from :meth:`_campus_candidates` or :func:`containing_site_records`.
@@ -742,7 +762,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     @staticmethod
     def _resource_detail(gateway, resource: dict) -> dict:
-        """One resource's detail record, degrading to the search row when REData has none.
+        """
+        One resource's detail record, degrading to the search row when REData has none.
 
         Args:
             gateway: The :class:`RedataGateway` to fetch through.
@@ -772,7 +793,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     @staticmethod
     def _attachments_with_extracted_images(resource_uuid: str | None, attachments: list[dict], unextracted: dict[str, list[int]]) -> list[dict]:
-        """The attachments, each document carrying whatever photos REData has already extracted from it.
+        """
+        The attachments, each document carrying whatever photos REData has already extracted from it.
 
         Extraction itself is not run here: REData does it synchronously and it can outlast the request, so a
         document never extracted is noted in ``unextracted`` for :func:`tasks.extract_cris_attachments`.
@@ -813,7 +835,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
             safely_enqueue_task(fill_cris_campus_details, location_id, attempt, countdown=CAMPUS_FILL_DELAYS_SECONDS[attempt])
 
     def fill_campus_details(self, location: Location) -> tuple[int, int]:
-        """Add to a site's row the campus records its pass left undetailed, as far as REData can now give them.
+        """
+        Add to a site's row the campus records its pass left undetailed, as far as REData can now give them.
 
         One lookup finds those REData's bulk queue has detailed since; the rest are fetched live, as many as a site
         pass would. Only the records are added: the row keeps its age and everything else in it, extractions merged
@@ -884,7 +907,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return row if row is not None and isinstance((row.data or {}).get(_CAMPUS_BUILDINGS_KEY), list) else None
 
     def _answer_from_site(self, site_data: dict, location: Location, *, unextracted: dict[str, list[int]] | None = None, buildings: list[dict] | None = None) -> dict | None:
-        """What ``location``'s own fetch would cache, taken from its site's site-scope payload.
+        """
+        What ``location``'s own fetch would cache, taken from its site's site-scope payload.
 
         Args:
             site_data: The site's payload, carrying a campus roster.
@@ -948,7 +972,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return {}
 
     def _write_answer(self, location: Location, data: dict, updated: datetime, *, keep_media_ready: bool) -> bool:
-        """Cache an answer taken from a site, dated as the site's own answer is so that it goes stale with it.
+        """
+        Cache an answer taken from a site, dated as the site's own answer is so that it goes stale with it.
 
         Args:
             location: The building child's location.
@@ -987,7 +1012,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return written
 
     def seed_descendants(self, site: Pin) -> int:
-        """Fill the card of each building child under ``site`` from the site's cached site-scope answer, asking REData nothing.
+        """
+        Fill the card of each building child under ``site`` from the site's cached site-scope answer, asking REData nothing.
 
         Args:
             site: The site pin.
@@ -998,7 +1024,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return 0 if site.location_id is None else self._seed_from_site(site.location)
 
     def seed_from_enclosing_site(self, location: Location) -> bool:
-        """Fill a nested location's card from a site it stands under that already has a site-scope answer.
+        """
+        Fill a nested location's card from a site it stands under that already has a site-scope answer.
 
         Args:
             location: A building child's location.
@@ -1017,7 +1044,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return False
 
     def adopt_site_answer(self, pin: Pin) -> bool:
-        """Answer a building child from its site's site-scope payload, fetching that once for the whole site when it has none.
+        """
+        Answer a building child from its site's site-scope payload, fetching that once for the whole site when it has none.
 
         Args:
             pin: The pin whose panel is being fetched.
@@ -1080,7 +1108,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return {"heading_name": usn_name, "meta": meta}
 
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
-        """CRIS's status for this place and its listing's number, for the Property Records Overview.
+        """
+        CRIS's status for this place and its listing's number, for the Property Records Overview.
 
         Only CRIS's own record of the place counts: on a site, the site record whose boundary holds it; otherwise a
         building record whose point stands on the building, since the nearest record within 200 m can be a neighbour's.
@@ -1116,7 +1145,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     @staticmethod
     def _nrhp_reference(pin: Pin, listing_name: str) -> list[dict[str, str]]:
-        """NPS's reference number for the National Register listing CRIS names, linked, when the registers cached one,
+        """
+        NPS's reference number for the National Register listing CRIS names, linked, when the registers cached one,
         then the listing's National Archives record when REData gave one."""
         from urbanlens.dashboard.services.locations.national_register import listing_named, nara_record_field, nps_record_url, reference_number
 
@@ -1130,7 +1160,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return [{"label": "NRHP Reference Number", "value": reference, "href": url}, *([archives] if archives else [])]
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.
+        """
+        Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.
 
         Args:
             data: This source's cached payload (see :meth:`fetch`). Each
@@ -1171,7 +1202,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return items
 
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
-        """True once the attachments were fetched, and at site scope when a site-scope page asks.
+        """
+        True once the attachments were fetched, and at site scope when a site-scope page asks.
 
         Args:
             data: This source's cached payload.
@@ -1185,7 +1217,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return not site_scope or not data or data.get("site_scope") is True
 
     def source_documents(self, data: dict, *, site_scope: bool, subject: MediaSubject | None = None) -> list[SourceDocument]:
-        """The PDF attachments in a cached payload: the pin's own building and site, plus every campus building at site scope.
+        """
+        The PDF attachments in a cached payload: the pin's own building and site, plus every campus building at site scope.
 
         Args:
             data: This source's cached payload.
@@ -1216,7 +1249,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
 
     @staticmethod
     def _attachment_ref(document: SourceDocument) -> tuple[str, int]:
-        """Split a document id back into REData's ``(resource uuid, attachment id)``.
+        """
+        Split a document id back into REData's ``(resource uuid, attachment id)``.
 
         Raises:
             ValueError: The id is not one :meth:`source_documents` minted.
@@ -1227,7 +1261,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return resource_uuid, int(attachment_id)
 
     def download_document(self, document: SourceDocument) -> tuple[bytes, str]:
-        """Fetch one listed CRIS attachment's bytes from REData.
+        """
+        Fetch one listed CRIS attachment's bytes from REData.
 
         Args:
             document: A document :meth:`source_documents` listed.
@@ -1253,7 +1288,8 @@ class CrisBuildingPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource
         return f"ul_cris_attachment_{resource_uuid}_{attachment_id}"
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The CRIS record as both an information card and its attachments.
+        """
+        The CRIS record as both an information card and its attachments.
         Neither inherited ``api_payload`` would do on its own - ``InfoPanelSource``'s would drop the attachments and ``GalleryMediaSource``'s would drop the eligibility card - so this composes both from the *one* cached row rather than reading it twice.
 
         Args:
@@ -1283,7 +1319,8 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
     geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("NY")
 
     def gate(self) -> bool:
-        """Requires REData to be configured - this source has no other backend.
+        """
+        Requires REData to be configured - this source has no other backend.
         Without it the cycle picks candidates, every fetch raises, and the run logs one exception per location."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
@@ -1294,7 +1331,8 @@ class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):
         return CrisBuildingPanelSource().seed_from_enclosing_site(location) or super().enrich(location)
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Find the CRIS "building" resource nearest this location and return its flattened info.
+        """
+        Find the CRIS "building" resource nearest this location and return its flattened info.
         Shares ``cache_source`` with :class:`CrisBuildingPanelSource`, so whichever of panel-fetch or background enrichment runs first for a Location fills in for the other."""
         from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 

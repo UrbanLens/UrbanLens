@@ -26,7 +26,8 @@ _COORD_QUANT = Decimal("0.000001")
 
 
 def normalize_coordinate(value: float | Decimal) -> Decimal:
-    """Normalize a coordinate to six decimal places for stable lookups.
+    """
+    Normalize a coordinate to six decimal places for stable lookups.
 
     Args:
         value: Raw latitude or longitude.
@@ -48,7 +49,8 @@ class GooglePlaceService:
         latitude: float | Decimal,
         longitude: float | Decimal,
     ) -> GooglePlace | None:
-        """Return an existing GooglePlace row for coordinates, if any.
+        """
+        Return an existing GooglePlace row for coordinates, if any.
 
         Args:
             latitude: WGS-84 latitude.
@@ -70,7 +72,8 @@ class GooglePlaceService:
         cid: int | Decimal | None = None,
         fetch_if_missing: bool = True,
     ) -> GooglePlace:
-        """Return the shared GooglePlace row for a coordinate pair.
+        """
+        Return the shared GooglePlace row for a coordinate pair.
 
         Args:
             latitude: WGS-84 latitude.
@@ -107,7 +110,8 @@ class GooglePlaceService:
             return self._merge_into_existing(existing, place_name=place_name, cid=cid, fetch_if_missing=fetch_if_missing)
 
     def ensure_linked(self, location: Location, *, fetch_if_missing: bool = True) -> GooglePlace:
-        """Attach entity.google_place to the shared row for its coordinates.
+        """
+        Attach entity.google_place to the shared row for its coordinates.
 
         Args:
             entity: A Location or Pin with latitude and longitude set.
@@ -130,7 +134,8 @@ class GooglePlaceService:
         return google_place
 
     def set_cid_for_entity(self, location: Location, cid: int | Decimal, *, fetch_if_missing: bool = True) -> GooglePlace:
-        """Store a Google Maps CID on the shared row for an entity's coordinates.
+        """
+        Store a Google Maps CID on the shared row for an entity's coordinates.
 
         Args:
             entity: Location or Pin whose coordinates identify the cache row.
@@ -149,7 +154,8 @@ class GooglePlaceService:
         return google_place
 
     def ensure_linked_by_place_id(self, location: Location, place_id: str) -> GooglePlace | None:
-        """Attach entity.google_place using a Google Place ID string.
+        """
+        Attach entity.google_place using a Google Place ID string.
         Stores the ``place_id`` on the shared GooglePlace row and links the entity, so future views can skip an additional Places API call.
 
         Args:
@@ -173,7 +179,8 @@ class GooglePlaceService:
         return google_place
 
     def resolve_place_name(self, google_place: GooglePlace) -> str:
-        """Return a cached or freshly fetched place name for a GooglePlace row.
+        """
+        Return a cached or freshly fetched place name for a GooglePlace row.
 
         Args:
             google_place: Row to read or populate.

@@ -1,4 +1,5 @@
-"""Inviting someone to a trip by email.
+"""
+Inviting someone to a trip by email.
 
 The inviter must not learn whether the address belongs to an account, and the invitee answers "join the trip?"
 and "become friends?" independently of each other and of signing up.

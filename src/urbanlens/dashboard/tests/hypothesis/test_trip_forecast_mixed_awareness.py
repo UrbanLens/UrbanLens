@@ -86,7 +86,8 @@ class UtcAnchoredSlotMatchingTests(TestCase):
             return _build_activity_forecasts([activity])
 
     def test_open_meteo_payload_matches_the_activitys_utc_instant(self) -> None:
-        """End-to-end through the Open-Meteo converter: `timezone=auto` gives local wall clocks, and the response's non-zero `utc_offset_seconds` (UTC-4 here, a US-Eastern summer offset) anchors them.
+        """
+        End-to-end through the Open-Meteo converter: `timezone=auto` gives local wall clocks, and the response's non-zero `utc_offset_seconds` (UTC-4 here, a US-Eastern summer offset) anchors them.
 
         The activity is at 15:00 UTC = 11:00 local."""
         payload = {
@@ -117,7 +118,8 @@ class UtcAnchoredSlotMatchingTests(TestCase):
         self.assertEqual(slot["date_utc"], datetime.datetime(2026, 6, 1, 13, 0, tzinfo=datetime.UTC))
 
     def test_gap_hours_uses_the_utc_instant_for_the_out_of_range_test(self) -> None:
-        """A slot 32h away in UTC but 45h away by wall clock (UTC+13) must be
+        """
+        A slot 32h away in UTC but 45h away by wall clock (UTC+13) must be
         matched, not flagged out of range by the local wall-clock gap.
         """
         slot = {
@@ -132,7 +134,8 @@ class UtcAnchoredSlotMatchingTests(TestCase):
         self.assertIs(results[0]["slot"], slot)
 
     def test_mixed_anchored_and_unanchored_slots_each_use_their_own_metric(self) -> None:
-        """An anchored slot competes on its UTC gap while an unanchored one
+        """
+        An anchored slot competes on its UTC gap while an unanchored one
         keeps the naive wall-clock gap, in the same `min()`.
         """
         unanchored = {"date": datetime.datetime(2026, 6, 1, 11, 0), "temp": 1}  # 1h naive gap

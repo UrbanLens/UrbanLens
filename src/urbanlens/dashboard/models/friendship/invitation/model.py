@@ -17,7 +17,8 @@ from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MES
 
 
 class FriendInvitation(abstract.DashboardModel):
-    """An invitation to connect, addressed to an email, whether or not an account holds it.
+    """
+    An invitation to connect, addressed to an email, whether or not an account holds it.
 
     The inviter's pending entry is this row until the invitee accepts, so nothing they see depends on the
     address having an account. An account proven to own the address, or one that signs up through the link,
@@ -80,7 +81,8 @@ class FriendInvitation(abstract.DashboardModel):
         return self.accepted_at is not None
 
     def mark_accepted(self) -> bool:
-        """Claim the invitation with a conditional write, without a full-model save.
+        """
+        Claim the invitation with a conditional write, without a full-model save.
         The ``accepted_at__isnull=True`` condition makes this a write-time claim: of any number of concurrent redemptions of the same invitation (e.g. a double-clicked verification link), exactly one caller sees ``True``.
 
         Returns:

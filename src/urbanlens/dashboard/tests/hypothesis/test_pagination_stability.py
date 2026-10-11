@@ -82,7 +82,8 @@ class StableOrderingTests(TestCase):
         self.assertEqual(list(ordered.query.order_by), ["name", "pk"])
 
     def test_it_does_not_touch_a_distinct_query(self) -> None:
-        """``SELECT DISTINCT`` requires every ORDER BY term in the select list -
+        """
+        ``SELECT DISTINCT`` requires every ORDER BY term in the select list -
         appending pk would turn a working endpoint into a database error."""
         from urbanlens.dashboard.external_api.pagination import stable_ordering
 
@@ -91,7 +92,8 @@ class StableOrderingTests(TestCase):
         self.assertEqual(list(stable_ordering(queryset).query.order_by), list(queryset.query.order_by))
 
     def test_it_does_not_touch_an_aggregate_query(self) -> None:
-        """Django folds ORDER BY terms into GROUP BY, so a tie-break would change
+        """
+        Django folds ORDER BY terms into GROUP BY, so a tie-break would change
         the grouping and therefore the numbers."""
         from django.db.models import Count
 

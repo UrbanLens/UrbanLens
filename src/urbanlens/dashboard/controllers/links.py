@@ -1,4 +1,5 @@
-"""Link views - add and remove external website links on Pins and Wikis.
+"""
+Link views - add and remove external website links on Pins and Wikis.
 
 Each link may carry a Wayback Machine snapshot url, filled in asynchronously
 (see models.links.signals / tasks.archive_link_to_wayback) shortly after creation.
@@ -35,7 +36,8 @@ logger = logging.getLogger(__name__)
 
 
 def _clean_link_input(request) -> tuple[str, str] | HttpResponse:
-    """Validate and return (name, url) from POST data, or a 400 response.
+    """
+    Validate and return (name, url) from POST data, or a 400 response.
 
     ``name`` sanitization happens in PinLink/WikiLink.save() (see _LinkBase),
     not here - this only validates the url, which the model doesn't touch.
@@ -78,7 +80,8 @@ def _render_pin_links(request, pin: Pin) -> HttpResponse:
 
 
 def _render_wiki_links(request, wiki, profile) -> HttpResponse:
-    """Render the wiki links row.
+    """
+    Render the wiki links row.
 
     Takes the profile for the same reason ``aliases._render_location_panel``
     does - see that docstring.

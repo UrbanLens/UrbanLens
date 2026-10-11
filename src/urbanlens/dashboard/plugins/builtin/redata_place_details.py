@@ -1,4 +1,5 @@
-"""REData place-details plugin: a compact Google Maps info card for CID-linked locations.
+"""
+REData place-details plugin: a compact Google Maps info card for CID-linked locations.
 This plugin reads it back via a second, independent REData endpoint - ``RedataCidGateway.get_place_detail`` (``GET /places/cid/{cid}/``, a pure database read that never triggers a new scrape - see that method's docstring)."""
 
 from __future__ import annotations
@@ -38,7 +39,8 @@ _MAX_PHOTOS = 3
 
 
 def place_detail(cid: int) -> dict[str, Any]:
-    """REData's place detail for a CID, posting a CID it has never seen for resolution.
+    """
+    REData's place detail for a CID, posting a CID it has never seen for resolution.
 
     REData answers ``404`` for a CID nobody has posted to ``POST /places/resolve-cids/``; a place with
     no location is a confirmed answer from that endpoint instead.
@@ -95,7 +97,8 @@ class RedataPlaceDetailsPanelSource(CoordinateGatedInfoPanelSource, GalleryMedia
     required_feature: ClassVar[SiteFeature | None] = SiteFeature.PLACES
 
     def gate(self, pin: Pin) -> bool:
-        """Requires REData to be configured and this pin's location to already carry a CID.
+        """
+        Requires REData to be configured and this pin's location to already carry a CID.
         Deliberately not the inherited coordinate/``geo_boundary`` gate: a pin can have coordinates with no linked CID (most of them - only CID-link imports set one), and this panel has nothing to fetch without one, no matter where the pin sits."""
         location = pin.location
         return redata_configured() and location is not None and location.cid is not None
@@ -198,7 +201,8 @@ class RedataPlaceDetailsEnrichmentSource(LocationCacheEnrichmentSource):
         return Q(google_place__cid__isnull=False) & super().missing_filter()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Read REData's cached deep-scrape record for the location's CID.
+        """
+        Read REData's cached deep-scrape record for the location's CID.
 
         Raises:
             GatewayRequestError: REData could not be asked, so there is no answer to cache.

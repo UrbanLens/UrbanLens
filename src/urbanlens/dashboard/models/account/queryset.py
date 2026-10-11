@@ -27,7 +27,8 @@ class AccountKdfQuerySet(abstract.DashboardQuerySet["AccountKdf"]):
     """QuerySet for AccountKdf rows."""
 
     def for_user(self, user: User) -> AccountKdfQuerySet:
-        """This user's KDF enrollment row, if any.
+        """
+        This user's KDF enrollment row, if any.
 
         Args:
             user: The account to look up.
@@ -45,7 +46,8 @@ class AccountKdfManager(_AccountKdfManagerBase["AccountKdf"]):
     """Manager for AccountKdf records."""
 
     def set_auth_salt(self, user: User, auth_salt: str) -> tuple[AccountKdf, bool]:
-        """Enroll (or update) a user's client-side KDF auth salt.
+        """
+        Enroll (or update) a user's client-side KDF auth salt.
 
         Args:
             user: The account being enrolled/updated.
@@ -61,7 +63,8 @@ class WebAuthnCredentialQuerySet(abstract.DashboardQuerySet["WebAuthnCredential"
     """QuerySet for WebAuthnCredential rows."""
 
     def for_user(self, user: User) -> WebAuthnCredentialQuerySet:
-        """This user's registered passkeys.
+        """
+        This user's registered passkeys.
 
         Args:
             user: The account to look up.
@@ -83,7 +86,8 @@ class TOTPDeviceQuerySet(abstract.DashboardQuerySet["TOTPDevice"]):
     """QuerySet for TOTPDevice rows."""
 
     def for_user(self, user: User) -> TOTPDeviceQuerySet:
-        """This user's TOTP device row, if any.
+        """
+        This user's TOTP device row, if any.
 
         Args:
             user: The account to look up.
@@ -105,7 +109,8 @@ class BackupCodeQuerySet(abstract.DashboardQuerySet["BackupCode"]):
     """QuerySet for BackupCode rows."""
 
     def for_user(self, user: User) -> BackupCodeQuerySet:
-        """All of this user's backup codes.
+        """
+        All of this user's backup codes.
 
         Args:
             user: The account to look up.
@@ -116,7 +121,8 @@ class BackupCodeQuerySet(abstract.DashboardQuerySet["BackupCode"]):
         return self.filter(user=user)
 
     def unused_for(self, user: User) -> BackupCodeQuerySet:
-        """This user's not-yet-used backup codes.
+        """
+        This user's not-yet-used backup codes.
 
         Args:
             user: The account to look up.
@@ -138,7 +144,8 @@ class ApiKeyQuerySet(abstract.DashboardQuerySet["ApiKey"]):
     """QuerySet for ApiKey rows."""
 
     def for_user(self, user: User) -> ApiKeyQuerySet:
-        """All of this user's API keys.
+        """
+        All of this user's API keys.
 
         Args:
             user: The account to look up.
@@ -164,7 +171,8 @@ class ApiKeyUsageLogQuerySet(abstract.DashboardQuerySet["ApiKeyUsageLog"]):
     """QuerySet for ApiKeyUsageLog rows."""
 
     def for_api_key(self, api_key: ApiKey) -> ApiKeyUsageLogQuerySet:
-        """This key's logged activity, newest first.
+        """
+        This key's logged activity, newest first.
 
         Args:
             api_key: The key whose activity to look up.

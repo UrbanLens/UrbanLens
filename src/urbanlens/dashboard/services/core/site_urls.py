@@ -6,7 +6,8 @@ from django.conf import settings
 
 
 def absolute_url(path: str = "") -> str:
-    """Join a site-relative path onto ``settings.SITE_URL``.
+    """
+    Join a site-relative path onto ``settings.SITE_URL``.
 
     Args:
         path: A path starting with ``/``, e.g. from ``reverse()``; empty for the site root.

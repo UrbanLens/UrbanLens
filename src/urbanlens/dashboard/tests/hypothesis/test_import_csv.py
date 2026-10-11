@@ -53,7 +53,8 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertIsNone(pins[0]["cid"])
 
     def test_utf8_bom_on_latitude_column_still_parses(self):
-        """DictReader keeps a leading BOM on the first header; strip it so the
+        """
+        DictReader keeps a leading BOM on the first header; strip it so the
         latitude key still matches after Excel-style UTF-8 CSV export."""
         csv_text = "\ufefflatitude,longitude\n1.5,2.5"
 

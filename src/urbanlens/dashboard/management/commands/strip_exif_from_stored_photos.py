@@ -1,4 +1,5 @@
-"""One-off backfill: re-encode photos, comment images, label icons and avatars stored before uploads of them were.
+"""
+One-off backfill: re-encode photos, comment images, label icons and avatars stored before uploads of them were.
 
 TEMPORARY - delete this command once it has been run against production. Run it once: each run re-encodes again.
 
@@ -80,7 +81,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Comment images, icons and avatars: rewritten or removed {rewritten}, failed {other_failed}.")
 
     def _reencode_other_images(self) -> tuple[int, int]:
-        """Re-encode every published comment image, custom icon and uploaded avatar.
+        """
+        Re-encode every published comment image, custom icon and uploaded avatar.
 
         Returns:
             How many were rewritten or removed, and how many failed on storage or the database.
@@ -140,7 +142,8 @@ class Command(BaseCommand):
         return rewritten, failed
 
     def _reencode(self, image: Image) -> bool:
-        """Record one photo's metadata on its row, then re-encode its file and analysis copy.
+        """
+        Record one photo's metadata on its row, then re-encode its file and analysis copy.
 
         Args:
             image: The row whose stored file to re-encode.

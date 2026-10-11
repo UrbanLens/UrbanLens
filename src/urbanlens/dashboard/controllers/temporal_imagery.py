@@ -1,4 +1,5 @@
-"""On-demand OpenHistoricalMap (OHM) features for the beta "time slider".
+"""
+On-demand OpenHistoricalMap (OHM) features for the beta "time slider".
 
 Whether the slider even renders is decided server-side by
 ``services.locations.temporal_imagery.temporal_slider_years`` (wired into ``PinController.view()``
@@ -31,7 +32,8 @@ TEMPORAL_YEAR_PLACEHOLDER = 9999
 
 
 def _resolve_location(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> Location:
-    """Resolve the Location behind a pin-scoped or wiki-scoped temporal-imagery request.
+    """
+    Resolve the Location behind a pin-scoped or wiki-scoped temporal-imagery request.
 
     Same ownership/visibility resolution as ``map_overlays._resolve_owner`` - a personal pin only ever
     resolves for its own owner, and a shared Location only through the community visibility rules in
@@ -61,14 +63,16 @@ def _resolve_location(request: HttpRequest, pin_slug: str | None, location_slug:
 
 
 class TemporalImageryFeaturesView(LoginRequiredMixin, View):
-    """GET one year's OpenHistoricalMap features for a pin's or wiki's map.
+    """
+    GET one year's OpenHistoricalMap features for a pin's or wiki's map.
 
     ``GET pin/<slug>/temporal/<year>/`` and ``GET location/<slug>/wiki/temporal/<year>/`` - beta-gated,
     matching the slider's own visibility rule in ``temporal_slider_years``.
     """
 
     def get(self, request: HttpRequest, year: int, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
-        """Return the cached-or-freshly-fetched GeoJSON for one historical year.
+        """
+        Return the cached-or-freshly-fetched GeoJSON for one historical year.
 
         Args:
             request: The current request.

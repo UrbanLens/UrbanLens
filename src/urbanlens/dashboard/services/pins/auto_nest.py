@@ -1,4 +1,5 @@
-"""Turning a property's buildings into child pins and child wikis without being asked.
+"""
+Turning a property's buildings into child pins and child wikis without being asked.
 
 A sweep can run any number of times - on pin creation, when the building list lands or is refreshed, when the
 property's boundary arrives - and converges: each building gets one child pin standing on its own child wiki,
@@ -29,7 +30,8 @@ MIN_BUILDINGS_TO_NEST = 1
 
 
 def eligible(pin: Pin) -> bool:
-    """Whether a pin may have building children created for it unprompted.
+    """
+    Whether a pin may have building children created for it unprompted.
 
     Args:
         pin: The candidate parent.
@@ -70,7 +72,8 @@ def _remembered(swept: list[SweptBuilding], clusters: list[BuildingCluster], pin
 
 
 def auto_nest_pin(pin: Pin) -> int:
-    """Give every building on this pin's property a child pin and a child wiki.
+    """
+    Give every building on this pin's property a child pin and a child wiki.
 
     A no-op unless the property's real boundary is known and at least one building is known on it; a property
     with none stays unswept so it can nest once its buildings become known.
@@ -127,7 +130,8 @@ def auto_nest_pin(pin: Pin) -> int:
 
 
 def auto_nest_location(location: Location) -> int:
-    """Sweep every eligible root pin standing on a location.
+    """
+    Sweep every eligible root pin standing on a location.
 
     Args:
         location: The location whose building list or boundary just arrived.
@@ -148,7 +152,8 @@ def auto_nest_location(location: Location) -> int:
 
 
 def request_location_sweep(location: Location) -> None:
-    """Queue a sweep of every root pin on a location once the current transaction commits.
+    """
+    Queue a sweep of every root pin on a location once the current transaction commits.
 
     Args:
         location: The location whose boundary or buildings just changed.
@@ -161,7 +166,8 @@ def request_location_sweep(location: Location) -> None:
 
 
 def request_sweep(pin: Pin) -> None:
-    """Ask for a background sweep of one pin, at most once per throttle window.
+    """
+    Ask for a background sweep of one pin, at most once per throttle window.
 
     Args:
         pin: A root pin a reader just found buildings without child pins on.
@@ -180,7 +186,8 @@ def _enqueue_sweep(pin_id: int) -> None:
 
 
 def _refresh_property_names(pin: Pin) -> None:
-    """Re-judge a property's names and aliases once its buildings have places: a campus stops carrying one building's name.
+    """
+    Re-judge a property's names and aliases once its buildings have places: a campus stops carrying one building's name.
 
     Args:
         pin: The swept parent pin.

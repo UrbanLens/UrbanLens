@@ -71,7 +71,8 @@ def test_suggest_label_style_validates_ai_answers(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.django_db
 def test_suggest_label_style_respects_the_site_wide_ai_toggle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The conjunct the module's own check was missing.
+    """
+    The conjunct the module's own check was missing.
 
     ``get_gateway`` would have refused anyway; sharing ``services.ai.access.ai_features_enabled`` makes it an
     early-out instead of a provider gateway built and discarded."""
@@ -92,7 +93,8 @@ def test_suggest_label_style_respects_the_site_wide_ai_toggle(monkeypatch: pytes
 @pytest.mark.django_db
 @override_settings(UL_AI_WORKER_ENABLED=False)
 def test_suggest_label_style_does_not_need_the_assistant_worker(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Label styling must survive turning the interactive assistant off.
+    """
+    Label styling must survive turning the interactive assistant off.
 
     It never touches the ``ai-worker`` container - ``get_gateway`` resolves an inference client through the
     shared ``ai-inference`` tier - so folding this onto ``assistant_available`` would have silently broken it

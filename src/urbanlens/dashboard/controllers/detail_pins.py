@@ -45,7 +45,8 @@ def _opacity(value: object, default: int) -> int:
 
 
 def _requested_pin_type(body) -> tuple[str, bool]:
-    """Resolve a submitted ``pin_type`` into a value plus user-chose flag.
+    """
+    Resolve a submitted ``pin_type`` into a value plus user-chose flag.
 
     Args:
         body: The parsed request body (JSON dict or QueryDict).
@@ -68,7 +69,8 @@ def _schedule_classification(kind: str, pk: int) -> None:
 
 
 class ChildWikiLocationError(ValueError):
-    """A child wiki can't be placed at the requested point - it's already taken.
+    """
+    A child wiki can't be placed at the requested point - it's already taken.
 
     ``message`` is for logs, not the response: a catch site should author its own user-facing text
     rather than relaying it, so a future raise here can't smuggle unreviewed text into a response.
@@ -76,7 +78,8 @@ class ChildWikiLocationError(ValueError):
 
 
 def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None = None) -> Location:
-    """Find-or-create a Location for a new child wiki's own coordinates.
+    """
+    Find-or-create a Location for a new child wiki's own coordinates.
 
     Resolution is exact rather than proximity-based, so two nearby child markers (or a marker and its
     own parent) keep their own coordinates instead of being merged.
@@ -268,7 +271,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
 
 
 class DetailPinJsonView(LoginRequiredMixin, View):
-    """Return personal detail pins as JSON for Leaflet rendering on the pin details page.
+    """
+    Return personal detail pins as JSON for Leaflet rendering on the pin details page.
 
     By default only the pin's direct children are returned.
     With ``?children=1`` (the page-wide "show child pin details" toggle) the full descendant subtree is
@@ -296,7 +300,8 @@ class DetailPinJsonView(LoginRequiredMixin, View):
 
 
 class LocationDetailPinJsonView(LoginRequiredMixin, View):
-    """Return a wiki's child wikis as JSON for Leaflet rendering (map overlay).
+    """
+    Return a wiki's child wikis as JSON for Leaflet rendering (map overlay).
 
     By default only direct children are returned.
     With ``?children=1`` (the page-wide "show child pin details" toggle) the full descendant subtree is
@@ -332,7 +337,8 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
 
 
 class LocationWikiDetailPinView(LoginRequiredMixin, View):
-    """Child wikis for a wiki page.
+    """
+    Child wikis for a wiki page.
 
     GET  → renders the (legacy, currently unused by the wiki page's own JS) panel partial.
     POST → creates a new child wiki, records a WikiEdit, returns JSON.
@@ -422,7 +428,8 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
 
 
 class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
-    """Edit, move, or delete a child wiki.
+    """
+    Edit, move, or delete a child wiki.
 
     Both verbs share one URL (mirroring the personal-pin equivalent, DetailPinEditView) so the frontend
     can use one base URL for both.

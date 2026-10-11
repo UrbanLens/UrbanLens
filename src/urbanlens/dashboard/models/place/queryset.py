@@ -42,7 +42,8 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
         return self.filter(kind=kind)
 
     def implausible(self) -> Self:
-        """Places larger than their kind can be, and every place in a domain rooted on one.
+        """
+        Places larger than their kind can be, and every place in a domain rooted on one.
 
         Such a place is not the thing it claims to be, so it must not share access between the pins on it.
         """
@@ -51,7 +52,8 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
         return self.filter(implausible_area_q() | implausible_area_q("domain_root__"))
 
     def resolvable(self) -> Self:
-        """Places a coordinate is allowed to resolve onto.
+        """
+        Places a coordinate is allowed to resolve onto.
         Four exclusions, each load-bearing: - **Superseded** places keep their geometry for display and history, but a historical campus boundary still geometrically contains every post-split pin, so containment against it must never resolve. - **Aggregates** (anything with ``MEMBER_OF`` children) exist to be *earned* by holding every member, never to be pinned into directly - see ``services.wiki.wiki_access``. - **Implausible** places (see :meth:`implausible`) would join strangers a county apart.
         """
         from urbanlens.dashboard.models.place.model import Place
@@ -59,7 +61,8 @@ class PlaceQuerySet(abstract.DashboardQuerySet["Place"]):
         return self.current().filter(is_aggregate=False, geometry__isnull=False).exclude(pk__in=Place.objects.implausible().values("pk"))
 
     def containing_point(self, point: Point) -> Self:
-        """Resolvable places whose official geometry contains a coordinate.
+        """
+        Resolvable places whose official geometry contains a coordinate.
         Ordered most-specific first: smallest area wins.
         A building footprint is always smaller than the parcel enclosing it, so area ordering subsumes "deepest in the containment tree" without needing to walk it, and it stays deterministic for two unrelated parcels that overlap through bad county geometry.
         """
@@ -70,7 +73,8 @@ _PlaceManagerBase = abstract.DashboardManager.from_queryset(PlaceQuerySet)
 
 
 class PlaceManager(_PlaceManagerBase["Place"]):
-    """Manager for Place.
+    """
+    Manager for Place.
 
     ``resolve_for_point`` is the single answer to "which real-world thing is
     this coordinate on?" - every creation, import, move, and access check goes
@@ -78,7 +82,8 @@ class PlaceManager(_PlaceManagerBase["Place"]):
     """
 
     def resolve_for_point(self, latitude: Coordinate, longitude: Coordinate) -> Place | None:
-        """The most specific current place containing a coordinate, or None.
+        """
+        The most specific current place containing a coordinate, or None.
 
         Args:
             latitude: WGS-84 latitude; None is tolerated.
@@ -94,7 +99,8 @@ class PlaceManager(_PlaceManagerBase["Place"]):
         return self.containing_point(point).first()
 
     def competing_for_point(self, latitude: Coordinate, longitude: Coordinate, *, resolved: Place | None) -> PlaceQuerySet:
-        """Places that genuinely compete with ``resolved`` for a coordinate.
+        """
+        Places that genuinely compete with ``resolved`` for a coordinate.
         A competitor is a resolvable place containing the same point that is in a *different access domain*.
         Everything inside one property - buildings under their parcel - shares a domain and is therefore never a competitor, which is what stops a 124-building campus from telling every visitor that 124 other places cover their pin.
 
@@ -116,7 +122,8 @@ class PlaceManager(_PlaceManagerBase["Place"]):
 
 
 def point_for_coordinates(latitude: Coordinate, longitude: Coordinate) -> Point | None:
-    """Build a WGS-84 GEOS point, tolerating missing coordinates.
+    """
+    Build a WGS-84 GEOS point, tolerating missing coordinates.
 
     Args:
         latitude: WGS-84 latitude, or None.
@@ -142,12 +149,14 @@ _PlaceAccessGrantManagerBase = abstract.DashboardManager.from_queryset(PlaceAcce
 
 
 class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
-    """Manager for PlaceAccessGrant.
+    """
+    Manager for PlaceAccessGrant.
     Every other caller must go through the computed predicate in ``services.wiki.wiki_access``.
     """
 
     def granted_domain_ids(self, profile) -> set[int]:
-        """Domain roots this profile holds an explicit grant for.
+        """
+        Domain roots this profile holds an explicit grant for.
 
         Args:
             profile: The Profile to look up.
@@ -160,7 +169,8 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
         return {root for root in self.for_profile(profile).values_list("place__domain_root_id", flat=True) if root is not None}
 
     def snapshot_family(self, profile_ids: Iterable[int], aggregate: Place, *, reason: str | None = None) -> None:
-        """Permanently grant a split-derived aggregate and all its current members.
+        """
+        Permanently grant a split-derived aggregate and all its current members.
         Used both at the moment a parcel is split (for everyone who held the undivided parcel) and, later, for anyone who independently earns the same aggregate by pinning every one of its current successors - both are "proved full knowledge of this split family", just at different times, and both deserve the identical permanent record.
 
         Args:
@@ -183,7 +193,8 @@ class PlaceAccessGrantManager(_PlaceAccessGrantManagerBase["PlaceAccessGrant"]):
         self.bulk_create(grants, ignore_conflicts=True)
 
     def record_engagement(self, profile, place: Place | None) -> None:
-        """Permanently grant *profile* the domain *place* sits in, for engaging with it.
+        """
+        Permanently grant *profile* the domain *place* sits in, for engaging with it.
         A profile who views a wiki or shares content to it while they hold access keeps that access even after every qualifying pin is later moved or deleted - see :class:`GrantReason.GRANDFATHERED_ENGAGEMENT`.
 
         Args:

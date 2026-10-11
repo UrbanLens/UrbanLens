@@ -117,7 +117,8 @@ class TripCrudTests(_TripApiTestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_upcoming_trip_quota_is_enforced(self) -> None:
-        """The site's max-upcoming-trips cap answers 400, not a 500.
+        """
+        The site's max-upcoming-trips cap answers 400, not a 500.
 
         The existing trip needs a future start date to actually count: an undated trip with no scheduled
         activities is not "upcoming" (see ``TripQuerySet.upcoming``), so it consumes no quota."""
@@ -228,7 +229,8 @@ class TripScopeEnforcementTests(_TripApiTestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_default_issued_key_cannot_reach_trips(self) -> None:
-        """A key issued today gets the original four scopes - none of them trips.
+        """
+        A key issued today gets the original four scopes - none of them trips.
 
         The whole point of leaving ``trips:*`` out of ``_default_api_key_scopes``: every already-issued key
         would otherwise have silently gained access to other people's trip data."""
@@ -304,7 +306,8 @@ class TripMemberTests(_TripApiTestCase):
         self.assertIn("no-such-person", response.json()["error"])
 
     def test_blocked_user_cannot_be_invited(self) -> None:
-        """A block stops a forced membership the same way it stops a DM.
+        """
+        A block stops a forced membership the same way it stops a DM.
 
         404, identical to an unknown username - a 403 would confirm the account exists and is blocking the
         caller, which is itself an enumeration leak."""
@@ -325,7 +328,8 @@ class TripMemberTests(_TripApiTestCase):
         self.assertIn("full", response.json()["error"])
 
     def test_member_cap_is_enforced_even_for_unknown_username(self) -> None:
-        """The cap check must fire before username resolution.
+        """
+        The cap check must fire before username resolution.
 
         Otherwise "trip full" only ever answers for a real, unblocked account, letting a caller who fills their
         own trip once turn the cap into a free, repeatable username-existence oracle."""
@@ -350,7 +354,8 @@ class TripMemberTests(_TripApiTestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_member_lookup_never_leaves_the_trip(self) -> None:
-        """Regression guard for the global-profile enumeration defect.
+        """
+        Regression guard for the global-profile enumeration defect.
 
         A real profile that simply isn't on this trip is now a plain 404."""
         outsider = baker.make(User, username="outsider")
@@ -435,7 +440,8 @@ class TripMemberTests(_TripApiTestCase):
         )
 
     def test_masked_member_exposes_no_slug(self) -> None:
-        """A member this viewer may not identify is addressable only by uuid.
+        """
+        A member this viewer may not identify is addressable only by uuid.
 
         The profile slug is derived from the username, so emitting it would
         undo the display-name masking entirely.
@@ -475,7 +481,8 @@ class TripActivityTests(_TripApiTestCase):
         record.assert_called_once()
 
     def test_create_refuses_another_accounts_pin(self) -> None:
-        """Naming a pin_slug that belongs to someone else must not attach it - or succeed quietly.
+        """
+        Naming a pin_slug that belongs to someone else must not attach it - or succeed quietly.
 
         ``resolve_activity_place`` now raises rather than falling through to "no place given"."""
         other_location = Location.objects.create(latitude=42.4, longitude=-83.1, official_name="Someone else's place")
@@ -587,7 +594,8 @@ class TripActivityTests(_TripApiTestCase):
         self.assertIsNone(row["longitude"])
 
     def test_hidden_location_masks_effective_title_when_it_falls_back_to_the_pin(self) -> None:
-        """effective_title must go through the same masking as latitude/longitude.
+        """
+        effective_title must go through the same masking as latitude/longitude.
 
         Regression for TripActivitySerializer sourcing the raw, unmasked ``activity.effective_title`` model
         property instead of the row's already-masked ``display_title``."""
@@ -603,7 +611,8 @@ class TripActivityTests(_TripApiTestCase):
         self.assertEqual(row["effective_title"], "Secret Location")
 
     def test_hidden_location_masks_child_trip_uuid(self) -> None:
-        """child_trip_uuid must go through the same masking as latitude/longitude.
+        """
+        child_trip_uuid must go through the same masking as latitude/longitude.
 
         Regression: TripActivitySerializer.get_child_trip_uuid read row["activity"].child_trip directly - the
         raw relation, with no location_hidden/viewer-privacy awareness - the same class of leak effective_title
@@ -648,7 +657,8 @@ class TripActivityTests(_TripApiTestCase):
         self.assertEqual(row["effective_title"], "Visible Spot")
 
     def test_position_requires_edit_permission(self) -> None:
-        """Regression guard: an invited-not-joined member could move any marker.
+        """
+        Regression guard: an invited-not-joined member could move any marker.
 
         The reposition endpoint used to check trip *membership* only, so anyone who had merely been invited
         could drag any activity on the map."""
@@ -798,7 +808,8 @@ class TripCommentTests(_TripApiTestCase):
         self.assertEqual(body["results"][0]["replies"][0]["text"], "Reply")
 
     def test_comment_visibility_gate_hides_the_whole_comment(self) -> None:
-        """An author whose comment_visibility excludes this viewer is filtered out.
+        """
+        An author whose comment_visibility excludes this viewer is filtered out.
 
         Sets the author's real preference rather than patching
         ``can_view_comments_from``: the gate is a queryset now
@@ -869,7 +880,8 @@ class TripCommentTests(_TripApiTestCase):
 
 
 class TripMapParityTests(_TripApiTestCase):
-    """The external map payload must equal the internal one, byte for byte.
+    """
+    The external map payload must equal the internal one, byte for byte.
 
     This is the regression guard for ``services.trips.trip_map`` being a genuine single source: if either
     surface ever grows its own point-building code, these payloads drift and this test fails."""

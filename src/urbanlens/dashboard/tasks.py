@@ -1,4 +1,5 @@
-"""Celery tasks for the dashboard app.
+"""
+Celery tasks for the dashboard app.
 
 Tasks that hand untrusted uploaded bytes to a parser declare
 ``queue=SANDBOX_QUEUE`` (or ``SANDBOX_BATCH_QUEUE`` for a minutes-long batch
@@ -66,7 +67,8 @@ _STALL_SWEEP_TIME_LIMIT_SECONDS = 100
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def ensure_wiki_for_location(location_id: int) -> int | None:
-    """Auto-create the Wiki for a Location when missing.
+    """
+    Auto-create the Wiki for a Location when missing.
 
     Args:
         location_id: PK of the Location that just gained a pin.
@@ -101,7 +103,8 @@ def ensure_wiki_for_location(location_id: int) -> int | None:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
-    """Chunk-shaped sibling of :func:`ensure_wiki_for_location`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`ensure_wiki_for_location`, for a bulk import's fan-out (P109).
 
     Runs its own :func:`batching_follow_on_work` so the enrichment work a new wiki queues coalesces
     into :func:`enrich_wiki_locations` chunks too, whether this task was itself reached from inside an
@@ -137,7 +140,8 @@ def ensure_wikis_for_locations(location_ids: list[int]) -> list[int]:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def ensure_building_wikis(location_id: int) -> list[int]:
-    """Give each pinned location on a campus's buildings its building's wiki, once the campus's building list is cached.
+    """
+    Give each pinned location on a campus's buildings its building's wiki, once the campus's building list is cached.
 
     A location pinned before the list landed was answered with the campus's wiki, which is not its own (P265).
 
@@ -159,7 +163,8 @@ def ensure_building_wikis(location_id: int) -> list[int]:
 
 @shared_task(soft_time_limit=240, time_limit=270, bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.PANEL_FETCH)
 def enrich_wiki_location(self, wiki_id: int) -> bool:
-    """Enrich a Wiki's Location with place link, name, and boundaries.
+    """
+    Enrich a Wiki's Location with place link, name, and boundaries.
 
     Args:
         wiki_id: PK of the Wiki to enrich.
@@ -219,7 +224,8 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def enrich_wiki_locations(self, wiki_ids: list[int]) -> dict[int, bool]:
-    """Chunk-shaped sibling of :func:`enrich_wiki_location`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`enrich_wiki_location`, for a bulk import's fan-out (P109).
 
     Each wiki keeps its own place-linking/name/boundary failures isolated - autoretry on this task
     retries the whole chunk, so a wiki that keeps failing must not stop its chunk-mates from ever
@@ -253,7 +259,8 @@ def enrich_wiki_locations(self, wiki_ids: list[int]) -> dict[int, bool]:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
-    """Mirror imported buildings onto the community wiki off-request.
+    """
+    Mirror imported buildings onto the community wiki off-request.
 
     Args:
         pin_id: The parent pin whose buildings were imported.
@@ -278,7 +285,8 @@ def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def auto_nest_building_pins(pin_id: int) -> int:
-    """Build a new pin's default child-pin structure from cached buildings.
+    """
+    Build a new pin's default child-pin structure from cached buildings.
 
     Args:
         pin_id: The freshly-created root pin.
@@ -300,7 +308,8 @@ def auto_nest_building_pins(pin_id: int) -> int:
 # fails still queues the next one. The limits sit under the bootstrap's own flight-marker TTL.
 @shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
 def bootstrap_location(pin_id: int, stage: str = "boundary", attempt: int = 0) -> str | None:
-    """Run one stage of a new root pin's property bootstrap, then queue the next (``services.pins.bootstrap``).
+    """
+    Run one stage of a new root pin's property bootstrap, then queue the next (``services.pins.bootstrap``).
 
     Queued on root-pin creation; queue it by hand to bootstrap any root pin on demand.
 
@@ -331,7 +340,8 @@ def bootstrap_location(pin_id: int, stage: str = "boundary", attempt: int = 0) -
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_boundaries_for_location(location_id: int, *, force: bool = False, attempt: int = 0) -> bool:
-    """Generate or refresh default boundaries for a Location.
+    """
+    Generate or refresh default boundaries for a Location.
 
     Args:
         location_id: PK of the Location.
@@ -363,7 +373,8 @@ def generate_boundaries_for_location(location_id: int, *, force: bool = False, a
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def classify_detail_marker(kind: str, marker_id: int) -> bool:
-    """Decide whether a newly placed child pin/wiki stands on a building.
+    """
+    Decide whether a newly placed child pin/wiki stands on a building.
 
     Queued whenever a sub-marker is created or moved without the user
     choosing a type themselves (see ``controllers.detail_pins``). Generating
@@ -405,7 +416,8 @@ def classify_detail_marker(kind: str, marker_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def refresh_profile_map_center(profile_id: int) -> bool:
-    """Recompute one profile's cached map centre away from the request that made it stale.
+    """
+    Recompute one profile's cached map centre away from the request that made it stale.
 
     Args:
         profile_id: PK of the ``Profile`` whose centre a new pin outdated.
@@ -423,7 +435,8 @@ def refresh_profile_map_center(profile_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def push_trip_to_calendar(trip_id: int) -> int:
-    """Push a changed trip to its auto-synced calendars, and finish any export of it the calendar budget cut short.
+    """
+    Push a changed trip to its auto-synced calendars, and finish any export of it the calendar budget cut short.
 
     Args:
         trip_id: PK of the trip that changed.
@@ -456,7 +469,8 @@ MAX_OWED_CALENDAR_WRITE_AGE = timedelta(days=30)
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def delete_orphaned_calendar_events(profile_id: int) -> int:
-    """Delete the events UrbanLens made on one profile's calendar whose trip or activity is gone.
+    """
+    Delete the events UrbanLens made on one profile's calendar whose trip or activity is gone.
 
     Args:
         profile_id: Whose calendar.
@@ -472,7 +486,8 @@ def delete_orphaned_calendar_events(profile_id: int) -> int:
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("calendar-push-sweep")
 def requeue_pending_calendar_pushes() -> int:
-    """Queue the calendar writes owed and not delivered: an auto-sync change, the rest of a cut-short export, or the
+    """
+    Queue the calendar writes owed and not delivered: an auto-sync change, the rest of a cut-short export, or the
     delete of an event whose trip or activity is gone.
 
     Returns:
@@ -537,7 +552,8 @@ def cleanup_export_artifacts_task(export_dir: str, job_id: str | None = None) ->
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=SANDBOX_BATCH_QUEUE)
 def run_user_data_import(self, user_id: int, zip_path: str, job_id: str, resume: dict[str, Any] | None = None, storage_waits: int = 0) -> bool:
-    """Parse a UrbanLens export ZIP and import data for the user.
+    """
+    Parse a UrbanLens export ZIP and import data for the user.
 
     Runs again, later, for files storage refused (``import_data.ImportWaitingForStorageError``).
 
@@ -610,7 +626,8 @@ def finish_import_preview_task(profile_id: int, job_id: str) -> None:
 
 @shared_task(bind=True, queue=SANDBOX_QUEUE, max_retries=5)
 def publish_held_upload(self, key: str, pk: int, held_name: str) -> bool:
-    """Re-encode a held icon or avatar in the sandbox worker and show it.
+    """
+    Re-encode a held icon or avatar in the sandbox worker and show it.
 
     Storage failing past the task's own retries leaves the upload held, waiting for :func:`retry_waiting_uploads`.
     """
@@ -660,7 +677,8 @@ def cleanup_vestigial_assets_task() -> dict[str, int]:
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def build_map_document(profile_id: int) -> int:
-    """Build and cache one profile's map document.
+    """
+    Build and cache one profile's map document.
 
     Off the request path because building it holds the whole document in memory, which is exactly what
     the streaming response exists to avoid.
@@ -701,7 +719,8 @@ def suggest_wiki_category(self, wiki_id: int) -> list[str]:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def suggest_wiki_categories(wiki_ids: list[int]) -> dict[int, list[str]]:
-    """Chunk-shaped sibling of :func:`suggest_wiki_category`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`suggest_wiki_category`, for a bulk import's fan-out (P109).
 
     Args:
         wiki_ids: PKs of the Wikis to suggest and attach labels for.
@@ -744,7 +763,8 @@ def suggest_pin_category(self, pin_id: int) -> list[str]:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def suggest_pin_categories(pin_ids: list[int]) -> dict[int, list[str]]:
-    """Chunk-shaped sibling of :func:`suggest_pin_category`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`suggest_pin_category`, for a bulk import's fan-out (P109).
 
     Args:
         pin_ids: PKs of the Pins to suggest and attach labels for.
@@ -771,7 +791,8 @@ def suggest_pin_categories(pin_ids: list[int]) -> dict[int, list[str]]:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def resolve_location_place_name(location_id: int) -> str | None:
-    """Fetch and cache a Location's Google place name outside the request/response cycle.
+    """
+    Fetch and cache a Location's Google place name outside the request/response cycle.
 
     Location.place_name is deliberately cache-only (see its docstring) - this is what actually populates
     that cache, dispatched from wherever a missing place name is first noticed (e.g. PinController.view)
@@ -788,7 +809,8 @@ def resolve_location_place_name(location_id: int) -> str | None:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_location_address(location_id: int) -> bool:
-    """Reverse-geocode and persist a Location's street address outside the request/response cycle.
+    """
+    Reverse-geocode and persist a Location's street address outside the request/response cycle.
 
     The background counterpart to ``resolve_location_place_name`` for address components:
     ``ensure_location_address`` makes a live Google Geocoding call, so it must never run inline on a
@@ -817,7 +839,8 @@ def backfill_location_address(location_id: int) -> bool:
 
 
 def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Archive one link, for :func:`archive_link_to_wayback` and its single-id siblings.
+    """
+    Archive one link, for :func:`archive_link_to_wayback` and its single-id siblings.
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -833,7 +856,8 @@ def _archive_link_to_wayback(link_model: str, link_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def archive_link_to_wayback(link_model: str, link_id: int) -> bool:
-    """Best-effort archive a link URL to the Wayback Machine.
+    """
+    Best-effort archive a link URL to the Wayback Machine.
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -853,7 +877,8 @@ def archive_pin_link_to_wayback(link_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def archive_pin_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
-    """Chunk-shaped sibling of :func:`archive_pin_link_to_wayback`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`archive_pin_link_to_wayback`, for a bulk import's fan-out (P109).
 
     A confirmed import that extracts embedded links from each pin's raw description
     (``maps.py::_attach_description_extras``) creates one ``PinLink`` per link, each of which
@@ -879,7 +904,8 @@ def archive_wiki_link_to_wayback(link_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def archive_wiki_links_to_wayback(link_ids: list[int]) -> dict[int, bool]:
-    """Chunk-shaped sibling of :func:`archive_wiki_link_to_wayback`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`archive_wiki_link_to_wayback`, for a bulk import's fan-out (P109).
 
     Args:
         link_ids: PKs of the WikiLinks to archive.
@@ -899,7 +925,8 @@ _WAYBACK_SWEEP_LOCK_SECONDS = 660
 @shared_task(soft_time_limit=600, time_limit=_WAYBACK_SWEEP_LOCK_SECONDS, queue=Queue.MAINTENANCE)
 @external_background_task("wayback-archive-sweep")
 def sweep_unarchived_links(limit: int | None = None) -> dict[str, int]:
-    """Ask the Wayback Machine again about links it has not archived yet (P308).
+    """
+    Ask the Wayback Machine again about links it has not archived yet (P308).
 
     Takes up a URL whose wait after a failure has passed, and a link whose own task never ran.
 
@@ -920,7 +947,8 @@ def sweep_unarchived_links(limit: int | None = None) -> dict[str, int]:
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prefetch_location_external_data(location_id: int, google_place_id: str | None = None, profile_id: int | None = None, pin_id: int | None = None) -> None:
-    """Pre-warm LocationCache for a newly created Location.
+    """
+    Pre-warm LocationCache for a newly created Location.
 
     Runs Wikipedia and NPS lookups so that the first time a user opens the pin detail page the data is
     already cached. Every lookup is driven by the Location's public data, never the pin's own name.
@@ -1001,7 +1029,8 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
 
 
 def _seed_new_pin_from_cached_wikipedia(location: Location, pin_id: int) -> None:
-    """Give a new pin the article and link its location's cached Wikipedia match offers.
+    """
+    Give a new pin the article and link its location's cached Wikipedia match offers.
 
     Args:
         location: The pin's location.
@@ -1025,7 +1054,8 @@ class _UploadProcessResult:
 
 
 def _process_photo_upload(image: Image, image_id: int, strip_location: bool, max_dimension_override: int | None = None) -> _UploadProcessResult | None:
-    """Extract photo metadata and downscale; None on unreadable file.
+    """
+    Extract photo metadata and downscale; None on unreadable file.
 
     Args:
         image: The row to process.
@@ -1266,7 +1296,8 @@ def _process_document_upload(image: Image, image_id: int) -> _UploadProcessResul
 
 
 def _sync_deduped_siblings(image: Image) -> None:
-    """Copy the processed file and its metadata onto this user's other rows of the same bytes.
+    """
+    Copy the processed file and its metadata onto this user's other rows of the same bytes.
 
     ``attach_deduped_copy`` gives a fresh sibling the same ``pending_scan`` its original had at that
     moment (so it isn't immediately visible in its own, different pin/wiki while the shared file is
@@ -1315,7 +1346,8 @@ def _sync_deduped_siblings(image: Image) -> None:
 
 
 def _scan_pending_upload(task, image: Image) -> bool:
-    """Run the malware scan a pending upload has not had yet.
+    """
+    Run the malware scan a pending upload has not had yet.
 
     It runs here instead, which is what makes an upload return immediately; ``Image.pending_scan`` is
     what makes that safe, since nobody but the uploader can see the row until this clears it.
@@ -1369,7 +1401,8 @@ class UploadStorageFailedError(Exception):
 
 
 def _image_storage_failed(task, image: Image, name: str, exc: BaseException) -> bool:
-    """Retry an upload storage failed on, then leave it waiting for storage; reject a pending one once its file is gone.
+    """
+    Retry an upload storage failed on, then leave it waiting for storage; reject a pending one once its file is gone.
 
     Args:
         task: The bound ``process_image_upload``.
@@ -1401,7 +1434,8 @@ def _image_storage_failed(task, image: Image, name: str, exc: BaseException) -> 
 
 
 def _reject_image_upload(image: Image, reason: str) -> None:
-    """Notify an uploader their upload was rejected, and remove it.
+    """
+    Notify an uploader their upload was rejected, and remove it.
 
     Also rejects every dedup sibling pointing at the same stored file (``attach_deduped_copy`` copies
     ``pending_scan`` from its original at creation, but nothing besides *this* function ever runs on a
@@ -1462,7 +1496,8 @@ def _reject_image_upload(image: Image, reason: str) -> None:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def process_image_upload(self, image_id: int, max_dimension: int | None = None) -> bool:
-    """Extract metadata after an upload and update the Image row.
+    """
+    Extract metadata after an upload and update the Image row.
 
     When the uploader has turned off visit-history tracking (``track_pin_visits``), GPS is treated as
     sensitive rather than useful: it's never read into ``Image.latitude``/``longitude`` or the
@@ -1605,7 +1640,8 @@ _CRIS_EXTRACTION_TIMEOUT_SECONDS = 180
 
 @shared_task(queue=Queue.BULK, soft_time_limit=_CRIS_EXTRACTION_TIMEOUT_SECONDS * 4)
 def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_ids: list[int]) -> int:
-    """Ask REData to extract photos from CRIS documents, and merge them into the location's cached CRIS payload.
+    """
+    Ask REData to extract photos from CRIS documents, and merge them into the location's cached CRIS payload.
 
     Args:
         location_id: PK of the Location whose ``cris_building_usn`` cache lists the attachments.
@@ -1635,7 +1671,8 @@ def extract_cris_attachments(location_id: int, resource_uuid: str, attachment_id
 
 @shared_task(soft_time_limit=110, time_limit=130, queue=Queue.MAINTENANCE)
 def fill_cris_campus_details(location_id: int, attempt: int = 0) -> int:
-    """Add to a campus's CRIS row the records its site pass left undetailed, queueing the next pass while any remain.
+    """
+    Add to a campus's CRIS row the records its site pass left undetailed, queueing the next pass while any remain.
 
     Args:
         location_id: PK of the site's Location.
@@ -1686,7 +1723,8 @@ def _merge_cris_extraction(location_id: int, resource_uuid: str, attachment_id: 
 
 @shared_task(queue=SANDBOX_QUEUE)
 def render_proxied_media(source_key: str, size: str, descriptor: dict[str, str]) -> bool:
-    """Decode one file an in-app REData proxy serves and keep the rendering (``services.media.proxied_renders``).
+    """
+    Decode one file an in-app REData proxy serves and keep the rendering (``services.media.proxied_renders``).
 
     Args:
         source_key: The proxy's cache key for the original file.
@@ -1718,7 +1756,8 @@ _REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS = 100
 
 @shared_task(queue=Queue.INTERACTIVE, soft_time_limit=_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS, time_limit=_REMOTE_COPY_SOFT_TIME_LIMIT_SECONDS + 10)
 def fetch_remote_image_copy(copy_id: int, *, waited: int = 0) -> bool:
-    """Download a third-party image for its first copy and hand the bytes to the sandbox to decode.
+    """
+    Download a third-party image for its first copy and hand the bytes to the sandbox to decode.
 
     Runs on an ordinary worker because the sandbox has no egress. Nothing here parses the bytes. The download takes
     one of the site-wide ``remote_copies.DOWNLOAD_SLOTS``; while none is free the task queues itself again
@@ -1772,7 +1811,8 @@ def fetch_remote_image_copy(copy_id: int, *, waited: int = 0) -> bool:
 
 @shared_task(queue=SANDBOX_QUEUE)
 def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
-    """Decode one downloaded third-party image and keep its re-encoded copy.
+    """
+    Decode one downloaded third-party image and keep its re-encoded copy.
 
     Args:
         copy_id: The ``RemoteImageCopy`` being made.
@@ -1807,7 +1847,8 @@ def render_remote_image_copy(copy_id: int, descriptor: dict[str, str]) -> bool:
 
 @shared_task(queue=SANDBOX_QUEUE)
 def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
-    """Decode one downloaded foreign map tile and keep its re-encoded copy.
+    """
+    Decode one downloaded foreign map tile and keep its re-encoded copy.
 
     Args:
         tile_id: The ``RemoteTile`` being kept.
@@ -1845,7 +1886,8 @@ def render_remote_tile(tile_id: int, descriptor: dict[str, str]) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_thumbnails(image_ids: list[int]) -> int:
-    """Fill in missing grid thumbnails for already-stored photos.
+    """
+    Fill in missing grid thumbnails for already-stored photos.
 
     Called from :func:`backfill_image_thumbnails` (and nowhere on a request path).
 
@@ -1901,7 +1943,8 @@ STALLED_UPLOAD_BATCH = 100
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sweep_stale_preview_sources() -> int:
-    """Remove staged preview sources whose render never ran.
+    """
+    Remove staged preview sources whose render never ran.
 
     ``render_proxied_media`` deletes its own source, so anything this finds is from an enqueue that
     failed - the broker was down when a tile was requested
@@ -1921,7 +1964,8 @@ def sweep_stale_preview_sources() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sweep_held_uploads() -> int:
-    """Re-queue stalled held icons and avatars, drop ones whose file is gone or whose publish never finishes, and remove held files nothing names.
+    """
+    Re-queue stalled held icons and avatars, drop ones whose file is gone or whose publish never finishes, and remove held files nothing names.
 
     Deliberately not on the sandbox queue - it enqueues, it does not parse.
 
@@ -1938,7 +1982,8 @@ def sweep_held_uploads() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sweep_unnamed_files() -> int:
-    """Delete icon, avatar and comment image files no row names, such as one whose delete storage refused.
+    """
+    Delete icon, avatar and comment image files no row names, such as one whose delete storage refused.
 
     Returns:
         How many files were deleted.
@@ -1953,7 +1998,8 @@ def sweep_unnamed_files() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def retry_waiting_uploads() -> int:
-    """Queue a bounded batch of uploads waiting for storage whose next attempt is due, and report stuck ones.
+    """
+    Queue a bounded batch of uploads waiting for storage whose next attempt is due, and report stuck ones.
 
     Returns:
         How many attempts were queued.
@@ -1968,7 +2014,8 @@ def retry_waiting_uploads() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def adopt_stalled_comment_scans() -> int:
-    """Leave pending comments whose scan never ran to :func:`retry_waiting_uploads`.
+    """
+    Leave pending comments whose scan never ran to :func:`retry_waiting_uploads`.
 
     Returns:
         How many comments were taken up.
@@ -1987,7 +2034,8 @@ _OUTBOX_DRAIN_LOCK_SECONDS = 55
 
 @shared_task(queue=Queue.INTERACTIVE, soft_time_limit=40, time_limit=50)
 def drain_task_outbox() -> int:
-    """Queue the tasks the broker refused while it was down.
+    """
+    Queue the tasks the broker refused while it was down.
 
     Interactive, because what it replays is mostly interactive work (alerts, uploads, invitations) whose
     delay is a person waiting; the drain itself is a bounded batch of inserts.
@@ -2006,7 +2054,8 @@ def drain_task_outbox() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
-    """Re-enqueue uploads whose processing task never ran.
+    """
+    Re-enqueue uploads whose processing task never ran.
 
     Without a sweep that is permanent, and the uploader sees an upload that succeeded and then never
     appeared to anyone.
@@ -2057,7 +2106,8 @@ def requeue_stalled_pending_uploads(limit: int | None = None) -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def discard_unretried_failed_uploads(limit: int | None = None) -> int:
-    """Throw away failed uploads nobody came back for.
+    """
+    Throw away failed uploads nobody came back for.
 
     Its filename is how the uploader recognises which picture went away, and once the bytes are gone it
     is the only trace.
@@ -2086,7 +2136,8 @@ def discard_unretried_failed_uploads(limit: int | None = None) -> int:
 
 
 def _clear_orphaned_dedup_siblings(cutoff) -> int:
-    """Clear dedup siblings whose original is gone, so they are not stuck forever.
+    """
+    Clear dedup siblings whose original is gone, so they are not stuck forever.
 
     If the original was deleted first (the user removed it, or it was rejected in a way that missed this
     sibling), nothing is left to do that - and unlike a real upload the sibling must not be run through
@@ -2112,7 +2163,8 @@ def _clear_orphaned_dedup_siblings(cutoff) -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def backfill_image_thumbnails(limit: int | None = None) -> int:
-    """Enqueue a bounded batch of photos that still lack a grid thumbnail.
+    """
+    Enqueue a bounded batch of photos that still lack a grid thumbnail.
 
     Walks the table by primary key so a handful of unreadable files cannot stall the rest of the
     library: this tick's last id is the next tick's exclusive floor, and an exhausted cursor resets on a
@@ -2147,7 +2199,8 @@ def backfill_image_thumbnails(limit: int | None = None) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_marker_thumbnails(image_ids: list[int]) -> int:
-    """Fill in missing map-marker thumbnails for already-stored photos.
+    """
+    Fill in missing map-marker thumbnails for already-stored photos.
 
     The marker-thumbnail mirror of :func:`generate_image_thumbnails` - see its docstring for why this
     exists alongside upload-time generation.
@@ -2196,7 +2249,8 @@ _MARKER_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
 
 @shared_task(queue=Queue.MAINTENANCE)
 def backfill_image_marker_thumbnails(limit: int | None = None) -> int:
-    """Enqueue a bounded batch of photos that still lack a map-marker thumbnail.
+    """
+    Enqueue a bounded batch of photos that still lack a map-marker thumbnail.
 
     The marker-thumbnail mirror of :func:`backfill_image_thumbnails` - see its docstring for the
     walk/cursor behaviour, which this copies exactly.
@@ -2230,7 +2284,8 @@ def backfill_image_marker_thumbnails(limit: int | None = None) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=SANDBOX_QUEUE)
 def generate_image_analysis_thumbnails(image_ids: list[int]) -> int:
-    """Fill in missing analysis copies for already-stored photos.
+    """
+    Fill in missing analysis copies for already-stored photos.
 
     Re-enqueues keywording for every row it fixes, so a write that failed during upload still ends in
     keywords rather than needing a manual sweep.
@@ -2281,7 +2336,8 @@ _ANALYSIS_THUMBNAIL_BACKFILL_CURSOR_TTL = 7 * 24 * 60 * 60
 
 @shared_task(queue=Queue.MAINTENANCE)
 def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
-    """Queue analysis-copy generation for photos that still lack one.
+    """
+    Queue analysis-copy generation for photos that still lack one.
 
     The analysis-copy mirror of :func:`backfill_image_thumbnails` - see its docstring for the
     walk/cursor behaviour, which this copies exactly.
@@ -2315,7 +2371,8 @@ def backfill_image_analysis_thumbnails(limit: int | None = None) -> int:
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def generate_image_keywords(image_id: int) -> dict[str, int]:
-    """Generate searchable keywords for an uploaded photo via keyword plugins.
+    """
+    Generate searchable keywords for an uploaded photo via keyword plugins.
 
     Enqueued at the end of ``process_image_upload`` (fully in the background - uploads never wait on
     it).
@@ -2339,7 +2396,8 @@ _KEYWORD_RETRY_SWEEP_LOCK_KEY = "urbanlens:keyword-retry:sweep-lock"
 @shared_task(soft_time_limit=600, time_limit=_KEYWORD_RETRY_SWEEP_LOCK_SECONDS, queue=Queue.MAINTENANCE)
 @external_background_task("keyword-retry-sweep")
 def sweep_keyword_retries(limit: int | None = None) -> dict[str, int]:
-    """Ask keyword sources again about the photos they did not answer for (P323).
+    """
+    Ask keyword sources again about the photos they did not answer for (P323).
 
     Only the source that did not answer is asked, a capped batch per run, never a source this environment does not
     call or one that is backing off; see ``services.photos.keyword_retry``.
@@ -2361,7 +2419,8 @@ def sweep_keyword_retries(limit: int | None = None) -> dict[str, int]:
 
 @shared_task(queue=Queue.BULK)
 def submit_redata_photos(image_ids: list[int]) -> bool:
-    """Submit photo observations to REData and cache the confidence scores it returns.
+    """
+    Submit photo observations to REData and cache the confidence scores it returns.
 
     Best-effort like every other REData call site (e.g. ``import_immich_photos``) - a REData outage is
     logged and swallowed rather than retried, since a later submission (or the periodic photo itself
@@ -2386,7 +2445,8 @@ def submit_redata_photos(image_ids: list[int]) -> bool:
 
 @shared_task(queue=Queue.BULK)
 def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) -> bool:
-    """Submit one relevance vote on a photo to REData.
+    """
+    Submit one relevance vote on a photo to REData.
 
     Enqueued from ``services.photos.redata_relevance.queue_relevance_vote`` whenever a user marks a
     materialized photo relevant or not relevant.
@@ -2420,7 +2480,8 @@ def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) 
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict]) -> bool:
-    """Push tag/category label definitions into every listed profile's REData taxonomy.
+    """
+    Push tag/category label definitions into every listed profile's REData taxonomy.
 
     Enqueued from ``services.labels.redata_suggestions.queue_label_definition_sync``/
     ``queue_label_retirement`` whenever a tag/category label is created, edited, reparented, or retired.
@@ -2443,7 +2504,8 @@ def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict
 
 @shared_task(queue=Queue.BULK)
 def sync_redata_pin_assignment(pin_id: int) -> bool:
-    """Push one pin's complete current tag/category label set to REData.
+    """
+    Push one pin's complete current tag/category label set to REData.
 
     Enqueued from ``services.labels.redata_suggestions.queue_pin_assignment_sync``, itself called from
     the ``Pin.labels`` ``m2m_changed`` signal - the single choke point that sees every pin-tagging call
@@ -2467,7 +2529,8 @@ def sync_redata_pin_assignment(pin_id: int) -> bool:
 
 @shared_task(queue=Queue.BULK)
 def sync_redata_pin_assignments(pin_ids: list[int]) -> int:
-    """Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`sync_redata_pin_assignment`, for a bulk import's fan-out (P109).
 
     A label added to every pin in an import (a list category, a shared tag) fires the
     ``Pin.labels`` ``m2m_changed`` signal once per pin - queued here instead of one broker task each.
@@ -2490,7 +2553,8 @@ def sync_redata_pin_assignments(pin_ids: list[int]) -> int:
 
 @shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_comment_image(self, comment_id: int) -> bool:
-    """Background malware-scan a newly-uploaded pin/wiki comment image.
+    """
+    Background malware-scan a newly-uploaded pin/wiki comment image.
 
     A clamd connectivity hiccup retries with backoff instead of immediately treating the upload as
     rejected.
@@ -2513,7 +2577,8 @@ def scan_comment_image(self, comment_id: int) -> bool:
 
 @shared_task(bind=True, max_retries=5, queue=SANDBOX_QUEUE)
 def scan_trip_comment_image(self, comment_id: int) -> bool:
-    """Background malware-scan a newly-uploaded trip comment image. Mirrors ``scan_comment_image``.
+    """
+    Background malware-scan a newly-uploaded trip comment image. Mirrors ``scan_comment_image``.
 
     Args:
         comment_id: PK of the ``TripComment`` whose image should be scanned.
@@ -2536,7 +2601,8 @@ _COMMENT_IMAGE_TOO_LARGE = "That photo is larger than this site's upload limit."
 
 
 def _run_comment_image_scan(task, comment, model) -> bool:
-    """Shared body for ``scan_comment_image``/``scan_trip_comment_image`` - see either's docstring.
+    """
+    Shared body for ``scan_comment_image``/``scan_trip_comment_image`` - see either's docstring.
 
     Args:
         task: The bound Celery task instance (for ``self.retry``).
@@ -2616,7 +2682,8 @@ def _run_comment_image_scan(task, comment, model) -> bool:
 
 
 def _comment_storage_failed(task, comment, target: str, exc: Exception) -> bool:
-    """Retry a comment image storage failed on, then leave it pending, waiting for storage; reject it once its file is gone.
+    """
+    Retry a comment image storage failed on, then leave it pending, waiting for storage; reject it once its file is gone.
 
     Args:
         task: The bound Celery task instance.
@@ -2646,7 +2713,8 @@ def _comment_storage_failed(task, comment, target: str, exc: Exception) -> bool:
 
 
 def reject_comment_upload(comment, reason: str) -> None:
-    """Notify a comment's author their upload was rejected, and remove the comment.
+    """
+    Notify a comment's author their upload was rejected, and remove the comment.
 
     The comment (text included) never went visible to anyone but its own author (see ``pending_scan``),
     so removing it outright and handing the author their own text back via the notification is simpler
@@ -2689,7 +2757,8 @@ def reject_comment_upload(comment, reason: str) -> None:
 
 
 def _resolve_image_location(image: Image, coords: tuple[float, float] | None) -> Location | None:
-    """Resolve the shared Location an image belongs to, if determinable.
+    """
+    Resolve the shared Location an image belongs to, if determinable.
 
     Prefers the Location of the pin or wiki the photo is attached to; otherwise falls back to
     matching/creating a Location at the photo's GPS coordinates.
@@ -2730,7 +2799,8 @@ def import_immich_photos(  # noqa: PLR0917 - a Celery task: safely_enqueue_task 
     done: dict[str, int] | None = None,
     storage_waits: int = 0,
 ) -> dict[str, int]:
-    """Download selected Immich assets and import them onto a pin.
+    """
+    Download selected Immich assets and import them onto a pin.
 
     An asset already imported to this pin, or one that would exceed the uploader's storage quota, is skipped rather
     than failing the whole batch. One that storage refuses is retried later with the assets after it
@@ -2769,7 +2839,8 @@ _SWEEP_BUCKET_DECIMALS = 4
 
 
 class _SweptPlace:
-    """Assets from one place in a library sweep, held as counts rather than rows.
+    """
+    Assets from one place in a library sweep, held as counts rather than rows.
 
     A library has far fewer places in it than photos, so grouping as the sweep
     reads means peak memory tracks places. Nothing is discarded that anything
@@ -2790,7 +2861,8 @@ class _SweptPlace:
         self._samples: list[str] = []
 
     def add(self, asset, sample_limit: int) -> None:
-        """Fold one asset into this place.
+        """
+        Fold one asset into this place.
 
         Args:
             asset: The ``SearchAsset`` being swept.
@@ -2804,7 +2876,8 @@ class _SweptPlace:
             self._label = asset.city
 
     def to_hits(self) -> list[LocationHit]:
-        """One hit per kept sample, carrying this place's whole weight between them.
+        """
+        One hit per kept sample, carrying this place's whole weight between them.
 
         Returns:
             Hits whose ``weight`` sums to every asset folded in here.
@@ -2830,7 +2903,8 @@ class _SweptPlace:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
-    """Sweep a user's entire Immich library for places they've been.
+    """
+    Sweep a user's entire Immich library for places they've been.
 
     Only triggered by an explicit "Scan your library" action (see
     ``controllers.immich.ImmichLibraryScanStartView``), never on connect.
@@ -2942,7 +3016,8 @@ _DEFERRED_MAX_RETRIES = math.ceil(_DEFERRED_LOOKUP_DEADLINE.total_seconds() / mi
 
 
 def _deferred_retry_countdown(attempt: int) -> int:
-    """Seconds to wait before retry number ``attempt`` (0-based).
+    """
+    Seconds to wait before retry number ``attempt`` (0-based).
 
     Args:
         attempt: How many retries this batch has already made.
@@ -2954,7 +3029,8 @@ def _deferred_retry_countdown(attempt: int) -> int:
 
 
 def _deferred_deadline_passed(started_at: str | None) -> bool:
-    """Whether this batch has been retrying past :data:`_DEFERRED_LOOKUP_DEADLINE`.
+    """
+    Whether this batch has been retrying past :data:`_DEFERRED_LOOKUP_DEADLINE`.
 
     Args:
         started_at: ISO timestamp of the batch's first attempt, or None on that first attempt (also None
@@ -2978,7 +3054,8 @@ def _deferred_deadline_passed(started_at: str | None) -> bool:
 
 
 def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_tag: bool) -> tuple[int, int, int]:
-    """Place every pin in ``deferred_lists`` whose cid this round actually resolved.
+    """
+    Place every pin in ``deferred_lists`` whose cid this round actually resolved.
 
     Called on *every* round of ``resolve_deferred_pin_locations``, not only the final one - see that
     task's own docstring ("places whatever resolves now"): a round with pending cids must still place
@@ -3079,7 +3156,8 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
 
 
 def _with_confirmed_cids(deferred_lists: list[dict], profile_id: int) -> list[dict]:
-    """*deferred_lists* with every pin's cid checked against its own Google Maps URL.
+    """
+    *deferred_lists* with every pin's cid checked against its own Google Maps URL.
 
     The confirm step already does this; a retry queued before it did can still carry a cid that lost
     its low digits in the browser (REData P120), which no answer would ever be keyed by. A pin whose
@@ -3115,7 +3193,8 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
     consecutive_no_progress: int = 0,
     started_at: str | None = None,
 ) -> dict[str, int]:
-    """Place pins whose Google Maps CID needed a live lookup to be accurate.
+    """
+    Place pins whose Google Maps CID needed a live lookup to be accurate.
 
     Queued by ``GoogleMapsGateway.iter_confirmed_import_events`` for any
     confirmed pin whose cid had neither an existing Location nor a cached
@@ -3323,7 +3402,8 @@ def resolve_deferred_pin_locations(  # noqa: PLR0917 - a Celery task: safely_enq
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, max_retries=None, queue=Queue.BULK)
 def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str], done: dict[str, int] | None = None, storage_waits: int = 0) -> dict[str, int]:
-    """Download selected Flickr photos and import them onto a pin.
+    """
+    Download selected Flickr photos and import them onto a pin.
 
     The same pipeline as ``import_immich_photos`` (``library_import.PhotoImport``); only the download source differs.
 
@@ -3353,7 +3433,8 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
 
 @shared_task(bind=True, queue=Queue.INTERACTIVE)
 def import_calendar_events(self, profile_id: int, selections: list[dict[str, Any]]) -> dict[str, Any]:
-    """Create trips from the calendar events a profile picked in the import dialog.
+    """
+    Create trips from the calendar events a profile picked in the import dialog.
 
     Args:
         profile_id: The importing profile.
@@ -3381,7 +3462,8 @@ def import_flickr_album_photos(  # noqa: PLR0917 - a Celery task: safely_enqueue
     done: dict[str, int] | None = None,
     storage_waits: int = 0,
 ) -> dict[str, int]:
-    """Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.
+    """
+    Download selected photos from a *public* Flickr album/photoset onto a pin or wiki.
 
     Unlike ``import_flickr_photos`` (one user's own OAuth-connected library), this imports from any public album
     given its URL - no OAuth token involved, just the site's Flickr API key.
@@ -3438,7 +3520,8 @@ def import_google_photos(  # noqa: PLR0917 - a Celery task: safely_enqueue_task 
     done: dict[str, int] | None = None,
     storage_waits: int = 0,
 ) -> dict[str, int]:
-    """Download selected Google Photos picker items and import them onto a pin.
+    """
+    Download selected Google Photos picker items and import them onto a pin.
 
     The same pipeline as ``import_immich_photos``/``import_flickr_photos`` (``library_import.PhotoImport``).
 
@@ -3474,7 +3557,8 @@ DATABASE_BACKUP_LOCK_KEY = "backup:database:running"
 
 
 def _run_database_backup(task=None) -> bool:
-    """Run database backup and retention cleanup using current site settings.
+    """
+    Run database backup and retention cleanup using current site settings.
 
     Returns:
         Whether a backup was written; False when another backup already holds the lock.
@@ -3531,7 +3615,8 @@ def run_scheduled_database_backup(self) -> bool:
 @shared_task(bind=True, soft_time_limit=2900, time_limit=3100, queue=Queue.MAINTENANCE)
 @external_background_task("scheduled-location-enrichment")
 def run_scheduled_enrichment(self) -> dict:
-    """Run one background-enrichment cycle when site settings allow it.
+    """
+    Run one background-enrichment cycle when site settings allow it.
 
     Fired hourly by Celery beat.
 
@@ -3560,7 +3645,8 @@ def run_scheduled_enrichment(self) -> dict:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def refresh_pin_web_search(self, pin_id: int) -> int:
-    """Pre-warm the web-search cache a pin's page reads: the shared search, and its own names' when it has any.
+    """
+    Pre-warm the web-search cache a pin's page reads: the shared search, and its own names' when it has any.
 
     Args:
         pin_id: PK of the pin; its names are read now, not when the task was queued.
@@ -3662,7 +3748,8 @@ def send_final_checkin_warnings() -> int:
 
 @shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def escalate_overdue_checkins() -> int:
-    """Notify emergency contacts for every safety check-in whose grace period has elapsed, once its owner had the final warning.
+    """
+    Notify emergency contacts for every safety check-in whose grace period has elapsed, once its owner had the final warning.
 
     Then sends any "it's over" notice a failure left owing to contacts an earlier escalation alerted
     (``services.visits.safety.retry_resolution_notices``), under the same lock, so two runs never both retry one.
@@ -3700,7 +3787,8 @@ def escalate_overdue_checkins() -> int:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def send_safety_resolution_email(contact_id: int, to: str, subject: str, text_body: str, html_body: str, *, removed: bool = False, attempt: int = 0) -> None:
-    """Send one contact's end-of-check-in email, queued by ``services.visits.safety._tell_contact_it_is_over``.
+    """
+    Send one contact's end-of-check-in email, queued by ``services.visits.safety._tell_contact_it_is_over``.
 
     Unlike ``send_email_task``, a failed send is retried: marked on the contact for the escalation sweep, or, for a
     deleted check-in, re-queued by ``send_resolution_email`` itself.
@@ -3721,7 +3809,8 @@ def send_safety_resolution_email(contact_id: int, to: str, subject: str, text_bo
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def archive_safety_checkin(checkin_id: int) -> None:
-    """Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution time
+    """
+    Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution time
     (``services.visits.safety.schedule_checkin_archival``) for responsiveness.
 
     Idempotent - ``services.visits.safety.archive_checkin`` no-ops if the check-in already has an
@@ -3737,7 +3826,8 @@ def archive_safety_checkin(checkin_id: int) -> None:
 
 @shared_task(soft_time_limit=_CHECKIN_SOFT_TIME_LIMIT_SECONDS, time_limit=_CHECKIN_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_due_safety_checkin_archival() -> int:
-    """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
+    """
+    Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
 
     A broker/worker restart can drop a countdown-scheduled task outright; a bare 5-minute poll alone
     would also make the "no other viewers - archive immediately" case visibly wait up to 5 minutes,
@@ -3784,7 +3874,8 @@ def delete_expired_safety_checkins() -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def prune_expired_undo_actions() -> int:
-    """Delete UndoAction rows past their retention window.
+    """
+    Delete UndoAction rows past their retention window.
 
     Each row's restore payload is stored directly on the row itself (see ``models.undo.UndoAction``'s
     docstring), not in a cache, specifically so an entry's restorability depends only on its own
@@ -3802,7 +3893,8 @@ def prune_expired_undo_actions() -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def detect_dm_address_mentions(message_id: int) -> int:
-    """Detect street addresses in a direct message's text and record their shares.
+    """
+    Detect street addresses in a direct message's text and record their shares.
 
     The forward-geocoding half of DM location detection (see
     ``services.messaging.dm_location_detection``) - coordinates are detected inline at send time, but
@@ -3825,7 +3917,8 @@ def detect_dm_address_mentions(message_id: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int = 50000) -> int:
-    """Permanently delete every direct message past its sender's disappearing-message window.
+    """
+    Permanently delete every direct message past its sender's disappearing-message window.
 
     In steady state a single hourly run has one hour of expiries to clear and takes one batch, but a
     backlog becoming due at once - the first run after a retention-policy change, or after the beat
@@ -3940,7 +4033,8 @@ def hard_delete_expired_accounts() -> int:
 # single-flight marker expires right after the task does.
 @shared_task(soft_time_limit=110, time_limit=130, queue=Queue.INTERACTIVE)
 def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
-    """Fetch one external-data panel's upstream data in the background.
+    """
+    Fetch one external-data panel's upstream data in the background.
 
     Scheduled by ``external_data.schedule_panel_fetch`` when a Private Pin page finds a panel's store
     empty; the page polls until this task persists the result (LocationCache row, Boundary geometry
@@ -3964,7 +4058,8 @@ def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = 
 
 @shared_task(queue=Queue.INTERACTIVE)
 def deliver_friend_invitation(invitation_id: int, url: str, send_join_email: bool) -> None:
-    """Deliver an email friend invitation after the request that made it, so its latency tells the inviter nothing.
+    """
+    Deliver an email friend invitation after the request that made it, so its latency tells the inviter nothing.
 
     Args:
         invitation_id: PK of the FriendInvitation.
@@ -3978,7 +4073,8 @@ def deliver_friend_invitation(invitation_id: int, url: str, send_join_email: boo
 
 @shared_task(queue=Queue.INTERACTIVE)
 def deliver_visit_invite(participant_id: int, invitation_id: int) -> None:
-    """Offer a tagged visit to the account proven to own the address, after the request that tagged it.
+    """
+    Offer a tagged visit to the account proven to own the address, after the request that tagged it.
 
     Args:
         participant_id: PK of the ExternalVisitParticipant.
@@ -3991,7 +4087,8 @@ def deliver_visit_invite(participant_id: int, invitation_id: int) -> None:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def deliver_trip_invitation(invitation_id: int, url: str) -> None:
-    """Deliver a trip invitation after the request that created it, so its latency tells the inviter nothing.
+    """
+    Deliver a trip invitation after the request that created it, so its latency tells the inviter nothing.
 
     Args:
         invitation_id: PK of the invitation.
@@ -4007,7 +4104,8 @@ def deliver_trip_invitation(invitation_id: int, url: str) -> None:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def send_email_task(to: str, subject: str, text_body: str, html_body: str) -> None:
-    """Send an email queued by ``notification_delivery.queue_email``.
+    """
+    Send an email queued by ``notification_delivery.queue_email``.
 
     Args:
         to: Recipient address.
@@ -4022,7 +4120,8 @@ def send_email_task(to: str, subject: str, text_body: str, html_body: str) -> No
 
 @shared_task(queue=Queue.INTERACTIVE)
 def send_notification_email_task(profile_id: int, title: str, body_text: str, url: str | None, action_label: str) -> None:
-    """Send a notification email queued by ``notification_delivery.send_notification_email``.
+    """
+    Send a notification email queued by ``notification_delivery.send_notification_email``.
 
     Args:
         profile_id: PK of the recipient profile.
@@ -4042,7 +4141,8 @@ def send_notification_email_task(profile_id: int, title: str, body_text: str, ur
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_email_if_unread(message_id: int) -> None:
-    """Send the delayed "new message" email, unless it's since been read or already sent.
+    """
+    Send the delayed "new message" email, unless it's since been read or already sent.
 
     Scheduled by ``services.messaging.direct_messages._schedule_message_email`` with a countdown, giving
     a logged-in recipient a chance to read the message organically first.
@@ -4073,7 +4173,8 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
-    """Send the delayed WhatsApp/SMS "new message" alert, unless read or already alerted.
+    """
+    Send the delayed WhatsApp/SMS "new message" alert, unless read or already alerted.
 
     Scheduled by ``services.messaging.direct_messages._schedule_message_text_alerts`` with a countdown,
     mirroring the delayed-email flow: no-ops if the message was read in the meantime or an earlier
@@ -4106,7 +4207,8 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def prune_api_call_logs() -> int:
-    """Delete ApiCallLog rows older than every consumer's longest window.
+    """
+    Delete ApiCallLog rows older than every consumer's longest window.
 
     The table is written on every external API call and, until this task existed, never trimmed -
     ``ApiCallLog.prune_older_than_days`` was documented as the way to trim it, but nothing ever called
@@ -4129,7 +4231,8 @@ _API_CALL_LOG_RETENTION_DAYS = 400
 
 @shared_task(queue=Queue.MAINTENANCE, soft_time_limit=50, time_limit=55)
 def roll_up_api_call_tallies() -> int:
-    """Write tallied services' calls into ``ApiCallLog`` (``services.core.call_tally``).
+    """
+    Write tallied services' calls into ``ApiCallLog`` (``services.core.call_tally``).
 
     Returns:
         Rows written.
@@ -4141,7 +4244,8 @@ def roll_up_api_call_tallies() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def evaluate_provider_health_task() -> dict[str, int]:
-    """Judge every external provider on its recent calls, back off the ones refusing or failing, and alert.
+    """
+    Judge every external provider on its recent calls, back off the ones refusing or failing, and alert.
 
     See ``services.core.provider_health``.
 
@@ -4163,7 +4267,8 @@ _PUBLIC_MEDIA_SWEEP_BATCH = 100
 
 @shared_task(queue=Queue.MAINTENANCE, soft_time_limit=_PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS - 60, time_limit=_PUBLIC_MEDIA_SWEEP_LOCK_TIMEOUT_SECONDS)
 def sweep_public_media_cache() -> int:
-    """Remove cached public-source results that no one is shown (``services.media.public_media_sweep``).
+    """
+    Remove cached public-source results that no one is shown (``services.media.public_media_sweep``).
 
     Scheduled, so a ``subject_relevance.RULE_VERSION`` bump is swept on the next tick; a run out of time queues the
     next rather than waiting for one.
@@ -4199,7 +4304,8 @@ def prune_expired_sessions() -> None:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def prune_read_notifications() -> int:
-    """Delete read notifications past ``SiteSettings.notification_retention_days``.
+    """
+    Delete read notifications past ``SiteSettings.notification_retention_days``.
 
     Returns:
         How many were deleted.
@@ -4214,7 +4320,8 @@ def prune_read_notifications() -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def prune_pin_tombstones() -> int:
-    """Remove pin-deletion tombstones older than the sync retention window.
+    """
+    Remove pin-deletion tombstones older than the sync retention window.
 
     A client whose ``deleted_since`` predates that floor gets an HTTP 410 full-resync signal from
     ``pins/deleted/`` instead of a silently incomplete deletions feed, so pruning can never cause a
@@ -4239,7 +4346,8 @@ PUBLIC_PIN_EVALUATION_LOCK_TIMEOUT_SECONDS = 55 * 60
 
 @shared_task(queue=Queue.MAINTENANCE)
 def evaluate_public_pin_candidates() -> dict[str, int]:
-    """Run the public-pin eligibility engine and settle open votes.
+    """
+    Run the public-pin eligibility engine and settle open votes.
 
     Everything lives in ``services.pins.public_pins`` - this is only the beat entry point.
 
@@ -4260,7 +4368,8 @@ def evaluate_public_pin_candidates() -> dict[str, int]:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def send_notification_text_alerts_if_unread(notification_id: int) -> None:
-    """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.
+    """
+    Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.
 
     Scheduled by ``services.notifications.notification_text_alerts.schedule_notification_text_alerts``
     (via the ``notification_text_alerts`` post_save signal) with a countdown, mirroring the DM
@@ -4287,7 +4396,8 @@ def send_notification_text_alerts_if_unread(notification_id: int) -> None:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None:
-    """Deliver ``message`` to every channel in channel-layer group ``group``.
+    """
+    Deliver ``message`` to every channel in channel-layer group ``group``.
 
     Runs the actual ``async_to_sync(channel_layer.group_send)`` call here, on ``celery-worker``'s
     prefork pool, rather than inline in whatever gunicorn gevent greenlet handled the request that
@@ -4309,7 +4419,8 @@ def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None
 
 @shared_task(queue=Queue.INTERACTIVE)
 def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]]) -> None:
-    """Deliver many ``(group, message)`` pairs inside one event loop.
+    """
+    Deliver many ``(group, message)`` pairs inside one event loop.
 
     The batched counterpart to :func:`broadcast_channel_group_message`, for a
     fan-out whose length is set by how many people are in a conversation. One
@@ -4335,7 +4446,8 @@ def broadcast_channel_group_messages(deliveries: list[tuple[str, dict[str, Any]]
 
 @shared_task(soft_time_limit=240, time_limit=270, queue=Queue.INTERACTIVE)
 def run_link_extraction(extraction_id: int) -> None:
-    """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
+    """
+    Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
     No Celery autoretry: the run itself records every failure mode on the LinkExtraction row (and
     notifies the user either way), and each attempt consumes a fetch plus AI tokens - retrying
@@ -4357,7 +4469,8 @@ def run_link_extraction(extraction_id: int) -> None:
 
 @shared_task(soft_time_limit=180, time_limit=210, queue=Queue.INTERACTIVE)
 def classify_trivia_submission(question_id: int) -> None:
-    """Classify one pending user-submitted Trivia question and record its verdict.
+    """
+    Classify one pending user-submitted Trivia question and record its verdict.
 
     No Celery autoretry: each attempt consumes an AI call, and this is a background action with no user
     waiting on it - if this task never runs (or the classifier can't reach AI right now), the question
@@ -4381,7 +4494,8 @@ def classify_trivia_submission(question_id: int) -> None:
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("scheduled-trivia-generation")
 def run_scheduled_trivia_generation() -> dict:
-    """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
+    """
+    Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
 
     Fired hourly by Celery beat, mirroring run_scheduled_enrichment's single-flight lock (a run that's
     still going when the next hour ticks over is left alone rather than started twice).
@@ -4406,7 +4520,8 @@ def run_scheduled_trivia_generation() -> dict:
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("scheduled-trivia-wiki-incorporation")
 def run_scheduled_trivia_wiki_incorporation() -> dict:
-    """Fold well-upvoted user-submitted Trivia questions into their location wikis.
+    """
+    Fold well-upvoted user-submitted Trivia questions into their location wikis.
 
     Fired hourly by Celery beat, mirroring run_scheduled_trivia_generation's single-flight lock (a run
     still going when the next hour ticks over is left alone rather than started twice).
@@ -4439,7 +4554,8 @@ _RESLUG_MIN_AGE = timedelta(hours=1)
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
-    """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.
+    """
+    Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.
 
     Once ingestion is guaranteed to never store a placeholder name this way, this task (and the gap it
     patches) should be removed - new pins never need it.
@@ -4485,7 +4601,8 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def dispatch_native_push(notification_id: int) -> int:
-    """Deliver one notification to the recipient's registered native push devices.
+    """
+    Deliver one notification to the recipient's registered native push devices.
 
     Enqueued by ``models.notifications.signals.enqueue_native_push`` on every ``NotificationLog``
     insert; exits immediately for the (common) profile with no registered devices.
@@ -4508,7 +4625,8 @@ def dispatch_native_push(notification_id: int) -> int:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def dispatch_push_to_devices(device_ids: list[int], payload: dict) -> int:
-    """Deliver a payload to one batch of a profile's devices, handed off by ``send_push_to_profile``.
+    """
+    Deliver a payload to one batch of a profile's devices, handed off by ``send_push_to_profile``.
 
     Args:
         device_ids: At most ``push.PUSH_BATCH_SIZE`` device primary keys.
@@ -4528,7 +4646,8 @@ _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute be
 
 @shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_spotguessr_sessions() -> int:
-    """Force-reveal any SpotGuessr round that's been open too long.
+    """
+    Force-reveal any SpotGuessr round that's been open too long.
 
     The safety net for a multiplayer round that can otherwise stall forever: a round only completes once
     every joined participant has guessed (``services.spotguessr.session.submit_guess``), but a
@@ -4568,7 +4687,8 @@ def sweep_stalled_spotguessr_sessions() -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
-    """Pre-select a SpotGuessr session's next round, so it's ready the instant a player reaches it.
+    """
+    Pre-select a SpotGuessr session's next round, so it's ready the instant a player reaches it.
 
     Queued by ``services.spotguessr.session.get_or_create_round`` right after it creates the round
     *before* this one - by the time that round is guessed and revealed, this round's location (and, for
@@ -4616,7 +4736,8 @@ def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def prewarm_spotguessr_solo_start(profile_id: int, mode: str, config_dict: dict) -> bool:
-    """Pre-select a solo player's likely first round before they've even clicked "start".
+    """
+    Pre-select a solo player's likely first round before they've even clicked "start".
 
     Keyed by a fingerprint of the exact config (see ``services.spotguessr.prewarm``), so it's simply
     never redeemed - not wrongly redeemed - if the player changes a setting before actually starting.
@@ -4660,7 +4781,8 @@ _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat i
 
 @shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_trivia_sessions() -> int:
-    """Force-reveal any Trivia round that's been open too long.
+    """
+    Force-reveal any Trivia round that's been open too long.
 
     The safety net for a multiplayer round that can otherwise stall forever: a round only completes once
     every joined participant has answered (``services.trivia.session.submit_answer``), but a participant
@@ -4704,7 +4826,8 @@ _CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute bea
 
 @shared_task(soft_time_limit=_STALL_SWEEP_SOFT_TIME_LIMIT_SECONDS, time_limit=_STALL_SWEEP_TIME_LIMIT_SECONDS, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_stalled_consensus_sessions() -> int:
-    """Force-resolve any Consensus round that's been open too long.
+    """
+    Force-resolve any Consensus round that's been open too long.
 
     Unlike SpotGuessr/Trivia, a Consensus round has *two* sub-phases that can each stall independently:
     answer-collection (mirrors ``sweep_stalled_spotguessr_sessions`` - force-reveals via
@@ -4754,7 +4877,8 @@ def sweep_stalled_consensus_sessions() -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def recompute_fact_confidence(fact_id: int) -> None:
-    """Recompute one Fact's confidence/status/value from its accumulated evidence.
+    """
+    Recompute one Fact's confidence/status/value from its accumulated evidence.
 
     Queued (never called inline) from every Facts evidence write site - see
     ``services.facts.evidence.record_evidence``.
@@ -4771,7 +4895,8 @@ STALE_FACT_CONFIDENCE_BATCH = 500
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sweep_stale_fact_confidence() -> int:
-    """Queue a recompute for every fact whose new evidence no recompute has read.
+    """
+    Queue a recompute for every fact whose new evidence no recompute has read.
 
     Returns:
         How many recomputes were queued.
@@ -4793,7 +4918,8 @@ def sweep_stale_fact_confidence() -> int:
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def process_device_scan_upload(self, upload_id: int) -> bool:
-    """Classify, wiki-match, and cluster one wireless device-scan upload.
+    """
+    Classify, wiki-match, and cluster one wireless device-scan upload.
 
     Runs on the bulk queue - up to 100,000 rows of real CPU-bound geometry
     work, sized by one account's upload, so it must not share a pool with
@@ -4861,7 +4987,8 @@ STALLED_SCAN_BATCH = 200
 
 @shared_task(queue=Queue.MAINTENANCE)
 def requeue_stalled_device_scans() -> int:
-    """Re-enqueue device-scan uploads nothing is processing.
+    """
+    Re-enqueue device-scan uploads nothing is processing.
 
     A pending upload whose enqueue was lost, or a processing one whose worker died (its work rolled back
     with it), goes back to pending and is queued again. One that has been claimed
@@ -4894,7 +5021,8 @@ def requeue_stalled_device_scans() -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | None = None) -> int:
-    """Grant any achievements a profile now qualifies for.
+    """
+    Grant any achievements a profile now qualifies for.
 
     Queued by ``models.achievements.signals`` after a contribution, but only when some active award
     actually measures the affected metric - so this runs rarely, and when it does it re-checks a single
@@ -4923,7 +5051,8 @@ def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_achievement(achievement_id: int) -> int:
-    """Grant a newly defined achievement to everyone who already qualifies.
+    """
+    Grant a newly defined achievement to everyone who already qualifies.
 
     Queued when an admin saves an ``Achievement`` or asks for a re-check, so awards added at any point reach
     users retroactively. Dispatch only: each profile range is its own :func:`backfill_achievement_range`.
@@ -4951,7 +5080,8 @@ def backfill_achievement(achievement_id: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def backfill_achievement_range(achievement_id: int, start_pk: int, end_pk: int) -> int:
-    """Grant one achievement to the qualifying profiles with ``start_pk <= pk <= end_pk``.
+    """
+    Grant one achievement to the qualifying profiles with ``start_pk <= pk <= end_pk``.
 
     Args:
         achievement_id: PK of the achievement to backfill.
@@ -4972,7 +5102,8 @@ def backfill_achievement_range(achievement_id: int, start_pk: int, end_pk: int) 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def score_reputation_event(event_id: int) -> str:
-    """Work out what one recorded contribution was worth.
+    """
+    Work out what one recorded contribution was worth.
 
     Deferred because establishing how badly a target needed a contribution means querying that target's
     state, which for photos can mean walking external gallery panels - by far the most expensive input
@@ -5002,7 +5133,8 @@ def score_reputation_event(event_id: int) -> str:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def score_reputation_events(event_ids: list[int]) -> int:
-    """Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out (P109).
+    """
+    Chunk-shaped sibling of :func:`score_reputation_event`, for a bulk import's fan-out (P109).
 
     ``_decay_multiplier`` is explicitly order-independent (see
     ``services.reputation.scoring``), so scoring a chunk's events in any order is safe. Each
@@ -5038,7 +5170,8 @@ def score_reputation_events(event_ids: list[int]) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.BULK)
 def recompute_reputation_total(profile_id: int) -> str:
-    """Rebuild one profile's cached reputation totals from the ledger.
+    """
+    Rebuild one profile's cached reputation totals from the ledger.
 
     Args:
         profile_id: Whose totals to rebuild.
@@ -5053,7 +5186,8 @@ def recompute_reputation_total(profile_id: int) -> str:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_reputation(chunk_size: int = 500) -> int:
-    """Drain unscored ledger rows and rebuild any totals known to be stale.
+    """
+    Drain unscored ledger rows and rebuild any totals known to be stale.
 
     Dispatch only: rows are sliced into bounded ranges, in pk order, and each range is handled by its
     own subtask, so a chunk that crashes costs its own range rather than the whole sweep.
@@ -5078,7 +5212,8 @@ def sweep_reputation(chunk_size: int = 500) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
-    """Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
+    """
+    Score every unscored ledger row with ``start_pk <= pk <= end_pk``.
 
     Args:
         start_pk: First row in the range, inclusive.
@@ -5105,7 +5240,8 @@ def sweep_reputation_range(start_pk: int, end_pk: int) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements(chunk_size: int = 1000) -> int:
-    """Fan the nightly achievement sweep out as bounded profile-range subtasks.
+    """
+    Fan the nightly achievement sweep out as bounded profile-range subtasks.
 
     Evaluating everything in one task would hit the hard ``CELERY_TASK_TIME_LIMIT`` at scale and die
     mid-iteration; a bounded chunk cannot approach the limit, and a chunk that crashes anyway costs only
@@ -5131,7 +5267,8 @@ def sweep_achievements(chunk_size: int = 1000) -> int:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
-    """Evaluate every achievement for profiles with ``start_pk <= pk <= end_pk``.
+    """
+    Evaluate every achievement for profiles with ``start_pk <= pk <= end_pk``.
 
     The range is evaluated with one bulk metric pass for the whole chunk, so it costs on the order of
     the metric count in queries rather than ~30 per profile.
@@ -5151,7 +5288,8 @@ def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 @external_background_task("stripe-subscriptions-sync")
 def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_started_at: float | None = None) -> int:
-    """Re-sync one page of Stripe subscriptions onto their RoleSubscription rows, then hand off the next page.
+    """
+    Re-sync one page of Stripe subscriptions onto their RoleSubscription rows, then hand off the next page.
 
     Webhooks (see controllers.billing_webhooks.StripeWebhookView) are the primary mechanism for keeping
     RoleSubscription in sync - this is the nightly safety net for deliveries Stripe couldn't complete. Each page is
@@ -5192,7 +5330,8 @@ def sync_stripe_subscriptions(self, starting_after: str | None = None, sweep_sta
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.MAINTENANCE)
 @external_background_task("stripe-subscriptions-sync")
 def reconcile_unlisted_stripe_subscriptions(sweep_started_at: float, after_pk: int, chunk_size: int = 100) -> int:
-    """Retrieve one chunk of live RoleSubscription rows the Stripe listing did not reach, then hand off the next.
+    """
+    Retrieve one chunk of live RoleSubscription rows the Stripe listing did not reach, then hand off the next.
 
     Args:
         sweep_started_at: Unix time the sweep started.
@@ -5219,7 +5358,8 @@ def reconcile_unlisted_stripe_subscriptions(sweep_started_at: float, after_pk: i
 
 @shared_task(queue=Queue.MAINTENANCE)
 def advance_pwyw_usage_ledgers() -> int:
-    """Advance every pay-what-you-want RoleSubscription's usage ledger.
+    """
+    Advance every pay-what-you-want RoleSubscription's usage ledger.
 
     invoice.payment_succeeded already ticks a subscription's ledger the moment a payment lands (see
     services.billing.banking), but that's the only trigger while a subscription is actively billed - a
@@ -5253,7 +5393,8 @@ def advance_pwyw_usage_ledgers() -> int:
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
-    """Download an external media item and file the local copy into an album.
+    """
+    Download an external media item and file the local copy into an album.
 
     The relevance vote is written synchronously by the request that queues this (it's a cheap DB write,
     and it's the part that must not be lost), so this task only owns the slow half: the HTTP download.
@@ -5330,7 +5471,8 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
 
 @shared_task(soft_time_limit=240, time_limit=270, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
-    """Download an external media item and attach the local copy to a wiki.
+    """
+    Download an external media item and attach the local copy to a wiki.
 
     Args:
         wiki_id: PK of the Wiki to attach the photo to.
@@ -5384,7 +5526,8 @@ def _parse_iso_days(iso_days: list[str], what: object) -> list[date]:
 
 @shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[str]) -> int:
-    """Store the recorded weather for a set of days at a coordinate.
+    """
+    Store the recorded weather for a set of days at a coordinate.
 
     Queued by the pages that show recorded weather - visit history and a trip's weather panel - which read
     stored rows without fetching, so a slow REData never holds up their render.
@@ -5407,7 +5550,8 @@ def fetch_recorded_weather_at(latitude: float, longitude: float, iso_days: list[
 
 @shared_task(soft_time_limit=180, time_limit=210, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3}, queue=Queue.INTERACTIVE)
 def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
-    """:func:`fetch_recorded_weather_at` for a Location, which may have been deleted since it was queued.
+    """
+    :func:`fetch_recorded_weather_at` for a Location, which may have been deleted since it was queued.
 
     Args:
         location_id: PK of the Location the days belong to.
@@ -5431,7 +5575,8 @@ def fetch_recorded_weather(location_id: int, iso_days: list[str]) -> int:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def run_scheduled_demo_account_purge() -> bool:
-    """Delete expired demo accounts. A no-op on any instance that is not the demo.
+    """
+    Delete expired demo accounts. A no-op on any instance that is not the demo.
 
     Unconditionally scheduled (see ``CELERY_BEAT_SCHEDULE``) rather than registered only when
     ``UL_DEMO_MODE`` is on, matching every other entry there - the schedule is fixed at process start,
@@ -5455,7 +5600,8 @@ def run_scheduled_demo_account_purge() -> bool:
 @shared_task(queue=Queue.MAINTENANCE)
 @external_background_task("scheduled-redata-public-locations-sync")
 def run_scheduled_redata_public_locations_sync() -> bool:
-    """Refresh the demo instance's location pool from REData. A no-op everywhere else.
+    """
+    Refresh the demo instance's location pool from REData. A no-op everywhere else.
 
     Unconditionally scheduled, same reasoning as ``run_scheduled_demo_account_purge``.
 
@@ -5475,7 +5621,8 @@ def run_scheduled_redata_public_locations_sync() -> bool:
 
 @shared_task(queue=Queue.BULK)
 def fan_out_wiki_alias_to_pins(alias_id: int) -> int:
-    """Mirror one new wiki alias onto every opted-in pin at that location.
+    """
+    Mirror one new wiki alias onto every opted-in pin at that location.
 
     Bulk rather than interactive because the list is as long as the place is
     popular, and nobody is waiting on it - the person who added the name has
@@ -5494,7 +5641,8 @@ def fan_out_wiki_alias_to_pins(alias_id: int) -> int:
 
 @shared_task(queue=Queue.BULK)
 def sync_pin_against_smart_lists_task(pin_id: int) -> None:
-    """Re-evaluate one pin against every smart list its owner has.
+    """
+    Re-evaluate one pin against every smart list its owner has.
 
     Nothing queues this any more; it stays so messages queued before :func:`sync_requested_smart_lists` replaced it
     are still applied.
@@ -5512,7 +5660,8 @@ def sync_pin_against_smart_lists_task(pin_id: int) -> None:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def sync_requested_smart_lists(profile_id: int) -> int | None:
-    """Apply an account's outstanding smart-list sync requests (``services.pins.smart_list_sync``).
+    """
+    Apply an account's outstanding smart-list sync requests (``services.pins.smart_list_sync``).
 
     Interactive by default, since the account's lists say they are catching up until it runs;
     ``queue_smart_list_sync`` routes an account past ``MAX_SMART_LISTS_PER_SYNC`` smart lists to the bulk queue.
@@ -5530,7 +5679,8 @@ def sync_requested_smart_lists(profile_id: int) -> int | None:
 
 @shared_task(queue=Queue.MAINTENANCE)
 def sweep_smart_list_sync_requests() -> int:
-    """Queue a smart-list sync for every account whose requests its own sync never drained.
+    """
+    Queue a smart-list sync for every account whose requests its own sync never drained.
 
     Returns:
         How many syncs were queued.
@@ -5542,7 +5692,8 @@ def sweep_smart_list_sync_requests() -> int:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def process_signup(username: str, email: str, password_hash: str, auth_salt: str, invite_token: str | None) -> None:
-    """Finish a signup after the response, so a registered address takes no longer to answer than a new one.
+    """
+    Finish a signup after the response, so a registered address takes no longer to answer than a new one.
 
     Args:
         username: The validated username.
@@ -5560,7 +5711,8 @@ def process_signup(username: str, email: str, password_hash: str, auth_salt: str
 
 @shared_task(queue=Queue.INTERACTIVE)
 def resend_signup_verification(email: str) -> None:
-    """Send a fresh verification link, if ``email`` has an account awaiting one, after the response.
+    """
+    Send a fresh verification link, if ``email`` has an account awaiting one, after the response.
 
     Args:
         email: The address as typed.
@@ -5572,7 +5724,8 @@ def resend_signup_verification(email: str) -> None:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def send_password_reset(email: str) -> None:
-    """Send a password-reset link, if ``email`` has an active account, after the response.
+    """
+    Send a password-reset link, if ``email`` has an active account, after the response.
 
     Args:
         email: The address as typed.
@@ -5584,7 +5737,8 @@ def send_password_reset(email: str) -> None:
 
 @shared_task(queue=Queue.INTERACTIVE)
 def deliver_email_claim(claim_id: int) -> None:
-    """Send a claimed address its confirmation link, or the in-use notice, after the response.
+    """
+    Send a claimed address its confirmation link, or the in-use notice, after the response.
 
     Args:
         claim_id: PK of the pending ProfileEmail.
@@ -5599,7 +5753,8 @@ def deliver_email_claim(claim_id: int) -> None:
 
 @shared_task(queue=Queue.BULK)
 def announce_trip_change_task(trip_id: int, actor_id: int, change: str) -> int:
-    """Tell a trip's members of a change queued by ``change_notifications.announce_trip_change``.
+    """
+    Tell a trip's members of a change queued by ``change_notifications.announce_trip_change``.
 
     Args:
         trip_id: PK of the changed trip.
@@ -5622,7 +5777,8 @@ def announce_trip_change_task(trip_id: int, actor_id: int, change: str) -> int:
 
 @shared_task(queue=Queue.BULK)
 def announce_wiki_change_task(wiki_id: int, actor_id: int, change: str, fields: list[str]) -> int:
-    """Tell a wiki's audience of a change queued by ``change_notifications.announce_wiki_change``.
+    """
+    Tell a wiki's audience of a change queued by ``change_notifications.announce_wiki_change``.
 
     Args:
         wiki_id: PK of the changed wiki.

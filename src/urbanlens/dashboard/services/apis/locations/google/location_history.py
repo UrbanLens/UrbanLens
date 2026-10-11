@@ -24,7 +24,8 @@ MIN_CONFIDENCE = 50
 
 
 def _e7_degrees(value: object, *, bound: float) -> float | None:
-    """A Takeout ``latitudeE7``-style coordinate in degrees, or None when it is not a place on the globe.
+    """
+    A Takeout ``latitudeE7``-style coordinate in degrees, or None when it is not a place on the globe.
 
     Args:
         value: The integer the file holds: degrees times ten million.
@@ -43,7 +44,8 @@ def _e7_degrees(value: object, *, bound: float) -> float | None:
 
 
 def detect_location_history_format(data: dict) -> str | None:
-    """Identify the Google Location History JSON variant.
+    """
+    Identify the Google Location History JSON variant.
 
     Args:
         data: Parsed top-level JSON dict.
@@ -61,7 +63,8 @@ def detect_location_history_format(data: dict) -> str | None:
 
 
 def parse_semantic_visits(json_data: dict) -> Generator[dict[str, Any], None, None]:
-    """Yield one visit dict per qualifying ``placeVisit`` in a timeline JSON.
+    """
+    Yield one visit dict per qualifying ``placeVisit`` in a timeline JSON.
 
     Args:
         json_data: Parsed Semantic Location History dict containing ``timelineObjects``.
@@ -75,7 +78,8 @@ def parse_semantic_visits(json_data: dict) -> Generator[dict[str, Any], None, No
 
 
 def semantic_visit(obj: dict) -> dict[str, Any] | None:
-    """The visit one ``timelineObjects`` entry records, if it is a qualifying ``placeVisit``.
+    """
+    The visit one ``timelineObjects`` entry records, if it is a qualifying ``placeVisit``.
 
     Args:
         obj: One entry of a Semantic Location History file's ``timelineObjects``.
@@ -117,7 +121,8 @@ def iter_location_history_events(
     profile: Profile,
     radius_m: int = VISIT_MATCH_RADIUS_M,
 ) -> Iterator[dict[str, Any]]:
-    """Log each place visit as a history visit to the profile's nearest pin, one event per whole percent.
+    """
+    Log each place visit as a history visit to the profile's nearest pin, one event per whole percent.
 
     Args:
         visits: Dicts shaped like :func:`parse_semantic_visits`'s, with ``latitude``, ``longitude`` and a
@@ -198,7 +203,8 @@ def _parse_iso_timestamp(value: str | None) -> datetime | None:
 
 
 def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
-    """Yield RawTrackPoint entries for an activitySegment, preferring the timestamped path.
+    """
+    Yield RawTrackPoint entries for an activitySegment, preferring the timestamped path.
     ``simplifiedRawPath.points`` carries a per-point timestamp when Google recorded one; ``waypointPath.waypoints`` is a coarser fallback with only coordinates, so points from it carry no timestamp."""
     from urbanlens.dashboard.services.import_formats.gpx_tracks import track_point
 
@@ -217,7 +223,8 @@ def _activity_segment_points(segment: dict) -> Generator[Any, None, None]:
 
 
 def _activity_segment(obj: dict) -> dict[str, Any] | None:
-    """The route one ``timelineObjects`` entry records, if it is an activitySegment with a usable path.
+    """
+    The route one ``timelineObjects`` entry records, if it is an activitySegment with a usable path.
 
     Args:
         obj: One entry of a Semantic Location History file's ``timelineObjects``.
@@ -240,7 +247,8 @@ def _activity_segment(obj: dict) -> dict[str, Any] | None:
 
 
 def semantic_history_to_routes(json_data: dict, profile: Profile, source_filename: str) -> list[ParsedRoute]:
-    """Build unsaved Route candidates from a Semantic Location History file's activitySegments.
+    """
+    Build unsaved Route candidates from a Semantic Location History file's activitySegments.
 
     Args:
         json_data: Parsed Semantic Location History dict.
@@ -254,7 +262,8 @@ def semantic_history_to_routes(json_data: dict, profile: Profile, source_filenam
 
 
 def semantic_route(obj: dict, profile: Profile, source_filename: str) -> ParsedRoute | None:
-    """The unsaved Route candidate one ``timelineObjects`` entry records, if it is a qualifying activitySegment.
+    """
+    The unsaved Route candidate one ``timelineObjects`` entry records, if it is a qualifying activitySegment.
 
     Args:
         obj: One entry of a Semantic Location History file's ``timelineObjects``.

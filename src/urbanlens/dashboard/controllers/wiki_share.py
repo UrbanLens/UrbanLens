@@ -1,4 +1,5 @@
-"""Sharing a pin's own content to the community wiki for its place.
+"""
+Sharing a pin's own content to the community wiki for its place.
 
 GET /map/pin/<slug>/wiki/share/ → HTMX dialog listing shareable pin fields
 POST /map/pin/<slug>/wiki/share/ → copy the chosen fields onto the wiki

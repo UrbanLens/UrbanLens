@@ -47,7 +47,8 @@ class MemoriesViewEmptyStateTests(TestCase):
 
 
 class MemoriesViewLabelOnlyVisitTests(TestCase):
-    """A pin marked "Visited" via the label alone (no PinVisit, no last_visited record) must count as memory data and produce visible content on the Memories page - not a blank page and not the "No memory data yet" empty state, since Pin.objects.visited_without_record() already says there is something here worth showing (a place to log a date for).
+    """
+    A pin marked "Visited" via the label alone (no PinVisit, no last_visited record) must count as memory data and produce visible content on the Memories page - not a blank page and not the "No memory data yet" empty state, since Pin.objects.visited_without_record() already says there is something here worth showing (a place to log a date for).
 
     Regression test: has_memory_data was computed strictly from PinVisit/Route/Image/Trip counts, so this exact
     profile shape (nothing but a label-only-visited pin) got has_memory_data=False *and* a non-empty
@@ -76,7 +77,8 @@ class MemoriesViewLabelOnlyVisitTests(TestCase):
         self.assertContains(response, "Overlook Ruins")
 
     def test_hero_stats_are_not_swallowed_by_a_zero_pinvisit_count(self) -> None:
-        """Ensures the fix folds label-only visits into has_memory_data rather
+        """
+        Ensures the fix folds label-only visits into has_memory_data rather
         than merely papering over the symptom in the template."""
         from urbanlens.dashboard.controllers.memories import _compute_hero_stats
 

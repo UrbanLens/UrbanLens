@@ -1,4 +1,5 @@
-"""Media galleries and Article > Sources show only what is about the place (P196), on every page that reads them.
+"""
+Media galleries and Article > Sources show only what is about the place (P196), on every page that reads them.
 
 One cached Wikimedia Commons row for Hudson River State Hospital holds what a real search returns: photos named for
 the place, a photo geolocated on the campus with an unrelated caption, one geolocated in Binghamton, one across the

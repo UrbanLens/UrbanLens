@@ -37,7 +37,8 @@ METERS_PER_DEGREE_LAT = 111_320.0
 
 
 def meters_to_lng_degrees(meters: float, latitude: float) -> float:
-    """Convert a real-world east-west distance to a longitude-degree delta.
+    """
+    Convert a real-world east-west distance to a longitude-degree delta.
     A degree of longitude spans fewer real-world metres away from the equator (by a factor of ``cos(latitude)``), so naively dividing by a constant metres-per-degree value (as if longitude behaved like latitude) understates the delta needed at higher latitudes.
 
     Args:
@@ -51,7 +52,8 @@ def meters_to_lng_degrees(meters: float, latitude: float) -> float:
 
 
 def buffer_point_by_meters(point: Point, radius_meters: float, *, latitude: float | None = None) -> Polygon:
-    """Buffer a WGS-84 point by a real-world metre radius, as a true circle.
+    """
+    Buffer a WGS-84 point by a real-world metre radius, as a true circle.
     ``GEOSGeometry.buffer()`` operates in the geometry's own coordinate units (degrees, for SRID 4326), so naively converting ``radius_meters`` to degrees with a single constant and buffering by that amount on both axes produces a shape that is a circle in *degree* space but an ellipse in *real-world distance*: it is squashed east-west, since a degree of longitude covers fewer metres than a degree of latitude away from the equator.
 
     Args:
@@ -76,7 +78,8 @@ def buffer_point_by_meters(point: Point, radius_meters: float, *, latitude: floa
 
 
 def circle_for_coordinates(latitude, longitude, radius_meters: int = DEFAULT_RADIUS_METERS) -> GEOSGeometry | None:
-    """Return the default circular boundary around a coordinate pair.
+    """
+    Return the default circular boundary around a coordinate pair.
 
     Args:
         latitude: WGS-84 latitude, or None.
@@ -120,7 +123,8 @@ _BoundaryManagerBase = abstract.DashboardManager.from_queryset(BoundaryQuerySet)
 
 
 class BoundaryManager(_BoundaryManagerBase["Boundary"]):
-    """Manager for Boundary.
+    """
+    Manager for Boundary.
 
     Resolution helpers return *polygons* (not rows) because the effective
     boundary for a pin or wiki may be synthesized (circle fallback) or
@@ -142,7 +146,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
     # ------------------------------------------------------------------
 
     def rows_by_pin_id(self, pin_ids: Iterable[int], boundary_type: str) -> dict[int, Boundary]:
-        """Bulk-fetch pin-owned boundary rows of one type, keyed by pin id.
+        """
+        Bulk-fetch pin-owned boundary rows of one type, keyed by pin id.
 
         Args:
             pin_ids: Primary keys of the pins to look up.
@@ -157,7 +162,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return {row.pin_id: row for row in self.filter(pin_id__in=pin_ids, boundary_type=boundary_type)}
 
     def rows_by_wiki_id(self, wiki_ids: Iterable[int], boundary_type: str) -> dict[int, Boundary]:
-        """Bulk-fetch wiki-owned boundary rows of one type, keyed by wiki id.
+        """
+        Bulk-fetch wiki-owned boundary rows of one type, keyed by wiki id.
 
         Args:
             wiki_ids: Primary keys of the wikis to look up.
@@ -172,7 +178,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return {row.wiki_id: row for row in self.filter(wiki_id__in=wiki_ids, boundary_type=boundary_type)}
 
     def official_polygons_by_location_id(self, location_ids: Iterable[int], boundary_type: str) -> dict[int, GEOSGeometry | None]:
-        """Bulk-resolve each location's official place outline, keyed by location id.
+        """
+        Bulk-resolve each location's official place outline, keyed by location id.
         The batched counterpart to the place step of :meth:`resolve_for_pin`, for callers resolving many markers at once.
 
         Args:
@@ -206,7 +213,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
     # ------------------------------------------------------------------
 
     def resolve_for_wiki(self, wiki: Wiki, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
-        """Resolve the polygon to display for a wiki page, with its source.
+        """
+        Resolve the polygon to display for a wiki page, with its source.
         Scope first (a wiki anchored to a building draws the footprint, not the parcel), then wiki-customized row → the wiki's place outline → circle fallback (property only; buildings have no fallback shape).
         Scoping here is what makes "the boundary used when creating a wiki for a building is the building's" true by construction rather than by every call site remembering to ask for the right type.
 
@@ -230,7 +238,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return self._resolve_wiki_chain(wiki, boundary_type, row=lambda: self.row_for_wiki(wiki, boundary_type), concealed=is_concealed(wiki))
 
     def own_polygons_for_wikis(self, wikis: Iterable[Wiki], boundary_type: str, viewer: Profile | None) -> dict[int, GEOSGeometry | None]:
-        """:meth:`resolve_for_wiki`'s polygon for many wikis, as ``viewer`` sees them, in a fixed number of queries.
+        """
+        :meth:`resolve_for_wiki`'s polygon for many wikis, as ``viewer`` sees them, in a fixed number of queries.
 
         Args:
             wikis: The wikis.
@@ -249,7 +258,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
 
     @staticmethod
     def _resolve_wiki_chain(wiki: Wiki, boundary_type: str, *, row: Callable[[], Boundary | None], concealed: bool) -> tuple[GEOSGeometry | None, str | None]:
-        """The :meth:`resolve_for_wiki` chain, given how to find the wiki's own row and whether the viewer may see it.
+        """
+        The :meth:`resolve_for_wiki` chain, given how to find the wiki's own row and whether the viewer may see it.
 
         Args:
             wiki: The wiki, its place and location loaded.
@@ -282,7 +292,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return None, None
 
     def resolve_for_pin(self, pin: Pin, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
-        """Resolve the polygon that applies to a pin, with its source.
+        """
+        Resolve the polygon that applies to a pin, with its source.
         Two questions, in that order. **Should this marker draw this kind of boundary at all?** A marker standing on a footprint on a multi-building property is not about the 200-acre parcel under it, so a property request answers nothing - see ``services.places.scope.place_polygon``.
 
         Args:
@@ -313,7 +324,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return self._resolve_pin_tail(boundary_type, location=location, scoped=scoped, wiki_row=wiki_row)
 
     def _resolve_pin_head(self, pin: Pin, boundary_type: str, *, row: Boundary | None, place: Place | None, scoped: GEOSGeometry | None, inherit: bool = True) -> tuple[GEOSGeometry | None, str | None] | None:
-        """The steps of :meth:`resolve_for_pin` that come before the wiki.
+        """
+        The steps of :meth:`resolve_for_pin` that come before the wiki.
 
         Args:
             pin: The pin.
@@ -360,7 +372,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
 
     @staticmethod
     def _resolve_pin_tail(boundary_type: str, *, location: Location | None, scoped: GEOSGeometry | None, wiki_row: Boundary | None) -> tuple[GEOSGeometry | None, str | None]:
-        """The steps of :meth:`resolve_for_pin` from the wiki on.
+        """
+        The steps of :meth:`resolve_for_pin` from the wiki on.
 
         Args:
             boundary_type: A :class:`BoundaryType` value.
@@ -384,7 +397,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return None, None
 
     def effective_polygons_for_pins(self, pins: Iterable[Pin], boundary_type: str) -> dict[int, GEOSGeometry | None]:
-        """:meth:`effective_polygon_for_pin` for many pins, in a fixed number of queries.
+        """
+        :meth:`effective_polygon_for_pin` for many pins, in a fixed number of queries.
 
         The same chain as :meth:`resolve_for_pin`, with each step's rows fetched for the whole batch. A detail
         pin (one with a parent) can inherit its parent's boundary, which is a walk up its own ancestors, so those
@@ -403,7 +417,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
         return answers
 
     def own_polygons_for_pins(self, pins: Iterable[Pin], boundary_type: str) -> dict[int, GEOSGeometry | None]:
-        """Each pin's own polygon - drawn, generated, its wiki's or its place's - in a fixed number of queries.
+        """
+        Each pin's own polygon - drawn, generated, its wiki's or its place's - in a fixed number of queries.
 
         Unlike :meth:`effective_polygons_for_pins`, a detail pin never takes its parent's polygon, and so the batch
         never walks up a hierarchy.
@@ -453,7 +468,8 @@ class BoundaryManager(_BoundaryManagerBase["Boundary"]):
 
     @staticmethod
     def _wikis_for_pins(pins: list[tuple[Pin, Location | None]]) -> dict[int, int]:
-        """Each pin's wiki id - its own, else its location's (``Wiki.objects.existing_for_location``).
+        """
+        Each pin's wiki id - its own, else its location's (``Wiki.objects.existing_for_location``).
 
         Up to two queries, plus two for each campus whose wiki a pin reaches only through the campus's place.
 

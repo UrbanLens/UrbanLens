@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ResultTypeMeta:
-    """Display metadata for one result type (section header in the dialog).
+    """
+    Display metadata for one result type (section header in the dialog).
 
     Attributes:
         slug: Stable identifier, also usable as a type filter in queries.
@@ -44,7 +45,8 @@ RESULT_TYPES: dict[str, ResultTypeMeta] = {
 
 @dataclass(slots=True)
 class SearchResult:
-    """One search hit, ready to render.
+    """
+    One search hit, ready to render.
     ``object_slug``/``object_uuid`` exist so that surface never has to try: they carry the identifiers this codebase actually addresses the result by, and every provider is required to populate them.
 
     Attributes:
@@ -79,7 +81,8 @@ class SearchResult:
 
 
 def excerpt(text: str | None, terms: list[str], *, radius: int = 45) -> str:
-    """Return a short excerpt of ``text`` centered on the first matching term.
+    """
+    Return a short excerpt of ``text`` centered on the first matching term.
 
     Args:
         text: The haystack (may be None/empty).

@@ -8,7 +8,8 @@ from urbanlens.dashboard.services.ai.assistant import MAX_MESSAGE_CHARS
 
 
 class AssistantHistoryEntrySerializer(serializers.Serializer):
-    """One prior turn in the conversation, carried by the client between requests.
+    """
+    One prior turn in the conversation, carried by the client between requests.
 
     The assistant is stateless server-side for this API - unlike the web chat, which keeps history in
     the Django session, a bearer-token client has no session to keep it in.
@@ -31,7 +32,8 @@ class AssistantMessageRequestSerializer(serializers.Serializer):
 
 
 class AssistantProposalSerializer(serializers.Serializer):
-    """One write-tool proposal awaiting the caller's confirmation.
+    """
+    One write-tool proposal awaiting the caller's confirmation.
 
     /assistant/turn/<turn_id>/confirm/<n>/``).
 
@@ -62,7 +64,8 @@ class AssistantProposalConfirmResponseSerializer(serializers.Serializer):
 
 
 class AssistantTurnPendingSerializer(serializers.Serializer):
-    """Body of a 202 response: the turn was enqueued (or is still running) on ai-worker.
+    """
+    Body of a 202 response: the turn was enqueued (or is still running) on ai-worker.
 
     ``turn_id`` is only present on the initial POST's 202 - the poll endpoint's own URL already carries
     it, so echoing it back there would be redundant.

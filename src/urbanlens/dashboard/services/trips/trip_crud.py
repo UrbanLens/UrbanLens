@@ -39,7 +39,8 @@ TRIP_PERMISSION_FIELDS: tuple[str, ...] = (
 
 
 def _trip_name(value: object) -> str:
-    """A submitted trip name, stripped: ``""`` for none.
+    """
+    A submitted trip name, stripped: ``""`` for none.
 
     Raises:
         TripValidationError: The name is not text, or is longer than its column.
@@ -53,7 +54,8 @@ def _trip_name(value: object) -> str:
 
 
 def _trip_description(value: object) -> str | None:
-    """A submitted description: None for a blank one.
+    """
+    A submitted description: None for a blank one.
 
     Raises:
         TripValidationError: The description is not text, or exceeds the shared text limit.
@@ -67,7 +69,8 @@ def _trip_description(value: object) -> str | None:
 
 
 def _trip_date(value: object, label: str) -> datetime.date | None:
-    """A submitted date: a ``date``, a ``YYYY-MM-DD`` string, or blank for none.
+    """
+    A submitted date: a ``date``, a ``YYYY-MM-DD`` string, or blank for none.
 
     Raises:
         TripValidationError: Anything else.
@@ -85,7 +88,8 @@ def _trip_date(value: object, label: str) -> datetime.date | None:
 
 
 def ensure_upcoming_trip_quota(creator: Profile) -> None:
-    """Refuse one more trip for ``creator`` once they are at ``max_upcoming_trips_per_user``.
+    """
+    Refuse one more trip for ``creator`` once they are at ``max_upcoming_trips_per_user``.
     Takes a lock on the creator's profile row, so it belongs inside the ``transaction.atomic()`` that also creates the trip: two creations racing for the last slot then queue instead of both passing.
 
     Args:
@@ -110,7 +114,8 @@ def create_trip(
     invite_profile_ids: Sequence[Any] = (),
     client_uuid: UUID | None = None,
 ) -> tuple[Trip, bool]:
-    """Create a trip, join its creator, and invite any chosen friends.
+    """
+    Create a trip, join its creator, and invite any chosen friends.
 
     Args:
         creator: The profile creating the trip, joined automatically with an RSVP of yes.
@@ -177,7 +182,8 @@ def create_trip(
 
 
 def invite_members(trip: Trip, inviter: Profile, invite_profile_ids: Sequence[Any]) -> int:
-    """Invite a set of the inviter's own friends to a freshly created trip.
+    """
+    Invite a set of the inviter's own friends to a freshly created trip.
 
     Args:
         trip: The trip to invite to.
@@ -212,7 +218,8 @@ def invite_members(trip: Trip, inviter: Profile, invite_profile_ids: Sequence[An
 
 
 def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
-    """Apply a presence-keyed partial update to a trip's own metadata.
+    """
+    Apply a presence-keyed partial update to a trip's own metadata.
     Only keys present in *changes* are touched, so a client syncing one field never clobbers another changed elsewhere in the meantime.
 
     Args:
@@ -244,7 +251,8 @@ def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Tr
 
 
 def delete_trip(trip: Trip, actor: Profile) -> None:
-    """Delete a trip, stashing it for Undo History first.
+    """
+    Delete a trip, stashing it for Undo History first.
 
     Args:
         trip: The trip to delete.
@@ -262,7 +270,8 @@ def delete_trip(trip: Trip, actor: Profile) -> None:
 
 
 def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
-    """Apply a presence-keyed partial update to a trip's permission levels.
+    """
+    Apply a presence-keyed partial update to a trip's permission levels.
     Only keys present in *changes* are touched, matching :func:`update_trip`.
 
     Args:

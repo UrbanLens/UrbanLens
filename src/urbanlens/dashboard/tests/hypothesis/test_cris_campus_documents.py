@@ -1,4 +1,5 @@
-"""A campus page's CRIS documents come from every record on the site, read from REData's real answer for HRSH (P234).
+"""
+A campus page's CRIS documents come from every record on the site, read from REData's real answer for HRSH (P234).
 
 The fixture is REData's recorded ``/cultural-resources/lookup/`` answer for the Hudson River State Hospital campus,
 trimmed to the fields the plugin reads, with the neighbouring Quiet Cove Riverfront Park district the same lookup

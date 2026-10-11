@@ -95,7 +95,8 @@ _REACTION_EMOJI_FORBIDDEN = set("<>&\"'`=/\\{}") | set("abcdefghijklmnopqrstuvwx
 
 
 def is_safe_reaction_emoji(emoji: str) -> bool:
-    """Return True when `emoji` is a plausible, render-safe reaction glyph.
+    """
+    Return True when `emoji` is a plausible, render-safe reaction glyph.
 
     Args:
         emoji: The candidate reaction string (already length-capped by the caller).
@@ -111,7 +112,8 @@ _presence = ConnectionRegistry(prefix="ul_dm_online", stale_after_seconds=socket
 
 
 def mark_profile_online(profile_id: int, connection_id: str) -> None:
-    """Record one live DM socket for `profile_id`.
+    """
+    Record one live DM socket for `profile_id`.
 
     Args:
         profile_id: PK of the profile that just connected.
@@ -121,7 +123,8 @@ def mark_profile_online(profile_id: int, connection_id: str) -> None:
 
 
 def refresh_profile_presence(profile_id: int, connection_id: str) -> None:
-    """Keep a live DM socket counted; called on the socket's heartbeat.
+    """
+    Keep a live DM socket counted; called on the socket's heartbeat.
 
     Args:
         profile_id: PK of the connected profile.
@@ -131,7 +134,8 @@ def refresh_profile_presence(profile_id: int, connection_id: str) -> None:
 
 
 def mark_profile_offline(profile_id: int, connection_id: str) -> None:
-    """Forget one DM socket for `profile_id`.
+    """
+    Forget one DM socket for `profile_id`.
 
     Args:
         profile_id: PK of the profile that just disconnected.
@@ -141,7 +145,8 @@ def mark_profile_offline(profile_id: int, connection_id: str) -> None:
 
 
 def is_profile_online(profile: Profile) -> bool:
-    """Return True while `profile` has at least one live DM socket.
+    """
+    Return True while `profile` has at least one live DM socket.
 
     Args:
         profile: The profile to check.
@@ -153,7 +158,8 @@ def is_profile_online(profile: Profile) -> bool:
 
 
 def broadcast_typing_indicator(sender_id: int, recipient_slug: str) -> None:
-    """Relay a "typing" event to `recipient_slug` if the sender may write to them, honoring the sender's privacy setting.
+    """
+    Relay a "typing" event to `recipient_slug` if the sender may write to them, honoring the sender's privacy setting.
 
     Args:
         sender_id: PK of the profile that is typing.
@@ -174,7 +180,8 @@ def broadcast_typing_indicator(sender_id: int, recipient_slug: str) -> None:
 
 
 def direct_message_group_name(profile_id: int) -> str:
-    """Build the channel-layer group name for one profile's live direct messages.
+    """
+    Build the channel-layer group name for one profile's live direct messages.
     Every open browser session of that profile joins this group (via ``DirectMessageConsumer``), so one ``group_send`` reaches all tabs at once.
 
     Args:
@@ -186,7 +193,8 @@ def direct_message_group_name(profile_id: int) -> str:
 
 
 def can_direct_message(sender: Profile, recipient: Profile) -> bool:
-    """Return True when ``sender`` is allowed to message ``recipient``.
+    """
+    Return True when ``sender`` is allowed to message ``recipient``.
 
     Args:
         sender: The profile attempting to send.
@@ -202,7 +210,8 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
 
 
 def conversation_reachable(profile: Profile, partner: Profile) -> bool:
-    """Whether ``profile`` may address a conversation with ``partner``: one exists, or a message would be accepted.
+    """
+    Whether ``profile`` may address a conversation with ``partner``: one exists, or a message would be accepted.
 
     Anything else must answer exactly as a partner who does not exist would.
 
@@ -216,7 +225,8 @@ def conversation_reachable(profile: Profile, partner: Profile) -> bool:
 
 
 def messageable_profile_pks(sender: Profile, recipients: Sequence[Profile]) -> set[int]:
-    """Batch equivalent of :func:`can_direct_message` over many recipients at once.
+    """
+    Batch equivalent of :func:`can_direct_message` over many recipients at once.
 
     Args:
         sender: The profile attempting to send.
@@ -236,7 +246,8 @@ def messageable_profile_pks(sender: Profile, recipients: Sequence[Profile]) -> s
 
 
 def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) -> bool:
-    """Whether ``viewer`` may be given the raw image URLs on ``message``.
+    """
+    Whether ``viewer`` may be given the raw image URLs on ``message``.
     The image-consent handshake (blurred preview + Allow / Allow Once / Reject) only means anything if a recipient who has not yet consented never receives the underlying media URL.
 
     Args:
@@ -260,7 +271,8 @@ def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) ->
 
 
 def _serialize_images(message: DirectMessage, viewer: Profile | None) -> list[dict[str, Any]]:
-    """Render the message's attachments for one viewer, withholding URLs without consent.
+    """
+    Render the message's attachments for one viewer, withholding URLs without consent.
 
     Args:
         message: The message whose attachments are being rendered.
@@ -284,7 +296,8 @@ def _serialize_images(message: DirectMessage, viewer: Profile | None) -> list[di
 
 
 def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
-    """Serialize a message into the JSON payload pushed over the WebSocket.
+    """
+    Serialize a message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
@@ -346,7 +359,8 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
 
 
 def _broadcast_direct_message(message: DirectMessage) -> None:
-    """Push a new message to both participants' live sessions after commit.
+    """
+    Push a new message to both participants' live sessions after commit.
     Best-effort, mirroring ``services.visits.safety._broadcast_chat_message``: the row is already durably saved, so a channel-layer failure is logged, not raised - the recipient still sees the message on their next page load or label poll.
 
     Args:
@@ -368,7 +382,8 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
 
 
 def _notify_recipient(message: DirectMessage) -> None:
-    """Raise an on-site notification for the recipient, honoring their preference.
+    """
+    Raise an on-site notification for the recipient, honoring their preference.
     Only fires when the recipient had no other unread messages from this sender - one notification per "conversation went unread", not one per message, so an active back-and-forth doesn't flood the bell dropdown.
 
     Args:
@@ -439,7 +454,8 @@ def _open_thread_cache_key(profile_id: int) -> str:
 
 
 def mark_thread_open(profile_id: int, partner_id: int) -> None:
-    """Record that `profile_id`'s client currently has the thread with `partner_id` open.
+    """
+    Record that `profile_id`'s client currently has the thread with `partner_id` open.
 
     Args:
         profile_id: PK of the profile viewing the thread.
@@ -449,7 +465,8 @@ def mark_thread_open(profile_id: int, partner_id: int) -> None:
 
 
 def is_thread_open(profile_id: int, partner_id: int) -> bool:
-    """Return True if `profile_id` currently has the thread with `partner_id` open.
+    """
+    Return True if `profile_id` currently has the thread with `partner_id` open.
 
     Args:
         profile_id: PK of the profile who would be viewing the thread.
@@ -470,7 +487,8 @@ def _text_alert_debounce_key(sender_id: int, recipient_id: int) -> str:
 
 
 def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
-    """Return True if an email was already sent for this sender/recipient's current unread streak.
+    """
+    Return True if an email was already sent for this sender/recipient's current unread streak.
 
     Args:
         sender_id: PK of the message sender.
@@ -482,7 +500,8 @@ def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
 
 
 def is_text_alert_debounced(sender_id: int, recipient_id: int) -> bool:
-    """Return True if a WhatsApp/SMS alert already went out for this unread streak.
+    """
+    Return True if a WhatsApp/SMS alert already went out for this unread streak.
 
     Args:
         sender_id: PK of the message sender.
@@ -494,7 +513,8 @@ def is_text_alert_debounced(sender_id: int, recipient_id: int) -> bool:
 
 
 def clear_email_debounce(sender_id: int, recipient_id: int) -> None:
-    """Clear the "already alerted" markers so the next unread streak can alert again.
+    """
+    Clear the "already alerted" markers so the next unread streak can alert again.
 
     Args:
         sender_id: PK of the message sender.
@@ -504,7 +524,8 @@ def clear_email_debounce(sender_id: int, recipient_id: int) -> None:
 
 
 def _schedule_message_email(message: DirectMessage) -> None:
-    """Queue the delayed "new message" email, honoring the recipient's preference.
+    """
+    Queue the delayed "new message" email, honoring the recipient's preference.
 
     Args:
         message: The freshly created, still-unread message.
@@ -525,7 +546,8 @@ def _schedule_message_email(message: DirectMessage) -> None:
 
 
 def _schedule_message_text_alerts(message: DirectMessage) -> None:
-    """Queue the delayed WhatsApp/SMS "new message" alert, honoring the recipient's toggles.
+    """
+    Queue the delayed WhatsApp/SMS "new message" alert, honoring the recipient's toggles.
     Same shape as the email flow: delayed so an active user reads organically first, re-checked for unreadness in the task, debounced per unread streak.
 
     Args:
@@ -549,7 +571,8 @@ def _schedule_message_text_alerts(message: DirectMessage) -> None:
 
 
 def send_message_text_alerts_now(message: DirectMessage) -> None:
-    """Send the WhatsApp/SMS "new message" alert(s), marking the unread streak as alerted.
+    """
+    Send the WhatsApp/SMS "new message" alert(s), marking the unread streak as alerted.
     Never includes message content beyond a sender attribution: the text goes to a third-party carrier, so even non-E2EE bodies stay off that channel.
 
     Args:
@@ -574,7 +597,8 @@ def send_message_text_alerts_now(message: DirectMessage) -> None:
 
 
 def send_message_email_now(message: DirectMessage) -> None:
-    """Send the "new message" email for `message`, marking the unread streak as emailed.
+    """
+    Send the "new message" email for `message`, marking the unread streak as emailed.
 
     Args:
         message: The message to email about."""
@@ -620,7 +644,8 @@ def send_message_email_now(message: DirectMessage) -> None:
 
 
 def resolve_attachment_ids(sender: Profile, *, image_ids: list[int] | None = None, image_uuids: list[UUID] | None = None) -> list[int]:
-    """Merge integer ``image_ids`` with uuid-addressed ``image_uuids`` into one pk list.
+    """
+    Merge integer ``image_ids`` with uuid-addressed ``image_uuids`` into one pk list.
     ``image_uuids`` is the preferred field for new clients (``MessageSendSerializer`` accepts both, additively - see its docstring); this only resolves addressing.
 
     Args:
@@ -653,7 +678,8 @@ def create_direct_message(
     client_uuid: UUID | None = None,
     defer_broadcast: bool = False,
 ) -> DirectMessage:
-    """Validate, persist, broadcast, and notify for one new direct message.
+    """
+    Validate, persist, broadcast, and notify for one new direct message.
 
     Args:
         sender: The profile sending the message.
@@ -821,7 +847,8 @@ def create_direct_message(
 
 
 def broadcast_direct_message(message: DirectMessage) -> None:
-    """Push `message` to both participants' live sessions now.
+    """
+    Push `message` to both participants' live sessions now.
 
     Args:
         message: The message to broadcast."""
@@ -829,7 +856,8 @@ def broadcast_direct_message(message: DirectMessage) -> None:
 
 
 def _broadcast_message_update(payload: dict[str, Any], groups: set[str]) -> None:
-    """Push an arbitrary JSON payload to the given channel-layer groups after commit.
+    """
+    Push an arbitrary JSON payload to the given channel-layer groups after commit.
     Shared by delete/tombstone updates - reuses the ``dm.message`` relay (the consumer forwards any payload verbatim), varying only the inner ``type`` field so the client dispatches it correctly.
 
     Args:
@@ -844,7 +872,8 @@ def _broadcast_message_update(payload: dict[str, Any], groups: set[str]) -> None
 
 
 def delete_message_for_everyone(message: DirectMessage, actor: Profile) -> DirectMessage:
-    """Delete `message` for both participants - only the sender may do this.
+    """
+    Delete `message` for both participants - only the sender may do this.
 
     Args:
         message: The message to delete.
@@ -872,7 +901,8 @@ def delete_message_for_everyone(message: DirectMessage, actor: Profile) -> Direc
 
 
 def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMessage:
-    """Hide `message` from `actor`'s own view only - only the recipient may do this.
+    """
+    Hide `message` from `actor`'s own view only - only the recipient may do this.
 
     Args:
         message: The message to hide.
@@ -896,7 +926,8 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
 
 
 def reaction_summary(message: DirectMessage | GroupMessage, *, viewer: Profile | None = None, blocks: SharedSpaceBlocks | None = None) -> list[dict[str, Any]]:
-    """Summarize a message's reactions grouped by emoji.
+    """
+    Summarize a message's reactions grouped by emoji.
     ``Reaction`` is one table with a nullable foreign key per host (see ``models.reactions``), so a group message's reactions live in the same rows under the same ``reactions`` related name, and the summary a client renders is identical for both.
 
     Args:
@@ -925,7 +956,8 @@ def reaction_summary(message: DirectMessage | GroupMessage, *, viewer: Profile |
 
 
 def _broadcast_reaction(message: DirectMessage) -> None:
-    """Push an updated reaction summary for `message` to both participants' live sessions.
+    """
+    Push an updated reaction summary for `message` to both participants' live sessions.
 
     Args:
         message: The message whose reactions changed.
@@ -941,7 +973,8 @@ def _broadcast_reaction(message: DirectMessage) -> None:
 
 
 def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str:
-    """Add or remove `profile`'s reaction of `emoji` on `message`.
+    """
+    Add or remove `profile`'s reaction of `emoji` on `message`.
 
     Args:
         profile: The reacting profile - must be the sender or recipient.
@@ -978,7 +1011,8 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
 
 
 def is_conversation_muted(viewer: Profile, partner: Profile) -> bool:
-    """Return whether `viewer` has muted notifications from `partner`.
+    """
+    Return whether `viewer` has muted notifications from `partner`.
 
     Args:
         viewer: The profile who may have muted.
@@ -993,7 +1027,8 @@ def is_conversation_muted(viewer: Profile, partner: Profile) -> bool:
 
 
 def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) -> bool:
-    """Put one conversation's mute state into the requested state, idempotently.
+    """
+    Put one conversation's mute state into the requested state, idempotently.
     Declarative rather than a toggle, and that is the whole point of it existing.
 
     Args:
@@ -1015,7 +1050,8 @@ def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) ->
 
 
 def display_identity_for(viewer: Profile, partner: Profile, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
-    """Return how `partner` should be displayed to `viewer` in a DM context right now.
+    """
+    Return how `partner` should be displayed to `viewer` in a DM context right now.
 
     Args:
         viewer: The profile viewing the conversation.
@@ -1032,7 +1068,8 @@ def display_identity_for(viewer: Profile, partner: Profile, *, visible_pks: set[
 
 
 def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[dict[str, Any]]:
-    """Return the profile's conversations, most recently active first.
+    """
+    Return the profile's conversations, most recently active first.
 
     Args:
         profile: The profile whose inbox to build.
@@ -1051,7 +1088,8 @@ def conversations_for(profile: Profile, *, only_unread: bool = False) -> list[di
 
 
 def build_dm_conversations(profile: Profile, rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Inbox dicts for ``conversation_rows`` rows, in the given order.
+    """
+    Inbox dicts for ``conversation_rows`` rows, in the given order.
 
     Args:
         profile: The viewer.
@@ -1101,7 +1139,8 @@ def build_dm_conversations(profile: Profile, rows: Sequence[Mapping[str, Any]]) 
 
 
 def has_any_conversation(profile: Profile) -> bool:
-    """Whether this profile has any conversation at all, of either kind.
+    """
+    Whether this profile has any conversation at all, of either kind.
     The dropdown needs this only to tell "all caught up" from "no messages yet".
 
     Args:
@@ -1117,7 +1156,8 @@ def has_any_conversation(profile: Profile) -> bool:
 
 
 def unread_conversations_for(profile: Profile, *, limit: int | None = None) -> list[dict[str, Any]]:
-    """Conversations with unread messages, newest first, across both kinds.
+    """
+    Conversations with unread messages, newest first, across both kinds.
 
     Args:
         profile: The viewer.
@@ -1131,7 +1171,8 @@ def unread_conversations_for(profile: Profile, *, limit: int | None = None) -> l
 
 
 def all_conversations_for(profile: Profile, *, limit: int | None = None) -> list[dict[str, Any]]:
-    """The profile's one-to-one and group conversations merged, newest first.
+    """
+    The profile's one-to-one and group conversations merged, newest first.
 
     Args:
         profile: The profile whose inbox to build.
@@ -1153,7 +1194,8 @@ MESSAGE_GROUP_GAP_SECONDS = 300
 
 
 def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, Any]]:
-    """Return this pair's encryption-key rotations after their first key.
+    """
+    Return this pair's encryption-key rotations after their first key.
 
     Args:
         profile: One participant.
@@ -1168,7 +1210,8 @@ def key_change_events_for(profile: Profile, partner: Profile) -> list[dict[str, 
 
 
 def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = None, limit: int = THREAD_PAGE_SIZE) -> tuple[list[DirectMessage], bool]:
-    """Return one page of a conversation, most recent messages first page by default.
+    """
+    Return one page of a conversation, most recent messages first page by default.
 
     Args:
         profile: One participant.
@@ -1211,7 +1254,8 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
 
 
 def build_thread_timeline(messages: list[DirectMessage], key_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge messages and key-change notices into one chronological timeline.
+    """
+    Merge messages and key-change notices into one chronological timeline.
 
     Args:
         messages: Thread messages, oldest first (mutated in place: each gets an ``is_grouped`` attribute).
@@ -1238,7 +1282,8 @@ def build_thread_timeline(messages: list[DirectMessage], key_events: list[dict[s
 
 
 def has_used_direct_messages(profile: Profile) -> bool:
-    """Return True when the profile has ever sent or received a direct message.
+    """
+    Return True when the profile has ever sent or received a direct message.
     Gates the navbar messages icon: users who have never touched the feature don't get an extra icon competing for attention.
 
     Args:
@@ -1252,7 +1297,8 @@ def has_used_direct_messages(profile: Profile) -> bool:
 
 
 def unread_conversation_total(profile: Profile) -> int:
-    """Direct and group conversations holding at least one message the profile has not read, as the navbar counts them.
+    """
+    Direct and group conversations holding at least one message the profile has not read, as the navbar counts them.
 
     Args:
         profile: The reader.
@@ -1271,7 +1317,8 @@ DIRECT_MESSAGE_SEARCH_LIMIT = 25
 
 
 def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: Profile | None = None) -> DirectMessageQuerySet:
-    """Build the filtered, ordered DirectMessage queryset for a parsed search query.
+    """
+    Build the filtered, ordered DirectMessage queryset for a parsed search query.
 
     Args:
         profile: The searching profile; results are scoped to messages they sent or received, minus anything they've deleted for themselves.
@@ -1294,7 +1341,8 @@ def message_search_queryset(profile: Profile, parsed: ParsedQuery, *, partner: P
 
 
 def search_direct_messages(profile: Profile, raw_query: str, *, partner: Profile | None = None, limit: int = DIRECT_MESSAGE_SEARCH_LIMIT) -> list[dict[str, Any]]:
-    """Search the profile's direct messages using the same NL parser as global search.
+    """
+    Search the profile's direct messages using the same NL parser as global search.
 
     Args:
         profile: The searching profile.

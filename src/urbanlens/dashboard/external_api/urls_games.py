@@ -1,4 +1,5 @@
-"""External-API routes for the gamified community-data surfaces.
+"""
+External-API routes for the gamified community-data surfaces.
 
 These games exist to get real data into wikis, so their write paths have side effects on community
 content - which is exactly why they are routed as their own domain rather than being folded into

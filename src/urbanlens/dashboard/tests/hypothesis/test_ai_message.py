@@ -1,4 +1,5 @@
-"""Tests for the AI MessageQueue and token estimation utilities.
+"""
+Tests for the AI MessageQueue and token estimation utilities.
 
 No database access - all tests exercise pure Python logic.
 """

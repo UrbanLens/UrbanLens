@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def candidate_name_for_location(location: Location, *, use_aliases: bool = True) -> str | None:
-    """Pick a meaningful name/alias to show for ``location``, or None if it has none.
+    """
+    Pick a meaningful name/alias to show for ``location``, or None if it has none.
     Reuses ``services.pins.public_pins.is_meaningful_name`` verbatim rather than a second heuristic - it already filters blank/placeholder/coordinate- shaped strings.
 
     Args:

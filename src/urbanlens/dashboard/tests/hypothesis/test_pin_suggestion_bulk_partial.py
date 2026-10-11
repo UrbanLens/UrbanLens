@@ -91,7 +91,8 @@ class BulkSuggestionPartialReportingTests(TestCase):
 
 
 class BulkAcceptDeferredNameResolutionTests(TestCase):
-    """Bulk accepts must never make a live Google name lookup inside the request.
+    """
+    Bulk accepts must never make a live Google name lookup inside the request.
 
     Both bulk endpoints now pass ``fetch_if_missing=False`` down the accept chain (the Location is created with
     ``official_name=None``) and instead dispatch ``tasks.resolve_location_place_name`` per name-less Location -

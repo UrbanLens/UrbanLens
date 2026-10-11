@@ -26,7 +26,8 @@ _WIKI_PHOTOS_PREVIEW_LIMIT = 60
 
 
 class WikiMediaProviderView(LoginRequiredMixin, View):
-    """One media provider's tiles for a wiki's location, vote-annotated.
+    """
+    One media provider's tiles for a wiki's location, vote-annotated.
 
     GET /location/<slug>/wiki/media/<source>/  → ``pin_media_items.html`` fragment
     """
@@ -153,7 +154,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": "photos", "wiki_mode": True})
 
     def _pending(self, request: HttpRequest, location: Location, profile: Profile, source: str, panel: GalleryMediaSource) -> HttpResponse:
-        """Warm the provider's cache from the viewer's own pin, or give up quietly.
+        """
+        Warm the provider's cache from the viewer's own pin, or give up quietly.
 
         A wiki viewer reaches the page because they have a pin at (or near) this location; we use *their*
         pin so the fetch is gated by their ``external_apis_enabled`` and counts against their quota.
@@ -180,7 +182,8 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
 
 
 class WikiMediaVoteView(LoginRequiredMixin, View):
-    """Cast, flip, or clear the viewer's community vote on one wiki Media item.
+    """
+    Cast, flip, or clear the viewer's community vote on one wiki Media item.
 
     POST /location/<slug>/wiki/media/vote/ →
 
@@ -271,7 +274,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
 
 
 class CopyWikiPhotoView(LoginRequiredMixin, View):
-    """Copy a wiki photo onto the viewer's own pin at this location.
+    """
+    Copy a wiki photo onto the viewer's own pin at this location.
 
     POST /location/<slug>/wiki/media/copy-to-pin/<int:image_id>/ →
 

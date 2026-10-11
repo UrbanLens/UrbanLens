@@ -58,7 +58,8 @@ class BuildingPlaceNestingTests(TestCase):
         self.assertEqual(places["osm:way/1"].parent_id, self.parcel.pk)
 
     def test_a_pin_already_resolved_to_the_parcel_moves_onto_the_new_building(self) -> None:
-        """The bug this whole module exists to fix.
+        """
+        The bug this whole module exists to fix.
 
         Before REData had described this footprint, the coordinate could only resolve to the parcel - that is
         how 124 pins on one campus each ended up claiming the whole property."""
@@ -107,7 +108,8 @@ class BuildingPlaceNestingTests(TestCase):
         self.assertEqual(places["cris:1"].parent_id, self.parcel.pk)
 
     def test_a_parent_ref_cycle_does_not_hang_and_loses_no_building(self) -> None:
-        """Two buildings each claiming the other as parent.
+        """
+        Two buildings each claiming the other as parent.
 
         Resolved by repeated passes rather than recursion precisely so this terminates - and both still become
         places, because the import already told the user it would create them."""
@@ -143,7 +145,8 @@ class BuildingPlaceNestingTests(TestCase):
 
 
 class DistinctRecordsStayDistinctTests(TestCase):
-    """A stable id the provider gave is stronger evidence than overlapping shapes.
+    """
+    A stable id the provider gave is stronger evidence than overlapping shapes.
 
     `find_matching_place` falls back to mutual centroid containment when no place carries the record's id -
     sensible for providers that publish no id, and how two sources' views of one parcel get merged."""

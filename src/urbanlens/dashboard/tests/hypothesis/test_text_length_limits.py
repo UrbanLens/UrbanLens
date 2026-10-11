@@ -49,7 +49,8 @@ def _location_with_wiki(name: str = "Old Mill") -> tuple[Location, Wiki]:
 
 
 class ModelFullCleanLengthTests(TestCase):
-    """`full_clean()` must reject text past each field's `max_length`.
+    """
+    `full_clean()` must reject text past each field's `max_length`.
 
     Each case starts from a fully-valid, already-saved instance (via ``baker.make``, so every other required
     field - FKs included - is already populated) and mutates only the field under test, then asserts the raised
@@ -214,7 +215,8 @@ class WikiEditDescriptionLengthTests(TestCase):
         self.assertEqual(self.wiki.description, text)
 
     def test_an_invalid_security_value_is_rejected_rather_than_dropped(self) -> None:
-        """This view used to skip the field and answer `{"ok": true}`.
+        """
+        This view used to skip the field and answer `{"ok": true}`.
 
         The dialog already renders `resp.error` on a non-ok response and keeps the user's values in place, so
         there was never a UI cost to telling them - only a report of a write that had not happened."""

@@ -1,4 +1,5 @@
-"""Applying a completed round's results to Glicko-2 ratings.
+"""
+Applying a completed round's results to Glicko-2 ratings.
 Mirrors ``services.spotguessr.ratings.apply_round_ratings`` exactly, reusing ``services.games.glicko2``'s pure math directly rather than reimplementing it."""
 
 from __future__ import annotations
@@ -12,7 +13,8 @@ from urbanlens.dashboard.services.games import glicko2
 
 @transaction.atomic
 def apply_round_ratings(round_: TriviaRound, answers: list[TriviaAnswer]) -> None:
-    """Update every participant's PlayerTriviaRating and the round's TriviaQuestionRating.
+    """
+    Update every participant's PlayerTriviaRating and the round's TriviaQuestionRating.
     ``services.trivia.session.submit_answer`` is the only caller and enforces this."""
     if not answers:
         return

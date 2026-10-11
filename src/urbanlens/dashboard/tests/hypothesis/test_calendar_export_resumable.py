@@ -1,4 +1,5 @@
-"""A trip's Google Calendar export resumes where the budget stopped it, and never sends an event twice (P334).
+"""
+A trip's Google Calendar export resumes where the budget stopped it, and never sends an event twice (P334).
 
 Measured before the fix with the real limiter and the HTTP layer stubbed: a trip with 40 scheduled activities under
 the site-wide 30-a-minute budget sent 30 requests per attempt (the trip event and the first 29 activities) and was
@@ -65,7 +66,8 @@ def _response(status: int, payload: dict[str, Any] | None = None) -> requests.Re
 
 
 class FakeGoogleCalendar:
-    """One calendar's events, answered the way the Calendar API answers.
+    """
+    One calendar's events, answered the way the Calendar API answers.
 
     A deleted event keeps its id, as Google's do: it is marked cancelled, a create reusing the id is refused with 409,
     and a patch can bring it back.
@@ -433,7 +435,8 @@ class ClientEventIdTests(SimpleTestCase):
 
 
 class AttemptCapCountsOnlyPushesThatWentNowhereTests(_CalendarExportCase):
-    """A push that wrote resets the count; one that wrote nothing adds to it only when Google refused it for a reason
+    """
+    A push that wrote resets the count; one that wrote nothing adds to it only when Google refused it for a reason
     of its own. The budget, Google's rate limit or failure, and a refusal of the site pass, and a push held up by
     one waits for the sweep however long it takes, up to ``MAX_OWED_CALENDAR_WRITE_AGE``."""
 

@@ -104,7 +104,8 @@ def record_evidence(
     consensus_round: ConsensusRound | None = None,
     context: dict[str, Any] | None = None,
 ) -> FactEvidence | None:
-    """Record one observation toward a Fact, creating the Fact row if this is the first.
+    """
+    Record one observation toward a Fact, creating the Fact row if this is the first.
     Queues an async confidence recompute (``tasks.recompute_fact_confidence``) rather than recomputing inline, per the project's Celery-everything-slow standard.
 
     Args:
@@ -150,7 +151,8 @@ def record_evidence(
 
 
 def record_photo_coordinate_evidence(image_id: int, guess_point: Point) -> FactEvidence | None:
-    """Log one anonymous SpotGuessr guess toward an image's ``photo_coordinates`` fact.
+    """
+    Log one anonymous SpotGuessr guess toward an image's ``photo_coordinates`` fact.
     Called from ``services.spotguessr.photo_coordinates.record_guess`` alongside (not instead of) the existing ``PhotoCoordinateGuess``/``estimated_latitude`` machinery, which stays authoritative for existing consumers.
 
     Args:
@@ -176,7 +178,8 @@ def record_photo_coordinate_evidence(image_id: int, guess_point: Point) -> FactE
 
 
 def record_consensus_answer_evidence(round_: ConsensusRound, answer: ConsensusAnswer) -> FactEvidence | None:
-    """Log one Consensus player's answer as evidence, trust-weighted by their ``ConsensusProfile``.
+    """
+    Log one Consensus player's answer as evidence, trust-weighted by their ``ConsensusProfile``.
 
     Args:
         round_: The round ``answer`` was submitted for.
@@ -217,7 +220,8 @@ def record_consensus_answer_evidence(round_: ConsensusRound, answer: ConsensusAn
 
 
 def record_wiki_edit_evidence(edit: WikiEdit) -> list[FactEvidence]:
-    """Log every Facts-mapped field change in a manual ``WikiEdit`` as evidence.
+    """
+    Log every Facts-mapped field change in a manual ``WikiEdit`` as evidence.
 
     Args:
         edit: The manual edit that was just saved.
@@ -255,7 +259,8 @@ def record_ai_evidence(
     image: Image | None = None,
     context: dict[str, Any] | None = None,
 ) -> FactEvidence | None:
-    """Log one AI-agent-sourced observation.
+    """
+    Log one AI-agent-sourced observation.
 
     Args:
         key: A key registered in ``services.facts.registry``.

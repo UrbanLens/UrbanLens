@@ -52,7 +52,8 @@ def street_view_target(location: Location) -> RoundTarget:
 
 
 def distance_for_guess(location: Location, guess_point: Point, *, target_is_point: bool, target_point: Point | None) -> float:
-    """Geodesic distance in meters from ``guess_point`` to a round's target.
+    """
+    Geodesic distance in meters from ``guess_point`` to a round's target.
     Boundary-based rounds resolve the location's *current* boundary live - boundaries are community-maintained and get more accurate over time, so an old round shouldn't freeze a stale one."""
     target = target_point if target_is_point else location_boundary_polygon(location)
     if target is None:

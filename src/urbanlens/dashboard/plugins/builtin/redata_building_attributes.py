@@ -1,4 +1,5 @@
-"""REData building-attributes plugin: standardized building name/number/year on pinned locations.
+"""
+REData building-attributes plugin: standardized building name/number/year on pinned locations.
 This is what makes a detail (child) pin - which has its own coordinates, distinct from its parent's, see ``controllers.detail_pins`` - resolve to *its own* building rather than whichever one happens to be first in REData's response."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ _CACHE_SOURCE = "redata_building_attributes"
 
 
 def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitude: float) -> dict[str, Any] | None:
-    """Pick the building closest to a coordinate.
+    """
+    Pick the building closest to a coordinate.
     The chosen building's name gets outright priority when naming a detail pin's location, so a wrong pick is user-visible.
 
     Args:
@@ -63,7 +65,8 @@ def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitud
 
 
 def _fetch_building_payload(latitude: float, longitude: float, *, location: Location | None = None) -> dict[str, Any]:
-    """Resolve the parcel at a coordinate and return its nearest building's record.
+    """
+    Resolve the parcel at a coordinate and return its nearest building's record.
     Only a cold cache falls through to fetching directly.
 
     Args:
@@ -114,7 +117,8 @@ def _fetch_building_payload(latitude: float, longitude: float, *, location: Loca
 
 
 def _render_building_attributes(data: dict[str, Any]) -> dict[str, Any] | None:
-    """Build the Building Attributes card context from a cached building payload.
+    """
+    Build the Building Attributes card context from a cached building payload.
 
     Args:
         data: A cached ``_fetch_building_payload`` result (``{}`` when nothing was found).
@@ -156,7 +160,8 @@ class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self, pin: Pin) -> bool:
-        """Also requires REData to be configured - this panel has no other data source.
+        """
+        Also requires REData to be configured - this panel has no other data source.
         Without this the panel was scheduled for every US pin on an install with no REData, and its fetch cached an empty payload for each one."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
@@ -172,7 +177,8 @@ class RedataBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Render the chosen building's attributes, or nothing (204).
+        """
+        Render the chosen building's attributes, or nothing (204).
         Those pins show the full building list instead (see ``plugins.builtin.parcel_buildings``)."""
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
@@ -191,7 +197,8 @@ class RedataBuildingAttributesEnrichmentSource(LocationCacheEnrichmentSource):
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self) -> bool:
-        """Requires REData to be configured - this source has no other backend.
+        """
+        Requires REData to be configured - this source has no other backend.
         Without it the cycle picks candidates, every fetch raises, and the run logs one exception per location."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 

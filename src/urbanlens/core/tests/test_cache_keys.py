@@ -29,7 +29,8 @@ class MakeCacheKeyTests(SimpleTestCase):
         self.assertNotEqual(key_a, key_b)
 
     def test_all_parts_contribute_to_the_key(self):
-        """A change to any part - not just the first - must change the key.
+        """
+        A change to any part - not just the first - must change the key.
 
         Real callers rely on this: pin.py and locations/base.py both key on a (lat, lng) pair passed as two
         separate parts, so two pins that share a latitude but differ in longitude must not collide."""
@@ -39,7 +40,8 @@ class MakeCacheKeyTests(SimpleTestCase):
         )
 
     def test_empty_string_part_is_distinct_from_no_parts(self):
-        """A single empty-string part is still a part, not the no-parts case.
+        """
+        A single empty-string part is still a part, not the no-parts case.
 
         ``parts`` is a non-empty tuple here (``("",)``), so this must take the
         hashed branch rather than the "return namespace as-is" shortcut.
@@ -55,7 +57,8 @@ class MakeCacheKeyTests(SimpleTestCase):
         self.assertNotEqual(key_a, key_c)
 
     def test_a_part_containing_the_separator_does_not_collide_with_two_parts(self):
-        """Joining on a bare separator makes the part boundaries unrecoverable.
+        """
+        Joining on a bare separator makes the part boundaries unrecoverable.
 
         ``('a:b',)`` and ``('a', 'b')`` are different logical arguments; if both flatten to the raw string
         ``"a:b"`` they hash to the same key and one caller reads the other's cached value."""
@@ -92,7 +95,8 @@ class MakeCacheKeyPropertyTests(SimpleTestCase):
     @given(parts=st.lists(st.text(alphabet=":|,-0ab", min_size=0, max_size=4), min_size=2, max_size=4))
     @_hyp
     def test_a_tuple_never_shares_a_key_with_its_own_flattening(self, parts: list[str]) -> None:
-        """The encoding must be injective, not merely deterministic.
+        """
+        The encoding must be injective, not merely deterministic.
 
         Constructed rather than searched for."""
         for separator in (":", "|", ",", "-"):

@@ -8,7 +8,8 @@ _TRACKING_PREFIX = "utm_"
 
 
 def without_tracking_params(url: str) -> str:
-    """*url* with its ``utm_*`` query parameters removed, everything else kept as written.
+    """
+    *url* with its ``utm_*`` query parameters removed, everything else kept as written.
 
     Wikimedia began adding them to Commons and Wikipedia file URLs in 2026-09, and only sometimes, so the same file
     arrived under two URLs.

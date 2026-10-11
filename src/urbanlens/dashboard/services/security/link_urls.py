@@ -1,4 +1,5 @@
-"""The one rule for a URL stored to be rendered as a link: http(s), no user part, a host with a real top-level domain, bounded.
+"""
+The one rule for a URL stored to be rendered as a link: http(s), no user part, a host with a real top-level domain, bounded.
 
 A stored link ends up in an ``href``, where autoescaping does nothing against ``javascript:`` or ``data:``. Forms,
 the external API, importers and provider data all write links, so each validates through :func:`clean_link_url`,
@@ -44,7 +45,8 @@ def _has_top_level_domain(url: str) -> bool:
 
 
 def clean_link_url(raw: object, *, max_length: int) -> str:
-    """Return *raw* as a storable http(s) link, reading a value with no scheme (``example.com/a``) as ``https://``.
+    """
+    Return *raw* as a storable http(s) link, reading a value with no scheme (``example.com/a``) as ``https://``.
 
     Args:
         raw: The submitted value.

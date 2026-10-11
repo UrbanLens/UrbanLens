@@ -55,7 +55,8 @@ class PhotoBytesTests(SimpleTestCase):
 
 
 class SniffAliasTests(SimpleTestCase):
-    """`filetype`'s names for our formats have to be names we recognise.
+    """
+    `filetype`'s names for our formats have to be names we recognise.
 
     This is the regression guard for the trap described in the module docstring: a format we allow by extension
     but whose sniffed name we do not recognise reads as "not an image" and gets rejected, and it looks like a
@@ -65,7 +66,8 @@ class SniffAliasTests(SimpleTestCase):
         self.assertEqual(sniff_media_kind(io.BytesIO(TIFF)), MediaKind.PHOTO)
 
     def test_every_allowed_image_extension_is_recognised_by_name(self) -> None:
-        """Each allowlisted extension must be one the sniffer maps to PHOTO.
+        """
+        Each allowlisted extension must be one the sniffer maps to PHOTO.
 
         `jpeg`/`heif` are the user-facing spellings of formats `filetype` calls `jpg`/`heic`; both spellings are
         in the sniffed set, so either answer maps correctly."""
@@ -78,7 +80,8 @@ class SniffAliasTests(SimpleTestCase):
 
 
 class PhotoUploadPipelineTests(TestCase):
-    """End to end through the shared admission pipeline both uploaders use.
+    """
+    End to end through the shared admission pipeline both uploaders use.
 
     Needs a database, unlike the checks above: the pipeline's first step reads
     the site-wide maximum upload size out of `SiteSettings`.
@@ -106,7 +109,8 @@ class PhotoUploadPipelineTests(TestCase):
         self.assertIsNone(image_upload_error(upload, MediaKind.PHOTO, skip_malware_scan=True))
 
     def test_a_document_with_unrecognisable_bytes_is_still_allowed(self) -> None:
-        """Documents keep failing open, which is why this is scoped to photos.
+        """
+        Documents keep failing open, which is why this is scoped to photos.
 
         Not every legitimate document format has a magic-byte signature, so the
         stricter rule must not leak across into them.

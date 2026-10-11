@@ -84,7 +84,8 @@ class ImportPreviewStreamingLabelAssignmentTests(TestCase):
 
 
 class ImportPreviewDescriptionLengthTests(TestCase):
-    """_preview_pins() must not silently truncate descriptions that later get saved verbatim.
+    """
+    _preview_pins() must not silently truncate descriptions that later get saved verbatim.
 
     The confirm/save step (iter_confirmed_import_events) re-uses the exact dict
     _preview_pins() built for the client-facing preview - it never re-parses the
@@ -128,7 +129,8 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
 
 class ImportPreviewLegacyRepairFlagTests(TestCase):
-    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin, or whose own coordinates are simply untrustworthy.
+    """
+    _preview_pins() flags records that would repair a pre-cutoff mis-placed pin, or whose own coordinates are simply untrustworthy.
 
     Regression coverage for the bug where re-importing to trigger the TEMPORARY legacy CID coordinate repair
     (see services.apis.locations.legacy_cid_coordinate_fix) never worked: the preview step's client-side
@@ -176,7 +178,8 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
         self.assertNotIn("needs_repair", preview[0])
 
     def test_flags_a_record_whose_cid_came_from_the_imprecise_s2_guess(self) -> None:
-        """TEMPORARY: force-selected on its own merits - no matching legacy pin
+        """
+        TEMPORARY: force-selected on its own merits - no matching legacy pin
         needed, since not every affected row still has one to find."""
         raw_pins = [
             {
@@ -243,7 +246,8 @@ class ImportPreviewMapsUrlPassthroughTests(TestCase):
 
 
 class ImportPreviewDescriptionExtrasTests(TestCase):
-    """HTML in a KMZ description is stripped, and any <img>/link URLs it embeds
+    """
+    HTML in a KMZ description is stripped, and any <img>/link URLs it embeds
     are turned into a Pin photo / PinLink - but only for pins the import
     actually creates, never for a pin it merges into."""
 
@@ -369,7 +373,8 @@ class ImportPreviewNamesBlankPinOnReimportTests(TestCase):
         self.assertEqual(pin.name, "My Own Name")
 
     def test_an_existing_non_blank_auto_name_is_left_alone(self) -> None:
-        """Only a genuinely blank name is filled in - a later import doesn't
+        """
+        Only a genuinely blank name is filled in - a later import doesn't
         churn a pin's display name just because it wasn't user-typed."""
         self._import("First Import Name")
 

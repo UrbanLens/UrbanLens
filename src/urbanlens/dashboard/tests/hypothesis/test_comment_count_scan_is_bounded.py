@@ -1,4 +1,5 @@
-"""The comment-count badge must agree with the thread without reading it.
+"""
+The comment-count badge must agree with the thread without reading it.
 
 The badge cannot report a raw ``.count()``: a total that disagrees with the
 rendered thread announces that something was hidden and roughly where, which is
@@ -121,7 +122,8 @@ class TheCountIsStillRightTests(_ThreadCase):
         self.assertEqual(int(self._count()), 1)
 
     def test_a_comment_from_an_author_the_viewer_cannot_read_is_not_counted(self) -> None:
-        """Gate 1, which the badge skipped while it was expensive to evaluate.
+        """
+        Gate 1, which the badge skipped while it was expensive to evaluate.
 
         A badge that counted those comments disagreed with the thread it sat
         beside, which is the disagreement the badge exists to avoid.

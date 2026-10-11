@@ -1,4 +1,5 @@
-"""Flickr OAuth 1.0a (3-legged) authorization flow.
+"""
+Flickr OAuth 1.0a (3-legged) authorization flow.
 Flickr has no OAuth2 option for accessing a user's private photos, so this is the one integration in the app that needs the older 3-legged dance:"""
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ class FlickrNotConfiguredError(RuntimeError):
 
 
 def _consumer_credentials() -> tuple[str, str]:
-    """Return the site's Flickr API key and secret.
+    """
+    Return the site's Flickr API key and secret.
 
     Returns:
         Tuple of (api_key, api_secret).
@@ -38,7 +40,8 @@ def _consumer_credentials() -> tuple[str, str]:
 
 
 def is_configured() -> bool:
-    """Return whether the site has a Flickr API key and secret configured.
+    """
+    Return whether the site has a Flickr API key and secret configured.
 
     Returns:
         True when both ``UL_FLICKR_API_KEY`` and ``UL_FLICKR_API_SECRET`` are set.
@@ -66,7 +69,8 @@ class FlickrAccessGrant:
 
 
 def start_authorization(callback_uri: str) -> PendingFlickrAuthorization:
-    """Fetch a temporary request token and build the user-facing authorize URL.
+    """
+    Fetch a temporary request token and build the user-facing authorize URL.
 
     Args:
         callback_uri: Absolute URL Flickr should redirect back to.
@@ -92,7 +96,8 @@ def start_authorization(callback_uri: str) -> PendingFlickrAuthorization:
 
 
 def finish_authorization(*, oauth_token: str, oauth_token_secret: str, oauth_verifier: str) -> FlickrAccessGrant:
-    """Exchange a verified temporary token for the permanent access token pair.
+    """
+    Exchange a verified temporary token for the permanent access token pair.
 
     Args:
         oauth_token: The temporary request token from step 1 (echoed back by Flickr's callback - the caller should verify it matches).

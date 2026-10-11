@@ -81,7 +81,8 @@ class WikiAlbumConcealmentTests(TestCase):
         return response.content.decode()
 
     def test_an_unconcealed_viewer_sees_every_contributors_album(self) -> None:
-        """Anti-vacuity, and the control for every assertion below.
+        """
+        Anti-vacuity, and the control for every assertion below.
 
         If this fails the fixture is wrong, and the concealed assertions would
         pass for the wrong reason - by nothing being listed at all.
@@ -104,7 +105,8 @@ class WikiAlbumConcealmentTests(TestCase):
 
 
 class WikiAlbumBySlugScopingTests(TestCase):
-    """A by-slug lookup must be scoped to the viewer, not to the wiki.
+    """
+    A by-slug lookup must be scoped to the viewer, not to the wiki.
 
     `concealment.visible_rows`' docstring records that nine call sites were once scoped to the wiki instead -
     "an existence oracle that answers 'is there a row N here' for rows concealment has already decided the
@@ -123,7 +125,8 @@ class WikiAlbumBySlugScopingTests(TestCase):
         self.theirs = baker.make(Album, parent_wiki=self.wiki, name="Their Contribution", profile=self.other)
 
     def _rename(self, *, concealed: bool):
-        """POST a rename, which is the shape that matters.
+        """
+        POST a rename, which is the shape that matters.
 
         `AlbumEditView` is POST-only."""
         url = reverse("location.wiki.albums.edit", args=[self.location.slug, self.theirs.slug])
@@ -138,7 +141,8 @@ class WikiAlbumBySlugScopingTests(TestCase):
         self.assertEqual(self.theirs.name, "Their Contribution", "and nothing may have been written")
 
     def test_an_unconcealed_viewer_can(self) -> None:
-        """Anti-vacuity: the 404 above must come from concealment, not from the route.
+        """
+        Anti-vacuity: the 404 above must come from concealment, not from the route.
 
         Asserted as "not 404 and not 405" rather than a specific success code,
         so neither a method mismatch nor a missing route can satisfy it.

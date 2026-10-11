@@ -69,7 +69,8 @@ def _url_templates() -> dict[str, str]:
 
 
 class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The Trivia overview page: own rating, last-used settings, start-game form.
+    """
+    The Trivia overview page: own rating, last-used settings, start-game form.
 
     GET /games/trivia/
     """
@@ -106,7 +107,8 @@ class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
+    """
+    Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
     POST /games/trivia/start/ body: ``difficulty``, ``total_rounds``,
 
@@ -162,7 +164,8 @@ class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Update Trivia preferences.
+    """
+    Update Trivia preferences.
 
     POST /games/trivia/settings/   body: ``show_ratings_to_friends`` ("on"/"off")
     """
@@ -179,7 +182,8 @@ class TriviaSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The lobby's current state: status and every participant (invited or joined).
+    """
+    The lobby's current state: status and every participant (invited or joined).
 
     GET /games/trivia/session/<session_id>/lobby/
     """
@@ -191,7 +195,8 @@ class TriviaLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Invite one more friend to a still-open lobby. Host-only.
+    """
+    Invite one more friend to a still-open lobby. Host-only.
 
     POST /games/trivia/session/<session_id>/invite/   body: ``profile_id``
     """
@@ -224,7 +229,8 @@ class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Accept an invitation to a lobby.
+    """
+    Accept an invitation to a lobby.
 
     POST /games/trivia/session/<session_id>/join/
     """
@@ -248,7 +254,8 @@ class TriviaJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host starts the game: locks the roster and creates round 1.
+    """
+    Host starts the game: locks the roster and creates round 1.
 
     POST /games/trivia/session/<session_id>/begin/
     """
@@ -278,7 +285,8 @@ class TriviaBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
+    """
+    Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
 
     POST /games/trivia/session/<session_id>/end/
 
@@ -307,7 +315,8 @@ class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The calling profile leaves this session - or declines an invitation to it.
+    """
+    The calling profile leaves this session - or declines an invitation to it.
 
     POST /games/trivia/session/<session_id>/leave/
     """
@@ -331,7 +340,8 @@ class TriviaLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 
 
 class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host removes another participant from the session. Host-only.
+    """
+    Host removes another participant from the session. Host-only.
 
     POST /games/trivia/session/<session_id>/kick/   body: ``profile_id``
     """
@@ -365,7 +375,8 @@ class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
 
 class TriviaChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
+    """
+    Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /games/trivia/session/<session_id>/chat/
     """
@@ -378,7 +389,8 @@ class TriviaChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)
 
 
 class TriviaRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The session's current round (for reloads/reconnects).
+    """
+    The session's current round (for reloads/reconnects).
 
     GET /games/trivia/session/<session_id>/round/
     """
@@ -400,7 +412,8 @@ class TriviaRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Submit an answer for the session's current round.
+    """
+    Submit an answer for the session's current round.
 
     POST /games/trivia/session/<session_id>/round/<round_id>/answer/   body: ``answer``
     """
@@ -434,7 +447,8 @@ class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The session's final scoreboard.
+    """
+    The session's final scoreboard.
 
     GET /games/trivia/session/<session_id>/summary/
     """
@@ -446,7 +460,8 @@ class TriviaSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Upvote, downvote, or report the question just answered. Host-agnostic - any participant may vote.
+    """
+    Upvote, downvote, or report the question just answered. Host-agnostic - any participant may vote.
 
     POST /games/trivia/questions/<question_id>/vote/ body: ``kind``
 
@@ -469,7 +484,8 @@ class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 
 
 class TriviaQuestionSubmitView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Submit a user-written trivia question about a location the profile has pinned.
+    """
+    Submit a user-written trivia question about a location the profile has pinned.
 
     POST /games/trivia/questions/submit/ body: ``location_id``, ``prompt``, ``answer``
 

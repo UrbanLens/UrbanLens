@@ -1,4 +1,5 @@
-"""Web Images plugin: a Media-gallery tab of web-image search results, via REData.
+"""
+Web Images plugin: a Media-gallery tab of web-image search results, via REData.
 So the query is built as required, disambiguating ``OR``-groups that a general image engine treats as required clauses (see :func:`build_image_query`):"""
 
 from __future__ import annotations
@@ -51,7 +52,8 @@ def _dedup_preserving_order(terms: list[str]) -> list[str]:
 
 
 def assemble_image_query(aliases: list[str], area_terms: list[str], ancestor_terms: list[str] | None = None) -> str | None:
-    """Assemble the grouped SearXNG relevance query from its component terms.
+    """
+    Assemble the grouped SearXNG relevance query from its component terms.
     Kept separate from :func:`build_image_query` (which pulls the terms off a ``Pin``) so the pure string-assembly logic is unit-testable without the ORM.
 
     Args:
@@ -82,7 +84,8 @@ def _or_group(terms: list[str]) -> str:
 
 
 def build_image_query(pin: Pin, scope: SearchScope) -> str | None:
-    """Build the aggressive image-search query for one of a pin's searches, or ``None`` if unbuildable.
+    """
+    Build the aggressive image-search query for one of a pin's searches, or ``None`` if unbuildable.
 
     Args:
         pin: The pin whose place is being searched; it supplies the area terms.
@@ -94,7 +97,8 @@ def build_image_query(pin: Pin, scope: SearchScope) -> str | None:
 
 
 def _area_terms(pin: Pin) -> list[str]:
-    """Geographic disambiguators: the broad region plus the municipality.
+    """
+    Geographic disambiguators: the broad region plus the municipality.
 
     Args:
         pin: The pin whose location supplies the geographic fields.

@@ -1,4 +1,5 @@
-"""A task's soft limit holds on a thread pool, where no signal can deliver it (P179).
+"""
+A task's soft limit holds on a thread pool, where no signal can deliver it (P179).
 
 ``celery-worker-panels`` runs ``--pool=threads``: billiard's soft-limit signal only reaches a prefork child's main
 thread, so a ``panel_fetch`` task's declared limits did nothing there, and a hung upstream call held its thread

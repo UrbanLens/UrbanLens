@@ -1,4 +1,5 @@
-"""Searching your own pins must not read label rows belonging to accounts you cannot see.
+"""
+Searching your own pins must not read label rows belonging to accounts you cannot see.
 
 The pins provider matches ``labels__name`` through ``_semijoin``, which builds
 ``Exists(Pin._base_manager.filter(condition, pk=OuterRef("pk")))``. Measured on the capacity population (X20),
@@ -116,7 +117,8 @@ class _PinSearchCase(TestCase):
         return baker.make(Pin, profile=profile, location=location, name=f"Spot {self.placed}", description="")
 
     def seed_strangers_labels(self, count: int, *, matching: bool = True) -> None:
-        """Give the stranger *count* more labels, then re-analyse.
+        """
+        Give the stranger *count* more labels, then re-analyse.
 
         Attached to the stranger's pin rather than left loose: a label reachable from no pin can be dropped by
         the join before the plan reads it, which would make the growth step seed nothing the search could see.
@@ -159,7 +161,8 @@ class _PinSearchCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the label table at all.
+        """
+        The full capture, and the statements in it that read the label table at all.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan
@@ -201,14 +204,16 @@ class SearchDoesNotReadAnotherAccountsLabelsTests(_PinSearchCase):
     """P123: one account's labels must not be read to answer another account's search."""
 
     def test_it_does_not_read_a_strangers_matching_labels(self) -> None:
-        """Rows the plan reads and then discards at the pin join, because the pin is not the viewer's.
+        """
+        Rows the plan reads and then discards at the pin join, because the pin is not the viewer's.
 
         Fixed by the trigram index in migration 0049 - see the module docstring for the measured mechanism.
         """
         self.assertDoesNotGrow(SECOND_BATCH, matching=True)
 
     def test_it_does_not_read_a_strangers_unrelated_labels(self) -> None:
-        """Rows the plan reads only to reject on the name.
+        """
+        Rows the plan reads only to reject on the name.
 
         Separated from the matching case because the two originally had different fixes: the trigram index
         alone (migration 0049) helped only the matching case, so a candidate fix that passed one test and

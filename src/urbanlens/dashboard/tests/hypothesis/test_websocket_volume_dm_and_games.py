@@ -62,7 +62,8 @@ async def _drain(comm: WebsocketCommunicator) -> list[dict]:
 
 
 async def _settle(count_rows) -> int:
-    """Wait for the consumer to finish the frames already sent to it.
+    """
+    Wait for the consumer to finish the frames already sent to it.
 
     ``send_to`` only enqueues, and neither of these sockets answers an accepted frame on the connection that
     sent it - the direct-message broadcast goes out through Celery, and the game broadcast reaches the *group*.
@@ -103,7 +104,8 @@ class DirectMessageVolumeTests(TransactionTestCase):
         return DirectMessage.objects.filter(sender=self.sender).count()
 
     def test_a_non_object_frame_does_not_kill_the_connection(self) -> None:
-        """``[]`` is valid JSON and was an AttributeError on ``.get`` one line later.
+        """
+        ``[]`` is valid JSON and was an AttributeError on ``.get`` one line later.
 
         The socket has no other guard against it, so before this the cheapest
         possible frame closed somebody's messaging connection.
@@ -144,7 +146,8 @@ class DirectMessageVolumeTests(TransactionTestCase):
         await comm.disconnect()
 
     def test_a_quick_burst_of_short_messages_all_arrive_under_the_default_budgets(self) -> None:
-        """People send single emoji or split a sentence into several messages; the socket's own frame budget
+        """
+        People send single emoji or split a sentence into several messages; the socket's own frame budget
         must not refuse what the message budget allows."""
         _run(self._quick_burst_arrives())
 
@@ -166,7 +169,8 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
     @override_settings(UL_WEBSOCKET_FANOUT_FRAMES_PER_MINUTE=2)
     def test_typing_indicators_are_budgeted(self) -> None:
-        """The one frame on this socket that writes nothing and still fans out.
+        """
+        The one frame on this socket that writes nothing and still fans out.
 
         It broadcasts into the *recipient's* group, so an unbudgeted ``typing`` is the cheapest amplifier here:
         no row, no validation, one channel-layer send per frame to somebody else's open tabs."""
@@ -189,7 +193,8 @@ class DirectMessageVolumeTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_an_empty_frame_does_not_spend_the_write_budget(self) -> None:
-        """A frame with nothing to send is dropped before it is charged.
+        """
+        A frame with nothing to send is dropped before it is charged.
 
         Otherwise a client bug that emitted blank frames would throttle its user
         out of a conversation they never typed in.
@@ -215,7 +220,8 @@ class DirectMessageVolumeTests(TransactionTestCase):
         _run(self._oversized_frame_refused())
 
     async def _oversized_frame_refused(self) -> None:
-        """The body is 500 characters: well over the 200-character frame cap, and well under ``MAX_DIRECT_MESSAGE_LENGTH`` (1,000).
+        """
+        The body is 500 characters: well over the 200-character frame cap, and well under ``MAX_DIRECT_MESSAGE_LENGTH`` (1,000).
 
         Sizing it above the *body* limit instead would pass against unbounded code, because the service's own
         length check already answers an over-long body with an error frame and saves nothing - so the test would
@@ -274,7 +280,8 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_the_refusal_is_an_error_frame_and_not_a_close(self) -> None:
-        """Closing would put the client into a reconnect loop over a condition
+        """
+        Closing would put the client into a reconnect loop over a condition
         retrying cannot fix - the convention this consumer's own scope refusal
         already follows."""
         _run(self._refusal_is_an_error_frame())
@@ -298,7 +305,8 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
     @override_settings(UL_WEBSOCKET_FRAMES_PER_MINUTE=2)
     def test_a_ping_is_charged_to_the_frame_budget(self) -> None:
-        """Keep-alives are traffic, and traffic is what the frame tier bounds.
+        """
+        Keep-alives are traffic, and traffic is what the frame tier bounds.
 
         Exempting them would leave the socket with an unmetered frame anyone can
         send: it parses, dispatches, and is free.
@@ -321,7 +329,8 @@ class TriviaSessionVolumeTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=1)
     def test_a_ping_does_not_spend_the_message_budget(self) -> None:
-        """The client sends one every 45 seconds, because Cloudflare closes an idle tunnelled socket at about 100. Charging those against the write budget would throttle a user for sitting in a lobby.
+        """
+        The client sends one every 45 seconds, because Cloudflare closes an idle tunnelled socket at about 100. Charging those against the write budget would throttle a user for sitting in a lobby.
 
         The frame budget is left at its production value here, so the pings are charged where they belong and
         the message that follows still arrives."""

@@ -1,4 +1,5 @@
-"""Keeping a database connection between requests is only safe where a thread gets reused.
+"""
+Keeping a database connection between requests is only safe where a thread gets reused.
 
 ``UL_DB_CONN_MAX_AGE`` is set to 300 for the web and websocket containers, which is right for the
 servers they run: gunicorn's ``gthread`` pool and Channels' loop both hand the same thread the next

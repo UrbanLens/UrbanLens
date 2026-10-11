@@ -25,7 +25,8 @@ _ORIGINALS: dict[str, Any] = {}
 
 
 def _resolve(target: str) -> Any:
-    """Return the attribute a dotted `mock.patch` target names.
+    """
+    Return the attribute a dotted `mock.patch` target names.
 
     The split between module and attribute is not written down in the target, so this walks it back from the
     longest importable prefix - the same thing `mock.patch` does internally.
@@ -52,7 +53,8 @@ def _resolve(target: str) -> Any:
 
 @contextmanager
 def patched_ai_gateway() -> Iterator[None]:
-    """Stop every AI chokepoint from reaching a provider, for the duration.
+    """
+    Stop every AI chokepoint from reaching a provider, for the duration.
 
     Yields:
         None, with every entry in :data:`AI_CHOKEPOINTS` patched to return None.
@@ -66,7 +68,8 @@ def patched_ai_gateway() -> Iterator[None]:
 
 @contextmanager
 def real_ai_chokepoint(target: str) -> Iterator[None]:
-    """Put one chokepoint back, for a test whose subject is that method itself.
+    """
+    Put one chokepoint back, for a test whose subject is that method itself.
 
     The guard replaces every entry in :data:`AI_CHOKEPOINTS` with a Mock for the whole session, which is right
     for every test except the ones covering a chokepoint's own logic - those get the Mock instead of the method

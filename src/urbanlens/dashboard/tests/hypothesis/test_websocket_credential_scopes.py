@@ -26,7 +26,8 @@ AccessToken = get_access_token_model()
 
 
 def _run(coro):
-    """Drive *coro* through ``async_to_sync`` rather than ``asyncio.run``.
+    """
+    Drive *coro* through ``async_to_sync`` rather than ``asyncio.run``.
 
     ``database_sync_to_async``'s thread-sensitive mode needs the ``CurrentThreadExecutor`` that only
     ``async_to_sync``'s sync->async->sync bridge installs; under a bare ``asyncio.run`` nothing pumps that queue
@@ -45,7 +46,8 @@ def _run(coro):
 
 
 def _issue_key(user, *scopes: ApiKeyScope) -> str:
-    """Issue a PAT-style key for *user* granting exactly *scopes*.
+    """
+    Issue a PAT-style key for *user* granting exactly *scopes*.
 
     ``ApiKey.scopes`` is ``editable=False`` and defaults to the fixed starter grant, so the scope list is
     rewritten with a queryset ``update``
@@ -61,7 +63,8 @@ def _issue_key(user, *scopes: ApiKeyScope) -> str:
 
 
 def _issue_oauth2_token(user, scope: str, *, token: str) -> str:
-    """Mint an OAuth2 access token for *user* carrying *scope*.
+    """
+    Mint an OAuth2 access token for *user* carrying *scope*.
 
     Args:
         user: The resource owner the token acts for.

@@ -1,4 +1,5 @@
-"""Searching your own photos must not read label rows belonging to accounts you cannot see.
+"""
+Searching your own photos must not read label rows belonging to accounts you cannot see.
 
 Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``), a different
 provider: ``PhotoSearchProvider.search`` also calls ``apply_label_clause``, which filters through
@@ -76,7 +77,8 @@ class _PhotoSearchCase(TestCase):
         )
 
     def seed_strangers_labels(self, count: int, *, matching: bool = True) -> None:
-        """Give the stranger *count* more photo labels, then re-analyse.
+        """
+        Give the stranger *count* more photo labels, then re-analyse.
 
         Attached to the stranger's own image rather than left loose, for the same reason as P123: a
         label reachable from nothing the semi-join can pk-match would prove less about the defect.
@@ -112,7 +114,8 @@ class _PhotoSearchCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the label table at all.
+        """
+        The full capture, and the statements in it that read the label table at all.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

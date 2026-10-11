@@ -48,7 +48,8 @@ _EVENT_CHANNEL_FIELDS: dict[str, dict[str, str]] = {
 
 
 def notify(event: str, subject: str, message: str) -> None:
-    """Send a critical-issue notification to every channel enabled for ``event``.
+    """
+    Send a critical-issue notification to every channel enabled for ``event``.
 
     Args:
         event: One of the ``NotificationEvent`` keys.

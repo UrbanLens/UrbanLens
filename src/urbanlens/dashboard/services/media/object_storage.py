@@ -19,7 +19,8 @@ class GatedS3Storage(S3Storage):
     """Object storage whose public URL is the media gate rather than the bucket."""
 
     def url(self, name: str, parameters: dict[str, Any] | None = None, expire: int | timedelta | None = None, http_method: str | None = None) -> str:
-        """Return the gated ``/media/`` URL for *name*.
+        """
+        Return the gated ``/media/`` URL for *name*.
 
         Args:
             name: The stored object's key.
@@ -37,7 +38,8 @@ class GatedS3Storage(S3Storage):
         return urljoin(settings.MEDIA_URL, quoted)
 
     def signed_object_url(self, name: str, expire: int) -> str:
-        """Return a presigned URL for *name*, for server-side use only.
+        """
+        Return a presigned URL for *name*, for server-side use only.
         The one caller is the gate's ``X-Accel-Redirect`` hand-off, where the URL is put in a response header that nginx consumes and strips: it reaches the object store from inside the cluster and never reaches the client.
 
         Args:

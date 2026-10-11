@@ -1,4 +1,5 @@
-"""Whether a session may draw basemap tiles, answered without loading the viewer's row.
+"""
+Whether a session may draw basemap tiles, answered without loading the viewer's row.
 
 A viewport is ~30 tiles and each one was a full ``LoginRequiredMixin`` check, so a map load spent
 30 ``auth_user`` queries establishing 30 times over that the same person was still signed in.
@@ -50,7 +51,8 @@ _GRANTED = "granted"
 
 
 def tile_auth_key(session_key: str) -> str:
-    """Cache key holding whether one session may draw tiles.
+    """
+    Cache key holding whether one session may draw tiles.
 
     Args:
         session_key: Django's own session key for the request.
@@ -62,7 +64,8 @@ def tile_auth_key(session_key: str) -> str:
 
 
 def session_key_for(request: HttpRequest) -> str | None:
-    """The session key of a request whose session currently names a signed-in user.
+    """
+    The session key of a request whose session currently names a signed-in user.
 
     Both halves matter. Reading the session proves the session still exists - a flushed one, which
     is what signing out leaves behind, no longer names anyone however good the cookie looks - and
@@ -83,7 +86,8 @@ def session_key_for(request: HttpRequest) -> str | None:
 
 
 def remember_tile_viewer(session_key: str) -> None:
-    """Record that this session was signed in, so the next tile need not ask the database.
+    """
+    Record that this session was signed in, so the next tile need not ask the database.
 
     Args:
         session_key: Django's own session key for the request.
@@ -94,7 +98,8 @@ def remember_tile_viewer(session_key: str) -> None:
 
 
 def forget_tile_viewer(sender: object, request: HttpRequest | None = None, **kwargs: Any) -> None:
-    """Drop a session's tile access as it signs out, rather than leaving it to expire.
+    """
+    Drop a session's tile access as it signs out, rather than leaving it to expire.
 
     Wired to ``user_logged_out``, which Django sends *before* flushing the session, so the key is
     still readable here.

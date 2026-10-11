@@ -30,7 +30,8 @@ _ACT_RE = re.compile(r"@act:(\d+)")
 
 
 def _linkify(segment: str) -> SafeString:
-    """Escape a plain-text segment, turning bare URLs into anchors.
+    """
+    Escape a plain-text segment, turning bare URLs into anchors.
 
     Args:
         segment: Raw (untrusted) comment text between mentions.
@@ -46,7 +47,8 @@ def extract_location_uuids(text: str) -> list[uuid.UUID]:
 
 
 def extract_location_mentions(text: str) -> list[tuple[str, str]]:
-    """Return every ``@[Display](loc:uuid)`` mention as a (display, uuid) pair.
+    """
+    Return every ``@[Display](loc:uuid)`` mention as a (display, uuid) pair.
     The display-text counterpart to :func:`extract_location_uuids`, for callers that render mentions themselves rather than taking the HTML from :func:`render_comment_text` (e.g. a native client that has no webview).
 
     Args:

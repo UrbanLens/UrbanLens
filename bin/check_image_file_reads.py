@@ -54,7 +54,8 @@ def _tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
 
 
 def _unguarded(text: str) -> list[tuple[int, str]]:
-    """Reads of ``.image.url`` that no enclosing tag guards.
+    """
+    Reads of ``.image.url`` that no enclosing tag guards.
 
     Enclosing, not merely earlier: a guard protects the block it opens and nothing else.
 

@@ -37,7 +37,8 @@ class VaultHomeVideoAccountingTests(TestCase):
         self.url = reverse("vault.home")
 
     def _video(self, *, size: int = 1000, profile=None, **kwargs) -> Image:
-        """A stored video row.
+        """
+        A stored video row.
 
         Baked rather than uploaded: `upload_photo` needs the VIDEO_UPLOADS
         entitlement and ffmpeg, neither of which is what these tests are about.
@@ -75,7 +76,8 @@ class VaultHomeVideoAccountingTests(TestCase):
         self.assertLessEqual(context["storage_video_bytes"], context["storage_used_bytes"])
 
     def test_exempt_video_bytes_are_not_added_to_the_counted_bar(self) -> None:
-        """Split on the same predicate `get_storage_totals` splits on, or the
+        """
+        Split on the same predicate `get_storage_totals` splits on, or the
         explanation can exceed the thing it explains."""
         self._video(size=5_000_000, quota_exempt_reason=QuotaExemption.SHARED_COPY)
 

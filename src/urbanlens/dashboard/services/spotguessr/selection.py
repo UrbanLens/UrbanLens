@@ -47,7 +47,8 @@ def pick_next_location(
     difficulty: float,
     previous_location: Location | None,
 ) -> Location | None:
-    """Weighted-random pick from ``candidates`` (already eligibility-filtered, not yet used this session).
+    """
+    Weighted-random pick from ``candidates`` (already eligibility-filtered, not yet used this session).
 
     Args:
         candidates: Eligible locations for this round.
@@ -92,7 +93,8 @@ def pick_next_location(
 
 
 def _proxy_difficulty_rating(location: Location, *, pin_count: int | None = None, photo_count: int | None = None) -> float:
-    """Estimate a difficulty rating from proxies the database already has, before anyone's ever played it.
+    """
+    Estimate a difficulty rating from proxies the database already has, before anyone's ever played it.
 
     Args:
         location: The candidate location.
@@ -109,7 +111,8 @@ def _proxy_difficulty_rating(location: Location, *, pin_count: int | None = None
 
 
 def _difficulty_weight(location: Location, rating: LocationModeRating | None, target_rating: float, *, pin_count: int | None = None, photo_count: int | None = None) -> float:
-    """Below that, it blends the proxy estimate (``_proxy_difficulty_rating``) with whatever real rating exists so far, weighted by how close it is to that threshold - a smooth handoff rather than a discontinuous jump the instant the threshold is crossed.
+    """
+    Below that, it blends the proxy estimate (``_proxy_difficulty_rating``) with whatever real rating exists so far, weighted by how close it is to that threshold - a smooth handoff rather than a discontinuous jump the instant the threshold is crossed.
 
     Args:
         location: The candidate location.

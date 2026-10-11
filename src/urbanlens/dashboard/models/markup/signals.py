@@ -16,7 +16,8 @@ _GEOMETRY_RELEVANT_MAP_FIELDS = frozenset({"center_latitude", "center_longitude"
 
 
 def _defer_sync(markup_map_id: int) -> None:
-    """Schedule a pin-inference resync for ``markup_map_id`` once the current transaction commits.
+    """
+    Schedule a pin-inference resync for ``markup_map_id`` once the current transaction commits.
     Re-fetches the map at commit time (rather than reusing the signal's ``instance``) so the resync always sees the final, fully-saved state - important since ``MarkupMap.replace_items_from_snapshot`` triggers this once per item it recreates.
 
     Args:
@@ -36,7 +37,8 @@ def _defer_sync(markup_map_id: int) -> None:
 
 
 def defer_pin_inference_sync(markup_map_id: int) -> None:
-    """Public seam for code that recreates map items without firing their signals.
+    """
+    Public seam for code that recreates map items without firing their signals.
     ``bulk_create`` never fires ``post_save``, so a caller rebuilding a map's items in bulk (the undo restore) must schedule the resync itself - this is the same deferred sync every per-item signal below uses.
 
     Args:
@@ -47,7 +49,8 @@ def defer_pin_inference_sync(markup_map_id: int) -> None:
 
 @receiver(post_save, sender=MarkupMap, dispatch_uid="markup_map_sync_pin_inferences_on_save")
 def sync_pin_inferences_on_map_save(sender: type[MarkupMap], instance: MarkupMap, created: bool = False, update_fields=None, **kwargs) -> None:
-    """Resync detected pins whenever a map's viewport is created or changed.
+    """
+    Resync detected pins whenever a map's viewport is created or changed.
     Skips the (expensive, boundary-lookup-heavy) resync for saves that only touch fields detection never reads - title renames, layer/border display toggles, and similar - by checking ``update_fields``.
     """
     geometry_relevant = created or update_fields is None or bool(set(update_fields) & _GEOMETRY_RELEVANT_MAP_FIELDS)
@@ -71,7 +74,8 @@ def sync_pin_inferences_on_item_delete(sender: type[PinMarkup], instance: PinMar
 
 @receiver(pre_delete, sender=MarkupMap, dispatch_uid="markup_map_flag_map_removed_on_delete")
 def flag_map_removed_on_map_delete(sender: type[MarkupMap], instance: MarkupMap, **kwargs) -> None:
-    """Mark every comment/trip comment/DM that references this map as having had its map removed.
+    """
+    Mark every comment/trip comment/DM that references this map as having had its map removed.
     Runs pre-delete (rather than post-delete) so the affected rows are flagged before Django's collector nulls out their ``markup_map`` FK via ``on_delete=SET_NULL`` - by post-delete time there is no reliable way to find them again.
     """
     from urbanlens.dashboard.models.comments.model import Comment

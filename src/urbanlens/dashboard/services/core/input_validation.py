@@ -1,4 +1,5 @@
-"""Refusing a request input that cannot return data, before it costs anything.
+"""
+Refusing a request input that cannot return data, before it costs anything.
 
 A call made with NaN coordinates, an empty query or a malformed id spends the same budget as a
 real one - and for a billed source the same money - and can only come back empty or as a 400.
@@ -61,7 +62,8 @@ class InputRejection(StrEnum):
 
 
 class ImpossibleInputError(GatewayRequestError):
-    """A request input that cannot return data from ``service``, refused before any I/O.
+    """
+    A request input that cannot return data from ``service``, refused before any I/O.
 
     Attributes:
         service: The rate-limiter service key the call was for.
@@ -100,7 +102,8 @@ def _should_log_loudly(service: str, reason: InputRejection) -> bool:
 
 
 def reject(service: str, reason: InputRejection, detail: str) -> NoReturn:
-    """Count, log and raise one refusal.
+    """
+    Count, log and raise one refusal.
 
     Args:
         service: The rate-limiter service key the call was for.
@@ -150,7 +153,8 @@ def _point_problem(point: tuple[float, float] | None, *, allow_null_island: bool
 
 
 def coordinate_problem(latitude: object, longitude: object, *, allow_null_island: bool = False) -> tuple[InputRejection, str] | None:
-    """Why a point cannot be somewhere a source has data, or None. Counts and logs nothing.
+    """
+    Why a point cannot be somewhere a source has data, or None. Counts and logs nothing.
 
     Args:
         latitude: The latitude as given.
@@ -164,7 +168,8 @@ def coordinate_problem(latitude: object, longitude: object, *, allow_null_island
 
 
 def require_coordinates(service: str, latitude: object, longitude: object, *, allow_null_island: bool = False) -> tuple[float, float]:
-    """A WGS-84 point that can be somewhere, as floats.
+    """
+    A WGS-84 point that can be somewhere, as floats.
 
     Args:
         service: The service key the call is for.
@@ -188,7 +193,8 @@ def require_coordinates(service: str, latitude: object, longitude: object, *, al
 
 
 def require_query(service: str, query: object, *, name: str = "query", max_length: int | None = None) -> str:
-    """A free-text query with something in it, returned unchanged.
+    """
+    A free-text query with something in it, returned unchanged.
 
     Args:
         service: The service key the call is for.
@@ -210,7 +216,8 @@ def require_query(service: str, query: object, *, name: str = "query", max_lengt
 
 
 def require_content(service: str, name: str, content: bytes) -> bytes:
-    """Bytes with something in them, such as an image to describe, returned unchanged.
+    """
+    Bytes with something in them, such as an image to describe, returned unchanged.
 
     Args:
         service: The service key the call is for.
@@ -229,7 +236,8 @@ def require_content(service: str, name: str, content: bytes) -> bytes:
 
 
 def require_jpeg_size(service: str, name: str, content: bytes, *, minimum_side: int) -> bytes:
-    """A JPEG at least ``minimum_side`` pixels along each side, returned unchanged.
+    """
+    A JPEG at least ``minimum_side`` pixels along each side, returned unchanged.
 
     The size is read from the frame header (:func:`~urbanlens.dashboard.services.media.jpeg_header.jpeg_dimensions`);
     the image is never decoded. Bytes whose header gives no size - another format, a JPEG cut short or malformed - are
@@ -255,7 +263,8 @@ def require_jpeg_size(service: str, name: str, content: bytes, *, minimum_side: 
 
 
 def require_in_range[N: (int, float)](service: str, name: str, value: N, *, minimum: float | None = None, maximum: float | None = None, exclusive_minimum: bool = False) -> N:
-    """A number the provider accepts, returned unchanged.
+    """
+    A number the provider accepts, returned unchanged.
 
     Args:
         service: The service key the call is for.
@@ -281,7 +290,8 @@ def require_in_range[N: (int, float)](service: str, name: str, value: N, *, mini
 
 
 def require_format(service: str, name: str, value: object, pattern: re.Pattern[str]) -> str:
-    """An identifier that matches the provider's format in full, returned unchanged.
+    """
+    An identifier that matches the provider's format in full, returned unchanged.
 
     Args:
         service: The service key the call is for.
@@ -310,7 +320,8 @@ MAX_PLACES_RADIUS_METERS = 50_000.0
 
 
 def require_google_place_id(service: str, place_id: object) -> str:
-    """A value that can be a Google place id, returned unchanged.
+    """
+    A value that can be a Google place id, returned unchanged.
 
     Args:
         service: The service key the call is for.
@@ -326,7 +337,8 @@ def require_google_place_id(service: str, place_id: object) -> str:
 
 
 def require_date_within[D: date](service: str, name: str, value: D, *, earliest: date | None = None, latest: date | None = None) -> D:
-    """A date the provider has data for, returned unchanged.
+    """
+    A date the provider has data for, returned unchanged.
 
     Args:
         service: The service key the call is for.
@@ -384,7 +396,8 @@ def _pairs(params: object) -> list[tuple[str, object]]:
 
 
 def check_request_parameters(service: str, *, params: object = None, json: object = None) -> None:
-    """Refuse a request whose parameters no API could answer.
+    """
+    Refuse a request whose parameters no API could answer.
 
     Checks query parameters and a JSON body for a non-finite number anywhere, and for a value under
     a latitude/longitude name that is non-finite or off the globe. Anything else - including a value

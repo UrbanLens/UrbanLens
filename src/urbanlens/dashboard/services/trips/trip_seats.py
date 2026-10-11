@@ -1,4 +1,5 @@
-"""The one place a trip's roster grows, so the member cap is checked and spent in one locked step.
+"""
+The one place a trip's roster grows, so the member cap is checked and spent in one locked step.
 
 Every path that adds a member - invite by username, a friend picked at creation, an accepted email
 invitation, a chat-thread invite, a calendar import, a data-export restore - counts the roster and then writes to it. Unserialised,
@@ -22,7 +23,8 @@ TRIP_FULL = "This trip is full ({max_members} members maximum)."
 
 
 def lock_trip_roster(trip: Trip) -> int:
-    """Serialise roster changes on *trip* for the rest of the current transaction.
+    """
+    Serialise roster changes on *trip* for the rest of the current transaction.
 
     Args:
         trip: The trip whose roster is about to change.
@@ -35,7 +37,8 @@ def lock_trip_roster(trip: Trip) -> int:
 
 
 def reserve_trip_seat(trip: Trip, profile: Profile, *, status: str = TripMembership.STATUS_INVITED, **defaults: Any) -> tuple[TripMembership, bool]:
-    """Put *profile* on *trip*'s roster if there is room; a profile already on it keeps its row.
+    """
+    Put *profile* on *trip*'s roster if there is room; a profile already on it keeps its row.
 
     Args:
         trip: The trip.

@@ -1,4 +1,5 @@
-"""Which places two people share is read from the pins they share, not from both of their pin lists.
+"""
+Which places two people share is read from the pins they share, not from both of their pin lists.
 
 The profile page and its "pins in common" list answered by reading every place each account had pinned, and every
 location each had visited, and intersecting them in Python - rows in proportion to how much either person owns,

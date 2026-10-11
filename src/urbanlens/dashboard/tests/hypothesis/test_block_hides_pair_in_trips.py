@@ -1,4 +1,5 @@
-"""Two people who blocked each other share a trip without seeing each other on it (I7, rulings 1b and 2b).
+"""
+Two people who blocked each other share a trip without seeing each other on it (I7, rulings 1b and 2b).
 
 Adding either to a trip the other is on is allowed. From the moment of the block, neither sees the other's
 comments, reactions or activity attribution, nor the other in any roster. What was posted before stays, and the

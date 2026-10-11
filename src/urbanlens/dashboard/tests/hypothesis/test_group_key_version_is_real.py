@@ -1,4 +1,5 @@
-"""A group message's `key_version` has to name a key this group has, held only by its current members.
+"""
+A group message's `key_version` has to name a key this group has, held only by its current members.
 
 Every envelope row records someone who can open that version. Sending under a version one of them no longer
 belongs to would make the message readable to a person the group removed, so the server refuses it."""

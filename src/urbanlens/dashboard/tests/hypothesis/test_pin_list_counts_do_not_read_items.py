@@ -1,4 +1,5 @@
-"""A page that shows what a list holds must count its rows in the database, not fetch them.
+"""
+A page that shows what a list holds must count its rows in the database, not fetch them.
 
 ``PinList.pin_count`` falls back to ``len(self.items.all())``. Every page that renders the add-to-list dialog hands
 it lists with no ``with_pin_counts()`` annotation, so showing a number costs one model instance per membership row:
@@ -46,7 +47,8 @@ class PinListCountScalingTests(EndpointScalingMixin, TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=self.place(), name="Subject")
 
     def place(self) -> Location:
-        """A location with real coordinates, so the profile's map centre is computed once and then cached.
+        """
+        A location with real coordinates, so the profile's map centre is computed once and then cached.
 
         Returns:
             A saved location near the others."""
@@ -54,7 +56,8 @@ class PinListCountScalingTests(EndpointScalingMixin, TestCase):
         return baker.make(Location, latitude=f"41.{self._seeded:06d}", longitude=f"-71.{self._seeded:06d}")
 
     def seed_rows(self, count: int) -> None:
-        """Put *count* more pins on the list.
+        """
+        Put *count* more pins on the list.
 
         Args:
             count: How many memberships to add.

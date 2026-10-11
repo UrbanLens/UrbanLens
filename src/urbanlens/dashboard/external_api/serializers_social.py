@@ -1,4 +1,5 @@
-"""External-API serializers for the social domain's newer surfaces.
+"""
+External-API serializers for the social domain's newer surfaces.
 
 The friendship shapes - ``FriendshipSerializer`` and friends - predate the per-domain split and stay
 in ``serializers.py``; the unblock endpoint reuses ``FriendshipSerializer`` rather than defining a
@@ -33,7 +34,8 @@ _DISCORD_HANDLE_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 
 class AvatarEmojiSerializer(serializers.Serializer):
-    """Validates a generated-emoji avatar request.
+    """
+    Validates a generated-emoji avatar request.
 
     Both fields are constrained to closed sets.
 
@@ -45,7 +47,8 @@ class AvatarEmojiSerializer(serializers.Serializer):
     color = serializers.CharField()
 
     def validate_color(self, value: str) -> str:
-        """Normalize a palette colour to its canonical hex form.
+        """
+        Normalize a palette colour to its canonical hex form.
 
         Accepts any case (``#4caf50`` and ``#4CAF50`` both work) because hex colours are routinely
         lowercased by client-side pickers, and returns the enum's own spelling so the stored SVG is
@@ -68,7 +71,8 @@ class AvatarEmojiSerializer(serializers.Serializer):
 
 
 class ProfileAnnotationsSerializer(serializers.Serializer):
-    """Everything the caller privately records about one other profile (read-only).
+    """
+    Everything the caller privately records about one other profile (read-only).
 
     The subject of an annotation can never read it - asking for your own annotations returns nulls, not
     the opinions other people hold about you.
@@ -85,7 +89,8 @@ class ProfileAnnotationsSerializer(serializers.Serializer):
 
 
 class ProfileNicknameWriteSerializer(serializers.Serializer):
-    """Validates a nickname assignment.
+    """
+    Validates a nickname assignment.
 
     ``allow_blank`` is off deliberately.
     Blank is how the site's HTMX widget signals "clear this", but an API with a real ``DELETE`` on the
@@ -97,7 +102,8 @@ class ProfileNicknameWriteSerializer(serializers.Serializer):
 
 
 class ProfileTrustWriteSerializer(serializers.Serializer):
-    """Validates a trust rating.
+    """
+    Validates a trust rating.
 
     Bounded to the same range the model's validators enforce.
     The bound is checked here as well as in the service because ``update_or_create`` does not run field
@@ -109,7 +115,8 @@ class ProfileTrustWriteSerializer(serializers.Serializer):
 
 
 class SocialLinkSerializer(serializers.Serializer):
-    """One entry in a profile's public social-links list, as rendered for display.
+    """
+    One entry in a profile's public social-links list, as rendered for display.
 
     Shape matches ``services.profile.social_links.get_profile_links`` field for field -
     ``url`` is null only for Discord, which has no public profile URL.
@@ -129,7 +136,8 @@ class SocialLinksResponseSerializer(serializers.Serializer):
 
 
 class SocialLinkWriteSerializer(serializers.Serializer):
-    """One social-link entry inside a full-replace submission.
+    """
+    One social-link entry inside a full-replace submission.
 
     ``handle`` means different things per platform: a username for the eight handle-based platforms -
     validated by the same ``services.profile.social_links.validate_handle`` rules a pasted URL is
@@ -142,7 +150,8 @@ class SocialLinkWriteSerializer(serializers.Serializer):
     handle = serializers.CharField(max_length=500)
 
     def validate(self, attrs: dict) -> dict:
-        """Apply the platform-specific handle/URL rule, normalizing where one exists.
+        """
+        Apply the platform-specific handle/URL rule, normalizing where one exists.
 
         Args:
             attrs: The already field-validated submission.
@@ -185,7 +194,8 @@ class SocialLinkWriteSerializer(serializers.Serializer):
 
 
 class SocialLinksReplaceSerializer(serializers.Serializer):
-    """Validates a full-replace PUT of the caller's social links.
+    """
+    Validates a full-replace PUT of the caller's social links.
 
     PUT rather than PATCH, matching ``SafetyContactDefaultsSerializer``'s own precedent: the underlying
     write deletes and recreates the whole set, and there is no per-entry addressing (a platform key
@@ -196,7 +206,8 @@ class SocialLinksReplaceSerializer(serializers.Serializer):
     links = SocialLinkWriteSerializer(many=True)
 
     def validate_links(self, value: list[dict]) -> list[dict]:
-        """Reject a submission naming the same platform twice.
+        """
+        Reject a submission naming the same platform twice.
 
         Args:
             value: The per-entry validated list.

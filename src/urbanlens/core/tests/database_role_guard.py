@@ -14,7 +14,8 @@ class _Connection(Protocol):
 
 
 def refusal_for_role(connection: _Connection) -> str | None:
-    """Why this connection's role cannot run the suite, or None when it can.
+    """
+    Why this connection's role cannot run the suite, or None when it can.
 
     The app containers log in as their own per-tier role, which cannot create databases, so pytest there
     would otherwise fail several layers down in ``CREATE DATABASE``.

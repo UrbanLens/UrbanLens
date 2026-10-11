@@ -1,4 +1,5 @@
-"""CommentLocationMention - which locations a comment's text names.
+"""
+CommentLocationMention - which locations a comment's text names.
 
 Gate 3 of the comment visibility rules (see ``services.comments.comments``)
 drops a comment entirely when it names a location the viewer has not pinned.
@@ -34,7 +35,8 @@ if TYPE_CHECKING:
 
 
 class LocationMentioningModel(models.Model):
-    """Keeps a comment model's mention rows in step with its text.
+    """
+    Keeps a comment model's mention rows in step with its text.
 
     A mixin rather than a call at each write site: the visibility gate reads
     these rows, so a path that stored text without deriving them would not
@@ -58,7 +60,8 @@ class LocationMentioningModel(models.Model):
         abstract = True
 
     def save(self, *args, **kwargs) -> None:
-        """Persist the row and re-derive the locations its text names.
+        """
+        Persist the row and re-derive the locations its text names.
 
         Args:
             *args: Passed through to ``Model.save``.
@@ -100,7 +103,8 @@ class CommentLocationMention(abstract.DashboardModel):
         trip_comment_id: int | None
 
     def __str__(self) -> str:
-        """Return a human-readable description of this mention.
+        """
+        Return a human-readable description of this mention.
 
         Returns:
             String like "Comment 5 mentions 0c8f...".

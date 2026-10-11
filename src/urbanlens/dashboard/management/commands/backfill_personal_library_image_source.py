@@ -1,4 +1,5 @@
-"""Relabel photos that connected-account imports filed as manual uploads.
+"""
+Relabel photos that connected-account imports filed as manual uploads.
 
 achievements - is decided by ``Image.is_own_contribution``, which does not read ``source`` at all,
 so a mislabelled row was never a privacy or scoring problem.
@@ -25,7 +26,8 @@ class Command(BaseCommand):
     help = "Relabel Image rows written by the Immich/Google Photos importers before they set source=."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Register the command's flags.
+        """
+        Register the command's flags.
 
         Args:
             parser: The argument parser.
@@ -33,7 +35,8 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Report what would change without writing.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Count, then relabel unless asked not to.
+        """
+        Count, then relabel unless asked not to.
 
         Args:
             *args: Unused. **options: Parsed command options.
@@ -60,7 +63,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Relabelled {relabelled} row(s)."))
 
     def _relabel(self, scope, source: str, label: str, *, dry_run: bool) -> int:
-        """Relabel one matched set, or report it.
+        """
+        Relabel one matched set, or report it.
 
         Args:
             scope: The rows to relabel.

@@ -1,4 +1,5 @@
-"""Channel-layer group naming and broadcast for participant-session sockets.
+"""
+Channel-layer group naming and broadcast for participant-session sockets.
 SpotGuessr, Trivia and Consensus each had their own ``realtime`` module whose only material difference was the group-name prefix - the docstrings themselves said "mirrors ``services.spotguessr.realtime`` exactly"."""
 
 from __future__ import annotations
@@ -9,7 +10,8 @@ from urbanlens.dashboard.services.core.channel_broadcast import send_group_messa
 
 
 class SessionBroadcaster:
-    """Broadcast helper for one game's per-session channel-layer group.
+    """
+    Broadcast helper for one game's per-session channel-layer group.
 
     Args:
         prefix: Must stay stable - it is the name connected consumers have already joined, so changing it orphans every open socket."""
@@ -18,7 +20,8 @@ class SessionBroadcaster:
         self.prefix = prefix
 
     def session_group_name(self, session_id: int) -> str:
-        """The channel-layer group every participant's WebSocket joins for one session.
+        """
+        The channel-layer group every participant's WebSocket joins for one session.
 
         Args:
             session_id: Primary key of the session.
@@ -29,7 +32,8 @@ class SessionBroadcaster:
         return f"{self.prefix}_session_{session_id}"
 
     def broadcast(self, session_id: int, event_type: str, payload: dict[str, Any]) -> None:
-        """Send ``payload`` to every connected participant of ``session_id``.
+        """
+        Send ``payload`` to every connected participant of ``session_id``.
 
         Args:
             session_id: Primary key of the session to broadcast to.

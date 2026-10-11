@@ -1,4 +1,5 @@
-"""One sender's message budget, charged wherever a message is actually created.
+"""
+One sender's message budget, charged wherever a message is actually created.
 The budget therefore lives at the service layer, which is the one place both doors meet, and the identity is built there too rather than by each caller."""
 
 from __future__ import annotations
@@ -9,7 +10,8 @@ from urbanlens.dashboard.services.core.frame_limits import FrameBudget
 
 
 class MessageRateLimitedError(ValueError):
-    """This sender's message budget for the current window is spent.
+    """
+    This sender's message budget for the current window is spent.
     A ``ValueError`` so the WebSocket consumers, which already answer ``ValueError`` with an error frame carrying its text, report it without knowing this class exists."""
 
 
@@ -23,7 +25,8 @@ def _budget() -> FrameBudget:
 
 
 def charge_message(identity: str) -> None:
-    """Charge one message send against *identity*.
+    """
+    Charge one message send against *identity*.
 
     Args:
         identity: Who to charge, from :func:`sender_identity` or one of the per-feature builders below.
@@ -35,7 +38,8 @@ def charge_message(identity: str) -> None:
 
 
 def refund_message(identity: str) -> None:
-    """Give back a charge for a message that turned out not to exist.
+    """
+    Give back a charge for a message that turned out not to exist.
 
     Args:
         identity: The key that was charged."""
@@ -43,7 +47,8 @@ def refund_message(identity: str) -> None:
 
 
 def sender_identity(sender_pk: int) -> str:
-    """The budget key for one person's outbound direct and group messages.
+    """
+    The budget key for one person's outbound direct and group messages.
 
     Args:
         sender_pk: The sending profile's pk.
@@ -54,7 +59,8 @@ def sender_identity(sender_pk: int) -> str:
 
 
 def safety_chat_identity(checkin_pk: int, *, profile_pk: int | None, contact_pk: int | None) -> str:
-    """The budget key for one participant of one safety check-in.
+    """
+    The budget key for one participant of one safety check-in.
     Scoped to the check-in rather than to the person: a check-in is an emergency surface, and someone handling two at once must not have one throttle the other.
 
     Args:
@@ -69,7 +75,8 @@ def safety_chat_identity(checkin_pk: int, *, profile_pk: int | None, contact_pk:
 
 
 def session_chat_identity(session_label: str, session_pk: int, profile_pk: int) -> str:
-    """The budget key for one participant of one game session.
+    """
+    The budget key for one participant of one game session.
     Scoped to the session for the same reason as a check-in: playing two games at once is legitimate, and one game's chat must not throttle the other's.
 
     Args:

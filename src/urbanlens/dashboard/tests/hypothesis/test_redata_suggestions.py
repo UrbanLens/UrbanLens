@@ -267,7 +267,8 @@ class QueueLabelRetirementTests(TestCase):
         on_commit.assert_not_called()
 
     def test_schedules_regardless_of_the_labels_current_kind(self) -> None:
-        """A kind-change-away caller passes a label whose *current* kind is
+        """
+        A kind-change-away caller passes a label whose *current* kind is
         already the new (non-suggestable) one - retirement must not re-check
         it, since callers already decided based on the kind it *was*."""
         label = ensure_label(profile=self.profile, name="Was Tag", kind=KIND_STATUS)

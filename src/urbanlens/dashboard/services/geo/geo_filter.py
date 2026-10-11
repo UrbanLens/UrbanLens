@@ -7,7 +7,8 @@ from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 
 def is_usa_coordinates(lat: float | None, lng: float | None) -> bool:
-    """Return ``True`` if the given coordinates are within US territory.
+    """
+    Return ``True`` if the given coordinates are within US territory.
     Accepts ``None`` inputs and returns ``False`` (no coordinates → cannot confirm US location → skip USA-only service).
 
     Args:
@@ -20,7 +21,8 @@ def is_usa_coordinates(lat: float | None, lng: float | None) -> bool:
 
 
 def require_usa(service: str, lat: float | None, lng: float | None) -> bool:
-    """Log a geo-filtered skip and return ``False`` if coordinates are outside the USA.
+    """
+    Log a geo-filtered skip and return ``False`` if coordinates are outside the USA.
     Convenience wrapper for gateway methods that need to guard a USA-only call.
 
     Args:

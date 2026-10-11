@@ -1,4 +1,5 @@
-"""The media object store's client gives up inside the proxy's timeout, after a bounded number of attempts (P201).
+"""
+The media object store's client gives up inside the proxy's timeout, after a bounded number of attempts (P201).
 
 botocore's defaults are five attempts with a 60 s read timeout, so a stalled Garage write could hold a request for
 about five minutes, long after Cloudflare had answered the browser with an error at 100 s.
@@ -65,7 +66,8 @@ def garage_stalled(request: AWSRequest) -> AWSResponse:
 
 
 def writes_fail(fail: Callable[[AWSRequest], AWSResponse]) -> Callable[[AWSRequest], AWSResponse]:
-    """Answer a name check with "no such key", and every write with *fail*.
+    """
+    Answer a name check with "no such key", and every write with *fail*.
 
     A name that is free is what storage checks before writing, since this deployment never overwrites.
     """
@@ -80,7 +82,8 @@ def writes_fail(fail: Callable[[AWSRequest], AWSResponse]) -> Callable[[AWSReque
 
 @contextmanager
 def object_store(respond: Callable[[AWSRequest], AWSResponse]) -> Iterator[list[AWSRequest]]:
-    """Put default storage on the real S3 backend, answering every request it sends with *respond*.
+    """
+    Put default storage on the real S3 backend, answering every request it sends with *respond*.
 
     Every file field without a storage of its own follows ``default_storage``, so this is the backend each upload path
     writes through in production, built from production's options.
@@ -125,7 +128,8 @@ class ObjectStoreClientConfigTests(SimpleTestCase):
         self.assertEqual(config.read_timeout, app_settings.s3_read_timeout_seconds)
 
     def test_an_upload_request_gives_up_on_a_stalled_store_inside_the_proxy_timeout(self) -> None:
-        """An upload makes two calls (the name check, then the write); a call fails only after every attempt has.
+        """
+        An upload makes two calls (the name check, then the write); a call fails only after every attempt has.
 
         The worst case is the name check stalling on every attempt and answering just inside its last, then the write
         stalling on all of them, after waiting the whole reservation for the uploader's previous upload.

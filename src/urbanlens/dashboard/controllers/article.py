@@ -38,7 +38,8 @@ _HISTORY_PAGE_SIZE = 25
 
 @dataclass(slots=True)
 class ArticleScope:
-    """Everything a view needs to know about the article being operated on.
+    """
+    Everything a view needs to know about the article being operated on.
 
     Attributes:
         profile: The requesting user's profile.
@@ -84,7 +85,8 @@ def _pin_urls(pin_slug: str) -> dict[str, str]:
 
 
 def _resolved_article(scope: ArticleScope) -> Article | None:
-    """Re-read the scope's article the way ``ArticleViewBase.resolve`` would.
+    """
+    Re-read the scope's article the way ``ArticleViewBase.resolve`` would.
 
     Used after a write, so the fragment sent back reflects what was just saved while staying concealed
     for the viewer who saved it.
@@ -105,7 +107,8 @@ def _resolved_article(scope: ArticleScope) -> Article | None:
 
 
 def _writable_article(scope: ArticleScope) -> Article:
-    """The scope's article as a row that may be written.
+    """
+    The scope's article as a row that may be written.
 
     ``scope.article`` may be a concealed projection carrying an older revision's text; restoring through
     it would publish that text as the current article.
@@ -134,7 +137,8 @@ def _writable_article(scope: ArticleScope) -> Article:
 
 
 def _visible_revision_queryset(scope: ArticleScope):
-    """The scope's article revisions, narrowed to what its viewer may see.
+    """
+    The scope's article revisions, narrowed to what its viewer may see.
 
     One definition rather than the same filter at each of the four places that list or look up a
     revision - the shape of defect this whole layer keeps producing is a rule spelled out per call site
@@ -160,7 +164,8 @@ def _visible_revision_queryset(scope: ArticleScope):
 
 
 def owned_pin(request: HttpRequest, pin_slug: str) -> Pin:
-    """The requester's own pin, addressed by slug or uuid.
+    """
+    The requester's own pin, addressed by slug or uuid.
 
     Args:
         request: The current request.
@@ -188,7 +193,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
     """Shared host resolution for every article endpoint."""
 
     def resolve(self, request: HttpRequest, **kwargs) -> ArticleScope:
-        """Resolve the host (pin or wiki) and its article for this request.
+        """
+        Resolve the host (pin or wiki) and its article for this request.
 
         Args:
             request: The current request. **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
@@ -239,7 +245,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
 
     @staticmethod
     def toast(response: HttpResponse, level: str, message: str, *extra_events: str) -> HttpResponse:
-        """Attach a toastr notification (and optional extra events) via HX-Trigger.
+        """
+        Attach a toastr notification (and optional extra events) via HX-Trigger.
 
         Args:
             response: The response to annotate.
@@ -256,7 +263,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
         return response
 
     def render_panel(self, request: HttpRequest, scope: ArticleScope) -> HttpResponse:
-        """Render the article panel (Notion-style: always the editable canvas, never a
+        """
+        Render the article panel (Notion-style: always the editable canvas, never a
         separate read-only view - see frontend/ts/entries/article-wysiwyg.ts) for the
         resolved scope.
         """
@@ -278,7 +286,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
 
 
 class ArticlePanelView(ArticleViewBase):
-    """The article panel (the Article tab's content) - an always-editable canvas,
+    """
+    The article panel (the Article tab's content) - an always-editable canvas,
     like a Notion page, with no separate read-only mode to click "Edit" out of.
 
     GET /location/<slug>/wiki/article/  or  /map/pin/<slug>/article/
@@ -331,7 +340,8 @@ class ArticleSaveView(ArticleViewBase):
 
 
 class ArticlePreviewView(ArticleViewBase):
-    """Render (but never persist) editor content for live preview.
+    """
+    Render (but never persist) editor content for live preview.
 
     POST .../article/preview/  with ``content``.
     """
@@ -350,7 +360,8 @@ class ArticlePreviewView(ArticleViewBase):
 
 
 class ArticleImageUploadView(ArticleViewBase):
-    """Upload an image to embed inline in an article, from the WYSIWYG editor.
+    """
+    Upload an image to embed inline in an article, from the WYSIWYG editor.
 
     POST .../article/image/ with an ``image`` file. Answers with the image's stable link
     (``media.image``), its id, and whether it is still processing.
@@ -405,7 +416,8 @@ class ArticleImageUploadView(ArticleViewBase):
 
 
 def _annotate_deltas(revisions: list[ArticleRevision], *, following: ArticleRevision | None = None, highest_number: int | None = None, current_id: int | None = None) -> list[dict]:
-    """Pair each revision (newest first) with its size delta, ordinal and current flag.
+    """
+    Pair each revision (newest first) with its size delta, ordinal and current flag.
 
     Args:
         revisions: Revisions ordered newest first.
@@ -436,7 +448,8 @@ def _annotate_deltas(revisions: list[ArticleRevision], *, following: ArticleRevi
 
 
 def _history_rows(request: HttpRequest, scope: ArticleScope) -> tuple[list[dict], Page]:
-    """One page of ``scope``'s revision history, newest first.
+    """
+    One page of ``scope``'s revision history, newest first.
 
     Args:
         request: The current request; carries the page number.
@@ -458,7 +471,8 @@ def _history_rows(request: HttpRequest, scope: ArticleScope) -> tuple[list[dict]
 
 
 class ArticleHistoryView(ArticleViewBase):
-    """Revision history list for the History tab.
+    """
+    Revision history list for the History tab.
 
     GET .../article/history/
     """
@@ -479,7 +493,8 @@ class ArticleHistoryView(ArticleViewBase):
 
 
 class ArticleRevisionView(ArticleViewBase):
-    """Diff of one revision against its predecessor.
+    """
+    Diff of one revision against its predecessor.
 
     GET .../article/history/<revision_id>/
     """
@@ -510,7 +525,8 @@ class ArticleRevisionView(ArticleViewBase):
 
 
 class ArticleRestoreView(ArticleViewBase):
-    """Restore an older revision as the newest version.
+    """
+    Restore an older revision as the newest version.
 
     POST .../article/history/<revision_id>/restore/
     """

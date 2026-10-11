@@ -189,7 +189,8 @@ class ExtractGpsCoordsMockTests(SimpleTestCase):
         mock_file.seek.assert_called_with(0)
 
     def test_returns_none_for_nan_gps(self):
-        """Zero-denominator EXIF rationals (some phones write these for 'GPS on, no fix')
+        """
+        Zero-denominator EXIF rationals (some phones write these for 'GPS on, no fix')
         decode to NaN; that must not reach callers, who store it as a DB decimal."""
         mock_file, mock_img, _ = self._make_file_with_gps(
             (float("nan"), 0, 0),
@@ -247,7 +248,8 @@ class ExtractGpsDirectionMockTests(SimpleTestCase):
         return mock_file, mock_img
 
     def _gps_ifd(self, **by_name):
-        """Build a raw (numeric-keyed) GPS IFD dict from GPSTAGS names, matching
+        """
+        Build a raw (numeric-keyed) GPS IFD dict from GPSTAGS names, matching
         how PIL's own get_ifd() returns it - see extract_gps_direction's own
         GPSTAGS.get(k, k) decode step."""
         from PIL.ExifTags import GPSTAGS
@@ -473,7 +475,8 @@ class ImageToGalleryJsonTests(SimpleTestCase):
         profile.can_view_profile.assert_not_called()
 
     def test_uploader_name_is_masked_from_a_viewer_who_may_not_see_the_profile(self):
-        """Naming somebody is its own disclosure, separate from showing their photo.
+        """
+        Naming somebody is its own disclosure, separate from showing their photo.
 
         Every other surface that names a profile - the API's owner_slug, wiki edit attribution - resolves it
         through identity visibility first."""

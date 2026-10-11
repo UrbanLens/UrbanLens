@@ -33,7 +33,8 @@ class HomeOverviewPageTests(TestCase):
         self.client.force_login(self.user)
 
     def test_no_longer_frames_content_as_private(self) -> None:
-        """The old amber "private zone" wrapper/chips are gone entirely -
+        """
+        The old amber "private zone" wrapper/chips are gone entirely -
         this is just the user's own dashboard, not a walled-off secret area."""
         response = self.client.get(reverse("home.view"))
         self.assertEqual(response.status_code, 200)
@@ -95,7 +96,8 @@ _PHOTO_MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-home-photos-")
 
 @override_settings(MEDIA_ROOT=_PHOTO_MEDIA_ROOT)
 class RecentPhotosAccessibleNameTests(TestCase):
-    """Every photo tile carries a name a screen reader can announce.
+    """
+    Every photo tile carries a name a screen reader can announce.
 
     axe reports a missing or blank one as ``image-alt``/``button-name``, both critical, and both have been real
     here: the button lost its name when the thumbnail 404'd (fixed by moving the label onto the button), and the
@@ -138,7 +140,8 @@ class RecentPhotosAccessibleNameTests(TestCase):
             self.assertTrue(alt.strip(), "alt is whitespace only, which axe reports as image-alt")
 
     def test_a_photo_row_with_no_file_does_not_take_the_page_down(self) -> None:
-        """The widget renders ``img.image.url``, which raises when the field is blank.
+        """
+        The widget renders ``img.image.url``, which raises when the field is blank.
 
         Such rows are a known condition, not a hypothetical - the wiki gallery endpoint carries an explicit
         ``exclude(image="")`` for them."""
@@ -244,7 +247,8 @@ class HomeWidgetLayoutSaveViewTests(TestCase):
 
 
 class DisabledWidgetsCostNothingTests(TestCase):
-    """Most homepage entries are lazy querysets, so a disabled widget is free.
+    """
+    Most homepage entries are lazy querysets, so a disabled widget is free.
 
     Two were not."""
 

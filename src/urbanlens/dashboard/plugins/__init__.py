@@ -1,4 +1,5 @@
-"""UrbanLens plugin framework.
+"""
+UrbanLens plugin framework.
 External integrations (third-party APIs and the features built on them) are packaged as plugins so individual installs can add, remove, and disable them independently."""
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin

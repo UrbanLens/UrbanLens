@@ -88,7 +88,8 @@ class PlaceholderSlugTests(TestCase):
         self.assertEqual(pin.slug, "hrsh")
 
     def test_the_sweep_will_not_reslug_a_pin_somebody_may_be_looking_at(self) -> None:
-        """A pin created minutes ago is not the legacy data this sweep is for.
+        """
+        A pin created minutes ago is not the legacy data this sweep is for.
 
         Its detail page has the old slug baked into every HTMX panel URL it rendered, so changing the slug
         underneath 404s those panels and the global `htmx:responseError` handler raises an error toast for each

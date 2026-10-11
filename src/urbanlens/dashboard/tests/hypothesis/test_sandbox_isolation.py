@@ -54,7 +54,8 @@ EXPECTED_SANDBOX_TASKS = {
 
 
 def _declared_queue_constants() -> dict[str, set[str]]:
-    """Which module constant each ``@shared_task(queue=...)`` in tasks.py names.
+    """
+    Which module constant each ``@shared_task(queue=...)`` in tasks.py names.
 
     Read from the source rather than from the task objects because under test settings ``UL_SANDBOX_ENABLED`` is
     False, so both constants resolve to the same string - the *routing* is indistinguishable at runtime here,
@@ -163,7 +164,8 @@ class UntrustedParseGuardTests(SimpleTestCase):
 
 @override_settings(UL_UNTRUSTED_PARSE_POLICY="deny", UL_PROCESS_ROLE="web")
 class DecoratedParserTests(SimpleTestCase):
-    """The parsers themselves refuse to run outside the sandbox.
+    """
+    The parsers themselves refuse to run outside the sandbox.
 
     Calling through the real functions rather than asserting on a decorator attribute: the thing worth knowing
     is that a view calling ``extract_exif_data`` fails, not that a marker is present."""
@@ -300,7 +302,8 @@ class SandboxQueueRoutingTests(SimpleTestCase):
         self.assertEqual(sandbox_queue(), Queue.DEFAULT)
 
     def test_declared_queue_reaches_apply_async(self) -> None:
-        """``@shared_task(queue=...)`` puts the queue in the dispatched options.
+        """
+        ``@shared_task(queue=...)`` puts the queue in the dispatched options.
 
         The load-bearing Celery behaviour."""
         from celery import Celery, shared_task
@@ -353,7 +356,8 @@ class SandboxQueueRoutingTests(SimpleTestCase):
 
 
 class AiQueueRoutingTests(SimpleTestCase):
-    """``ai_queue()`` always resolves to :attr:`Queue.AI` - no DEFAULT fallback.
+    """
+    ``ai_queue()`` always resolves to :attr:`Queue.AI` - no DEFAULT fallback.
 
     Unlike ``sandbox_queue()``, whether the assistant is reachable at all is decided earlier by
     ``assistant_available()`` (which checks ``UL_AI_WORKER_ENABLED``); a task should never be enqueued in the

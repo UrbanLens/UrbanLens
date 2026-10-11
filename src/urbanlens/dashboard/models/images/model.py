@@ -47,7 +47,8 @@ _UPLOAD_BUCKET_CHARS = 2
 
 
 def _random_upload_dir() -> str:
-    """Return a fresh ``<bucket>/<token>`` directory for one stored file.
+    """
+    Return a fresh ``<bucket>/<token>`` directory for one stored file.
 
     Returns:
         Two path segments, e.g. ``"a7/Kd3xq8Lm2Zpq"``.
@@ -57,7 +58,8 @@ def _random_upload_dir() -> str:
 
 
 def anonymized_media_stem(instance: Image | None) -> str:
-    """Random filename stem, year-prefixed when a capture date is known.
+    """
+    Random filename stem, year-prefixed when a capture date is known.
 
     The uploaded filename never reaches storage, since device names can leak
     capture details; only the year is kept for downloaded files.
@@ -76,7 +78,8 @@ def anonymized_media_stem(instance: Image | None) -> str:
 
 @declares_media_family("pin_images")
 def pin_image_upload_path(instance: Image, filename: str) -> str:
-    """Storage path under a random directory with an opaque name.
+    """
+    Storage path under a random directory with an opaque name.
 
     Migrations serialize ``upload_to`` by reference, so this stays public.
     """
@@ -131,7 +134,8 @@ class ImageSource(TextChoices):
 
     @classmethod
     def personal_library(cls) -> frozenset[str]:
-        """Sources that mean this profile's own picture.
+        """
+        Sources that mean this profile's own picture.
 
         Returns:
             The ``ImageSource`` values that denote the profile's own picture.
@@ -367,7 +371,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def is_own_contribution(self) -> bool:
-        """Whether ``profile`` photographed this rather than up-voting it.
+        """
+        Whether ``profile`` photographed this rather than up-voting it.
 
         Returns:
             True when this profile contributed the picture itself.
@@ -396,7 +401,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def file_url(self) -> str | None:
-        """The stored file's URL, or None when there is none to serve.
+        """
+        The stored file's URL, or None when there is none to serve.
 
         None while ``pending_scan`` is set: the stored file is then the raw upload, which its
         re-encode replaces and deletes, so a URL for it 404s moments later.
@@ -410,7 +416,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def display_url(self) -> str:
-        """Stored file URL, falling back to the remote source.
+        """
+        Stored file URL, falling back to the remote source.
 
         Returns:
             The stored file's URL, the remote source URL, or "" when neither
@@ -424,7 +431,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def thumb_url(self) -> str:
-        """Grid thumbnail URL, falling back to the original.
+        """
+        Grid thumbnail URL, falling back to the original.
 
         Returns:
             The thumbnail URL, the original's URL, or "" (always, while pending).
@@ -435,7 +443,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def marker_thumb_url(self) -> str:
-        """Marker thumbnail URL, falling back through larger images.
+        """
+        Marker thumbnail URL, falling back through larger images.
 
         Returns:
             The marker thumbnail's URL, then the grid thumbnail's, then the
@@ -447,7 +456,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def effective_taken_at(self) -> datetime | None:
-        """Best-known capture time: EXIF first, then filename date.
+        """
+        Best-known capture time: EXIF first, then filename date.
 
         Returns:
             The capture time, or None when neither source has one.
@@ -473,7 +483,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def display_caption(self) -> str:
-        """Stripped caption, or ``""``; whitespace alone counts as none.
+        """
+        Stripped caption, or ``""``; whitespace alone counts as none.
 
         Returns:
             The caption with surrounding whitespace removed, or an empty string.
@@ -489,7 +500,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def effective_latitude(self) -> Decimal | None:
-        """Best-known latitude: real GPS, then estimate, then Location.
+        """
+        Best-known latitude: real GPS, then estimate, then Location.
 
         Returns:
             The latitude, or None when the photo has no position of any kind
@@ -506,7 +518,8 @@ class Image(abstract.FrontendDashboardModel):
 
     @property
     def effective_longitude(self) -> Decimal | None:
-        """Best-known longitude: real GPS, then estimate, then Location.
+        """
+        Best-known longitude: real GPS, then estimate, then Location.
 
         Returns:
             The longitude, or None when the photo has no position of any

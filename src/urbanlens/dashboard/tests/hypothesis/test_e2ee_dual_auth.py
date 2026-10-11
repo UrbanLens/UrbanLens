@@ -94,7 +94,8 @@ class OwnKeysDualAuthTests(TestCase):
         self.assertEqual(self.client.get(self.url, **_bearer(token)).status_code, 403)
 
     def test_pat_api_key_is_refused_even_holding_the_scope(self) -> None:
-        """OAUTH2_ONLY_SCOPES is about the credential *kind*, end to end.
+        """
+        OAUTH2_ONLY_SCOPES is about the credential *kind*, end to end.
 
         A bearer API key tends to end up in CI configs and screenshots; it must never be a route into someone's
         messages, even if something wrote the messaging scopes onto it."""
@@ -125,7 +126,8 @@ class ScopeSeparationTests(TestCase):
 
 
 class CurrentPasswordProofUnderCredentialAuthTests(TestCase):
-    """The three key-replacing endpoints still demand the account password.
+    """
+    The three key-replacing endpoints still demand the account password.
 
     A stolen token must not be sufficient on its own to re-key the account."""
 
@@ -246,7 +248,8 @@ class ErrorBodyShapeTests(TestCase):
         self.assertEqual(response.json()["error"], "Malformed JSON body")
 
     def test_malformed_json_from_a_credential_is_still_a_json_400(self) -> None:
-        """Credential callers get the package's ``{"error": ...}`` here too.
+        """
+        Credential callers get the package's ``{"error": ...}`` here too.
 
         django-oauth-toolkit's authenticator reads the request body while verifying the token, so a malformed
         body raises DRF's ParseError during authentication - before any handler in this module runs and could
@@ -321,7 +324,8 @@ class GroupKeyTokenContractTests(TestCase):
 
 
 class ChangePasswordStaysSessionOnlyTests(TestCase):
-    """``E2EEChangePasswordView`` must never accept a credential.
+    """
+    ``E2EEChangePasswordView`` must never accept a credential.
 
     It calls ``user.set_password()`` on the *login* credential."""
 

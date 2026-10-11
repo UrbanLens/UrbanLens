@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class StreetViewPanorama:
-    """A candidate Street View panorama for a SpotGuessr round.
+    """
+    A candidate Street View panorama for a SpotGuessr round.
 
     Attributes:
         latitude: The panorama's own resolved latitude - may differ slightly from ``location``'s coordinates, since coverage lookup can widen its search radius to find the nearest pano.

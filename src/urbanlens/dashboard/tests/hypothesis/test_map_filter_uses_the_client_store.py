@@ -1,4 +1,5 @@
-"""The filter panel must not re-send pins the asker already has.
+"""
+The filter panel must not re-send pins the asker already has.
 
 `map.search` fires on every filter change - a slider drag is several - and its
 answer was every matching pin's full payload. For a 10,000-pin account that is an
@@ -47,7 +48,8 @@ _UUIDS_SCRIPT = re.compile(r'<script[^>]*id="map-filter-uuids"[^>]*>(.*?)</scrip
 
 
 def _embedded(pattern: re.Pattern[str], html: str) -> Any:
-    """Parse one of the two documents `map.search` can answer with.
+    """
+    Parse one of the two documents `map.search` can answer with.
 
     Args:
         pattern: Which script tag to look for.
@@ -106,7 +108,8 @@ class TheClientStoreIsUsedWhenItIsCurrentTests(_FilterCase):
         self.assertIsNone(_embedded(_PINS_SCRIPT, body), "the identifier response shipped payloads as well")
 
     def test_the_identifier_answer_does_not_grow_with_the_account(self) -> None:
-        """The cost being removed is the model graph, not only the bytes.
+        """
+        The cost being removed is the model graph, not only the bytes.
 
         Stated as a slope rather than an absolute: the form has its own fixed
         setup cost, and an absolute bound would be a number to re-tune rather
@@ -134,7 +137,8 @@ class TheClientStoreIsUsedWhenItIsCurrentTests(_FilterCase):
         )
 
     def test_the_fingerprint_the_client_sends_is_the_one_meta_serves(self) -> None:
-        """Guards the handshake itself, across the two endpoints that share it.
+        """
+        Guards the handshake itself, across the two endpoints that share it.
 
         The client reads this value from `map.pins.meta` and posts it here. Were
         the two to derive it differently, identifiers would never be served and
@@ -208,7 +212,8 @@ class TheCeilingBoundsBothAnswersTests(_FilterCase):
         self.assertLessEqual(len(pins or []), 2)
 
     def test_a_bounded_answer_says_how_many_it_left_out(self) -> None:
-        """A client that cannot tell a partial answer from a complete one will
+        """
+        A client that cannot tell a partial answer from a complete one will
         show the partial one as the whole truth."""
         for body in (
             self.search().content.decode(),

@@ -1,4 +1,5 @@
-"""A rewritten video, a converted document and an OCR pass never hold the whole file in memory.
+"""
+A rewritten video, a converted document and an OCR pass never hold the whole file in memory.
 
 Uploads may be hundreds of megabytes, and these run in a media worker beside other jobs. Each one
 already works on a temporary copy on disk; the property pinned here is that the result goes back to

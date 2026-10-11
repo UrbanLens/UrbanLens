@@ -1,4 +1,5 @@
-"""Longitude arithmetic that survives the antimeridian.
+"""
+Longitude arithmetic that survives the antimeridian.
 Longitude wraps at ±180, so the ordinary arithmetic every other coordinate uses gives nonsense there:"""
 
 from __future__ import annotations
@@ -11,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def circular_mean_longitude(longitudes: Sequence[float], weights: Sequence[float] | None = None) -> float:
-    """Average longitudes as directions rather than as numbers.
+    """
+    Average longitudes as directions rather than as numbers.
 
     Args:
         longitudes: Degrees, each in [-180, 180].
@@ -34,7 +36,8 @@ def circular_mean_longitude(longitudes: Sequence[float], weights: Sequence[float
 
 
 def longitude_delta(a: float, b: float) -> float:
-    """Shortest angular distance between two longitudes, in degrees.
+    """
+    Shortest angular distance between two longitudes, in degrees.
 
     Args:
         a: First longitude in degrees.
@@ -47,7 +50,8 @@ def longitude_delta(a: float, b: float) -> float:
 
 
 def normalize_longitude(longitude: float) -> float:
-    """Fold a longitude into [-180, 180].
+    """
+    Fold a longitude into [-180, 180].
     Map clients report unwrapped bounds when panned across the date line - Leaflet's ``getEast()`` can return 181 - while stored coordinates are always folded, so the two never match until one side is normalised.
 
     Args:
@@ -62,7 +66,8 @@ def normalize_longitude(longitude: float) -> float:
 
 
 def split_at_antimeridian(geometry):
-    """Fold a region that runs past +/-180 into the two halves it really covers.
+    """
+    Fold a region that runs past +/-180 into the two halves it really covers.
     Map clients report unwrapped coordinates when the user draws across the date line - Leaflet gives a box from 179 to 181 rather than 179 to -179 - while stored points are always folded into [-180, 180].
 
     Args:
@@ -119,7 +124,8 @@ def split_at_antimeridian(geometry):
 
 
 def _translate_longitude(geometry, offset: float):
-    """Shift every vertex of a polygon east/west by ``offset`` degrees.
+    """
+    Shift every vertex of a polygon east/west by ``offset`` degrees.
 
     Args:
         geometry: A Polygon or MultiPolygon in SRID 4326.

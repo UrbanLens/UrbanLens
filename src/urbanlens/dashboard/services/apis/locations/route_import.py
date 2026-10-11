@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 def iter_route_import_events(parsed_routes: list[ParsedRoute], profile: Profile) -> Iterator[dict[str, Any]]:
-    """Save each parsed route and record the visits its dwells imply, one event per route.
+    """
+    Save each parsed route and record the visits its dwells imply, one event per route.
 
     Args:
         parsed_routes: Unsaved Route instances paired with their raw points.

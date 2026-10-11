@@ -1,4 +1,5 @@
-"""OSRM plugin: free, open-source routing gateway registration.
+"""
+OSRM plugin: free, open-source routing gateway registration.
 Registers rate-limit defaults so admins can see/throttle it like any other external call; see ``services.apis.routing.osrm`` for the gateway."""
 
 from __future__ import annotations

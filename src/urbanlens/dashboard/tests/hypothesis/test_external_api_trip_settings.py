@@ -22,7 +22,8 @@ _LEVELS = [Trip.PERM_NONE, Trip.PERM_ORGANIZERS, Trip.PERM_EVERYONE]
 
 
 def _bearer(raw_key: str) -> dict:
-    """Request kwargs carrying an API key as a bearer token.
+    """
+    Request kwargs carrying an API key as a bearer token.
 
     Args:
         raw_key: The raw (unhashed) API key value.
@@ -47,7 +48,8 @@ class _TripSettingsTestCase(TestCase):
         self.trip = self._make_trip()
 
     def _make_trip(self, creator: Profile | None = None, **kwargs) -> Trip:
-        """Create a trip with its creator joined, as the create flow would.
+        """
+        Create a trip with its creator joined, as the create flow would.
 
         Args:
             creator: The trip's creator; defaults to the key owner. **kwargs: Extra ``Trip`` field values.
@@ -60,7 +62,8 @@ class _TripSettingsTestCase(TestCase):
         return trip
 
     def _patch(self, trip: Trip, body: dict, raw_key: str | None = None):
-        """PATCH the settings endpoint for *trip* with *body*.
+        """
+        PATCH the settings endpoint for *trip* with *body*.
 
         Args:
             trip: The trip whose settings to edit. body: The JSON body to send. raw_key: Optional alternative API key; defaults to the fixture's.
@@ -76,13 +79,15 @@ class _TripSettingsTestCase(TestCase):
 
 
 class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
-    """``set_trip_permissions`` touches only the fields actually submitted.
+    """
+    ``set_trip_permissions`` touches only the fields actually submitted.
 
     A one-key partial update therefore rewrote three unrelated permissions on a trip shared with other people,
     with nothing in the response to reveal it had happened."""
 
     def _configure(self, trip: Trip) -> None:
-        """Set all four permissions to values that differ from the old defaults.
+        """
+        Set all four permissions to values that differ from the old defaults.
 
         The old implementation's defaults were ``none`` for ``allow_add_members`` and ``everyone`` for the other
         three, so this fixture inverts each one: any field the service silently rewrites is then unambiguously
@@ -121,7 +126,8 @@ class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
         self.assertEqual(self.trip.allow_comments, Trip.PERM_NONE)
 
     def test_unknown_level_is_rejected_rather_than_defaulted(self) -> None:
-        """A garbage level is a validation failure, not a silent reset.
+        """
+        A garbage level is a validation failure, not a silent reset.
 
         Coercing it to the field's default is worse than refusing it: the caller is told the write succeeded
         while the permission moved somewhere they never asked for."""
@@ -146,7 +152,8 @@ class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
         initial=st.lists(st.sampled_from(_LEVELS), min_size=4, max_size=4),
     )
     def test_only_submitted_fields_ever_move(self, submitted: dict[str, str], initial: list[str]) -> None:
-        """For any subset of fields, exactly that subset changes.
+        """
+        For any subset of fields, exactly that subset changes.
 
         The property the presence-keyed contract actually promises, stated over every subset rather than the one
         the example tests happen to pick: a field named in the submission ends up at the submitted level, and a
@@ -183,7 +190,8 @@ class TripSettingsEndpointTests(_TripSettingsTestCase):
         self.assertEqual(self.trip.allow_add_members, Trip.PERM_EVERYONE)
 
     def test_response_is_the_full_trip_with_recomputed_viewer_flags(self) -> None:
-        """One round trip: the write answers with what the client renders from.
+        """
+        One round trip: the write answers with what the client renders from.
 
         ``viewer.can_*`` is derived server-side from the levels *and* the caller's role, so a client that only
         echoed back the submitted levels would still need a second request to know what it may now show."""
@@ -211,7 +219,8 @@ class TripSettingsEndpointTests(_TripSettingsTestCase):
         self.assertIn("allow_comments", response.json()["fields"])
 
     def test_member_who_is_not_an_organizer_gets_403(self) -> None:
-        """A deliberate 403: they have already been shown this trip.
+        """
+        A deliberate 403: they have already been shown this trip.
 
         The package's usual answer for an action a caller may not take is 404, so that the status cannot confirm
         the resource exists."""

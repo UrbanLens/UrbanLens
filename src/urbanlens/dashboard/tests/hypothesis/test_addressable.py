@@ -1,4 +1,5 @@
-"""Tests for AddressableMixin address-component properties.
+"""
+Tests for AddressableMixin address-component properties.
 
 Tests use unsaved Location instances (no DB required) to exercise the
 pure Python properties on AddressableMixin.
@@ -23,7 +24,8 @@ _HYP = {"max_examples": 100, "deadline": None}
 
 
 def _loc(**kwargs) -> Location:
-    """Create an unsaved Location with address fields overridden from kwargs.
+    """
+    Create an unsaved Location with address fields overridden from kwargs.
 
     Uses Location() so Django's __init__ sets up internal state correctly.
     No DB interaction occurs - save() is never called.

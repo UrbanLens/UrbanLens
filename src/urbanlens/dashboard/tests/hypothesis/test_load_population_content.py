@@ -1,4 +1,5 @@
-"""The capacity population carries the content its journeys render, not only pins.
+"""
+The capacity population carries the content its journeys render, not only pins.
 
 A pin page with no comments, a trips page with no trips, an Organize page with no customizations and a pin save that
 syncs no smart lists all cost less than they do for a real account, so a capacity run over them overstates capacity.

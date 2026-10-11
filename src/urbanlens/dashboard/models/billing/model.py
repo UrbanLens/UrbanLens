@@ -35,7 +35,8 @@ class BillingCustomer(abstract.DashboardModel):
 
 
 class RoleSubscription(abstract.DashboardModel):
-    """A user's paid, Stripe-backed subscription to a SubscriptionRole.
+    """
+    A user's paid, Stripe-backed subscription to a SubscriptionRole.
     Distinct from ``UserSubscription`` (an admin-issued grant with no billing behind it) - a role can be held either way, and ``active_subscription_roles()``/ ``user_has_feature()`` check both.
     """
 
@@ -110,7 +111,8 @@ class RoleSubscription(abstract.DashboardModel):
 
 
 class StripeWebhookEvent(abstract.DashboardModel):
-    """Idempotency/audit log for incoming Stripe webhook deliveries.
+    """
+    Idempotency/audit log for incoming Stripe webhook deliveries.
 
     Stripe redelivers on any non-2xx response or timeout, so every event is recorded
     (with its raw payload, for debugging) before being processed - a replay of an
@@ -132,7 +134,8 @@ class StripeWebhookEvent(abstract.DashboardModel):
 
 
 class StripeProcessedRefund(abstract.DashboardModel):
-    """Idempotency record for individual Stripe refund objects already applied.
+    """
+    Idempotency record for individual Stripe refund objects already applied.
     ``StripeWebhookEvent`` dedups whole event deliveries, but ``charge.refunded`` is cumulative: a second partial refund on the same charge arrives as a *fresh* event (new event id) whose ``refunds.data`` re-contains every earlier refund object.
     Each refund id (``re_...``) is claimed here exactly once - within the receiving view's transaction, so the claim commits atomically with the ledger decrement it produced.
     """

@@ -1,4 +1,5 @@
-"""External-API routes for the social graph.
+"""
+External-API routes for the social graph.
 
 Owns everything about the relationships between people rather than between a person and a place:
 friendships and their state transitions, invitations, blocks and mutes, follows, and whatever a

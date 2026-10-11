@@ -14,7 +14,8 @@ _MODULE_PATH = Path(__file__).resolve().parents[5] / "bin" / "perf" / "derive_bu
 
 
 def _load() -> Any:
-    """Import the script by path.
+    """
+    Import the script by path.
 
     It lives in ``bin/`` and is a command rather than a package member, so there is no import path to it."""
     spec = importlib.util.spec_from_file_location("derive_budget", _MODULE_PATH)
@@ -113,7 +114,8 @@ def test_the_tagged_trend_is_taken_silently(capsys: Any) -> None:
 
 
 def test_a_baseline_that_measured_nothing_is_refused() -> None:
-    """The dangerous case. A budget derived from no requests has nothing behind it,
+    """
+    The dangerous case. A budget derived from no requests has nothing behind it,
     and every phase of the run that follows would be judged against it."""
     with pytest.raises(SystemExit):
         derive_budget.baseline_p95(summary(50.0, count=0))

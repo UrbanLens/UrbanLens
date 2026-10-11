@@ -1,4 +1,5 @@
-"""Enums and key helpers for the reputation ledger.
+"""
+Enums and key helpers for the reputation ledger.
 
 Separate from both the models and the rule registry so each can import it
 without a cycle: the models need ``TargetKind`` for a field's choices, and the
@@ -17,7 +18,8 @@ if TYPE_CHECKING:
 
 
 class TargetKind(TextChoices):
-    """What a ledger row is *about*.
+    """
+    What a ledger row is *about*.
     Stored as a label plus an integer id rather than a real ``GenericForeignKey``: the ledger is written on every contribution and read in bulk by the aggregator, and a contenttypes join on both paths buys nothing here - nothing dereferences the target generically, and the two consumers that care (per-wiki caps, the admin breakdown) both filter on :attr:`ReputationEvent.wiki` instead.
     """
 
@@ -40,7 +42,8 @@ PERIOD_FORMAT = "%Y-%m"
 
 
 def period_key_for(moment: datetime.datetime | datetime.date | None = None) -> str:
-    """Return the period bucket a moment falls in.
+    """
+    Return the period bucket a moment falls in.
 
     Args:
         moment: The time to bucket. Defaults to now, in the project timezone.

@@ -34,7 +34,8 @@ MAX_BYTES_PER_ROW = 4_000
 
 
 def read_body(response: HttpResponseBase) -> bytes:
-    """The whole body, whether or not it was streamed.
+    """
+    The whole body, whether or not it was streamed.
 
     `StreamingHttpResponse` raises on `.content`, so reading a body the obvious way put `map.document` - the
     largest endpoint in the application - outside the reach of every gate built on this mixin.
@@ -72,7 +73,8 @@ class EndpointSample:
 
 
 def _row_counting_wrapper(totals: list[int]) -> Any:
-    """A `connection.execute_wrapper` that sums the rows each statement returned.
+    """
+    A `connection.execute_wrapper` that sums the rows each statement returned.
 
     Args:
         totals: Single-element accumulator, mutated in place.
@@ -95,12 +97,14 @@ def _row_counting_wrapper(totals: list[int]) -> Any:
 
 
 class EndpointScalingMixin(InstantiationScalingMixin):
-    """Assert an endpoint's cost per row is bounded on every axis at once.
+    """
+    Assert an endpoint's cost per row is bounded on every axis at once.
 
     Subclasses implement :meth:`seed_rows` and call :meth:`assert_endpoint_scaling`."""
 
     def request(self, url: str, **extra: Any) -> HttpResponse:
-        """Issue the request under test. Override for POST or a body.
+        """
+        Issue the request under test. Override for POST or a body.
 
         Args:
             url: The URL to fetch. **extra: Passed to the test client.
@@ -110,7 +114,8 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         return self.client.get(url, **extra)
 
     def count_payload_rows(self, response: HttpResponse) -> int | None:
-        """How many records the response carries, if that is countable.
+        """
+        How many records the response carries, if that is countable.
 
         Returns None by default, which skips the ceiling axis.
 
@@ -122,7 +127,8 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         return None
 
     def measure_endpoint(self, url: str, **extra: Any) -> EndpointSample:
-        """Fetch *url* once, reading every axis off the same request.
+        """
+        Fetch *url* once, reading every axis off the same request.
 
         Args:
             url: The URL to measure. **extra: Passed to the test client.
@@ -148,7 +154,8 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         )
 
     def measure_queries(self, url: str, **extra: Any) -> tuple[dict[str, Any], ...]:
-        """The statements *url* runs, captured separately from the timed axes.
+        """
+        The statements *url* runs, captured separately from the timed axes.
 
         `CaptureQueriesContext` turns on ``force_debug_cursor``, which is fine for counting but is not something
         to hold while measuring anything else.
@@ -175,7 +182,8 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         growth_waiver: str = "",
         **extra: Any,
     ) -> None:
-        """Assert every per-row cost of *url* is bounded, reporting all failures.
+        """
+        Assert every per-row cost of *url* is bounded, reporting all failures.
 
         Args:
             url: The URL to measure. max_objects_per_row: Model instances one row may cost. max_rows_fetched_per_row: Database rows one row may cost.
@@ -241,7 +249,8 @@ class EndpointScalingMixin(InstantiationScalingMixin):
         query_tolerance: int,
         payload_ceiling: int | None,
     ) -> Iterator[str]:
-        """Every axis that grew past its budget, described.
+        """
+        Every axis that grew past its budget, described.
 
         Yielded rather than raised one at a time so a failure reports the whole picture: an endpoint building
         objects per row usually also fetches rows per row, and fixing one at a time means measuring three times."""

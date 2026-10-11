@@ -79,7 +79,8 @@ class ProviderDiscoveryTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(near.call_args.kwargs["provider"], ["fcc_asr"])
 
     def test_overture_places_are_left_to_the_building_panel(self) -> None:
-        """The Building Characteristics panel lists Overture's nearby places, and REData's Overture lookup can run to
+        """
+        The Building Characteristics panel lists Overture's nearby places, and REData's Overture lookup can run to
         a 90 s timeout that holds up the whole request."""
         with (
             mock.patch(f"{_GATEWAY}.applicable_provider_tags", return_value=["fcc_asr", "overture"]),
@@ -106,7 +107,8 @@ class ProviderDiscoveryTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(near.call_args.kwargs["provider"], ["some_register_redata_added_yesterday"])
 
     def test_failed_discovery_asks_nothing_rather_than_everything(self) -> None:
-        """A request with no `provider` fans out across the whole registry.
+        """
+        A request with no `provider` fans out across the whole registry.
 
         That is the one outcome the capability lookup exists to prevent, so a
         discovery failure must not fall through to it.
@@ -131,7 +133,8 @@ class ProviderDiscoveryTests(RedataConfiguredMixin, TestCase):
         self.assertNotIn("osm_surveillance", _TOO_GENERIC | _SHOWN_ELSEWHERE)
 
     def test_the_excluded_tags_all_name_an_urbanlens_panel(self) -> None:
-        """`_SHOWN_ELSEWHERE` is about this app's UI, which is why it may be written down.
+        """
+        `_SHOWN_ELSEWHERE` is about this app's UI, which is why it may be written down.
 
         If a tag here stopped matching a panel, the list would have quietly become a REData-taxonomy list - the
         kind that goes stale."""

@@ -1,4 +1,5 @@
-"""Recording that a pin's map appearance changed.
+"""
+Recording that a pin's map appearance changed.
 A pin can change what it draws without its own row being written - a label's colour, a label's order, a rating - and `bulk_update` never touches `auto_now` columns."""
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ if TYPE_CHECKING:
 
 
 def touch_pins(pins: QuerySet[Pin]) -> int:
-    """Mark every pin in a query as having changed, in one statement.
+    """
+    Mark every pin in a query as having changed, in one statement.
 
     Args:
         pins: The pins to mark.
@@ -31,7 +33,8 @@ def touch_pins(pins: QuerySet[Pin]) -> int:
 
 
 def touch_pin(pin_id: int) -> int:
-    """Mark one pin as having changed.
+    """
+    Mark one pin as having changed.
     For the writes that change a single pin's payload without writing the pin row: gaining or losing a label, gaining or losing a rating.
 
     Args:
@@ -45,7 +48,8 @@ def touch_pin(pin_id: int) -> int:
 
 
 def touch_pins_for_labels(label_ids: Iterable[int]) -> int:
-    """Mark every pin carrying any of these labels.
+    """
+    Mark every pin carrying any of these labels.
     Which is to say: after any bulk write to `Label`, since deciding otherwise per site is how three of them ended up wrong.
 
     Args:
@@ -63,7 +67,8 @@ def touch_pins_for_labels(label_ids: Iterable[int]) -> int:
 
 
 def touch_pins_for_label_customization(profile_id: int, label_id: int) -> int:
-    """Mark one profile's pins carrying a label whose per-profile override changed.
+    """
+    Mark one profile's pins carrying a label whose per-profile override changed.
     A `LabelCustomization` is scoped to one profile, so unlike a label edit this must not reach anybody else's pins - including for a global label, which every profile can carry.
 
     Args:

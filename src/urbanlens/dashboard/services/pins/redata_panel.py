@@ -1,4 +1,5 @@
-"""Base for pin-detail panels whose whole payload is one REData near-point call.
+"""
+Base for pin-detail panels whose whole payload is one REData near-point call.
 Eight plugins under ``plugins/builtin/redata_*.py`` had the same ``gate`` / ``fetch`` / ``debug_count`` skeleton copied into each of them, differing only in a gateway class, an accessor and the key the payload is stored under."""
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ if TYPE_CHECKING:
 
 
 def at_limit(rows: Sized, limit: int | None) -> bool:
-    """Whether any provider filled the ``limit`` it was asked under, which makes any count drawn from the answer a floor.
+    """
+    Whether any provider filled the ``limit`` it was asked under, which makes any count drawn from the answer a floor.
 
     Args:
         rows: The rows the answer held; REData applies ``limit`` to each ``provider`` among them.
@@ -34,7 +36,8 @@ def at_limit(rows: Sized, limit: int | None) -> bool:
 
 
 def count_label(rows: Sized, limit: int | None) -> str:
-    """How many rows an answer holds, said as a floor when it stopped at ``limit``.
+    """
+    How many rows an answer holds, said as a floor when it stopped at ``limit``.
 
     Args:
         rows: The rows the count describes.
@@ -47,12 +50,14 @@ def count_label(rows: Sized, limit: int | None) -> str:
 
 
 class RedataBackedSource(PanelSource):
-    """A panel source only REData can fill. Listed first among a source's bases, it adds to the source's own gate
+    """
+    A panel source only REData can fill. Listed first among a source's bases, it adds to the source's own gate
     that REData is configured, so without REData the panel is never scheduled and caches nothing - an empty row
     written then would outlive REData being configured."""
 
     def gate(self, pin: Pin) -> bool:
-        """REData is configured, and the source's own conditions hold.
+        """
+        REData is configured, and the source's own conditions hold.
 
         Args:
             pin: The pin whose panel is being rendered.
@@ -66,7 +71,8 @@ class RedataBackedSource(PanelSource):
 
 
 class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
-    """An info panel filled by a single REData near-a-coordinate request.
+    """
+    An info panel filled by a single REData near-a-coordinate request.
     ``render_context`` remains the subclass's own, since turning one domain's rows into a card is the only genuinely per-panel code.
 
     Attributes:
@@ -78,7 +84,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
     row_limit: ClassVar[int | None] = None
 
     def counted(self, rows: Sized) -> str:
-        """How many rows an answer holds, said as a floor when the answer stopped at :attr:`row_limit`.
+        """
+        How many rows an answer holds, said as a floor when the answer stopped at :attr:`row_limit`.
 
         Args:
             rows: The rows the count describes.
@@ -89,7 +96,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
         return count_label(rows, self.row_limit)
 
     def is_full(self, rows: Sized) -> bool:
-        """Whether an answer stopped at :attr:`row_limit`, so counts of its subsets are floors too.
+        """
+        Whether an answer stopped at :attr:`row_limit`, so counts of its subsets are floors too.
 
         Args:
             rows: The rows the answer held.
@@ -101,7 +109,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
 
     @abstractmethod
     def fetch_envelope(self, latitude: float, longitude: float) -> LocationContextEnvelope:
-        """Make this panel's one REData call.
+        """
+        Make this panel's one REData call.
 
         Args:
             latitude: WGS-84 latitude of the pin.
@@ -115,7 +124,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
         """
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
-        """Shape the envelope's rows before they are cached.
+        """
+        Shape the envelope's rows before they are cached.
 
         Args:
             rows: The envelope's ``results``.
@@ -126,7 +136,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
         return rows
 
     def fetch(self, pin: Pin) -> None:
-        """Call REData and cache the rows, unless the answer is an outage.
+        """
+        Call REData and cache the rows, unless the answer is an outage.
 
         Args:
             pin: The pin whose location is being filled.
@@ -148,7 +159,8 @@ class RedataInfoPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSource):
         self.landed(pin, data)
 
     def landed(self, pin: Pin, data: dict) -> None:
-        """Do whatever else a fetched answer calls for, once it is cached.
+        """
+        Do whatever else a fetched answer calls for, once it is cached.
 
         Args:
             pin: The pin whose panel was fetched.

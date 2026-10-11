@@ -11,7 +11,8 @@ from urbanlens.dashboard.models.reactions.queryset import ReactionManager
 
 
 class Reaction(abstract.DashboardModel):
-    """An emoji reaction from a user on a Comment, TripComment, DirectMessage, or GroupMessage.
+    """
+    An emoji reaction from a user on a Comment, TripComment, DirectMessage, or GroupMessage.
     Exactly one of ``comment``, ``trip_comment``, ``direct_message``, or ``group_message`` must be set.
     A profile can react with the same emoji only once per target, but may react to the same target with several different emoji.
     """

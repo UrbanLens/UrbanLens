@@ -69,7 +69,8 @@ class PinLinkViewTests(TestCase):
         self.assertTrue(PinLink.objects.filter(pk=other_link.pk).exists())
 
     def test_empty_row_shows_placeholder_text(self) -> None:
-        """The pin links row now lives in its own always-visible card (the header's
+        """
+        The pin links row now lives in its own always-visible card (the header's
         "Add a link" button is the entry point regardless of link count), so it no
         longer needs to hide itself when empty - matches the wiki page's row now."""
         response = self.client.get(reverse("pin.links", args=[self.pin.slug]))
@@ -87,7 +88,8 @@ class PinLinkViewTests(TestCase):
 
 
 class PinDetailsPageLinksCardTests(TestCase):
-    """Links moved out of the Details card into their own standalone card
+    """
+    Links moved out of the Details card into their own standalone card
 
     The card lives directly in pages/location/index.html (a static block, not part of the pin.overview HTMX
     partial - PinOverviewView/pin_overview_partial.html only ever cover the Details card) - these tests render
@@ -112,7 +114,8 @@ class PinDetailsPageLinksCardTests(TestCase):
         self.assertContains(response, 'class="btn btn--icon-sm" title="Add a link"')
 
     def test_add_link_header_button_stays_shown_once_a_link_exists(self) -> None:
-        """Unlike the old Details-card version, the Links card header button is
+        """
+        Unlike the old Details-card version, the Links card header button is
         always the entry point now - no more disappearing once a link exists
         (that was the old row's own inline toggle's job; it no longer renders one)."""
         baker.make(PinLink, pin=self.pin, url="https://example.com/a")
@@ -132,7 +135,8 @@ class PinDetailsPageLinksCardTests(TestCase):
         self.assertContains(response, 'data-dialog-open="pin-link-add-dialog"')
 
     def test_row_never_renders_its_own_inline_form(self) -> None:
-        """The row's inline add-toggle/form only exists for the wiki page now -
+        """
+        The row's inline add-toggle/form only exists for the wiki page now -
         on the pin page the Links card header button is the sole entry point,
         regardless of link count."""
         baker.make(PinLink, pin=self.pin, url="https://example.com/a")
@@ -152,7 +156,8 @@ class PinDetailsPageLinksCardTests(TestCase):
         self.assertIn('id="pin-links-count-badge">2</span>', content)
 
     def test_links_card_body_listens_for_the_live_refresh_event(self) -> None:
-        """See test_pin_panel_live_refresh.py - Nominatim/EPA ECHO fetches can
+        """
+        See test_pin_panel_live_refresh.py - Nominatim/EPA ECHO fetches can
         auto-add a link, so this card must refresh itself without a reload."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         self.assertContains(response, "pinLinksChanged from:body")
@@ -208,7 +213,8 @@ class LocationLinkViewTests(TestCase):
         self.assertNotContains(response, 'class="pin-link-add-form"')
 
     def test_row_keeps_its_field_label(self) -> None:
-        """Unlike the pin page's standalone Links card (which has its own
+        """
+        Unlike the pin page's standalone Links card (which has its own
         card-header title), the wiki row is one field among several with no
         title of its own, so it still needs the "Links" label."""
         response = self.client.get(reverse("location.wiki.links", args=[self.location.slug]))

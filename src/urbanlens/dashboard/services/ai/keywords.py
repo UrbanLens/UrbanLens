@@ -252,7 +252,8 @@ def _get_compiled() -> dict[str, list[re.Pattern[str]]]:
 
 
 def categorize_by_keywords(text: str) -> str | None:
-    """Attempt to categorize a location using regex keyword matching.
+    """
+    Attempt to categorize a location using regex keyword matching.
     Only name and place_name fields should be passed in - avoid addresses, which produce too many false positives (e.g.
 
     Args:

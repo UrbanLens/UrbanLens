@@ -91,7 +91,8 @@ class PinShareDetailViewPrivateNotesLeakTests(TestCase):
         self.assertNotContains(response, "An even more secret note added after sharing")
 
     def test_pin_address_is_still_shown(self) -> None:
-        """The fix must not over-hide - address_basic proxies the shared Location,
+        """
+        The fix must not over-hide - address_basic proxies the shared Location,
         not sender-private data, so it should render same as before."""
         self.pin.location.street_number = "742"
         self.pin.location.route = "Evergreen Terrace"

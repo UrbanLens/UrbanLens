@@ -26,7 +26,8 @@ def _tracked_paths() -> set[str]:
 
 
 def check() -> int:
-    """Report migrations whose in-app dependencies are missing or untracked.
+    """
+    Report migrations whose in-app dependencies are missing or untracked.
 
     Returns:
         Process exit code: non-zero when any dependency would dangle in a fresh checkout."""

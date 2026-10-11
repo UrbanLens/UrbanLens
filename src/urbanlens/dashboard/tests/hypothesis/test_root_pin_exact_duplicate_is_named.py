@@ -1,4 +1,5 @@
-"""A second root pin at the exact coordinates of one you already have is refused as exactly that.
+"""
+A second root pin at the exact coordinates of one you already have is refused as exactly that.
 
 It was reported as "you already have a pin on this property", which on a coordinate that resolves
 onto no property at all sends the reader looking for a property that does not exist."""

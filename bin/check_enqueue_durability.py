@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fail if a caller inspects ``safely_enqueue_task``'s result without choosing ``durable=``.
+"""
+Fail if a caller inspects ``safely_enqueue_task``'s result without choosing ``durable=``.
 
 A durable enqueue the broker refuses is kept in the task outbox and queued later. A caller that also handles
 the ``None`` itself (reports the failure, runs the work inline, releases a claim) would then do the work

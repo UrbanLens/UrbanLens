@@ -54,7 +54,8 @@ class PanelReadyTtlTests(TestCase):
         cache.delete(self.source.ready_key(self.pin))
 
     def _fetch_with(self, error: Exception | None) -> int:
-        """Run a fetch and return the TTL it stamped on the ready marker.
+        """
+        Run a fetch and return the TTL it stamped on the ready marker.
 
         The marker's lifetime is the thing under test and the test cache backend (LocMemCache) cannot report a
         key's remaining TTL, so the ``cache.set`` call itself is observed rather than its aftermath."""
@@ -95,7 +96,8 @@ class PanelReadyTtlTests(TestCase):
         self.assertEqual(self._fetch_with(RuntimeError("provider exploded")), FAILURE_SKIP_TTL_SECONDS)
 
     def test_a_disabled_service_still_counts_as_a_settled_answer(self) -> None:
-        """An admin turning a provider off is stable, not transient - re-warming
+        """
+        An admin turning a provider off is stable, not transient - re-warming
         every few minutes forever would be worse than the bug being fixed."""
         self.assertEqual(self._fetch_with(ServiceDisabledError("stub_imagery")), SLIDES_READY_TTL_SECONDS)
 

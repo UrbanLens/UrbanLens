@@ -1,4 +1,5 @@
-"""Where the browser fetches the street and dark basemaps' tiles: Protomaps' hosted API, directly, or our own mirror.
+"""
+Where the browser fetches the street and dark basemaps' tiles: Protomaps' hosted API, directly, or our own mirror.
 
 Production and staging hand the page a hosted tile template carrying the key (``{% hosted_basemap_tiles %}``); the
 client points our own style's ``protomaps`` source at it and falls back to the style's own tiles when it fails

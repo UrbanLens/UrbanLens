@@ -1,4 +1,5 @@
-"""Who can fetch a basemap tile, now that the answer is cached rather than asked every time.
+"""
+Who can fetch a basemap tile, now that the answer is cached rather than asked every time.
 
 ``BasemapTileView`` remembers, against the session key, that a session was signed in - so a
 viewport costs one such check instead of thirty (``P125``). That is a gate, so the interesting
@@ -104,7 +105,8 @@ class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
         self.assertNotEqual(self._fetch(self.client), 200)
 
     def test_the_remembered_answer_expires(self) -> None:
-        """How long a revoked session keeps *fetching* tiles is this timeout, so it is asserted.
+        """
+        How long a revoked session keeps *fetching* tiles is this timeout, so it is asserted.
 
         Not how long it keeps seeing them: a tile already in the browser's cache outlives this by
         the ``Cache-Control`` lifetime, which the module docstring covers.
@@ -126,7 +128,8 @@ class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
         )
 
     def test_the_answer_buys_tiles_and_nothing_else(self) -> None:
-        """A cached 'yes' must not become a general-purpose session.
+        """
+        A cached 'yes' must not become a general-purpose session.
 
         The catalogue sits on the same route prefix, is the nearest thing to a lookalike, and is
         the one endpoint a viewer holding tile access might plausibly be handed by mistake.
@@ -160,7 +163,8 @@ class TileAuthorisationTests(RedataConfiguredMixin, TestCase):
         self.assertNotEqual(signed_out.status_code, 200)
 
     def test_a_restored_entry_on_a_dead_session_still_gets_nothing(self) -> None:
-        """The strongest version of the attack: the cookie, and the entry, after the session is gone.
+        """
+        The strongest version of the attack: the cookie, and the entry, after the session is gone.
 
         The remembered answer is only half the gate - the session itself has to still name someone
         - so putting the entry back by hand must not be enough. Worth pinning rather than assuming:

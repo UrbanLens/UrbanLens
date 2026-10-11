@@ -425,7 +425,8 @@ def _resolve_schedule(parsed: dict, context: TripAiContext) -> ScheduleSuggestio
 
 
 def generate_trip_suggestions(trip: Trip, requester: Profile) -> TripSuggestions:
-    """Generate fresh AI trip suggestions - always live, never cached (see get_trip_suggestions).
+    """
+    Generate fresh AI trip suggestions - always live, never cached (see get_trip_suggestions).
 
     Returns:
         A ``TripSuggestions`` with ``generated=False`` when AI is unavailable for this profile/site, otherwise the (possibly empty) result."""
@@ -463,7 +464,8 @@ def _cooldown_key(trip: Trip, requester: Profile) -> str:
 
 
 def get_trip_suggestions(trip: Trip, requester: Profile, *, force_refresh: bool = False) -> TripSuggestions:
-    """Cached entry point the trip page actually calls.
+    """
+    Cached entry point the trip page actually calls.
 
     Args:
         trip: The trip to generate suggestions for.

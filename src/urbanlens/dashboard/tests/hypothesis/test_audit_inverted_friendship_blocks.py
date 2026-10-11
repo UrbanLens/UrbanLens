@@ -46,7 +46,8 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertIn("Nothing to review", output)
 
     def test_a_row_created_and_blocked_in_the_same_instant_is_reported_as_likely_fine(self) -> None:
-        """The always-correct path: Friendship.objects.create(..., status=BLOCKED) for a
+        """
+        The always-correct path: Friendship.objects.create(..., status=BLOCKED) for a
         stranger with no prior row. created == updated, no request_message.
         """
         friendship = Friendship.objects.create(
@@ -62,7 +63,8 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertIn("0 of 1 row(s) look reused", output)
 
     def test_a_row_blocked_long_after_it_was_created_is_flagged_for_review(self) -> None:
-        """The reuse path the bug lived in: a PENDING/ACCEPTED row later flipped to
+        """
+        The reuse path the bug lived in: a PENDING/ACCEPTED row later flipped to
         BLOCKED without repointing - updated lands well after created.
         """
         friendship = Friendship.objects.create(
@@ -83,7 +85,8 @@ class AuditInvertedFriendshipBlocksTests(TestCase):
         self.assertIn("1 of 1 row(s) look reused", output)
 
     def test_a_stored_request_message_flags_a_row_even_with_a_tiny_timestamp_gap(self) -> None:
-        """request_message is only ever set at creation (a friend request note) -
+        """
+        request_message is only ever set at creation (a friend request note) -
         its presence alone proves the row did not start life as a fresh block,
         even if it was blocked moments after being created.
         """

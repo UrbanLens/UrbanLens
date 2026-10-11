@@ -1,4 +1,5 @@
-"""Coercion for numeric values arriving from form or JSON request data.
+"""
+Coercion for numeric values arriving from form or JSON request data.
 Views that call `int(request.POST.get(...))` directly therefore turn a malformed field into a 500 rather than a sensible default - the same shape as an unbounded `CharField` write reaching the database."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ DB_BIGINT_MAX = 2**63 - 1
 
 
 def safe_int_or_none(value: object) -> int | None:
-    """Return ``value`` as an int, or ``None`` when it is not one, or is past a 64-bit column.
+    """
+    Return ``value`` as an int, or ``None`` when it is not one, or is past a 64-bit column.
     ``None`` rather than a number is what a row lookup needs: Django answers an exact lookup past the column with no
     rows, but an ``__in`` lookup sends the number to Postgres, which refuses it.
 
@@ -60,7 +62,8 @@ LONGITUDE_BOUND = 180.0
 
 
 def bounded_float_or_none(value: object, *, low: float, high: float) -> float | None:
-    """Return ``value`` as a finite float within ``[low, high]``, or ``None``.
+    """
+    Return ``value`` as a finite float within ``[low, high]``, or ``None``.
 
     Args:
         value: Raw value from a form post or a parsed JSON body.
@@ -80,7 +83,8 @@ def bounded_float_or_none(value: object, *, low: float, high: float) -> float | 
 
 
 def coordinate_or_none(value: object, *, bound: float) -> float | None:
-    """Return ``value`` as a finite coordinate within ``±bound``, or ``None``.
+    """
+    Return ``value`` as a finite coordinate within ``±bound``, or ``None``.
 
     Args:
         value: Raw value from a form post or a parsed JSON body.
@@ -93,7 +97,8 @@ def coordinate_or_none(value: object, *, bound: float) -> float | None:
 
 
 def degrees_or_none(value: object) -> float | None:
-    """Return ``value`` as an angle in ``[0, 360)``, or ``None`` when it is not a finite number.
+    """
+    Return ``value`` as an angle in ``[0, 360)``, or ``None`` when it is not a finite number.
 
     Wrapped rather than clamped: 370 and -350 are both a turn of ten degrees, and a client that spins a map past north
     several times has still only turned it once.
@@ -118,7 +123,8 @@ def degrees_or_none(value: object) -> float | None:
 
 
 def safe_int(value: object, default: int = 0) -> int:
-    """Return ``value`` as an int, or ``default`` when it is not one.
+    """
+    Return ``value`` as an int, or ``default`` when it is not one.
 
     Args:
         value: Raw value from `request.POST`/`request.GET` or a parsed JSON body.
@@ -131,7 +137,8 @@ def safe_int(value: object, default: int = 0) -> int:
 
 
 def clamp_int(value: object, *, low: int, high: int, default: int) -> int:
-    """Return ``value`` as an int constrained to ``[low, high]``.
+    """
+    Return ``value`` as an int constrained to ``[low, high]``.
 
     Args:
         value: Raw value from request data.
@@ -146,7 +153,8 @@ def clamp_int(value: object, *, low: int, high: int, default: int) -> int:
 
 
 def typed_decimal_for_column(raw: str, model: type[Model], field_name: str) -> Decimal | None:
-    """What someone typed, as *model*'s ``DecimalField`` *field_name* would store it, or None when it cannot.
+    """
+    What someone typed, as *model*'s ``DecimalField`` *field_name* would store it, or None when it cannot.
 
     Args:
         raw: The typed number.
@@ -170,7 +178,8 @@ def typed_decimal_for_column(raw: str, model: type[Model], field_name: str) -> D
 
 
 def decimal_for_column(value: Decimal, column: DecimalField) -> Decimal | None:
-    """Return ``value`` as a ``numeric(max_digits, decimal_places)`` column would store it, or ``None`` when it cannot.
+    """
+    Return ``value`` as a ``numeric(max_digits, decimal_places)`` column would store it, or ``None`` when it cannot.
 
     PostgreSQL rounds input to the column's scale, half away from zero, and refuses more integer digits than
     ``max_digits - decimal_places`` with ``numeric field overflow``. Rounding first means a value that only overflows

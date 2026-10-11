@@ -1,4 +1,5 @@
-"""Trivia models - Glicko-2 ratings, question bank, sessions, rounds, answers, and votes.
+"""
+Trivia models - Glicko-2 ratings, question bank, sessions, rounds, answers, and votes.
 See "Trivia entry for the full spec this schema encodes: locations drawn only from a pool every session participant can access (mirrors SpotGuessr's eligibility rule), questions from three sources (user-submitted, AI-generated from wiki articles, deterministic from structured location data), a Glicko-2 player-skill/question-difficulty pairing (mirrors ``models.spotguessr``'s player/location pairing), and upvote/downvote/report voting with a small passive "shown, no reaction" default.
 """
 
@@ -49,7 +50,8 @@ class TriviaQuestionSource(abstract.TextChoices):
 
 
 class TriviaQuestionStatus(abstract.TextChoices):
-    """Content-moderation lifecycle of a TriviaQuestion.
+    """
+    Content-moderation lifecycle of a TriviaQuestion.
     Mirrors ``PinSuggestionStatus``'s shape.
     Deterministic questions are created ``APPROVED`` directly - they're template-generated from structured data, not free text, so they carry none of the person/ bullying/in-group risk the classifier exists to catch (Phase 3 only classifies ``USER_SUBMITTED``/``AI_GENERATED`` questions).
     """
@@ -60,7 +62,8 @@ class TriviaQuestionStatus(abstract.TextChoices):
 
 
 class TriviaQuestion(abstract.DashboardModel):
-    """One trivia question about a location.
+    """
+    One trivia question about a location.
 
     Attributes:
         location: The location this question is about.
@@ -116,7 +119,8 @@ class TriviaQuestion(abstract.DashboardModel):
 
     @staticmethod
     def normalize_answer(text: str) -> str:
-        """Lowercase and strip everything but letters/digits, for exact-match comparison.
+        """
+        Lowercase and strip everything but letters/digits, for exact-match comparison.
         A handful of Unicode letters (e.g. mathematical alphanumeric symbols like MATHEMATICAL SCRIPT CAPITAL A) have no lowercase form, so ``casefold()`` leaves them unchanged and still uppercase - drop those rather than let a "normalized" answer stay non-lowercase.
         """
         return "".join(char for char in text.casefold() if char.isalnum() and not char.isupper())
@@ -137,7 +141,8 @@ class TriviaQuestion(abstract.DashboardModel):
 
 
 class TriviaQuestionVoteKind(abstract.TextChoices):
-    """What a participant did (or didn't do) about a question they were asked.
+    """
+    What a participant did (or didn't do) about a question they were asked.
 
     Exact mirror of ``models.spotguessr.GamePhotoFeedbackKind`` - see
     ``services.trivia.voting`` for how these are weighted into a question's
@@ -151,7 +156,8 @@ class TriviaQuestionVoteKind(abstract.TextChoices):
 
 
 class TriviaQuestionVote(abstract.DashboardModel):
-    """One participant's reaction to one TriviaQuestion.
+    """
+    One participant's reaction to one TriviaQuestion.
     An event log, not a single mutable counter - the same profile can be asked the same question again in a later session and gets a fresh ``NO_REACTION`` backfill each time, since that signal is only meaningful in aggregate over many plays.
     """
 
@@ -185,7 +191,8 @@ class TriviaQuestionVote(abstract.DashboardModel):
 
 
 class PlayerTriviaRating(Glicko2RatingFields, abstract.DashboardModel):
-    """A profile's overall Glicko-2 skill rating for Trivia.
+    """
+    A profile's overall Glicko-2 skill rating for Trivia.
     One row per profile - unlike SpotGuessr's per-mode ratings, Trivia has no notion of separate "modes" to split skill across.
     """
 
@@ -250,7 +257,8 @@ class TriviaSessionStatus(abstract.TextChoices):
 
 
 class TriviaSessionParticipantStatus(abstract.TextChoices):
-    """Whether a participant has accepted their invitation yet.
+    """
+    Whether a participant has accepted their invitation yet.
     Mirrors ``GameSessionParticipantStatus``.
     ``LEFT`` is set once a participant voluntarily leaves (``services.trivia.session.leave_session``) or is removed by the host (``kick_participant``), from either ``INVITED`` or ``JOINED``.
     """
@@ -261,7 +269,8 @@ class TriviaSessionParticipantStatus(abstract.TextChoices):
 
 
 class TriviaSession(abstract.DashboardModel):
-    """One Trivia playthrough: a config snapshot and a fixed round count.
+    """
+    One Trivia playthrough: a config snapshot and a fixed round count.
     Modeled as a proper many-participant session from Phase 1, mirroring ``models.spotguessr.GameSession`` - every eligibility/scoring rule reads "all (joined) participants," not "the player," so a Phase 2 multiplayer lobby reuses these tables unchanged.
 
     Attributes:
@@ -304,7 +313,8 @@ class TriviaSession(abstract.DashboardModel):
 
 
 class TriviaSessionParticipant(abstract.DashboardModel):
-    """One profile's membership in a TriviaSession, plus their running score.
+    """
+    One profile's membership in a TriviaSession, plus their running score.
 
     ``total_points`` is a denormalized cache, kept in sync by
     ``services.trivia.session`` as answers are submitted, mirroring
@@ -350,7 +360,8 @@ class TriviaSessionParticipant(abstract.DashboardModel):
 
 
 class TriviaRound(abstract.DashboardModel):
-    """One question asked within a session.
+    """
+    One question asked within a session.
 
     Attributes:
         session: The session this round belongs to.
@@ -399,7 +410,8 @@ class TriviaAnswerMatchKind(abstract.TextChoices):
 
 
 class TriviaAnswer(abstract.DashboardModel):
-    """One participant's answer to one TriviaRound.
+    """
+    One participant's answer to one TriviaRound.
 
     ``is_correct``/``points`` are computed once at submission time
     (``services.trivia.session.submit_answer``) and stored, matching
@@ -440,7 +452,8 @@ class TriviaAnswer(abstract.DashboardModel):
 
 
 class TriviaSessionChatMessage(abstract.DashboardModel):
-    """One chat message in a multiplayer session's live text chat.
+    """
+    One chat message in a multiplayer session's live text chat.
     Mirrors ``GameSessionChatMessage``.
     Plain text, no E2EE - ephemeral match banter between participants already visible to each other on the scoreboard, not a private conversation.
     """
@@ -478,7 +491,8 @@ class TriviaSessionChatMessage(abstract.DashboardModel):
 
 
 class TriviaPreference(abstract.DashboardModel):
-    """Per-profile Trivia settings - same shape as ``SpotGuessrPreference``.
+    """
+    Per-profile Trivia settings - same shape as ``SpotGuessrPreference``.
 
     Attributes:
         show_ratings_to_friends: Whether this profile's rating may appear on
@@ -508,7 +522,8 @@ class TriviaPreference(abstract.DashboardModel):
 
 
 class TriviaGenerationAttempt(abstract.DashboardModel):
-    """When the AI question sweep last mined a wiki, so it moves on instead of retrying the same ones.
+    """
+    When the AI question sweep last mined a wiki, so it moves on instead of retrying the same ones.
 
     Attributes:
         attempted_at: When the sweep last sent this wiki's article for questions.

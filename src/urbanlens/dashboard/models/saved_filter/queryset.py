@@ -17,7 +17,8 @@ class SavedFilterQuerySet(abstract.FrontendDashboardQuerySet["SavedFilter"]):
     """Custom queryset for SavedFilter models."""
 
     def name_taken_for(self, profile: Profile, name: str, *, exclude_pk: int | None = None) -> bool:
-        """Whether ``profile`` already has a saved filter with ``name``.
+        """
+        Whether ``profile`` already has a saved filter with ``name``.
 
         Args:
             profile: The owning profile.
@@ -35,7 +36,8 @@ class SavedFilterQuerySet(abstract.FrontendDashboardQuerySet["SavedFilter"]):
         return qs.exists()
 
     def for_client_ids(self, profile: Profile, raw_ids: str) -> Self:
-        """``profile``'s filters named by a comma-separated uuid list from the client.
+        """
+        ``profile``'s filters named by a comma-separated uuid list from the client.
 
         Another profile's uuid, an unknown uuid and a malformed value are all dropped the same way, so the
         result never says which of them a value was.

@@ -1,4 +1,5 @@
-"""The ``refetch_parcel_buildings`` cleanup: dry run by default, and only the rows a pending REData answer could have left.
+"""
+The ``refetch_parcel_buildings`` cleanup: dry run by default, and only the rows a pending REData answer could have left.
 
 UrbanLens 0.8.0 kept REData 0.3.7 to 0.3.9's pending 503 for a parcel's buildings as a settled answer: Building
 Attributes cached ``{}``, and the parcel-buildings list cached its OpenStreetMap or CRIS fallback, or ``{}``. The

@@ -1,4 +1,5 @@
-"""One account must not be able to hold every WebSocket slot on the site.
+"""
+One account must not be able to hold every WebSocket slot on the site.
 
 Authorization on these sockets is thorough, and `InboundVolumeMixin` bounds how
 fast an account may *send* on them - its docstring even says the shared tier "is
@@ -135,7 +136,8 @@ class ACrashedWorkerDoesNotLockAnAccountOutTests(_BudgetCase):
 
 @override_settings(**{SETTING_NAME: 3})
 class ALiveConnectionKeepsItsPlaceTests(_BudgetCase):
-    """The other half of the sweep: it must expire the dead, not the living.
+    """
+    The other half of the sweep: it must expire the dead, not the living.
 
     These sockets live as long as their tab, which is hours - far past the sweep
     window. Without a renewal a long-lived connection would quietly stop
@@ -153,7 +155,8 @@ class ALiveConnectionKeepsItsPlaceTests(_BudgetCase):
         self.assertEqual(socket_budget.open_count("user:1"), 2, "a renewed claim was swept as abandoned")
 
     def test_an_unrenewed_claim_does_not_survive(self) -> None:
-        """The negative half - otherwise the test above would pass against a
+        """
+        The negative half - otherwise the test above would pass against a
         sweep that never removed anything."""
         socket_budget.claim("user:1", "chan-0")
         self.store.zsets["ul_ws_open:user:1"]["chan-0"] = time.time() - socket_budget.STALE_AFTER_SECONDS - 1
@@ -161,7 +164,8 @@ class ALiveConnectionKeepsItsPlaceTests(_BudgetCase):
         self.assertEqual(socket_budget.open_count("user:1"), 0)
 
     def test_renewing_a_swept_claim_does_not_resurrect_it(self) -> None:
-        """It would let a connection that lost its place take a new one without
+        """
+        It would let a connection that lost its place take a new one without
         being counted against the allowance."""
         socket_budget.refresh("user:1", "never-claimed")
 
@@ -196,7 +200,8 @@ class TheCapFailsOpenTests(SimpleTestCase):
 
 
 class TheConsumersHonourTheAllowanceTests(TransactionTestCase):
-    """The service is only worth having if the sockets actually ask it.
+    """
+    The service is only worth having if the sockets actually ask it.
 
     Through a real consumer rather than by reading the source: the claim has to
     happen on the connect path, before any group is joined, and a unit test of
@@ -240,7 +245,8 @@ class TheConsumersHonourTheAllowanceTests(TransactionTestCase):
 
     @override_settings(**{SETTING_NAME: 1})
     def test_a_refused_socket_joined_no_group(self) -> None:
-        """Channels fires disconnect() only for a connection that accepted, so a
+        """
+        Channels fires disconnect() only for a connection that accepted, so a
         refusal after group_add would leak the membership permanently."""
         async_to_sync(self._refused_socket_joined_no_group)()
 
@@ -259,7 +265,8 @@ class TheConsumersHonourTheAllowanceTests(TransactionTestCase):
 
     @override_settings(**{SETTING_NAME: 1})
     def test_a_connect_that_fails_after_claiming_gives_the_place_back(self) -> None:
-        """The leak that would be permanent rather than temporary.
+        """
+        The leak that would be permanent rather than temporary.
 
         Channels fires `disconnect()` only for a connection that reached
         `accept()`, so a failure between the claim and the accept would hold the
@@ -298,7 +305,8 @@ class TheConsumersHonourTheAllowanceTests(TransactionTestCase):
 
 
 class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
-    """The per-account cap runs after authentication, so it cannot see the case
+    """
+    The per-account cap runs after authentication, so it cannot see the case
     that costs the least to mount: a handshake that never authenticates still
     occupies an nginx connection and a daphne slot before Django closes it.
 
@@ -326,7 +334,8 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
         self.assertIn(f"limit_conn {self.ZONE} ", block, "the /ws/ location does not apply the connection zone")
 
     def test_the_real_address_is_established_before_the_limit(self) -> None:
-        """Keyed on `$binary_remote_addr`, which is the front door's address
+        """
+        Keyed on `$binary_remote_addr`, which is the front door's address
         unless real_ip has already rewritten it - in which case every visitor
         behind the tunnel would share one budget."""
         text = (REPO_ROOT / "src" / "urbanlens" / "config" / "nginx" / "django.conf.template").read_text(
@@ -337,7 +346,8 @@ class TheEdgeBoundsWhatTheAppCannotTests(SimpleTestCase):
 
 
 class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
-    """A client that retries a capacity refusal eagerly is the cap's own load.
+    """
+    A client that retries a capacity refusal eagerly is the cap's own load.
 
     Found by grepping rather than by reasoning about which page opens what: the
     fix for `live-socket.ts` covered the three game consumers and nothing else,
@@ -387,7 +397,8 @@ class EverySocketClientBacksOffOnTheRefusalTests(SimpleTestCase):
 
 
 class TheRefusalScanReadsCodeNotCommentsTests(SimpleTestCase):
-    """The scan above is satisfied by any occurrence of the string.
+    """
+    The scan above is satisfied by any occurrence of the string.
 
     Every file it guards happens to explain the close code in a comment next to
     the branch that handles it, so a file that kept the comment and lost the

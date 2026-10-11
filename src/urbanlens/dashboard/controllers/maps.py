@@ -67,7 +67,8 @@ _PIN_LIST_MAX_PAGE_SIZE = 100
 
 
 def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -> PinQuerySet:
-    """AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
+    """
+    AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
 
     Args:
         query: Already profile-scoped pin queryset to further restrict.
@@ -320,7 +321,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse("Error: failed to create pin.", status=400)
 
     def autocomplete_local(self, request, *args, **kwargs):
-        """Fast autocomplete from local DB: pins, locations, aliases, labels, wiki.
+        """
+        Fast autocomplete from local DB: pins, locations, aliases, labels, wiki.
 
         This is always the first source shown to the user because it requires no external API calls and
         typically responds within 50-100 ms.
@@ -336,7 +338,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"results": [r.to_dict() for r in results], "source": "local"})
 
     def autocomplete_places(self, request, *args, **kwargs):
-        """Proxy Google Places Autocomplete so the API key stays server-side.
+        """
+        Proxy Google Places Autocomplete so the API key stays server-side.
 
         Returns an empty list with ``disabled: true`` when no API key is
         configured so the client can suppress the source gracefully.
@@ -363,7 +366,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"results": [r.to_dict() for r in found.value_or([])], "source": "places"})
 
     def autocomplete_empty(self, request, *args, **kwargs):
-        """Suggestions shown when the search bar is focused but empty.
+        """
+        Suggestions shown when the search bar is focused but empty.
 
         Returns top cities by pin count so the user can quickly jump to the
         areas where they have the most pins.
@@ -375,7 +379,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"results": [r.to_dict() for r in results], "source": "empty"})
 
     def resolve_place(self, request, *args, **kwargs):
-        """Resolve a Google place_id to latitude/longitude coordinates.
+        """
+        Resolve a Google place_id to latitude/longitude coordinates.
 
         Coordinates are intentionally omitted from the autocomplete response to avoid a Places Details API
         call for every suggestion shown.
@@ -476,7 +481,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=400, content="Invalid search criteria.")
 
     def pin_list_panel(self, request, *args, **kwargs):
-        """Render the paginated pin-list sidebar for the current filter criteria and map viewport.
+        """
+        Render the paginated pin-list sidebar for the current filter criteria and map viewport.
 
         Invalid or absent filter criteria fall back to the full unfiltered pin list rather than erroring
         out, since this is a convenience view rather than a form submission.
@@ -546,7 +552,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
     def upload_image(self, request, pin_slug, *args, **kwargs):
-        """Attach an uploaded image to a pin.
+        """
+        Attach an uploaded image to a pin.
 
         Args:
             request: Incoming request carrying an ``image`` file.
@@ -588,7 +595,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return HttpResponse(status=200)
 
     def map_pins_json(self, request, *args, **kwargs):
-        """Return pin data as JSON with optional bbox filtering for two-phase map loading.
+        """
+        Return pin data as JSON with optional bbox filtering for two-phase map loading.
 
         Query params:
             bbox: "south,west,north,east" floats - restrict to this bounding box.
@@ -615,7 +623,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse(payload)
 
     def map_document(self, request, *args, **kwargs):
-        """Stream every one of the profile's root pins as one NDJSON document.
+        """
+        Stream every one of the profile's root pins as one NDJSON document.
 
         `map.pins` is unchanged and still serves anyone who wants pages - and is what the client falls back
         to for an account above the document ceiling, which this endpoint says so rather than trying to
@@ -659,7 +668,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return _tag_document(streamed, quoted)
 
     def map_child_pins_json(self, request, *args, **kwargs):
-        """Return the profile's child pins (all nesting depths) for the Child pins layer.
+        """
+        Return the profile's child pins (all nesting depths) for the Child pins layer.
 
         Returns:
             JsonResponse: ``{"pins": [{...to_detail_json(), child_count, parent_slug, parent_name,
@@ -700,7 +710,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"pins": pins})
 
     def map_pins_meta(self, request, *args, **kwargs):
-        """Report whether the profile's pins have changed, for client-side cache invalidation.
+        """
+        Report whether the profile's pins have changed, for client-side cache invalidation.
 
         ``fingerprint`` is the value to compare; ``last_updated`` is kept because it is the timestamp it
         claims to be and callers may want it, but it cannot answer the question on its own - deleting any
@@ -726,7 +737,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         )
 
     def map_pin_json(self, request, pin_slug, *args, **kwargs):
-        """Return JSON data for a single pin - used for targeted cache updates after edits.
+        """
+        Return JSON data for a single pin - used for targeted cache updates after edits.
 
         Args:
             pin_slug: Slug or UUID string of the pin to return.
@@ -751,7 +763,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"pin": context["map_pins"][0], "labels": context["map_labels"]})
 
     def patch_pin(self, request, pin_slug, *args, **kwargs):
-        """Quick-edit a pin from the map popup dialog.
+        """
+        Quick-edit a pin from the map popup dialog.
 
         Accepts the same FormData fields as ``post_add_pin`` and applies them to an existing pin looked up
         by slug or UUID.
@@ -857,7 +870,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"ok": True, "pin_slug": pin.slug or str(pin.uuid)})
 
     def nearby_places(self, request, *args, **kwargs):
-        """Return Places layer results near a given coordinate, aggregated from enabled sources.
+        """
+        Return Places layer results near a given coordinate, aggregated from enabled sources.
 
         VIP-only endpoint.
 
@@ -904,7 +918,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"places": found.places, "cached": found.cached, "incomplete": found.incomplete})
 
     def place_details(self, request, *args, **kwargs):
-        """Return Google Place details for a single place_id.
+        """
+        Return Google Place details for a single place_id.
 
         VIP-only endpoint.
 
@@ -946,7 +961,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/pages/map/data.html", self.map_data_context(request))
 
     def map_data_context(self, request, query: PinQuerySet | None = None) -> dict[str, Any]:
-        """The map payload for *query*, in the one shape every map endpoint returns.
+        """
+        The map payload for *query*, in the one shape every map endpoint returns.
 
         The dictionary travels with the payloads because a pin names its labels by id, and a response the
         client cannot resolve those against draws a pin with no chips.
@@ -976,7 +992,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
 
 def _tag_document(response, etag):
-    """Attach the validators every map-document response carries.
+    """
+    Attach the validators every map-document response carries.
 
     Args:
         response: The response to tag.
@@ -999,7 +1016,8 @@ def _safe_positive_int(value: str | None) -> int | None:
 
 
 def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
-    """Parse a "south,west,north,east" bbox query param into its four floats.
+    """
+    Parse a "south,west,north,east" bbox query param into its four floats.
 
     Args:
         bbox_str: Raw query-param value (may be empty or malformed).

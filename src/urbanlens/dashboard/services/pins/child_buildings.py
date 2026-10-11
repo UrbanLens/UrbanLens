@@ -1,4 +1,5 @@
-"""A property's building child pins, surfaced on the property's own Private Pin page.
+"""
+A property's building child pins, surfaced on the property's own Private Pin page.
 
 A building's own records (its CRIS entry, characteristics, notes, description) live on its child pin. The property's
 Buildings list opens a pinned building's card in place (``controllers.child_buildings``), and the page-wide "child pin
@@ -20,7 +21,8 @@ if TYPE_CHECKING:
 
 
 def building_children(pin: Pin) -> QuerySet[Pin]:
-    """The pin's direct children typed as buildings.
+    """
+    The pin's direct children typed as buildings.
 
     Args:
         pin: The property pin.
@@ -32,7 +34,8 @@ def building_children(pin: Pin) -> QuerySet[Pin]:
 
 
 def child_details_default(pin: Pin, building_count: int) -> bool:
-    """Whether the page-wide child-details toggle starts on for this pin.
+    """
+    Whether the page-wide child-details toggle starts on for this pin.
 
     Args:
         pin: The pin whose page is being rendered.
@@ -51,7 +54,8 @@ def child_details_default(pin: Pin, building_count: int) -> bool:
 
 
 def building_panel_sources(user: AbstractBaseUser | AnonymousUser) -> list[InfoPanelSource]:
-    """The info panels that describe one structure, as the viewer may see them.
+    """
+    The info panels that describe one structure, as the viewer may see them.
 
     Args:
         user: The viewer.

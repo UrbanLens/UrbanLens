@@ -1,4 +1,5 @@
-"""Signal wiring that feeds the reputation ledger.
+"""
+Signal wiring that feeds the reputation ledger.
 Every handler does the same three things - decide whether this save is a contribution, write the row, and queue the scoring - so they are generated from :data:`_SUBSCRIPTIONS` rather than written out one by one.
 """
 
@@ -25,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class _Subscription:
-    """How one source model feeds the ledger.
+    """
+    How one source model feeds the ledger.
 
     Attributes:
         model_path: ``module:ClassName`` of the sender, resolved lazily so this
@@ -51,7 +53,8 @@ class _Subscription:
 
 
 def _is_wiki_upload(image: Any) -> bool:
-    """Whether an Image row is a photo its own uploader contributed to a wiki.
+    """
+    Whether an Image row is a photo its own uploader contributed to a wiki.
     ``profile`` on a materialised external row is whoever up-voted it, not the photographer, and a bulk import attaches other people's photos under the importer - so the source check is what makes the attribution trustworthy, not a refinement of it.
     """
     from urbanlens.dashboard.models.images.model import ImageSource, MediaKind
@@ -143,7 +146,8 @@ def _make_handler(subscription: _Subscription) -> Callable[..., None]:
 
 
 def on_wiki_edit_reverted(sender: type[Model], instance: Any, created: bool, raw: bool = False, **kwargs: Any) -> None:
-    """Keep a wiki edit's ledger row in step with its ``reverted`` flag.
+    """
+    Keep a wiki edit's ledger row in step with its ``reverted`` flag.
     Both directions, because ``revert_wiki_edit`` clears the flag when the revert is itself reverted - so this is current state, not a one-way subtraction.
     """
     if raw or created:

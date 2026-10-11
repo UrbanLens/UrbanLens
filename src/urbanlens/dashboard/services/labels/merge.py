@@ -1,4 +1,5 @@
-"""Merging one or more labels into a single surviving target label.
+"""
+Merging one or more labels into a single surviving target label.
 Three real bugs in the controller versions are fixed rather than carried over:"""
 
 from __future__ import annotations
@@ -41,7 +42,8 @@ class LabelKindMismatchError(LabelMergeError):
 
 
 class UnownedSourceLabelError(LabelMergeError):
-    """A source isn't owned by the profile requesting the merge.
+    """
+    A source isn't owned by the profile requesting the merge.
     Global labels (``profile=None``) always trip this too: they're shared by every user, so consuming one as a merge source would destroy other people's data - a user who wants one gone can only stop using it."""
 
 
@@ -51,7 +53,8 @@ class ProtectedSourceLabelError(LabelMergeError):
 
 @dataclass(frozen=True)
 class LabelMergeResult:
-    """What one :func:`merge_labels` call did.
+    """
+    What one :func:`merge_labels` call did.
 
     Attributes:
         target_id: Primary key of the surviving label.
@@ -64,7 +67,8 @@ class LabelMergeResult:
 
 
 def _validate(target: Label, sources: Sequence[Label], profile: Profile) -> None:
-    """Refuse any merge that crosses an ownership, kind, or protection boundary.
+    """
+    Refuse any merge that crosses an ownership, kind, or protection boundary.
 
     Args:
         target: The surviving label.
@@ -106,7 +110,8 @@ def _validate(target: Label, sources: Sequence[Label], profile: Profile) -> None
 
 
 def _reparent_children(target: Label, source: Label) -> None:
-    """Move *source*'s children onto *target* before *source* is deleted.
+    """
+    Move *source*'s children onto *target* before *source* is deleted.
     Skips the target itself - a target that happens to be a child of the source must not be made its own parent, which would create the exact cycle ``services.labels.hierarchy.would_create_cycle`` exists to prevent.
 
     Args:
@@ -120,7 +125,8 @@ def _reparent_children(target: Label, source: Label) -> None:
 
 @transaction.atomic
 def merge_labels(*, target: Label, sources: Sequence[Label], profile: Profile) -> LabelMergeResult:
-    """Merge every label in *sources* into *target*, then delete the sources. - ``KIND_USER`` - ``ProfileLabelAssignment`` rows are reassigned to the target via ``get_or_create``, so an author/subject pair already carrying the target is not duplicated....
+    """
+    Merge every label in *sources* into *target*, then delete the sources. - ``KIND_USER`` - ``ProfileLabelAssignment`` rows are reassigned to the target via ``get_or_create``, so an author/subject pair already carrying the target is not duplicated....
 
     Args:
         target: The label that survives.

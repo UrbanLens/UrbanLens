@@ -58,7 +58,8 @@ def _debounce_key(profile_id: int, notification_type: str) -> str:
 
 
 def is_text_alert_debounced(profile_id: int, notification_type: str) -> bool:
-    """Whether a recent same-type text already went to this recipient.
+    """
+    Whether a recent same-type text already went to this recipient.
 
     Args:
         profile_id: The recipient profile's pk.
@@ -70,7 +71,8 @@ def is_text_alert_debounced(profile_id: int, notification_type: str) -> bool:
 
 
 def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
-    """The recipient's (whatsapp, sms) toggle states for this notification's type.
+    """
+    The recipient's (whatsapp, sms) toggle states for this notification's type.
 
     Args:
         notification: The notification whose recipient's preferences to read.
@@ -95,7 +97,8 @@ def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
 
 
 def schedule_notification_text_alerts(notification: NotificationLog) -> None:
-    """Queue the delayed WhatsApp/SMS alert for a freshly created notification.
+    """
+    Queue the delayed WhatsApp/SMS alert for a freshly created notification.
     Cheap no-op for the overwhelmingly common cases (type has no toggles, or the recipient left both off - the default); otherwise enqueues the re-checking Celery task with a countdown.
 
     Args:
@@ -111,7 +114,8 @@ def schedule_notification_text_alerts(notification: NotificationLog) -> None:
 
 
 def send_notification_text_alerts_now(notification: NotificationLog) -> None:
-    """Send the WhatsApp/SMS alert(s) for a notification.
+    """
+    Send the WhatsApp/SMS alert(s) for a notification.
     The body is the notification title only; details stay on-site rather than traveling through a third-party carrier.
 
     Args:

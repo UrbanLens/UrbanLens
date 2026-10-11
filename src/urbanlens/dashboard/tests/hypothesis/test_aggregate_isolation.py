@@ -41,7 +41,8 @@ class JournalSourceIsolationTests(TestCase):
         self.assertIn("review", {entry.kind for entry in entries}, "a healthy source must still contribute")
 
     def test_a_source_that_fails_midway_keeps_what_it_already_yielded(self) -> None:
-        """Sources are generators - ``get_journal_entries`` extends its result list
+        """
+        Sources are generators - ``get_journal_entries`` extends its result list
         incrementally, so a failure partway through a source must not discard the
         entries that source had already produced, nor the other sources' entries."""
 
@@ -76,7 +77,8 @@ class JournalSourceIsolationTests(TestCase):
 
 
 class _HealthyPanel(PanelSource):
-    """A bespoke panel - i.e. not cache- or slide-backed, so panel_readiness calls
+    """
+    A bespoke panel - i.e. not cache- or slide-backed, so panel_readiness calls
     its is_ready() directly. Cache-backed panels (InfoPanelSource and friends) are
     resolved by one bulk query instead and never invoke is_ready per source."""
 

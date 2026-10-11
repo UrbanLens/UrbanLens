@@ -1,4 +1,5 @@
-"""A template pays for the context values it reads, not for every processor the site configures.
+"""
+A template pays for the context values it reads, not for every processor the site configures.
 
 The navbar badges render a partial that reads one number, and each paid for feature flags, the messages icon and the
 account-deletion banner it never shows. Three of them on every page view, and again on every poll.
@@ -144,7 +145,8 @@ class OneRequestAsksAboutFeaturesOnceTests(TestCase):
             request_cache.end_scope()
 
     def test_a_bulk_update_reaches_the_next_check(self) -> None:
-        """The shape the site admin's own revoke takes, which sends no ``post_save`` of its own.
+        """
+        The shape the site admin's own revoke takes, which sends no ``post_save`` of its own.
 
         ``controllers/site_admin.py`` revokes with ``UserSubscription.objects.filter(pk=...).update(...)``, and
         editing a role's features is the same shape. The bump is deferred to the commit, which a ``TestCase`` only

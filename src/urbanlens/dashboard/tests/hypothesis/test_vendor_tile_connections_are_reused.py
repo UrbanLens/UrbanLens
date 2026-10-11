@@ -1,4 +1,5 @@
-"""Consecutive vendor tiles share a connection instead of opening one each.
+"""
+Consecutive vendor tiles share a connection instead of opening one each.
 
 The gateway is built once per uncached tile, and each one used to bring a fresh ``requests.Session`` - so every tile
 paid a TCP and TLS handshake to Esri before asking for anything. Against a real local server here, so the connection

@@ -1,4 +1,5 @@
-"""EPA ECHO plugin: EPA-regulated facility data for pinned locations.
+"""
+EPA ECHO plugin: EPA-regulated facility data for pinned locations.
 Two panels share one upstream fetch budget (``_fetch_epa_echo_data``, called by both panels' ``fetch()`` and writing the same ``LocationCache`` row - mirrors the Yelp plugin's shared-row trick between its Media-gallery tab and its own bespoke panel):"""
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ _EXACT_MATCH_RADIUS_MILES = 0.1
 
 
 def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Great-circle distance between two points, in miles.
+    """
+    Great-circle distance between two points, in miles.
 
     Args:
         lat1: First latitude in degrees.
@@ -48,7 +50,8 @@ def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
-    """Map a REData ``epa_echo`` points-of-interest row onto this plugin's facility shape.
+    """
+    Map a REData ``epa_echo`` points-of-interest row onto this plugin's facility shape.
     The compliance data lives in ``attributes``, since the generic ``PointOfInterest`` model promotes only the fields every provider can answer.
 
     Args:
@@ -72,7 +75,8 @@ def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
 
 
 def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
-    """Search REData for nearby EPA-regulated facilities and pick out an exact-site match.
+    """
+    Search REData for nearby EPA-regulated facilities and pick out an exact-site match.
     Every facility this function sees is still recorded in ``EpaFacility``, project-wide, exactly as before - reusable by any other pin's own exact-site check, and by :class:`EpaFacilityNameProvider`, without a second REData call."""
     from urbanlens.dashboard.models.epa_facility import EpaFacility
     from urbanlens.dashboard.services.apis.locations.redata_points_of_interest_gateway import RedataPointsOfInterestGateway
@@ -115,7 +119,8 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
 
 
 def _fetch_and_cache(pin: Pin) -> dict[str, Any]:
-    """Run the shared upstream fetch, persist the shared cache row, and propagate any exact-site match.
+    """
+    Run the shared upstream fetch, persist the shared cache row, and propagate any exact-site match.
 
     Args:
         pin: The pin whose location's EPA data should be (re)fetched.
@@ -136,7 +141,8 @@ def _fetch_and_cache(pin: Pin) -> dict[str, Any]:
 
 
 def _propagate_exact_site_to_nearby_locations(location: Location, exact_site: dict[str, Any]) -> None:
-    """Apply a newly-confirmed exact-site EPA match to any other pinned Location within the exact-match radius whose own ``epa_echo`` cache has no match yet.
+    """
+    Apply a newly-confirmed exact-site EPA match to any other pinned Location within the exact-match radius whose own ``epa_echo`` cache has no match yet.
     Never overwrites a Location that already has its own confirmed ``exact_site`` - only fills in rows that are missing or empty, so a genuinely different real match is never clobbered.
 
     Args:
@@ -255,7 +261,8 @@ class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
 
     @staticmethod
     def _add_echo_report_link(pin: Pin, location: Location, registry_id: str) -> None:
-        """Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there.
+        """
+        Add the EPA ECHO compliance report URL to the pin's (and wiki's) links, if not already there.
 
         Args:
             pin: The pin whose links should include this URL.
@@ -304,7 +311,8 @@ class EpaEchoDetailPanelSource(_EpaEchoPanelSourceBase):
 
 
 class EpaFacilityNameProvider(NameProvider):
-    """Suggests the exact-site EPA facility's name as an official-name candidate.
+    """
+    Suggests the exact-site EPA facility's name as an official-name candidate.
     Only fires when a facility was matched as genuinely AT this pin's coordinates (see ``_fetch_epa_echo_data``'s exact-match check) - never suggests the name of a merely-nearby facility."""
 
     def __init__(self) -> None:
@@ -312,7 +320,8 @@ class EpaFacilityNameProvider(NameProvider):
         super().__init__(source="epa_echo", verbose_name="EPA ECHO")
 
     def candidates(self, location: Location) -> list[str | None]:
-        """Return the exact-site facility's name, when one was matched.
+        """
+        Return the exact-site facility's name, when one was matched.
 
         Args:
             location: The location to name.

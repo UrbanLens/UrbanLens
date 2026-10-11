@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 
 def record_pin_import_failure(profile: Profile, cid: int, *, name: str, description: str, reason: PinImportFailureReason, maps_url: str = "") -> None:
-    """Record a pin's cid that couldn't be placed automatically, unless one already exists.
+    """
+    Record a pin's cid that couldn't be placed automatically, unless one already exists.
 
     Args:
         profile: Owner the failure belongs to.
@@ -45,7 +46,8 @@ def resolve_pin_import_failure(
     latitude: float | None = None,
     longitude: float | None = None,
 ) -> Pin:
-    """Place a pin for a failure entry using an address or coordinates the owner supplied.
+    """
+    Place a pin for a failure entry using an address or coordinates the owner supplied.
     This mirrors ``tasks._create_pin_from_confirmed``'s own use of the same repair for the automatic resolution path - manual resolution must not skip it, or a legacy pin the automatic path failed to fix stays stranded forever.
 
     Args:
@@ -101,7 +103,8 @@ def resolve_pin_import_failure(
 
 
 def dismiss_pin_import_failure(failure: PinImportFailure) -> None:
-    """Dismiss a pending failure entry without placing a pin for it.
+    """
+    Dismiss a pending failure entry without placing a pin for it.
 
     Args:
         failure: The pending failure being dismissed.
@@ -111,7 +114,8 @@ def dismiss_pin_import_failure(failure: PinImportFailure) -> None:
 
 
 def auto_resolve_pin_import_failure_for_cid(profile: Profile, cid: int, pin: Pin) -> None:
-    """Clear a pending failure the moment its cid resolves on its own.
+    """
+    Clear a pending failure the moment its cid resolves on its own.
     Safe to call unconditionally on every successful pin placement in ``tasks.resolve_deferred_pin_locations`` - including for a cid that never had a failure entry, in which case this is a no-op.
 
     Args:

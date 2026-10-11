@@ -1,4 +1,5 @@
-"""Clear the parcel building rows a pending REData answer may have left, so they are fetched again.
+"""
+Clear the parcel building rows a pending REData answer may have left, so they are fetched again.
 
 REData 0.3.7 to 0.3.9 answer a parcel's buildings with a 503 naming ``refresh_queued`` or ``compute_timeout`` in
 ``error`` while they compute it. UrbanLens 0.8.0 knows neither code and kept the 503 as REData's settled answer: the
@@ -37,7 +38,8 @@ _FALLBACK_PROVIDERS = ("osm", "cris")
 
 
 def _instant(value: str) -> datetime:
-    """An ISO 8601 instant with its offset, such as ``2026-10-07T08:24:00+00:00``.
+    """
+    An ISO 8601 instant with its offset, such as ``2026-10-07T08:24:00+00:00``.
 
     Args:
         value: The command-line value.
@@ -63,7 +65,8 @@ class Command(BaseCommand):
     help = "Clear empty Building Attributes rows and empty or fallback parcel-buildings rows cached in a window, so they are fetched again. Dry-run unless --apply."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Register the command's flags.
+        """
+        Register the command's flags.
 
         Args:
             parser: The argument parser.
@@ -73,7 +76,8 @@ class Command(BaseCommand):
         parser.add_argument("--apply", action="store_true", help="Delete the rows; without it, only count them.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Count, or delete, each source's rows in the window.
+        """
+        Count, or delete, each source's rows in the window.
 
         Args:
             *args: Unused.

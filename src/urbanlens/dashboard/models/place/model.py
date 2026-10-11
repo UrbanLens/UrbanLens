@@ -1,4 +1,5 @@
-"""Place - the real-world parcel or building a coordinate resolves onto.
+"""
+Place - the real-world parcel or building a coordinate resolves onto.
 ``Location`` is an exact coordinate.
 Before Place, official geometry hung off Location, and it was fetched by point lookup - so importing 124 building pins onto one campus created 124 Locations each holding its own copy of the *same* parcel polygon.
 """
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class PlaceKind(TextChoices):
-    """What sort of real-world thing a Place describes.
+    """
+    What sort of real-world thing a Place describes.
 
     Extensible by design: the containment FK does the modelling work, and kind
     is closer to a label on hierarchy depth than a behavioural switch, so a new
@@ -42,7 +44,8 @@ MAX_PLAUSIBLE_AREA_SQM: dict[str, float] = {
 
 
 def is_plausible_area(kind: str, area_sqm: float | None) -> bool:
-    """Whether a place of ``kind`` could really cover ``area_sqm``.
+    """
+    Whether a place of ``kind`` could really cover ``area_sqm``.
 
     Args:
         kind: A :class:`PlaceKind` value.
@@ -56,7 +59,8 @@ def is_plausible_area(kind: str, area_sqm: float | None) -> bool:
 
 
 def implausible_area_q(prefix: str = "") -> Q:
-    """Filter for places larger than their kind can be.
+    """
+    Filter for places larger than their kind can be.
 
     Args:
         prefix: Lookup path to the place, e.g. ``"domain_root__"``.
@@ -75,7 +79,8 @@ class PlaceRelation(TextChoices):
 
 
 class PlaceStatus(TextChoices):
-    """Whether a Place still describes the ground as it is today.
+    """
+    Whether a Place still describes the ground as it is today.
     Status controls one thing: whether a coordinate may resolve onto this geometry.
     A superseded campus boundary still contains every pin dropped inside its former footprint, so it must never resolve, but it stays for display and history.
     """
@@ -93,7 +98,8 @@ class GrantReason(TextChoices):
 
 
 class Place(abstract.DashboardModel):
-    """One real-world parcel, building, or multi-parcel site.
+    """
+    One real-world parcel, building, or multi-parcel site.
 
     Attributes:
         kind: What sort of thing this is (see :class:`PlaceKind`).
@@ -173,7 +179,8 @@ class Place(abstract.DashboardModel):
 
     @property
     def parcel(self) -> Place | None:
-        """The parcel this place is on: its ``PART_OF`` parent, or itself.
+        """
+        The parcel this place is on: its ``PART_OF`` parent, or itself.
 
         Returns None for a building whose parcel is unknown.
         """
@@ -185,7 +192,8 @@ class Place(abstract.DashboardModel):
 
     @property
     def is_multi_building(self) -> bool:
-        """Whether the parcel this place belongs to holds several buildings.
+        """
+        Whether the parcel this place belongs to holds several buildings.
         The distinction the whole parcel/building split exists for.
         An ordinary house is one building on one parcel, and calling either of those "the building" or "the grounds" would be drawing a line where there isn't one - so scope stays neutral and both outlines are drawn.
         """
@@ -196,7 +204,8 @@ class Place(abstract.DashboardModel):
 
     @property
     def expected_domain_root_id(self) -> int | None:
-        """The domain root this place's own edge implies.
+        """
+        The domain root this place's own edge implies.
 
         A place roots its own domain unless it is ``PART_OF`` a parent, in
         which case it inherits the parent's. Returns None only for an unsaved
@@ -207,7 +216,8 @@ class Place(abstract.DashboardModel):
         return self.parent.domain_root_id if self.parent is not None else None
 
     def save(self, *args, **kwargs) -> None:
-        """Persist, then self-anchor the domain root for a newly created root place.
+        """
+        Persist, then self-anchor the domain root for a newly created root place.
 
         A domain root points at itself, which cannot be expressed before the
         row has a primary key. The follow-up write happens only on the insert
@@ -238,7 +248,8 @@ class Place(abstract.DashboardModel):
 
 
 class PlaceAccessGrant(abstract.DashboardModel):
-    """Materialised access that containment can no longer prove.
+    """
+    Materialised access that containment can no longer prove.
     Written by four callers, all through ``PlaceAccessGrantManager`` rather than a public "grant access" API surface:
 
     Attributes:

@@ -23,7 +23,8 @@ def _grant_ai_to_everyone() -> None:
 
 
 def _plain_profile(*, ai_enabled: bool = True, external_apis_enabled: bool = True) -> Profile:
-    """A profile whose user has no subscription and no feature grants.
+    """
+    A profile whose user has no subscription and no feature grants.
 
     The first user created in a fresh test database is auto-promoted to bootstrap site admin, and
     ``user_has_feature`` grants a site admin every feature - so a throwaway user absorbs that promotion first."""
@@ -76,7 +77,8 @@ def test_unavailable_when_site_ai_disabled() -> None:
 @pytest.mark.django_db
 @override_settings(UL_AI_WORKER_ENABLED=False)
 def test_unavailable_without_an_ai_worker_deployed() -> None:
-    """Every other condition satisfied, but nothing drains Queue.AI.
+    """
+    Every other condition satisfied, but nothing drains Queue.AI.
 
     Must fail closed rather than degrade the tool loop onto the regular worker, which holds REData/OAuth
     credentials the loop must never run alongside - see services.sandbox.queues.ai_queue."""
@@ -89,7 +91,8 @@ def test_unavailable_without_an_ai_worker_deployed() -> None:
 @pytest.mark.django_db
 @override_settings(UL_AI_WORKER_ENABLED=False)
 def test_ai_worker_absence_does_not_disable_other_ai_features() -> None:
-    """The whole reason the two predicates are separate.
+    """
+    The whole reason the two predicates are separate.
 
     ``UL_AI_WORKER_ENABLED`` describes the sandboxed ``ai-worker`` container, which only the interactive
     assistant runs in."""

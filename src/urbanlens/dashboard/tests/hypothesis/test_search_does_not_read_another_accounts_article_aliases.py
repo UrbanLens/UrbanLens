@@ -1,4 +1,5 @@
-"""Searching your own articles must not read alias rows belonging to pins/wikis you cannot see.
+"""
+Searching your own articles must not read alias rows belonging to pins/wikis you cannot see.
 
 P123's mechanism (``test_search_does_not_read_another_accounts_labels.py``) is not specific to
 labels: ``ArticleSearchProvider.search`` feeds ``pin__aliases__name`` and ``wiki__aliases__name`` to
@@ -102,7 +103,8 @@ class _ArticlePinAliasCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the pin-alias table.
+        """
+        The full capture, and the statements in it that read the pin-alias table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan
@@ -237,7 +239,8 @@ class _ArticleWikiAliasCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the wiki-alias table.
+        """
+        The full capture, and the statements in it that read the wiki-alias table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

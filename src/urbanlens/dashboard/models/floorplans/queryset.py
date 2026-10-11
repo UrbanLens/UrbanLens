@@ -19,7 +19,8 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
     """Query helpers for versioned floorplan documents."""
 
     def for_place(self, place: Place) -> FloorplanQuerySet:
-        """Every version of this building's plan, oldest first.
+        """
+        Every version of this building's plan, oldest first.
 
         Args:
             place: The building. Never ``None`` - a placeless plan is scoped
@@ -41,7 +42,8 @@ class FloorplanQuerySet(FrontendDashboardQuerySet["Floorplan"]):
         return self.filter(place=place).order_by(F("valid_from").asc(nulls_first=True))
 
     def at(self, place: Place, on_date: datetime.date | None = None, *, profile=None, community: bool = False) -> Floorplan | None:
-        """The plan in force on a date, or the most current when no date given.
+        """
+        The plan in force on a date, or the most current when no date given.
         A version applies from its ``valid_from`` until the next dated version; the undated original applies from the beginning of time.
         So the answer is simply the latest version not after the date.
 

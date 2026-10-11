@@ -1,4 +1,5 @@
-"""The task outbox: enqueues the broker refused, kept in the database and queued again once it recovers.
+"""
+The task outbox: enqueues the broker refused, kept in the database and queued again once it recovers.
 
 ``safely_enqueue_task`` records one here only on failure, so the healthy path costs nothing. The entry is
 written in the caller's transaction: a change that rolls back takes its follow-up work with it, and one
@@ -30,7 +31,8 @@ MAX_BACKOFF = timedelta(minutes=15)
 
 
 def record_refused_enqueue(task: Any, args: Sequence[Any], kwargs: Mapping[str, Any], *, countdown: int | None, queue: str | None, expires: int | None) -> bool:
-    """Keep an enqueue the broker refused, for :func:`drain_outbox` to queue later.
+    """
+    Keep an enqueue the broker refused, for :func:`drain_outbox` to queue later.
 
     Never raises: the caller has already lost the enqueue, and failing its request as well would make an
     outage worse. A write that cannot happen (no database, a broken transaction, an async context) is logged.
@@ -75,7 +77,8 @@ def _backoff(attempts: int) -> timedelta:
 
 
 def drain_outbox(*, batch: int = DRAIN_BATCH) -> int:
-    """Queue every due outbox entry, deleting each once the broker takes it.
+    """
+    Queue every due outbox entry, deleting each once the broker takes it.
 
     Stops at the first refusal, pushing that entry's next attempt back: the rest would be refused too.
     An entry whose ``expires`` has passed, or whose task no longer exists, is dropped.

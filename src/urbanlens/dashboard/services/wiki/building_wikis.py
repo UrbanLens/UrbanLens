@@ -1,4 +1,5 @@
-"""Which of a campus's buildings a location stands on, and that building's wiki (P261).
+"""
+Which of a campus's buildings a location stands on, and that building's wiki (P261).
 
 A building with no place of its own resolves onto its parcel, whose wiki another location holds. The buildings known
 on the parcel are the building wikis nested under the parcel's wiki and the building list cached for that wiki's
@@ -28,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class StandingBuilding:
-    """The building of a campus's that a location stands on.
+    """
+    The building of a campus's that a location stands on.
 
     Attributes:
         wiki: The building's wiki, or None while it has none.
@@ -82,7 +84,8 @@ class CampusBuildings:
     """The buildings known on one campus: its wiki's building descendants and its location's cached building list."""
 
     def __init__(self, campus_wiki: Wiki, buildings: list[_Building], parents: dict[int, Wiki]) -> None:
-        """Hold one campus's known buildings.
+        """
+        Hold one campus's known buildings.
 
         Args:
             campus_wiki: The wiki holding the campus's place.
@@ -95,7 +98,8 @@ class CampusBuildings:
 
     @classmethod
     def of(cls, campus_wiki: Wiki) -> CampusBuildings | None:
-        """The buildings known on the place ``campus_wiki`` holds.
+        """
+        The buildings known on the place ``campus_wiki`` holds.
 
         Args:
             campus_wiki: A wiki holding a place, with ``place`` and ``location`` loaded.
@@ -132,7 +136,8 @@ class CampusBuildings:
         return cls(campus_wiki, buildings, parents)
 
     def standing(self, latitude: float, longitude: float) -> StandingBuilding | None:
-        """The building a coordinate stands on: the smallest footprint holding it, else the nearest within range.
+        """
+        The building a coordinate stands on: the smallest footprint holding it, else the nearest within range.
 
         Args:
             latitude: The coordinate's latitude.
@@ -156,7 +161,8 @@ class CampusBuildings:
 
 
 def standing_building(location: Location, campus_wiki: Wiki) -> StandingBuilding | None:
-    """Which of the buildings known on ``campus_wiki``'s place ``location`` stands on.
+    """
+    Which of the buildings known on ``campus_wiki``'s place ``location`` stands on.
 
     Args:
         location: A location on the place, other than the campus wiki's own.
@@ -172,7 +178,8 @@ def standing_building(location: Location, campus_wiki: Wiki) -> StandingBuilding
 
 
 def locations_awaiting_building_wikis(campus_wiki: Wiki) -> list[int]:
-    """The pinned locations on ``campus_wiki``'s place standing on one of its buildings that has no wiki yet.
+    """
+    The pinned locations on ``campus_wiki``'s place standing on one of its buildings that has no wiki yet.
 
     A location counts only once a community member has pinned it, as on a pin save
     (``pin.signals.ensure_wiki_for_pin_location``).

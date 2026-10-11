@@ -1,4 +1,5 @@
-"""Tests for RedataGateway, the REST client for the standalone REData property-records service.
+"""
+Tests for RedataGateway, the REST client for the standalone REData property-records service.
 
 All HTTP calls are mocked so no real network access occurs.
 """
@@ -120,7 +121,8 @@ class LookupParcelSuccessTests(SimpleTestCase):
         self.assertEqual(gateway.lookup_parcel(42.65, -73.75), {})
 
     def test_top_level_geojson_parcel_geometry_overrides_record_payloads_own_copy(self) -> None:
-        """The Parcel's top-level parcel_geometry is already-converted GeoJSON; record_payload's own
+        """
+        The Parcel's top-level parcel_geometry is already-converted GeoJSON; record_payload's own
         parcel_geometry/building_geometry are the raw Esri-ring snapshot, and the building one is the only copy."""
         building_rings = {"format": "esri_rings", "rings": [[[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 2.0]]]}
         session = MagicMock()
@@ -363,7 +365,8 @@ class LookupCulturalResourcesTests(SimpleTestCase):
 
 class FetchCulturalResourceDetailTests(SimpleTestCase):
     def test_unwraps_the_resource_from_redatas_envelope(self) -> None:
-        """REData answers ``{"detail_status": ..., "resource": {...}}``.
+        """
+        REData answers ``{"detail_status": ..., "resource": {...}}``.
 
         Handing the envelope on made every caller's ``attributes``/``attachments`` read come back empty, which
         is indistinguishable from a resource that genuinely has neither - so no CRIS record ever produced an
@@ -413,7 +416,8 @@ class FetchCulturalResourceDetailTests(SimpleTestCase):
 
 
 class FetchCulturalResourceDetailUnresolvedTests(SimpleTestCase):
-    """REData holds a resource its source cannot resolve, and answers 200 ``unresolved`` with the resource and no detail.
+    """
+    REData holds a resource its source cannot resolve, and answers 200 ``unresolved`` with the resource and no detail.
 
     Handed on as the resource, that answer reads as a fetched record, and the share cache keeps it for an hour.
     """
@@ -878,7 +882,8 @@ def _demographics_body(**fields: object) -> dict:
 
 
 class DemographicsSharedPerParcelTests(SimpleTestCase):
-    """Every location on one parcel asks REData for the same parcel's demographics.
+    """
+    Every location on one parcel asks REData for the same parcel's demographics.
 
     In 0.8.0 each location made its own call: 24 locations on one parcel were 24 calls in a cycle, whatever REData
     answered. The answer is the parcel's, so one call answers all of them.

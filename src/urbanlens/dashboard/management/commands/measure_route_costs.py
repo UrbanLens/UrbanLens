@@ -25,7 +25,8 @@ class Command(BaseCommand):
         parser.add_argument("--force", action="store_true", help=f"Permit running against production. Also requires {INTEGRATION_OVERRIDE_ENV_VAR}=true.")
 
     def handle(self, *args, **options) -> None:
-        """Measure both accounts, then write the JSON and the report.
+        """
+        Measure both accounts, then write the JSON and the report.
 
         Raises:
             CommandError: This is production and a lock is closed, ``--runs`` is below one, ``--only`` does not

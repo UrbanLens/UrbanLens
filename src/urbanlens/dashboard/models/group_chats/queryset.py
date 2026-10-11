@@ -28,7 +28,8 @@ class GroupChatMembershipQuerySet(abstract.DashboardQuerySet["GroupChatMembershi
     """QuerySet for GroupChatMembership."""
 
     def active(self) -> Self:
-        """Return only current (not left/removed) memberships.
+        """
+        Return only current (not left/removed) memberships.
 
         Returns:
             Memberships with ``left_at`` unset.
@@ -47,7 +48,8 @@ class GroupMessageQuerySet(abstract.DashboardQuerySet["GroupMessage"]):
     """QuerySet for GroupMessage with membership-scoped visibility helpers."""
 
     def visible_window(self, membership: GroupChatMembership, *, blocks: SharedSpaceBlocks | None = None) -> Self:
-        """Restrict to messages the given membership stint is allowed to see.
+        """
+        Restrict to messages the given membership stint is allowed to see.
         A member only sees messages sent during their current stint: nothing from before they joined (the core "added users can't read prior messages" guarantee), and - because leaving ends the stint - nothing from an absence window either.
         Nor anything a member they are in a block with sent once the block was in place (``models.friendship.blocks``).
 
@@ -64,7 +66,8 @@ class GroupMessageQuerySet(abstract.DashboardQuerySet["GroupMessage"]):
         return blocks.exclude_hidden(self.filter(group_id=membership.group_id, created__gte=membership.created), author_field="sender_id")
 
     def mark_read(self, membership: GroupChatMembership) -> None:
-        """Advance the membership's read high-water mark to now.
+        """
+        Advance the membership's read high-water mark to now.
 
         Args:
             membership: The viewer's active membership row (updated in place).

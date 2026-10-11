@@ -70,7 +70,8 @@ class ExtractTextTests(TestCase):
 
 
 class DocxDecompressionCeilingTests(TestCase):
-    """The byte cap bounds what was uploaded; a .docx is the one compressed format.
+    """
+    The byte cap bounds what was uploaded; a .docx is the one compressed format.
 
     The character check therefore ran after the memory had already been spent."""
 
@@ -216,7 +217,8 @@ class ParseExplicitCoordinatesTests(SimpleTestCase):
 
 
 class ParseAiCsvResponseTests(SimpleTestCase):
-    """_parse_ai_csv_response treats the AI's answer like any other untrusted upload:
+    """
+    _parse_ai_csv_response treats the AI's answer like any other untrusted upload:
     written to a scratch file under a name our code controls, parsed from disk, and
     deleted immediately afterwards - success or failure."""
 
@@ -332,7 +334,8 @@ def test_extract_pins_requires_profile_external_apis_enabled(monkeypatch: pytest
 
 @pytest.mark.django_db
 def test_extract_pins_wraps_document_text_and_geocodes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The document text must be sent wrapped in <USER_DATA> tags (injection guard),
+    """
+    The document text must be sent wrapped in <USER_DATA> tags (injection guard),
     and extracted rows must be geocoded before becoming preview pin dicts."""
     profile = _make_profile(ai_enabled=True)
     monkeypatch.setattr(
@@ -381,7 +384,8 @@ def test_extract_pins_wraps_document_text_and_geocodes(monkeypatch: pytest.Monke
 
 @pytest.mark.django_db
 def test_extract_pins_uses_explicit_coordinates_without_geocoding(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A row with an explicit lat/lng pair from the document must skip the geocoding
+    """
+    A row with an explicit lat/lng pair from the document must skip the geocoding
     API entirely - this is the fix for documents that state GPS coordinates directly
     rather than a geocoder-friendly address."""
     profile = _make_profile(ai_enabled=True)
@@ -496,7 +500,8 @@ def test_extract_pins_rejects_oversized_raw_upload(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.django_db
 def test_extract_pins_rejects_document_over_configured_char_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The character limit is read from SiteSettings, so admins can adjust it without a deploy,
+    """
+    The character limit is read from SiteSettings, so admins can adjust it without a deploy,
     and an oversized document is rejected (never truncated) before the AI is ever called."""
     from urbanlens.dashboard.models.site_settings import SiteSettings
 

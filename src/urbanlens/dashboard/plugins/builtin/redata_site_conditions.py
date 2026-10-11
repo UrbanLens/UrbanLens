@@ -38,7 +38,8 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
         return super().gate(pin) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Fetch all three domains, caching whichever answered.
+        """
+        Fetch all three domains, caching whichever answered.
         Each domain is fetched independently: one source's outage must not blank the facts the others can still
         supply, so a failure is logged and its key left absent rather than raised. A domain that failed, or that REData
         answered only in part, marks the row partial, so the cache keeps it only briefly."""

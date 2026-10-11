@@ -115,7 +115,8 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertEqual(set(requested), set(_REDATA_PROVIDER_NAMES))
 
     def test_nothing_applicable_asks_nothing_rather_than_everything(self) -> None:
-        """An empty `provider` list reads as *all* providers at REData's end.
+        """
+        An empty `provider` list reads as *all* providers at REData's end.
 
         That would fan the request out across the scanned-map collections this carousel deliberately leaves out,
         so "everything here belongs to another panel" has to mean no request at all - not a request with no
@@ -123,7 +124,8 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertEqual(self._requested(["map_warper", "loc_sanborn"]), [])
 
     def test_an_outage_propagates_so_the_caller_can_tell(self) -> None:
-        """Deliberately not swallowed any more.
+        """
+        Deliberately not swallowed any more.
 
         Swallowing made "this place has no imagery" and "we could not ask" identical, and `get_satellite_slides`
         then cached the outage as a permanent absence."""
@@ -238,7 +240,8 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertNotIn("{", img_src)
 
     def test_a_provider_with_no_display_name_still_renders(self) -> None:
-        """Gating on a known name is what made a new REData source invisible.
+        """
+        Gating on a known name is what made a new REData source invisible.
 
         It reached this code twice - once because it was requested, and once as a historical capture the
         timeline returned - and was dropped both times for having no entry in a dict in this repo."""
@@ -536,7 +539,8 @@ class RedataSatelliteProviderTests(SimpleTestCase):
 
 
 class NativeResolutionZoomTests(SimpleTestCase):
-    """P232: a coarse source is composed at the deepest zoom its own resolution supports, showing a wider area
+    """
+    P232: a coarse source is composed at the deepest zoom its own resolution supports, showing a wider area
     rather than enlarging its pixels; a sharp one keeps REData's default framing."""
 
     def setUp(self) -> None:

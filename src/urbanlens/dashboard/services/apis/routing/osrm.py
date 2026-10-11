@@ -33,7 +33,8 @@ class OSRMGateway(Gateway):
     base_url: str = field(default_factory=lambda: settings.osrm_base_url or _DEMO_BASE_URL)
 
     def get_route(self, waypoints: list[tuple[float, float]], *, profile: OsrmProfile = "driving") -> dict[str, Any] | None:
-        """Return the routed distance/duration between an ordered list of waypoints.
+        """
+        Return the routed distance/duration between an ordered list of waypoints.
 
         Args:
             waypoints: Ordered ``(latitude, longitude)`` pairs, at least two.
@@ -69,7 +70,8 @@ class OSRMGateway(Gateway):
         return {"distance_meters": route.get("distance"), "duration_seconds": route.get("duration")}
 
     def get_route_between(self, origin: tuple[float, float], destination: tuple[float, float], *, profile: OsrmProfile = "driving") -> dict[str, Any] | None:
-        """Convenience wrapper around :meth:`get_route` for a single origin/destination pair.
+        """
+        Convenience wrapper around :meth:`get_route` for a single origin/destination pair.
 
         Args:
             origin: ``(latitude, longitude)`` of the starting point.

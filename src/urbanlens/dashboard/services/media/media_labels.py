@@ -1,4 +1,5 @@
-"""Replace the media labels on one photo/video/document, by name.
+"""
+Replace the media labels on one photo/video/document, by name.
 The site's own label UI (``controllers.labels.LabelImageMembershipView``) attaches labels one at a time *by id*, from a picker that only ever offers the viewer's own ``kind='media'`` labels."""
 
 from __future__ import annotations
@@ -41,7 +42,8 @@ class MediaLabelNameTooLongError(MediaLabelError):
 
 
 def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> list[Label]:
-    """Replace *image*'s media labels with the ones named in *names*.
+    """
+    Replace *image*'s media labels with the ones named in *names*.
 
     Args:
         image: The photo/video/document whose labels to set.

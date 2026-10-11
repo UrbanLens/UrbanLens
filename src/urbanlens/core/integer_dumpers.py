@@ -1,4 +1,5 @@
-"""Integer parameters a column can't hold fail, as the server fails them, instead of being stored as their low bits.
+"""
+Integer parameters a column can't hold fail, as the server fails them, instead of being stored as their low bits.
 
 Django sends an ``IntegerField``'s value as psycopg's ``Int4`` (``Int2`` for a small one, ``Int8`` for a big one),
 and with server-side binding it goes to Postgres in binary. psycopg-binary's C dumpers for ``Int2`` and ``Int4`` keep
@@ -49,7 +50,8 @@ class CheckedInt8BinaryDumper(Int8BinaryDumper):
 
 
 def register_checked_integer_dumpers(adapters: AdaptersMap) -> None:
-    """Dump ``Int2``/``Int4``/``Int8`` parameters through the range-checking dumpers.
+    """
+    Dump ``Int2``/``Int4``/``Int8`` parameters through the range-checking dumpers.
 
     Args:
         adapters: A connection's adapters map.
@@ -60,7 +62,8 @@ def register_checked_integer_dumpers(adapters: AdaptersMap) -> None:
 
 
 def on_connection_created(sender: object, connection: BaseDatabaseWrapper, **kwargs: object) -> None:
-    """``connection_created`` receiver: every new Postgres connection gets the checked dumpers.
+    """
+    ``connection_created`` receiver: every new Postgres connection gets the checked dumpers.
 
     Args:
         sender: The backend's wrapper class.

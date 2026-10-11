@@ -1,4 +1,5 @@
-"""A keyword source that did not answer leaves a photo's keywords as they were (P322).
+"""
+A keyword source that did not answer leaves a photo's keywords as they were (P322).
 
 Ollama returned ``[]`` for a refused connection, a timeout, a 5xx or an error body, and
 ``generate_keywords_for_image`` stored that as the photo's answer: it deleted the Ollama keywords the

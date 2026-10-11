@@ -38,7 +38,8 @@ class OpenAIAdapter(ProviderAdapter):
 
     @staticmethod
     def _user_content(message: Message) -> Any:
-        """OpenAI content for one user message: a bare string, or content parts when it carries an image.
+        """
+        OpenAI content for one user message: a bare string, or content parts when it carries an image.
 
         Images go as a ``data:`` URL, which is how the Chat Completions API takes inline bytes - not a fetchable
         URL, so this stays consistent with the "the inference tier fetches nothing" rule (see

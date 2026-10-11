@@ -1,4 +1,5 @@
-"""P125: the app container is CPU-bound under concurrent load, and production has cores to spare.
+"""
+P125: the app container is CPU-bound under concurrent load, and production has cores to spare.
 
 `capacity-content` (2026-09-15) found the app container pegged at `docker-compose.yml`'s shared
 `CPU_LIMIT__APP` default of 2 cores - 84.41% throttled at 1,000 concurrent users, uniformly across
@@ -40,7 +41,8 @@ _PRODUCTION_APP_MEMORY_MINIMUM_GB = 3.0
 
 
 def _gigabytes(value: str) -> float:
-    """A compose memory limit (``3g``, ``512m``, ``2048``) in GB.
+    """
+    A compose memory limit (``3g``, ``512m``, ``2048``) in GB.
 
     Args:
         value: The limit as written in an env file.
@@ -61,7 +63,8 @@ def _gigabytes(value: str) -> float:
 
 
 def _sample_values(path: pathlib.Path) -> dict[str, str]:
-    """One `key=value` sample env file, parsed.
+    """
+    One `key=value` sample env file, parsed.
 
     Args:
         path: The sample file to read.
@@ -86,7 +89,8 @@ _NESTED_DEFAULT = re.compile(r"\$\{[A-Z_]+:-([^}]+)\}")
 
 
 def _compose_default(name: str) -> str:
-    """`docker-compose.yml`'s own default for one variable, e.g. `CPU_LIMIT__APP`.
+    """
+    `docker-compose.yml`'s own default for one variable, e.g. `CPU_LIMIT__APP`.
 
     Args:
         name: The variable name, without the `${...}` wrapper.

@@ -1,4 +1,5 @@
-"""The Organize page renders label stats in its first paint, rather than backfilling them.
+"""
+The Organize page renders label stats in its first paint, rather than backfilling them.
 
 Deferring the stats bought a cheaper first paint in theory only: ``stats_pending``
 swaps each number for a spinner, so the deferred render emitted the same ~414KB
@@ -49,18 +50,21 @@ class OrganizeStatsRenderInlineTests(TestCase):
         self.assertIn('title="Pins"', content)
 
     def test_the_first_paint_shows_no_stat_spinners(self) -> None:
-        """The other half of the above: a card rendered with real counts must not
+        """
+        The other half of the above: a card rendered with real counts must not
         also be rendered with the placeholder it replaced."""
         self.assertNotIn("tag-stat-loading", self._page())
 
     def test_the_active_tab_does_not_schedule_a_stats_backfill(self) -> None:
-        """The whole point: the active tab's rows are already correct, so nothing
+        """
+        The whole point: the active tab's rows are already correct, so nothing
         should re-fetch and re-render them."""
         rows_url = reverse("label.rows", kwargs={"label_kind": "tag"})
         self.assertNotIn(f'hx-get="{rows_url}"', self._page())
 
     def test_an_inactive_tab_still_defers_its_rows(self) -> None:
-        """The negative half: removing the stats backfill must not remove tab
+        """
+        The negative half: removing the stats backfill must not remove tab
         deferral, which is a different and still-worthwhile saving."""
         content = self._page()
         categories_url = reverse("label.rows", kwargs={"label_kind": "category"})

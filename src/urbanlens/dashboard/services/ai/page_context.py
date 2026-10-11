@@ -25,7 +25,8 @@ class PageObject:
 
 @dataclass(frozen=True, slots=True)
 class PageContext:
-    """What :func:`resolve_page_context` returns for a URL path.
+    """
+    What :func:`resolve_page_context` returns for a URL path.
 
     Attributes:
         url_name: The resolved Django URL name (e.g. ``"pin.details"``) - also the lookup key into ``services.ai.page_help.PAGE_HELP`` (batch 4's ``get_page_help`` tool), so no separate key is kept here.
@@ -90,7 +91,8 @@ _RESOLVERS: dict[str, _PageResolver] = {
 
 
 def resolve_page_context(path: str, profile: Profile) -> PageContext | None:
-    """Resolve a client-sent ``location.pathname`` into a :class:`PageContext`.
+    """
+    Resolve a client-sent ``location.pathname`` into a :class:`PageContext`.
 
     Args:
         path: The client's current path.
@@ -141,7 +143,8 @@ _EXISTENCE_CHECKS: dict[str, Callable[[Profile, int], bool]] = {
 
 
 def verify_page_object(profile: Profile, page_object: PageObject) -> bool:
-    """Re-confirm that ``profile`` may still see ``page_object``.
+    """
+    Re-confirm that ``profile`` may still see ``page_object``.
 
     Args:
         profile: The task's own resolved profile.

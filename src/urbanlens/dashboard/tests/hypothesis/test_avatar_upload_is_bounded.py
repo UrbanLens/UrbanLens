@@ -1,4 +1,5 @@
-"""An avatar is scanned synchronously, and bounded by the site's photo ceiling.
+"""
+An avatar is scanned synchronously, and bounded by the site's photo ceiling.
 
 N21 H45. `set_profile_avatar` runs the shared `image_upload_error` gauntlet
 without `skip_malware_scan`, so the antivirus scan happens inside the request:

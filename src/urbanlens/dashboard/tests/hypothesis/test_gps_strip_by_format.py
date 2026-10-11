@@ -22,7 +22,8 @@ _FORMATS = (("JPEG", "jpg"), ("TIFF", "tif"), ("WEBP", "webp"), ("PNG", "png"), 
 
 
 def _image_bytes_with_gps(fmt: str) -> bytes:
-    """Encode a small image carrying a real GPS IFD.
+    """
+    Encode a small image carrying a real GPS IFD.
 
     ``exif=`` must be handed raw bytes: passing the ``Exif`` object itself encodes without the GPS IFD for
     several of these formats, which yields a fixture that quietly proves nothing."""
@@ -77,7 +78,8 @@ class GpsStripByFormatTests(TestCase):
         self.assertEqual(leaked, [], "GPS coordinates survived the strip in the stored file")
 
     def test_gps_goes_even_for_a_user_who_tracks_visits(self) -> None:
-        """There is no opt-out from the file strip - only from recording it on the row.
+        """
+        There is no opt-out from the file strip - only from recording it on the row.
 
         This asserted the opposite while the strip was opt-in."""
         image = baker.make(Image, image=None)

@@ -1,4 +1,5 @@
-"""Confirmed pin imports run as one bulk task per account, never inside the request.
+"""
+Confirmed pin imports run as one bulk task per account, never inside the request.
 
 The preview step stops at ``GoogleMapsGateway.MAX_PREVIEW_PINS``, but the confirm
 step gets the selection back from the client, so the ceiling is applied again here
@@ -74,7 +75,8 @@ class ConfirmedImportStatus(ImportJobStatus):
 
 
 def job_dir(job_id: str) -> str:
-    """Where a confirmed import's selection waits for its task.
+    """
+    Where a confirmed import's selection waits for its task.
 
     Args:
         job_id: The import.
@@ -86,7 +88,8 @@ def job_dir(job_id: str) -> str:
 
 
 class ConfirmedImportRefusedError(Exception):
-    """The import was not started, and nothing was left behind.
+    """
+    The import was not started, and nothing was left behind.
 
     Attributes:
         message: What to tell the user.
@@ -103,7 +106,8 @@ class ConfirmedImportRefusedError(Exception):
 
 @dataclass(frozen=True)
 class StartedImport:
-    """An accepted import.
+    """
+    An accepted import.
 
     Attributes:
         job_id: Identifies it for status and cancel.
@@ -115,7 +119,8 @@ class StartedImport:
 
 
 def guard_key(profile_id: int) -> str:
-    """The single-flight key allowing one confirmed import per account.
+    """
+    The single-flight key allowing one confirmed import per account.
 
     Args:
         profile_id: The importing profile.
@@ -131,7 +136,8 @@ def _cancel_key(job_id: str) -> str:
 
 
 def import_cancel_requested(job_id: str) -> bool:
-    """Whether someone asked the import to stop.
+    """
+    Whether someone asked the import to stop.
 
     Args:
         job_id: The import.
@@ -143,7 +149,8 @@ def import_cancel_requested(job_id: str) -> bool:
 
 
 def count_confirmed_pins(confirmed_lists: object, *, ceiling: int, allow_empty: bool = False) -> int:
-    """Count a confirmed selection's pins, refusing one the importer should not walk.
+    """
+    Count a confirmed selection's pins, refusing one the importer should not walk.
 
     The ceiling is checked on list lengths before any pin is looked at, so an
     oversized selection costs nothing per pin.
@@ -175,7 +182,8 @@ def count_confirmed_pins(confirmed_lists: object, *, ceiling: int, allow_empty: 
 
 
 def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_tag: bool, preview_id: object = None) -> StartedImport:
-    """Store a confirmed selection and queue it as the account's one running import.
+    """
+    Store a confirmed selection and queue it as the account's one running import.
 
     Args:
         profile: The importing profile.
@@ -238,7 +246,8 @@ def start_confirmed_import(profile: Profile, confirmed_lists: object, *, auto_ta
 
 
 def read_status(user_id: int, job_id: str) -> dict[str, Any] | None:
-    """The status of one of *user_id*'s imports.
+    """
+    The status of one of *user_id*'s imports.
 
     Args:
         user_id: The requesting user.
@@ -255,7 +264,8 @@ def read_status(user_id: int, job_id: str) -> dict[str, Any] | None:
 
 
 def cancel_confirmed_import(user_id: int, job_id: str) -> bool:
-    """Ask a running import to stop at its next progress write.
+    """
+    Ask a running import to stop at its next progress write.
 
     Args:
         user_id: The requesting user.
@@ -273,7 +283,8 @@ def cancel_confirmed_import(user_id: int, job_id: str) -> bool:
 
 
 def run_confirmed_import(profile_id: int, job_id: str) -> dict[str, Any]:
-    """Import a stored confirmed selection, writing progress where the client polls for it.
+    """
+    Import a stored confirmed selection, writing progress where the client polls for it.
 
     However it ends, the stored selection is removed and the account's guard is
     released.

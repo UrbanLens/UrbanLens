@@ -1,4 +1,5 @@
-"""Global search shows a comment only when the thread it sits in would.
+"""
+Global search shows a comment only when the thread it sits in would.
 
 Search reads comment bodies into snippets, so every gate the thread applies has to hold here too: the
 author's ``comment_visibility``, an author who blocked the viewer, a deactivated author, an upload still

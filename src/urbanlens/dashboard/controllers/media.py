@@ -44,7 +44,8 @@ PROCESSING_PLACEHOLDER_SVG = (
 
 
 class MediaGateView(CredentialOrSessionMediaMixin, View):
-    """Authenticate and authorize a request for one file under ``MEDIA_ROOT``.
+    """
+    Authenticate and authorize a request for one file under ``MEDIA_ROOT``.
 
     An API-shaped request (one carrying an ``Authorization`` header) that fails to authenticate gets 404
     instead, since redirecting an API client to an HTML login form is useless and the redirect itself
@@ -55,7 +56,8 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
     """
 
     def get(self, request: HttpRequest, path: str) -> HttpResponseBase:
-        """Serve (or hand off to nginx) one media file the requester may see.
+        """
+        Serve (or hand off to nginx) one media file the requester may see.
 
         It is called here rather than applied as a ``xframe_options_sameorigin`` decorator because the two
         origins need different framing rules and a decorator runs after this body - it would overwrite
@@ -93,7 +95,8 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         return apply_media_response_headers(request, serve_media_file(source))
 
     def _resolve_media_path(self, path: str) -> MediaByteSource:
-        """Delegate to :func:`resolve_media_path`.
+        """
+        Delegate to :func:`resolve_media_path`.
 
         Args:
             path: The untrusted relative path from the URL.
@@ -107,7 +110,8 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         return resolve_media_path(path)
 
     def _authorized(self, profile: Profile, rel_path: str) -> bool:
-        """Delegate to :func:`~urbanlens.dashboard.services.media.access.authorize_media`.
+        """
+        Delegate to :func:`~urbanlens.dashboard.services.media.access.authorize_media`.
 
         Args:
             profile: The authenticated requester's profile.
@@ -121,7 +125,8 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
 
 
 class StableImageView(CredentialOrSessionMediaMixin, View):
-    """A link to an ``Image`` row's current file, addressed by the row's uuid rather than the file's path.
+    """
+    A link to an ``Image`` row's current file, addressed by the row's uuid rather than the file's path.
 
     Content that embeds an image (an article body) outlives the file it was uploaded as: the upload's
     re-encode replaces the raw file under a new name. This resolves the row on every request and redirects
@@ -129,7 +134,8 @@ class StableImageView(CredentialOrSessionMediaMixin, View):
     """
 
     def get(self, request: HttpRequest, image_uuid: UUID) -> HttpResponseBase:
-        """Redirect to the row's current file, or answer with a placeholder while it is being processed.
+        """
+        Redirect to the row's current file, or answer with a placeholder while it is being processed.
 
         Args:
             request: The current request, carrying either a session or an external API credential.
@@ -172,7 +178,8 @@ class StableImageView(CredentialOrSessionMediaMixin, View):
 
 
 class MediaByteSource(ABC):
-    """One already-located media file, and the cheapest way to put its bytes on the wire.
+    """
+    One already-located media file, and the cheapest way to put its bytes on the wire.
 
     Splitting it this way keeps the path handling (which is security-critical and identical either way)
     in one place, and lets a third store be added by writing one class rather than by adding a branch to
@@ -180,7 +187,8 @@ class MediaByteSource(ABC):
     """
 
     def __init__(self, rel_path: str) -> None:
-        """Store the normalized path.
+        """
+        Store the normalized path.
 
         Args:
             rel_path: Normalized, traversal-checked path relative to the media root (filesystem) or to the
@@ -190,7 +198,8 @@ class MediaByteSource(ABC):
 
     @abstractmethod
     def response(self) -> HttpResponseBase:
-        """Return the response that delivers this file's bytes.
+        """
+        Return the response that delivers this file's bytes.
 
         Returns:
             An ``X-Accel-Redirect`` hand-off, or a ``FileResponse``.
@@ -204,7 +213,8 @@ class LocalMediaSource(MediaByteSource):
     """A file on the local filesystem under ``MEDIA_ROOT``."""
 
     def __init__(self, rel_path: str, full_path: Path) -> None:
-        """Store the path pair.
+        """
+        Store the path pair.
 
         Args:
             rel_path: Path relative to ``MEDIA_ROOT``.
@@ -215,7 +225,8 @@ class LocalMediaSource(MediaByteSource):
         self.full_path = full_path
 
     def response(self) -> HttpResponseBase:
-        """Hand the file to nginx, or stream it.
+        """
+        Hand the file to nginx, or stream it.
 
         Returns:
             An ``X-Accel-Redirect`` into ``/_protected_media/`` when nginx fronts the app, otherwise a
@@ -239,7 +250,8 @@ class LocalMediaSource(MediaByteSource):
 
 
 class ObjectMediaSource(MediaByteSource):
-    """An object in an S3-compatible store, reached through ``STORAGES["default"]``.
+    """
+    An object in an S3-compatible store, reached through ``STORAGES["default"]``.
 
     Existence is not checked up front, unlike the filesystem case: on an object store that is a second
     network round trip per media request, and the answer changes nothing.
@@ -248,7 +260,8 @@ class ObjectMediaSource(MediaByteSource):
     """
 
     def response(self) -> HttpResponseBase:
-        """Hand nginx a signed URL, or stream the object.
+        """
+        Hand nginx a signed URL, or stream the object.
 
         Returns:
             An ``X-Accel-Redirect`` carrying a URL this process signed - which nginx consumes and strips, so
@@ -277,7 +290,8 @@ class ObjectMediaSource(MediaByteSource):
 
 
 def _accel_redirect(target: str) -> HttpResponseBase:
-    """Build the empty response whose only job is the ``X-Accel-Redirect`` header.
+    """
+    Build the empty response whose only job is the ``X-Accel-Redirect`` header.
 
     Args:
         target: The internal location (and, for an object store, the signed URL appended to it) nginx
@@ -293,7 +307,8 @@ def _accel_redirect(target: str) -> HttpResponseBase:
 
 
 def _normalize_object_key(path: str) -> str:
-    """Normalize an untrusted media path into an object key, or refuse it.
+    """
+    Normalize an untrusted media path into an object key, or refuse it.
 
     Args:
         path: The untrusted relative path from the URL.
@@ -316,7 +331,8 @@ def _normalize_object_key(path: str) -> str:
 
 
 def resolve_media_path(path: str) -> MediaByteSource:
-    """Resolve a media path against the configured store, refusing anything that escapes.
+    """
+    Resolve a media path against the configured store, refusing anything that escapes.
 
     Args:
         path: The untrusted relative path.
@@ -352,7 +368,8 @@ def resolve_media_path(path: str) -> MediaByteSource:
 
 
 def serve_media_file(source: MediaByteSource) -> HttpResponseBase:
-    """Serve one already-authorized media file.
+    """
+    Serve one already-authorized media file.
 
     Split out so a surface with its own credential (the safety contact portal authenticates by
     magic-link token, not by login) can reuse the nginx hand-off instead of reimplementing it.

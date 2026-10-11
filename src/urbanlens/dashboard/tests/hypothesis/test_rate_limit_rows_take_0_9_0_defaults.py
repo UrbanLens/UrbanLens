@@ -1,4 +1,5 @@
-"""Migration 0064 gives each rate-limit row nobody edited the defaults 0.9.0 changed, and leaves an edited row alone.
+"""
+Migration 0064 gives each rate-limit row nobody edited the defaults 0.9.0 changed, and leaves an edited row alone.
 
 `get_limit_config` writes a service's defaults into its row only when it creates it, and afterwards rewrites only the
 generic fallback. So production's `redata_places` row, which 0.8.0 created with no daily cap, would have stayed

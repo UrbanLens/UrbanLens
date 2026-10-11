@@ -1,4 +1,5 @@
-"""The child-pins layer still builds a model graph per row.
+"""
+The child-pins layer still builds a model graph per row.
 
 Each child pin costs its own ``Pin``, its ``Location``, its parent ``Pin``,
 that parent's ``Location``, and a fresh ``Label`` per pin-label pair - the

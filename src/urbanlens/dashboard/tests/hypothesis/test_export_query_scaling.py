@@ -74,7 +74,8 @@ class ExportQueryScalingTests(TestCase):
         self._assert_flat(_export_direct_messages, self._seed_messages, self.profile)
 
     def test_a_global_label_exports_only_the_owner_s_own_pins(self):
-        """The narrowed prefetch must not change what the export contains.
+        """
+        The narrowed prefetch must not change what the export contains.
 
         A global label is visible to everyone, so prefetching its whole `pins` relation pulls other profiles'
         pins."""

@@ -1,4 +1,5 @@
-"""Utilities for bounding the wall-clock time of blocking external calls.
+"""
+Utilities for bounding the wall-clock time of blocking external calls.
 ``call_with_deadline`` runs the call in a worker thread and gives up waiting after a fixed wall-clock budget, so a view can never be held hostage by one slow provider."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="ext-api-deadl
 
 
 def submit_bounded[T](func: Callable[[], T]) -> Future[T]:
-    """Start ``func`` on the shared deadline pool and hand back its future.
+    """
+    Start ``func`` on the shared deadline pool and hand back its future.
 
     For a caller that waits on several calls under one budget, or has to know whether an abandoned
     call ever started. :func:`call_with_deadline` is the single-call form.
@@ -53,7 +55,8 @@ def submit_bounded[T](func: Callable[[], T]) -> Future[T]:
 
 
 def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, name: str | None = None) -> T:
-    """Run ``func`` with a hard wall-clock deadline, returning ``default`` only on timeout.
+    """
+    Run ``func`` with a hard wall-clock deadline, returning ``default`` only on timeout.
 
     Args:
         func: Zero-argument callable to run (wrap a gateway call in a lambda).

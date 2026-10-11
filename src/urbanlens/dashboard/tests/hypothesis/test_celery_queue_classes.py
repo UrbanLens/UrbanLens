@@ -1,4 +1,5 @@
-"""One account's big job must not delay everyone's small ones.
+"""
+One account's big job must not delay everyone's small ones.
 
 D13 measured it: 87 of 96 task definitions declared no queue, so all of them
 landed on `celery` and were drained by one worker at `--concurrency=4`. An Immich
@@ -54,7 +55,8 @@ _BULK_TASKS = (
 
 
 def _app_tasks() -> dict[str, Any]:
-    """Every task this codebase defines outside its own test suite, by name.
+    """
+    Every task this codebase defines outside its own test suite, by name.
 
     Returns:
         The registry entries whose implementation lives in `urbanlens` and is
@@ -71,7 +73,8 @@ def _app_tasks() -> dict[str, Any]:
 
 
 def _compose_services() -> dict[str, Any]:
-    """`docker-compose.yml`, parsed.
+    """
+    `docker-compose.yml`, parsed.
 
     Parsed rather than grepped: the services are nested, several of them carry a
     `-Q`, and a regex over the whole file cannot say which one a match belongs
@@ -85,7 +88,8 @@ def _compose_services() -> dict[str, Any]:
 
 
 def _queues_of(service: dict[str, Any]) -> set[str]:
-    """The queues one service's command drains.
+    """
+    The queues one service's command drains.
 
     Args:
         service: One entry from the compose `services` mapping.
@@ -101,7 +105,8 @@ def _queues_of(service: dict[str, Any]) -> set[str]:
 
 
 def _worker_queues() -> set[str]:
-    """Every queue some compose service drains.
+    """
+    Every queue some compose service drains.
 
     Returns:
         The union across all services.
@@ -135,7 +140,8 @@ class EveryTaskNamesItsClassTests(SimpleTestCase):
         self.assertEqual([], check_every_task_declares_a_queue())
 
     def test_the_check_reports_an_unrouted_task(self) -> None:
-        """Otherwise the check is a function that returns an empty list.
+        """
+        Otherwise the check is a function that returns an empty list.
 
         The probe claims `dashboard.tasks` as its module because that is what it
         is standing in for. Registering it as what it really is - a function in a
@@ -193,7 +199,8 @@ class EveryQueueHasAWorkerTests(SimpleTestCase):
         )
 
     def test_a_second_pool_drains_the_rest(self) -> None:
-        """Named explicitly, so deleting the bulk worker fails here rather than
+        """
+        Named explicitly, so deleting the bulk worker fails here rather than
         silently moving every account-sized job back onto the interactive pool."""
         queues = _queues_of(_compose_services()["celery-worker-bulk"])
 
@@ -221,7 +228,8 @@ class SafetyOverridesTheBeatRuleTests(SimpleTestCase):
 
 
 class UpstreamWorkStaysOffTheInteractivePoolTests(SimpleTestCase):
-    """A new pin's wiki is created on the interactive pool; enriching it waits on Google, OSM and REData for up to
+    """
+    A new pin's wiki is created on the interactive pool; enriching it waits on Google, OSM and REData for up to
     four minutes. On one pool, four enrichments held every slot and new pins' wikis took over two minutes to appear
     (the integration suite, 2026-10-01)."""
 

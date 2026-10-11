@@ -1,4 +1,5 @@
-"""Calendar writes owed by changes that do not save a trip or its activities.
+"""
+Calendar writes owed by changes that do not save a trip or its activities.
 
 What a member may see of a trip-mate's stop depends on the stop's own ``location_hidden`` (a save of the activity,
 which ``models.trips.signals`` already pushes), on the trip-mate's ``trip_pin_location_visibility``, on friendships
@@ -46,13 +47,15 @@ def _account_going(kwargs: dict[str, Any]) -> bool:
 
 
 def _stops_added_by(profile_ids: list[int]) -> Q:
-    """Links of trips holding a stop one of *profile_ids* added that names a place: a located one, or one whose title
+    """
+    Links of trips holding a stop one of *profile_ids* added that names a place: a located one, or one whose title
     is a place's (an imported event's location). In one ``filter``, so both hold of the same stop."""
     return Q(trip__activities__added_by_id__in=profile_ids) & (Q(trip__activities__location__isnull=False) | Q(trip__activities__title_from_place=True))
 
 
 def queue_pushes_for_stops_added_by(profile_ids: list[int]) -> None:
-    """Queue the push for every auto-synced trip holding a stop that names a place, added by one of *profile_ids*.
+    """
+    Queue the push for every auto-synced trip holding a stop that names a place, added by one of *profile_ids*.
 
     Args:
         profile_ids: The adders whose stops' visibility changed.
@@ -95,7 +98,8 @@ def remember_friendship_accepted(sender: type[Friendship], instance: Friendship,
 
 
 def _push_for_friendship_ended(friendship: Friendship) -> None:
-    """Push what an ended friendship can hide: either side's own calendars, and the stops either side added.
+    """
+    Push what an ended friendship can hide: either side's own calendars, and the stops either side added.
 
     The second covers a third member whose COMMON_FRIEND view of one side's stops relied on the other side.
     """
@@ -148,7 +152,8 @@ def push_on_pin_deleted(sender: type[Pin], instance: Pin, **kwargs: Any) -> None
 
 @receiver(pre_delete, sender=TripCalendarLink, dispatch_uid="calendar_delete_event_with_what_it_mirrors")
 def delete_event_with_what_it_mirrors(sender: type[TripCalendarLink], instance: TripCalendarLink, **kwargs: Any) -> None:
-    """Queue the delete of an event UrbanLens made whose trip or activity is being deleted.
+    """
+    Queue the delete of an event UrbanLens made whose trip or activity is being deleted.
 
     Only then: a link deleted by itself was dealt with by its caller (``remove_trip_from_calendar``, an export
     dropping an unscheduled stop's event, a member leaving), and one deleted with its profile's account has no

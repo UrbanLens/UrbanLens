@@ -1,4 +1,5 @@
-"""Who is allowed to read a metrics endpoint.
+"""
+Who is allowed to read a metrics endpoint.
 They must not drift apart: a second, subtly different copy of "is this scraper authorized" is how one endpoint ends up open while the other is guarded, and nothing says so."""
 
 from __future__ import annotations
@@ -14,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 def token_ok(authorization_header: str) -> bool:
-    """Check a presented bearer token against the configured one.
+    """
+    Check a presented bearer token against the configured one.
 
     Args:
         authorization_header: Raw ``Authorization`` header value, or ``""``.
@@ -33,7 +35,8 @@ def token_ok(authorization_header: str) -> bool:
 
 
 def network_ok(address: str) -> bool:
-    """Check a client address against the configured CIDR allowlist.
+    """
+    Check a client address against the configured CIDR allowlist.
 
     Args:
         address: The client address, already resolved through the trusted-proxy hop count where one applies.
@@ -47,7 +50,8 @@ def network_ok(address: str) -> bool:
 
 
 def gates_configured() -> bool:
-    """Report whether any gate is actually configured.
+    """
+    Report whether any gate is actually configured.
 
     Returns:
         ``True`` when a token or an allowlist is set."""

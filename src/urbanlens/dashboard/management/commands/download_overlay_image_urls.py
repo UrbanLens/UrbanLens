@@ -1,4 +1,5 @@
-"""Download the image of every map overlay that still draws only from an external ``image_url``.
+"""
+Download the image of every map overlay that still draws only from an external ``image_url``.
 
 Migration 0033_v0_8_0_indexes stops while any overlay has neither a stored image nor a tile template, because it
 then drops the column such an overlay draws from. This runs while it is stopped, so the model no longer declares
@@ -37,7 +38,8 @@ class _OverlayTable:
 
     @classmethod
     def quoted(cls) -> _OverlayTable:
-        """Quote each identifier for this connection.
+        """
+        Quote each identifier for this connection.
 
         Returns:
             The identifiers.
@@ -66,7 +68,8 @@ class Command(BaseCommand):
     help = "Download the image of each map overlay that draws only from an external URL, so migration 0033_v0_8_0_indexes can run. Deletes nothing."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Register the command's flags.
+        """
+        Register the command's flags.
 
         Args:
             parser: The argument parser.
@@ -74,7 +77,8 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="List the overlays without downloading anything.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Download and link each overlay's image, then report what is left.
+        """
+        Download and link each overlay's image, then report what is left.
 
         Args:
             *args: Unused.
@@ -115,7 +119,8 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("No overlay draws only from an external URL; migration 0033_v0_8_0_indexes can run."))
 
     def _url_only_rows(self) -> list[tuple[int, str]]:
-        """Every overlay with neither a stored image nor a tile template, as migration 0033_v0_8_0_indexes counts them.
+        """
+        Every overlay with neither a stored image nor a tile template, as migration 0033_v0_8_0_indexes counts them.
 
         Returns:
             ``(overlay id, image_url)`` pairs, oldest first.
@@ -128,7 +133,8 @@ class Command(BaseCommand):
             return [(int(overlay_id), str(url)) for overlay_id, url in cursor.fetchall()]
 
     def _store(self, overlay_id: int, url: str) -> str | None:
-        """Download one overlay's image the way the overlay form stores a pasted URL, and link it.
+        """
+        Download one overlay's image the way the overlay form stores a pasted URL, and link it.
 
         Args:
             overlay_id: The overlay.
@@ -159,7 +165,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _is_an_image(image: Image) -> bool:
-        """Whether the stored file's magic bytes are an image's, read without decoding it.
+        """
+        Whether the stored file's magic bytes are an image's, read without decoding it.
 
         Args:
             image: The downloaded image's row.
@@ -177,7 +184,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _link(overlay_id: int, url: str, image_id: int) -> bool:
-        """Point the overlay at its stored image and clear the URL, unless the row changed meanwhile.
+        """
+        Point the overlay at its stored image and clear the URL, unless the row changed meanwhile.
 
         Args:
             overlay_id: The overlay.

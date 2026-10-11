@@ -1,4 +1,5 @@
-"""Google Photos plugin: rate-limit defaults for the per-user picker integration.
+"""
+Google Photos plugin: rate-limit defaults for the per-user picker integration.
 This plugin registers the service's rate-limit defaults so calls are throttled and logged like every other external API."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ class GooglePhotosPlugin(UrbanLensPlugin):
     order: ClassVar[int] = 42
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Google Photos Picker API.
+        """
+        Rate-limit defaults for the Google Photos Picker API.
 
         Returns:
             Defaults for the ``google_photos`` service key.

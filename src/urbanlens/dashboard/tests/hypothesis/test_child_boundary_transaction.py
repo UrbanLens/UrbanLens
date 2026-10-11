@@ -61,7 +61,8 @@ class ChildPinOutsideTransactionTests(TransactionTestCase):
         )
 
     def test_reparenting_a_child_pin_outside_a_transaction(self) -> None:
-        """A hierarchy move refits the old and new parent as two separate atomic calls.
+        """
+        A hierarchy move refits the old and new parent as two separate atomic calls.
 
         Untested by the create/delete cases above: ``refit_child_boundaries_on_save`` loops over up to two
         parent ids for a single save, each its own ``@transaction.atomic`` call, still with no ambient

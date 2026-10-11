@@ -310,7 +310,8 @@ class PasskeyWrapEndpointTests(TestCase):
         self.assertFalse(E2EEPasskeyWrap.objects.filter(credential=credential).exists())
 
     def test_delete_without_a_credential_id_is_refused_not_a_crash(self) -> None:
-        """``DELETE`` on the collection URL must answer 405, not 500.
+        """
+        ``DELETE`` on the collection URL must answer 405, not 500.
 
         ``post`` took ``credential_id=None`` precisely so a POST to the item URL could answer 405 instead of
         raising TypeError out of the dispatcher; ``delete`` never got the same treatment, so a DELETE to the
@@ -467,7 +468,8 @@ class CredentialPromptTests(TestCase):
         self.assertNotEqual(response.url, reverse("account.set_password"))
 
     def test_a_passkey_that_unwraps_nothing_still_prompts(self) -> None:
-        """Owning a credential is not the same as owning a way back in.
+        """
+        Owning a credential is not the same as owning a way back in.
 
         Counting it as "handled" silenced the prompt for exactly the accounts it exists to reach."""
         profile = _profile()

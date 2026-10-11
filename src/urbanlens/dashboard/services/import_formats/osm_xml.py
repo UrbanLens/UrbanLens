@@ -1,4 +1,5 @@
-"""OSM XML pin import.
+"""
+OSM XML pin import.
 Only elements carrying at least one ``<tag>`` become pins - most nodes in an OSM XML export are untagged geometry vertices belonging to a way, not points of interest in their own right."""
 
 from __future__ import annotations
@@ -48,7 +49,8 @@ def _pin_from_tags(tags: dict[str, str], lat: float, lon: float, fallback_name: 
 
 @untrusted_parse("geo.osm_xml")
 def osm_xml_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
-    """Convert tagged OSM XML nodes and ways into pin dicts.
+    """
+    Convert tagged OSM XML nodes and ways into pin dicts.
 
     Args:
         file_contents: The OSM XML file, as bytes or a seekable binary file positioned at its start.
@@ -71,7 +73,8 @@ def osm_xml_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> 
 
 @untrusted_parse("geo.osm_xml")
 def iter_osm_xml_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
-    """:func:`osm_xml_to_dict`, reading the file an element at a time rather than building its tree.
+    """
+    :func:`osm_xml_to_dict`, reading the file an element at a time rather than building its tree.
 
     Every tagged node comes before every tagged way, in document order, as with the tree. The nodes are read in a
     pass that keeps none of them. The ways are then read a batch at a time, each batch in two passes - one taking
@@ -135,7 +138,8 @@ def _key(node_id: str) -> _Key:
 
 
 def _tagged_ways(stream: IO[bytes], *, skip: int) -> tuple[list[_Way], bool]:
-    """The tagged ways after the first *skip*, until they reference ``_WAY_REFS_PER_PASS`` nodes.
+    """
+    The tagged ways after the first *skip*, until they reference ``_WAY_REFS_PER_PASS`` nodes.
 
     Args:
         stream: The OSM XML file, positioned at its start.
@@ -191,7 +195,8 @@ class _Coordinates:
 
 
 def _top_level_ways(stream: IO[bytes]) -> Iterator[_Way]:
-    """Each way's id, tags and node references, its children read and freed as they close rather than kept to its end.
+    """
+    Each way's id, tags and node references, its children read and freed as they close rather than kept to its end.
 
     The tags and references are the way's own ``<tag>`` and ``<nd>`` children, as ``findall`` finds them.
     """
@@ -224,7 +229,8 @@ def _top_level_ways(stream: IO[bytes]) -> Iterator[_Way]:
 
 
 def _top_level(stream: IO[bytes], tag: str) -> Iterator[Element]:
-    """Each child of the root element named *tag*, complete, freeing every child of the root once it closes.
+    """
+    Each child of the root element named *tag*, complete, freeing every child of the root once it closes.
 
     A child of another name is never wanted whole, so its own children are freed as they close: one way through a
     file's every node costs a pass for nodes nothing per reference.

@@ -1,4 +1,5 @@
-"""Request/response types for label reorder and bulk delete/edit/convert.
+"""
+Request/response types for label reorder and bulk delete/edit/convert.
 
 A uuid-based API caller has no reason to batch that way, so ``uuids`` here may span kinds freely -
 each endpoint resolves and checks every label's own kind instead of trusting a route parameter.
@@ -19,7 +20,8 @@ _CONVERTIBLE_KIND_CHOICES = [(KIND_TAG, "Tag"), (KIND_CATEGORY, "Category"), (KI
 
 
 class LabelReorderSerializer(serializers.Serializer):
-    """Validates a label priority-reorder request.
+    """
+    Validates a label priority-reorder request.
 
     ``uuids`` is the complete desired order, first = highest priority -
     matching ``OrganizePrioritySaveView``'s ``items`` semantics.
@@ -28,7 +30,8 @@ class LabelReorderSerializer(serializers.Serializer):
     uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
 
     def validate(self, attrs: dict) -> dict:
-        """Refuse a list over ``LABEL_REORDER_MAX_IDS``.
+        """
+        Refuse a list over ``LABEL_REORDER_MAX_IDS``.
 
         Read from settings rather than bound as a field ``max_length``, which is
         fixed at import and so could be neither configured nor overridden - and
@@ -63,7 +66,8 @@ class LabelReorderResponseSerializer(serializers.Serializer):
 
 
 class _CeilingOnUuids(serializers.Serializer):
-    """Bounds ``uuids`` by ``LABEL_BULK_EDIT_MAX_IDS`` at validation time.
+    """
+    Bounds ``uuids`` by ``LABEL_BULK_EDIT_MAX_IDS`` at validation time.
 
     Every bulk label action here does per-label work against the database, and
     saving a label touches every pin carrying it, so the three share a ceiling.
@@ -75,7 +79,8 @@ class _CeilingOnUuids(serializers.Serializer):
     """
 
     def validate(self, attrs: dict) -> dict:
-        """Refuse a list over the shared ceiling.
+        """
+        Refuse a list over the shared ceiling.
 
         Args:
             attrs: The validated field values.
@@ -107,7 +112,8 @@ class LabelBulkDeleteResponseSerializer(serializers.Serializer):
 
 
 class LabelBulkEditSerializer(_CeilingOnUuids):
-    """Validates a bulk label-edit request. Every field but ``uuids`` is optional.
+    """
+    Validates a bulk label-edit request. Every field but ``uuids`` is optional.
 
     Absent means untouched, matching the rest of this API - contrast the internal view, whose
     ``icon``/``color`` blank out to null on any falsy submission rather than distinguishing "not sent"
@@ -126,7 +132,8 @@ class LabelBulkEditSerializer(_CeilingOnUuids):
     add_child_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
 
     def validate(self, attrs: dict) -> dict:
-        """Bound every list against the same ceiling the internal door uses.
+        """
+        Bound every list against the same ceiling the internal door uses.
 
         The base bounds `uuids`; this adds the two hierarchy lists, which
         carried no ceiling at all. That left the real cost - for every label,
@@ -163,7 +170,8 @@ class LabelBulkEditResponseSerializer(serializers.Serializer):
 
 
 class LabelBulkConvertSerializer(_CeilingOnUuids):
-    """Validates a bulk label-kind-conversion request.
+    """
+    Validates a bulk label-kind-conversion request.
 
     A label already at ``target_kind``, or already a ``status`` label being converted to something else,
     is left untouched - matching the internal view, which has no path out of ``status`` at all (see

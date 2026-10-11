@@ -1,4 +1,5 @@
-"""State that controls work is kept out of the proxied-bytes store, which may evict anything at any time.
+"""
+State that controls work is kept out of the proxied-bytes store, which may evict anything at any time.
 
 ``da3f6c885`` pointed every ``bounded_cache`` helper at that store, which moved an import's cancel request and the
 media-usage measurement into it along with the tile bytes.

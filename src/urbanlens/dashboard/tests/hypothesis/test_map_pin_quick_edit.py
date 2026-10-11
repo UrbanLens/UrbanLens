@@ -40,7 +40,8 @@ class MapPinJsonLabelsTests(TestCase):
         self.assertEqual(body["labels"][str(label.id)]["name"], "Urbex")
 
     def test_same_named_labels_stay_distinct(self) -> None:
-        """Two distinct labels may legally share a name (no unique constraint) -
+        """
+        Two distinct labels may legally share a name (no unique constraint) -
         matching by name alone would conflate them, so id must always be present."""
         tag = ensure_label(profile=self.profile, kind=KIND_TAG, name="Church")
         category = ensure_label(profile=self.profile, kind=KIND_CATEGORY, name="Church")
@@ -133,7 +134,8 @@ class PatchPinClearCustomIconTests(TestCase):
 
 
 class MapPinOwnIconColorFieldsTests(TestCase):
-    """map_pin_json must expose the pin's own icon/color separately from the
+    """
+    map_pin_json must expose the pin's own icon/color separately from the
     effective (possibly label-inherited) display values used for the marker."""
 
     def setUp(self) -> None:
@@ -177,7 +179,8 @@ class MapPinOwnIconColorFieldsTests(TestCase):
         self.assertIsNone(data["own_color"])  # the pin has no color of its own
 
     def test_resaving_with_own_icon_does_not_bake_in_the_labels_icon(self) -> None:
-        """Regression test: mirrors the fixed openEditPinDialog, which pre-fills
+        """
+        Regression test: mirrors the fixed openEditPinDialog, which pre-fills
         the icon input from own_icon (empty here), not the label-inherited
         effective icon, then resubmits that unchanged value on an unrelated save."""
         label = ensure_label(profile=self.profile, kind=KIND_TAG, name="Factory", icon="factory")

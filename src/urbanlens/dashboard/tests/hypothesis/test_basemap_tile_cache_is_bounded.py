@@ -1,4 +1,5 @@
-"""The basemap tile proxy writes whatever the vendor sent into the shared cache.
+"""
+The basemap tile proxy writes whatever the vendor sent into the shared cache.
 
 N21 H35/H22/H13. `cache.set(cache_key, (body, resolved_type), _TILE_CACHE_TTL)`
 stores raw tile bytes with no size check, into the same shared Dragonfly that holds
@@ -38,7 +39,8 @@ _CEILING = "urbanlens.dashboard.services.core.bounded_cache.MAX_CACHED_BODY_BYTE
 
 
 def _breaking(operation: str, reason: str = "dragonfly is full"):
-    """Make one operation on the proxied-bytes store fail.
+    """
+    Make one operation on the proxied-bytes store fail.
 
     Patching ``django.core.cache.cache`` instead reaches the store that holds the sessions, which
     the tile path stopped using - and the tile is served either way, so the test would pass
@@ -105,7 +107,8 @@ class ACacheFailureIsNotA500Tests(_TileCase):
         self.assertEqual(responses[0].content, b"PNGDATA")
 
     def test_a_failing_read_still_serves_the_tile(self) -> None:
-        """The read is the first cache call the view makes, so an unreachable store fails here
+        """
+        The read is the first cache call the view makes, so an unreachable store fails here
         before any of the write paths are even reached."""
         with _breaking("get_many"):
             responses, _download = self._fetch(b"PNGDATA")
@@ -125,7 +128,8 @@ class ACacheFailureIsNotA500Tests(_TileCase):
         self.assertEqual(response.status_code, 404)
 
     def test_a_failing_write_does_not_break_the_authorisation_note(self) -> None:
-        """``remember_tile_viewer`` writes on the first tile of a session, before anything is
+        """
+        ``remember_tile_viewer`` writes on the first tile of a session, before anything is
         cached - so a degraded store breaks every map load rather than an unlucky one."""
         from urbanlens.dashboard.services.map.tile_authorisation import remember_tile_viewer
 
@@ -133,7 +137,8 @@ class ACacheFailureIsNotA500Tests(_TileCase):
             remember_tile_viewer("some-session-key")
 
     def test_a_failing_delete_does_not_break_signing_out(self) -> None:
-        """``forget_tile_viewer`` is wired to ``user_logged_out``, so raising here 500s the logout
+        """
+        ``forget_tile_viewer`` is wired to ``user_logged_out``, so raising here 500s the logout
         itself rather than the map."""
         from urbanlens.dashboard.services.map.tile_authorisation import forget_tile_viewer
 

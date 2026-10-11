@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def _derive_fernet(raw_key: str) -> Fernet:
-    """Build a ``Fernet`` from an arbitrary-length secret string.
+    """
+    Build a ``Fernet`` from an arbitrary-length secret string.
 
     Args:
         raw_key: The raw secret to derive a Fernet key from.
@@ -36,7 +37,8 @@ def _derive_fernet(raw_key: str) -> Fernet:
 
 
 def encryption_keys() -> list[str]:
-    """Return every key to try, active key first.
+    """
+    Return every key to try, active key first.
 
     ``MultiFernet`` encrypts with the *first* key and decrypts with the *first that works*,
     so writes use the active key while reads still understand retired ones. Django's
@@ -59,7 +61,8 @@ def encryption_keys() -> list[str]:
 
 @lru_cache(maxsize=1)
 def _fernet() -> MultiFernet:
-    """Return the process-wide ``MultiFernet`` used by ``EncryptedTextField``.
+    """
+    Return the process-wide ``MultiFernet`` used by ``EncryptedTextField``.
 
     Uses ``settings.field_encryption_key`` when set, else Django's ``SECRET_KEY`` (stable
     across processes, unlike the unset pydantic field). Cached since key setup runs on
@@ -72,7 +75,8 @@ def _fernet() -> MultiFernet:
 
 
 def keyed_digest(purpose: str, value: str, *, key: str | None = None) -> str:
-    """HMAC-SHA256 of ``value``, for matching a value later without keeping it.
+    """
+    HMAC-SHA256 of ``value``, for matching a value later without keeping it.
 
     Keyed rather than a bare hash: without the key, a copy of the database cannot test a guessed value against it, and
     with it a guess can be confirmed but the value still never read back. ``purpose`` separates digests made for
@@ -91,7 +95,8 @@ def keyed_digest(purpose: str, value: str, *, key: str | None = None) -> str:
 
 
 def keyed_digests(purpose: str, value: str) -> set[str]:
-    """Every digest :func:`keyed_digest` could have stored for ``value``, one per key still configured.
+    """
+    Every digest :func:`keyed_digest` could have stored for ``value``, one per key still configured.
 
     A digest cannot be re-keyed the way ``rotate_field_encryption`` re-encrypts a column, because the value is gone,
     so one written before a rotation matches only while its key stays in ``UL_FIELD_ENCRYPTION_KEY_FALLBACKS``.
@@ -107,7 +112,8 @@ def keyed_digests(purpose: str, value: str) -> set[str]:
 
 
 def reset_encryption_keys() -> None:
-    """Drop the cached key set so the next call re-reads settings.
+    """
+    Drop the cached key set so the next call re-reads settings.
 
     Only needed when the configured keys change inside a live process - i.e.
     tests, and ``rotate_field_encryption`` verifying its own work.
@@ -116,7 +122,8 @@ def reset_encryption_keys() -> None:
 
 
 class UndecryptableValue(str):
-    """A ``fail_soft`` read that could not be decrypted, carrying its ciphertext.
+    """
+    A ``fail_soft`` read that could not be decrypted, carrying its ciphertext.
 
     Subclasses ``str`` so consumers see the field default while the original ciphertext rides
     along in :attr:`ciphertext`, letting :meth:`EncryptedTextField.get_prep_value` write it
@@ -132,7 +139,8 @@ class UndecryptableValue(str):
     ciphertext: str
 
     def __new__(cls, default: str, ciphertext: str) -> Self:
-        """Build a default-valued string that remembers its ciphertext.
+        """
+        Build a default-valued string that remembers its ciphertext.
 
         Args:
             default: The field default to present to callers.
@@ -146,7 +154,8 @@ class UndecryptableValue(str):
         return instance
 
     def __reduce__(self) -> tuple[type[Self], tuple[str, str]]:
-        """Support pickling/copying, which cached model instances hit.
+        """
+        Support pickling/copying, which cached model instances hit.
 
         ``str``'s default reduction calls ``cls(one_argument)``, which fails against this
         two-argument ``__new__``.
@@ -158,7 +167,8 @@ class UndecryptableValue(str):
 
 
 class EncryptedTextField(TextField):
-    """A ``TextField`` whose value is encrypted at rest with Fernet.
+    """
+    A ``TextField`` whose value is encrypted at rest with Fernet.
 
     Values are written under the active key and read under any key in :func:`encryption_keys`;
     rotate via ``docs/DATA_ENCRYPTION.md``. An undecryptable value depends on ``fail_soft``:
@@ -173,7 +183,8 @@ class EncryptedTextField(TextField):
     """
 
     def __init__(self, *args: Any, fail_soft: bool = False, **kwargs: Any) -> None:
-        """Initialise the field.
+        """
+        Initialise the field.
 
         Args:
             *args: Standard ``TextField`` positional arguments.
@@ -185,7 +196,8 @@ class EncryptedTextField(TextField):
         super().__init__(*args, **kwargs)
 
     def deconstruct(self) -> tuple[str, str, Sequence[Any], dict[str, Any]]:
-        """Include ``fail_soft`` in the migration representation.
+        """
+        Include ``fail_soft`` in the migration representation.
 
         Returns:
             The standard 4-tuple, with ``fail_soft`` added when enabled.
@@ -196,7 +208,8 @@ class EncryptedTextField(TextField):
         return name, path, args, kwargs
 
     def get_prep_value(self, value: object) -> str | None:
-        """Encrypt ``value`` for storage under the active key.
+        """
+        Encrypt ``value`` for storage under the active key.
 
         Args:
             value: The plaintext string to encrypt, or None/empty.
@@ -214,7 +227,8 @@ class EncryptedTextField(TextField):
         return _fernet().encrypt(str(prepped).encode()).decode()
 
     def from_db_value(self, value: str | None, expression: object, connection: object) -> str | None:
-        """Decrypt a stored value read from the database.
+        """
+        Decrypt a stored value read from the database.
 
         Args:
             value: The ciphertext read from the database, or None/empty.
@@ -254,7 +268,8 @@ class EncryptedTextField(TextField):
 
 
 class UndecryptableJSON(dict):
-    """A ``fail_soft`` JSON read that could not be decrypted, carrying its ciphertext.
+    """
+    A ``fail_soft`` JSON read that could not be decrypted, carrying its ciphertext.
 
     The mapping counterpart to :class:`UndecryptableValue` for nullable JSON fields: an empty
     ``dict`` reads like "no data recorded" while preserving the ciphertext for a later save.
@@ -276,7 +291,8 @@ type JSONValue = dict[str, Any] | list[Any] | str | int | float | bool | None
 
 
 class EncryptedJSONField(EncryptedTextField):
-    """A JSON field whose serialised value is encrypted at rest with Fernet.
+    """
+    A JSON field whose serialised value is encrypted at rest with Fernet.
 
     Stored as ``text``: ciphertext is opaque so the database could not query inside it anyway.
     Subclasses :class:`EncryptedTextField` so rotation picks these columns up by ``isinstance``.
@@ -293,7 +309,8 @@ class EncryptedJSONField(EncryptedTextField):
         def __set__(self, instance: Any, value: JSONValue) -> None: ...
 
     def get_prep_value(self, value: object) -> str | None:
-        """Serialise then encrypt ``value`` for storage.
+        """
+        Serialise then encrypt ``value`` for storage.
 
         Args:
             value: The JSON-serialisable value, or None.
@@ -309,7 +326,8 @@ class EncryptedJSONField(EncryptedTextField):
         return super().get_prep_value(json.dumps(value, separators=(",", ":"), sort_keys=True))
 
     def from_db_value(self, value: str | None, expression: object, connection: object) -> object:
-        """Decrypt and deserialise a stored value.
+        """
+        Decrypt and deserialise a stored value.
 
         Args:
             value: The ciphertext read from the database, or None/empty.

@@ -106,7 +106,8 @@ class GameSessionConsumerTests(TransactionTestCase):
         self.assertEqual(close_code, 4404)
 
     def test_a_participant_without_alpha_features_is_rejected(self) -> None:
-        """Gating only the HTTP routes left this socket as the way around them.
+        """
+        Gating only the HTTP routes left this socket as the way around them.
 
         The participant is real and invited - what they lack is the entitlement every game view enforces."""
         _run(self._a_participant_without_alpha_features_is_rejected())

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fail if production code sets a password without deciding what the change revokes.
+"""
+Fail if production code sets a password without deciding what the change revokes.
 
 ``services.auth.credential_revocation.revoke_credentials_on_password_change`` ends the OAuth2 grants (and, on
 request, the API keys) that should not outlive a password, and keeps the requester's session. A function that

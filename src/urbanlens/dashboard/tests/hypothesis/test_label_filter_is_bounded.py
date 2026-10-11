@@ -1,4 +1,5 @@
-"""A search's label filter must not let the client choose how much work it is.
+"""
+A search's label filter must not let the client choose how much work it is.
 
 ``label_groups`` arrives as JSON on the search form. Every id in it was expanded
 through a descendant walk that issued one query *per label visited*, and then
@@ -124,7 +125,8 @@ class TheGraphIsWalkedCorrectlyTests(_LabelCase):
 
 
 class TrimmingIsNeverSilentTests(_LabelCase):
-    """Trimming is not direction-safe, so it must never happen unnoticed.
+    """
+    Trimming is not direction-safe, so it must never happen unnoticed.
 
     A short descendant set narrows an ``and``/``or`` group - fewer labels match -
     but *widens* a ``not`` one, because there is less to exclude. The ceiling is

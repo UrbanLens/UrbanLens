@@ -1,4 +1,5 @@
-"""Turning provider geometry into places.
+"""
+Turning provider geometry into places.
 The provider chain answers a *coordinate*: "what parcel and what building footprint are here?" This module is what makes that answer converge onto one row per real-world thing instead of one row per person who pinned it."""
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ MAX_SUBDIVISION_PROBES = 20
 
 
 def geometry_stale(place: Place) -> bool:
-    """Whether a place's geometry is older than the site's boundary cache window.
+    """
+    Whether a place's geometry is older than the site's boundary cache window.
 
     Args:
         place: The place to check.
@@ -44,7 +46,8 @@ def geometry_stale(place: Place) -> bool:
 
 
 def find_matching_place(kind: str, polygon: MultiPolygon, *, provider: str = "", provider_key: str = "", exclude_pk: int | None = None) -> Place | None:
-    """Find the existing place a freshly-fetched polygon describes, if any.
+    """
+    Find the existing place a freshly-fetched polygon describes, if any.
 
     Args:
         kind: The :class:`PlaceKind` the polygon describes.
@@ -89,7 +92,8 @@ def upsert_place(
     relation: str = PlaceRelation.PART_OF,
     exclude_pk: int | None = None,
 ) -> Place | None:
-    """Create or update the place a provider record describes.
+    """
+    Create or update the place a provider record describes.
 
     Args:
         kind: The :class:`PlaceKind` to create.
@@ -137,7 +141,8 @@ def upsert_place(
 
 @dataclass(slots=True)
 class ProvisionOutcome:
-    """What one resolution of a coordinate produced.
+    """
+    What one resolution of a coordinate produced.
 
     Attributes:
         place: The most specific place now covering the coordinate, or None.
@@ -153,7 +158,8 @@ class ProvisionOutcome:
 
 
 def ensure_place_for_location(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> Place | None:
-    """Resolve a Location onto a place, provisioning geometry only if needed.
+    """
+    Resolve a Location onto a place, provisioning geometry only if needed.
 
     Args:
         location: The Location to place.
@@ -167,7 +173,8 @@ def ensure_place_for_location(location: Location, *, name: str | None = None, fo
 
 
 def ensure_place_outcome(location: Location, *, name: str | None = None, force: bool = False, detect_splits: bool = True) -> ProvisionOutcome:
-    """:func:`ensure_place_for_location`, also reporting which providers deferred.
+    """
+    :func:`ensure_place_for_location`, also reporting which providers deferred.
 
     Args:
         location: The Location to place.
@@ -189,7 +196,8 @@ def ensure_place_outcome(location: Location, *, name: str | None = None, force: 
 
 
 def provision_places_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> Place | None:
-    """Run the provider chain for a coordinate and persist the places it describes.
+    """
+    Run the provider chain for a coordinate and persist the places it describes.
     That separation is what lets a building's page draw its own footprint instead of the grounds it stands on, while keeping both in one access domain.
 
     Args:
@@ -203,7 +211,8 @@ def provision_places_for_coordinate(location: Location, *, name: str | None = No
 
 
 def provision_outcome_for_coordinate(location: Location, *, name: str | None = None, detect_splits: bool = True) -> ProvisionOutcome:
-    """:func:`provision_places_for_coordinate`, also reporting which providers deferred.
+    """
+    :func:`provision_places_for_coordinate`, also reporting which providers deferred.
 
     Args:
         location: The Location whose coordinate to resolve.
@@ -252,7 +261,8 @@ def provision_outcome_for_coordinate(location: Location, *, name: str | None = N
 
 
 def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | None) -> Place | None:
-    """Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
+    """
+    Only the shrink case is detected from a single coordinate: the provider now returns a much smaller parcel here than the one on record, which means the rest of the old parcel became something else.
 
     Args:
         location: The coordinate whose refresh triggered this.
@@ -287,7 +297,8 @@ def detect_subdivision(location: Location, new_parcel_polygon: MultiPolygon | No
 
 
 def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provider: str = "") -> dict[int, Place]:
-    """Create the building places a bulk import already has the footprints for.
+    """
+    Create the building places a bulk import already has the footprints for.
     It keeps identity, lineage, and the ability to hold its own wiki, and can never be resolved onto - which is the right answer for a structure we know exists but cannot locate precisely.
 
     Args:
@@ -411,7 +422,8 @@ def _as_multipolygon(geometry):
 
 
 def record_boundary_candidates(place: Place, candidates: list[tuple[str, MultiPolygon]]) -> None:
-    """Persist one votable candidate row per provider that offered a parcel outline.
+    """
+    Persist one votable candidate row per provider that offered a parcel outline.
     Candidate geometry refreshes freely: it is never user-drawn, so a newer provider answer can only be better data.
 
     Args:

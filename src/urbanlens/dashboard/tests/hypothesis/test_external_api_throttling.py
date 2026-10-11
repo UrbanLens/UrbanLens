@@ -39,7 +39,8 @@ class RequestTierTests(SimpleTestCase):
         self.assertEqual(request_tier(view, "GET"), TIER_READ)
 
     def test_post_requiring_only_read_scopes_is_read_tier(self) -> None:
-        """Classification follows the scopes, not the HTTP verb.
+        """
+        Classification follows the scopes, not the HTTP verb.
 
         A search endpoint is a POST (its query is too big for a query string)
         yet requires only ``search:read`` - it costs what a read costs.
@@ -109,7 +110,8 @@ class RequestTierTests(SimpleTestCase):
 
 
 class ThrottleConfigurationTests(SimpleTestCase):
-    """The three throttle classes are wired to configured rates.
+    """
+    The three throttle classes are wired to configured rates.
 
     ``SimpleRateThrottle`` resolves its rate in ``__init__`` and raises ``ImproperlyConfigured`` on a missing
     key, so merely constructing each class proves the settings entry exists - which is why the settings change

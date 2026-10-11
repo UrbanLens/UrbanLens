@@ -49,7 +49,8 @@ def _viewer_profile(request: HttpRequest) -> Profile | None:
 
 
 def _visible_profile_or_404(request: HttpRequest, profile_slug: str) -> tuple[Profile, Profile | None]:
-    """Return (subject, viewer), raising 404 when the viewer may not see the subject.
+    """
+    Return (subject, viewer), raising 404 when the viewer may not see the subject.
 
     Achievements are shown to exactly the audience that can see the profile itself, so this reuses the
     profile page's own lookup, :meth:`Profile.visible_by_slug`.
@@ -62,7 +63,8 @@ def _visible_profile_or_404(request: HttpRequest, profile_slug: str) -> tuple[Pr
 
 
 class ProfileAchievementsView(LoginRequiredMixin, View):
-    """HTMX partial: the achievement grid on a profile page.
+    """
+    HTMX partial: the achievement grid on a profile page.
 
     GET /profile/<slug>/achievements/
     """
@@ -88,7 +90,8 @@ class ProfileAchievementsView(LoginRequiredMixin, View):
 
 
 class AchievementListView(LoginRequiredMixin, View):
-    """Full award catalogue for one profile, with progress for the owner.
+    """
+    Full award catalogue for one profile, with progress for the owner.
 
     GET /profile/<slug>/achievements/all/
     """
@@ -162,7 +165,8 @@ def _admin_context(**extra: Any) -> dict[str, Any]:
 
 
 def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
-    """Return the submitted custom-icon file, if any.
+    """
+    Return the submitted custom-icon file, if any.
 
     Mirrors ``labels._uploaded_custom_icon``: the icon picker partial names its file input
     ``custom_icon-<picker_id>`` (scoped per widget instance), so the create form and every row's edit
@@ -179,7 +183,8 @@ _FORM_FIELDS = ("name", "description", "metric", "threshold", "icon", "color", "
 
 
 def _apply_form(achievement: Achievement, request: HttpRequest) -> list[str]:
-    """Copy submitted form values onto *achievement* without saving it.
+    """
+    Copy submitted form values onto *achievement* without saving it.
 
     Args:
         achievement: The instance to populate.
@@ -237,7 +242,8 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> list[str]:
 
 
 class SiteAdminAchievementsView(_AchievementAdminMixin, View):
-    """Site-admin page for defining awards.
+    """
+    Site-admin page for defining awards.
 
     GET  /site-admin/achievements/  → list and the create form
     POST /site-admin/achievements/  → create one award
@@ -265,7 +271,8 @@ class SiteAdminAchievementsView(_AchievementAdminMixin, View):
 
 
 class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
-    """Edit or delete one award.
+    """
+    Edit or delete one award.
 
     POST   /site-admin/achievements/<id>/  → save changes
     DELETE /site-admin/achievements/<id>/  → delete the award and every grant of it
@@ -300,7 +307,8 @@ class SiteAdminAchievementEditView(_AchievementAdminMixin, View):
 
 
 class SiteAdminAchievementBackfillView(_AchievementAdminMixin, View):
-    """Re-check one award against every profile.
+    """
+    Re-check one award against every profile.
 
     POST /site-admin/achievements/<id>/backfill/
     """

@@ -1,4 +1,5 @@
-"""Google Open Buildings is read one S2 cell's shard at a time, and a real shard runs to gigabytes (P301, P319).
+"""
+Google Open Buildings is read one S2 cell's shard at a time, and a real shard runs to gigabytes (P301, P319).
 
 Its level-4 shards are Lagos's 1.9 GB compressed, Sao Paulo's 2.4 GB, Dhaka's 3.4 GB, and 200 of the 333 run past the
 cap a lookup will read. The same v3 release is published as 3,330 level-6 shards with no header row, a median of

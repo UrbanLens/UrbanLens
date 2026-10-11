@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 
 def uuid_or_none(value: object) -> UUID | None:
-    """*value* as a UUID, or None when it is not one.
+    """
+    *value* as a UUID, or None when it is not one.
 
     Args:
         value: A request parameter, a decoded JSON value, or a UUID.
@@ -29,7 +30,8 @@ def uuid_or_none(value: object) -> UUID | None:
 
 
 def valid_uuids(values: Iterable[object]) -> list[UUID]:
-    """The UUIDs among *values*, dropping anything that is not one.
+    """
+    The UUIDs among *values*, dropping anything that is not one.
 
     Args:
         values: Request parameters or decoded JSON values.

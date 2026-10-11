@@ -1,4 +1,5 @@
-"""Persist a validated device-scan upload; classification/clustering happens later, in the background.
+"""
+Persist a validated device-scan upload; classification/clustering happens later, in the background.
 Kept deliberately lightweight - this runs inline in the upload request/response cycle, so it only writes what the client submitted."""
 
 from __future__ import annotations
@@ -15,7 +16,8 @@ if TYPE_CHECKING:
 
 
 def ingest_scan_upload(uploader: Profile, *, attribute: bool, client_session_uuid: str, devices: list[dict[str, Any]]) -> tuple[DeviceScanUpload, bool]:
-    """Persist one validated device-scan upload and its per-device entries/readings.
+    """
+    Persist one validated device-scan upload and its per-device entries/readings.
 
     A non-empty *client_session_uuid* is an idempotency key: a retry carrying one already stored
     returns that upload and writes nothing.

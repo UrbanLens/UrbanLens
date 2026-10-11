@@ -32,7 +32,8 @@ def _read(compute: Callable[[], Mapping[str, object]], key: str) -> object:
 
 
 def deferred(*keys: str) -> Callable[[Callable[[HttpRequest], Mapping[str, object]]], Callable[[HttpRequest], dict[str, Deferred]]]:
-    """Run a processor only if the template reads one of *keys*, and once however many it reads.
+    """
+    Run a processor only if the template reads one of *keys*, and once however many it reads.
 
     Django runs every processor on every render, including fragments that read none of their values.
     """
@@ -50,7 +51,8 @@ def deferred(*keys: str) -> Callable[[Callable[[HttpRequest], Mapping[str, objec
 
 @deferred("site_title", "app_version", "public_costs_page_enabled", "media_origin")
 def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
-    """Inject site-wide settings into template context.
+    """
+    Inject site-wide settings into template context.
 
     Args:
         request: The current HttpRequest.
@@ -82,7 +84,8 @@ def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
 
 @deferred("show_dev_toolbar", "dev_toolbar_theme_mode", "dev_toolbar_map_dark_mode")
 def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
-    """Inject dev toolbar visibility and theme state.
+    """
+    Inject dev toolbar visibility and theme state.
 
     Args:
         request: The current HttpRequest.
@@ -117,7 +120,8 @@ def add_dev_toolbar(request: HttpRequest) -> dict[str, bool | str]:
 
 @deferred("env_indicator_type", "env_indicator_label")
 def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
-    """Expose the active environment for the non-production banner.
+    """
+    Expose the active environment for the non-production banner.
 
     Args:
         request: The current HttpRequest.
@@ -143,7 +147,8 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
 
 
 def add_demo_context(request: HttpRequest) -> dict[str, object]:
-    """Expose demo flags to templates.
+    """
+    Expose demo flags to templates.
 
     ``demo_url`` lives on the real site (button target); ``demo_mode`` on the
     demo instance itself (banner). Never both.
@@ -169,7 +174,8 @@ _NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
 
 
 def add_page_name(request: HttpRequest) -> dict[str, str]:
-    """Expose the current page and nav section to templates.
+    """
+    Expose the current page and nav section to templates.
 
     Args:
         request: The current HttpRequest.
@@ -189,7 +195,8 @@ def add_page_name(request: HttpRequest) -> dict[str, str]:
 
 @deferred("distance_units")
 def add_distance_units(request: HttpRequest) -> dict[str, str]:
-    """Expose the viewer's distance unit to templates.
+    """
+    Expose the viewer's distance unit to templates.
 
     Args:
         request: The current HttpRequest.
@@ -210,7 +217,8 @@ def add_distance_units(request: HttpRequest) -> dict[str, str]:
 
 @deferred("keyboard_shortcuts")
 def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
-    """Expose the viewer's shortcut overrides to templates.
+    """
+    Expose the viewer's shortcut overrides to templates.
 
     Args:
         request: The current HttpRequest.
@@ -228,7 +236,8 @@ def add_keyboard_shortcuts(request: HttpRequest) -> dict[str, dict[str, str]]:
 
 @deferred("pending_account_deletion", "account_deletion_date", "account_deletion_days_left")
 def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
-    """Expose pending-deletion state for the warning banner.
+    """
+    Expose pending-deletion state for the warning banner.
 
     Args:
         request: The current HttpRequest.
@@ -252,7 +261,8 @@ def add_pending_account_deletion(request: HttpRequest) -> dict[str, object]:
 
 @deferred("show_messages_icon", "e2ee_needs_oauth_enroll")
 def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
-    """Expose whether the navbar messages icon should render.
+    """
+    Expose whether the navbar messages icon should render.
 
     Shown once the feature has been relevant; stays visible afterwards.
 
@@ -326,7 +336,8 @@ _MARKUP_MAP_PLACEHOLDER = "11111111-1111-1111-1111-111111111111"
 
 @deferred("comment_map_config")
 def add_comment_map_config(request: HttpRequest) -> dict[str, dict[str, Any]]:
-    """What the theme's comment-map composer needs from the server.
+    """
+    What the theme's comment-map composer needs from the server.
 
     The composer is a static file, so the browser keeps it between pages and only these few request-shaped
     values travel with the page. An anonymous visitor reaches the theme too, by way of the signed-out page.
@@ -364,7 +375,8 @@ _E2EE_SLUG_PLACEHOLDER = "e2ee-slug-token"
 
 @deferred("e2ee_urls")
 def add_e2ee_urls(request: HttpRequest) -> dict[str, dict[str, str]]:
-    """The E2EE client's endpoints, for the OAuth-enrollment bootstrap and the sign-in pages' auth.js.
+    """
+    The E2EE client's endpoints, for the OAuth-enrollment bootstrap and the sign-in pages' auth.js.
 
     Mirrors ``add_comment_map_config``: the request-shaped values travel with the page, and the
     behavior that reads them is a cached static file.
@@ -407,7 +419,8 @@ _FEATURE_FLAGS = {
 
 @deferred(*_FEATURE_FLAGS, "is_site_admin")
 def add_feature_access(request: HttpRequest) -> dict[str, bool]:
-    """Expose subscription-gated feature visibility, and whether the viewer is a site admin.
+    """
+    Expose subscription-gated feature visibility, and whether the viewer is a site admin.
 
     ``is_site_admin`` is here rather than left to ``{{ perms }}`` because the template's ``perms``
     lookup goes to the database on every page, asking the same question this already has the

@@ -193,7 +193,8 @@ class PinFlickrAlbumLookupViewTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile)
 
     def test_blank_url_shows_an_error(self) -> None:
-        """Configured state is forced, like every sibling test here: the view
+        """
+        Configured state is forced, like every sibling test here: the view
         checks configuration first, so on a server without Flickr credentials
         this saw "not configured" and never reached the blank-URL branch it is
         meant to cover."""

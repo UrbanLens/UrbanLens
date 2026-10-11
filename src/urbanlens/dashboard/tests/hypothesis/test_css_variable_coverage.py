@@ -12,7 +12,8 @@ _CHECKER_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "check_css
 
 
 def _load_checker():
-    """Import ``bin/check_css_variables.py`` as a module.
+    """
+    Import ``bin/check_css_variables.py`` as a module.
 
     Returns:
         The imported module.

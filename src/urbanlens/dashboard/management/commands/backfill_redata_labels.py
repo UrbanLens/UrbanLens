@@ -1,4 +1,5 @@
-"""Backfill: push every profile's existing tag/category taxonomy and pin assignments to REData.
+"""
+Backfill: push every profile's existing tag/category taxonomy and pin assignments to REData.
 
 Ongoing changes are kept in sync automatically once this integration is live (see
 ``models.labels.signals`` and the ``Pin.labels`` m2m_changed receiver in ``models.pin.signals``),

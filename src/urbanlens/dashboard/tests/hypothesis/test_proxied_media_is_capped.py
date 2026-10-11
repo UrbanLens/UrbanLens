@@ -1,4 +1,5 @@
-"""A gateway proxying someone else's media must bound what it reads into memory.
+"""
+A gateway proxying someone else's media must bound what it reads into memory.
 
 `bounded_cache.set_if_small` already stops an oversized body being *stored* in
 the shared Dragonfly (H14, H22, H35). Nothing stopped it being *read*: every media
@@ -56,7 +57,8 @@ def _buffered(body: bytes) -> requests.Response:
 
 class TheCapIsEnforcedTests(SimpleTestCase):
     def test_a_small_body_comes_through_whole(self) -> None:
-        """Anti-vacuity: a helper that refused everything would pass the test
+        """
+        Anti-vacuity: a helper that refused everything would pass the test
         below while breaking every gallery on the site."""
         body = b"x" * 1024
 
@@ -73,7 +75,8 @@ class TheCapIsEnforcedTests(SimpleTestCase):
             read_capped(_streamed(b"x" * 4097), max_bytes=4096, what="photo")
 
     def test_the_refusal_does_not_read_the_whole_body(self) -> None:
-        """The point is the memory never being spent, so the helper must stop
+        """
+        The point is the memory never being spent, so the helper must stop
         at the cap rather than read everything and then complain."""
         raw = io.BytesIO(b"x" * 10_000_000)
         response = _streamed(b"")
@@ -97,7 +100,8 @@ class TheCapIsEnforcedTests(SimpleTestCase):
         )
 
     def test_a_connection_dropped_mid_body_is_a_gateway_error(self) -> None:
-        """``raw.read`` bypasses the ``requests`` wrapper that turns urllib3's errors into ``RequestException``, so a
+        """
+        ``raw.read`` bypasses the ``requests`` wrapper that turns urllib3's errors into ``RequestException``, so a
         caller catching ``GatewayRequestError`` (every download loop does) would otherwise see a raw ``ProtocolError``."""
         from urllib3.exceptions import ProtocolError, ReadTimeoutError
 
@@ -112,7 +116,8 @@ class TheCapIsEnforcedTests(SimpleTestCase):
 
 
 class TheNonStreamedMistakeIsLoudTests(SimpleTestCase):
-    """A cap that silently does nothing is worse than no cap, because it reads
+    """
+    A cap that silently does nothing is worse than no cap, because it reads
     as protection in review."""
 
     def test_a_buffered_response_is_refused_rather_than_read_as_empty(self) -> None:
@@ -122,14 +127,16 @@ class TheNonStreamedMistakeIsLoudTests(SimpleTestCase):
 
 class TheDefaultIsSaneTests(SimpleTestCase):
     def test_the_default_cap_is_bounded_and_generous(self) -> None:
-        """Large enough for a real photo or map tile, small enough that a worker
+        """
+        Large enough for a real photo or map tile, small enough that a worker
         cannot be pushed over its mem_limit by one request."""
         self.assertGreaterEqual(MAX_PROXIED_MEDIA_BYTES, 8 * 1024 * 1024)
         self.assertLessEqual(MAX_PROXIED_MEDIA_BYTES, 64 * 1024 * 1024)
 
 
 class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
-    """The existing proxy tests stub `download_listing_photo` itself, so they
+    """
+    The existing proxy tests stub `download_listing_photo` itself, so they
     pass whatever the gateway does underneath - including against a cap that was
     never wired in, or one wired in wrongly enough to serve empty bodies. These
     stub the HTTP layer instead, which is the only level at which `stream=True`
@@ -149,7 +156,8 @@ class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
         return gateway, session
 
     def test_a_normal_photo_still_downloads(self) -> None:
-        """The half that catches a broken cap: `raw.read()` on a response the
+        """
+        The half that catches a broken cap: `raw.read()` on a response the
         gateway forgot to stream returns b'', which is a silent empty image."""
         gateway, session = self._gateway(b"x" * 2048)
 
@@ -203,7 +211,8 @@ class TheGatewaysActuallyUseItTests(RedataConfiguredMixin, SimpleTestCase):
                 download()
 
     def test_every_media_download_streams(self) -> None:
-        """One forgotten `stream=True` is a silent empty body, so this asserts
+        """
+        One forgotten `stream=True` is a silent empty body, so this asserts
         the property across the gateways rather than per call site."""
         import inspect
         import re

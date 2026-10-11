@@ -290,7 +290,8 @@ class VisitHistoryPanelTests(TestCase):
         self.assertEqual({call.args[1:3] for call in enqueue.call_args_list}, {(41.73, -73.92), (42.65, -73.75)})
 
     def test_a_visit_has_a_place_by_construction(self) -> None:
-        """Documents why `_visit_weather` carries no missing-location guard.
+        """
+        Documents why `_visit_weather` carries no missing-location guard.
 
         `PinVisit.pin`, `Pin.location` and `Location.latitude`/`longitude` are all non-null, so "a visit with
         nowhere to ask about" is not a state the database can hold - and a guard for it would be code no test

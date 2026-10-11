@@ -50,7 +50,8 @@ _WHITESPACE_RUN = re.compile(r"\s+")
 
 
 def _clean_text(raw: Any, max_length: int) -> str:
-    """Coerce an untrusted AI value to a bounded, control-character-free string.
+    """
+    Coerce an untrusted AI value to a bounded, control-character-free string.
 
     Args:
         raw: The raw JSON value.
@@ -66,7 +67,8 @@ def _clean_text(raw: Any, max_length: int) -> str:
 
 
 def _parse_date(raw: Any) -> date:
-    """Parse an AI-supplied date - full ISO date or bare year - with sanity bounds.
+    """
+    Parse an AI-supplied date - full ISO date or bare year - with sanity bounds.
 
     Args:
         raw: The raw JSON value.
@@ -90,7 +92,8 @@ def _parse_date(raw: Any) -> date:
 
 
 def _parse_price(raw: Any) -> Decimal:
-    """Parse an AI-supplied sale price, tolerating currency punctuation.
+    """
+    Parse an AI-supplied sale price, tolerating currency punctuation.
 
     Args:
         raw: The raw JSON value.
@@ -118,7 +121,8 @@ def _parse_price(raw: Any) -> Decimal:
 
 @dataclass(frozen=True)
 class ExtractableField:
-    """One pin field the AI may propose a value for.
+    """
+    One pin field the AI may propose a value for.
 
     Attributes:
         key: Stable identifier - the JSON key requested from (and read back from) the model, and the ``key`` stored in run results.
@@ -212,7 +216,8 @@ def _apply_sale_price(pin: Pin, value: Decimal, context: dict[str, Any]) -> tupl
 
 
 def _parse_aliases(raw: Any) -> list[str]:
-    """Parse the aliases list: bounded count, each name strictly sanitized.
+    """
+    Parse the aliases list: bounded count, each name strictly sanitized.
 
     Args:
         raw: The raw JSON value (expected: list of strings).
@@ -336,7 +341,8 @@ def _account_may_extract(user, profile: Profile) -> bool:
 
 
 def link_extraction_available(user, profile: Profile) -> bool:
-    """Whether the AI link-extraction buttons should exist for this user at all.
+    """
+    Whether the AI link-extraction buttons should exist for this user at all.
     Per the feature request, users without access must not see the buttons - this is the single check templates and endpoints share.
 
     Args:
@@ -349,7 +355,8 @@ def link_extraction_available(user, profile: Profile) -> bool:
 
 
 def extractions_remaining_today(profile: Profile) -> int:
-    """How many extraction runs the profile may still start today.
+    """
+    How many extraction runs the profile may still start today.
 
     Args:
         profile: The requesting user.
@@ -365,7 +372,8 @@ def extractions_remaining_today(profile: Profile) -> int:
 
 
 def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_COOLDOWN_DAYS) -> frozenset[str]:
-    """URLs on this pin already submitted for AI extraction within the cooldown window.
+    """
+    URLs on this pin already submitted for AI extraction within the cooldown window.
     The extract button hides for these specific links (any other link on the same pin is unaffected) so the user isn't tempted to immediately re-run an extraction that just started - see :data:`RECENT_EXTRACTION_COOLDOWN_DAYS`.
 
     Args:
@@ -383,7 +391,8 @@ def recently_requested_urls(pin: Pin, *, within_days: int = RECENT_EXTRACTION_CO
 
 
 def ai_extract_button_context(user, profile: Profile, pin: Pin) -> dict[str, Any]:
-    """Shared context for every AI-extract-button render site.
+    """
+    Shared context for every AI-extract-button render site.
 
     Args:
         user: The authenticated user (subscription features hang off User).
@@ -408,7 +417,8 @@ class LinkExtractionUnavailableHereError(LinkExtractionError):
 
 
 def _validate_extraction_url(url: str) -> str:
-    """Validate a user-submitted extraction target url.
+    """
+    Validate a user-submitted extraction target url.
 
     Args:
         url: The submitted url.
@@ -428,7 +438,8 @@ def _validate_extraction_url(url: str) -> str:
 
 
 def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExtraction:
-    """Validate every gate and queue an extraction run for background processing.
+    """
+    Validate every gate and queue an extraction run for background processing.
 
     Args:
         user: The authenticated requesting user.
@@ -478,7 +489,8 @@ _SCRIPT_STYLE = re.compile(r"<(script|style|noscript|template)\b[^>]*>.*?</\1\s*
 
 
 def _html_to_text(markup: str) -> str:
-    """Reduce fetched HTML to bounded plain text for the prompt.
+    """
+    Reduce fetched HTML to bounded plain text for the prompt.
 
     Args:
         markup: Raw response body.
@@ -500,7 +512,8 @@ _MAX_REDIRECTS = 5
 
 
 def fetch_page_text(url: str) -> str:
-    """Fetch the target page and return its visible text.
+    """
+    Fetch the target page and return its visible text.
     Runs from a Celery task that may execute long after the request that queued it, so the submission-time check is far too stale to rely on: the host's DNS can have changed, and a hostile server can redirect to an internal address regardless.
 
     Args:
@@ -546,7 +559,8 @@ def fetch_page_text(url: str) -> str:
 
 
 def build_extraction_prompt(pin: Pin, page_text: str) -> tuple[str, str]:
-    """Build the (instructions, prompt) pair for the AI call from the registry.
+    """
+    Build the (instructions, prompt) pair for the AI call from the registry.
 
     Args:
         pin: The pin being enriched (its name anchors the model on the right place).
@@ -571,7 +585,8 @@ def build_extraction_prompt(pin: Pin, page_text: str) -> tuple[str, str]:
 
 
 def parse_ai_response(answer: str) -> dict[str, Any]:
-    """Deterministically parse the model's answer into a plain dict.
+    """
+    Deterministically parse the model's answer into a plain dict.
 
     Args:
         answer: The raw model output.
@@ -596,7 +611,8 @@ def parse_ai_response(answer: str) -> dict[str, Any]:
 
 
 def apply_extracted_fields(pin: Pin, payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Run every registry field against the AI payload, applying what's usable.
+    """
+    Run every registry field against the AI payload, applying what's usable.
     Only registry keys are consulted; anything else in ``payload`` is ignored.
 
     Args:
@@ -626,7 +642,8 @@ def apply_extracted_fields(pin: Pin, payload: dict[str, Any]) -> list[dict[str, 
 
 
 def run_extraction(extraction: LinkExtraction) -> None:
-    """Execute one queued extraction end to end and record the outcome.
+    """
+    Execute one queued extraction end to end and record the outcome.
     Never raises - every failure path lands in ``extraction.status``/``error`` so the review page always has something honest to show.
 
     Args:
@@ -703,7 +720,8 @@ def run_extraction(extraction: LinkExtraction) -> None:
 
 
 def _notify_extraction_complete(extraction: LinkExtraction) -> None:
-    """Raise the on-site notification linking to the review page.
+    """
+    Raise the on-site notification linking to the review page.
 
     Args:
         extraction: The finished run (any terminal status).

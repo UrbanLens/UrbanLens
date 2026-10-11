@@ -1,4 +1,5 @@
-"""Overture Maps buildings and places for a coordinate, from REData's mirror where it holds them and the public release elsewhere.
+"""
+Overture Maps buildings and places for a coordinate, from REData's mirror where it holds them and the public release elsewhere.
 
 REData syncs Overture's themes by padded US state and territory boxes and serves them from ``/buildings/`` and the
 ``overture`` points-of-interest provider, so a coordinate it covers never reaches Overture itself, even when REData
@@ -31,7 +32,8 @@ _BUILDING_SEARCH_RADIUS_METERS = 10.0
 
 
 def served_by_redata(latitude: float, longitude: float) -> bool:
-    """Whether REData's Overture mirror covers a coordinate, so the public release is not read for it.
+    """
+    Whether REData's Overture mirror covers a coordinate, so the public release is not read for it.
 
     REData answers its ``overture`` providers only where its ``is_usa_coordinates`` holds (the same boxes as ours),
     and holds rows only inside the shards it syncs. Those boxes are wider than the US in places (Canada and Mexico
@@ -55,7 +57,8 @@ class OvertureProvider(BoundaryProvider):
     boundary_kind: ClassVar[str] = "building"
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
-        """The smallest Overture building footprint containing the coordinate.
+        """
+        The smallest Overture building footprint containing the coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -80,7 +83,8 @@ class OvertureProvider(BoundaryProvider):
         return best_containing_polygon(features, latitude, longitude)
 
     def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """The physical attributes of the building at a coordinate.
+        """
+        The physical attributes of the building at a coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -99,7 +103,8 @@ class OvertureProvider(BoundaryProvider):
         return building_attributes(_redata_building_features(latitude, longitude), latitude, longitude)
 
     def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
-        """Named Overture places near a coordinate, nearest first.
+        """
+        Named Overture places near a coordinate, nearest first.
 
         Args:
             latitude: WGS-84 latitude.
@@ -140,7 +145,8 @@ def _redata_building_features(latitude: float, longitude: float) -> list[dict]:
 
 
 def _building_feature(record: dict[str, Any]) -> dict[str, Any]:
-    """A REData ``BuildingRecord`` from its Overture mirror, as the feature it was mirrored from.
+    """
+    A REData ``BuildingRecord`` from its Overture mirror, as the feature it was mirrored from.
 
     Its ``attributes`` are the Overture row's own properties: the promoted ``subtype``/``class``/``height``/
     ``num_floors``/``sources`` plus every other column REData stores, the roof columns among them. The name is taken
@@ -153,7 +159,8 @@ def _building_feature(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def _place_feature(row: dict[str, Any]) -> dict[str, Any]:
-    """A REData ``overture`` point of interest as the Overture place it was mirrored from.
+    """
+    A REData ``overture`` point of interest as the Overture place it was mirrored from.
 
     REData flattens ``names.primary`` into ``name`` and the taxonomy's primary category into ``category``, and keeps
     the rest of the row (``confidence``, ``operating_status``, and anything it does not promote) in ``attributes``.

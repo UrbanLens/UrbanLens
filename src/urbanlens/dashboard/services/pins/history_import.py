@@ -1,4 +1,5 @@
-"""Location History, My Activity and GPS tracks carried from an import preview to its confirmed import.
+"""
+Location History, My Activity and GPS tracks carried from an import preview to its confirmed import.
 
 The preview's sandbox parse fills an :class:`ImportedHistory` from the uploaded bytes. Its JSON form waits
 beside the preview until the user confirms, and the confirmed import applies it on a worker without
@@ -29,7 +30,8 @@ _ACTIVITY_KEYS = ("destination_name", "latitude", "longitude", "visited_at")
 
 @dataclass
 class ImportedHistory:
-    """What an upload holds besides pins, in a JSON-serialisable form.
+    """
+    What an upload holds besides pins, in a JSON-serialisable form.
 
     Attributes:
         visits: Location History place visits: ``latitude``, ``longitude``, ISO ``visited_at``.
@@ -47,7 +49,8 @@ class ImportedHistory:
         return bool(self.visits or self.activity or self.routes)
 
     def add_location_history(self, content: bytes | IO[bytes], profile: Profile, filename: str) -> None:
-        """Add a Semantic Location History file's place visits and trips, reading one timeline entry at a time.
+        """
+        Add a Semantic Location History file's place visits and trips, reading one timeline entry at a time.
 
         Args:
             content: The file, as bytes or a seekable binary file positioned at its start.
@@ -72,7 +75,8 @@ class ImportedHistory:
                 self.routes.append(route.to_json())
 
     def add_my_activity(self, content: bytes | IO[bytes]) -> None:
-        """Add a My Activity export's "Directions to" entries.
+        """
+        Add a My Activity export's "Directions to" entries.
 
         Args:
             content: The ``MyActivity.html`` file, as bytes or a seekable binary file positioned at its start.
@@ -82,7 +86,8 @@ class ImportedHistory:
         self.activity.extend(_encoded(entry, _ACTIVITY_KEYS) for entry in parse_my_activity_entries(content))
 
     def add_routes(self, parsed_routes: Iterable[ParsedRoute]) -> None:
-        """Add parsed routes.
+        """
+        Add parsed routes.
 
         Args:
             parsed_routes: Unsaved routes, whose profile is not kept.
@@ -90,7 +95,8 @@ class ImportedHistory:
         self.routes.extend(parsed.to_json() for parsed in parsed_routes)
 
     def extend(self, other: ImportedHistory) -> None:
-        """Add everything *other* holds.
+        """
+        Add everything *other* holds.
 
         Args:
             other: History read from another file.
@@ -100,7 +106,8 @@ class ImportedHistory:
         self.routes.extend(other.routes)
 
     def counts(self) -> dict[str, int]:
-        """How many of each kind there are, for the preview.
+        """
+        How many of each kind there are, for the preview.
 
         Returns:
             ``visits``, ``activity`` and ``routes``.
@@ -108,7 +115,8 @@ class ImportedHistory:
         return {"visits": len(self.visits), "activity": len(self.activity), "routes": len(self.routes)}
 
     def to_json(self) -> dict[str, Any]:
-        """The form :meth:`from_json` reads back.
+        """
+        The form :meth:`from_json` reads back.
 
         Returns:
             ``visits``, ``activity`` and ``routes`` lists.
@@ -117,7 +125,8 @@ class ImportedHistory:
 
     @classmethod
     def from_json(cls, data: object) -> ImportedHistory:
-        """Read :meth:`to_json`'s output, keeping only the lists it recognises.
+        """
+        Read :meth:`to_json`'s output, keeping only the lists it recognises.
 
         Args:
             data: The stored value, or None.
@@ -130,7 +139,8 @@ class ImportedHistory:
         return cls(**{name: [item for item in data.get(name) or [] if isinstance(item, dict)] for name in ("visits", "activity", "routes")})
 
     def iter_import_events(self, profile: Profile) -> Iterator[dict[str, Any]]:
-        """Log the visits, suggest the unmatched places and save the routes, as each importer's events.
+        """
+        Log the visits, suggest the unmatched places and save the routes, as each importer's events.
 
         Args:
             profile: The importing profile.
@@ -151,7 +161,8 @@ class ImportedHistory:
 
 
 def describe_preview(counts: Mapping[str, int], profile: Profile) -> list[str]:
-    """What the preview found besides pins, and what the profile's settings will leave out.
+    """
+    What the preview found besides pins, and what the profile's settings will leave out.
 
     Args:
         counts: :meth:`ImportedHistory.counts`.
@@ -179,7 +190,8 @@ def describe_preview(counts: Mapping[str, int], profile: Profile) -> list[str]:
 
 
 def describe_outcome(results: Mapping[str, Mapping[str, Any]]) -> str:
-    """Summarise what the history importers did.
+    """
+    Summarise what the history importers did.
 
     Args:
         results: Each importer's ``complete`` event, by ``subtype``.

@@ -34,7 +34,8 @@ _PRECISION_CAVEAT: dict[str, str] = {"label": "Precision", "value": "Locations a
 
 
 def _crime(incidents: list[dict]) -> list[dict]:
-    """The incidents that are crime, by REData's category.
+    """
+    The incidents that are crime, by REData's category.
 
     Args:
         incidents: Cached incident rows.
@@ -55,7 +56,8 @@ def _crime_categories() -> list[str]:
 
 
 def _top_category_chips(incidents: list[dict], category_labels: dict[str, str]) -> list[str]:
-    """Tally incidents by category and format the most common as chip strings.
+    """
+    Tally incidents by category and format the most common as chip strings.
 
     Args:
         incidents: Incident rows, each with a ``category`` key.
@@ -116,7 +118,8 @@ class PoliceIncidentsPanelSource(RedataInfoPanelSource):
 
 
 class IncidentHistoryPanelSource(RedataInfoPanelSource):
-    """Full REData incident history (up to 25 years) for the pin's block, gated to subscribers.
+    """
+    Full REData incident history (up to 25 years) for the pin's block, gated to subscribers.
     A deeper research pull than :class:`PoliceIncidentsPanelSource`'s free safety-context snapshot: instead of the most recent handful of reports over 3 years, this shows the year-by-year trend across REData's whole retention window."""
 
     key = "redata_incident_history"

@@ -1,4 +1,5 @@
-"""Uploads storage failed on wait for storage to recover, rather than being dropped or rejected (P119, P201).
+"""
+Uploads storage failed on wait for storage to recover, rather than being dropped or rejected (P119, P201).
 
 A held icon or avatar, a pending comment image and a photo, video or document being processed are already in media
 storage, so retrying needs nothing from their owner. Waiting must not cost anyone else: each upload's attempts back off from :data:`RETRY_BASE` to :data:`RETRY_CAP`,
@@ -59,7 +60,8 @@ _STUCK_LISTED = 50
 
 
 def means_file_is_gone(exc: BaseException) -> bool:
-    """Whether a storage error says the file itself is not there.
+    """
+    Whether a storage error says the file itself is not there.
 
     Args:
         exc: What storage raised.
@@ -78,7 +80,8 @@ def record_storage_success() -> None:
 
 
 def is_waiting(target: str, object_id: int) -> bool:
-    """Whether an upload is already waiting for storage, so its task leaves pacing to the sweep.
+    """
+    Whether an upload is already waiting for storage, so its task leaves pacing to the sweep.
 
     Args:
         target: The held field's key or comment image target.
@@ -91,7 +94,8 @@ def is_waiting(target: str, object_id: int) -> bool:
 
 
 def stop_waiting(target: str, object_id: int) -> None:
-    """Forget an upload that no longer waits: it was published, rejected, dropped, or its row is gone.
+    """
+    Forget an upload that no longer waits: it was published, rejected, dropped, or its row is gone.
 
     Args:
         target: The held field's key or comment image target.
@@ -101,7 +105,8 @@ def stop_waiting(target: str, object_id: int) -> None:
 
 
 def wait_for_storage(target: str, object_id: int, name: str, exc: BaseException) -> None:
-    """Keep an upload storage failed on waiting for a retry. A second failure keeps its place in the backoff.
+    """
+    Keep an upload storage failed on waiting for a retry. A second failure keeps its place in the backoff.
 
     Args:
         target: The held field's key or comment image target.
@@ -115,7 +120,8 @@ def wait_for_storage(target: str, object_id: int, name: str, exc: BaseException)
 
 
 def report_lasting_refusal(exc: BaseException) -> None:
-    """Tell the admins storage refuses for a reason waiting won't fix, such as a rejected key or a denying policy.
+    """
+    Tell the admins storage refuses for a reason waiting won't fix, such as a rejected key or a denying policy.
 
     Sent at most once per :data:`REFUSAL_REPORT_INTERVAL`. Uploads already in storage keep waiting meanwhile, and are
     retried once an operator fixes it.
@@ -157,7 +163,8 @@ def _keep_waiting(target: str, object_id: int, name: str, exc: BaseException) ->
 
 
 def file_is_gone(target: str, object_id: int, name: str, exc: BaseException) -> bool:
-    """Whether to give up on an upload whose file storage says is gone; until then it waits, tried once a day.
+    """
+    Whether to give up on an upload whose file storage says is gone; until then it waits, tried once a day.
 
     Storage pointed at the wrong place says every file is gone, so an upload is given up on only once storage has said
     so for :data:`GONE_GRACE` and has served another upload through since it first did.
@@ -185,7 +192,8 @@ def file_is_gone(target: str, object_id: int, name: str, exc: BaseException) -> 
 
 
 def retry_waiting_uploads() -> int:
-    """Queue the uploads whose next attempt is due, pushing each one's following attempt further out.
+    """
+    Queue the uploads whose next attempt is due, pushing each one's following attempt further out.
 
     Returns:
         How many attempts were queued.
@@ -209,7 +217,8 @@ def retry_waiting_uploads() -> int:
 
 
 def adopt_stalled_comment_scans() -> int:
-    """Have the sweep retry pending comments whose scan never ran, such as one the broker would not queue.
+    """
+    Have the sweep retry pending comments whose scan never ran, such as one the broker would not queue.
 
     Returns:
         How many comments were taken up.
@@ -229,7 +238,8 @@ def adopt_stalled_comment_scans() -> int:
 
 
 def give_up(waiting: UploadRetry) -> None:
-    """Stop waiting on an upload: drop the held one, reject the pending comment and tell its author, or offer the photo
+    """
+    Stop waiting on an upload: drop the held one, reject the pending comment and tell its author, or offer the photo
     back to its owner to retry or discard.
 
     Args:

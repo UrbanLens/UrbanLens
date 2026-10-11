@@ -6,7 +6,8 @@ from urbanlens.dashboard.models import abstract
 
 
 class ProviderState(abstract.TextChoices):
-    """Where a provider stands, as ``services.core.provider_health`` last judged it.
+    """
+    Where a provider stands, as ``services.core.provider_health`` last judged it.
 
     Attributes:
         HEALTHY: Answering about as often as it normally does.
@@ -24,7 +25,8 @@ class ProviderState(abstract.TextChoices):
 
 
 class BackoffCause(abstract.TextChoices):
-    """Why a provider left ``healthy``.
+    """
+    Why a provider left ``healthy``.
 
     Attributes:
         NONE: It has not.

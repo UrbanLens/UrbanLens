@@ -52,7 +52,8 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         radius: int | None = None,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """Free-text fuzzy search across addresses, POIs, and geographies.
+        """
+        Free-text fuzzy search across addresses, POIs, and geographies.
 
         Args:
             query: Free-text search query.
@@ -93,7 +94,8 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         radius: int = 1000,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """Search points of interest near a coordinate, nearest first.
+        """
+        Search points of interest near a coordinate, nearest first.
 
         Args:
             latitude: WGS-84 latitude of the search origin.
@@ -123,7 +125,8 @@ class AzureMapsSearchGateway(AzureMapsGateway):
         return [_normalize_result(result) for result in body.get("results") or []]
 
     def find_nearest_poi(self, latitude: float, longitude: float, *, radius: int = 75) -> dict[str, Any] | None:
-        """Find the single nearest POI to a coordinate - never by name.
+        """
+        Find the single nearest POI to a coordinate - never by name.
 
         Args:
             latitude: WGS-84 latitude.

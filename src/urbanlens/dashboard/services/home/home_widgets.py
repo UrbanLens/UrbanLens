@@ -44,7 +44,8 @@ _WIDGETS_BY_KEY: dict[str, HomeWidget] = {widget.key: widget for widget in HOME_
 
 
 def effective_widget_layout(profile: Profile) -> list[dict[str, Any]]:
-    """Resolve a profile's homepage widgets: enabled ones (in their chosen order), then disabled ones.
+    """
+    Resolve a profile's homepage widgets: enabled ones (in their chosen order), then disabled ones.
 
     Args:
         profile: The signed-in profile whose homepage is being rendered/customized.
@@ -66,7 +67,8 @@ def effective_widget_layout(profile: Profile) -> list[dict[str, Any]]:
 
 
 def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
-    """Validate and persist a new enabled-widget order for a profile.
+    """
+    Validate and persist a new enabled-widget order for a profile.
 
     Args:
         profile: The profile customizing their homepage.
@@ -82,7 +84,8 @@ def save_widget_layout(profile: Profile, enabled_keys: list[str]) -> list[str]:
 
 
 def home_dashboard_context(profile: Profile) -> dict[str, Any]:
-    """Build the data context every homepage widget partial draws from.
+    """
+    Build the data context every homepage widget partial draws from.
     Most entries below are unevaluated querysets, so a widget the user has switched off costs nothing - the template never iterates it.
 
     Args:

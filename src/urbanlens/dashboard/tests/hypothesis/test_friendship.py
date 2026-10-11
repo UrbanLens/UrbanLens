@@ -97,7 +97,8 @@ class FriendshipTransitionTests(TestCase):
 
 
 class FriendshipBlockMuteTests(TestCase):
-    """block_profile() creates a new friendship row when none exists; mute() only flips a flag.
+    """
+    block_profile() creates a new friendship row when none exists; mute() only flips a flag.
 
     The asymmetry is the point."""
 
@@ -164,7 +165,8 @@ class FriendshipUniqueConstraintTests(TestCase):
             _make_requested(self.profile_a, self.profile_b)
 
     def test_reversed_direction_conflicts_too(self) -> None:
-        """This asserted the opposite until 2026-09-05, and that was the defect.
+        """
+        This asserted the opposite until 2026-09-05, and that was the defect.
 
         `unique_together` is directional, so it permitted A→B *and* B→A - while every reader assumed one row per
         pair and the mute columns are per-side of one row."""

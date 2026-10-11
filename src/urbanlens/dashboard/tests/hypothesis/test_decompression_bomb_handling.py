@@ -70,7 +70,8 @@ class DecompressionBombHandlingTests(TestCase):
 
 
 class EnrichmentPathBombHandlingTests(TestCase):
-    """The second caller of `downscale_stored_image` needed the same guard.
+    """
+    The second caller of `downscale_stored_image` needed the same guard.
 
     `tasks.py` carries the fix above *and the comment explaining it*."""
 

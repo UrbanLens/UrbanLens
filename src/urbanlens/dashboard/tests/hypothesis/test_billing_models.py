@@ -1,4 +1,5 @@
-"""Tests for the billing models package: SubscriptionRole pricing validation,
+"""
+Tests for the billing models package: SubscriptionRole pricing validation,
 RoleSubscription's unique-active-per-role constraint, and granting_access_for()."""
 
 from __future__ import annotations
@@ -44,7 +45,8 @@ class SubscriptionRoleCleanTests(TestCase):
         self.assertIn("pwyw_minimum_cents", ctx.value.message_dict)
 
     def test_a_static_minimum_requires_pay_what_you_want(self) -> None:
-        """The symmetric half of the dynamic-threshold rule, which clean() was missing.
+        """
+        The symmetric half of the dynamic-threshold rule, which clean() was missing.
 
         With pay-what-you-want off there is nothing for a minimum *pledge* to be a minimum of - the role is
         either fixed-price or free - so the field is inert rather than wrong, and an admin gets no signal that
@@ -78,7 +80,8 @@ class SubscriptionRoleCleanTests(TestCase):
         role.clean()
 
     def test_dynamic_threshold_with_a_zero_minimum_is_valid(self) -> None:
-        """clean() checks `pwyw_minimum_cents` truthily, matching pwyw_minimum_dollars/is_purchasable
+        """
+        clean() checks `pwyw_minimum_cents` truthily, matching pwyw_minimum_dollars/is_purchasable
         elsewhere treating 0 the same as unset - a switch to an `is not None` check would wrongly
         reject this combination."""
         role = baker.prepare(
@@ -101,7 +104,8 @@ class SubscriptionRoleIsPurchasableTests(TestCase):
         self.assertTrue(role.is_purchasable)
 
     def test_zero_monthly_price_is_still_purchasable(self) -> None:
-        """is_purchasable checks `monthly_price_cents is not None`, not truthiness - an explicit
+        """
+        is_purchasable checks `monthly_price_cents is not None`, not truthiness - an explicit
         $0 price (e.g. a promotional free tier) is a set price, unlike a blank/unset one."""
         role = baker.make(SubscriptionRole, monthly_price_cents=0, pay_what_you_want=False)
         self.assertTrue(role.is_purchasable)
@@ -209,7 +213,8 @@ class RoleSubscriptionGrantingAccessForTests(TestCase):
         self.assertNotIn(sub, RoleSubscription.objects.granting_access_for(self.user))
 
     def test_active_but_under_threshold_with_unexpired_banked_access_grants_access(self) -> None:
-        """Banked runway also covers a still-active subscriber whose pledge is currently
+        """
+        Banked runway also covers a still-active subscriber whose pledge is currently
         under a dynamic threshold - being "still paying but under threshold" shouldn't be
         worse off than being fully canceled."""
         sub = baker.make(
@@ -262,7 +267,8 @@ class RoleSubscriptionBankedAccessBoundaryTests(TestCase):
 
 
 class RoleSubscriptionGrantsAccessParityTests(TestCase):
-    """grants_access (the model property) and granting_access_for() (the queryset filter)
+    """
+    grants_access (the model property) and granting_access_for() (the queryset filter)
     encode the same rule in two places and must agree, or a display path checking one and
     an access-control path checking the other would silently drift apart."""
 

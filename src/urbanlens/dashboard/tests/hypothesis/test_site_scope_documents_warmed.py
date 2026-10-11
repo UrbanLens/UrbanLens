@@ -1,4 +1,5 @@
-"""A pin that becomes a site gets its site-scope documents fetched without anyone opening Sources.
+"""
+A pin that becomes a site gets its site-scope documents fetched without anyone opening Sources.
 
 The campus's first CRIS fetch ran a few seconds before the building sweep made it a site, cached the
 one-building answer, and nothing re-fetched until Sources was opened again."""

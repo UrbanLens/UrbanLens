@@ -75,7 +75,8 @@ exclude:logs
 
 
 def _require_https(url: str) -> str:
-    """Return *url* if it is https, otherwise raise.
+    """
+    Return *url* if it is https, otherwise raise.
 
     Args:
         url: Candidate URL.
@@ -119,7 +120,8 @@ def _candidate_binaries() -> list[Path]:
 
 
 def _codeql_works(path: Path) -> bool:
-    """Return True if *path* is a CodeQL CLI that can actually start.
+    """
+    Return True if *path* is a CodeQL CLI that can actually start.
 
     A partial extract leaves ``codeql.exe`` on disk without its bundled JRE,
     and ``codeql version`` then fails with a missing ``java.exe``.
@@ -150,7 +152,8 @@ def _codeql_cmd(codeql: Path, *args: str) -> list[str]:
 
 
 def _run(codeql: Path, *args: str, check: bool = True, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-    """Run a CodeQL command with the repo as cwd.
+    """
+    Run a CodeQL command with the repo as cwd.
 
     Args:
         codeql: Path to the CLI executable. *args: Arguments following the executable.
@@ -185,7 +188,8 @@ def _platform_bundle_name() -> str:
 
 
 def _latest_bundle_asset() -> tuple[str, str]:
-    """Return ``(tag, download_url)`` for the current CodeQL-action bundle.
+    """
+    Return ``(tag, download_url)`` for the current CodeQL-action bundle.
 
     Prefers ``gh`` so an authenticated GitHub CLI session is used; urllib is the fallback when ``gh`` is not
     installed.
@@ -256,7 +260,8 @@ def _add_to_user_path(directory: Path) -> None:
 
 
 def _extract_bundle(archive: Path, dest: Path) -> Path:
-    """Extract the CodeQL bundle and return the directory that contains ``codeql``.
+    """
+    Extract the CodeQL bundle and return the directory that contains ``codeql``.
 
     Args:
         archive: Downloaded ``.tar.gz``.
@@ -305,7 +310,8 @@ def _download_bundle(tag: str, url: str, archive: Path) -> None:
 
 
 def install_codeql(*, force: bool = False) -> Path:
-    """Download the official CodeQL bundle and put the CLI on PATH.
+    """
+    Download the official CodeQL bundle and put the CLI on PATH.
 
     Args:
         force: Re-download and replace an existing install.
@@ -347,7 +353,8 @@ def install_codeql(*, force: bool = False) -> Path:
 
 
 def _source_stamp(languages: tuple[str, ...], mode: str, extra: str) -> str:
-    """Hash the analysed tree plus the analysis mode, so reuse is safe.
+    """
+    Hash the analysed tree plus the analysis mode, so reuse is safe.
 
     Args:
         languages: Languages that will be extracted.
@@ -389,7 +396,8 @@ def _write_stamp(stamp: str, mode: str, languages: tuple[str, ...]) -> None:
 
 
 def _yaml_finalised(text: str) -> bool:
-    """Return True if CodeQL YAML records a finished extract.
+    """
+    Return True if CodeQL YAML records a finished extract.
 
     A failed JavaScript/Actions extract still writes ``codeql-database.yml`` with ``finalised: false``.
 
@@ -410,7 +418,8 @@ def _result_level(result: dict, rules: dict) -> str:
 
 
 def load_triaged(path: Path) -> dict[TriageKey, dict]:
-    """Read the triaged-findings file.
+    """
+    Read the triaged-findings file.
 
     Args:
         path: JSON list of ``{rule, path, fingerprint, language, reason}`` objects.
@@ -432,7 +441,8 @@ def load_triaged(path: Path) -> dict[TriageKey, dict]:
 
 
 def stale_triaged(triaged: dict[TriageKey, dict], matched: set[TriageKey], *, languages: tuple[str, ...]) -> list[dict]:
-    """Entries for an analysed language that no finding matched: the code moved on, so the verdict should go.
+    """
+    Entries for an analysed language that no finding matched: the code moved on, so the verdict should go.
 
     Args:
         triaged: Every triaged entry.
@@ -452,7 +462,8 @@ def _print_sarif(
     triaged: dict[TriageKey, dict] | None = None,
     matched: set[TriageKey] | None = None,
 ) -> int:
-    """Print findings from a SARIF file and return how many were error/warning.
+    """
+    Print findings from a SARIF file and return how many were error/warning.
 
     Default output is a per-rule count plus each error/warning.
 
@@ -518,7 +529,8 @@ def _print_sarif(
 
 
 def _suite_args(language: str, mode: str, all_queries: bool) -> list[str]:
-    """Return the query-pack arguments for one language.
+    """
+    Return the query-pack arguments for one language.
 
     Args:
         language: CodeQL language id (``python``, ``javascript``, ``actions``).
@@ -549,7 +561,8 @@ def _analyze_language(
     triaged: dict[TriageKey, dict] | None = None,
     matched: set[TriageKey] | None = None,
 ) -> int:
-    """Analyse one language database and print its findings.
+    """
+    Analyse one language database and print its findings.
 
     Args:
         codeql: CLI executable.
@@ -610,7 +623,8 @@ def _database_ready(language: str) -> bool:
 
 
 def _node_bindir() -> Path | None:
-    """Return the directory containing a Node.js executable, if any.
+    """
+    Return the directory containing a Node.js executable, if any.
 
     The JavaScript/TypeScript extractor (also used for GitHub Actions) requires ``node`` on PATH."""
     which = shutil.which("node")
@@ -640,7 +654,8 @@ def _extractor_env() -> dict[str, str]:
 
 
 def create_databases(codeql: Path, languages: tuple[str, ...], config: Path, *, rebuild: bool = False) -> None:
-    """(Re)build per-language databases under ``.codeql/db``.
+    """
+    (Re)build per-language databases under ``.codeql/db``.
 
     Databases are created one language at a time so an extractor crash in JavaScript (which the Actions
     extractor also uses) does not discard a finished Python database.
@@ -693,7 +708,8 @@ def create_databases(codeql: Path, languages: tuple[str, ...], config: Path, *, 
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse CLI arguments.
+    """
+    Parse CLI arguments.
 
     Args:
         argv: Argument list without the program name.
@@ -735,7 +751,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Install and/or run CodeQL.
+    """
+    Install and/or run CodeQL.
 
     Args:
         argv: Argument list without the program name.

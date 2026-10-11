@@ -1,4 +1,5 @@
-"""Consensus models - the wiki-data-completion game.
+"""
+Consensus models - the wiki-data-completion game.
 Each round shows one player a single missing/unconfirmed piece of data about a ``Wiki`` they've visited-pinned (a name, a description, an alias, a photo's coordinates) and the player supplies it, applied to the wiki immediately - see ``services.consensus.fields`` for the per-field-kind registry that drives round generation and answer application.
 Points/leveling/trust live on a Consensus-only per-profile row (``ConsensusProfile``), independent of SpotGuessr/Trivia's Glicko-2 ratings - see ``services.consensus.points``/``trust`` for the formulas.
 """
@@ -40,7 +41,8 @@ from urbanlens.dashboard.models.consensus.queryset import (
 
 
 class ConsensusFieldKind(abstract.TextChoices):
-    """Which piece of Wiki/Image data a round is about.
+    """
+    Which piece of Wiki/Image data a round is about.
 
     See ``services.consensus.fields``'s ``ConsensusFieldStrategy`` registry -
     this is the registry's key, the single place a new field kind is wired
@@ -56,7 +58,8 @@ class ConsensusFieldKind(abstract.TextChoices):
 
 
 class ConsensusSessionStatus(abstract.TextChoices):
-    """Lifecycle of a ConsensusSession - mirrors ``GameSessionStatus``.
+    """
+    Lifecycle of a ConsensusSession - mirrors ``GameSessionStatus``.
 
     Solo sessions skip LOBBY entirely (created directly as ACTIVE with one
     JOINED participant). Competitive sessions start in LOBBY and only become
@@ -77,7 +80,8 @@ class ConsensusSessionParticipantStatus(abstract.TextChoices):
 
 
 class ConsensusRoundResolution(abstract.TextChoices):
-    """How a round's answer(s) settled.
+    """
+    How a round's answer(s) settled.
     ``PENDING`` covers both "solo, not yet answered" and "competitive, still collecting answers" - the single source of truth ``get_or_create_round`` reads for "is this round done" (mirrors ``GameRound.revealed_at``, but named/valued so the competitive sub-phases have somewhere to live too).
     """
 
@@ -100,7 +104,8 @@ class ConsensusTentativeStatus(abstract.TextChoices):
 
 
 class ConsensusProfile(abstract.DashboardModel):
-    """A profile's Consensus points, level, and trust standing.
+    """
+    A profile's Consensus points, level, and trust standing.
 
     Attributes:
         total_points: Lifetime point total, from both in-game contributions
@@ -164,7 +169,8 @@ class ConsensusProfile(abstract.DashboardModel):
 
 
 class ConsensusSession(abstract.DashboardModel):
-    """One Consensus playthrough: a fixed round count, solo or competitive.
+    """
+    One Consensus playthrough: a fixed round count, solo or competitive.
     No ``mode`` field - unlike SpotGuessr's fixed-per-session mode, a Consensus round's field kind varies round-to-round (see ``ConsensusRound.field_kind``); solo vs. competitive is expressed the same implicit way ``GameSession`` does it (a single-participant session created directly ACTIVE, vs. a multi-participant session starting in LOBBY).
 
     Attributes:
@@ -214,7 +220,8 @@ class ConsensusSession(abstract.DashboardModel):
 
 
 class ConsensusSessionParticipant(abstract.DashboardModel):
-    """One profile's membership in a ConsensusSession, plus their running score.
+    """
+    One profile's membership in a ConsensusSession, plus their running score.
 
     Attributes:
         status: INVITED until the profile accepts, then JOINED - mirrors
@@ -265,7 +272,8 @@ class ConsensusSessionParticipant(abstract.DashboardModel):
 
 
 class ConsensusRound(abstract.DashboardModel):
-    """One missing piece of data to fill in within a session.
+    """
+    One missing piece of data to fill in within a session.
 
     Attributes:
         session: The session this round belongs to.
@@ -338,7 +346,8 @@ class ConsensusRound(abstract.DashboardModel):
 
 
 class ConsensusAnswer(abstract.DashboardModel):
-    """One participant's answer to one ConsensusRound.
+    """
+    One participant's answer to one ConsensusRound.
 
     Attributes:
         text_value: Raw submitted text, for every field kind except
@@ -389,7 +398,8 @@ class ConsensusAnswer(abstract.DashboardModel):
 
 
 class ConsensusVote(abstract.DashboardModel):
-    """One participant's vote, during a competitive round's disagreement sub-phase.
+    """
+    One participant's vote, during a competitive round's disagreement sub-phase.
 
     ``chosen_answer`` points at one of the round's distinct submitted
     ``ConsensusAnswer`` rows - not necessarily the voter's own.
@@ -429,7 +439,8 @@ class ConsensusVote(abstract.DashboardModel):
 
 
 class ConsensusTentativeAnswer(abstract.DashboardModel):
-    """A wiki-scoped, not-yet-applied candidate answer awaiting cross-session consensus.
+    """
+    A wiki-scoped, not-yet-applied candidate answer awaiting cross-session consensus.
     The Wiki-scoped analog of ``PinSuggestion`` (which is Pin-scoped and doesn't fit here): created when a competitive round's disagreement vote fails to reach consensus (see ``services.consensus.session``'s ``TENTATIVE`` resolution branch).
     ``support_count`` accumulates across separate sessions proposing the same value, so consensus can build up over time without ever touching the wiki until it does.
 
@@ -497,7 +508,8 @@ class ConsensusTentativeAnswer(abstract.DashboardModel):
 
 
 class ConsensusRoundPhoto(abstract.DashboardModel):
-    """Records that ``image`` was captured during ``round`` by ``profile``.
+    """
+    Records that ``image`` was captured during ``round`` by ``profile``.
 
     A thin join, not a new FK on ``Image`` itself - keeps ``Image`` from
     needing to know about Consensus. Used for the round-resolution UI and

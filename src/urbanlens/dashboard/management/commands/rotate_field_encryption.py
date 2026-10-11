@@ -1,4 +1,5 @@
-"""Re-encrypt every ``EncryptedTextField`` column under the currently-active key.
+"""
+Re-encrypt every ``EncryptedTextField`` column under the currently-active key.
 
 Because ``EncryptedTextField`` reads through every key in ``encryption_keys()`` but writes under the
 first, adding a new key alone leaves the database in a mixed state that works but still depends on
@@ -30,7 +31,8 @@ if TYPE_CHECKING:
 
 
 def _encrypted_columns() -> list[tuple[str, str, str, str]]:
-    """Find every concrete ``EncryptedTextField`` column in the project.
+    """
+    Find every concrete ``EncryptedTextField`` column in the project.
 
     Returns:
         One ``(label, table, pk_column, column)`` tuple per encrypted column, where ``label`` is a
@@ -60,7 +62,8 @@ class Command(BaseCommand):
     help = "Re-encrypt all EncryptedTextField columns under the active field encryption key, so retired keys can be dropped."
 
     def add_arguments(self, parser: Any) -> None:
-        """Register command-line arguments.
+        """
+        Register command-line arguments.
 
         Args:
             parser: The argument parser supplied by Django.
@@ -73,7 +76,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Re-encrypt every discovered column.
+        """
+        Re-encrypt every discovered column.
 
         Args:
             *args: Unused positional arguments. **options: Parsed command-line options.
@@ -134,7 +138,8 @@ class Command(BaseCommand):
             self.stdout.write("Retired keys can now be removed from UL_FIELD_ENCRYPTION_KEY_FALLBACKS.")
 
     def _rotate_column(self, table: str, pk_column: str, column: str, *, label: str, dry_run: bool) -> tuple[int, list[str]]:
-        """Re-encrypt every non-empty value in one column.
+        """
+        Re-encrypt every non-empty value in one column.
 
         Uses a raw cursor rather than the ORM so the stored ciphertext is handled directly - going through
         the model would decrypt on read and re-encrypt on write via the same key set, making the rotation

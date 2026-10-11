@@ -213,7 +213,8 @@ class RedataCidGatewayWireRoundTripTests(SimpleTestCase):
 
 
 class RedataCidGatewayGetPlaceDetailTests(SimpleTestCase):
-    """Tests for ``get_place_detail`` against ``../REData/docs/api-reference.md``'s
+    """
+    Tests for ``get_place_detail`` against ``../REData/docs/api-reference.md``'s
     "GET /places/cid/{cid}/" contract."""
 
     def _gateway(self, session: mock.Mock) -> RedataCidGateway:
@@ -282,7 +283,8 @@ class RedataCidGatewayGetPlaceDetailTests(SimpleTestCase):
 
 
 class RedataCidGatewayDownloadMediaTests(SimpleTestCase):
-    """Tests for ``download_media`` against ``../REData/docs/api-reference.md``'s
+    """
+    Tests for ``download_media`` against ``../REData/docs/api-reference.md``'s
     "GET /places/cid/{cid}/media/{id}/download/" contract."""
 
     def _gateway(self, session: mock.Mock) -> RedataCidGateway:

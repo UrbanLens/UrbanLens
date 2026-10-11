@@ -1,4 +1,5 @@
-"""A Google failure that passes, or one about the site rather than the user, keeps the calendar connection.
+"""
+A Google failure that passes, or one about the site rather than the user, keeps the calendar connection.
 
 Only Google's refusal of the user's grant drops it: ``invalid_grant`` from the token endpoint, a 401 that a fresh token
 does not cure, or a 403 naming a reason that is neither a rate limit, a refusal of the site's Google project, nor a
@@ -384,7 +385,8 @@ class ARefusalOfTheSiteIsNotTheUsersTests(_ExpiredTokenCase):
 
 
 class APushGoogleCannotTakeNowIsNeverGivenUpTests(_ExpiredTokenCase):
-    """Only a refusal of the push's own counts toward ``MAX_CALENDAR_PUSH_ATTEMPTS``.
+    """
+    Only a refusal of the push's own counts toward ``MAX_CALENDAR_PUSH_ATTEMPTS``.
 
     A push that would clear a hidden location must not be dropped because Google failed, rate-limited or refused the
     site for an hour. Such a push waits for the sweep, bounded only by ``MAX_OWED_CALENDAR_WRITE_AGE``.

@@ -1,4 +1,5 @@
-"""Business logic for group chats.
+"""
+Business logic for group chats.
 Live events are fanned out to each member's existing per-profile direct-message channel group (``direct_message_group_name``), so group chats need no new socket routes - every open tab of every member already listens there."""
 
 from __future__ import annotations
@@ -138,7 +139,8 @@ def group_member_limit() -> int:
 
 
 def _check_membership_room(profiles: Iterable[Profile]) -> None:
-    """Refuse when any of *profiles* already holds the most active groups a profile may.
+    """
+    Refuse when any of *profiles* already holds the most active groups a profile may.
 
     Args:
         profiles: Profiles about to gain a membership.
@@ -173,7 +175,8 @@ def _open_thread_cache_key(profile_id: int) -> str:
 
 
 def mark_group_thread_open(profile_id: int, group_id: int) -> None:
-    """Record that `profile_id`'s client currently has this group thread open.
+    """
+    Record that `profile_id`'s client currently has this group thread open.
 
     Args:
         profile_id: PK of the profile viewing the thread.
@@ -183,7 +186,8 @@ def mark_group_thread_open(profile_id: int, group_id: int) -> None:
 
 
 def is_group_thread_open(profile_id: int, group_id: int) -> bool:
-    """Return True if `profile_id` currently has this group thread open.
+    """
+    Return True if `profile_id` currently has this group thread open.
 
     Args:
         profile_id: PK of the profile who would be viewing the thread.
@@ -199,7 +203,8 @@ def is_group_thread_open(profile_id: int, group_id: int) -> bool:
 
 
 def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> GroupChat:
-    """Create a group chat with `creator` plus `members`.
+    """
+    Create a group chat with `creator` plus `members`.
 
     Args:
         creator: The profile creating (and thereafter managing) the group.
@@ -255,7 +260,8 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
 
 
 def _suggest_connections_among_new_members(people: list[Profile]) -> None:
-    """Soft-introduce every pair in ``people`` who isn't already connected.
+    """
+    Soft-introduce every pair in ``people`` who isn't already connected.
     Both sides of a pair must allow friend recommendations (see ``services.social.connections.recommendable_strangers``) - never presumes on anyone's behalf, just makes an already-opted-in connection discoverable.
 
     Args:
@@ -273,7 +279,8 @@ def _suggest_connections_among_new_members(people: list[Profile]) -> None:
 
 
 def _suggest_connections_for_new_member(new_member: Profile, existing_members: list[Profile]) -> None:
-    """Soft-introduce a newly added member to existing members they aren't friends with.
+    """
+    Soft-introduce a newly added member to existing members they aren't friends with.
 
     Args:
         new_member: The profile that was just added to the group.
@@ -286,7 +293,8 @@ def _suggest_connections_for_new_member(new_member: Profile, existing_members: l
 
 
 def rename_group_chat(group: GroupChat, actor: Profile, name: str) -> GroupChat:
-    """Rename `group` - any active member may do this.
+    """
+    Rename `group` - any active member may do this.
 
     Args:
         group: The group to rename.
@@ -315,7 +323,8 @@ def rename_group_chat(group: GroupChat, actor: Profile, name: str) -> GroupChat:
 
 
 def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) -> list[GroupChatMembership]:
-    """Add `members` to `group` - only the creator may do this.
+    """
+    Add `members` to `group` - only the creator may do this.
 
     Args:
         group: The group being extended.
@@ -362,7 +371,8 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
 
 
 def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> None:
-    """End `target`'s membership in `group`.
+    """
+    End `target`'s membership in `group`.
     Anyone may remove themselves (leave); only the creator may remove someone else.
 
     Args:
@@ -390,7 +400,8 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
 
 
 def visible_memberships(group: GroupChat, viewer: Profile, *, blocks: SharedSpaceBlocks | None = None) -> list[GroupChatMembership]:
-    """The group's active memberships *viewer* may see, oldest first.
+    """
+    The group's active memberships *viewer* may see, oldest first.
 
     Anyone in a block with the viewer is left out; see ``models.friendship.blocks``.
 
@@ -410,7 +421,8 @@ def visible_memberships(group: GroupChat, viewer: Profile, *, blocks: SharedSpac
 
 
 def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None, has_share: bool | None = None, sender_identity: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Serialize a group message into the JSON payload pushed over the WebSocket.
+    """
+    Serialize a group message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
@@ -446,7 +458,8 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
 
 
 def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_profile_ids: list[int] | None = None, exclude_profile_ids: Iterable[int] = ()) -> None:
-    """Push `payload` to every active member's live sessions after commit.
+    """
+    Push `payload` to every active member's live sessions after commit.
     Best-effort: a channel-layer failure is logged, never raised.
 
     Args:
@@ -466,7 +479,8 @@ def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_p
 
 
 def _notify_group_event(group: GroupChat, recipient: Profile, text: str) -> None:
-    """Raise an on-site notification about a group membership event.
+    """
+    Raise an on-site notification about a group membership event.
 
     Args:
         group: The group the event concerns.
@@ -494,7 +508,8 @@ def _notify_group_event(group: GroupChat, recipient: Profile, text: str) -> None
 
 
 def _notify_group_message(message: GroupMessage) -> None:
-    """Raise on-site notifications for a new group message.
+    """
+    Raise on-site notifications for a new group message.
 
     Args:
         message: The freshly created message.
@@ -599,7 +614,8 @@ def create_group_message(
     client_uuid: UUID | None = None,
     defer_broadcast: bool = False,
 ) -> GroupMessage:
-    """Validate, persist, broadcast, and notify for one new group message.
+    """
+    Validate, persist, broadcast, and notify for one new group message.
 
     Args:
         sender: The sending profile (must be an active member).
@@ -705,7 +721,8 @@ def create_group_message(
 
 
 def broadcast_group_message(message: GroupMessage) -> None:
-    """Push `message` to every active member's live sessions now.
+    """
+    Push `message` to every active member's live sessions now.
 
     Args:
         message: The message to broadcast."""
@@ -733,7 +750,8 @@ def broadcast_group_message(message: GroupMessage) -> None:
 
 
 def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
-    """Delete `message` for everyone - only the sender may do this.
+    """
+    Delete `message` for everyone - only the sender may do this.
 
     Args:
         message: The message to delete.
@@ -762,7 +780,8 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
 
 
 def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -> str:
-    """Add or remove `profile`'s reaction of `emoji` on one group message.
+    """
+    Add or remove `profile`'s reaction of `emoji` on one group message.
 
     Args:
         profile: The reacting profile - must be an active member of the group.
@@ -819,7 +838,8 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
 
 
 def set_group_muted(membership: GroupChatMembership, *, muted: bool) -> bool:
-    """Put one member's group mute flag into the requested state, idempotently.
+    """
+    Put one member's group mute flag into the requested state, idempotently.
     Declarative rather than a toggle for the same reason as ``services.messaging.direct_messages.set_conversation_muted``: a retried request on a flaky link must not invert the state its first, unacknowledged attempt already applied.
 
     Args:
@@ -837,7 +857,8 @@ def set_group_muted(membership: GroupChatMembership, *, muted: bool) -> bool:
 
 
 def _revoke_pin_share(pin_share) -> None:
-    """Reject a still-pending PinShare when its group message is deleted.
+    """
+    Reject a still-pending PinShare when its group message is deleted.
 
     Args:
         pin_share: The PinShare attached to the deleted message.
@@ -850,7 +871,8 @@ def _revoke_pin_share(pin_share) -> None:
 
 
 def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body: str, *, client_uuid: UUID | None = None) -> GroupMessage:
-    """Share `pin` into `group` - one full PinShare per member, plus the chat message.
+    """
+    Share `pin` into `group` - one full PinShare per member, plus the chat message.
 
     Args:
         sender: The sharing profile (must own the pin and be an active member).
@@ -897,7 +919,8 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
 
 
 def hidden_by_block(message: GroupMessage, viewer: Profile) -> bool:
-    """Whether a block between *viewer* and the message's sender hides *message* from them.
+    """
+    Whether a block between *viewer* and the message's sender hides *message* from them.
 
     Args:
         message: A message in a group *viewer* belongs to.
@@ -910,7 +933,8 @@ def hidden_by_block(message: GroupMessage, viewer: Profile) -> bool:
 
 
 def group_thread_page(membership: GroupChatMembership, *, before_id: int | None = None, limit: int = GROUP_THREAD_PAGE_SIZE, blocks: SharedSpaceBlocks | None = None) -> tuple[list[GroupMessage], bool]:
-    """Return one page of a group thread, mirroring ``direct_messages.thread_page``.
+    """
+    Return one page of a group thread, mirroring ``direct_messages.thread_page``.
 
     Args:
         membership: The viewer's active membership (scopes visibility).
@@ -935,7 +959,8 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
 
 
 def group_inbox_rows(profile: Profile, *, only_unread: bool = False) -> QuerySet[GroupChatMembership]:
-    """The profile's active group memberships with each group's inbox summary annotated, newest activity first.
+    """
+    The profile's active group memberships with each group's inbox summary annotated, newest activity first.
 
     Each figure is a correlated subquery scoped to that membership's own join time, so the query has one
     shape however many groups the profile belongs to.
@@ -973,7 +998,8 @@ GROUP_INBOX_FIELDS = ("group_id", "muted", "last_id", "last_activity", "unread",
 
 
 def build_group_conversations(profile: Profile, rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Inbox dicts for :func:`group_inbox_rows` rows, in the given order.
+    """
+    Inbox dicts for :func:`group_inbox_rows` rows, in the given order.
 
     Args:
         profile: The viewer.
@@ -1019,7 +1045,8 @@ def build_group_conversations(profile: Profile, rows: Sequence[dict[str, Any]]) 
 
 
 def group_conversations_for(profile: Profile, *, only_unread: bool = False) -> list[dict[str, Any]]:
-    """Return the profile's group conversations, most recently active first.
+    """
+    Return the profile's group conversations, most recently active first.
 
     Args:
         profile: The profile whose group inbox to build.
@@ -1031,7 +1058,8 @@ def group_conversations_for(profile: Profile, *, only_unread: bool = False) -> l
 
 
 def unread_group_conversation_count(profile: Profile) -> int:
-    """Count the profile's groups with at least one unread message.
+    """
+    Count the profile's groups with at least one unread message.
 
     Args:
         profile: The member profile.
@@ -1052,7 +1080,8 @@ def unread_group_conversation_count(profile: Profile) -> int:
 
 
 def group_e2ee_ready(group: GroupChat) -> bool:
-    """Return True when every active member has published a key bundle.
+    """
+    Return True when every active member has published a key bundle.
     Group messages are encrypted iff *all* current members are enrolled - otherwise the group falls back to plaintext (matching the 1:1 opportunistic-encryption rule).
 
     Args:

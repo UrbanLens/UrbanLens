@@ -179,7 +179,8 @@ class TheRedisBackendDistinguishesAnOutageTests(SimpleTestCase):
             backend.peek_int("k")
 
     def test_a_full_dragonfly_refuses_a_script_without_a_bare_protocol_error(self) -> None:
-        """Dragonfly turns a script's write away as a generic script error, not an ``OOM`` reply.
+        """
+        Dragonfly turns a script's write away as a generic script error, not an ``OOM`` reply.
 
         The wording is Dragonfly v1.40.2's, filled to its ``maxmemory``. redis-py
         raises it as a plain `ResponseError`, which escaped every caller of the

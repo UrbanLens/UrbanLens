@@ -1,4 +1,5 @@
-"""Tests for services.apis.locations.weather_resolution - the REData-vs-direct
+"""
+Tests for services.apis.locations.weather_resolution - the REData-vs-direct
 provider choice for forecast slots and sun times (mirrors cid_resolution.py's/
 places_resolution.py's precedent for the same kind of decision).
 """

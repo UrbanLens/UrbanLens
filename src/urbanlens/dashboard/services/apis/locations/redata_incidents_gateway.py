@@ -53,7 +53,8 @@ class RedataIncidentsGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch reported police incidents near a coordinate.
+        """
+        Fetch reported police incidents near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

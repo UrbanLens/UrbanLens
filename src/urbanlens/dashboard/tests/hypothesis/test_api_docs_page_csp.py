@@ -1,4 +1,5 @@
-"""The external API's interactive documentation runs under the site's Content-Security-Policy (P312).
+"""
+The external API's interactive documentation runs under the site's Content-Security-Policy (P312).
 
 The page loaded Swagger UI from ``cdn.jsdelivr.net/npm/swagger-ui-dist@latest`` and started it with an inline script.
 ``script-src`` admits neither, so the browser blocked both and the page rendered an empty body.

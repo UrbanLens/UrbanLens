@@ -6,7 +6,8 @@ import json
 
 
 def parse_json_answer(answer: str) -> dict | None:
-    """Parse one JSON object out of a model's answer.
+    """
+    Parse one JSON object out of a model's answer.
 
     Args:
         answer: The raw text returned by the model.

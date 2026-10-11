@@ -566,7 +566,8 @@ class MatchingVocabularyCachingTests(TestCase):
         self.assertTrue(refreshed[b.pk])
 
     def test_a_newly_synced_tag_is_visible_on_the_very_next_call(self):
-        """PlaceExternalTag.sync_for_source registers new vocabulary outside this module's three
+        """
+        PlaceExternalTag.sync_for_source registers new vocabulary outside this module's three
         admin functions (see ExternalTagVocabularyEntry's docstring) - it must invalidate too."""
         place = baker.make(Place)
         # Warm the cache while the vocabulary table is still empty.

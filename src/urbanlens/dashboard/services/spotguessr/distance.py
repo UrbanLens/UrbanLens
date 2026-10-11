@@ -26,7 +26,8 @@ def location_boundary_polygon(location: Location) -> GEOSGeometry | None:
 
 
 def geodesic_distance_meters(anchor_location: Location, geometry_a: GEOSGeometry, geometry_b: GEOSGeometry) -> float:
-    """Geodesic distance in meters between two geometries (0 when one contains/touches the other).
+    """
+    Geodesic distance in meters between two geometries (0 when one contains/touches the other).
     ``anchor_location`` only supplies the single database row the annotation runs against - both geometries are passed as literal values, never read from a field, so this works for any point/point, point/polygon, or polygon/polygon pair."""
     result = (
         Location.objects.filter(pk=anchor_location.pk)

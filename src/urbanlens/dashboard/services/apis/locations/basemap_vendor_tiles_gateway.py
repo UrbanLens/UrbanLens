@@ -22,7 +22,8 @@ class BasemapVendorTilesGateway(Gateway):
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
-        """Record the vendor and service, never the tile coordinate.
+        """
+        Record the vendor and service, never the tile coordinate.
 
         Which tiles a viewer asked for is which places they were looking at, so the coordinate must
         not reach ``ApiCallLog`` any more than it reaches the vendor's own logs with a Referer.
@@ -44,7 +45,8 @@ class BasemapVendorTilesGateway(Gateway):
         return f"{parsed.scheme}://{parsed.netloc}/"
 
     def download_tile(self, layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
-        """Fetch one basemap tile from its vendor.
+        """
+        Fetch one basemap tile from its vendor.
 
         Args:
             layer: Layer id from REData's catalogue.

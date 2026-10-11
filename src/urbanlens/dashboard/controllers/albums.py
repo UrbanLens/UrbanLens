@@ -61,7 +61,8 @@ _MAX_ALBUM_NAME_LENGTH = column_max_length(Album, "name")
 
 
 def _panel_owner(request: HttpRequest, owner: Pin | Wiki | Profile) -> Pin | Wiki | Profile:
-    """The pin whose Photos tab we should re-render after a mutation.
+    """
+    The pin whose Photos tab we should re-render after a mutation.
 
     Album action URLs use the album's own pin slug.
     """
@@ -122,7 +123,8 @@ _PHOTOS_FILTER_LOOSE = "loose"
 
 
 def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None, *, vault: bool = False) -> tuple[Pin | Wiki | Profile, QuerySet[Album]]:
-    """Resolve the Album owner (Pin, Wiki, or the requesting profile's Vault) from URL kwargs.
+    """
+    Resolve the Album owner (Pin, Wiki, or the requesting profile's Vault) from URL kwargs.
 
     A Vault route carries no owner slug at all - there is exactly one Vault per profile, resolved from
     the request itself rather than a URL segment.
@@ -157,7 +159,8 @@ def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_sl
 
 
 def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | None, album_slug: str, *, vault: bool = False) -> tuple[Pin | Wiki | Profile, QuerySet[Album], Album]:
-    """Resolve a single owner-scoped Album, 404ing if it belongs to someone else.
+    """
+    Resolve a single owner-scoped Album, 404ing if it belongs to someone else.
 
     Args:
         request: The current HttpRequest.
@@ -174,7 +177,8 @@ def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | 
 
 
 def _owner_slug(owner: Pin | Wiki) -> str:
-    """Return the slug used in *owner*'s own URL namespace.
+    """
+    Return the slug used in *owner*'s own URL namespace.
 
     ``slug`` is nullable on the model, but cannot be absent here: both owner kinds were fetched *by*
     this slug in :func:`_resolve_album_owner`, and both mint one on save.
@@ -204,7 +208,8 @@ def _url_prefix(owner: Pin | Wiki | Profile) -> str:
 
 
 def _owner_url_args(owner: Pin | Wiki | Profile) -> list[str]:
-    """Return the positional ``reverse()`` args identifying *owner* in its own URL namespace.
+    """
+    Return the positional ``reverse()`` args identifying *owner* in its own URL namespace.
 
     A vault (Profile-owned) album has no owner-slug segment - there is one implicit album space per
     user, resolved from the request - so this is empty for a Profile and ``[_owner_slug(owner)]`` for a
@@ -225,7 +230,8 @@ def _album_row(
     date_start=None,
     date_end=None,
 ) -> dict:
-    """Build one album's template payload, with its action URLs pre-reversed.
+    """
+    Build one album's template payload, with its action URLs pre-reversed.
 
     URLs are built here (by positional ``args``) rather than in-template because ``{% url %}`` can't
     take a dynamic view name plus dynamic kwargs - same reasoning as
@@ -270,7 +276,8 @@ def _album_row(
 
 
 def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
-    """Describe *images* for the album map layer.
+    """
+    Describe *images* for the album map layer.
 
     Sending ``movable`` from here keeps the map from offering a drag that the server would then reject.
 
@@ -301,7 +308,8 @@ def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
 
 
 def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Profile) -> dict:
-    """Assemble the single-album view's context.
+    """
+    Assemble the single-album view's context.
 
     Args:
         owner: The Pin, Wiki, or Profile the album belongs to.
@@ -359,7 +367,8 @@ def _album_detail_context(owner: Pin | Wiki | Profile, album: Album, viewer: Pro
 
 
 def _photos_context(owner: Pin | Wiki | Profile, viewer: Profile | None, *, include_children: bool = False, photos_filter: str = _PHOTOS_FILTER_ALL) -> dict:
-    """Assemble the Photos subpage context: albums first, then photos.
+    """
+    Assemble the Photos subpage context: albums first, then photos.
 
     A pin lists every one of its photos, filed or not, under "Your photos" (``photos_filter`` narrows that
     to the unfiled ones), and loads its public-source photos as a section of their own. A wiki lists only
@@ -455,7 +464,8 @@ def _mine_page(request: HttpRequest, listing: list[Pin | Wiki | Profile], profil
 
 
 def _external_response(request: HttpRequest, pin: Pin, listing: list[Pin | Wiki | Profile], profile: Profile, include_children: bool) -> HttpResponse:
-    """A pin's public-source photos: one JSON page (``?external=1``), or the Photos tab section (``?external_section=1``).
+    """
+    A pin's public-source photos: one JSON page (``?external=1``), or the Photos tab section (``?external_section=1``).
 
     While a provider is still fetching, the section polls with the photo count it shows (``known``). A poll that finds
     the same count answers with the status note and the next poll only, leaving the grid and its loading tiles as they
@@ -546,7 +556,8 @@ def _album_list_rows(
     include_children: bool,
     list_url: str,
 ) -> list[dict]:
-    """Album-card payloads for one page of the Photos tab's album grid.
+    """
+    Album-card payloads for one page of the Photos tab's album grid.
 
     Args:
         owner: The Pin, Wiki, or Profile whose Photos tab this is.
@@ -601,7 +612,8 @@ def _album_picker_rows(
     viewer: Profile,
     include_children: bool,
 ) -> HttpResponse:
-    """One page of the add/move dialog's albums, narrowed by ``?q=``, as ``<li>`` rows.
+    """
+    One page of the add/move dialog's albums, narrowed by ``?q=``, as ``<li>`` rows.
 
     Args:
         request: HttpRequest with optional ``q``, ``exclude`` (one of *owner*'s album slugs), and ``offset``.
@@ -646,7 +658,8 @@ def _album_picker_rows(
 
 
 def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
-    """URLs the album UI needs for delete / send-to-wiki / share, when they exist.
+    """
+    URLs the album UI needs for delete / send-to-wiki / share, when they exist.
 
     Three separate questions, and P61 is what came of answering them with one URL: a vault album got no
     bulk endpoint at all, so its Delete button rendered hidden forever alongside the two that genuinely
@@ -675,7 +688,8 @@ def _attach_owner_action_urls(ctx: dict, owner: Pin | Wiki | Profile) -> None:
 
 
 def _album_bulk_actions(*, inside_album: bool) -> list[dict]:
-    """Buttons for the shared ``ul-bulk-bar`` on the Photos tab.
+    """
+    Buttons for the shared ``ul-bulk-bar`` on the Photos tab.
 
     The bar only shows a button when the client supplies a callback for its ``action`` key, so list and
     detail can share this list and hide move/remove on the album list by omitting those callbacks.
@@ -701,7 +715,8 @@ def _album_bulk_actions(*, inside_album: bool) -> list[dict]:
 
 
 class AlbumPhotosView(LoginRequiredMixin, View):
-    """The Photos subpage body: albums first, then photos not in any album.
+    """
+    The Photos subpage body: albums first, then photos not in any album.
 
     GET /map/pin/<pin_slug>/albums/
     GET /location/<location_slug>/wiki/albums/
@@ -713,7 +728,8 @@ class AlbumPhotosView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
-        """Render the Photos panel, or one album when ``?album=`` is given.
+        """
+        Render the Photos panel, or one album when ``?album=`` is given.
 
         An ``album`` slug that doesn't resolve falls back to the list rather than 404ing - a stale bookmark
         to a since-deleted album should still land somewhere useful.
@@ -780,7 +796,8 @@ class AlbumPhotosView(LoginRequiredMixin, View):
         return _render_photos_panel(request, owner, profile)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
-        """Create a new album for this pin, wiki, or Vault.
+        """
+        Create a new album for this pin, wiki, or Vault.
 
         Args:
             request: HttpRequest, with ``name``/``description``/``kind`` fields.
@@ -816,7 +833,8 @@ class AlbumPhotosView(LoginRequiredMixin, View):
 
 
 class AlbumDetailView(LoginRequiredMixin, View):
-    """One album's own photo grid.
+    """
+    One album's own photo grid.
 
     GET /map/pin/<pin_slug>/albums/<album_slug>/
     GET /location/<location_slug>/wiki/albums/<album_slug>/
@@ -824,7 +842,8 @@ class AlbumDetailView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
-        """Render one album's contents.
+        """
+        Render one album's contents.
 
         Args:
             request: HttpRequest.
@@ -853,7 +872,8 @@ class AlbumDetailView(LoginRequiredMixin, View):
 
 
 class AlbumEditView(LoginRequiredMixin, View):
-    """Rename an album / change its blurb, kind, or cover photo.
+    """
+    Rename an album / change its blurb, kind, or cover photo.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/edit/
     POST /location/<location_slug>/wiki/albums/<album_slug>/edit/
@@ -861,7 +881,8 @@ class AlbumEditView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
-        """Apply an album edit.
+        """
+        Apply an album edit.
 
         Only fields actually present in the POST (or JSON body) are touched, so a partial form can't blank
         out the rest.
@@ -915,7 +936,8 @@ class AlbumEditView(LoginRequiredMixin, View):
 
 
 class AlbumDeleteView(LoginRequiredMixin, View):
-    """Delete an album. Its photos survive and fall back to the loose section.
+    """
+    Delete an album. Its photos survive and fall back to the loose section.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/delete/
     POST /location/<location_slug>/wiki/albums/<album_slug>/delete/
@@ -923,7 +945,8 @@ class AlbumDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> HttpResponse:
-        """Delete the album.
+        """
+        Delete the album.
 
         Args:
             request: HttpRequest.
@@ -942,7 +965,8 @@ class AlbumDeleteView(LoginRequiredMixin, View):
 
 
 class AlbumAddPhotosView(LoginRequiredMixin, View):
-    """Add photos - already-local ones, or an external gallery item - to an album.
+    """
+    Add photos - already-local ones, or an external gallery item - to an album.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/add/
     POST /location/<location_slug>/wiki/albums/<album_slug>/add/
@@ -952,7 +976,8 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
-        """Add photos to the album.
+        """
+        Add photos to the album.
 
         Args:
             request: HttpRequest with a JSON body.
@@ -1007,7 +1032,8 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
         return JsonResponse(response)
 
     def _add_external(self, owner: Pin | Wiki, album: Album, profile: Profile, media: dict) -> dict:
-        """Vote an external gallery item relevant, then cache and file it.
+        """
+        Vote an external gallery item relevant, then cache and file it.
 
         If the broker is unreachable the download falls back to running inline rather than silently never
         happening.
@@ -1066,7 +1092,8 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
 
 
 class AlbumUploadView(LoginRequiredMixin, View):
-    """Upload a photo straight into an album.
+    """
+    Upload a photo straight into an album.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/upload/
     POST /location/<location_slug>/wiki/albums/<album_slug>/upload/
@@ -1079,7 +1106,8 @@ class AlbumUploadView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
-        """Store the uploaded photo and file it in this album.
+        """
+        Store the uploaded photo and file it in this album.
 
         Args:
             request: HttpRequest carrying the multipart ``image`` file.
@@ -1135,7 +1163,8 @@ class AlbumUploadView(LoginRequiredMixin, View):
 
 
 class AlbumRemovePhotosView(LoginRequiredMixin, View):
-    """Remove photos from an album without deleting the photos themselves.
+    """
+    Remove photos from an album without deleting the photos themselves.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/remove/
     POST /location/<location_slug>/wiki/albums/<album_slug>/remove/
@@ -1143,7 +1172,8 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
-        """Remove photos from the album.
+        """
+        Remove photos from the album.
 
         Args:
             request: HttpRequest with a JSON ``image_ids`` list.
@@ -1169,7 +1199,8 @@ class AlbumRemovePhotosView(LoginRequiredMixin, View):
 
 
 class AlbumItemsView(LoginRequiredMixin, View):
-    """Paginated JSON of one album's photos, for the virtualized grid.
+    """
+    Paginated JSON of one album's photos, for the virtualized grid.
 
     GET /map/pin/<pin_slug>/albums/<album_slug>/items/
     GET /location/<location_slug>/wiki/albums/<album_slug>/items/
@@ -1177,7 +1208,8 @@ class AlbumItemsView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
-        """Return one page of this album's viewer-visible photos.
+        """
+        Return one page of this album's viewer-visible photos.
 
         Args:
             request: HttpRequest with ``offset``/``limit`` query params.
@@ -1204,7 +1236,8 @@ class AlbumItemsView(LoginRequiredMixin, View):
 
 
 class AlbumEligibleImagesView(LoginRequiredMixin, View):
-    """Paginated JSON of the photos this album could still take, for its picker.
+    """
+    Paginated JSON of the photos this album could still take, for its picker.
 
     GET /map/pin/<pin_slug>/albums/<album_slug>/eligible/
     GET /location/<location_slug>/wiki/albums/<album_slug>/eligible/
@@ -1216,7 +1249,8 @@ class AlbumEligibleImagesView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
-        """Return one page of photos that may still be added to this album.
+        """
+        Return one page of photos that may still be added to this album.
 
         Args:
             request: HttpRequest with ``offset``/``limit`` query params.
@@ -1246,7 +1280,8 @@ class AlbumEligibleImagesView(LoginRequiredMixin, View):
 
 
 class AlbumReorderView(LoginRequiredMixin, View):
-    """Persist a drag-and-drop reordering of an album's photos.
+    """
+    Persist a drag-and-drop reordering of an album's photos.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/reorder/
     POST /location/<location_slug>/wiki/albums/<album_slug>/reorder/
@@ -1256,7 +1291,8 @@ class AlbumReorderView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None, vault: bool = False) -> JsonResponse:
-        """Apply the new item order.
+        """
+        Apply the new item order.
 
         Args:
             request: HttpRequest with a JSON ``items`` list of AlbumItem ids.
@@ -1283,14 +1319,16 @@ class AlbumReorderView(LoginRequiredMixin, View):
 
 
 class AlbumMoveView(LoginRequiredMixin, View):
-    """Move a pin album onto another pin in the same parent/child tree.
+    """
+    Move a pin album onto another pin in the same parent/child tree.
 
     POST /map/pin/<pin_slug>/albums/<album_slug>/move/
     Body: ``{"pin_slug": "<target>"}``.
     """
 
     def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
-        """Re-parent the album and its photos onto the chosen pin.
+        """
+        Re-parent the album and its photos onto the chosen pin.
 
         Args:
             request: HttpRequest with JSON ``pin_slug``.

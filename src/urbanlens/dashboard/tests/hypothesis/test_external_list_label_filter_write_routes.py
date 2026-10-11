@@ -1,4 +1,5 @@
-"""External API writes on a user's own pin lists, labels and saved filters (P29).
+"""
+External API writes on a user's own pin lists, labels and saved filters (P29).
 
 Each asserts the owner's write lands, that another account's key is answered 404 (or, for a global label, 403) and
 nothing changes, that anonymous and a key without the write scope are refused, and that a malformed body is a 4xx

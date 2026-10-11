@@ -39,7 +39,8 @@ class PinCommentReactionApiTests(TestCase):
         self.comment = baker.make("dashboard.Comment", pin=self.pin, profile=self.profile, text="Note to self")
 
     def _headers(self, raw_key: str | None = None) -> dict:
-        """Bearer-header kwargs for the fixture key, or an explicitly given one.
+        """
+        Bearer-header kwargs for the fixture key, or an explicitly given one.
 
         Args:
             raw_key: A raw key to use instead of the fixture's.
@@ -49,7 +50,8 @@ class PinCommentReactionApiTests(TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, emoji: str, *, comment_id: int | None = None, pin_slug: str | None = None) -> str:
-        """The reaction URL for one emoji on one comment.
+        """
+        The reaction URL for one emoji on one comment.
 
         Args:
             emoji: Percent-encoded emoji for the URL's last segment. comment_id: Comment to address; defaults to the fixture comment. pin_slug: Pin...
@@ -61,7 +63,8 @@ class PinCommentReactionApiTests(TestCase):
         return f"{BASE}/{slug}/comments/{pk}/reactions/{emoji}/"
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
-        """Issue a second key carrying exactly *scopes*.
+        """
+        Issue a second key carrying exactly *scopes*.
 
         Args:
             scopes: Raw scope values to store on the row.
@@ -98,7 +101,8 @@ class PinCommentReactionApiTests(TestCase):
         self.assertFalse(Reaction.objects.filter(comment=self.comment).exists())
 
     def test_comment_on_another_users_pin_is_not_found(self) -> None:
-        """The pin gate is a lookup, so someone else's pin reads as nonexistent.
+        """
+        The pin gate is a lookup, so someone else's pin reads as nonexistent.
 
         Not merely a read leak: without ``pin=`` scoping the caller could write
         a reaction row onto a comment on a stranger's private pin.
@@ -148,7 +152,8 @@ class PinCommentReactionApiTests(TestCase):
 
 
 class ReactionNotificationTests(TestCase):
-    """Reacting to someone's comment must notify them, whichever surface did it.
+    """
+    Reacting to someone's comment must notify them, whichever surface did it.
 
     The regression these guard: the notification lived in the internal HTMX view, so every API reaction was
     silent."""
@@ -164,7 +169,8 @@ class ReactionNotificationTests(TestCase):
         self.comment = baker.make("dashboard.Comment", pin=self.pin, profile=self.author, text="Worth a look")
 
     def _liked_notifications(self) -> int:
-        """How many "reacted to your comment" rows the author has.
+        """
+        How many "reacted to your comment" rows the author has.
 
         Returns:
             The row count.
@@ -180,7 +186,8 @@ class ReactionNotificationTests(TestCase):
         self.assertEqual(self._liked_notifications(), 1)
 
     def test_a_double_tap_that_loses_the_race_is_already_applied_not_a_500(self) -> None:
-        """Two taps read "no reaction yet" together; the second insert hits the unique constraint. It must not raise
+        """
+        Two taps read "no reaction yet" together; the second insert hits the unique constraint. It must not raise
         (a 500 on a double-tap), leave one reaction, and not announce it twice."""
         toggle_reaction(self.reactor, self.comment, "👍")
 
@@ -205,7 +212,8 @@ class ReactionNotificationTests(TestCase):
         self.assertEqual(self._liked_notifications(), 0)
 
     def test_the_authors_delivery_preference_is_respected(self) -> None:
-        """A user who turned "comment liked" off stays off, service path included.
+        """
+        A user who turned "comment liked" off stays off, service path included.
 
         The preference row is created explicitly rather than fetched: it is created lazily in production, and
         the notification helper treats a missing row as "site delivery", so the off case only exists once a row
@@ -219,7 +227,8 @@ class ReactionNotificationTests(TestCase):
         self.assertEqual(self._liked_notifications(), 0)
 
     def test_reacting_through_the_api_notifies_too(self) -> None:
-        """End-to-end: the endpoint inherits the notification from the service.
+        """
+        End-to-end: the endpoint inherits the notification from the service.
 
         Reacting to another profile's comment on a pin needs the reactor to own the pin, so the roles here are
         inverted relative to the rest of this class - the reactor is the pin owner and the author is a guest

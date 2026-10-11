@@ -51,7 +51,8 @@ class PinListUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[PinList]:
-        """Recreate the lists and re-add every member pin that still exists.
+        """
+        Recreate the lists and re-add every member pin that still exists.
 
         Raises:
             UndoExpiredError: If the owning profile was deleted during the retention window, or the list's name has since been reused - ``uq_pin_list_profile_name`` would otherwise surface as an uncaught IntegrityError, the same contract every other handler follows."""

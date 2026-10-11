@@ -1,4 +1,5 @@
-"""External-API routes for the mobile app's wireless device-scanning feature.
+"""
+External-API routes for the mobile app's wireless device-scanning feature.
 
 Two routes only: uploading scan data, and querying which devices are already known nearby.
 Wiring: ``urls.py`` concatenates the ``urlpatterns`` below into the flat ``external_api:`` namespace

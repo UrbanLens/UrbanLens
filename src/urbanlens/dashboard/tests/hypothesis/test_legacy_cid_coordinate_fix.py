@@ -129,7 +129,8 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         return Pin.objects.get(pk=pin.pk)
 
     def _set_cid(self, location: Location, cid: int) -> None:
-        """Link a CID to *location* without the live place-name lookup.
+        """
+        Link a CID to *location* without the live place-name lookup.
 
         Assigning ``location.cid`` goes through ``GooglePlaceService`` with ``fetch_if_missing=True``, which
         calls REData's nearby-places search to name the coordinates - a real network call, so under the test
@@ -340,7 +341,8 @@ class RepointCidToCorrectedLocationTests(TestCase):
         self.assertEqual(Location.objects.by_cid(12345).first().pk, correct.pk)
 
     def test_does_nothing_when_the_legacy_location_no_longer_holds_this_cid(self):
-        """Must not clear a GooglePlace row that legitimately holds a *different* cid - guards
+        """
+        Must not clear a GooglePlace row that legitimately holds a *different* cid - guards
         against a stale/reordered caller repointing a cid that never matched this location."""
         from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import (
             repoint_cid_to_corrected_location,
@@ -429,7 +431,8 @@ class CidRepointOnRepairTests(TestCase):
 
 
 class PreviewNeedsLegacyRepairTests(TestCase):
-    """preview_needs_legacy_repair - the import preview's "don't dedupe this" flag.
+    """
+    preview_needs_legacy_repair - the import preview's "don't dedupe this" flag.
 
     Regression coverage for the bug where a re-import's preview step deselected exactly the pins the legacy
     repair exists to fix: its "already on your map" check compared the preview's own (still S2-guessed)

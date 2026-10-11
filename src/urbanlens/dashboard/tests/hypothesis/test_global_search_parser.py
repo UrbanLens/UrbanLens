@@ -57,7 +57,8 @@ class ParseQueryStructureTests(SimpleTestCase):
         self.assertEqual(trailing.terms, ["abandoned", "mill"])
 
     def test_a_mid_sentence_type_word_is_left_alone(self):
-        """The reason the match is restricted to the ends at all.
+        """
+        The reason the match is restricted to the ends at all.
 
         "visit" and "page" are ordinary English; a match anywhere would turn
         this into a visits-only search over the word "please".

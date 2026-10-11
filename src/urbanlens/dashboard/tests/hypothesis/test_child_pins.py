@@ -1,4 +1,5 @@
-"""Tests for child (sub) pin functionality: merge property retention, the main
+"""
+Tests for child (sub) pin functionality: merge property retention, the main
 map's Child Pins layer, jump-to-pin search coverage, detaching a child pin, the
 pin page's "show child pin details" toggle endpoints, share bundles, and the
 Visited-label propagation to ancestors."""
@@ -41,7 +42,8 @@ _coord_counter = 0
 
 
 def _make_pin(profile, **kwargs) -> Pin:
-    """Create a pin with a real coordinate-bearing Location.
+    """
+    Create a pin with a real coordinate-bearing Location.
 
     Locations are unique per (latitude, longitude), so each generated pin
     gets its own distinct coordinates.
@@ -95,7 +97,8 @@ class MergeRetainsPropertiesTests(TestCase):
 
 
 class MergeRetainsPropertiesPropertyTests(TestCase):
-    """Property-based generalization of MergeRetainsPropertiesTests above.
+    """
+    Property-based generalization of MergeRetainsPropertiesTests above.
 
     PinBulkMergeView.post has no extracted service function to call directly (the reparenting -
     ``source.parent_pin = target; source.save(...)`` - is inline in the view), so this exercises that same
@@ -176,7 +179,8 @@ class MapChildPinsJsonTests(TestCase):
 
 
 class MapSearchExcludesChildPinsTests(TestCase):
-    """POST /map/search/ (the filter-formula search path) must not surface child pins as if they were root pins.
+    """
+    POST /map/search/ (the filter-formula search path) must not surface child pins as if they were root pins.
 
     Unlike every other map-data query, this path built its queryset without ``.root_pins()`` before
     ``map_data_context()`` was called with an explicit (non-None) query - which only applies that filter itself
@@ -333,7 +337,8 @@ class PinPromoteChildrenViewTests(TestCase):
         self.assertEqual(self.child_a.parent_pin_id, self.parent.pk)
 
     def test_child_sharing_a_root_pins_own_location_is_left_in_place(self) -> None:
-        """A root pin being promoted-from isn't deleted, so it keeps occupying its
+        """
+        A root pin being promoted-from isn't deleted, so it keeps occupying its
         own root slot forever - a child at that same Location can't become root
         (there's no parent to move it under instead) and must stay put."""
         root = _make_pin(self.profile, name="Root")
@@ -349,7 +354,8 @@ class PinPromoteChildrenViewTests(TestCase):
         self.assertEqual(response.json()["promoted"], 0)
 
     def test_child_sharing_a_non_root_pins_location_is_still_promoted(self) -> None:
-        """When the pin being promoted-from itself has a parent, a child sharing
+        """
+        When the pin being promoted-from itself has a parent, a child sharing
         its Location can still move to that parent - only *root* pins are
         constrained by Location, and the child isn't becoming one here."""
         same_loc_child = _make_pin(
@@ -411,7 +417,8 @@ class PinSwapWithParentModelTests(TestCase):
             self.grandparent.swap_with_parent()
 
     def test_raises_on_location_conflict_at_grandparent_slot(self) -> None:
-        """Swapping a pin one level under a root pin would leave the old
+        """
+        Swapping a pin one level under a root pin would leave the old
         parent as a second root pin at a Location that already has one."""
         root = _make_pin(self.profile, name="Root")
         conflicting_root = _make_pin(self.profile, name="Conflicting Root")
@@ -422,7 +429,8 @@ class PinSwapWithParentModelTests(TestCase):
         self.assertEqual(sub.parent_pin_id, conflicting_root.pk)
 
     def test_succeeds_despite_unrelated_root_conflict_at_own_location_when_grandparent_exists(self) -> None:
-        """A conflicting root pin at this pin's own Location must not block the swap
+        """
+        A conflicting root pin at this pin's own Location must not block the swap
         when a grandparent exists - this pin never actually needs to become a root
         pin in that case, so the one-root-per-Location constraint doesn't apply."""
         other_root = _make_pin(self.profile, name="Other Root", location=self.child.location)
@@ -560,7 +568,8 @@ class DetailPinJsonChildrenTests(TestCase):
 
 
 class DetailPinCoordinateDedupTests(TestCase):
-    """Detail pins placed near each other must keep distinct coordinates.
+    """
+    Detail pins placed near each other must keep distinct coordinates.
 
     ``Location.objects.get_nearby_or_create``'s default 50m proximity dedup would otherwise snap two nearby
     detail pins (or a detail pin and its own parent) onto the same Location, collapsing their marker coordinates
@@ -669,7 +678,8 @@ class PinShareBundleTests(TestCase):
         self.assertEqual(bundled_pins, {self.child.pk, self.grandchild.pk})
 
     def test_already_pending_child_share_is_not_duplicated(self) -> None:
-        """A child that already has its own pending share to this recipient must be
+        """
+        A child that already has its own pending share to this recipient must be
         skipped by the bundle, not doubled up into a second PinShare row."""
         existing = PinShare.objects.create(
             pin=self.child,
@@ -725,7 +735,8 @@ class PinShareBundleTests(TestCase):
 
 
 class PinShareSelectedChildrenTests(TestCase):
-    """Sharing a specific subset of child pins - the detail page's multi-select
+    """
+    Sharing a specific subset of child pins - the detail page's multi-select
     toolbar's "Share" action - rather than the "share every descendant" checkbox.
     """
 
@@ -763,7 +774,8 @@ class PinShareSelectedChildrenTests(TestCase):
         self.assertEqual(bundled_pins, {self.child_a.pk})
 
     def test_selected_children_take_precedence_over_include_children(self) -> None:
-        """A submit can only ever carry one or the other in practice, but if both are
+        """
+        A submit can only ever carry one or the other in practice, but if both are
         present the explicit selection must win, not silently union with "everything"."""
         self.client.post(
             reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}),

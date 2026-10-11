@@ -25,7 +25,8 @@ _OWN_APP_PREFIX = "urbanlens."
 
 
 def _declared_family(field: FileField) -> tuple[str | None, str | None]:
-    """Resolve the media family a file field writes into.
+    """
+    Resolve the media family a file field writes into.
 
     Args:
         field: The model field to inspect.
@@ -51,7 +52,8 @@ def _declared_family(field: FileField) -> tuple[str | None, str | None]:
 
 @register()
 def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when a file field has no registered media authorizer.
+    """
+    Fail startup when a file field has no registered media authorizer.
 
     Args:
         app_configs: The app configs being checked, or None for all of them.
@@ -98,7 +100,8 @@ def check_media_authorizers(app_configs: Sequence[AppConfig] | None = None, **kw
 
 @register()
 def check_media_origin_cookie_domain(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when a configured media origin cannot issue its cookie.
+    """
+    Fail startup when a configured media origin cannot issue its cookie.
 
     Args:
         app_configs: The app configs being checked, or None for all of them.
@@ -159,7 +162,8 @@ _LOCAL_ONLY_MEDIA_SUBTREES = (
 
 @register()
 def check_object_storage_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when the object-store backend is incomplete or bypasses the media gate.
+    """
+    Fail startup when the object-store backend is incomplete or bypasses the media gate.
 
     Args:
         app_configs: The app configs being checked, or None for all of them.
@@ -236,7 +240,8 @@ _PROVIDER_KEY_SETTINGS = ("anthropic_api_key", "openai_api_key", "cloudflare_ai_
 
 @register()
 def check_provider_keys_are_not_on_the_app_tier(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when a provider key is readable on the app tier instead of ai-inference.
+    """
+    Warn when a provider key is readable on the app tier instead of ai-inference.
 
     Args:
         app_configs: Unused; part of Django's check signature.
@@ -282,7 +287,8 @@ _LOCAL_REDATA_MARKERS = (".dev.", "urbanlens_redata", "redata-", "_redata")
 
 
 def _redata_host_is_local(url: str) -> bool:
-    """Whether *url* points at a local or dev REData instance.
+    """
+    Whether *url* points at a local or dev REData instance.
 
     Args:
         url: The configured ``redata_api_url``.
@@ -311,7 +317,8 @@ def _redata_host_is_local(url: str) -> bool:
 
 @register()
 def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when a dev deployment points at a non-local REData.
+    """
+    Warn when a dev deployment points at a non-local REData.
 
     Args:
         app_configs: Unused; part of Django's check signature.
@@ -348,7 +355,8 @@ def check_dev_is_not_pointed_at_a_real_redata(app_configs: Sequence[AppConfig] |
 
 @register()
 def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when /metrics is enabled without a token or allowlist on production.
+    """
+    Fail startup when /metrics is enabled without a token or allowlist on production.
 
     Args:
         app_configs: The app configs being checked, or None for all of them.
@@ -377,7 +385,8 @@ def check_metrics_endpoint_is_guarded(app_configs: Sequence[AppConfig] | None = 
 
 @register()
 def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Fail startup when Celery settings allow unbounded task requeue.
+    """
+    Fail startup when Celery settings allow unbounded task requeue.
 
     Args:
         app_configs: The app configs being checked, or None for all of them.
@@ -413,7 +422,8 @@ def check_celery_failures_cannot_requeue_forever(app_configs: Sequence[AppConfig
 
 
 def websocket_frame_cap_conflict() -> str | None:
-    """Report when daphne flags cap frames below the app-level limit.
+    """
+    Report when daphne flags cap frames below the app-level limit.
 
     Returns:
         A description of the conflict, or None when there is none - including
@@ -441,7 +451,8 @@ def websocket_frame_cap_conflict() -> str | None:
 
 @register()
 def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Refuse to start when a task this codebase defines names no queue.
+    """
+    Refuse to start when a task this codebase defines names no queue.
 
     A task with no ``queue=`` lands on ``celery``, which is where 87 of 96 of
     them were when D13 measured it - one pool, drained by one worker, so an
@@ -481,7 +492,8 @@ def check_every_task_declares_a_queue(app_configs: Sequence[AppConfig] | None = 
 
 @register()
 def check_every_task_has_a_time_limit(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Refuse to start when a task's time limits are missing, inverted, or above its queue's ceiling.
+    """
+    Refuse to start when a task's time limits are missing, inverted, or above its queue's ceiling.
 
     Limits come from the decorator or, failing that, the queue default ``QueueTimeLimits`` annotates. The
     ceiling keeps an interactive task from holding a slot the safety escalations share for as long as a bulk
@@ -522,7 +534,8 @@ def check_every_task_has_a_time_limit(app_configs: Sequence[AppConfig] | None = 
 
 @register()
 def check_a_channel_layer_is_configured(app_configs: Sequence[AppConfig] | None = None, **kwargs: object) -> list[CheckMessage]:
-    """Warn when no channel layer is configured, which turns off every WebSocket.
+    """
+    Warn when no channel layer is configured, which turns off every WebSocket.
 
     Args:
         app_configs: Unused; part of Django's check signature.

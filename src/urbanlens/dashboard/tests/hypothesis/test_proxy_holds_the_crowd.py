@@ -1,4 +1,5 @@
-"""nginx must hold every visitor's connections at the capacity target, or it refuses them before the app is asked.
+"""
+nginx must hold every visitor's connections at the capacity target, or it refuses them before the app is asked.
 
 A proxied request costs two connections, the visitor's and the upstream's, and each is a file descriptor. The
 notification socket holds its pair for as long as the page is open, so the site's concurrent-user ceiling is

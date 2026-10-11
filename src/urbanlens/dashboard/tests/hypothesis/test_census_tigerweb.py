@@ -1,4 +1,5 @@
-"""Tests for CensusTigerwebGateway.get_state_boundary - the state-polygon attribute query
+"""
+Tests for CensusTigerwebGateway.get_state_boundary - the state-polygon attribute query
 backing services.geo.geo_boundary.state_boundary.
 """
 

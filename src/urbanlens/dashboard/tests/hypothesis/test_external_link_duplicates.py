@@ -44,7 +44,8 @@ class DuplicateExternalLinkTests(TestCase):
         self.assertEqual(PinLink.objects.filter(url=_URL).count(), 2)
 
     def test_a_racing_add_is_absorbed_rather_than_raising(self) -> None:
-        """The loser of the exists()-then-create race returns False, not a 500.
+        """
+        The loser of the exists()-then-create race returns False, not a 500.
 
         A concurrent panel inserts between the fast-path check and this call's insert."""
         PinLink.objects.create(pin=self.pin, url=_URL, name="the winner")

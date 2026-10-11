@@ -1,4 +1,5 @@
-"""Request-scoped memoisation for the ``SiteSettings`` singleton and each account's standing.
+"""
+Request-scoped memoisation for the ``SiteSettings`` singleton and each account's standing.
 ``SiteSettings.get_current()`` is called ~80 places, and several of them run on every single page: three separate context processors each fetch it, then the controller fetches it again, then every ``user_has_feature()`` check fetches it once more.
 Each call was its own ``get_or_create(pk=1)`` round-trip for a row that cannot change mid-request, so an ordinary map render spent a handful of identical queries on one singleton.
 What an account may see is the settings row plus its subscriptions, and a page asks about it from its views and its template alike, so it is remembered alongside - as an ``AccessState``, which is also cached across requests (see ``models.subscriptions.access_state``).
@@ -36,7 +37,8 @@ def end_scope(**_kwargs: object) -> None:
 
 
 def invalidate(**_kwargs: object) -> None:
-    """Forget the memoised row and every account's standing, without disarming the scope.
+    """
+    Forget the memoised row and every account's standing, without disarming the scope.
 
     Connected to the ``post_save`` of the rows these are built from, so a change made during a request is seen
     by the rest of it.
@@ -46,7 +48,8 @@ def invalidate(**_kwargs: object) -> None:
 
 
 def distrust_shared_access(**_kwargs: object) -> None:
-    """Record that this scope changed a row access is derived from.
+    """
+    Record that this scope changed a row access is derived from.
 
     Dropping the memo is not enough on its own: the next read would fall through to the
     cross-request cache, whose entries were written before the change and are still stamped with
@@ -86,7 +89,8 @@ def get_access(user_id: int) -> AccessState | None:
 
 
 def set_access(user_id: int, state: AccessState) -> None:
-    """Memoise the user's access state for the rest of this scope, if one is armed.
+    """
+    Memoise the user's access state for the rest of this scope, if one is armed.
 
     The state, not the feature set it implies: an admin's features are every feature, which says
     nothing about whether they are an admin, and the dev toolbar asks the second question.

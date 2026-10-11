@@ -36,7 +36,8 @@ class AppleMapsGateway(Gateway):
         radius: int | None = None,
         **params: Any,
     ) -> dict[str, Any]:
-        """Search for places near coordinates.
+        """
+        Search for places near coordinates.
 
         Args:
             latitude: WGS-84 latitude of the search origin.
@@ -56,7 +57,8 @@ class AppleMapsGateway(Gateway):
         return response.json()
 
     def reverse_geocode_coordinates(self, latitude: float, longitude: float, **params: Any) -> dict[str, Any]:
-        """Reverse geocode coordinates to addresses or places.
+        """
+        Reverse geocode coordinates to addresses or places.
 
         Args:
             latitude: WGS-84 latitude.
@@ -76,7 +78,8 @@ class AppleMapsGateway(Gateway):
         return response.json()
 
     def geocode_address(self, query: str, **params: Any) -> dict[str, Any]:
-        """Forward geocode a structured or free-form address.
+        """
+        Forward geocode a structured or free-form address.
 
         Args:
             query: Address string to geocode.
@@ -98,7 +101,8 @@ class AppleMapsGateway(Gateway):
         destination_longitude: float,
         **params: Any,
     ) -> dict[str, Any]:
-        """Return estimated travel time between two coordinate pairs.
+        """
+        Return estimated travel time between two coordinate pairs.
 
         Args:
             origin_latitude: Starting point latitude.

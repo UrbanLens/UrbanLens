@@ -34,7 +34,8 @@ _MUNICIPAL_PREFIX = re.compile(r"^(?:town|city|village|township|borough|municipa
 
 
 def public_name_hint(location: Location | None) -> str:
-    """The place's public name to match Wikipedia titles against.
+    """
+    The place's public name to match Wikipedia titles against.
 
     The Location's official name, else its community wiki's name. Never a pin's own name: the match
     lands in a row every viewer of the place shares.
@@ -59,7 +60,8 @@ def public_name_hint(location: Location | None) -> str:
 
 
 def match_address_components(location: Location) -> dict[str, str]:
-    """Address components for ``WikipediaGateway``'s match check, looked up when the Location has none.
+    """
+    Address components for ``WikipediaGateway``'s match check, looked up when the Location has none.
 
     A pin dropped on bare coordinates has no address when its first lookup runs, and without one
     only a title match can confirm an article. The street address is backfilled first (Google
@@ -134,7 +136,8 @@ MAX_MATCH_PARCEL_AREA_SQM = 5_000_000.0
 
 
 def match_outline(location: Location | None) -> MultiPolygon | None:
-    """The property outline an article's own coordinates may confirm it by.
+    """
+    The property outline an article's own coordinates may confirm it by.
 
     Only a property's page gets one: a building's article is not every article placed on its campus.
 
@@ -156,7 +159,8 @@ def match_outline(location: Location | None) -> MultiPolygon | None:
 
 
 def store_wikipedia_match(location: Location, article: dict | None, query_key: str) -> None:
-    """Cache a lookup's result, keeping an earlier match over a later miss.
+    """
+    Cache a lookup's result, keeping an earlier match over a later miss.
 
     A refresh that finds nothing is more often a transient upstream failure than a deleted article,
     and replacing a match with ``{}`` would strip the name source and article images it feeds.
@@ -223,7 +227,8 @@ class WikipediaPanelSource(LocationCachePanelSource):
 
     @staticmethod
     def _campus_article(location: Location) -> dict | None:
-        """Campus fallback: search again from each place this one stands in, nearest first.
+        """
+        Campus fallback: search again from each place this one stands in, nearest first.
 
         A building can sit beyond the geosearch radius from the point its campus's article is placed at, and that
         article is what its panel should show. Only public places are walked: the match lands in the row every viewer
@@ -262,7 +267,8 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
     service_keys: ClassVar[tuple[str, ...]] = ("wikipedia",)
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Find the best-matching Wikipedia article for a location.
+        """
+        Find the best-matching Wikipedia article for a location.
 
         Args:
             location: The location to fetch an article for.
@@ -279,7 +285,8 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
         return article, name or f"{lat:.5f}, {lng:.5f}"
 
     def enrich(self, location: Location) -> bool:
-        """Fetch and cache the article, keeping an earlier match over a later miss.
+        """
+        Fetch and cache the article, keeping an earlier match over a later miss.
 
         Args:
             location: The location to fetch an article for.
@@ -293,7 +300,8 @@ class WikipediaEnrichmentSource(LocationCacheEnrichmentSource):
 
 
 class WikipediaMediaPanelSource(GatewayMediaPanelSource):
-    """Media panel backed by the pin's own matched Wikipedia article, not a generic name search - see ``WikipediaMediaGateway``.
+    """
+    Media panel backed by the pin's own matched Wikipedia article, not a generic name search - see ``WikipediaMediaGateway``.
     The "search term" ``fetch`` uses is the exact article title from the Wikipedia summary panel's own cache, so this naturally no-ops for any pin without a confidently-matched article - there's nothing to read images from yet."""
 
     @staticmethod
@@ -321,7 +329,8 @@ class WikipediaMediaPanelSource(GatewayMediaPanelSource):
         return bool((cached.data or {}).get("title"))
 
     def fetch(self, pin: Pin) -> None:
-        """Fetch this pin's article images, deduped against the Wikimedia Commons panel.
+        """
+        Fetch this pin's article images, deduped against the Wikimedia Commons panel.
 
         Nothing is cached until the article lookup has landed: the gate already declines a Location it found no article
         for, so a missing title here means that lookup has not answered yet.

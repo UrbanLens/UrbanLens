@@ -73,7 +73,8 @@ class OpenMeteoGateway(Gateway):
         return True
 
     def get_weather_forecast(self, latitude: float, longitude: float) -> list[ForecastSlot] | None:
-        """Return a morning/evening forecast strip for the next few days.
+        """
+        Return a morning/evening forecast strip for the next few days.
 
         Args:
             latitude: WGS-84 latitude.
@@ -150,7 +151,8 @@ class OpenMeteoGateway(Gateway):
         return slots
 
     def get_sun_times(self, latitude: float, longitude: float) -> SunTimes | None:
-        """Return today's sunrise/sunset and approximate golden-hour windows.
+        """
+        Return today's sunrise/sunset and approximate golden-hour windows.
 
         Args:
             latitude: WGS-84 latitude.

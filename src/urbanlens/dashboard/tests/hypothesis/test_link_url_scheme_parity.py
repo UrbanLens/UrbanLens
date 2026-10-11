@@ -1,4 +1,5 @@
-"""A stored link is http(s), whichever door it came in by (N29 G4-26 and its import incidental).
+"""
+A stored link is http(s), whichever door it came in by (N29 G4-26 and its import incidental).
 
 The forms and API refused ``javascript:`` links, but the archive importer wrote custom-field URL values straight
 into the column, and the KML importer turned any ``<a href>`` in a placemark description into a pin link. Both are

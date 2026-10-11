@@ -1,4 +1,5 @@
-"""How many upstream fetches may be in flight: per process for a proxy, or fleet-wide per account.
+"""
+How many upstream fetches may be in flight: per process for a proxy, or fleet-wide per account.
 
 A tile viewport is ~30 tiles and the browser asks for all of them at once, so on a cold cache a
 proxy can hold every request thread in the process for as long as the upstream takes per tile -
@@ -19,7 +20,8 @@ if TYPE_CHECKING:
 
 
 class UpstreamSlots:
-    """The process-wide bound for one proxy's upstream.
+    """
+    The process-wide bound for one proxy's upstream.
 
     Subclass it and implement :meth:`limit`. The semaphore is built on first use rather than at
     import, so a deployment - or a test - can set the count without the module having frozen it.
@@ -29,7 +31,8 @@ class UpstreamSlots:
     _lock: ClassVar[threading.Lock] = threading.Lock()
 
     def __init_subclass__(cls, **kwargs: object) -> None:
-        """Give each subclass its own semaphore rather than the base class's.
+        """
+        Give each subclass its own semaphore rather than the base class's.
 
         Args:
             **kwargs: Passed through to :class:`object`.
@@ -40,7 +43,8 @@ class UpstreamSlots:
 
     @classmethod
     def limit(cls) -> int:
-        """How many fetches this proxy may have in flight at once.
+        """
+        How many fetches this proxy may have in flight at once.
 
         Returns:
             The count, read fresh each time the semaphore is built.
@@ -52,7 +56,8 @@ class UpstreamSlots:
 
     @classmethod
     def semaphore(cls) -> threading.BoundedSemaphore:
-        """The shared semaphore, built if this is the first call.
+        """
+        The shared semaphore, built if this is the first call.
 
         Returns:
             This proxy's semaphore.
@@ -72,7 +77,8 @@ class UpstreamSlots:
     @classmethod
     @contextlib.contextmanager
     def hold(cls) -> Iterator[bool]:
-        """Hold one slot for the block, or yield ``False`` when none is free.
+        """
+        Hold one slot for the block, or yield ``False`` when none is free.
 
         Never blocks: a request thread waiting for a slot is occupying the resource the slot
         exists to ration, so over the cap the caller answers immediately instead.
@@ -93,7 +99,8 @@ _CACHE_ERRORS = (ConnectionError, OSError, RuntimeError, ValueError)
 
 
 class KeyedUpstreamSlots:
-    """A fleet-wide bound on how many fetches one key - usually one account - may have in flight.
+    """
+    A fleet-wide bound on how many fetches one key - usually one account - may have in flight.
 
     :class:`UpstreamSlots` counts per process, so one account can hold its cap in every process at
     once. These slots are leases in the shared cache instead: ``limit()`` numbered keys per holder,
@@ -107,7 +114,8 @@ class KeyedUpstreamSlots:
 
     @classmethod
     def limit(cls) -> int:
-        """How many fetches one key may have in flight.
+        """
+        How many fetches one key may have in flight.
 
         Raises:
             NotImplementedError: Always, on the base class.
@@ -116,7 +124,8 @@ class KeyedUpstreamSlots:
 
     @classmethod
     def lease_seconds(cls) -> int:
-        """How long a slot outlives a holder that never released it; longer than one fetch can take.
+        """
+        How long a slot outlives a holder that never released it; longer than one fetch can take.
 
         Raises:
             NotImplementedError: Always, on the base class.
@@ -126,7 +135,8 @@ class KeyedUpstreamSlots:
     @classmethod
     @contextlib.contextmanager
     def hold(cls, key: object) -> Iterator[bool]:
-        """Hold one of *key*'s slots for the block, or yield ``False`` when all are taken.
+        """
+        Hold one of *key*'s slots for the block, or yield ``False`` when all are taken.
 
         Never blocks, for the reason :meth:`UpstreamSlots.hold` gives. A cache that cannot answer
         yields ``True``: the per-process bound still holds, and refusing every fetch because the

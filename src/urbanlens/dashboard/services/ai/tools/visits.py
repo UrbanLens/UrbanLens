@@ -19,7 +19,8 @@ _NEARBY_ROUTE_METERS = 150
 
 
 def _resolve_own_pin(context: ToolContext, pin_slug: str) -> Pin | None:
-    """One of the requesting profile's own pins.
+    """
+    One of the requesting profile's own pins.
     Never resolves any other profile's pin - see ``Pin.objects.by_profile``."""
     from urbanlens.dashboard.models.pin.model import Pin
 

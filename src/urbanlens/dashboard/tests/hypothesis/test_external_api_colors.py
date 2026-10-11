@@ -96,7 +96,8 @@ class PinColorRejectionTests(ColorApiTestCase):
 
 
 class PinColorUpdateRejectionTests(ColorApiTestCase):
-    """PATCH ``pins/{slug}/`` - the sibling POST hardened, and this did not.
+    """
+    PATCH ``pins/{slug}/`` - the sibling POST hardened, and this did not.
 
     `Pin.color` is served as `effective_color` and interpolated into a Leaflet `divIcon`'s `html`, so a string
     that is not a colour is a stored injection into the owner's own map, not a cosmetic problem."""
@@ -137,7 +138,8 @@ class PinColorUpdateRejectionTests(ColorApiTestCase):
 
 
 class PinModelColorCoercionTests(ColorApiTestCase):
-    """The column itself, for the write paths no serializer stands in front of.
+    """
+    The column itself, for the write paths no serializer stands in front of.
 
     The floorplan editor's save assigns `linked.color` straight from its JSON body, and the archive importer
     assigns three pin colour columns from an uploaded file."""

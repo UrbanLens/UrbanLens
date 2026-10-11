@@ -283,7 +283,8 @@ class EpaFacilityNameProviderTests(TestCase):
         self.assertEqual(self.provider.candidates(self.location), ["Old Mill Factory"])
 
     def test_never_suggests_a_merely_nearby_facility_name(self) -> None:
-        """Regression guard: only the matched exact_site name is ever a candidate, never
+        """
+        Regression guard: only the matched exact_site name is ever a candidate, never
         facilities[0] or any other nearby-list entry."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
@@ -495,7 +496,8 @@ class PropagateExactSiteToNearbyLocationsTests(TestCase):
         self.assertIsNone(self._cached_data(neighbor))
 
     def test_the_originating_location_itself_is_excluded(self) -> None:
-        """The neighbor query must not try to re-propagate onto the same Location
+        """
+        The neighbor query must not try to re-propagate onto the same Location
         the match was just confirmed for."""
         from urbanlens.dashboard.models.pin.model import Pin
 
@@ -509,7 +511,8 @@ class PropagateExactSiteToNearbyLocationsTests(TestCase):
 
 
 class DetailPanelFetchPropagatesExactSiteTests(TestCase):
-    """End-to-end: EpaEchoDetailPanelSource.fetch() must propagate a newly-found
+    """
+    End-to-end: EpaEchoDetailPanelSource.fetch() must propagate a newly-found
     exact-site match to nearby pinned Locations, not just cache it for itself."""
 
     def setUp(self) -> None:
@@ -544,7 +547,8 @@ class DetailPanelFetchPropagatesExactSiteTests(TestCase):
 
 
 class FacilityFromPoiKeyNamesTests(SimpleTestCase):
-    """The plugin's field names have to match the ones REData actually emits.
+    """
+    The plugin's field names have to match the ones REData actually emits.
 
     Nothing failed."""
 

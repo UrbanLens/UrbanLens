@@ -38,7 +38,8 @@ class Expectation:
 
 @dataclass
 class Session:
-    """A signed-in browser, roughly.
+    """
+    A signed-in browser, roughly.
 
     Carries its own cookies rather than using `http.cookiejar`, which appends ``.local`` to a dotless host - so
     a cookie set by `localhost` is stored under `localhost.local` and never sent back."""
@@ -103,7 +104,8 @@ def _authenticated_page_renders(session: Session) -> tuple[bool, str]:
 
 
 def _uncached_pins_answer(session: Session) -> tuple[bool, str]:
-    """The pins endpoint on a path the cache cannot serve.
+    """
+    The pins endpoint on a path the cache cannot serve.
 
     `map_pins_json` only caches the profile's whole unbounded root-pin set, so a `bbox` request is explicitly
     `cacheable=False` and must reach Postgres."""
@@ -169,7 +171,8 @@ SCENARIOS: dict[str, list[Expectation]] = {
 
 
 def establish(base_url: str, manifest: Path, role: str, session_file: Path | None) -> Session:
-    """A signed-in session, from a saved one when there is one.
+    """
+    A signed-in session, from a saved one when there is one.
 
     The saved path matters: every scenario here asks what an *already* signed-in user still sees while something
     is broken.
@@ -193,7 +196,8 @@ def establish(base_url: str, manifest: Path, role: str, session_file: Path | Non
 
 
 def sign_in(base_url: str, manifest: Path, role: str) -> Session:
-    """Sign in as *role* from the provisioning manifest.
+    """
+    Sign in as *role* from the provisioning manifest.
 
     Redirects are deliberately not followed: a successful sign-in is a 302, and following it without carrying
     the new session cookie lands back on the login page and reads as a failure that did not happen.
@@ -249,7 +253,8 @@ _NO_REDIRECTS = urllib.request.build_opener(_StopRedirects)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Probe one scenario's expectations and report.
+    """
+    Probe one scenario's expectations and report.
 
     Returns:
         The number of *unexpected* failures.

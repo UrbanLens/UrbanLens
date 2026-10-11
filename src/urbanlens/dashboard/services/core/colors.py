@@ -12,7 +12,8 @@ NO_COLOR = "none"
 
 
 def is_hex_color(value: object) -> TypeGuard[str]:
-    """Whether ``value`` is a 6-digit ``#rrggbb`` string.
+    """
+    Whether ``value`` is a 6-digit ``#rrggbb`` string.
     A ``TypeGuard`` rather than a plain bool so the sanitizers below can return ``value`` directly in the true branch without the checker losing track of the ``isinstance`` that already happened here.
 
     Args:
@@ -24,7 +25,8 @@ def is_hex_color(value: object) -> TypeGuard[str]:
 
 
 def sanitize_hex_color(value: object, fallback: str = "#e74c3c") -> str:
-    """Return ``value`` when it is a hex colour, else ``fallback``.
+    """
+    Return ``value`` when it is a hex colour, else ``fallback``.
 
     Args:
         value: The candidate colour, typically straight off a JSON body.
@@ -37,7 +39,8 @@ def sanitize_hex_color(value: object, fallback: str = "#e74c3c") -> str:
 
 
 def sanitize_optional_color(value: object, fallback: str = "") -> str:
-    """Return ``value`` when it is a hex colour or ``"none"``, else ``fallback``.
+    """
+    Return ``value`` when it is a hex colour or ``"none"``, else ``fallback``.
 
     Args:
         value: The candidate colour, typically straight off a JSON body.
@@ -59,7 +62,8 @@ def clean_color(value: object, *, default: None = None, allow_none_keyword: bool
 
 
 def clean_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:
-    """Return ``value`` when it is a colour this application stores, else ``default``.
+    """
+    Return ``value`` when it is a colour this application stores, else ``default``.
     Built on :func:`is_hex_color` so there is one definition of what a colour is.
 
     Note:
@@ -95,7 +99,8 @@ def require_color(value: object, *, default: None = None, allow_none_keyword: bo
 
 
 def require_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:
-    """Like :func:`clean_color`, but refuse a wrong value instead of replacing it.
+    """
+    Like :func:`clean_color`, but refuse a wrong value instead of replacing it.
 
     Args:
         value: The raw submitted value, typically straight off a JSON body.

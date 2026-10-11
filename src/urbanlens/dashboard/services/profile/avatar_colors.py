@@ -13,7 +13,8 @@ PALETTE_SIZE = 10
 
 
 def _preferred_color_index(identity: str) -> int:
-    """Stable hash of an identity string into a palette slot.
+    """
+    Stable hash of an identity string into a palette slot.
 
     Args:
         identity: A stable per-person string (e.g. profile slug).
@@ -26,7 +27,8 @@ def _preferred_color_index(identity: str) -> int:
 
 
 def assign_avatar_colors[T](items: Sequence[T], *, identity: Callable[[T], str], attr: str = "avatar_color_class") -> None:
-    """Attach an ``avatar_color_class`` to each item, distinct within this list.
+    """
+    Attach an ``avatar_color_class`` to each item, distinct within this list.
     Each item's *preferred* slot is a stable hash of its identity string, so the same person tends to land on the same color across different renders.
 
     Args:

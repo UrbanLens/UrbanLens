@@ -25,7 +25,8 @@ class RedataCapabilitiesGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_capabilities"
 
     def get_capabilities(self, *, latitude: float | None = None, longitude: float | None = None) -> dict[str, Any]:
-        """Fetch the capability index, optionally scoped to a point.
+        """
+        Fetch the capability index, optionally scoped to a point.
 
         Args:
             latitude: With ``longitude``, adds ``applicable_providers`` to each
@@ -46,7 +47,8 @@ class RedataCapabilitiesGateway(RedataLocationContextGateway):
 
 
 def applicable_providers(domain_tag: str, latitude: float, longitude: float) -> list[str]:
-    """Which of a domain's providers cover a coordinate, per REData.
+    """
+    Which of a domain's providers cover a coordinate, per REData.
     A client that names its own list stops growing the day REData registers a source, silently, which is the failure this exists to prevent.
 
     Args:

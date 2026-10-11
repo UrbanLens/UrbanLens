@@ -16,7 +16,8 @@ DEFAULT_TIMEOUT_SECONDS = 30
 
 
 def run_concurrently(callables: Sequence[Callable[[], Any]], *, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> list[Any]:
-    """Run every callable on its own thread, released together at a barrier.
+    """
+    Run every callable on its own thread, released together at a barrier.
 
     Each thread closes its database connections on the way out; leaking them keeps the test database busy and
     makes teardown hang.

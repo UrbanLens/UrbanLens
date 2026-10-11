@@ -89,7 +89,8 @@ class DataFileUploadFormCapTests(SimpleTestCase):
     """The import form has its own 500 MB literal, which the cap also has to reach."""
 
     def _validate(self, size: int) -> str | None:
-        """Run the form field's own per-file validation against a stand-in upload.
+        """
+        Run the form field's own per-file validation against a stand-in upload.
 
         Args:
             size: The file's size in bytes.

@@ -296,7 +296,8 @@ _PURE_LOGIC_SETTINGS = hyp_settings(suppress_health_check=[HealthCheck.too_slow]
 
 
 class SubResourcePureLogicTests(SimpleTestCase):
-    """Property-based checks for the pure helpers these endpoints rely on.
+    """
+    Property-based checks for the pure helpers these endpoints rely on.
 
     ``@given`` is used only here: this repo's TestCase keeps ``self.client`` state across generated examples, so
     view-level tests above stay example-based on purpose."""

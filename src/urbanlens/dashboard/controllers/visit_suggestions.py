@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 
 class VisitSuggestionRespondView(LoginRequiredMixin, View):
-    """Accept or reject a suggested visit entry from the notification dropdown.
+    """
+    Accept or reject a suggested visit entry from the notification dropdown.
 
     POST /visit-suggestions/<int:suggestion_id>/respond/
 
@@ -28,7 +29,8 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, suggestion_id: int) -> HttpResponse:
-        """Handle an accept/reject response and return an HTMX swap payload.
+        """
+        Handle an accept/reject response and return an HTMX swap payload.
 
         Args:
             request: Incoming HTTP request.

@@ -1,4 +1,5 @@
-"""What the ``db`` service tells Postgres about itself, and why each of those is not the default.
+"""
+What the ``db`` service tells Postgres about itself, and why each of those is not the default.
 
 JIT is on by default and compiles any statement the planner costs above 100,000, which one heavy account's queries
 reach: the nearby-pins statement for a 17,720-pin account spent 150 ms of its 204 ms compiling, and ran in 98 ms
@@ -69,12 +70,14 @@ class PostgresIsSizedForItsContainerTests(SimpleTestCase):
         self.assertLess(float(_default_of(self.settings_given.get("random_page_cost", "4"))), 2.0)
 
     def test_statement_statistics_are_available_without_an_alter_system(self) -> None:
-        """X27's figures came from a setting someone applied by hand to one container, which is
+        """
+        X27's figures came from a setting someone applied by hand to one container, which is
         indistinguishable from a measurement nobody can repeat."""
         self.assertEqual(self.settings_given.get("shared_preload_libraries"), "pg_stat_statements")
 
     def test_planning_time_tracking_is_off_unless_a_deployment_asks(self) -> None:
-        """Anti-vacuity for the line above: it is Postgres's own default, its cost here was not
+        """
+        Anti-vacuity for the line above: it is Postgres's own default, its cost here was not
         measurable against host noise, and X27 needs it turned on deliberately rather than always."""
         self.assertEqual(_default_of(self.settings_given["pg_stat_statements.track_planning"]), "off")
 
@@ -86,7 +89,8 @@ class PostgresIsSizedForItsContainerTests(SimpleTestCase):
 
 
 class PostgresIsHealthyOnlyOnceItTakesConnectionsTests(SimpleTestCase):
-    """On a fresh volume the image runs its init scripts under a temporary server that listens on the Unix socket
+    """
+    On a fresh volume the image runs its init scripts under a temporary server that listens on the Unix socket
     alone, then restarts. A socket probe reports healthy during that window and db-setup's TCP connection is refused,
     which failed a new environment's first start (2026-10-01)."""
 

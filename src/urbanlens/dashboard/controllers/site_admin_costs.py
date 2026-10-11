@@ -91,7 +91,8 @@ def _toast_response(request: HttpRequest, *, level: str, message: str, status: i
 
 
 def _apply_component_form(component: CostComponent, request: HttpRequest) -> None:
-    """Copy submitted form values onto *component* without saving.
+    """
+    Copy submitted form values onto *component* without saving.
 
     Args:
         component: The instance to populate.
@@ -125,7 +126,8 @@ def _apply_component_form(component: CostComponent, request: HttpRequest) -> Non
 
 
 def _apply_operating_cost_form(cost: OperatingCost, request: HttpRequest) -> None:
-    """Copy submitted form values onto *cost* without saving.
+    """
+    Copy submitted form values onto *cost* without saving.
 
     Args:
         cost: The instance to populate.

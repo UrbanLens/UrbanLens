@@ -1,4 +1,5 @@
-"""Vision AI helpers: photo keyword description and image classification.
+"""
+Vision AI helpers: photo keyword description and image classification.
 Separate from the text-only ``LLMGateway`` hierarchy because these calls aren't conversations - there is no transcript, no tool loop, and no ``<ANSWER>`` protocol, just one image and one question."""
 
 from __future__ import annotations
@@ -60,7 +61,8 @@ def _parse_keyword_text(text: str) -> list[str]:
 
 
 def _vision_target() -> tuple[Provider, str]:
-    """The ``(provider, model)`` the site's AI settings select for a vision call.
+    """
+    The ``(provider, model)`` the site's AI settings select for a vision call.
 
     Returns:
         The provider name and model identifier to send this call to."""
@@ -74,7 +76,8 @@ def _vision_target() -> tuple[Provider, str]:
 
 
 def _openai_cost(model: str, input_tokens: int | None, output_tokens: int | None) -> Decimal:
-    """Price one OpenAI vision call from its reported usage, falling back to an estimate.
+    """
+    Price one OpenAI vision call from its reported usage, falling back to an estimate.
 
     Args:
         model: The model the call actually used.
@@ -93,7 +96,8 @@ def _openai_cost(model: str, input_tokens: int | None, output_tokens: int | None
 
 
 def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], slot: ApiCallSlot, max_tokens: int) -> str | None:
-    """Ask the configured vision provider one question about one image.
+    """
+    Ask the configured vision provider one question about one image.
 
     Args:
         image_bytes: JPEG bytes, already downscaled.
@@ -141,7 +145,8 @@ def _describe(image_bytes: bytes, prompt: str, *, target: tuple[Provider, str], 
 
 
 def describe_photo_keywords(image_bytes: bytes, *, raise_refusal: bool = False) -> list[str] | None:
-    """Generate descriptive keywords for a (downscaled) photo via the site's AI provider.
+    """
+    Generate descriptive keywords for a (downscaled) photo via the site's AI provider.
     Caller is responsible for permission checks (site/profile AI toggles and the AI photo processing subscription feature); this function only handles the provider call, rate limiting, and cost logging.
 
     Args:
@@ -171,7 +176,8 @@ def describe_photo_keywords(image_bytes: bytes, *, raise_refusal: bool = False) 
 
 
 def classify_photo(image_bytes: bytes, *, raise_refusal: bool = False) -> list[tuple[str, float]] | None:
-    """Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
+    """
+    Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
     Unlike :func:`describe_photo_keywords` this is not a chat completion - no prompt, no tokens - so it takes the inference service's separate classify call.
 
     Args:

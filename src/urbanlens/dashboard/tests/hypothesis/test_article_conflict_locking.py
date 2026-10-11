@@ -83,7 +83,8 @@ class ArticleConflictLockingTests(TestCase):
 
 
 class ConcealedViewerConflictCheckTests(TestCase):
-    """A concealed viewer's conflict check is scoped to what they were shown, not the true latest.
+    """
+    A concealed viewer's conflict check is scoped to what they were shown, not the true latest.
 
     ``concealment_active`` is hardcoded False today (the reputation ledger it needs doesn't exist yet), so this
     branch is currently dead in production - mocked here so a regression is caught before the day it starts

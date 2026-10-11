@@ -1,4 +1,5 @@
-"""Atomic windowed counters, and what each caller does when the store cannot count.
+"""
+Atomic windowed counters, and what each caller does when the store cannot count.
 
 Every rate limit, lockout and volume budget here is one of these: a key that counts
 events and expires with its window. They share this module so that the increment is
@@ -62,7 +63,8 @@ class CounterUnavailableError(RuntimeError):
 
 
 class _GenericOps:
-    """:class:`AtomicCacheOps` over any Django cache, for backends that lack them.
+    """
+    :class:`AtomicCacheOps` over any Django cache, for backends that lack them.
 
     Increments stay atomic (``add`` then ``incr``); the compare-and-delete and the
     tallies do not, which is why the configured backends implement the protocol
@@ -211,7 +213,8 @@ def _warn_outage(operation: str, key: str, on_outage: Outage) -> None:
 
 
 def hit(key: str, ttl: int, *, on_outage: Outage, sliding: bool = False) -> int:
-    """Count one event and return the window's total, this one included.
+    """
+    Count one event and return the window's total, this one included.
 
     Args:
         key: The counter's key, including whatever window index the caller keys by.
@@ -240,7 +243,8 @@ def _now_us() -> int:
 
 
 def take_token(key: str, *, interval_us: int, burst: int, on_outage: Outage) -> bool:
-    """Take one token from a bucket that holds *burst* and gets one back every *interval_us*.
+    """
+    Take one token from a bucket that holds *burst* and gets one back every *interval_us*.
 
     Args:
         key: The bucket's key.
@@ -265,7 +269,8 @@ def take_token(key: str, *, interval_us: int, burst: int, on_outage: Outage) -> 
 
 
 def return_token(key: str, *, interval_us: int) -> None:
-    """Put back a token for an event that turned out not to happen. Best effort, never past full.
+    """
+    Put back a token for an event that turned out not to happen. Best effort, never past full.
 
     Args:
         key: The bucket's key.
@@ -279,7 +284,8 @@ def return_token(key: str, *, interval_us: int) -> None:
 
 
 def peek(key: str, *, on_outage: Outage) -> int:
-    """The window's count so far, without counting.
+    """
+    The window's count so far, without counting.
 
     Args:
         key: The counter's key.
@@ -301,7 +307,8 @@ def peek(key: str, *, on_outage: Outage) -> int:
 
 
 def refund(key: str) -> None:
-    """Give back one event that turned out not to happen. Best effort, never below 0.
+    """
+    Give back one event that turned out not to happen. Best effort, never below 0.
 
     Args:
         key: The counter's key.
@@ -313,7 +320,8 @@ def refund(key: str) -> None:
 
 
 def clear(key: str) -> None:
-    """Forget a counter, in the store and in the local fallback.
+    """
+    Forget a counter, in the store and in the local fallback.
 
     Args:
         key: The counter's key.
@@ -326,7 +334,8 @@ def clear(key: str) -> None:
 
 
 def add_to_tally(key: str, increments: Mapping[str, int], ttl: int) -> None:
-    """Add to several named counts kept together under one key, which expires *ttl* seconds after the last addition.
+    """
+    Add to several named counts kept together under one key, which expires *ttl* seconds after the last addition.
 
     No local fallback: a tally is a record for someone to read later, and one kept in this process
     would be read by nobody.
@@ -347,7 +356,8 @@ def add_to_tally(key: str, increments: Mapping[str, int], ttl: int) -> None:
 
 
 def take_tally(key: str) -> dict[str, int]:
-    """Remove a tally and return what it held, atomically on the configured backends.
+    """
+    Remove a tally and return what it held, atomically on the configured backends.
 
     Args:
         key: The tally's key.
@@ -366,7 +376,8 @@ def take_tally(key: str) -> dict[str, int]:
 
 
 def delete_if_value(key: str, value: str) -> bool:
-    """Delete *key* only while it still holds *value*, atomically on the configured backends.
+    """
+    Delete *key* only while it still holds *value*, atomically on the configured backends.
 
     Args:
         key: The key.

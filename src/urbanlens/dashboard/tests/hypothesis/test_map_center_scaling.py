@@ -35,7 +35,8 @@ MAX_GROWTH_RATIO = 3.0
 
 
 def count_haversine_calls(profile: Profile) -> int:
-    """Run the centre calculation and report how many pairwise distances it took.
+    """
+    Run the centre calculation and report how many pairwise distances it took.
 
     Patches the function `Profile._haversine_km` imports rather than the wrapper itself: the import happens
     inside the function body, so the module attribute is what is resolved on each call.
@@ -94,7 +95,8 @@ class TheMapCentreDoesNotComparePairsTests(TestCase):
 
 
 class TheMeasurementIsRealTests(TestCase):
-    """Guards.
+    """
+    Guards.
 
     Each of these would pass just as happily against a test that had stopped calling the code under test, which
     is the way a scaling assertion goes quietly wrong."""
@@ -126,7 +128,8 @@ class TheMeasurementIsRealTests(TestCase):
         self.assertAlmostEqual(longitude, ORIGIN_LONGITUDE, delta=1.0)
 
     def test_the_result_is_stored_so_it_is_paid_once(self) -> None:
-        """Cached afterwards — which bounds how often it happens, not how long it takes.
+        """
+        Cached afterwards — which bounds how often it happens, not how long it takes.
 
         Worth pinning: it is the reason this is survivable at all, and a fix that
         removed the write would turn a one-off stall into one per page load.

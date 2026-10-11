@@ -1,4 +1,5 @@
-"""Per-profile display overrides for labels (``LabelCustomization``).
+"""
+Per-profile display overrides for labels (``LabelCustomization``).
 A customization is how a user renames or re-styles a label they do not own - in practice a global label, which they cannot edit because everyone shares it."""
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize(value: str | None) -> str | None:
-    """Collapse an empty or whitespace-only override to None ("no override").
+    """
+    Collapse an empty or whitespace-only override to None ("no override").
 
     Args:
         value: The submitted override, if any.
@@ -39,7 +41,8 @@ def upsert_label_customization(
     icon: str | None = None,
     color: str | None = None,
 ) -> LabelCustomization | None:
-    """Create, update, or clear *profile*'s display overrides for *label*.
+    """
+    Create, update, or clear *profile*'s display overrides for *label*.
     When all three end up None the row is deleted rather than stored as an all-null record, keeping "customized" equivalent to "row exists and carries something", which is what ``Label.is_customized`` assumes.
 
     Args:
@@ -81,7 +84,8 @@ def upsert_label_customization(
 
 @transaction.atomic
 def clear_label_customization(profile: Profile, label: Label) -> bool:
-    """Remove *profile*'s overrides for *label*, restoring the label's own styling.
+    """
+    Remove *profile*'s overrides for *label*, restoring the label's own styling.
 
     Args:
         profile: The profile whose overrides to clear.

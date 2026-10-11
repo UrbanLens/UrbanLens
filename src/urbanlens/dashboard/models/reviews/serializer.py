@@ -4,7 +4,8 @@ from urbanlens.dashboard.models.reviews.model import Review
 
 
 class ReviewSerializer(serializers.ModelSerializer):
-    """Serializer for Review.
+    """
+    Serializer for Review.
 
     ``profile`` and ``pin`` are set server-side - never accepted from the client.
     """

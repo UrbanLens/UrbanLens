@@ -1,4 +1,5 @@
-"""QuerySet/Manager for BoundaryVote.
+"""
+QuerySet/Manager for BoundaryVote.
 
 The recency-weighted tallying lives in ``services.geo.boundary_voting``.
 """

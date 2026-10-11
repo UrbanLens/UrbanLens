@@ -1,4 +1,5 @@
-"""LabelMergeView's GET form had zero rendering coverage - only a service-level
+"""
+LabelMergeView's GET form had zero rendering coverage - only a service-level
 test suite (test_label_merge_service.py) and a single 404-for-media check
 (test_media_labels.py) existed. This covers the search + button-list target
 picker (organize_label_merge_form.html) that replaced the native <select>.

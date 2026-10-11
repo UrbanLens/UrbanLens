@@ -23,7 +23,8 @@ _DIRECTORY_SUFFIXES = (".ts", ".tsx", ".d.ts")
 
 
 def glob_to_regex(pattern: str) -> re.Pattern[str]:
-    """Translate one tsconfig include/exclude glob into a whole-path regex.
+    """
+    Translate one tsconfig include/exclude glob into a whole-path regex.
 
     Handles the three wildcards TypeScript documents: ``**`` for any number of path segments, ``*`` for any run
     of characters within one segment, and ``?`` for one such character.
@@ -55,7 +56,8 @@ def glob_to_regex(pattern: str) -> re.Pattern[str]:
 
 
 def covered_paths(config_path: str, config: dict, candidates: list[str]) -> set[str]:
-    """Which of `candidates` the project at `config_path` lists.
+    """
+    Which of `candidates` the project at `config_path` lists.
 
     Args:
         config_path: Repo-relative path of the ``tsconfig.json``.
@@ -94,7 +96,8 @@ def covered_paths(config_path: str, config: dict, candidates: list[str]) -> set[
 
 
 def _projects_not_typechecked(root: pathlib.Path, configs: list[str]) -> list[str]:
-    """Which tracked projects `package.json`'s `typecheck` script never reads.
+    """
+    Which tracked projects `package.json`'s `typecheck` script never reads.
 
     Coverage by a project only means anything if something runs that project.
 

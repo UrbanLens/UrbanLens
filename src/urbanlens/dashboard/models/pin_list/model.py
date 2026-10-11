@@ -1,4 +1,5 @@
-"""PinList models - named, ordered collections of a profile's Pins.
+"""
+PinList models - named, ordered collections of a profile's Pins.
 A PinList can be plain (pins added/removed only by explicit user action) or "smart" (``is_smart=True``), in which case it auto-includes pins matching a saved filter (``smart_filter``, same JSON shape as ``SavedFilter.criteria``) and/or falling inside a drawn boundary polygon (``smart_boundary``).
 """
 
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 class PinList(abstract.PublicDashboardModel):
-    """A profile's named, ordered collection of their own Pins.
+    """
+    A profile's named, ordered collection of their own Pins.
     URLs identify a list by ``slug`` rather than ``uuid`` - see ``abstract.PublicDashboardModel``.
     """
 
@@ -58,7 +60,8 @@ class PinList(abstract.PublicDashboardModel):
 
     @property
     def pin_count(self) -> int:
-        """Number of pins currently on this list.
+        """
+        Number of pins currently on this list.
 
         Prefers ``with_pin_counts()``'s annotation, which counts in the database. Falls back to
         ``len(self.items.all())``, which reuses a ``prefetch_related("items")`` cache where a
@@ -121,7 +124,8 @@ class PinListItem(abstract.DashboardModel):
 
 
 class SmartListSyncRequest(abstract.DashboardModel):
-    """A pin whose smart-list membership is owed a re-evaluation.
+    """
+    A pin whose smart-list membership is owed a re-evaluation.
 
     Written in the transaction that changed the pin, so it rolls back with that change, and drained by
     ``tasks.sync_requested_smart_lists``. Rows are only inserted and deleted: a pin changed again while a sync runs

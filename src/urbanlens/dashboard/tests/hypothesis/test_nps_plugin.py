@@ -46,7 +46,8 @@ def _gateway_returning(
     visitor_centers: list | None = None,
     campgrounds: list | None = None,
 ) -> None:
-    """Configure a mocked ``RedataNationalParksGateway`` class's instance methods.
+    """
+    Configure a mocked ``RedataNationalParksGateway`` class's instance methods.
 
     Every facet defaults to ``[]`` (rather than leaving a bare ``Mock`` in place) since the cache write is real
     ``JSONField`` storage in these tests' ``TestCase`` - an unconfigured facet call would otherwise fail to
@@ -298,7 +299,8 @@ class NpsEnrichmentSourceTests(TestCase):
 
 
 class NpsInfoViewTests(TestCase):
-    """``PinController.nps_info`` - the web HTMX partial, not the JSON API.
+    """
+    ``PinController.nps_info`` - the web HTMX partial, not the JSON API.
 
     Alerts reach the JSON API through ``api_payload``'s ``facts``, but the web panel is bespoke markup
     (``pin_nps.html``) rather than the generic ``_simple_info_panel.html`` renderer, so it needs its own
@@ -320,7 +322,8 @@ class NpsInfoViewTests(TestCase):
             NpsPanelSource().fetch(self.pin)
 
     def _seed_containment(self, park_code: str) -> None:
-        """A Property Records cache row saying this pin sits inside ``park_code``.
+        """
+        A Property Records cache row saying this pin sits inside ``park_code``.
 
         ``NpsPanelSource.fetch`` reads this (``_is_park_containing_location``)
         to decide ``is_contained`` - see the nps.py module docstring.
@@ -393,7 +396,8 @@ class NpsInfoViewTests(TestCase):
 
 
 class IsParkContainingLocationTests(TestCase):
-    """``_is_park_containing_location`` reads Property Records' own cached
+    """
+    ``_is_park_containing_location`` reads Property Records' own cached
     point-in-boundary result rather than re-querying REData - see the
     function's own docstring for why, and its "fail closed" default."""
 

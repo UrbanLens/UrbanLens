@@ -23,7 +23,8 @@ _db_settings = settings(
 
 
 def _pin_at(profile: Profile, lat: float, lng: float, **kwargs) -> Pin:
-    """Create a Pin whose linked Location sits at the given coordinates.
+    """
+    Create a Pin whose linked Location sits at the given coordinates.
 
     A Pin no longer stores its own coordinates; they live on the shared Location it references (see
     AddressableModel), so tests that care about a pin's map position must create a Location at those
@@ -181,7 +182,8 @@ class GetMapCenterRememberModeTests(TestCase):
         self.assertIsNone(profile.get_map_center())
 
     def test_remember_mode_template_context_reflects_stored_value(self) -> None:
-        """view_map renders **profile.get_map_center_template_context() directly -
+        """
+        view_map renders **profile.get_map_center_template_context() directly -
         this is what actually reaches the page's `_SERVER_CENTER_LAT` JS constant."""
         profile = _profile_with_mode(
             MapCenterMode.REMEMBER,

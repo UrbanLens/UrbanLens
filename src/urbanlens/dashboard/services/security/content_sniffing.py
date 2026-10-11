@@ -24,7 +24,8 @@ _SNIFFED_IMAGE_EXTENSIONS = _IMAGE_EXTENSIONS | {"apng"}
 
 
 def guess_media_kind_from_extension(filename: str) -> MediaKind | None:
-    """Guess a file's claimed MediaKind from its filename extension alone.
+    """
+    Guess a file's claimed MediaKind from its filename extension alone.
 
     Args:
         filename: The file's name (path or bare name; only the extension is used).
@@ -42,7 +43,8 @@ def guess_media_kind_from_extension(filename: str) -> MediaKind | None:
 
 
 def unsupported_image_extension_error(filename: str) -> str | None:
-    """Reject a photo upload whose extension we would not serve as a passive image.
+    """
+    Reject a photo upload whose extension we would not serve as a passive image.
 
     Args:
         filename: The uploaded file's client-supplied name.
@@ -56,7 +58,8 @@ def unsupported_image_extension_error(filename: str) -> str | None:
 
 
 def sniff_media_kind(file_obj: IO[bytes]) -> MediaKind | None:
-    """Detect the real media kind of an uploaded file from its magic bytes.
+    """
+    Detect the real media kind of an uploaded file from its magic bytes.
 
     Args:
         file_obj: The uploaded file to sniff.
@@ -77,7 +80,8 @@ def sniff_media_kind(file_obj: IO[bytes]) -> MediaKind | None:
 
 
 def photo_is_not_an_image_error(file_obj: IO[bytes]) -> str | None:
-    """Reject a photo upload whose bytes are not any image at all. :func:`content_type_mismatch_error` only fires on a *confirmed* mismatch - bytes that fingerprint as something else.
+    """
+    Reject a photo upload whose bytes are not any image at all. :func:`content_type_mismatch_error` only fires on a *confirmed* mismatch - bytes that fingerprint as something else.
 
     Args:
         file_obj: The uploaded file.
@@ -90,7 +94,8 @@ def photo_is_not_an_image_error(file_obj: IO[bytes]) -> str | None:
 
 
 def content_type_mismatch_error(file_obj: IO[bytes], declared_media_type: MediaKind) -> str | None:
-    """Reject an upload whose actual bytes don't match its declared kind.
+    """
+    Reject an upload whose actual bytes don't match its declared kind.
 
     Args:
         file_obj: The uploaded file.

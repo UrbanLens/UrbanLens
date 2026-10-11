@@ -1,4 +1,5 @@
-"""Guess where an unplaceable imported pin belongs, from its name alone.
+"""
+Guess where an unplaceable imported pin belongs, from its name alone.
 When a Google Maps CID never resolves, the import records a :class:`~urbanlens.dashboard.models.pin_import_failures.model.PinImportFailure` carrying little more than the place's *name*."""
 
 from __future__ import annotations
@@ -52,7 +53,8 @@ _CONFIDENCE_AREA_ONLY = 0.4
 
 @dataclass(frozen=True)
 class LocationGuess:
-    """A suggested location for an unplaceable import.
+    """
+    A suggested location for an unplaceable import.
 
     Attributes:
         latitude: Suggested latitude.
@@ -69,7 +71,8 @@ class LocationGuess:
 
 
 def s2_hint_for(failure: PinImportFailure) -> tuple[float, float] | None:
-    """Approximate position from the S2 cell in the failure's Maps URL.
+    """
+    Approximate position from the S2 cell in the failure's Maps URL.
 
     Args:
         failure: The unresolved import row.
@@ -92,7 +95,8 @@ def s2_hint_for(failure: PinImportFailure) -> tuple[float, float] | None:
 
 
 def _agrees(latitude: float, longitude: float, hint: tuple[float, float] | None) -> bool:
-    """Whether a candidate sits in the same area as the decoded S2 cell.
+    """
+    Whether a candidate sits in the same area as the decoded S2 cell.
 
     Args:
         latitude: Candidate latitude.
@@ -107,7 +111,8 @@ def _agrees(latitude: float, longitude: float, hint: tuple[float, float] | None)
 
 
 def _within_hint(latitude: float, longitude: float, near: tuple[float, float] | None) -> bool:
-    """Whether a candidate is close enough to an area hint to be plausible.
+    """
+    Whether a candidate is close enough to an area hint to be plausible.
 
     Args:
         latitude: Candidate latitude.
@@ -122,7 +127,8 @@ def _within_hint(latitude: float, longitude: float, near: tuple[float, float] | 
 
 
 def _candidate(raw: dict, *, source: str, confidence: float) -> LocationGuess | None:
-    """Build a guess from one Nominatim result, or None if it is unusable.
+    """
+    Build a guess from one Nominatim result, or None if it is unusable.
 
     Args:
         raw: A single Nominatim search result.
@@ -146,7 +152,8 @@ def _candidate(raw: dict, *, source: str, confidence: float) -> LocationGuess | 
 
 
 def guess_for_failure(failure: PinImportFailure, *, near: tuple[float, float] | None = None) -> LocationGuess | None:
-    """Suggest where an unplaceable imported pin belongs.
+    """
+    Suggest where an unplaceable imported pin belongs.
     Combines two independent signals - what the pin's *name* geocodes to, and the rough position of the S2 cell in its Maps URL - so that agreement between them raises confidence, and neither is trusted alone more than it deserves.
 
     Args:
@@ -223,7 +230,8 @@ def guess_for_failure(failure: PinImportFailure, *, near: tuple[float, float] | 
 
 
 def _area_only_guess(hint: tuple[float, float] | None, near: tuple[float, float] | None) -> LocationGuess | None:
-    """The decoded cell on its own, when the name yielded nothing.
+    """
+    The decoded cell on its own, when the name yielded nothing.
 
     Args:
         hint: The decoded S2 position, or None.

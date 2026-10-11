@@ -18,7 +18,8 @@ _MAX_EVIDENCE_ITEMS = 3
 
 
 def _resolve_own_pin(context: ToolContext, pin_slug: str) -> Pin | None:
-    """One of the requesting profile's own pins, with its location/place preloaded.
+    """
+    One of the requesting profile's own pins, with its location/place preloaded.
     Never resolves any other profile's pin - see ``Pin.objects.by_profile``."""
     from urbanlens.dashboard.models.pin.model import Pin
 

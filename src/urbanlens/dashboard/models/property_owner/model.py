@@ -1,4 +1,5 @@
-"""Property owner and sale-history models.
+"""
+Property owner and sale-history models.
 Mirrors the ``PinAlias``/``WikiAlias`` split (``models.aliases.model``) - two entirely separate models per concept, never a single model with a visibility flag.
 """
 
@@ -30,7 +31,8 @@ class _OwnerBase(abstract.DashboardModel):
         ordering = ["name"]
 
     def __str__(self) -> str:
-        """Return a human-readable label for this owner.
+        """
+        Return a human-readable label for this owner.
 
         Returns:
             The owner's name, with their company appended in parentheses when set.
@@ -39,7 +41,8 @@ class _OwnerBase(abstract.DashboardModel):
 
 
 class PinOwner(_OwnerBase):
-    """An owner private to one Pin, visible only to that pin's own profile.
+    """
+    An owner private to one Pin, visible only to that pin's own profile.
 
     Ownership is derived from pin.profile; no separate profile FK is needed
     (mirrors ``PinAlias``).
@@ -63,7 +66,8 @@ class PinOwner(_OwnerBase):
 
 
 class WikiOwner(_OwnerBase):
-    """An owner shared with everyone who has this location pinned.
+    """
+    An owner shared with everyone who has this location pinned.
     ``locations`` (not a Wiki FK) so the same real-world owner can be linked to any number of properties, the way one landlord or company genuinely can own many distinct places - unlinking a location never deletes the record (see the controller's remove view): previous ownership is never lost, only no longer "current."
     """
 
@@ -93,7 +97,8 @@ class _PropertySaleBase(abstract.DashboardModel):
 
 
 class PinPropertySale(_PropertySaleBase):
-    """A sale record private to one Pin.
+    """
+    A sale record private to one Pin.
 
     ``previous_owners``/``new_owners`` are M2M to ``PinOwner`` (not single
     FKs) - a sale can record any number of co-owners on either side, and
@@ -110,7 +115,8 @@ class PinPropertySale(_PropertySaleBase):
     objects = PinPropertySaleManager()
 
     def __str__(self) -> str:
-        """Return a human-readable label for this sale record.
+        """
+        Return a human-readable label for this sale record.
 
         Returns:
             A string like "Sale of pin <id> on <date>", or "(undated)" if unset.
@@ -127,7 +133,8 @@ class PinPropertySale(_PropertySaleBase):
 
 
 class WikiPropertySale(_PropertySaleBase):
-    """A sale record shared with everyone who has this location pinned.
+    """
+    A sale record shared with everyone who has this location pinned.
 
     ``previous_owners``/``new_owners`` are M2M to ``WikiOwner`` for the same
     reason as ``PinPropertySale``.
@@ -146,7 +153,8 @@ class WikiPropertySale(_PropertySaleBase):
     objects = WikiPropertySaleManager()
 
     def __str__(self) -> str:
-        """Return a human-readable label for this sale record.
+        """
+        Return a human-readable label for this sale record.
 
         Returns:
             A string like "Sale of location <id> on <date>", or "(undated)" if unset.

@@ -52,7 +52,8 @@ class EsriGateway(SatelliteViewProvider):
         height: int = 400,
         limit: int = -1,
     ) -> Generator[SatelliteSlide]:
-        """Yield the current Esri World Imagery and USGS slides, then Esri Wayback's historical releases.
+        """
+        Yield the current Esri World Imagery and USGS slides, then Esri Wayback's historical releases.
 
         Args:
             latitude: WGS-84 latitude.
@@ -106,7 +107,8 @@ class EsriGateway(SatelliteViewProvider):
         )
 
     def get_wayback_slides(self, latitude: float, longitude: float, *, max_count: int = 5) -> list[SatelliteSlide]:
-        """Return historical Esri Wayback imagery slides, one release tile each.
+        """
+        Return historical Esri Wayback imagery slides, one release tile each.
 
         Args:
             latitude: WGS-84 latitude the tile must contain.
@@ -151,7 +153,8 @@ class EsriGateway(SatelliteViewProvider):
         return slides
 
     def _get_wayback_releases(self) -> list[dict[str, Any]]:
-        """Return cached Esri Wayback release metadata.
+        """
+        Return cached Esri Wayback release metadata.
 
         Raises:
             requests.RequestException: Esri couldn't be asked, or didn't answer.

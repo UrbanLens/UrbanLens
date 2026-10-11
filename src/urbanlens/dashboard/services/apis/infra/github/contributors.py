@@ -36,7 +36,8 @@ class GitHubContributor:
 
 
 def get_github_contributors() -> list[GitHubContributor]:
-    """Return cached GitHub contributors, refreshing from the API when stale.
+    """
+    Return cached GitHub contributors, refreshing from the API when stale.
 
     Returns:
         Contributors sorted by contribution count (highest first)."""
@@ -65,7 +66,8 @@ def _contributor_from_dict(data: dict[str, Any]) -> GitHubContributor:
 
 
 def _fetch_contributors() -> list[GitHubContributor]:
-    """Download all contributor pages from the GitHub REST API.
+    """
+    Download all contributor pages from the GitHub REST API.
 
     Returns:
         Parsed contributors excluding GitHub bot accounts.

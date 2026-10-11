@@ -147,7 +147,8 @@ class GooglePhotosGatewayTests(TestCase):
         self.assertIn(f"=w{PREVIEW_MAX_DIMENSION}-h{PREVIEW_MAX_DIMENSION}", called_url)
 
     def test_the_preview_dimension_stays_a_thumbnail(self) -> None:
-        """Guards the constant: raising it back would leave the assertion above
+        """
+        Guards the constant: raising it back would leave the assertion above
         passing while restoring the defect it exists to prevent."""
         self.assertLessEqual(PREVIEW_MAX_DIMENSION, 1024)
 
@@ -399,7 +400,8 @@ class ImportGooglePhotosTaskTests(TestCase):
 
 
 class GetPhotosAccountTests(TestCase):
-    """GooglePhotosAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
+    """
+    GooglePhotosAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
 
     Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
     EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the Google Photos

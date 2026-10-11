@@ -1,4 +1,5 @@
-"""nginx must not be able to spool request bodies onto the database's disk.
+"""
+nginx must not be able to spool request bodies onto the database's disk.
 
 `client_max_body_size` is 200m and nginx buffers a request body larger than
 `client_body_buffer_size` (a page or two) to `client_body_temp_path` before the
@@ -61,7 +62,8 @@ def _bytes(value: str) -> int:
 
 
 def _resolved(value: str) -> str:
-    """The default a ``${VAR:-default}`` compose value falls back to.
+    """
+    The default a ``${VAR:-default}`` compose value falls back to.
 
     Nested defaults (``${A:-${B:-128m}}``) resolve to the innermost, which is
     what a deployment that sets neither variable gets.

@@ -67,7 +67,8 @@ class ProvisionMobileOauthClientTests(TestCase):
         self.assertEqual(application.redirect_uris, "urbanlens://alt/callback")
 
     def test_client_secret_is_stored_blank_and_unhashed(self) -> None:
-        """A public client's secret must stay literally empty.
+        """
+        A public client's secret must stay literally empty.
 
         ``ClientSecretField.pre_save`` hashes the secret whenever ``hash_client_secret`` is True (its default)."""
         _provision()
@@ -77,7 +78,8 @@ class ProvisionMobileOauthClientTests(TestCase):
 
 
 class FirstPartyClientMigrationTests(TestCase):
-    """The 0010 data migration provisions the same registration at migrate time.
+    """
+    The 0010 data migration provisions the same registration at migrate time.
 
     The row these assertions read is made by the migration's own function in ``setUp``, not by any code in this test,
     so a regression in the migration surfaces here even though the management command still works. The row the
@@ -99,7 +101,8 @@ class FirstPartyClientMigrationTests(TestCase):
         self.assertFalse(application.skip_authorization)
 
     def test_migrated_client_secret_is_blank_and_unhashed(self) -> None:
-        """The migration sets hash_client_secret=False, so "" stays "".
+        """
+        The migration sets hash_client_secret=False, so "" stays "".
 
         Without it the stored value would be ``make_password("")`` - a hash a
         presented empty secret would verify against.

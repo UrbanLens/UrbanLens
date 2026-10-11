@@ -1,4 +1,5 @@
-"""An archive's directory is bounded before it is read, not only its supported entries (P95).
+"""
+An archive's directory is bounded before it is read, not only its supported entries (P95).
 
 ``zipfile`` reads a ZIP's whole central directory into a ``ZipInfo`` per entry before anything looks at one: a 94 MB
 upload of a million empty entries cost 586 MiB to open, and the 200 MB upload cap allows several times that.
@@ -102,7 +103,8 @@ class ZipDirectoryTests(SimpleTestCase):
         self.assertLess(peak, archive_extractor.MAX_ZIP_DIRECTORY_BYTES + 4 * 1024 * 1024)
 
     def test_opening_a_small_zip_holds_about_what_it_reads(self) -> None:
-        """zipfile reads the end record to the file's end, and a buffered ``read(n)`` allocates ``n`` before reading.
+        """
+        zipfile reads the end record to the file's end, and a buffered ``read(n)`` allocates ``n`` before reading.
 
         Asking a real file for the whole bound there costs 8 MiB per ZIP opened. A ``BytesIO`` slices instead, which is
         why this opens a file on disk. See UrbanLens#298 ("Nine tests fail under bin/host_pytest.sh on release/v_0_9_0").

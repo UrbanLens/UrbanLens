@@ -1,4 +1,5 @@
-"""The Celery queues this deployment runs, and which container drains each one.
+"""
+The Celery queues this deployment runs, and which container drains each one.
 
 A queue here is not a scheduling nicety - it is the unit of *isolation*. Each
 one is drained by its own container in ``docker-compose.yml``, and those
@@ -63,7 +64,8 @@ from enum import StrEnum
 
 
 class Queue(StrEnum):
-    """A Celery queue name.
+    """
+    A Celery queue name.
 
     Attributes:
         DEFAULT: Celery's own default queue name. Nothing should route here -
@@ -94,7 +96,8 @@ class Queue(StrEnum):
 
 
 def sandbox_queue(*, batch: bool = False) -> str:
-    """The queue untrusted-parse tasks should be routed to.
+    """
+    The queue untrusted-parse tasks should be routed to.
     Read once per task definition, at import time, so it appears in the task's own exec options rather than at each call site.
 
     Args:
@@ -110,7 +113,8 @@ def sandbox_queue(*, batch: bool = False) -> str:
 
 
 def ai_queue() -> str:
-    """The queue the assistant's tool-loop task should be routed to.
+    """
+    The queue the assistant's tool-loop task should be routed to.
     Read once per task definition, at import time, so it appears in the task's own exec options rather than at each call site - matching :func:`sandbox_queue`.
 
     Returns:

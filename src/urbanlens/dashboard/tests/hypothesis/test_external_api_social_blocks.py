@@ -17,7 +17,8 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the Authorization header kwargs for the test client.
+    """
+    Build the Authorization header kwargs for the test client.
 
     Args:
         raw_key: The plaintext API key.
@@ -28,7 +29,8 @@ def _bearer(raw_key: str) -> dict:
 
 
 def _key_with_scopes(user: User, *scopes: ApiKeyScope) -> str:
-    """Issue an API key granting exactly ``scopes``.
+    """
+    Issue an API key granting exactly ``scopes``.
 
     Args:
         user: The key's owner.
@@ -57,7 +59,8 @@ class _BlockTestCase(TestCase):
         self.blocked_key = _key_with_scopes(self.blocked_user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE)
 
     def _block(self) -> Friendship:
-        """Have ``blocker`` block ``blocked`` through the real endpoint.
+        """
+        Have ``blocker`` block ``blocked`` through the real endpoint.
 
         Going through the endpoint rather than ``Friendship.objects.create`` is deliberate: the row's
         *direction* is what identifies the blocker, and only the service normalizes it.
@@ -74,7 +77,8 @@ class _BlockTestCase(TestCase):
         return friendship
 
     def _assert_still_blocked(self, friendship: Friendship) -> None:
-        """Assert the row is untouched: still blocked, still owned by the blocker.
+        """
+        Assert the row is untouched: still blocked, still owned by the blocker.
 
         Args:
             friendship: The row captured before the refused request.
@@ -113,7 +117,8 @@ class BlockedPartyCannotClearTheBlockTests(_BlockTestCase):
         self._assert_still_blocked(friendship)
 
     def test_block_placed_on_an_inbound_request_still_belongs_to_the_blocker(self) -> None:
-        """Blocking a pending requester must not leave the requester owning the row.
+        """
+        Blocking a pending requester must not leave the requester owning the row.
 
         ``block_profile`` reuses the existing relationship row, and the row created by a friend request has
         ``from_profile`` = the *requester*."""
@@ -202,7 +207,8 @@ class UnblockRefusalsAreIndistinguishableTests(_BlockTestCase):
     """Unknown uuid, no row, and a row blocked by someone else all answer alike."""
 
     def _unblock(self, profile_uuid) -> object:
-        """POST the unblock endpoint as the blocker.
+        """
+        POST the unblock endpoint as the blocker.
 
         Args:
             profile_uuid: The uuid named in the path.

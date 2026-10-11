@@ -101,7 +101,8 @@ _STOP_HEADING_TITLES = frozenset(
 
 @dataclass(slots=True, kw_only=True)
 class WikipediaGateway(Gateway):
-    """Fetches Wikipedia article summaries for a geographic location.
+    """
+    Fetches Wikipedia article summaries for a geographic location.
     The address-verification step ensures we return an article that is actually about the queried address rather than a nearby unrelated landmark."""
 
     service_key: ClassVar[str] = "wikipedia"
@@ -120,7 +121,8 @@ class WikipediaGateway(Gateway):
         radius_m: int = 5000,
         limit: int = 15,
     ) -> list[dict[str, Any]]:
-        """Return Wikipedia articles near the given coordinates as place dicts.
+        """
+        Return Wikipedia articles near the given coordinates as place dicts.
 
         Args:
             latitude: WGS-84 latitude.
@@ -185,7 +187,8 @@ class WikipediaGateway(Gateway):
         name: str = "",
         within: Polygon | MultiPolygon | None = None,
     ) -> dict[str, Any] | None:
-        """Find a Wikipedia article near the coordinates that matches the place.
+        """
+        Find a Wikipedia article near the coordinates that matches the place.
 
         Args:
             latitude: WGS-84 latitude of the location.
@@ -218,7 +221,8 @@ class WikipediaGateway(Gateway):
         return None
 
     def get_article_media(self, title: str) -> list[dict[str, Any]]:
-        """Return the images actually shown on a specific Wikipedia article.
+        """
+        Return the images actually shown on a specific Wikipedia article.
 
         Args:
             title: Exact Wikipedia article title (as returned by
@@ -266,7 +270,8 @@ class WikipediaGateway(Gateway):
     # -- private ----------------------------------------------------------------
 
     def _fill_full_extract(self, article: dict[str, Any], title: str) -> None:
-        """Mutate ``article["extract"]`` in place with the full article body.
+        """
+        Mutate ``article["extract"]`` in place with the full article body.
         The lead section alone (all the REST summary endpoint returns) is frequently only a fraction of the article's real content, so this always pulls from later sections of the body too rather than stopping at the lead."""
         extended = self._fetch_extended_extract(title)
         if extended and self._visible_length(extended) > self._visible_length(article["extract"]):
@@ -292,7 +297,8 @@ class WikipediaGateway(Gateway):
         return None
 
     def _fetch_infobox(self, title: str) -> list[list[str]]:
-        """Fetch and extract an article's infobox as ordered label/value fact pairs.
+        """
+        Fetch and extract an article's infobox as ordered label/value fact pairs.
         This instead requests the article's real rendered HTML (``action=parse``) and pulls just the infobox table out of it, since that's the only Wikipedia response that contains it.
 
         Args:
@@ -348,7 +354,8 @@ class WikipediaGateway(Gateway):
 
     @staticmethod
     def _clean_and_trim_extract(raw_html: str) -> str:
-        """Sanitize untrusted article HTML, drop reference-style sections, and cap length.
+        """
+        Sanitize untrusted article HTML, drop reference-style sections, and cap length.
         Truncation happens at block-element boundaries (never mid-tag or mid-sentence) so the result is always well-formed and never ends on a dangling heading."""
         # attribute_filter is required alongside attributes={} - nh3/ammonia keeps a hardcoded
         # "generic" attribute set (title, lang, ...) on every tag regardless of the allowlist.

@@ -18,7 +18,8 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet["VisitSuggestion"]):
     """QuerySet for VisitSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """Filter to suggestions sent to a given profile.
+        """
+        Filter to suggestions sent to a given profile.
 
         Args:
             profile: Recipient profile.
@@ -29,7 +30,8 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet["VisitSuggestion"]):
         return self.filter(suggested_to=profile)
 
     def for_place(self, *, location: Location | None, latitude: Decimal | float | None, longitude: Decimal | float | None) -> Self:
-        """Filter to suggestions for a specific place.
+        """
+        Filter to suggestions for a specific place.
         Matches on the shared Location when one is given, otherwise falls back to an exact latitude/longitude match (mirrors how ``find_pin_at`` resolves a profile's own pin for a place with no Location).
 
         Args:
@@ -45,7 +47,8 @@ class VisitSuggestionQuerySet(abstract.DashboardQuerySet["VisitSuggestion"]):
         return self.filter(latitude=latitude, longitude=longitude)
 
     def pending(self) -> Self:
-        """Filter to suggestions still awaiting a response.
+        """
+        Filter to suggestions still awaiting a response.
 
         Returns:
             Filtered queryset.

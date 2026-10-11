@@ -50,7 +50,8 @@ _SAMPLE_FIELD_VALUES: dict[str, Any] = {
 
 
 def _bearer(raw_key: str) -> dict:
-    """Request kwargs carrying an API key as a bearer token.
+    """
+    Request kwargs carrying an API key as a bearer token.
 
     Args:
         raw_key: The plaintext API key.
@@ -74,7 +75,8 @@ class _PinPatchTestCase(TestCase):
         self.pin = create_pin_for_profile(self.profile, name="Old Mill", latitude=42.5, longitude=-73.5).pin
 
     def _url(self, pin: Pin | None = None) -> str:
-        """The detail URL of *pin* (default: the fixture pin).
+        """
+        The detail URL of *pin* (default: the fixture pin).
 
         Args:
             pin: The pin to address.
@@ -85,7 +87,8 @@ class _PinPatchTestCase(TestCase):
         return f"{BASE}/{pin.slug or pin.uuid}/"
 
     def _patch(self, payload: dict, *, pin: Pin | None = None, raw_key: str | None = None):
-        """PATCH a pin with a JSON body.
+        """
+        PATCH a pin with a JSON body.
 
         Args:
             payload: The JSON body to send. pin: The pin to address; defaults to the fixture pin. raw_key: A raw key to use instead of the fixture's.
@@ -97,7 +100,8 @@ class _PinPatchTestCase(TestCase):
         )
 
     def _get(self, pin: Pin | None = None):
-        """GET a pin's detail payload.
+        """
+        GET a pin's detail payload.
 
         Args:
             pin: The pin to address; defaults to the fixture pin.
@@ -107,7 +111,8 @@ class _PinPatchTestCase(TestCase):
         return self.client.get(self._url(pin), **_bearer(self.raw_key))
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
-        """Issue a second key carrying exactly *scopes*.
+        """
+        Issue a second key carrying exactly *scopes*.
 
         Args:
             scopes: Raw scope values to store on the row.
@@ -119,7 +124,8 @@ class _PinPatchTestCase(TestCase):
         return raw
 
     def _label(self, name: str, kind: str = KIND_TAG, profile: Profile | None = None) -> Label:
-        """Create one label, owned by the key holder unless told otherwise.
+        """
+        Create one label, owned by the key holder unless told otherwise.
 
         Args:
             name: The label's name. kind: One of the ``KIND_*`` constants. profile: The owning profile; ``None`` means a *global* label.
@@ -130,7 +136,8 @@ class _PinPatchTestCase(TestCase):
 
 
 class PinPatchRoundTripTests(_PinPatchTestCase):
-    """Every newly-writable field is readable back on the next GET.
+    """
+    Every newly-writable field is readable back on the next GET.
 
     The failure this guards is the exact one the widening exists to fix: a field the endpoint accepts, answers
     200 for, and then quietly does not store."""
@@ -141,7 +148,8 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
         self.assertEqual(self._get().json()["description"], "Rusted catwalks - watch the floor.")
 
     def test_color_round_trips(self) -> None:
-        """Asserted on ``own_color``: ``color`` is the *effective* colour, which
+        """
+        Asserted on ``own_color``: ``color`` is the *effective* colour, which
         falls back to a label's when the pin has none of its own."""
         response = self._patch({"color": "#F44336"})
         self.assertEqual(response.status_code, 200, response.content)
@@ -158,7 +166,8 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
         self.assertEqual(self._get().json()["priority"], 4)
 
     def test_pin_type_round_trips_and_marks_the_type_user_provided(self) -> None:
-        """The companion flag matters as much as the value.
+        """
+        The companion flag matters as much as the value.
 
         Without it, automatic building/parcel classification (``services.locations.site_scope``) would go on
         overruling the type the user deliberately chose, and the choice would appear to "not stick"."""
@@ -224,7 +233,8 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
         self.assertEqual(self.pin.locked, SecurityLevel.UNKNOWN.value)
 
     def test_danger_and_vulnerability_are_stored_but_not_yet_served_back(self) -> None:
-        """KNOWN GAP, asserted so it cannot be mistaken for working.
+        """
+        KNOWN GAP, asserted so it cannot be mistaken for working.
 
         ``PATCH`` accepts both, and both are persisted - but neither appears in the pin-detail payload, because
         ``services.map_pins.payload`` (which ``services.pins.pin_detail.build_pin_detail`` builds on) never
@@ -255,7 +265,8 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
 
 
 class PinPatchPartialSemanticsTests(_PinPatchTestCase):
-    """Absent means untouched; an explicit null clears.
+    """
+    Absent means untouched; an explicit null clears.
 
     Both halves have to hold or a client destroys data it never mentioned: a single-control quick edit that
     rewrites every field silently reverts whatever another device changed since, and a "clear this note" that
@@ -306,7 +317,8 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
         self.assertIsNone(self.pin.icon)
 
     def test_a_blank_string_clears_a_free_text_field_exactly_like_null(self) -> None:
-        """ "Cleared in the UI" and "explicit JSON null" must land on one stored value.
+        """
+        "Cleared in the UI" and "explicit JSON null" must land on one stored value.
 
         Otherwise a pin edited on the website holds ``""`` where the same edit from the mobile app holds
         ``NULL``, and every ``field__isnull`` filter disagrees about which pins have a description."""
@@ -365,7 +377,8 @@ class PinPatchPartialSemanticsTests(_PinPatchTestCase):
                 self.assertEqual(getattr(self.pin, name), value)
 
     def test_a_rejected_field_writes_none_of_the_others_in_the_same_patch(self) -> None:
-        """Validation happens before anything is written - a partly-applied
+        """
+        Validation happens before anything is written - a partly-applied
         PATCH is the worst outcome, because the client cannot tell which half
         landed."""
         response = self._patch({"description": "should not land", "priority": 99})
@@ -406,7 +419,8 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
         self.assertEqual(self._label_ids(), {self.status.pk})
 
     def test_every_label_dropped_by_the_replacement_is_tombstoned(self) -> None:
-        """Without the tombstone the removal does not stick: keyword and AI
+        """
+        Without the tombstone the removal does not stick: keyword and AI
         auto-tagging re-derive labels from the pin's own text and would put the
         label straight back on their next run."""
         response = self._patch({"label_uuids": [str(self.category.uuid)]})
@@ -429,7 +443,8 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
         self.assertEqual(self._tombstoned(), set())
 
     def test_person_labels_survive_a_replacement_that_never_mentions_them(self) -> None:
-        """Person and media labels are attached by entirely different surfaces
+        """
+        Person and media labels are attached by entirely different surfaces
         (photo tagging, media galleries). Stripping them here would delete data
         from a UI the user was not even looking at."""
         person = self._label("Sam", KIND_USER)
@@ -451,7 +466,8 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
         self.assertEqual(self._label_ids(), {shared.pk})
 
     def test_an_unknown_label_uuid_is_a_400_not_a_silent_skip(self) -> None:
-        """A partial resolution answered 200 would hand the client a label set
+        """
+        A partial resolution answered 200 would hand the client a label set
         smaller than the one it submitted, with nothing saying so."""
         response = self._patch({"label_uuids": [str(self.status.uuid), str(uuid4())]})
 
@@ -469,7 +485,8 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
         self.assertEqual(self._label_ids(), {self.tag.pk, self.category.pk})
 
     def test_a_person_label_uuid_is_a_400_rather_than_a_quiet_no_op(self) -> None:
-        """Only tag/category/status labels are this payload's to set, so a
+        """
+        Only tag/category/status labels are this payload's to set, so a
         person label here is a client bug worth reporting, not one to swallow."""
         person = self._label("Sam", KIND_USER)
 
@@ -520,7 +537,8 @@ class PinPatchVisitedTests(_PinPatchTestCase):
         self.assertEqual(self.pin.labels.filter(pk=self.visited_label.pk).count(), 1)
 
     def test_visited_false_removes_the_label_and_clears_last_visited(self) -> None:
-        """Both halves, because the point of un-marking a pin is to get it back
+        """
+        Both halves, because the point of un-marking a pin is to get it back
         into the Memories "log your visits" queue - which a stale
         ``last_visited`` would keep it out of."""
         self._patch({"last_visited": "2024-06-01T12:00:00Z"})
@@ -534,7 +552,8 @@ class PinPatchVisitedTests(_PinPatchTestCase):
         self.assertIsNone(self.pin.last_visited)
 
     def test_visited_combined_with_an_explicit_last_visited_is_a_400(self) -> None:
-        """The two make opposite claims about the same fact - ``visited: false``
+        """
+        The two make opposite claims about the same fact - ``visited: false``
         clears ``last_visited`` outright - so any precedence rule would silently
         discard one of the two things the client actually asked for."""
         response = self._patch({"visited": True, "last_visited": "2024-06-01T12:00:00Z"})
@@ -550,7 +569,8 @@ class PinPatchVisitedTests(_PinPatchTestCase):
         self.assertEqual(response.status_code, 400, response.content)
 
     def test_visited_true_wins_over_a_label_replacement_that_omits_it(self) -> None:
-        """Applied after the replacement on purpose: a client sending its whole
+        """
+        Applied after the replacement on purpose: a client sending its whole
         label set plus ``visited: true`` means both, and undoing one of them is
         not a defensible reading."""
         tag = self._label("rooftop", KIND_TAG)
@@ -570,7 +590,8 @@ class PinPatchVisitedTests(_PinPatchTestCase):
 
 
 class PinPatchWikiStatVoteTests(_PinPatchTestCase):
-    """Writing priority/danger/vulnerability publishes a *community* wiki vote.
+    """
+    Writing priority/danger/vulnerability publishes a *community* wiki vote.
 
     This is the surprising one."""
 
@@ -586,7 +607,8 @@ class PinPatchWikiStatVoteTests(_PinPatchTestCase):
         return dict(WikiStatVote.objects.filter(wiki=self.wiki, profile=self.profile).values_list("field", "value"))
 
     def _patch_committed(self, payload: dict):
-        """PATCH with ``transaction.on_commit`` hooks actually run.
+        """
+        PATCH with ``transaction.on_commit`` hooks actually run.
 
         The vote is published from an ``on_commit`` callback, which a Django ``TestCase``'s wrapping transaction
         never reaches - without this the assertion would pass vacuously against an empty table.
@@ -612,7 +634,8 @@ class PinPatchWikiStatVoteTests(_PinPatchTestCase):
         self.assertEqual(self._votes(), {"danger": 5, "vulnerability": 2})
 
     def test_setting_the_value_back_to_zero_withdraws_the_vote(self) -> None:
-        """0 means "unset" on the pin, and a 0-valued vote would skew the wiki's
+        """
+        0 means "unset" on the pin, and a 0-valued vote would skew the wiki's
         composite average rather than leaving it."""
         self._patch_committed({"priority": 4})
 
@@ -622,7 +645,8 @@ class PinPatchWikiStatVoteTests(_PinPatchTestCase):
         self.assertEqual(self._votes(), {})
 
     def test_an_unrelated_field_edit_publishes_nothing(self) -> None:
-        """The narrow ``update_fields`` is what makes this true: a save naming
+        """
+        The narrow ``update_fields`` is what makes this true: a save naming
         every column would republish the owner's votes on every edit, including
         ones that never touched a stat."""
         response = self._patch_committed({"description": "Boiler house", "color": "#0088CC"})
@@ -648,7 +672,8 @@ class PinPatchWikiStatVoteTests(_PinPatchTestCase):
 
 
 class PinPatchWikiLossConfirmationTests(_PinPatchTestCase):
-    """A move that costs the owner wiki access needs an explicit acknowledgement.
+    """
+    A move that costs the owner wiki access needs an explicit acknowledgement.
 
     Wiki visibility follows where a person's pins are, so dragging a pin off a site quietly revokes their access
     to that site's community wiki."""
@@ -693,7 +718,8 @@ class PinPatchWikiLossConfirmationTests(_PinPatchTestCase):
         self.assertEqual(response.status_code, 200, response.content)
 
     def test_the_handshake_is_asked_only_once_the_rest_of_the_request_is_valid(self) -> None:
-        """Confirming a move and then being handed a 400 for an unrelated bad
+        """
+        Confirming a move and then being handed a 400 for an unrelated bad
         field would be a pointless prompt."""
         response = self._patch({"latitude": 10.0, "longitude": 10.0, "priority": 99})
 
@@ -704,7 +730,8 @@ class PinPatchNotWritableHereTests(_PinPatchTestCase):
     """Fields a client may reasonably expect here, and must not find."""
 
     def test_rating_is_not_writable_through_this_endpoint(self) -> None:
-        """A pin's rating is not a pin field - it is the caller's ``Review`` of
+        """
+        A pin's rating is not a pin field - it is the caller's ``Review`` of
         it, written through ``PUT``/``DELETE /pins/{slug}/review/``. Two write
         paths to one value would have to be kept in agreement forever."""
         self.assertNotIn("rating", PinUpdateSerializer().fields)
@@ -730,7 +757,8 @@ class PinPatchNotWritableHereTests(_PinPatchTestCase):
         self.assertEqual(self._get().json()["address"], before)
 
     def test_the_writable_pin_columns_are_exactly_what_the_edit_service_allows(self) -> None:
-        """Guards the other direction: a field added to the serializer that the
+        """
+        Guards the other direction: a field added to the serializer that the
         shared edit service does not handle would be refused at runtime with a
         400 that names it - a contract break discovered by a user, not a test."""
         serializer_columns = set(PinUpdateSerializer().fields) - {
@@ -786,13 +814,15 @@ class PinPatchAuthorizationTests(_PinPatchTestCase):
 
 
 class PinUpdateEditMappingTests(SimpleTestCase):
-    """``PinUpdateSerializer.pin_field_edits`` - the wire-to-column flattening.
+    """
+    ``PinUpdateSerializer.pin_field_edits`` - the wire-to-column flattening.
 
     Unit-level because this is pure parsing and the property below would be unbearably slow against the
     database."""
 
     def _edits(self, payload: dict) -> dict[str, Any]:
-        """Validate *payload* and return the flattened edit mapping.
+        """
+        Validate *payload* and return the flattened edit mapping.
 
         Args:
             payload: A pin-update wire payload.
@@ -820,7 +850,8 @@ class PinUpdateEditMappingTests(SimpleTestCase):
         self.assertEqual(edits, {"security": SecurityLevel.SOME.value})
 
     def test_non_column_keys_are_dropped_from_the_mapping(self) -> None:
-        """Each of these has its own handling in the view; letting one through
+        """
+        Each of these has its own handling in the view; letting one through
         would reach ``apply_pin_edits``, which refuses unknown fields outright."""
         edits = self._edits(
             {
@@ -847,7 +878,8 @@ class PinUpdateEditMappingTests(SimpleTestCase):
     def test_any_subset_of_the_optional_fields_yields_exactly_that_subset(
         self, fields: set[str], security_fields: set[str]
     ) -> None:
-        """The property behind "absent means untouched".
+        """
+        The property behind "absent means untouched".
 
         ``apply_pin_edits`` writes precisely the columns it is handed, so a key appearing here that the client
         never sent is a silent overwrite of a field the user was not looking at - and one going missing is the

@@ -1,4 +1,5 @@
-"""WikiStatVote - one profile's vote on a community stat field for a Wiki.
+"""
+WikiStatVote - one profile's vote on a community stat field for a Wiki.
 Danger, vulnerability, priority, and rating are personal star ratings on a Pin.
 A Wiki has no single owner, so the equivalent fields there are a composite (average) of every contributing profile's vote rather than a single stored value - this model holds those individual votes.
 """

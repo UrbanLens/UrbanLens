@@ -1,4 +1,5 @@
-"""Resolving coordinates onto places, and keeping that cache honest.
+"""
+Resolving coordinates onto places, and keeping that cache honest.
 Nothing keyed off ``Location`` (pin provenance, share exposure, wiki routing) is disturbed when it moves, which is the whole reason place membership is resolved rather than stored as an FK users' data depends on."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_location_place(location: Location, *, save: bool = True) -> Place | None:
-    """Resolve which place a Location's coordinate sits on.
+    """
+    Resolve which place a Location's coordinate sits on.
     Never calls a provider - it only asks what is already known.
 
     Args:
@@ -50,7 +52,8 @@ def resolve_location_place(location: Location, *, save: bool = True) -> Place | 
 
 
 def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
-    """Re-resolve every Location whose coordinate falls inside a polygon.
+    """
+    Re-resolve every Location whose coordinate falls inside a polygon.
     Scoped by polygon so a boundary refresh never walks the whole table.
 
     Args:
@@ -76,7 +79,8 @@ def resolve_locations_in(polygon, *, exclude_place: Place | None = None) -> int:
 
 
 def refresh_area(place: Place) -> float | None:
-    """Recompute and store a place's cached area in square metres.
+    """
+    Recompute and store a place's cached area in square metres.
 
     Args:
         place: The place whose geometry has just changed.
@@ -95,7 +99,8 @@ def refresh_area(place: Place) -> float | None:
 
 
 def attach_location(location: Location, place: Place | None) -> None:
-    """Point a Location at a place without re-running containment.
+    """
+    Point a Location at a place without re-running containment.
 
     Args:
         location: The Location to update.
@@ -106,7 +111,8 @@ def attach_location(location: Location, place: Place | None) -> None:
 
 
 def domain_ids_for_locations(location_ids: Iterable[int]) -> set[int]:
-    """The access domains a set of locations belong to.
+    """
+    The access domains a set of locations belong to.
 
     Args:
         location_ids: Location primary keys.

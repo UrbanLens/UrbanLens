@@ -1,4 +1,5 @@
-"""Per-viewer visibility of a trip activity's location.
+"""
+Per-viewer visibility of a trip activity's location.
 Shared by the trip controllers (activities panel, map data) and anything else - like AI trip suggestions - that must never show a viewer a location their trip-mate chose not to reveal to them specifically."""
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ HIDDEN_ACTIVITY_TITLE = "Secret Location"
 
 
 def shown_activity_title(activity: TripActivity, *, hidden: bool) -> str | None:
-    """The activity's own stored title as this viewer may see it.
+    """
+    The activity's own stored title as this viewer may see it.
 
     A title filled in from the place (``TripActivity.title_from_place``) names the place, so it goes wherever the
     location goes. A title the author typed was written for the other members and is kept.
@@ -38,7 +40,8 @@ def shown_activity_title(activity: TripActivity, *, hidden: bool) -> str | None:
 
 
 def masked_activity_title(activity: TripActivity, *, hidden: bool) -> str:
-    """The activity's display title as this viewer may see it.
+    """
+    The activity's display title as this viewer may see it.
     An activity's ``effective_title`` falls back to its location's name, so for a hidden activity the title *is* the location - which is why masking it is not cosmetic.
 
     Args:
@@ -57,7 +60,8 @@ def apply_trip_visibility_filter(
     viewer: Profile,
     hidden_out: set[int],
 ) -> None:
-    """Populate *hidden_out* with the IDs of activities whose location the viewer may not see, based on each adder's trip_pin_location_visibility setting.
+    """
+    Populate *hidden_out* with the IDs of activities whose location the viewer may not see, based on each adder's trip_pin_location_visibility setting.
 
     Args:
         sensitive: Activities already filtered to non-ANYONE visibility and non-owner viewer.
@@ -132,7 +136,8 @@ def apply_trip_visibility_filter(
 
 
 def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) -> set[int]:
-    """Convenience wrapper: compute the full hidden-activity-id set for a viewer.
+    """
+    Convenience wrapper: compute the full hidden-activity-id set for a viewer.
 
     Args:
         activities: Candidate activities (any status/location state).

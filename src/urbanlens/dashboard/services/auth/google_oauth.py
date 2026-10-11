@@ -37,19 +37,22 @@ DEAD_GRANT_ERRORS = frozenset({"invalid_grant", "admin_policy_enforced"})
 
 
 class GoogleAuthExpiredError(GatewayRequestError):
-    """Raised when Google has rejected the stored grant entirely (not a transient failure).
+    """
+    Raised when Google has rejected the stored grant entirely (not a transient failure).
     Distinct from the generic ``GatewayRequestError`` so callers can tell "this connection is dead, prompt the user to reconnect" apart from a transient or unrelated API failure that doesn't warrant discarding the stored credentials."""
 
 
 class GoogleTokenServiceBusyError(UpstreamBusyError):
-    """Google's token endpoint did not refresh a token this time: a 5xx, a 408 or 429, an unusable 200, or no answer.
+    """
+    Google's token endpoint did not refresh a token this time: a 5xx, a 408 or 429, an unusable 200, or no answer.
 
     Nothing about the grant was learned, so it stands.
     """
 
 
 class GoogleOAuthClientRefusedError(GatewayRequestError):
-    """The token endpoint refused the site's OAuth client or its request, not the user's grant.
+    """
+    The token endpoint refused the site's OAuth client or its request, not the user's grant.
 
     RFC 6749 section 5.2's ``invalid_client``, ``unauthorized_client``, ``invalid_request``, ``unsupported_grant_type``
     and ``invalid_scope``, and any other refusal Google does not name as the grant's: the operator's to fix, and every
@@ -76,7 +79,8 @@ def build_authorization_url(
     access_type: str = "offline",
     prompt: str = "consent",
 ) -> str:
-    """Build a Google consent-screen URL for an authorization-code flow.
+    """
+    Build a Google consent-screen URL for an authorization-code flow.
 
     Args:
         client_id: The site's Google OAuth client id.
@@ -101,7 +105,8 @@ def build_authorization_url(
 
 
 def exchange_code_for_tokens(client_id: str, client_secret: str, code: str, redirect_uri: str) -> dict[str, Any]:
-    """Exchange an authorization code for access/refresh tokens.
+    """
+    Exchange an authorization code for access/refresh tokens.
 
     Args:
         client_id: The site's Google OAuth client id.
@@ -132,7 +137,8 @@ def exchange_code_for_tokens(client_id: str, client_secret: str, code: str, redi
 
 
 def refresh_access_token(client_id: str, client_secret: str, refresh_token: str) -> dict[str, Any]:
-    """Obtain a fresh access token using a refresh token.
+    """
+    Obtain a fresh access token using a refresh token.
 
     Args:
         client_id: The site's Google OAuth client id.
@@ -183,7 +189,8 @@ def refresh_access_token(client_id: str, client_secret: str, refresh_token: str)
 
 
 def revoke_token(token: str) -> bool:
-    """Best-effort revocation of an access or refresh token at Google.
+    """
+    Best-effort revocation of an access or refresh token at Google.
 
     Args:
         token: The token to revoke (refresh token revokes the whole grant).
@@ -200,7 +207,8 @@ def revoke_token(token: str) -> bool:
 
 
 def extract_email_from_id_token(id_token: str | None) -> str | None:
-    """Read the ``email`` claim from an OAuth ``id_token``.
+    """
+    Read the ``email`` claim from an OAuth ``id_token``.
     The token arrives directly from Google's token endpoint over TLS, so the payload is decoded without signature verification - it is used for display only, never for authentication.
 
     Args:

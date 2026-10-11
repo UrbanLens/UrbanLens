@@ -1,4 +1,5 @@
-"""Schema serializers for the E2EE key-distribution API.
+"""
+Schema serializers for the E2EE key-distribution API.
 
 A native client generates its E2EE types from these, so each field mirrors the view's actual
 reads/writes exactly; drift is caught by `test_external_api_schema_e2ee.py`.

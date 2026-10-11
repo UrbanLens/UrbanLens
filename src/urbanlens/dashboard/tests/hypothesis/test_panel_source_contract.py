@@ -64,7 +64,8 @@ class PanelSourceProblemsTests(SimpleTestCase):
         self.assertIn("section_id", " ".join(panel_source_problems(NoSection())))
 
     def test_a_cache_backed_panel_without_a_cache_source_is_reported(self) -> None:
-        """The quietest of the three: the fetch writes one key and the read looks
+        """
+        The quietest of the three: the fetch writes one key and the read looks
         for another, so the panel polls forever and never renders."""
 
         class NoCacheSource(_MinimalCachePanel):
@@ -73,7 +74,8 @@ class PanelSourceProblemsTests(SimpleTestCase):
         self.assertIn("cache_source", " ".join(panel_source_problems(NoCacheSource())))
 
     def test_a_gallery_media_provider_is_exempt_from_the_presentation_attributes(self) -> None:
-        """Media providers render as tabs inside the combined gallery, which supplies
+        """
+        Media providers render as tabs inside the combined gallery, which supplies
         the surrounding markup - they have no section of their own to identify or head.
         Requiring these of them flagged nine correct shipped panels on the first pass."""
         from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
@@ -112,7 +114,8 @@ class PanelSourceProblemsTests(SimpleTestCase):
         self.assertIn("cache_source", " ".join(panel_source_problems(NoCache())))
 
     def test_a_source_that_renders_nothing_is_exempt_too(self) -> None:
-        """BoundaryPanelSource is the shipped example: it renders no section at all,
+        """
+        BoundaryPanelSource is the shipped example: it renders no section at all,
         fetching data the map and the external API consume. Demanding presentation
         attributes of it flagged a correct core panel on the second pass."""
 

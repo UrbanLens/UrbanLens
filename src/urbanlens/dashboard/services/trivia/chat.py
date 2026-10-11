@@ -1,4 +1,5 @@
-"""Session-scoped live text chat for trivia sessions.
+"""
+Session-scoped live text chat for trivia sessions.
 Binds ``services.core.session_chat.SessionChat``, shared by every participant-session game; existing import paths and call signatures are unchanged."""
 
 from __future__ import annotations

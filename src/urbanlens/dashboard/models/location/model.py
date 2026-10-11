@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 
 class Location(abstract.PublicDashboardModel):
-    """Shared, immutable address/coordinate record for a physical place.
+    """
+    Shared, immutable address/coordinate record for a physical place.
     A Location stores only what is derived from the address itself: coordinates, street components (via AddressableMixin), the linked GooglePlace, an external-source ``official_name``, and the cache of address-keyed external API results (``external_cache``).
     Treated as immutable: when a pin's or wiki's coordinates change we find-or-create a *different* Location instead of mutating it. - Wiki - one community page per Location (1:1); everything users edit collectively (name, description, security, labels, aliases, ...). - Pin - one row per (user, place) pair; a user's personal record.
     """
@@ -192,7 +193,8 @@ class Location(abstract.PublicDashboardModel):
 
     @cid.setter
     def cid(self, value: int | Decimal | None) -> None:
-        """Store a Google Maps CID on the shared cache row for these coordinates.
+        """
+        Store a Google Maps CID on the shared cache row for these coordinates.
         ``set_cid_for_entity`` defaults to ``fetch_if_missing=True``, which made this plain-looking attribute assignment issue a live Google call - the same class of hidden synchronous request that ``place_name`` above is cache-only to avoid.
         """
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
@@ -203,14 +205,16 @@ class Location(abstract.PublicDashboardModel):
 
     @property
     def place_name(self) -> str | None:
-        """Cached Google place name, or None when nothing has been resolved yet.
+        """
+        Cached Google place name, or None when nothing has been resolved yet.
         A plain property is the wrong place to make a synchronous external request (it fires on every pin detail page render until the cache warms, with no way to opt out or show a loading state) - see PinOverviewView.get, which dispatches tasks.resolve_location_place_name in the background instead so this stays populated for next time without ever blocking a request.
         """
         return self.cached_place_name
 
     @property
     def is_usa(self) -> bool:
-        """Whether this location's country component identifies the USA.
+        """
+        Whether this location's country component identifies the USA.
         An empty country is treated as USA for display purposes: the address backfill frequently omits the country for domestic geocoding results, and the [City, State] form it selects reads fine either way.
 
         Returns:
@@ -220,7 +224,8 @@ class Location(abstract.PublicDashboardModel):
 
     @property
     def area_label(self) -> str | None:
-        """Short human-readable area, e.g.
+        """
+        Short human-readable area, e.g.
         ``Albany, NY`` or ``Kyiv, Ukraine``.
         USA locations render as ``City, State``; elsewhere the country replaces the state (``City, Country``), falling back to ``State, Country`` when the city is unknown.
 
@@ -231,7 +236,8 @@ class Location(abstract.PublicDashboardModel):
 
     @property
     def display_name(self) -> str:
-        """Best human-readable name: the community wiki name, else the official name.
+        """
+        Best human-readable name: the community wiki name, else the official name.
         Reads the linked Wiki when present (prefetch with ``select_related("wiki")`` in bulk to avoid an extra query per row).
         """
         try:
@@ -247,7 +253,8 @@ class Location(abstract.PublicDashboardModel):
         )
 
     def get_place_name(self) -> str | None:
-        """Fetch the canonical place name from Google and cache it on GooglePlace.
+        """
+        Fetch the canonical place name from Google and cache it on GooglePlace.
         Blocks on a live API call when nothing is cached yet - safe to call from a Celery task (see tasks.resolve_location_place_name), never from a request/response cycle.
         """
         from urbanlens.dashboard.services.apis.locations.google.place_info import NO_INFORMATION, GooglePlaceService
@@ -289,7 +296,8 @@ class Location(abstract.PublicDashboardModel):
 
     @property
     def provider_name(self) -> str | None:
-        """``official_name`` when a provider is known to have supplied it, else None.
+        """
+        ``official_name`` when a provider is known to have supplied it, else None.
 
         The only name that may reach a wiki URL, a wiki's automatic name, or anyone who sees only what providers say.
         """
@@ -297,7 +305,8 @@ class Location(abstract.PublicDashboardModel):
 
     @staticmethod
     def name_from_provider(official_name: str | None, official_name_source: str | None) -> str | None:
-        """What :attr:`provider_name` is for these two column values.
+        """
+        What :attr:`provider_name` is for these two column values.
 
         Args:
             official_name: The stored name.
@@ -334,7 +343,8 @@ class Location(abstract.PublicDashboardModel):
         return could_mint(self.slug or "", name, max_length=self._slug_max_length())
 
     def _remint_slug(self) -> None:
-        """Move the slug onto the provider name, or the uuid when there is none.
+        """
+        Move the slug onto the provider name, or the uuid when there is none.
 
         A former slug of this Location's own that the name could have given is taken back rather than a new one
         minted, so a provider flipping between names moves between the same slugs.
@@ -375,7 +385,8 @@ class Location(abstract.PublicDashboardModel):
             child.sync_slug_with_provider_name()
 
     def _sync_slug_after_save(self, *, wrote_slug: bool, wrote_name: bool) -> None:
-        """Keep the slug history current, and re-mint a slug the provider name could no longer have given.
+        """
+        Keep the slug history current, and re-mint a slug the provider name could no longer have given.
 
         Args:
             wrote_slug: Whether the save just made wrote the slug column.
@@ -405,7 +416,8 @@ class Location(abstract.PublicDashboardModel):
 
     @classmethod
     def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Location:  # noqa: ARG003
-        """Stash the loaded identity-field values so ``save()`` can detect mutation.
+        """
+        Stash the loaded identity-field values so ``save()`` can detect mutation.
         Capturing the originals here means the immutability check normally costs nothing extra - it compares against these instead of re-querying.
 
         Args:
@@ -429,7 +441,8 @@ class Location(abstract.PublicDashboardModel):
 
     @staticmethod
     def _identity_values_differ(old, new) -> bool:
-        """Compare two identity-field values, treating equal numbers as unchanged.
+        """
+        Compare two identity-field values, treating equal numbers as unchanged.
 
         Coordinates are ``Decimal`` columns; a caller may assign a ``float``.
         Normalising both through ``Decimal`` avoids a spurious mismatch (e.g.
@@ -444,7 +457,8 @@ class Location(abstract.PublicDashboardModel):
         return old != new
 
     def _assert_identity_unchanged(self, update_fields) -> None:
-        """Raise if this save would alter any immutable identity field.
+        """
+        Raise if this save would alter any immutable identity field.
 
         Args:
             update_fields: The ``update_fields`` passed to ``save()`` (or ``None``
@@ -513,7 +527,8 @@ class Location(abstract.PublicDashboardModel):
         self._sync_slug_after_save(wrote_slug=writes_slug, wrote_name=writes_name)
 
     def __setattr__(self, name: str, value) -> None:
-        """Support lightweight GooglePlace doubles on unsaved model instances.
+        """
+        Support lightweight GooglePlace doubles on unsaved model instances.
         Django's foreign-key descriptor only accepts real ``GooglePlace`` model instances.
         """
         if name == "google_place" and value is not None:

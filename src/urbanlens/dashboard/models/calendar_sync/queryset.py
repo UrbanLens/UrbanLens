@@ -16,7 +16,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
     """Custom queryset for TripCalendarLink models."""
 
     def for_trip_and_profile(self, trip: Trip, profile: Profile) -> TripCalendarLinkQuerySet:
-        """Every link (trip-level and activity-level) for one trip+profile pair.
+        """
+        Every link (trip-level and activity-level) for one trip+profile pair.
 
         Args:
             trip: The trip.
@@ -36,7 +37,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         return self.filter(activity__isnull=False)
 
     def trip_level_link(self, trip: Trip, profile: Profile):
-        """The single trip-level link for a trip+profile pair, if any.
+        """
+        The single trip-level link for a trip+profile pair, if any.
 
         Args:
             trip: The trip.
@@ -48,7 +50,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         return self.for_trip_and_profile(trip, profile).trip_level().first()
 
     def activity_links_by_activity_id(self, trip: Trip, profile: Profile) -> dict[int, TripCalendarLink]:
-        """Activity-level links for a trip+profile, keyed by activity id.
+        """
+        Activity-level links for a trip+profile, keyed by activity id.
 
         Args:
             trip: The trip.
@@ -60,7 +63,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         return {link.activity_id: link for link in self.for_trip_and_profile(trip, profile).activity_level()}
 
     def already_linked(self, profile: Profile, event_id: str) -> bool:
-        """Whether a Google Calendar event is already linked for this profile.
+        """
+        Whether a Google Calendar event is already linked for this profile.
 
         Args:
             profile: The profile whose links to check.
@@ -72,7 +76,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         return self.filter(profile=profile, google_event_id=event_id).exists()
 
     def forget_written_events(self, profile: Profile) -> int:
-        """Stop trusting that this profile's calendar holds what UrbanLens last wrote to it.
+        """
+        Stop trusting that this profile's calendar holds what UrbanLens last wrote to it.
 
         Called when the profile (re)connects a Google account, which may not be the one the events went to: the next
         export rewrites every event instead of skipping it as current.
@@ -86,7 +91,8 @@ class TripCalendarLinkQuerySet(abstract.DashboardQuerySet["TripCalendarLink"]):
         return self.filter(profile=profile).exclude(event_fingerprint="").update(event_fingerprint="")
 
     def set_auto_sync(self, link_pk: int, auto_sync: bool) -> None:
-        """Update just the auto_sync flag for one link, by pk.
+        """
+        Update just the auto_sync flag for one link, by pk.
 
         Args:
             link_pk: Primary key of the link to update.
@@ -106,7 +112,8 @@ class CalendarEventDeletionQuerySet(abstract.DashboardQuerySet["CalendarEventDel
     """Custom queryset for CalendarEventDeletion models."""
 
     def queue(self, link: TripCalendarLink) -> bool:
-        """Owe a delete of the event *link* names, once.
+        """
+        Owe a delete of the event *link* names, once.
 
         Args:
             link: A link whose event UrbanLens made, with a Google event id.

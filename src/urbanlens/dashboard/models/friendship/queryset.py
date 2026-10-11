@@ -31,7 +31,8 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         )
 
     def between(self, from_profile: Profile | int, to_profile: Profile | int) -> Friendship | None:
-        """Return the relationship joining two profiles, in either direction.
+        """
+        Return the relationship joining two profiles, in either direction.
         The tolerance below is kept rather than reverted to ``.get()``: a database restored from a backup that predates the migration still holds the pair, and answering deterministically is better than refusing to render a profile.
 
         Args:
@@ -72,7 +73,8 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         return self.filter(status=FriendshipStatus.ACCEPTED)
 
     def ever_friends(self) -> Self:
-        """Return friendships that are (or once were) an accepted friendship.
+        """
+        Return friendships that are (or once were) an accepted friendship.
         ``remove()`` never deletes the row, it just moves status to ``REMOVED`` - so this is the set of rows that reached ``ACCEPTED`` at some point, unlike ``is_friend()`` which only sees the current state.
         """
         return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
