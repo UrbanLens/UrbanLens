@@ -56,7 +56,8 @@ class BackupFilesTests(SimpleTestCase):
         self.assertEqual(backup_files(missing), [])
 
     def test_ignores_a_tmp_file_from_an_unfinished_dump(self) -> None:
-        """A killed pg_dump's `.sql.tmp` almost matches the naming scheme but must
+        """
+        A killed pg_dump's `.sql.tmp` almost matches the naming scheme but must
         never be counted alongside a completed backup."""
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -201,7 +202,8 @@ class CollectBackupStatsTests(SimpleTestCase):
 
 
 class DefaultSiteSettingsTests(TestCase):
-    """Both helpers resolve the live ``SiteSettings`` singleton when none is passed in.
+    """
+    Both helpers resolve the live ``SiteSettings`` singleton when none is passed in.
 
     Every production caller (the site-admin view, the scheduled-backup Celery task, and ``DatabaseBackup``
     itself - see ``core.controllers.backups.db`` and ``dashboard.tasks``) omits the ``site_settings`` argument
@@ -240,7 +242,8 @@ class DefaultSiteSettingsTests(TestCase):
 
 
 class DeploymentSwitchTests(SimpleTestCase):
-    """``UL_BACKUP_ENABLED=false`` turns scheduled backups off whatever the settings row says (P202).
+    """
+    ``UL_BACKUP_ENABLED=false`` turns scheduled backups off whatever the settings row says (P202).
 
     On Kubernetes the backups directory is an emptyDir that a new pod sees empty, so the task always reads as due, and
     a restored settings row brought it back on after infrastructure had switched it off.

@@ -1,4 +1,5 @@
-"""WebAuthn (passkey) registration and authentication ceremonies.
+"""
+WebAuthn (passkey) registration and authentication ceremonies.
 This module only ever deals with the passkey half of that; TOTP and backup codes live in ``services.auth.two_factor``."""
 
 from __future__ import annotations
@@ -105,19 +106,22 @@ def _to_transports(values: list[str]) -> list[AuthenticatorTransport] | None:
 
 
 def has_passkeys(user: User) -> bool:
-    """True when ``user`` has enrolled at least one *login-factor* passkey.
+    """
+    True when ``user`` has enrolled at least one *login-factor* passkey.
     Unlock-only credentials (``is_login_factor=False`` - enrolled to decrypt E2EE data, see ``E2EEPasskeyWrap``) are deliberately excluded: adding one must never flip the account into mandatory 2FA."""
     return WebAuthnCredential.objects.for_user(user).filter(is_login_factor=True).exists()
 
 
 def list_credentials(user: User):
-    """Return this user's registered passkeys, newest first - both kinds.
+    """
+    Return this user's registered passkeys, newest first - both kinds.
     Settings lists everything (with a badge distinguishing sign-in factors from unlock-only keys); only the 2FA gates filter on ``is_login_factor``."""
     return WebAuthnCredential.objects.for_user(user)
 
 
 def _with_prf_extension(options_json: str, *, eval_by_credential: dict[str, str] | None = None) -> str:
-    """Add the WebAuthn ``prf`` extension to ceremony-options JSON. py_webauthn's ``options_to_json()`` emits no ``extensions`` member and its option dataclasses have nowhere to carry one, so the extension is spliced into the JSON after the fact.
+    """
+    Add the WebAuthn ``prf`` extension to ceremony-options JSON. py_webauthn's ``options_to_json()`` emits no ``extensions`` member and its option dataclasses have nowhere to carry one, so the extension is spliced into the JSON after the fact.
 
     Args:
         options_json: The JSON produced by ``options_to_json()``.
@@ -134,7 +138,8 @@ def _with_prf_extension(options_json: str, *, eval_by_credential: dict[str, str]
 
 
 def build_registration_options(request: HttpRequest, user: User) -> str:
-    """Start a passkey-registration ceremony and return JSON options for the browser.
+    """
+    Start a passkey-registration ceremony and return JSON options for the browser.
 
     Args:
         request: The incoming request (used for RP ID/origin and to stash the challenge).
@@ -171,7 +176,8 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
 
 
 def _decoded_credential(credential_json: str) -> dict[str, Any]:
-    """Decode a ceremony response, which must be an object; the library's own decode lets ``RecursionError`` out.
+    """
+    Decode a ceremony response, which must be an object; the library's own decode lets ``RecursionError`` out.
 
     Args:
         credential_json: The raw JSON the browser posted.
@@ -189,7 +195,8 @@ def _decoded_credential(credential_json: str) -> dict[str, Any]:
 
 
 def verify_and_save_registration(request: HttpRequest, user: User, credential_json: str, name: str = "", *, login_factor: bool = True) -> WebAuthnCredential:
-    """Verify a completed registration ceremony and persist the new credential.
+    """
+    Verify a completed registration ceremony and persist the new credential.
 
     Args:
         request: The incoming request (holds the challenge stashed by ``build_registration_options``).
@@ -244,7 +251,8 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
 
 
 def build_authentication_options(request: HttpRequest, user: User) -> str:
-    """Start a login-2FA passkey ceremony scoped to ``user``'s sign-in credentials.
+    """
+    Start a login-2FA passkey ceremony scoped to ``user``'s sign-in credentials.
     Only ``is_login_factor`` credentials are offered - an unlock-only key is not a second factor, by the owner's own choice.
 
     Args:
@@ -281,7 +289,8 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
 
 
 def verify_authentication(request: HttpRequest, user: User, credential_json: str) -> WebAuthnCredential:
-    """Verify a completed authentication ceremony against one of ``user``'s credentials.
+    """
+    Verify a completed authentication ceremony against one of ``user``'s credentials.
 
     Args:
         request: The incoming request (holds the challenge stashed by ``build_authentication_options``).

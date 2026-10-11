@@ -1,4 +1,5 @@
-"""The fabricated half of a demo account: friends, messages, trips, visits, lists.
+"""
+The fabricated half of a demo account: friends, messages, trips, visits, lists.
 Everything here is invented, unlike the real places in :mod:`.locations` - see that module and ``docs/DEMO.md`` for why coordinates are never fabricated."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ _rng = random.Random(20260820)  # noqa: S311 - demo flavour text, not a security
 
 
 def _backdate(instance: Any, when: Any) -> None:
-    """Set ``created`` (and, for models that carry one, ``visited_at``-like fields) into the past.
+    """
+    Set ``created`` (and, for models that carry one, ``visited_at``-like fields) into the past.
     ``created``/``updated`` are ``auto_now_add``/``auto_now`` (see ``models.abstract.model``), so they ignore whatever is passed to ``objects.create()`` - the only way to backdate one is an ``update()`` after the fact, which is what this does.
 
     Args:
@@ -34,7 +36,8 @@ def _backdate(instance: Any, when: Any) -> None:
 
 
 def seed_friendships(owner: Profile, personas: list[Profile]) -> None:
-    """Accepted friendships: the owner with every persona, and a few among them.
+    """
+    Accepted friendships: the owner with every persona, and a few among them.
 
     Args:
         owner: The login account's profile.
@@ -55,7 +58,8 @@ def seed_friendships(owner: Profile, personas: list[Profile]) -> None:
 
 
 def seed_wiki_comments(personas_by_pin: dict[Profile, list[Pin]]) -> list[Any]:
-    """A few comments on the wikis of pooled locations, where more than one profile can see them.
+    """
+    A few comments on the wikis of pooled locations, where more than one profile can see them.
 
     Args:
         personas_by_pin: Each seeded profile mapped to the pins just created for it, in pool order - used to find the locations two profiles share.
@@ -95,7 +99,8 @@ _WIKI_COMMENT_REPLIES = [
 
 
 def seed_direct_messages(owner: Profile, personas: list[Profile]) -> list[Any]:
-    """A short plaintext exchange between the owner and each persona, and one among personas.
+    """
+    A short plaintext exchange between the owner and each persona, and one among personas.
 
     Args:
         owner: The login account's profile.
@@ -126,7 +131,8 @@ def seed_direct_messages(owner: Profile, personas: list[Profile]) -> list[Any]:
 
 
 def seed_group_chat(owner: Profile, personas: list[Profile]) -> None:
-    """One group chat, memberships created strictly before the messages they should see.
+    """
+    One group chat, memberships created strictly before the messages they should see.
 
     Args:
         owner: The login account's profile, and the chat's creator.
@@ -153,7 +159,8 @@ def seed_group_chat(owner: Profile, personas: list[Profile]) -> None:
 
 
 def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False) -> list[Any]:
-    """``create_manual_visit`` rather than ``PinVisit.objects.create`` directly: it also runs ``sync_last_visited`` and ``add_visited_status`` (the "Visited" label), which are exactly the derived state a real visit would produce and a raw insert would silently skip.
+    """
+    ``create_manual_visit`` rather than ``PinVisit.objects.create`` directly: it also runs ``sync_last_visited`` and ``add_visited_status`` (the "Visited" label), which are exactly the derived state a real visit would produce and a raw insert would silently skip.
 
     Args:
         profile: Pin owner.
@@ -177,7 +184,8 @@ def seed_visits(profile: Profile, pins: list[Pin], *, on_this_day: bool = False)
 
 
 def mark_unlogged_visits(pins: list[Pin]) -> None:
-    """Mark a couple of pins visited with no logged ``PinVisit`` - the Memories "Visits" queue's whole reason to exist.
+    """
+    Mark a couple of pins visited with no logged ``PinVisit`` - the Memories "Visits" queue's whole reason to exist.
 
     Args:
         pins: Candidate pins; the ones already visited via :func:`seed_visits` must not be passed here, or they no longer qualify either."""
@@ -199,7 +207,8 @@ _VISIT_NOTES = [
 
 
 def seed_routes(profile: Profile) -> list[Any]:
-    """A couple of short recorded routes, so the Memories map has route markers and a nonzero distance total.
+    """
+    A couple of short recorded routes, so the Memories map has route markers and a nonzero distance total.
 
     Args:
         profile: Route owner - routes have no shared/wiki analog and are always personal.
@@ -231,7 +240,8 @@ def seed_routes(profile: Profile) -> list[Any]:
 
 
 def seed_markup_maps(profile: Profile) -> None:
-    """A couple of standalone drawn maps, for the Memories "Maps" page.
+    """
+    A couple of standalone drawn maps, for the Memories "Maps" page.
     Built directly rather than through ``materialize_markup_map`` - that helper exists to sanitize an untrusted client-submitted snapshot, which a seeder does not have.
 
     Args:
@@ -258,7 +268,8 @@ def seed_markup_maps(profile: Profile) -> None:
 
 
 def seed_labels(pins_by_profile: dict[Profile, list[Pin]]) -> None:
-    """Attach a few of the profile's own default labels to its pins.
+    """
+    Attach a few of the profile's own default labels to its pins.
 
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins."""
@@ -275,7 +286,8 @@ def seed_labels(pins_by_profile: dict[Profile, list[Pin]]) -> None:
 
 
 def seed_safety_checkins(profiles: list[Profile]) -> None:
-    """A couple of historical, already-resolved safety check-ins.
+    """
+    A couple of historical, already-resolved safety check-ins.
 
     Args:
         profiles: Every seeded profile."""
@@ -294,7 +306,8 @@ def seed_safety_checkins(profiles: list[Profile]) -> None:
 
 
 def seed_journal_content(pins_by_profile: dict[Profile, list[Pin]]) -> list[Any]:
-    """Reviews and pin comments - the two Journal sources ``seed_wiki_comments`` doesn't cover.
+    """
+    Reviews and pin comments - the two Journal sources ``seed_wiki_comments`` doesn't cover.
 
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins.
@@ -318,7 +331,8 @@ def seed_journal_content(pins_by_profile: dict[Profile, list[Pin]]) -> list[Any]
 
 
 def seed_reactions(owner: Profile, personas: list[Profile]) -> None:
-    """A few reactions on existing comments and messages.
+    """
+    A few reactions on existing comments and messages.
     Straight to ``Reaction.objects.create`` rather than ``toggle_reaction`` - that service function notifies the comment's author on add, which is exactly the kind of side effect this module stays silent by construction to avoid.
 
     Args:
@@ -337,7 +351,8 @@ def seed_reactions(owner: Profile, personas: list[Profile]) -> None:
 
 
 def seed_pin_shares(owner: Profile, personas: list[Profile], pins: list[Pin]) -> None:
-    """A couple of accepted pin shares, for the Memories "Sharing" page.
+    """
+    A couple of accepted pin shares, for the Memories "Sharing" page.
 
     Args:
         owner: The sharer.
@@ -362,7 +377,8 @@ def seed_pin_shares(owner: Profile, personas: list[Profile], pins: list[Pin]) ->
 
 
 def seed_trips(owner: Profile, personas: list[Profile], pool: list[Location]) -> list[Trip]:
-    """A past trip (so Memories has a real trip in its history) and an upcoming one.
+    """
+    A past trip (so Memories has a real trip in its history) and an upcoming one.
 
     Args:
         owner: The trips' creator.
@@ -406,7 +422,8 @@ def seed_trips(owner: Profile, personas: list[Profile], pool: list[Location]) ->
 
 
 def seed_pin_lists(owner: Profile, pins: list[Pin]) -> None:
-    """A couple of ordinary lists over the owner's own pins.
+    """
+    A couple of ordinary lists over the owner's own pins.
 
     Args:
         owner: List owner.
@@ -434,7 +451,8 @@ _PHOTO_PALETTE: list[tuple[int, int, int]] = [(74, 62, 54), (58, 74, 66), (70, 6
 
 
 def _placeholder_photo(caption: str, color: tuple[int, int, int]) -> Any:
-    """A small synthetic JPEG, in memory - never touches the network.
+    """
+    A small synthetic JPEG, in memory - never touches the network.
 
     Args:
         caption: Text drawn onto the image.
@@ -455,7 +473,8 @@ def _placeholder_photo(caption: str, color: tuple[int, int, int]) -> Any:
 
 
 def seed_photos(pins_by_profile: dict[Profile, list[Pin]], *, on_this_day: bool = False) -> list[Any]:
-    """A handful of generated photos per profile, attached to their own pins.
+    """
+    A handful of generated photos per profile, attached to their own pins.
 
     Args:
         pins_by_profile: Each seeded profile mapped to its own pins.
@@ -488,7 +507,8 @@ def seed_photos(pins_by_profile: dict[Profile, list[Pin]], *, on_this_day: bool 
 
 
 def seed_visit_photo(profile: Profile, visit: Any) -> None:
-    """One photo attached to a logged visit, via ``Image.visit``.
+    """
+    One photo attached to a logged visit, via ``Image.visit``.
 
     Args:
         profile: The visit's owner.
@@ -508,7 +528,8 @@ def seed_visit_photo(profile: Profile, visit: Any) -> None:
 
 
 def seed_comment_photo(comment: Any) -> None:
-    """One photo on a comment - unlike Pin/PinVisit/DirectMessage, ``Comment.image`` is its own field, not an ``Image`` FK.
+    """
+    One photo on a comment - unlike Pin/PinVisit/DirectMessage, ``Comment.image`` is its own field, not an ``Image`` FK.
 
     Args:
         comment: A ``Comment`` already created elsewhere in this module.
@@ -518,7 +539,8 @@ def seed_comment_photo(comment: Any) -> None:
 
 
 def seed_dm_photo(sender: Profile, dm: Any) -> None:
-    """One photo attached to a direct message, via ``Image.direct_message``.
+    """
+    One photo attached to a direct message, via ``Image.direct_message``.
 
     Args:
         sender: The message's sender, credited as the photo's uploader.
@@ -531,7 +553,8 @@ def seed_dm_photo(sender: Profile, dm: Any) -> None:
 
 
 def seed_achievements_and_activity(profiles: list[Profile]) -> None:
-    """Award whatever Achievement definitions already exist, and backfill an activity streak.
+    """
+    Award whatever Achievement definitions already exist, and backfill an activity streak.
 
     Args:
         profiles: Every seeded profile - owner and personas."""

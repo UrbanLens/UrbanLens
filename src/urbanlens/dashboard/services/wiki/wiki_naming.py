@@ -1,4 +1,5 @@
-"""Name a community wiki from public sources without overriding anyone who named it by hand.
+"""
+Name a community wiki from public sources without overriding anyone who named it by hand.
 
 Candidates come from the Location's cached public data (Wikipedia, REData, CRIS, OSM, the
 Location's official name, Google as a last resort). A private pin's own name is never one of them.
@@ -29,7 +30,8 @@ PROVISIONAL_NAME_SOURCES: frozenset[str] = FALLBACK_ONLY_NAME_SOURCES | {OFFICIA
 
 
 def name_set_by_person(wiki: Wiki) -> bool:
-    """Whether the wiki's current name was last written by a person.
+    """
+    Whether the wiki's current name was last written by a person.
 
     A wiki with no recorded name write predates revision history; its name is treated as a
     person's when it is meaningful, since nothing says otherwise.
@@ -49,7 +51,8 @@ def name_set_by_person(wiki: Wiki) -> bool:
 
 
 def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> bool:
-    """Whether automatic naming may still replace the wiki's name.
+    """
+    Whether automatic naming may still replace the wiki's name.
 
     A placeholder always may. So may an automatic stand-in - a Google guess or a creation-time
     official name, or a name written past ``Wiki.save`` and so carrying no alias - until a person
@@ -83,7 +86,8 @@ def is_provisional_name(wiki: Wiki, *, outranked_by: NameTier | None = None) -> 
 
 
 def wiki_named_by_location(location: Location) -> Wiki | None:
-    """The wiki whose name and aliases this Location's public names may feed.
+    """
+    The wiki whose name and aliases this Location's public names may feed.
 
     The Location's own wiki, else the place's wiki when the Location carries a root pin. A Location holding
     only child (building) pins describes one building, so its names stay off the parcel's page, and a campus
@@ -110,7 +114,8 @@ def wiki_named_by_location(location: Location) -> Wiki | None:
 
 
 def adopt_public_name(wiki: Wiki, name: str | None, *, source: str, tier: NameTier | None = None) -> bool:
-    """Rename the wiki to a public name when its current name is provisional or outranked.
+    """
+    Rename the wiki to a public name when its current name is provisional or outranked.
 
     The write is recorded as automatic and the name is kept as an official alias credited to
     ``source``, so the name stays one of the wiki's own aliases and a later, better source can

@@ -312,7 +312,8 @@ class SafetyCheckinContactByTokenTests(TestCase):
         self.assertFalse(SafetyCheckinContact.objects.by_token(uuid4()).exists())
 
     def test_chains_with_select_related(self):
-        """Every real call site chains select_related(...) before by_token() -
+        """
+        Every real call site chains select_related(...) before by_token() -
         confirm that composition still resolves to exactly the right row."""
         contact = baker.make(
             "dashboard.SafetyCheckinContact",
@@ -420,7 +421,8 @@ class SafetyContactPortalEscalationGateTests(TestCase):
 
     @override_settings(MARKUP_MAX_ITEMS_PER_RESPONSE=3)
     def test_markup_json_is_capped_like_the_signed_in_reader(self):
-        """This route is reachable by anyone holding the magic link.
+        """
+        This route is reachable by anyone holding the magic link.
 
         It built its own listing, so the ceiling added to ``MarkupJsonView``
         left the *less* guarded of the two readers unbounded.
@@ -628,7 +630,8 @@ class TripScopedActiveCheckinTests(TestCase):
 
 
 class EmergencyContactDefaultQuerySetTests(TestCase):
-    """EmergencyContactDefault.objects.for_owner() - two call sites in services/safety.py
+    """
+    EmergencyContactDefault.objects.for_owner() - two call sites in services/safety.py
     (save_contact_defaults, default_contacts_as_input) each re-wrote
     `EmergencyContactDefault.objects.filter(owner=profile)` directly."""
 
@@ -763,7 +766,8 @@ class RecordContactOptOutDedupTests(TestCase):
         )
 
     def test_a_second_identical_row_is_rejected_at_the_database(self) -> None:
-        """Direct proof the constraint - not just the service function's own call
+        """
+        Direct proof the constraint - not just the service function's own call
         pattern - is what prevents the duplicate."""
         record_contact_opt_out(self.contact, SafetyContactOptOutScope.CHECKIN)
         with self.assertRaises(IntegrityError), transaction.atomic():

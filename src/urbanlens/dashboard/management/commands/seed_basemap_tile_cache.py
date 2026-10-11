@@ -1,4 +1,5 @@
-"""Fill this deployment's basemap tile cache with placeholder tiles, for a load run.
+"""
+Fill this deployment's basemap tile cache with placeholder tiles, for a load run.
 
 A capacity run must measure what this deployment costs to serve a tile it already holds. Left to
 warm itself, every tile in the run's grid would instead be an upstream fetch - measuring the
@@ -50,7 +51,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args: object, **options: object) -> None:
-        """Write the grid into the cache.
+        """
+        Write the grid into the cache.
 
         Raises:
             CommandError: If this is production, which has real viewers who would be shown grey squares.

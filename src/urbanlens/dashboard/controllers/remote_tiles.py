@@ -45,7 +45,8 @@ def _absent() -> HttpResponse:
 
 
 class RemoteTileView(LoginRequiredMixin, View):
-    """GET map/tile-copies/<digest>/<z>/<x>/<y>.png - one tile of a foreign template, from this site's copy.
+    """
+    GET map/tile-copies/<digest>/<z>/<x>/<y>.png - one tile of a foreign template, from this site's copy.
 
     Answers 404 for a template this site never recorded, a coordinate outside the grid, a tile the host has not got,
     and a tile that failed and is not due another try. Answers 503 while the first copy is being made.

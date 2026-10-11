@@ -1,4 +1,5 @@
-"""Safety controls for user-triggered outbound email.
+"""
+Safety controls for user-triggered outbound email.
 2. **Duplicate suppression** - a user who has already sent a "join the site" email to an address never sends that address another one."""
 
 from __future__ import annotations
@@ -38,7 +39,8 @@ def _inflight_cache_key(profile_id: int) -> str:
 
 
 def hash_email(email: str) -> str:
-    """One-way hash of an email address for storage and matching.
+    """
+    One-way hash of an email address for storage and matching.
     Hashing operates on the normalized form (lowercased, Gmail dot/plus variants collapsed) so trivially distinct spellings of the same inbox hash identically.
 
     Args:
@@ -50,7 +52,8 @@ def hash_email(email: str) -> str:
 
 
 def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | None]:
-    """Resolve the effective outbound-email limits for a profile.
+    """
+    Resolve the effective outbound-email limits for a profile.
 
     Args:
         profile: The profile whose limits to resolve.
@@ -75,7 +78,8 @@ def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | No
 
 
 def email_rate_limit_error(profile: Profile) -> str | None:
-    """Check whether the profile may trigger one more outbound email right now.
+    """
+    Check whether the profile may trigger one more outbound email right now.
 
     Args:
         profile: The profile attempting to send.
@@ -111,7 +115,8 @@ def email_rate_limit_error(profile: Profile) -> str | None:
 
 
 def release_email_reservation(profile: Profile) -> None:
-    """Return the in-flight reservation :func:`email_rate_limit_error` took, once the send is logged.
+    """
+    Return the in-flight reservation :func:`email_rate_limit_error` took, once the send is logged.
 
     Args:
         profile: The profile whose reservation to release.
@@ -125,7 +130,8 @@ _RESERVED_TLDS = frozenset({"invalid", "test", "example", "localhost"})
 
 
 def is_reserved_address(email: str) -> bool:
-    """Whether no mailbox can exist at an address, so no mail should be handed to the relay or charged for.
+    """
+    Whether no mailbox can exist at an address, so no mail should be handed to the relay or charged for.
 
     Args:
         email: Raw address.
@@ -140,7 +146,8 @@ def is_reserved_address(email: str) -> bool:
 
 
 def has_sent_join_email(profile: Profile, email: str) -> bool:
-    """Whether this profile's join-the-site email ever reached the relay for this address.
+    """
+    Whether this profile's join-the-site email ever reached the relay for this address.
 
     Args:
         profile: The prospective sender.
@@ -153,7 +160,8 @@ def has_sent_join_email(profile: Profile, email: str) -> bool:
 
 
 def has_charged_join_email(profile: Profile, email: str) -> bool:
-    """Whether inviting this address has already been charged to this profile's email budget, sent or not.
+    """
+    Whether inviting this address has already been charged to this profile's email budget, sent or not.
 
     Args:
         profile: The inviter.
@@ -166,7 +174,8 @@ def has_charged_join_email(profile: Profile, email: str) -> bool:
 
 
 def mark_join_email_delivered(profile: Profile, email: str) -> None:
-    """Record that a join email went out, converting the charge taken when it was requested.
+    """
+    Record that a join email went out, converting the charge taken when it was requested.
 
     Args:
         profile: The inviter.
@@ -184,7 +193,8 @@ VERIFICATION_RESEND_COOLDOWN_SECONDS = 5 * 60
 
 
 def verification_recently_sent(profile: Profile, email: str) -> bool:
-    """Whether a verification email went to this address from this profile within the cooldown.
+    """
+    Whether a verification email went to this address from this profile within the cooldown.
 
     Args:
         profile: The sender.
@@ -203,7 +213,8 @@ def verification_recently_sent(profile: Profile, email: str) -> bool:
 
 
 def record_email_sent(profile: Profile, email: str, email_type: EmailType | str, *, delivered: bool = True) -> EmailSendLog:
-    """Log one user-triggered outbound email (hashed recipient only).
+    """
+    Log one user-triggered outbound email (hashed recipient only).
 
     Args:
         profile: The profile whose action caused the send.

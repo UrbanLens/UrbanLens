@@ -31,7 +31,8 @@ class AchievementAdminRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(_site_admin())
 
     def seed_rows(self, count: int) -> None:
-        """Create *count* more achievements, each of which renders a picker.
+        """
+        Create *count* more achievements, each of which renders a picker.
 
         Args:
             count: How many rows to add.
@@ -72,7 +73,8 @@ class IconPickerGridEndpointTests(TestCase):
         self.assertEqual(missing, [], f"{len(missing)} of {len(expected)} icons are absent from the shared grid")
 
     def test_the_response_carries_no_picker_id(self) -> None:
-        """One response serves every picker on the page, so it cannot name one.
+        """
+        One response serves every picker on the page, so it cannot name one.
 
         ``picker-actions.ts`` resolves the id from the enclosing dropdown; a hardcoded id here would send every
         pick to whichever picker rendered first."""
@@ -86,7 +88,8 @@ class IconPickerGridEndpointTests(TestCase):
         self.assertNotIn("icon-tabs-", body)
 
     def test_the_response_carries_both_fragments(self) -> None:
-        """The tab strip rides along with the catalogue it filters, so a picker
+        """
+        The tab strip rides along with the catalogue it filters, so a picker
         costs one request rather than two."""
         self.client.force_login(self.user)
 
@@ -145,7 +148,8 @@ class IconPickerPartialTests(TestCase):
         self.assertEqual(inlined, [], "the picker partial is rendering catalogue icons again")
 
     def test_the_partial_is_a_small_fraction_of_the_catalogue(self) -> None:
-        """A byte budget rather than a shape assertion: the defect was size, and a future edit can put the size back without restoring the loops.
+        """
+        A byte budget rather than a shape assertion: the defect was size, and a future edit can put the size back without restoring the loops.
 
         A ratio rather than a constant so it keeps meaning something as the catalogue grows."""
         markup = self._render()
@@ -157,7 +161,8 @@ class IconPickerPartialTests(TestCase):
         )
 
     def test_the_partial_does_not_inline_the_category_tabs(self) -> None:
-        """28 tabs per picker was the second-largest thing this partial rendered.
+        """
+        28 tabs per picker was the second-largest thing this partial rendered.
 
         "All" stays: it is the tab that starts active, which is per-picker state
         rather than catalogue.
@@ -173,7 +178,8 @@ class IconPickerPartialTests(TestCase):
         self.assertIn(f'data-grid-url="{reverse("ui.icon_picker_grid")}?v={icon_grid_version()}"', markup)
 
     def test_the_none_button_survives_in_the_partial(self) -> None:
-        """It is per-picker state, not catalogue, and a picker with no grid yet
+        """
+        It is per-picker state, not catalogue, and a picker with no grid yet
         still has to offer "no icon"."""
         markup = self._render()
 

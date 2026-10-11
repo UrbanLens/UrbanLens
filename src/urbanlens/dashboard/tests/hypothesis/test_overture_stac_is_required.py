@@ -50,7 +50,8 @@ class TheGatewayRefusesTests(SimpleTestCase):
         self.assertEqual(geodataframe.call_args.args[0], ["bucket/one.parquet"])
 
     def test_an_empty_result_is_not_a_refusal(self) -> None:
-        """ "No buildings here" is an answer, read as an empty frame without touching the bucket.
+        """
+        "No buildings here" is an answer, read as an empty frame without touching the bucket.
 
         The library handed geopandas a None reader for it and crashed."""
         gateway = OvertureMapsGateway()
@@ -64,7 +65,8 @@ class TheGatewayRefusesTests(SimpleTestCase):
 
 
 class TheLatestReleaseIsResolvedTests(SimpleTestCase):
-    """With no pinned release, the index lookup must name a real one.
+    """
+    With no pinned release, the index lookup must name a real one.
 
     The library resolves "latest" inside its own read but not inside its index lookup, so the
     narrowing check asked for `stac.overturemaps.org/None/collections.parquet`, got a 404, and refused
@@ -161,7 +163,8 @@ class ARefusalIsRecordedAsAFailureTests(SimpleTestCase):
 
 
 class TheBreakerStopsTheLoopTests(SimpleTestCase):
-    """A refusal has to stop the next lookup, or the storm continues.
+    """
+    A refusal has to stop the next lookup, or the storm continues.
 
     Every queued enrichment task probing an index that is refusing us is the
     loop that earned the rate limit in the first place.
@@ -207,7 +210,8 @@ def _reset_breaker() -> None:
 
 
 def _patch_rate_limit_gate(test_case: SimpleTestCase) -> None:
-    """Make the P110 call-budget gate a no-op, so these `SimpleTestCase`s never touch the DB.
+    """
+    Make the P110 call-budget gate a no-op, so these `SimpleTestCase`s never touch the DB.
 
     Both halves are stubbed: `_reserve_call_budget` (so no `ApiCallLog` row is reserved) and
     `_finalize_call` (so `_fetch` has nothing to update afterwards). The gate's own behaviour

@@ -1,4 +1,5 @@
-"""Bulk-copy a PinList's pins into a Trip's activities.
+"""
+Bulk-copy a PinList's pins into a Trip's activities.
 This is always a one-time copy - a list's smart-filter membership changes never propagate to a trip after the copy runs."""
 
 from __future__ import annotations
@@ -12,7 +13,8 @@ if TYPE_CHECKING:
 
 
 def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> int:
-    """Append one TripActivity per pin currently on ``pin_list`` to ``trip``.
+    """
+    Append one TripActivity per pin currently on ``pin_list`` to ``trip``.
 
     Args:
         pin_list: Source list, copied in its current display order.

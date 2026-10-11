@@ -34,7 +34,8 @@ TRIP_LIST_SORT_FIELDS: dict[str, str] = {
 
 
 def _member_profiles() -> Prefetch:
-    """Prefetch each trip's memberships with their profile+user loaded.
+    """
+    Prefetch each trip's memberships with their profile+user loaded.
     The overview masks every listed trip's member identities (``controllers.trip._apply_trip_list_identity_masking``), which walks ``trip.memberships.all()``; without this that is two queries per trip.
 
     Returns:
@@ -49,7 +50,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
     """Custom queryset for Trip models."""
 
     def with_effective_dates(self) -> TripQuerySet:
-        """Annotate ``_eff_start``/``_eff_end`` so the date properties don't query per row.
+        """
+        Annotate ``_eff_start``/``_eff_end`` so the date properties don't query per row.
         ``Trip.effective_start_date``/``effective_end_date`` fall back to querying the trip's activities, and ``timeline_status``/``duration_days`` read both, so any page rendering a list of trips pays two activity queries per trip without this.
 
         Correlated subqueries rather than a join aggregate, so the annotations are plain columns: they filter in ``WHERE``, :meth:`timeline_counts` can count them, and they combine with other aggregates without fanning out.
@@ -74,7 +76,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         )
 
     def with_timeline_status(self) -> TripQuerySet:
-        """Annotate ``timeline``, the SQL form of ``Trip.timeline_status``.
+        """
+        Annotate ``timeline``, the SQL form of ``Trip.timeline_status``.
 
         Returns:
             The queryset with effective dates and ``timeline`` annotated.
@@ -91,7 +94,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         )
 
     def timeline_counts(self) -> dict[str, int]:
-        """How many of these trips are in each timeline status, in one query.
+        """
+        How many of these trips are in each timeline status, in one query.
 
         Returns:
             ``total`` plus one key per :data:`TIMELINE_STATUSES` entry.
@@ -100,7 +104,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return {key: value or 0 for key, value in counts.items()}
 
     def overlapping(self, start: datetime.date, end: datetime.date) -> TripQuerySet:
-        """Trips whose effective date range meets ``[start, end]``; undated trips never do.
+        """
+        Trips whose effective date range meets ``[start, end]``; undated trips never do.
 
         Args:
             start: First day of the window.
@@ -112,7 +117,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return self.with_effective_dates().filter(_eff_start__isnull=False, _eff_start__lte=end, _eff_end__gte=start)
 
     def visible_to(self, profile: Profile, *, joined_only: bool = False) -> TripQuerySet:
-        """Trips *profile* created or is a member of, decided in the query that finds them.
+        """
+        Trips *profile* created or is a member of, decided in the query that finds them.
 
         Args:
             profile: The viewer.
@@ -129,7 +135,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return self.filter(Q(creator=profile) | Q(Exists(memberships)))
 
     def for_list_page(self, profile: Profile, sort: str = "updated", direction: str = "desc") -> TripQuerySet:
-        """Return trips for the list page with counts and member prefetch, ordered in SQL.
+        """
+        Return trips for the list page with counts and member prefetch, ordered in SQL.
 
         Args:
             profile: The viewer's profile; only their trips are included.
@@ -191,7 +198,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
 
     @staticmethod
     def _soonest_first_ordering() -> tuple:
-        """``ORDER BY`` terms putting upcoming/active trips first (soonest first), then undated, then past (most recent first).
+        """
+        ``ORDER BY`` terms putting upcoming/active trips first (soonest first), then undated, then past (most recent first).
 
         Returns:
             Terms for ``order_by``.
@@ -208,7 +216,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return (bucket.asc(), upcoming.asc(nulls_last=True), past.desc(nulls_last=True), "pk")
 
     def search_for_member(self, profile: Profile, query: str = "", limit: int = 20) -> TripQuerySet:
-        """The viewer's trips whose name contains *query*, most recently updated first, capped.
+        """
+        The viewer's trips whose name contains *query*, most recently updated first, capped.
 
         Args:
             profile: The viewer's profile; only their trips are included.
@@ -224,7 +233,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return qs.order_by("-updated", "-pk")[:limit]
 
     def upcoming(self, profile: Profile) -> TripQuerySet:
-        """Return the viewer's upcoming (or still-planning, undated) trips.
+        """
+        Return the viewer's upcoming (or still-planning, undated) trips.
         A trip counts as upcoming if it has a future/today start date, or has no start date at all but at least one activity scheduled today or later.
 
         Args:
@@ -237,7 +247,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return self.filter(profiles=profile).filter(Q(start_date__gte=today) | Q(start_date__isnull=True, activities__scheduled_at__date__gte=today)).distinct()
 
     def recently_updated(self, profile: Profile, limit: int = 5) -> TripQuerySet:
-        """Return the viewer's trips ordered by most recently updated, for the overview page.
+        """
+        Return the viewer's trips ordered by most recently updated, for the overview page.
 
         Args:
             profile: The viewer's profile; only their trips are included.
@@ -249,7 +260,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return self.filter(profiles=profile).select_related("creator__user").prefetch_related(_member_profiles()).with_effective_dates().order_by("-updated")[:limit]
 
     def recently_active_past(self, profile: Profile, since: datetime.datetime, limit: int = 6) -> list[Trip]:
-        """Return the viewer's past trips that have had a comment posted since ``since``.
+        """
+        Return the viewer's past trips that have had a comment posted since ``since``.
 
         Args:
             profile: The viewer's profile; only their trips are included.
@@ -276,7 +288,8 @@ class TripQuerySet(abstract.PublicDashboardQuerySet["Trip"]):
         return past[:limit]
 
     def recently_viewed(self, profile: Profile, limit: int = 5) -> TripQuerySet:
-        """Return the viewer's trips ordered by when they personally last viewed each one.
+        """
+        Return the viewer's trips ordered by when they personally last viewed each one.
 
         Args:
             profile: The viewer's profile; only trips they've opened before are included.
@@ -308,7 +321,8 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet["TripMembership"]):
     """Custom queryset for TripMembership models."""
 
     def for_trip_and_profile(self, trip: Trip, profile: Profile) -> TripMembershipQuerySet:
-        """The membership row for a specific trip+profile pair (the unique_together key).
+        """
+        The membership row for a specific trip+profile pair (the unique_together key).
 
         Args:
             trip: The trip.
@@ -320,7 +334,8 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet["TripMembership"]):
         return self.filter(trip=trip, profile=profile)
 
     def trip_ids_for(self, profile: Profile | int) -> QuerySet[TripMembership, int]:
-        """IDs of every trip this profile has a membership row for.
+        """
+        IDs of every trip this profile has a membership row for.
 
         Args:
             profile: The profile (or a raw profile id) to look up.
@@ -331,7 +346,8 @@ class TripMembershipQuerySet(abstract.DashboardQuerySet["TripMembership"]):
         return self.filter(profile=profile).values_list("trip_id", flat=True)
 
     def joined(self, trip: Trip) -> TripMembershipQuerySet:
-        """Members who have actually joined (not just invited) a trip.
+        """
+        Members who have actually joined (not just invited) a trip.
 
         Args:
             trip: The trip.
@@ -355,7 +371,8 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
     """Custom queryset for TripComment models."""
 
     def mentions_all_visible_to(self, profile: Profile) -> TripCommentQuerySet:
-        """Drop comments naming a location *profile* has not pinned.
+        """
+        Drop comments naming a location *profile* has not pinned.
 
         The trip-side twin of ``CommentQuerySet.mentions_all_visible_to``, over
         the same rows - see ``models.comments.location_mention``.
@@ -374,7 +391,8 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         return self.filter(~Exists(unpinned_mention))
 
     def visible_to(self, profile: Profile) -> TripCommentQuerySet:
-        """The gates ``trip_comments.build_comment_tree`` applies, in SQL.
+        """
+        The gates ``trip_comments.build_comment_tree`` applies, in SQL.
 
         The queryset counterpart to ``trip_comments.trip_comment_is_visible``,
         and held to it across the product of every visibility setting and every
@@ -408,7 +426,8 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         return SharedSpaceBlocks.for_viewer(profile).exclude_hidden(visible, author_field="author_id")
 
     def for_member(self, profile: Profile) -> TripCommentQuerySet:
-        """Comments on the trips *profile* belongs to.
+        """
+        Comments on the trips *profile* belongs to.
 
         The trip ids are resolved to a literal list first rather than left as ``trip__profiles=``
         for the planner to join. Given the join, Postgres is free to drive it from the comment
@@ -427,7 +446,8 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         return self.filter(trip__pk__anyof=list(TripMembership.objects.trip_ids_for(profile)))
 
     def by_author(self, profile: Profile) -> TripCommentQuerySet:
-        """Comments a profile has left across any of their trips, most recent first.
+        """
+        Comments a profile has left across any of their trips, most recent first.
 
         Args:
             profile: The commenting profile.

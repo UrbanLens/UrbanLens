@@ -73,7 +73,8 @@ SLIDES_READY_TTL_SECONDS = 12 * 3600
 
 @dataclass(frozen=True, slots=True)
 class ProviderFetchResult:
-    """Outcome of one imagery provider inside a slide collector run.
+    """
+    Outcome of one imagery provider inside a slide collector run.
 
     Attributes:
         service: The provider's service key (or class name when keyless).
@@ -89,7 +90,8 @@ class ProviderFetchResult:
 
 
 class PanelApiKind(StrEnum):
-    """A read shape a panel's JSON body can take on the external API.
+    """
+    A read shape a panel's JSON body can take on the external API.
     That pairing is the whole point of the interface: a native client branches on the *kind*, never on the source key, so a panel contributed by a plugin written long after the client shipped still renders instead of being ignored as an unknown string."""
 
     INFO = "info"
@@ -113,7 +115,8 @@ class PanelPlacement(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class OverviewSummary:
-    """What one source contributes to its card's merged Overview tab.
+    """
+    What one source contributes to its card's merged Overview tab.
 
     Attributes:
         heading_name: A name for the place; the first source to offer one wins.
@@ -132,7 +135,8 @@ class OverviewSummary:
 
 @dataclass(frozen=True, slots=True)
 class CachedEntry:
-    """What a pin reads from one cache-backed source: its rows' payloads, combined.
+    """
+    What a pin reads from one cache-backed source: its rows' payloads, combined.
 
     Attributes:
         data: The combined payload; ``{}`` means "we searched and found nothing".
@@ -163,7 +167,8 @@ def info_card(
     image_url: str | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
-    """Build the :attr:`PanelApiKind.INFO` body, the one information-card contract.
+    """
+    Build the :attr:`PanelApiKind.INFO` body, the one information-card contract.
     Having one constructor rather than each source hand-rolling a dict is what keeps that promise true: a client can lay out the card once and every panel, including ones added later, lands in it.
 
     Args:
@@ -191,7 +196,8 @@ def info_card(
 
 
 def info_card_from_render_context(context: dict) -> dict[str, Any]:
-    """Project an ``InfoPanelSource.render_context`` result onto the info-card contract.
+    """
+    Project an ``InfoPanelSource.render_context`` result onto the info-card contract.
 
     Args:
         context: A render context (see ``InfoPanelSource.render_context``).
@@ -202,7 +208,8 @@ def info_card_from_render_context(context: dict) -> dict[str, Any]:
 
 
 class PanelSource(ABC):
-    """One external-data panel: readiness check plus Celery-side fetch.
+    """
+    One external-data panel: readiness check plus Celery-side fetch.
 
     Attributes:
         key: Registry key; also the Celery task argument and log label.
@@ -250,7 +257,8 @@ class PanelSource(ABC):
     required_feature: ClassVar[SiteFeature | None] = None
 
     def scope(self, pin: Pin) -> str:
-        """Cache-key scope identifying which rows/entries this pin's fetch fills.
+        """
+        Cache-key scope identifying which rows/entries this pin's fetch fills.
         Location-scoped by default, because most panels cache per shared Location (two users pinning the same place share one fetch).
 
         Args:
@@ -274,7 +282,8 @@ class PanelSource(ABC):
         return f"ulfetch:unavailable:{self.key}:{self.scope(pin)}"
 
     def gate(self, pin: Pin) -> bool:
-        """Whether this source has enough information to fetch for ``pin``.
+        """
+        Whether this source has enough information to fetch for ``pin``.
         Checked before scheduling a fetch so a source with nothing to work with (e.g. no coordinates, no address, no name) degrades to a quiet 204 instead of polling forever.
 
         Args:
@@ -287,7 +296,8 @@ class PanelSource(ABC):
 
     @abstractmethod
     def is_ready(self, pin: Pin) -> bool:
-        """Whether the panel's data has already been fetched and persisted.
+        """
+        Whether the panel's data has already been fetched and persisted.
 
         Args:
             pin: The pin whose panel is being rendered.
@@ -297,7 +307,8 @@ class PanelSource(ABC):
         """
 
     def has_landed(self, pin: Pin) -> bool:
-        """Whether a fetch has answered for ``pin``, whether or not the answer has anything to show.
+        """
+        Whether a fetch has answered for ``pin``, whether or not the answer has anything to show.
 
         Args:
             pin: The pin whose panel is being read.
@@ -309,7 +320,8 @@ class PanelSource(ABC):
 
     @abstractmethod
     def fetch(self, pin: Pin) -> None:
-        """Fetch from the upstream provider(s) and persist to the panel's store.
+        """
+        Fetch from the upstream provider(s) and persist to the panel's store.
         Runs inside a Celery worker, never on the request path.
 
         Args:
@@ -317,7 +329,8 @@ class PanelSource(ABC):
         """
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """This panel's already-landed data as a JSON body, or None.
+        """
+        This panel's already-landed data as a JSON body, or None.
         See the module docstring: this interface is reachable by third-party plugin code, so the failure mode of forgetting about it has to be an absent panel and not an unreviewed dump of whatever that plugin cached.
 
         Args:
@@ -333,7 +346,8 @@ class PanelSource(ABC):
 
 
 class LocationCachePanelSource(PanelSource, ABC):
-    """Base for panels whose store is a ``LocationCache`` row.
+    """
+    Base for panels whose store is a ``LocationCache`` row.
 
     Attributes:
         cache_source: The LocationCache ``source`` field value this panel reads and writes."""
@@ -356,7 +370,8 @@ class LocationCachePanelSource(PanelSource, ABC):
     cache_max_age: ClassVar[timedelta | None] = None
 
     def fresh_since(self, since: datetime) -> datetime:
-        """The oldest ``updated`` this source's rows may have and still be fresh.
+        """
+        The oldest ``updated`` this source's rows may have and still be fresh.
 
         Args:
             since: The site-wide cutoff, ``LocationCache.fresh_since()``.
@@ -371,7 +386,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return max(since, timezone.now() - self.cache_max_age)
 
     def site_pin(self, pin: Pin) -> Pin | None:
-        """The pin whose answer this one should share, when this panel is site-level and ``pin`` is nested.
+        """
+        The pin whose answer this one should share, when this panel is site-level and ``pin`` is nested.
 
         Args:
             pin: The pin whose panel is being fetched.
@@ -382,7 +398,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return self.nesting_site(pin) if self.site_level else None
 
     def nesting_site(self, pin: Pin) -> Pin | None:
-        """The outermost pin ``pin`` is nested under, when it stands on another location close enough to be the same site.
+        """
+        The outermost pin ``pin`` is nested under, when it stands on another location close enough to be the same site.
 
         Args:
             pin: A possibly nested pin.
@@ -400,7 +417,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return site if apart <= self.SITE_RADIUS_METERS else None
 
     def site_answer_covers(self, pin: Pin, data: dict) -> bool:
-        """Whether the site's answer is also the answer for ``pin``.
+        """
+        Whether the site's answer is also the answer for ``pin``.
 
         Args:
             pin: The nested pin.
@@ -412,7 +430,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return True
 
     def adopt_site_answer(self, pin: Pin) -> bool:
-        """Copy the site's answer to ``pin``'s location, fetching it for the site first when there is none.
+        """
+        Copy the site's answer to ``pin``'s location, fetching it for the site first when there is none.
 
         Args:
             pin: The pin whose panel is being fetched.
@@ -442,7 +461,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return True
 
     def adopted(self, pin: Pin, data: dict) -> None:
-        """Do whatever :meth:`fetch` does besides caching, for a pin that took its site's answer.
+        """
+        Do whatever :meth:`fetch` does besides caching, for a pin that took its site's answer.
 
         Args:
             pin: The pin that took it.
@@ -450,7 +470,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         """
 
     def seed_descendants(self, site: Pin) -> int:
-        """Write the answers ``site``'s cached payload already holds for the markers nested under it.
+        """
+        Write the answers ``site``'s cached payload already holds for the markers nested under it.
 
         Args:
             site: A pin whose nested markers may have just been created.
@@ -461,7 +482,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return 0
 
     def has_content(self, data: dict | None) -> bool:
-        """Whether a fetched payload has anything worth showing a tab for.
+        """
+        Whether a fetched payload has anything worth showing a tab for.
         Only consulted when :attr:`inspects_content` is set.
 
         Args:
@@ -473,7 +495,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return bool(data)
 
     def shows(self, pin: Pin, data: dict) -> bool:
-        """Whether the panel's card has anything to show ``pin`` from a payload that has landed.
+        """
+        Whether the panel's card has anything to show ``pin`` from a payload that has landed.
 
         Its view answers 204 when this is False, and the Private Pin page leaves out a card it already knows would
         (``services.pins.panel_probe``).
@@ -488,7 +511,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return self.has_content(data)
 
     def always_shows(self, pin: Pin) -> bool:
-        """Whether the card has something to show ``pin`` whatever this source's fetch finds, or whether it applies.
+        """
+        Whether the card has something to show ``pin`` whatever this source's fetch finds, or whether it applies.
 
         Args:
             pin: The pin being viewed.
@@ -499,7 +523,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return False
 
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
-        """This source's cached data, summarized for the Overview tab of the card it is a tab in.
+        """
+        This source's cached data, summarized for the Overview tab of the card it is a tab in.
 
         Args:
             pin: The pin being viewed.
@@ -511,7 +536,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return None
 
     def search_scopes(self, pin: Pin, names: SearchNames | None = None) -> tuple[SearchScope, ...]:
-        """The cached searches ``pin`` reads from this source, the shared one first.
+        """
+        The cached searches ``pin`` reads from this source, the shared one first.
 
         Args:
             pin: The pin whose panel is being read or fetched.
@@ -523,7 +549,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return (SHARED_SCOPE,)
 
     def merge_cached(self, payloads: Sequence[dict]) -> dict:
-        """Combine the payloads of the rows a pin reads into one, the shared row's first.
+        """
+        Combine the payloads of the rows a pin reads into one, the shared row's first.
 
         Args:
             payloads: One payload per :meth:`search_scopes` entry, in that order.
@@ -534,7 +561,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return payloads[0] if payloads else {}
 
     def cached_entry(self, pin: Pin) -> CachedEntry | None:
-        """What ``pin`` reads from this source, or None while any of its rows is missing or stale.
+        """
+        What ``pin`` reads from this source, or None while any of its rows is missing or stale.
 
         Args:
             pin: The pin whose panel is being read.
@@ -556,7 +584,8 @@ class LocationCachePanelSource(PanelSource, ABC):
         return self.cached_entry(pin) is not None
 
     def cached_data(self, pin: Pin) -> dict | None:
-        """This source's fresh cached payload, or None when nothing has landed.
+        """
+        This source's fresh cached payload, or None when nothing has landed.
 
         Args:
             pin: The pin whose panel is being read.
@@ -569,7 +598,8 @@ class LocationCachePanelSource(PanelSource, ABC):
 
 
 class InfoPanelSource(LocationCachePanelSource, ABC):
-    """Base for panels that render through the generic ``_simple_info_panel.html`` template.
+    """
+    Base for panels that render through the generic ``_simple_info_panel.html`` template.
 
     Attributes:
         placement: Where the Private Pin page renders the panel - see :class:`PanelPlacement`.
@@ -595,7 +625,8 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
 
     @abstractmethod
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build ``_simple_info_panel.html``'s context from cached data.
+        """
+        Build ``_simple_info_panel.html``'s context from cached data.
 
         Args:
             pin: The pin whose panel is being rendered.
@@ -611,7 +642,8 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
         return self.render_context(pin, data) is not None
 
     def debug_count(self, data: dict) -> int:
-        """Item count reported in the debug overlay.
+        """
+        Item count reported in the debug overlay.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
@@ -619,7 +651,8 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
         return 1
 
     def api_info(self, pin: Pin, data: dict) -> dict[str, Any] | None:
-        """This source's cached data as an :attr:`PanelApiKind.INFO` card.
+        """
+        This source's cached data as an :attr:`PanelApiKind.INFO` card.
 
         Args:
             pin: The pin whose panel is being read (``render_context`` may
@@ -642,7 +675,8 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
 
 
 class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
-    """An ``InfoPanelSource`` that only makes sense when the pin has coordinates.
+    """
+    An ``InfoPanelSource`` that only makes sense when the pin has coordinates.
 
     Attributes:
         geo_boundary: Restricts this panel to a geographic region (see ``services.geo.geo_boundary``); None means unrestricted."""
@@ -658,7 +692,8 @@ class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
 
 
 class GalleryMediaSource(LocationCachePanelSource, ABC):
-    """Base for anything that can appear as a source tab in the Media gallery.
+    """
+    Base for anything that can appear as a source tab in the Media gallery.
 
     Attributes:
         judges_relevance: Whether an item is shown only when it is about the place (``services.media.subject_relevance``),
@@ -675,7 +710,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
 
     @abstractmethod
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn this source's cached ``LocationCache.data`` into gallery items.
+        """
+        Turn this source's cached ``LocationCache.data`` into gallery items.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict for this source
@@ -686,7 +722,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         """
 
     def for_viewer(self, data: dict, viewer: Profile, location: Location) -> dict:
-        """``data`` as ``viewer`` may see it on ``location``'s pages, which every reader applies before reading tiles.
+        """
+        ``data`` as ``viewer`` may see it on ``location``'s pages, which every reader applies before reading tiles.
 
         A provider's cached rows describe public media and are anyone's to see as they are. A source whose rows name
         members' own uploads overrides this, and stores rows that yield no tile until narrowed here: a reader that
@@ -703,7 +740,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return data
 
     def pictures(self, items: Sequence[MediaItem]) -> list[GalleryUrls]:
-        """Where each tile gets its pictures: this site's copy of a provider's image, or a member's upload where it is.
+        """
+        Where each tile gets its pictures: this site's copy of a provider's image, or a member's upload where it is.
 
         Args:
             items: The tiles, from :meth:`gallery_items`.
@@ -719,7 +757,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return gallery_urls(items, provider=self.key)
 
     def media_is_ready(self, data: dict) -> bool:
-        """Whether a cached row's *media* half has actually been filled in.
+        """
+        Whether a cached row's *media* half has actually been filled in.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict for this source.
@@ -730,7 +769,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return True
 
     def relevant_media_items(self, data: dict, subject: MediaSubject, *, kept: Collection[str] = ()) -> list[MediaItem]:
-        """:meth:`media_items`, less any that are not about ``subject`` when this source judges relevance.
+        """
+        :meth:`media_items`, less any that are not about ``subject`` when this source judges relevance.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict for this source.
@@ -748,7 +788,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return [item for item in items if (kept and media_item_key(item.url) in kept) or subject.matches(item)]
 
     def gallery_items(self, data: dict, subject: MediaSubject, *, kept: Collection[str] = ()) -> list[MediaItem]:
-        """The items a gallery shows as tiles: :meth:`relevant_media_items` less documents, which belong on Article > Sources.
+        """
+        The items a gallery shows as tiles: :meth:`relevant_media_items` less documents, which belong on Article > Sources.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict for this source.
@@ -761,7 +802,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return [item for item in self.relevant_media_items(data, subject, kept=kept) if not item.is_document]
 
     def without_irrelevant(self, data: dict, subjects: Sequence[MediaSubject], *, kept: Collection[str]) -> dict | None:
-        """``data`` less each cached result that :meth:`relevant_media_items` keeps for none of ``subjects``.
+        """
+        ``data`` less each cached result that :meth:`relevant_media_items` keeps for none of ``subjects``.
 
         A result that does not read as exactly one item is never judged, so it stays.
 
@@ -793,7 +835,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         return not any(self.relevant_media_items(single, subject, kept=kept) for subject in subjects)
 
     def api_media(self, data: dict) -> list[dict[str, Any]]:
-        """This source's cached data as plain JSON media dicts.
+        """
+        This source's cached data as plain JSON media dicts.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict for this source.
@@ -820,7 +863,8 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
 
 @dataclass(frozen=True, slots=True)
 class SourceDocument:
-    """One document a panel lists under Article > Sources and serves through its scoped proxy.
+    """
+    One document a panel lists under Article > Sources and serves through its scoped proxy.
 
     Attributes:
         document_id: Identifies the document within its source's cached payload; the proxy URL's last segment.
@@ -844,7 +888,8 @@ class DocumentUnavailableError(Exception):
 
 
 class DocumentPanelSource(LocationCachePanelSource, ABC):
-    """A cache-backed panel whose payload names documents for the Article > Sources tab.
+    """
+    A cache-backed panel whose payload names documents for the Article > Sources tab.
 
     Attributes:
         documents_depend_on_site_scope: Whether a site-scope page lists different documents from a building's, so a
@@ -859,7 +904,8 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
     fetched_for_sources: bool = True
 
     def may_list_documents(self, data: dict) -> bool:
-        """Whether a cached payload holds any document at all, before any is judged against a subject.
+        """
+        Whether a cached payload holds any document at all, before any is judged against a subject.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
@@ -870,7 +916,8 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         return True
 
     def documents_ready(self, data: dict, *, site_scope: bool) -> bool:
-        """Whether a cached payload can answer the Sources tab for a viewer of this scope.
+        """
+        Whether a cached payload can answer the Sources tab for a viewer of this scope.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
@@ -883,7 +930,8 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
 
     @abstractmethod
     def source_documents(self, data: dict, *, site_scope: bool, subject: MediaSubject | None = None) -> list[SourceDocument]:
-        """The documents a cached payload lists, in display order.
+        """
+        The documents a cached payload lists, in display order.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
@@ -896,7 +944,8 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
 
     @abstractmethod
     def download_document(self, document: SourceDocument) -> tuple[bytes, str]:
-        """Fetch one listed document's bytes.
+        """
+        Fetch one listed document's bytes.
 
         Args:
             document: A document :meth:`source_documents` listed.
@@ -909,7 +958,8 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         """
 
     def document_cache_key(self, document: SourceDocument) -> str:
-        """Cache key for one document's bytes.
+        """
+        Cache key for one document's bytes.
 
         Args:
             document: A listed document.
@@ -920,7 +970,8 @@ class DocumentPanelSource(LocationCachePanelSource, ABC):
         return f"ul_source_document_{self.key}_{document.document_id}"
 
     def find_document(self, data: dict, document_id: str, *, site_scope: bool, subject: MediaSubject | None = None) -> SourceDocument | None:
-        """The listed document with this id, or None when the payload does not list it.
+        """
+        The listed document with this id, or None when the payload does not list it.
 
         Args:
             data: The ``LocationCache`` row's ``data`` dict.
@@ -939,7 +990,8 @@ SEARCH_NAMES_KEY = "search_names"
 
 
 class NameSearchSource(LocationCachePanelSource, ABC):
-    """A cache-backed panel whose upstream query is built from the place's names.
+    """
+    A cache-backed panel whose upstream query is built from the place's names.
 
     The shared row is built from shared names only. A pin with custom names also reads a row cached for exactly that
     set (see ``services.pins.search_names``), fetched once for every pin holding it. Each row keeps the names its
@@ -963,7 +1015,8 @@ class NameSearchSource(LocationCachePanelSource, ABC):
         return f"loc{pin.location_id}:{audience}" if audience else f"loc{pin.location_id}"
 
     def result_identity(self, result: object) -> str:
-        """What makes two results the same one, for combining rows.
+        """
+        What makes two results the same one, for combining rows.
 
         Args:
             result: One entry of a payload's :attr:`results_key` list.
@@ -1007,7 +1060,8 @@ class NameSearchSource(LocationCachePanelSource, ABC):
 
     @abstractmethod
     def fetch_scope(self, pin: Pin, scope: SearchScope) -> None:
-        """Run one search and cache it under ``scope.audience``, through :meth:`store`.
+        """
+        Run one search and cache it under ``scope.audience``, through :meth:`store`.
 
         A scope whose names build no query is cached as an empty answer without asking the upstream; an outage is
         not cached at all.
@@ -1018,7 +1072,8 @@ class NameSearchSource(LocationCachePanelSource, ABC):
         """
 
     def store(self, pin: Pin, scope: SearchScope, data: dict, query_key: str) -> None:
-        """Cache one search's payload under its audience, with the names that built it.
+        """
+        Cache one search's payload under its audience, with the names that built it.
 
         Args:
             pin: The pin whose Location the row belongs to.
@@ -1035,7 +1090,8 @@ class GatewayMediaPanelSource(GalleryMediaSource):
     """A Media gallery provider backed by one :class:`MediaProvider` gateway."""
 
     def __init__(self, key: str, cache_source: str, gateway_factory) -> None:
-        """Bind this source to one media provider.
+        """
+        Bind this source to one media provider.
 
         Args:
             key: Registry key, matching the URL's ``source`` segment.
@@ -1064,7 +1120,8 @@ class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
 
     @staticmethod
     def search_terms(pin: Pin, gateway: MediaProvider, scope: SearchScope) -> list[str]:
-        """Candidate search queries for one of this pin's searches, most specific first.
+        """
+        Candidate search queries for one of this pin's searches, most specific first.
 
         Args:
             pin: The pin to build search queries for.
@@ -1124,7 +1181,8 @@ class MediaPanelSource(NameSearchSource, GatewayMediaPanelSource):
 
 
 class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
-    """A Media gallery provider whose results may include books and scans, which are listed under Article > Sources.
+    """
+    A Media gallery provider whose results may include books and scans, which are listed under Article > Sources.
 
     A document opens on the provider's own page: a scanned book runs to tens of megabytes, more than the Sources proxy holds.
     """
@@ -1133,7 +1191,8 @@ class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
     documents_judged: ClassVar[bool] = True
 
     def __init__(self, key: str, cache_source: str, gateway_factory, *, fetched_for_sources: bool = True) -> None:
-        """Bind this source to one media provider.
+        """
+        Bind this source to one media provider.
 
         Args:
             key: Registry key, matching the URL's ``source`` segment.
@@ -1167,7 +1226,8 @@ class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
         ]
 
     def download_document(self, document: SourceDocument) -> tuple[bytes, str]:
-        """Never proxied: the Sources tab links to the provider's page instead.
+        """
+        Never proxied: the Sources tab links to the provider's page instead.
 
         Raises:
             DocumentUnavailableError: Always.
@@ -1176,7 +1236,8 @@ class DocumentMediaPanelSource(MediaPanelSource, DocumentPanelSource):
 
 
 class BoundaryPanelSource(PanelSource):
-    """Auto-generated default boundaries stored on the Location's Boundary rows.
+    """
+    Auto-generated default boundaries stored on the Location's Boundary rows.
     Location-scoped: the generated property/building boundaries are shared place data, so one fetch serves every pin (and the wiki page) at that Location."""
 
     key = "boundary"
@@ -1194,7 +1255,8 @@ class BoundaryPanelSource(PanelSource):
 
     @classmethod
     def location_flight_key(cls, location_id: int | None) -> str:
-        """The flight marker of a location's boundary fetch, for a caller generating it with no pin in hand.
+        """
+        The flight marker of a location's boundary fetch, for a caller generating it with no pin in hand.
 
         Args:
             location_id: The location.
@@ -1209,7 +1271,8 @@ class BoundaryPanelSource(PanelSource):
         return self.location_flight_key(pin.location_id)
 
     def is_ready(self, pin: Pin) -> bool:
-        """True when the provider chain has a fresh answer for the pin's Location.
+        """
+        True when the provider chain has a fresh answer for the pin's Location.
 
         A run that found no place is only fresh for :data:`CIRCLE_RETRY_AFTER`. After that the
         fallback circle is asked again, so a refusal stamped before the parcel was available
@@ -1223,7 +1286,8 @@ class BoundaryPanelSource(PanelSource):
         return ran and not stale
 
     def fetch(self, pin: Pin) -> None:
-        """Run the boundary provider chain and persist generated polygons.
+        """
+        Run the boundary provider chain and persist generated polygons.
         Persistence uses queryset ``update()`` calls (see ``generate_location_boundaries``) so it can never clobber geometry saved concurrently by the web request."""
         from urbanlens.dashboard.services.locations.boundaries import generate_location_boundaries
 
@@ -1232,7 +1296,8 @@ class BoundaryPanelSource(PanelSource):
         generate_location_boundaries(pin.location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The pin's effective property and building geometry as GeoJSON.
+        """
+        The pin's effective property and building geometry as GeoJSON.
 
         Args:
             pin: The pin whose boundaries are being read.
@@ -1253,7 +1318,8 @@ class BoundaryPanelSource(PanelSource):
 
     @staticmethod
     def _boundary_side(pin: Pin, boundary_type: str) -> dict[str, Any] | None:
-        """One boundary type's resolved geometry plus its provenance.
+        """
+        One boundary type's resolved geometry plus its provenance.
 
         Args:
             pin: The pin to resolve for.
@@ -1286,7 +1352,8 @@ def _street_view_gateways() -> list[StreetViewProvider]:
 
 
 def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlide], list[ProviderFetchResult]]:
-    """Gather satellite slides from every provider, tolerating per-provider failure.
+    """
+    Gather satellite slides from every provider, tolerating per-provider failure.
     Each provider caches its own slides (24h, keyed by coordinates), so running this twice is one round of upstream fetches followed by pure cache hits -- the Celery warm-up task and the request-path render share this exact function.
 
     Args:
@@ -1324,7 +1391,8 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
 
 
 def collect_street_view_slides(lat: float, lng: float) -> tuple[list[StreetViewSlide], list[ProviderFetchResult]]:
-    """Gather street-level slides from every provider, tolerating per-provider failure.
+    """
+    Gather street-level slides from every provider, tolerating per-provider failure.
 
     Args:
         lat: WGS-84 latitude.
@@ -1387,7 +1455,8 @@ class SlidesPanelSource(PanelSource, ABC):
         """Run this carousel's provider chain (see the module-level collectors)."""
 
     def fetch(self, pin: Pin) -> None:
-        """Warm every provider's slide cache, then mark how far to trust the result.
+        """
+        Warm every provider's slide cache, then mark how far to trust the result.
         Those retry on the ordinary failure cadence instead. A provider this environment refused (D26) answered
         nothing, so the pass is trusted only as long as an unavailable panel is, and an override takes effect."""
         lat = float(pin.effective_latitude or 0)
@@ -1444,7 +1513,8 @@ _CORE_PANEL_SOURCES: tuple[PanelSource, ...] = (
 
 
 def panel_source_problems(source: PanelSource) -> list[str]:
-    """Return the ways ``source`` is misconfigured, as human-readable strings.
+    """
+    Return the ways ``source`` is misconfigured, as human-readable strings.
 
     Args:
         source: The panel source to check.
@@ -1476,7 +1546,8 @@ _REPORTED_PANEL_PROBLEMS: set[str] = set()
 
 
 def panel_sources() -> dict[str, PanelSource]:
-    """Every registered panel source, keyed by the source key used in URLs, Celery task arguments, and cache keys.
+    """
+    Every registered panel source, keyed by the source key used in URLs, Celery task arguments, and cache keys.
 
     Returns:
         Mapping of source key to its :class:`PanelSource`."""
@@ -1498,7 +1569,8 @@ def panel_sources() -> dict[str, PanelSource]:
 
 
 def tabbed_panels(sources: Iterable[PanelSource], placement: PanelPlacement) -> list[InfoPanelSource]:
-    """The info panels placed in one tabbed card, in tab order.
+    """
+    The info panels placed in one tabbed card, in tab order.
 
     Args:
         sources: Candidate sources, in registry order.
@@ -1513,7 +1585,8 @@ def tabbed_panels(sources: Iterable[PanelSource], placement: PanelPlacement) -> 
 
 
 def own_panels(sources: Iterable[PanelSource]) -> list[InfoPanelSource]:
-    """The info panels among ``sources`` that are not shown inside another of them.
+    """
+    The info panels among ``sources`` that are not shown inside another of them.
 
     Args:
         sources: Candidate sources, in registry order.
@@ -1527,7 +1600,8 @@ def own_panels(sources: Iterable[PanelSource]) -> list[InfoPanelSource]:
 
 
 def panels_shown_in(host: InfoPanelSource, sources: Iterable[PanelSource]) -> list[InfoPanelSource]:
-    """The info panels among ``sources`` that ``host`` shows inside it.
+    """
+    The info panels among ``sources`` that ``host`` shows inside it.
 
     Args:
         host: The panel whose tab or card holds them.
@@ -1540,7 +1614,8 @@ def panels_shown_in(host: InfoPanelSource, sources: Iterable[PanelSource]) -> li
 
 
 def without_repeats(contexts: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Several panels' render contexts, each dropping what an earlier one already said.
+    """
+    Several panels' render contexts, each dropping what an earlier one already said.
 
     A fact is repeated when it links somewhere an earlier panel already linked, or gives a label and value an earlier
     panel already gave. The first panel is kept whole; a later one left with nothing to show is dropped.
@@ -1571,7 +1646,8 @@ def without_repeats(contexts: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def get_panel_source(source_key: str) -> PanelSource | None:
-    """Look up one panel source by key.
+    """
+    Look up one panel source by key.
 
     Args:
         source_key: A :func:`panel_sources` key.
@@ -1582,7 +1658,8 @@ def get_panel_source(source_key: str) -> PanelSource | None:
 
 
 def shows_members_media(source_key: str) -> bool:
-    """Whether a gallery source's tiles are other members' photos from this site, which no gallery action copies.
+    """
+    Whether a gallery source's tiles are other members' photos from this site, which no gallery action copies.
 
     Args:
         source_key: A :func:`panel_sources` key, as a gallery request names it.
@@ -1595,7 +1672,8 @@ def shows_members_media(source_key: str) -> bool:
 
 
 def document_panel_sources() -> list[DocumentPanelSource]:
-    """Every registered panel source that lists documents for Article > Sources.
+    """
+    Every registered panel source that lists documents for Article > Sources.
 
     Returns:
         The sources, in registry order.
@@ -1610,7 +1688,8 @@ def _scopes_by_source(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> 
 
 
 def _fresh_location_cache_keys(pin: Pin, audiences: Iterable[str], since: datetime) -> dict[tuple[str, str], datetime]:
-    """Every ``(source, audience)`` of these audiences with a row at this pin's location fresh by the site-wide window.
+    """
+    Every ``(source, audience)`` of these audiences with a row at this pin's location fresh by the site-wide window.
 
     Args:
         pin: The pin whose location's cache rows are being examined.
@@ -1654,7 +1733,8 @@ def _entries(pin: Pin, sources: Sequence[LocationCachePanelSource], scopes: dict
 
 
 def cached_entries(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> dict[str, CachedEntry | None]:
-    """What ``pin`` reads from each source, in one query.
+    """
+    What ``pin`` reads from each source, in one query.
 
     A pin reads the shared row and, for a name-built source, the row of its own name set, never another's.
 
@@ -1671,7 +1751,8 @@ def cached_entries(pin: Pin, sources: Sequence[LocationCachePanelSource]) -> dic
 
 
 def gate_allows(source: PanelSource, pin: Pin) -> bool:
-    """Whether *source* applies to *pin*, treating a raising gate as "no".
+    """
+    Whether *source* applies to *pin*, treating a raising gate as "no".
     Per-panel surfaces survive that on their own (one HTMX request, one panel), but any surface that evaluates *every* source in one pass would answer with no panels at all rather than one fewer.
 
     Args:
@@ -1688,7 +1769,8 @@ def gate_allows(source: PanelSource, pin: Pin) -> bool:
 
 
 def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None, *, require_content: bool = True) -> dict[str, bool]:
-    """Whether each panel source already has data for ``pin``, in one pass.
+    """
+    Whether each panel source already has data for ``pin``, in one pass.
     Anything that needs the readiness of more than one source should call this instead of looping.
 
     Args:
@@ -1746,7 +1828,8 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None, *, r
 
 
 def panel_visible_to(user: AbstractBaseUser | AnonymousUser, source: PanelSource) -> bool:
-    """Whether *user* holds the subscription feature this panel source requires.
+    """
+    Whether *user* holds the subscription feature this panel source requires.
 
     Args:
         user: The user asking to see the panel (typically ``request.user``).
@@ -1763,7 +1846,8 @@ def panel_visible_to(user: AbstractBaseUser | AnonymousUser, source: PanelSource
 
 
 def seed_site_descendants(site: Pin) -> int:
-    """Answer the markers nested under ``site`` from every panel's cached site payload, without asking any upstream.
+    """
+    Answer the markers nested under ``site`` from every panel's cached site payload, without asking any upstream.
 
     Args:
         site: The site pin.
@@ -1783,7 +1867,8 @@ def seed_site_descendants(site: Pin) -> int:
 
 
 def fetch_blocked(source: PanelSource, pin: Pin) -> bool:
-    """Whether :func:`schedule_panel_fetch` would refuse to fetch ``source`` for ``pin``.
+    """
+    Whether :func:`schedule_panel_fetch` would refuse to fetch ``source`` for ``pin``.
 
     Args:
         source: The panel source.
@@ -1801,7 +1886,8 @@ def fetch_blocked(source: PanelSource, pin: Pin) -> bool:
 
 
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
-    """Ensure a background fetch is in flight for this panel, single-flight.
+    """
+    Ensure a background fetch is in flight for this panel, single-flight.
 
     Args:
         source_key: A :func:`panel_sources` key.
@@ -1835,7 +1921,8 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
 
 
 def _release_flight(source, pin: Pin, flight_token: str | None) -> None:
-    """Drop the single-flight marker, if it is still this fetch's.
+    """
+    Drop the single-flight marker, if it is still this fetch's.
 
     Args:
         source: The panel source being fetched.
@@ -1848,7 +1935,8 @@ def _release_flight(source, pin: Pin, flight_token: str | None) -> None:
 
 
 def unavailable_here(source_key: str, pin: Pin) -> str | None:
-    """The service a panel's last fetch found this environment does not call, if that is why it has nothing.
+    """
+    The service a panel's last fetch found this environment does not call, if that is why it has nothing.
 
     Args:
         source_key: A :func:`panel_sources` key.
@@ -1872,7 +1960,8 @@ def _mark_unavailable_here(source: PanelSource, pin: Pin, service: str) -> None:
 
 
 def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) -> int | None:
-    """Execute one panel fetch inside the Celery worker. Owns the failure policy so individual sources don't have to:
+    """
+    Execute one panel fetch inside the Celery worker. Owns the failure policy so individual sources don't have to:
 
     Args:
         source_key: A :func:`panel_sources` key.

@@ -88,7 +88,8 @@ def _self_signed_context(test: TestCase) -> ssl.SSLContext:
 def start_drip_server(
     test: TestCase, *, drip_headers: bool = False, interval: float = 0.1, body_bytes: int = 1000, tls: bool = False
 ) -> str:
-    """Serve a slow-drip response on loopback for the rest of *test*.
+    """
+    Serve a slow-drip response on loopback for the rest of *test*.
 
     Args:
         test: The running test; the server is stopped in its cleanups.

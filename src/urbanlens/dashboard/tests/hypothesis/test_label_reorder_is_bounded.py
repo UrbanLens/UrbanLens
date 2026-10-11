@@ -1,4 +1,5 @@
-"""The label reorder had a ceiling on one of its two doors.
+"""
+The label reorder had a ceiling on one of its two doors.
 
 `LabelReorderSerializer` caps `uuids` at a literal 1000 and its docstring says it
 mirrors `OrganizePrioritySaveView`'s `items` semantics. The view it mirrors has no

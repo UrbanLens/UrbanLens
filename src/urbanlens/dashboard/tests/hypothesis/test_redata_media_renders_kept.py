@@ -1,4 +1,5 @@
-"""A REData-proxied file a browser cannot show (a CRIS PDF, a TIFF) is rendered once and kept, at a tile's size for tiles.
+"""
+A REData-proxied file a browser cannot show (a CRIS PDF, a TIFF) is rendered once and kept, at a tile's size for tiles.
 
 P189: a gallery tile loaded the lightbox's 1200 px render of a document's first page, and the render lived an hour in
 the cache, after which the next view downloaded the document from REData and decoded it again.

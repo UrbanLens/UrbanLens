@@ -13,7 +13,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 
 class ConversationListRowCostTests(RenderTimeScalingMixin, TestCase):
-    """The DM sidebar lists every conversation the profile has with no cap or slice.
+    """
+    The DM sidebar lists every conversation the profile has with no cap or slice.
 
     ``ConversationListQueryScalingTests`` already proved this stays flat on query count, but that
     test can't see render-time cost, and the list is re-fetched on nearly every DM sent anywhere in
@@ -29,7 +30,8 @@ class ConversationListRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Add *count* more conversations, each a partner with one message in and one out.
+        """
+        Add *count* more conversations, each a partner with one message in and one out.
 
         Args:
             count: How many rows to add.

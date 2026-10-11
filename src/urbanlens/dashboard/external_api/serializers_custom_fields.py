@@ -1,4 +1,5 @@
-"""Serializers for the external API's custom-field domain.
+"""
+Serializers for the external API's custom-field domain.
 
 Definitions (:class:`CustomFieldDefinitionSerializer`/
 :class:`CustomFieldDefinitionWriteSerializer`) describe the field itself;
@@ -32,7 +33,8 @@ _MAX_SELECT_OPTIONS = 100
 
 
 def normalize_select_options(raw_options: list[str]) -> tuple[list[str], str | None]:
-    """Dedupe and bound-check a select field's submitted options.
+    """
+    Dedupe and bound-check a select field's submitted options.
 
     Shared between :class:`CustomFieldDefinitionWriteSerializer` (create, where ``field_type`` is always
     present) and the PATCH view (where a partial update omitting ``field_type`` never reaches
@@ -73,7 +75,8 @@ class CustomFieldDefinitionSerializer(serializers.Serializer):
 
 
 class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
-    """A custom field definition submitted for create or partial update.
+    """
+    A custom field definition submitted for create or partial update.
 
     ``entity_type`` is accepted on create only - the view never applies it on PATCH, since changing
     which object type a field applies to would orphan every value already stored under it.
@@ -86,7 +89,8 @@ class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
     order = serializers.IntegerField(required=False, default=0, min_value=0, max_value=DB_SMALLINT_MAX)
 
     def validate(self, attrs: dict) -> dict:
-        """Require and normalize choices when the field type is SELECT.
+        """
+        Require and normalize choices when the field type is SELECT.
 
         Only fires here when ``field_type`` itself is present in the request - a partial update that submits
         ``options`` alone (the common case) skips this branch entirely, since DRF never populates omitted
@@ -101,7 +105,8 @@ class CustomFieldDefinitionWriteSerializer(serializers.Serializer):
 
 
 class CustomFieldValueWriteSerializer(serializers.Serializer):
-    """A value submitted for one custom field on a target object.
+    """
+    A value submitted for one custom field on a target object.
 
     ``value`` is a string regardless of the field's type, matching ``CustomFieldValue.set_value``'s own
     contract - the typed parsing (number, date, time, checkbox, select-membership, url) happens there,

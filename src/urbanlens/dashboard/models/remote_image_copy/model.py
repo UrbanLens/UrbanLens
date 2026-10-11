@@ -16,7 +16,8 @@ def remote_image_copy_path(instance: RemoteImageCopy, filename: str) -> str:
 
 
 class RemoteImageCopy(abstract.DashboardModel):
-    """One remote image, keyed by its URL, with where it came from.
+    """
+    One remote image, keyed by its URL, with where it came from.
 
     A row exists once this site has emitted a link to its copy; that is what lets the copy endpoint fetch the source,
     so it cannot be pointed at an arbitrary URL. It has no expiry: once stored, the source is never fetched again.

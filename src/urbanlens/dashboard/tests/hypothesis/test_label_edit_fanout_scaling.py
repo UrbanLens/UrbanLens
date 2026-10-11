@@ -39,7 +39,8 @@ class LabelEditCostIsFlatTests(TestCase):
         self._seeded = 0
 
     def seed_pins(self, count: int) -> None:
-        """Create *count* more pins for this profile, all carrying the probe label.
+        """
+        Create *count* more pins for this profile, all carrying the probe label.
 
         Args:
             count: How many to add.
@@ -57,7 +58,8 @@ class LabelEditCostIsFlatTests(TestCase):
             pin.labels.set([self.label])
 
     def edit_the_label(self) -> int:
-        """Recolour the label, and report how many statements it took.
+        """
+        Recolour the label, and report how many statements it took.
 
         Counted across the commit callbacks too, since a receiver that deferred its work to `on_commit` would
         otherwise look free.

@@ -1,4 +1,5 @@
-"""Checks shared by the tests that keep programs out of rendered pages.
+"""
+Checks shared by the tests that keep programs out of rendered pages.
 
 An inline ``<script>`` cannot be cached between visits, cannot be minified by the bundler, and is invisible to the
 TypeScript checks. Each one that carried a program has been moved to a static file fed by a JSON config element;
@@ -35,7 +36,8 @@ ANY_READ = re.compile(r'CFG\.(?:urls|assets)\["[^"]+"\]|CFG\.[a-zA-Z][a-zA-Z0-9_
 
 
 def inline_blocks(page: bytes) -> list[bytes]:
-    """Every inline script in *page*.
+    """
+    Every inline script in *page*.
 
     Args:
         page: A rendered response body.
@@ -46,7 +48,8 @@ def inline_blocks(page: bytes) -> list[bytes]:
 
 
 def executable_blocks(page: bytes) -> list[bytes]:
-    """Every inline script in *page* a browser would run.
+    """
+    Every inline script in *page* a browser would run.
 
     Args:
         page: A rendered response body.
@@ -57,7 +60,8 @@ def executable_blocks(page: bytes) -> list[bytes]:
 
 
 def inline_handlers(page: bytes) -> list[str]:
-    """Every ``on*=`` handler attribute in *page*, by name.
+    """
+    Every ``on*=`` handler attribute in *page*, by name.
 
     Args:
         page: A rendered response body.
@@ -68,7 +72,8 @@ def inline_handlers(page: bytes) -> list[str]:
 
 
 def largest_inline(page: bytes) -> int:
-    """The size of the biggest inline script in *page*.
+    """
+    The size of the biggest inline script in *page*.
 
     Args:
         page: A rendered response body.
@@ -79,7 +84,8 @@ def largest_inline(page: bytes) -> int:
 
 
 def rendered_config(page: bytes, element_id: str) -> dict[str, Any] | None:
-    """The JSON a page sends its script.
+    """
+    The JSON a page sends its script.
 
     Args:
         page: A rendered response body.
@@ -96,7 +102,8 @@ def rendered_config(page: bytes, element_id: str) -> dict[str, Any] | None:
 
 
 def missing_config(source: str, config: Mapping[str, Any]) -> list[str]:
-    """Config the script reads that the page does not send.
+    """
+    Config the script reads that the page does not send.
 
     Args:
         source: The script's text.
@@ -114,7 +121,8 @@ def missing_config(source: str, config: Mapping[str, Any]) -> list[str]:
 
 
 def open_delimiter(source: str, position: int) -> str | None:
-    """The string delimiter open at *position*, judged on its own line.
+    """
+    The string delimiter open at *position*, judged on its own line.
 
     Args:
         source: The script's text.
@@ -136,7 +144,8 @@ def open_delimiter(source: str, position: int) -> str | None:
 
 
 def inert_reads(source: str) -> list[str]:
-    """Config reads that are quoted text rather than values.
+    """
+    Config reads that are quoted text rather than values.
 
     ``'history_v1_' + CFG.profileId`` keys one account's stored history; ``'history_v1_CFG.profileId'`` keys
     everyone's to the same string, and nothing raises to say so.
@@ -161,7 +170,8 @@ def inert_reads(source: str) -> list[str]:
 
 
 def template_syntax(source: str) -> list[str]:
-    """Django tags left in a file that is no longer a template.
+    """
+    Django tags left in a file that is no longer a template.
 
     Args:
         source: The script's text.

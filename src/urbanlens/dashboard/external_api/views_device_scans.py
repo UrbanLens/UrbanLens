@@ -1,4 +1,5 @@
-"""External-API views for the mobile app's wireless device-scanning feature.
+"""
+External-API views for the mobile app's wireless device-scanning feature.
 
 Two endpoints only, per design - no wiki-editing surface: an upload endpoint
 that ingests scan data (classification and marker maintenance happen
@@ -34,7 +35,8 @@ if TYPE_CHECKING:
 
 
 class DeviceScanUploadView(ExternalApiView):
-    """POST: upload one batch of wireless device-scan data.
+    """
+    POST: upload one batch of wireless device-scan data.
 
     Authentication is always required, but whether this upload is attributed to the caller's account
     depends entirely on their own ``Profile.track_device_scans`` preference - an anonymous upload is
@@ -76,7 +78,8 @@ class DeviceScanUploadView(ExternalApiView):
 
 
 class NearbyDeviceMarkersView(ExternalApiView):
-    """GET: wireless device markers already known near a point.
+    """
+    GET: wireless device markers already known near a point.
 
     Lets the app decide when to turn scanning on (entering a region with known markers) and enrich what
     it shows the user when it detects a matching MAC address.

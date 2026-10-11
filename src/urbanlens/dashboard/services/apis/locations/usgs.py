@@ -33,7 +33,8 @@ class UsgsGateway(Gateway):
     username: str | None = field(default_factory=lambda: settings.usgs_username)
 
     def _session_token(self) -> str | None:
-        """Return a valid M2M session token, exchanging credentials if needed.
+        """
+        Return a valid M2M session token, exchanging credentials if needed.
 
         Returns:
             Session token string, or ``None`` when credentials are not configured.
@@ -65,7 +66,8 @@ class UsgsGateway(Gateway):
         return token
 
     def m2m_request(self, endpoint: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Send a POST request to the M2M API.
+        """
+        Send a POST request to the M2M API.
 
         Args:
             endpoint: M2M endpoint name (e.g. ``"scene-search"``).
@@ -85,7 +87,8 @@ class UsgsGateway(Gateway):
         return response.json()
 
     def dataset_search(self, **payload: Any) -> dict[str, Any]:
-        """Search EarthExplorer/M2M datasets.
+        """
+        Search EarthExplorer/M2M datasets.
 
         Args:
             **payload: M2M dataset-search parameters (``datasetName``,
@@ -105,7 +108,8 @@ class UsgsGateway(Gateway):
         max_results: int = 25,
         **payload: Any,
     ) -> dict[str, Any]:
-        """Search EarthExplorer scenes intersecting a coordinate.
+        """
+        Search EarthExplorer scenes intersecting a coordinate.
 
         Args:
             latitude: WGS-84 latitude of the target location.
@@ -128,7 +132,8 @@ class UsgsGateway(Gateway):
         )
 
     def download_options(self, **payload: Any) -> dict[str, Any]:
-        """Return available M2M download products for a set of scenes.
+        """
+        Return available M2M download products for a set of scenes.
 
         Args:
             **payload: M2M download-options parameters (``datasetName``, ``entityIds``, etc.).
@@ -139,7 +144,8 @@ class UsgsGateway(Gateway):
         return self.m2m_request("download-options", payload)
 
     def download_request(self, **payload: Any) -> dict[str, Any]:
-        """Request downloads for selected M2M products.
+        """
+        Request downloads for selected M2M products.
 
         Args:
             **payload: M2M download-request parameters (``downloads`` list, ``label``, etc.).
@@ -157,7 +163,8 @@ class UsgsGateway(Gateway):
         delta: float = 0.005,
         **params: Any,
     ) -> dict[str, Any]:
-        """Return The National Map products intersecting coordinates.
+        """
+        Return The National Map products intersecting coordinates.
 
         Args:
             latitude: WGS-84 latitude.
@@ -185,7 +192,8 @@ class UsgsGateway(Gateway):
         delta: float = 0.005,
         **params: Any,
     ) -> dict[str, Any]:
-        """Return HTMC historical topographic maps near coordinates.
+        """
+        Return HTMC historical topographic maps near coordinates.
 
         Args:
             latitude: WGS-84 latitude.

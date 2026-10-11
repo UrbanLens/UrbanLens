@@ -80,7 +80,8 @@ class PinOrganizeDialogTests(TestCase):
 
 
 class LabelCreateAndAddTests(TestCase):
-    """Inline "create a new label" from the pin/wiki Add Labels dialog.
+    """
+    Inline "create a new label" from the pin/wiki Add Labels dialog.
 
     Mirrors LabelImageMembershipView's existing create_and_add support (see test_media_labels.py) - the same
     action, extended to the pin and location membership routes."""
@@ -198,7 +199,8 @@ class PinWikiLinkVisibilityTests(TestCase):
         self.assertContains(overview, "Share to Community Wiki")
 
     def test_overview_fragment_backfills_the_slug_even_without_a_prior_page_load(self) -> None:
-        """PinOverviewView must not depend on PinController.view having run first.
+        """
+        PinOverviewView must not depend on PinController.view having run first.
 
         The backfill used to live only in PinController.view - a direct hit to the HTMX overview endpoint (e.g.
         a bookmarked fragment URL, or any future caller that skips the full page load) would render with the

@@ -1,4 +1,5 @@
-"""Site-admin controller for mapping equivalent external-provider tags together.
+"""
+Site-admin controller for mapping equivalent external-provider tags together.
 
 See ``services.locations.external_tag_groups`` for the resolution/mutation
 logic this only calls into. Modeled on ``site_admin_costs.py``'s shape (a
@@ -93,7 +94,8 @@ def _toast_response(request: HttpRequest, *, level: str, message: str, search: s
 
 
 class SiteAdminExternalTagsView(_ExternalTagsAdminMixin, View):
-    """Admin page for mapping equivalent external-provider tags together.
+    """
+    Admin page for mapping equivalent external-provider tags together.
 
     GET /site-admin/external-tags/  → full page: explicit groups, suggested
         (auto-matched, unconfirmed) clusters, and the remaining ungrouped pool.
@@ -105,7 +107,8 @@ class SiteAdminExternalTagsView(_ExternalTagsAdminMixin, View):
 
 
 class SiteAdminExternalTagsSearchView(_ExternalTagsAdminMixin, View):
-    """Re-render the mapping body for a search-as-you-type query.
+    """
+    Re-render the mapping body for a search-as-you-type query.
 
     GET /site-admin/external-tags/search/
     """
@@ -116,7 +119,8 @@ class SiteAdminExternalTagsSearchView(_ExternalTagsAdminMixin, View):
 
 
 class SiteAdminExternalTagsGroupView(_ExternalTagsAdminMixin, View):
-    """Create a new equivalence group from two or more selected (or suggested) tags.
+    """
+    Create a new equivalence group from two or more selected (or suggested) tags.
 
     POST /site-admin/external-tags/group/
     """
@@ -148,7 +152,8 @@ class SiteAdminExternalTagsGroupView(_ExternalTagsAdminMixin, View):
 
 
 class SiteAdminExternalTagsMoveView(_ExternalTagsAdminMixin, View):
-    """Drag-and-drop endpoint: move one tag to a different group, or ungroup it.
+    """
+    Drag-and-drop endpoint: move one tag to a different group, or ungroup it.
 
     POST /site-admin/external-tags/move/
 
@@ -184,7 +189,8 @@ class SiteAdminExternalTagsMoveView(_ExternalTagsAdminMixin, View):
 
 
 class SiteAdminExternalTagsPreferredView(_ExternalTagsAdminMixin, View):
-    """Mark one tag as the member shown for its group.
+    """
+    Mark one tag as the member shown for its group.
 
     POST /site-admin/external-tags/preferred/
     """

@@ -1,4 +1,5 @@
-"""A reorder may name as many items as the thing being reordered may hold.
+"""
+A reorder may name as many items as the thing being reordered may hold.
 
 `PinListReorderView` and the trip activity reorder both pass whatever list was
 submitted into `filter(pk__in=ids)`. A JSON body is not covered by Django's
@@ -89,7 +90,8 @@ class AListReorderIsBoundedByItsPinLimitTests(_ListCase):
         self.assertEqual(self._reorder(ids).status_code, 200)
 
     def test_unlimited_falls_back_to_the_fields_own_maximum(self) -> None:
-        """0 means unlimited pins; it must not mean an unlimited id list.
+        """
+        0 means unlimited pins; it must not mean an unlimited id list.
 
         Asserted on the ceiling rather than by posting a million ids, because
         that body is over ``DATA_UPLOAD_MAX_MEMORY_SIZE`` and Django refuses it

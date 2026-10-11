@@ -133,7 +133,8 @@ class MaxPinsPerListTests(TestCase):
 
 
 class MapSidebarAddToListButtonTests(TestCase):
-    """The map's pin-list sidebar hides "Add these pins to a list" once the
+    """
+    The map's pin-list sidebar hides "Add these pins to a list" once the
     number of matching pins would exceed the site's max_pins_per_list cap."""
 
     def setUp(self) -> None:

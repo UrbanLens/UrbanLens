@@ -1,4 +1,5 @@
-"""Stop calling an upstream that has told this deployment to wait.
+"""
+Stop calling an upstream that has told this deployment to wait.
 
 A throttled REData refuses every call until its window reopens, so each call made in the meantime
 is a refusal that also keeps the key's window full. A tripped breaker stores the retry-at time in the
@@ -35,7 +36,8 @@ BREAKER_MAX_SECONDS = 3600
 
 
 class UpstreamBreaker(ABC):
-    """The breakers guarding one upstream's calls, and the responses that trip them.
+    """
+    The breakers guarding one upstream's calls, and the responses that trip them.
 
     A call is guarded by several scopes at once - the key's shared budget and the one source behind
     the endpoint - and is short-circuited while any of them is open.
@@ -46,7 +48,8 @@ class UpstreamBreaker(ABC):
 
     @abstractmethod
     def covers(self, service: str) -> bool:
-        """Whether this upstream owns ``service``'s calls.
+        """
+        Whether this upstream owns ``service``'s calls.
 
         Args:
             service: The rate-limiter service key.
@@ -54,7 +57,8 @@ class UpstreamBreaker(ABC):
 
     @abstractmethod
     def scopes(self, url: str, params: object = None) -> tuple[str, ...]:
-        """The breakers a call to ``url`` must find closed.
+        """
+        The breakers a call to ``url`` must find closed.
 
         Args:
             url: The URL about to be requested.
@@ -63,7 +67,8 @@ class UpstreamBreaker(ABC):
 
     @abstractmethod
     def scope_tripped_by(self, url: str, params: object, response: requests.Response) -> str | None:
-        """Which breaker ``response`` trips, if any.
+        """
+        Which breaker ``response`` trips, if any.
 
         Args:
             url: The URL that was requested.
@@ -75,7 +80,8 @@ class UpstreamBreaker(ABC):
         return f"upstream-breaker:{self.name}:{scope}"
 
     def wait(self, url: str, params: object = None) -> int | None:
-        """Seconds until every breaker guarding ``url`` is closed.
+        """
+        Seconds until every breaker guarding ``url`` is closed.
 
         Args:
             url: The URL about to be requested.
@@ -93,7 +99,8 @@ class UpstreamBreaker(ABC):
         return max(1, int(remaining + 0.999)) if remaining > 0 else None
 
     def observe(self, url: str, params: object, response: requests.Response) -> None:
-        """Trip the breaker ``response`` names, for as long as the upstream asked.
+        """
+        Trip the breaker ``response`` names, for as long as the upstream asked.
 
         Args:
             url: The URL that was requested.
@@ -107,7 +114,8 @@ class UpstreamBreaker(ABC):
         self.trip(scope, upstream_retry_after(response, maximum=BREAKER_MAX_SECONDS, default=default) or default)
 
     def default_seconds(self, scope: str) -> int:
-        """How long to open ``scope`` when the response named no wait.
+        """
+        How long to open ``scope`` when the response named no wait.
 
         Args:
             scope: The scope being tripped.
@@ -118,7 +126,8 @@ class UpstreamBreaker(ABC):
         return UPSTREAM_BUSY_DEFAULT_SECONDS
 
     def trip(self, scope: str, seconds: int) -> None:
-        """Open ``scope`` for ``seconds``, never shortening a longer wait already recorded.
+        """
+        Open ``scope`` for ``seconds``, never shortening a longer wait already recorded.
 
         Args:
             scope: The breaker to open.
@@ -137,7 +146,8 @@ class UpstreamBreaker(ABC):
         self.announce(scope, seconds, retry_at)
 
     def announce(self, scope: str, seconds: int, retry_at: float) -> None:
-        """Report that ``scope`` was opened.
+        """
+        Report that ``scope`` was opened.
 
         Args:
             scope: The scope opened.
@@ -181,7 +191,8 @@ def _api_path(url: str) -> str:
 
 
 class RefusedEndpoint(NamedTuple):
-    """An endpoint REData refused this deployment's key, as the site admin sees it.
+    """
+    An endpoint REData refused this deployment's key, as the site admin sees it.
 
     Attributes:
         endpoint: The endpoint, its identifiers blanked (``parcels/{id}/owners``).
@@ -195,7 +206,8 @@ class RefusedEndpoint(NamedTuple):
 
 
 class RedataBreaker(UpstreamBreaker):
-    """REData's per-key throttles and its per-source budgets.
+    """
+    REData's per-key throttles and its per-source budgets.
 
     REData throttles each key in pools: every endpoint but a tile draws on the key's default budget,
     the endpoints that can start a live fetch draw on the smaller lookup budget as well, tiles have a
@@ -260,7 +272,8 @@ class RedataBreaker(UpstreamBreaker):
     OPTIONAL_ENDPOINTS: ClassVar[frozenset[str]] = frozenset({"locations/prewarm"})
 
     def covers(self, service: str) -> bool:
-        """REData's services are the ones named for it.
+        """
+        REData's services are the ones named for it.
 
         Args:
             service: The rate-limiter service key.
@@ -271,7 +284,8 @@ class RedataBreaker(UpstreamBreaker):
         return service.startswith("redata")
 
     def pools(self, url: str) -> tuple[str, ...]:
-        """The throttle pools ``url`` draws from, the one a 429 most likely came from first.
+        """
+        The throttle pools ``url`` draws from, the one a 429 most likely came from first.
 
         Args:
             url: A REData URL.
@@ -294,7 +308,8 @@ class RedataBreaker(UpstreamBreaker):
 
     @staticmethod
     def endpoint(url: str) -> str:
-        """The endpoint behind a URL, its identifiers blanked.
+        """
+        The endpoint behind a URL, its identifiers blanked.
 
         Args:
             url: A REData URL.
@@ -306,7 +321,8 @@ class RedataBreaker(UpstreamBreaker):
         return "/".join("{id}" if any(char.isdigit() for char in segment) else segment for segment in segments) or "root"
 
     def source(self, url: str, params: object = None) -> str:
-        """The providers behind a request: its endpoint with identifiers blanked, and any provider it named.
+        """
+        The providers behind a request: its endpoint with identifiers blanked, and any provider it named.
 
         Args:
             url: A REData URL.
@@ -321,7 +337,8 @@ class RedataBreaker(UpstreamBreaker):
         return f"{endpoint}?{chosen}" if chosen else endpoint
 
     def scopes(self, url: str, params: object = None) -> tuple[str, ...]:
-        """The pool and the source behind ``url``.
+        """
+        The pool and the source behind ``url``.
 
         Args:
             url: The URL about to be requested.
@@ -340,7 +357,8 @@ class RedataBreaker(UpstreamBreaker):
         return hashlib.sha256(str(settings.redata_api_key or "").encode()).hexdigest()[:12]
 
     def _refused_scope(self, url: str) -> str:
-        """The scope a refusal of ``url`` opens: its endpoint, for the key now configured.
+        """
+        The scope a refusal of ``url`` opens: its endpoint, for the key now configured.
 
         Args:
             url: A REData URL.
@@ -351,7 +369,8 @@ class RedataBreaker(UpstreamBreaker):
         return f"{self.REFUSED_SCOPE}{self._key_fingerprint()}:{self.endpoint(url)}"
 
     def scope_tripped_by(self, url: str, params: object, response: requests.Response) -> str | None:
-        """The pool on a 429, the source on a 503 that says it is busy, the endpoint on a refusal.
+        """
+        The pool on a 429, the source on a 503 that says it is busy, the endpoint on a refusal.
 
         Args:
             url: The URL that was requested.
@@ -390,7 +409,8 @@ class RedataBreaker(UpstreamBreaker):
         return named <= unanswered
 
     def default_seconds(self, scope: str) -> int:
-        """A minute for a busy source, which never names its wait; :attr:`REFUSED_SECONDS` for a refused endpoint.
+        """
+        A minute for a busy source, which never names its wait; :attr:`REFUSED_SECONDS` for a refused endpoint.
 
         Args:
             scope: The scope being tripped.
@@ -403,7 +423,8 @@ class RedataBreaker(UpstreamBreaker):
         return self.SOURCE_BUSY_SECONDS if scope.startswith("source:") else super().default_seconds(scope)
 
     def refuses(self, url: str) -> bool:
-        """Whether REData refused this key at ``url``'s endpoint and the breaker still holds that refusal.
+        """
+        Whether REData refused this key at ``url``'s endpoint and the breaker still holds that refusal.
 
         A call the breaker stops says only that it was stopped; this says it was stopped for a refusal, not a throttle.
 
@@ -423,7 +444,8 @@ class RedataBreaker(UpstreamBreaker):
         return self._key(f"refusals:{self._key_fingerprint()}")
 
     def announce(self, scope: str, seconds: int, retry_at: float) -> None:
-        """Report a refused endpoint once, at error level, and remember it for the site admin; anything else as usual.
+        """
+        Report a refused endpoint once, at error level, and remember it for the site admin; anything else as usual.
 
         Args:
             scope: The scope opened.
@@ -451,7 +473,8 @@ class RedataBreaker(UpstreamBreaker):
             logger.log(level, "REData refused this key at %s - it may lack the endpoint's scope. Not asking again for %ss.", endpoint, seconds)
 
     def refused_endpoints(self) -> list[RefusedEndpoint]:
-        """The endpoints REData has refused this key in the last :attr:`REFUSAL_MEMORY_SECONDS`, most recent first.
+        """
+        The endpoints REData has refused this key in the last :attr:`REFUSAL_MEMORY_SECONDS`, most recent first.
 
         Returns:
             One entry per endpoint; empty when there are none or the cache cannot say.
@@ -467,7 +490,8 @@ class RedataBreaker(UpstreamBreaker):
         return sorted(entries, key=lambda entry: entry.refused_at, reverse=True)
 
     def _recent(self, times: object, now: float) -> bool:
-        """Whether a registry entry is well-formed and its refusal within :attr:`REFUSAL_MEMORY_SECONDS` of ``now``.
+        """
+        Whether a registry entry is well-formed and its refusal within :attr:`REFUSAL_MEMORY_SECONDS` of ``now``.
 
         Args:
             times: The entry's ``(refused_at, retry_at)``.
@@ -482,7 +506,8 @@ class RedataBreaker(UpstreamBreaker):
 
 
 class WaybackBreaker(UpstreamBreaker):
-    """The Internet Archive's throttles, one per host: archive.org answers availability lookups, and web.archive.org
+    """
+    The Internet Archive's throttles, one per host: archive.org answers availability lookups, and web.archive.org
     takes saves and serves the indexes and snapshots.
 
     A 429, or a 503 naming a wait, refuses every caller; anything else is about the one page asked for.
@@ -493,7 +518,8 @@ class WaybackBreaker(UpstreamBreaker):
     BUSY_SECONDS: ClassVar[int] = 300
 
     def covers(self, service: str) -> bool:
-        """The Wayback Machine's service key.
+        """
+        The Wayback Machine's service key.
 
         Args:
             service: The rate-limiter service key.
@@ -504,7 +530,8 @@ class WaybackBreaker(UpstreamBreaker):
         return service == "wayback_machine"
 
     def scopes(self, url: str, params: object = None) -> tuple[str, ...]:
-        """The host the call goes to.
+        """
+        The host the call goes to.
 
         Args:
             url: The URL about to be requested.
@@ -516,7 +543,8 @@ class WaybackBreaker(UpstreamBreaker):
         return ((urlsplit(url).hostname or "").lower(),)
 
     def scope_tripped_by(self, url: str, params: object, response: requests.Response) -> str | None:
-        """The host, when it refused every caller.
+        """
+        The host, when it refused every caller.
 
         Args:
             url: The URL that was requested.
@@ -530,7 +558,8 @@ class WaybackBreaker(UpstreamBreaker):
 
     @staticmethod
     def refuses_every_caller(response: requests.Response) -> bool:
-        """Whether the Archive refused for now rather than failed the one page: a 429, or a 503 naming a wait.
+        """
+        Whether the Archive refused for now rather than failed the one page: a 429, or a 503 naming a wait.
 
         Args:
             response: The Archive's answer.
@@ -541,7 +570,8 @@ class WaybackBreaker(UpstreamBreaker):
         return response.status_code == 429 or (response.status_code == 503 and bool(response.headers.get("Retry-After")))
 
     def default_seconds(self, scope: str) -> int:
-        """:attr:`BUSY_SECONDS`.
+        """
+        :attr:`BUSY_SECONDS`.
 
         Args:
             scope: The scope being tripped.
@@ -557,7 +587,8 @@ BREAKERS: tuple[UpstreamBreaker, ...] = (RedataBreaker(), WaybackBreaker())
 
 
 def breaker_for(service: str) -> UpstreamBreaker | None:
-    """The breaker guarding ``service``'s calls.
+    """
+    The breaker guarding ``service``'s calls.
 
     Args:
         service: The rate-limiter service key.

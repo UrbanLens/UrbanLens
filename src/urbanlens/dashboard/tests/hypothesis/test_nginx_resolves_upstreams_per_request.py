@@ -1,4 +1,5 @@
-"""nginx must re-resolve the app's address, not keep the one it saw at startup (P7).
+"""
+nginx must re-resolve the app's address, not keep the one it saw at startup (P7).
 
 A literal hostname in `proxy_pass` is resolved once, when the config loads. A recreated
 `app` container comes back on a new IP, and nginx keeps dialling the old one: every

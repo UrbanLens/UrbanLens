@@ -49,7 +49,8 @@ _VISITS_PAGE_SIZE = _VISITS_CLIENT_PAGE_SIZE * _VISITS_BATCH_MULTIPLIER
 
 
 def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, object]:
-    """Build the shared context the add/edit visit dialogs need.
+    """
+    Build the shared context the add/edit visit dialogs need.
 
     Args:
         pin: Pin the dialog operates on.
@@ -76,7 +77,8 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
 
 
 def _visit_weather(visits: list[PinVisit]) -> dict[int, RecordedDay]:
-    """What the weather actually was on the day of each visit, from cache.
+    """
+    What the weather actually was on the day of each visit, from cache.
 
     **Reads only; never fetches.** This runs inside a page render, and a page render must not block on
     an outbound call - a slow REData would hold up the whole visit list for a decorative line of text,
@@ -115,7 +117,8 @@ _PENDING_SUGGESTIONS_PAGE_SIZE = 5
 
 
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
-    """Render the visit history panel for a pin, paginated newest-first.
+    """
+    Render the visit history panel for a pin, paginated newest-first.
 
     With "child pin details" on (see :func:`child_details_requested`) the panel also lists visits
     logged on the pin's child pins (any depth), each labelled with the child pin it belongs to.
@@ -167,7 +170,8 @@ def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
 
 
 def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
-    """Reconcile the photos attached to a visit from the submitted form.
+    """
+    Reconcile the photos attached to a visit from the submitted form.
 
     Handles both the create and edit flows:
 
@@ -263,7 +267,8 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
 
 
 def _parse_visited_at(request: HttpRequest) -> datetime | None:
-    """Build a timezone-aware ``visited_at`` from the POST date/time fields.
+    """
+    Build a timezone-aware ``visited_at`` from the POST date/time fields.
 
     Args:
         request: Request carrying ``visited_date`` (required) and optional ``visited_time``.
@@ -283,7 +288,8 @@ def _parse_visited_at(request: HttpRequest) -> datetime | None:
 
 
 def _resolve_participants(request: HttpRequest, pin: Pin) -> list:
-    """Resolve the submitted participant ids to the owner's actual connections.
+    """
+    Resolve the submitted participant ids to the owner's actual connections.
 
     Args:
         request: Request carrying ``participant_ids``.
@@ -298,14 +304,16 @@ def _resolve_participants(request: HttpRequest, pin: Pin) -> list:
 
 
 class VisitHistoryView(LoginRequiredMixin, View):
-    """List existing visits and add new manual visit entries (HTMX partial).
+    """
+    List existing visits and add new manual visit entries (HTMX partial).
 
     GET  /map/pin/<pin_id>/visits/  → renders the full visit history panel
     POST /map/pin/<pin_id>/visits/  → creates a new visit, returns updated panel
     """
 
     def get(self, request: HttpRequest, pin_slug) -> HttpResponse:
-        """Render the visit history panel for a pin.
+        """
+        Render the visit history panel for a pin.
 
         Args:
             request: Incoming HTTP request.
@@ -318,7 +326,8 @@ class VisitHistoryView(LoginRequiredMixin, View):
         return _render_visit_history(request, pin)
 
     def post(self, request: HttpRequest, pin_slug) -> HttpResponse:
-        """Create a new manual visit entry and return the updated panel.
+        """
+        Create a new manual visit entry and return the updated panel.
 
         Args:
             request: Incoming HTTP request.
@@ -389,14 +398,16 @@ class VisitHistoryView(LoginRequiredMixin, View):
 
 
 class VisitEditView(LoginRequiredMixin, View):
-    """Edit an existing PinVisit (HTMX partial).
+    """
+    Edit an existing PinVisit (HTMX partial).
 
     GET  /map/pin/<pin_slug>/visits/<visit_id>/edit/  → renders the edit form
     POST /map/pin/<pin_slug>/visits/<visit_id>/edit/  → saves and returns the panel
     """
 
     def get(self, request: HttpRequest, pin_slug, visit_id: int) -> HttpResponse:
-        """Render the pre-filled edit form for a single visit.
+        """
+        Render the pre-filled edit form for a single visit.
 
         Args:
             request: Incoming HTTP request.
@@ -427,7 +438,8 @@ class VisitEditView(LoginRequiredMixin, View):
         )
 
     def post(self, request: HttpRequest, pin_slug, visit_id: int) -> HttpResponse:
-        """Apply edits to an existing visit and return the updated panel.
+        """
+        Apply edits to an existing visit and return the updated panel.
 
         Args:
             request: Incoming HTTP request carrying the same fields as the add form (``visited_date``,
@@ -465,13 +477,15 @@ class VisitEditView(LoginRequiredMixin, View):
 
 
 class VisitDeleteView(LoginRequiredMixin, View):
-    """Delete a single PinVisit and return the refreshed panel (HTMX).
+    """
+    Delete a single PinVisit and return the refreshed panel (HTMX).
 
     POST /map/pin/<pin_id>/visits/<visit_id>/delete/
     """
 
     def post(self, request: HttpRequest, pin_slug, visit_id: int) -> HttpResponse:
-        """Delete the specified visit and return the updated panel.
+        """
+        Delete the specified visit and return the updated panel.
 
         Args:
             request: Incoming HTTP request.

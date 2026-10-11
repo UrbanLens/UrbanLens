@@ -1,4 +1,5 @@
-"""A root pin on a notable property gets its parcel, buildings, child pins, child wikis and site content without a visit.
+"""
+A root pin on a notable property gets its parcel, buildings, child pins, child wikis and site content without a visit.
 
 Before, pin creation brought only the parcel and the wiki; the buildings, their pins and wikis and every site panel
 waited for somebody to open the pin page, or for the hourly enrichment job and its cap of ten locations per run.
@@ -472,7 +473,8 @@ class InFlightDeduplicationTests(_BootstrapCase):
         self.assertGreater(retry[0].kwargs["countdown"], 0)
 
     def test_a_building_list_redata_is_still_computing_is_asked_for_again_after_its_wait(self) -> None:
-        """REData 0.3.7 answers a cold parcel ``503 refresh_queued`` with its wait in the body: the bootstrap sits that
+        """
+        REData 0.3.7 answers a cold parcel ``503 refresh_queued`` with its wait in the body: the bootstrap sits that
         out rather than nesting the campus from a fallback list, or from none."""
         self.upstreams = HrshUpstreams(pending_parcel_answers=1)
 

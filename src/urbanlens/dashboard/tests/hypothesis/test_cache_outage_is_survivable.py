@@ -1,4 +1,5 @@
-"""A Valkey outage must cost one timeout per request, not one per cache call.
+"""
+A Valkey outage must cost one timeout per request, not one per cache call.
 
 Measured with Valkey paused on a staging-model environment (P105): every
 request 500s after **32 seconds**, `/health/ready` included. The 500 came from
@@ -240,7 +241,8 @@ class TheDeploymentUsesItTests(SimpleTestCase):
     """A backend nothing is configured to use protects nothing."""
 
     def test_the_configured_backend_is_the_resilient_one(self) -> None:
-        """`settings/test.py` swaps in locmem, so this reads the real module.
+        """
+        `settings/test.py` swaps in locmem, so this reads the real module.
 
         Skipped rather than passed when no Dragonfly is configured: there is then
         no cache to be down, and asserting on a branch that did not run would

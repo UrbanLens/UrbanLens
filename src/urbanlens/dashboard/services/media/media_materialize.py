@@ -1,4 +1,5 @@
-"""Turns a transient Media-gallery item into a persisted ``Image`` row.
+"""
+Turns a transient Media-gallery item into a persisted ``Image`` row.
 
 The Private Pin page's Media gallery (Wikimedia, Smithsonian, Yelp, Google
 Images, ...) renders straight from each provider's live results (see
@@ -101,7 +102,8 @@ def _translated_source(source: str) -> str:
 
 
 def find_materialized_image(location: Location, source: str, url: str, *, page_url: str = "", pin: Pin | None = None, profile: Profile | None = None) -> Image | None:
-    """Look up an already-materialized ``Image`` row for a Media gallery item, without creating one.
+    """
+    Look up an already-materialized ``Image`` row for a Media gallery item, without creating one.
 
     Args:
         location: The shared Location the item belongs to.
@@ -123,7 +125,8 @@ def find_materialized_image(location: Location, source: str, url: str, *, page_u
 
 
 def _filename_from_url(url: str) -> str:
-    """Best-effort filename for the downloaded content, defaulting when unclear.
+    """
+    Best-effort filename for the downloaded content, defaulting when unclear.
     Left untruncated - ``Image.image``'s ``upload_to`` trims an overlong name to fit the field itself, so every writer doesn't need its own copy of that logic."""
     name = urlparse(url).path.rsplit("/", 1)[-1]
     return name if name and "." in name else _DEFAULT_FILENAME
@@ -136,7 +139,8 @@ def fetch_with_revalidated_redirects(
     timeout: float = _DOWNLOAD_TIMEOUT,
     headers: dict[str, str] | None = None,
 ) -> requests.Response:
-    """Fetch ``url`` via GET, with rebind-proof SSRF protection on every hop.
+    """
+    Fetch ``url`` via GET, with rebind-proof SSRF protection on every hop.
 
     Args:
         url: The url to fetch.
@@ -154,7 +158,8 @@ def fetch_with_revalidated_redirects(
 
 
 def daily_external_media_bytes() -> int:
-    """How much external media one profile may cache in a rolling day.
+    """
+    How much external media one profile may cache in a rolling day.
 
     Read at call time rather than bound at import, so a test can lower it without
     downloading half a gigabyte.
@@ -166,7 +171,8 @@ def daily_external_media_bytes() -> int:
 
 
 def _external_bytes_cached_today(profile: Profile) -> int:
-    """How much quota-exempt external media *profile* has cached in the window.
+    """
+    How much quota-exempt external media *profile* has cached in the window.
 
     Args:
         profile: Whose recent caching to total.
@@ -186,7 +192,8 @@ def _external_bytes_cached_today(profile: Profile) -> int:
 
 
 def _refuse_over_the_daily_ceiling(profile: Profile) -> None:
-    """Stop *profile* caching more external media than one account may in a day.
+    """
+    Stop *profile* caching more external media than one account may in a day.
 
     Args:
         profile: Whose allowance to check.
@@ -202,7 +209,8 @@ def _refuse_over_the_daily_ceiling(profile: Profile) -> None:
 
 
 def _reusable_rows(location: Location, django_source: str, source_url: str, *, pin: Pin | None, profile: Profile, wiki: Wiki | None) -> QuerySet[Image]:
-    """The rows an earlier materialize stored for the same item that this call may reuse.
+    """
+    The rows an earlier materialize stored for the same item that this call may reuse.
 
     A pin's copy is its owner's own. Any other call shares community copies only: never someone's pin copy, and never
     a row already in a different wiki.
@@ -226,7 +234,8 @@ def _reusable_rows(location: Location, django_source: str, source_url: str, *, p
 
 
 def _reuse_materialized(rows: QuerySet[Image], *, wiki: Wiki | None, source: str, item_key: str) -> Image | None:
-    """Return the row an earlier materialize stored for the same item, updated for this call.
+    """
+    Return the row an earlier materialize stored for the same item, updated for this call.
 
     Args:
         rows: The rows this call may reuse (:func:`_reusable_rows`).
@@ -268,7 +277,8 @@ def materialize_media_item(
     wiki: Wiki | None = None,
     pin: Pin | None = None,
 ) -> Image:
-    """Download one Media gallery item and persist it as an ``Image`` row.
+    """
+    Download one Media gallery item and persist it as an ``Image`` row.
     Idempotent per ``(location, source, source_url)`` - re-sending the same item (e.g. clicking "send to wiki" twice) reuses the existing row rather than downloading and storing a duplicate, within the limits :func:`_reusable_rows` sets.
 
     Args:

@@ -35,7 +35,8 @@ Point = tuple[float, float]
 
 
 def densest_cluster_centroid(points: Sequence[Point], radius_km: float) -> Point | None:
-    """Centre of the largest concentration of points within ``radius_km``.
+    """
+    Centre of the largest concentration of points within ``radius_km``.
 
     Args:
         points: ``(latitude, longitude)`` pairs in degrees.
@@ -71,7 +72,8 @@ def densest_cluster_centroid(points: Sequence[Point], radius_km: float) -> Point
 
 
 def _densest_block(points: Sequence[Point], cells: Sequence[tuple[int, int, int]]) -> list[Point]:
-    """The points in the most occupied cell neighbourhood.
+    """
+    The points in the most occupied cell neighbourhood.
 
     Args:
         points: The points being clustered.
@@ -87,7 +89,8 @@ def _densest_block(points: Sequence[Point], cells: Sequence[tuple[int, int, int]
 
 
 def _block_total(occupancy: Counter[tuple[int, int, int]], cell: tuple[int, int, int]) -> int:
-    """How many points sit in ``cell`` and the cells immediately around it.
+    """
+    How many points sit in ``cell`` and the cells immediately around it.
 
     Args:
         occupancy: Point count per cell.
@@ -101,7 +104,8 @@ def _block_total(occupancy: Counter[tuple[int, int, int]], cell: tuple[int, int,
 
 
 def _cell_of(point: Point, radius_km: float) -> tuple[int, int, int]:
-    """Which cell of the lattice a point falls in.
+    """
+    Which cell of the lattice a point falls in.
     Cells are cut from a cubic lattice in the unit sphere's own coordinates rather than from a latitude/longitude grid, because lat/lng cells shrink towards the poles and would make polar accounts look artificially dense.
 
     Args:
@@ -121,7 +125,8 @@ def _cell_of(point: Point, radius_km: float) -> tuple[int, int, int]:
 
 
 def _chord_length(radius_km: float) -> float:
-    """Straight-line distance across the sphere for a given surface distance.
+    """
+    Straight-line distance across the sphere for a given surface distance.
 
     Args:
         radius_km: Surface distance in kilometres.
@@ -133,7 +138,8 @@ def _chord_length(radius_km: float) -> float:
 
 
 def _centroid(points: Iterable[Point]) -> Point:
-    """Average a set of points, treating longitude as a direction.
+    """
+    Average a set of points, treating longitude as a direction.
 
     Args:
         points: ``(latitude, longitude)`` pairs.

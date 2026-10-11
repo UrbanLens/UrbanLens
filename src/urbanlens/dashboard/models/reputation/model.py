@@ -1,4 +1,5 @@
-"""The hidden reputation ledger.
+"""
+The hidden reputation ledger.
 Two models. :class:`ReputationEvent` is the append-only truth - one row per contribution, carrying the inputs that produced its value so a score can be explained later. :class:`ProfileReputation` is a cache of the sum, because the consumers of this system read a total on the request path and summing a growing ledger per read is exactly the cost this feature is required not to add.
 """
 
@@ -29,7 +30,8 @@ from urbanlens.dashboard.models.reputation.queryset import ProfileReputationMana
 
 
 def rule_choices() -> list[tuple[str, str]]:
-    """Return the registered rule keys, for ``rule_key``'s choices.
+    """
+    Return the registered rule keys, for ``rule_key``'s choices.
     A callable rather than a list, matching ``Achievement.metric``: the registry is populated at import time by whatever rules are installed, so passing the function means registering a new rule never generates a migration.
     """
     from urbanlens.dashboard.services.reputation.rules import rule_choices as registry_choices
@@ -38,7 +40,8 @@ def rule_choices() -> list[tuple[str, str]]:
 
 
 class ReputationEvent(abstract.DashboardModel):
-    """One scored contribution.
+    """
+    One scored contribution.
 
     Attributes:
         profile: Who earned it.
@@ -113,7 +116,8 @@ class ReputationEvent(abstract.DashboardModel):
 
 
 class ProfileReputation(abstract.DashboardModel):
-    """The cached sum of one profile's ledger.
+    """
+    The cached sum of one profile's ledger.
 
     Attributes:
         profile: The owner.

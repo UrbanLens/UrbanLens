@@ -42,7 +42,8 @@ _UNSAFE_FILENAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 @dataclass(frozen=True, slots=True)
 class SourcesScope:
-    """Where a Sources request reads from and whose fetch warms it.
+    """
+    Where a Sources request reads from and whose fetch warms it.
 
     Attributes:
         location: The location whose cache rows list the documents.
@@ -63,7 +64,8 @@ class SourcesScope:
     wiki: Wiki | None = None
 
     def nested_locations(self) -> list[Location]:
-        """Where the markers nested under this page's stand: the pin's own descendants, or the wiki's child wikis.
+        """
+        Where the markers nested under this page's stand: the pin's own descendants, or the wiki's child wikis.
 
         Returns:
             Their distinct locations, this page's own excluded.
@@ -89,7 +91,8 @@ class SourcesScope:
 
 
 def resolve_sources_scope(request: HttpRequest, *, pin_slug: str = "", location_slug: str = "") -> SourcesScope:
-    """Resolve the requester's pin, or a wiki they can see, into a :class:`SourcesScope`.
+    """
+    Resolve the requester's pin, or a wiki they can see, into a :class:`SourcesScope`.
 
     Args:
         request: The current request.
@@ -135,7 +138,8 @@ def _poll_attempt(request: HttpRequest) -> int:
 
 
 class ArticleSourcesView(LoginRequiredMixin, View):
-    """GET <pin>/article/sources/ or <location>/wiki/article/sources/ - the Sources sub-tab's list and viewer.
+    """
+    GET <pin>/article/sources/ or <location>/wiki/article/sources/ - the Sources sub-tab's list and viewer.
 
     Polls itself while a source is still fetching. ``?selected=<source>:<document id>`` opens that document in the viewer.
     """
@@ -249,7 +253,8 @@ class ArticleSourcesView(LoginRequiredMixin, View):
 
 @method_decorator(csp_exempt(REPORT_ONLY=True), name="dispatch")
 class ArticleSourceDocumentView(LoginRequiredMixin, View):
-    """GET .../article/sources/<source>/<document id>/ - one listed document, framed by the Sources viewer.
+    """
+    GET .../article/sources/<source>/<document id>/ - one listed document, framed by the Sources viewer.
 
     Serves only what this pin's or wiki's own Sources list names, and only bytes that are a PDF or raster image.
     """

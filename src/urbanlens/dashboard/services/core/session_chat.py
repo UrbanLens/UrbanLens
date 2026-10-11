@@ -21,7 +21,8 @@ CHAT_HISTORY_LIMIT = 50
 
 
 class SessionRealtime(Protocol):
-    """The broadcast entry point of a game's ``realtime`` module.
+    """
+    The broadcast entry point of a game's ``realtime`` module.
     Deliberately the *module* rather than the ``SessionBroadcaster`` it wraps: the attribute is looked up at call time, so ``patch("services.<game>.realtime.broadcast")`` - the idiom every existing game test uses - still intercepts the call."""
 
     def broadcast(self, session_id: int, event_type: str, payload: dict[str, Any]) -> None:
@@ -30,7 +31,8 @@ class SessionRealtime(Protocol):
 
 
 class ChatMessageManager[MessageT](Protocol):
-    """The slice of a chat-message manager ``SessionChat`` depends on.
+    """
+    The slice of a chat-message manager ``SessionChat`` depends on.
     Structural rather than a base class: the three managers are already built by ``DashboardManager.from_queryset(...)`` over unrelated querysets, and each needs only to create a message and list a session's messages."""
 
     def create(self, *, session: Any, profile: Any, body: str) -> MessageT:
@@ -43,7 +45,8 @@ class ChatMessageManager[MessageT](Protocol):
 
 
 class SessionChat[SessionT: Model, MessageT]:
-    """Send and read back the live text chat for one game's sessions.
+    """
+    Send and read back the live text chat for one game's sessions.
 
     Args:
         name: Which game this is, e.g. ``"trivia"``.
@@ -74,7 +77,8 @@ class SessionChat[SessionT: Model, MessageT]:
         self.max_message_length = max_message_length
 
     def send(self, session: SessionT, profile: Profile, body: str) -> MessageT:
-        """Save a chat message and broadcast it to every connected participant.
+        """
+        Save a chat message and broadcast it to every connected participant.
 
         Args:
             session: The session this message belongs to.
@@ -97,7 +101,8 @@ class SessionChat[SessionT: Model, MessageT]:
         return message
 
     def recent(self, session: SessionT, *, limit: int | None = None) -> list[MessageT]:
-        """The most recent messages in ``session``, returned oldest first.
+        """
+        The most recent messages in ``session``, returned oldest first.
 
         Args:
             session: The session to read chat for.

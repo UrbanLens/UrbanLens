@@ -29,7 +29,8 @@ FRIEND_RECOMMENDATION_ACCESS_DURATION = datetime.timedelta(days=1)
 
 
 class ShareTargetNotFoundError(LookupError):
-    """A share referenced a pin/trip/profile the sender can't address.
+    """
+    A share referenced a pin/trip/profile the sender can't address.
     Carried as its own type rather than a bare `LookupError` so an API layer can map it to 404 without also swallowing genuine lookup bugs."""
 
 
@@ -85,7 +86,8 @@ def send_message_with_share(
     image_ids: list[int] | None = None,
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
-    """Send one direct message, resolving and attaching an optional `@`-share.
+    """
+    Send one direct message, resolving and attaching an optional `@`-share.
 
     Args:
         sender: The sending profile.
@@ -214,7 +216,8 @@ def share_pin_in_message(
     image_ids: list[int] | None = None,
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
-    """Share `pin` with `recipient` as a chat message carrying a PinShare.
+    """
+    Share `pin` with `recipient` as a chat message carrying a PinShare.
 
     Args:
         sender: The profile sharing the pin (must own it and be connected to `recipient`).
@@ -294,7 +297,8 @@ def invite_to_trip_in_message(
     reply_to_id: int | None = None,
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
-    """Invite `recipient` to `trip` as a chat message carrying the invite.
+    """
+    Invite `recipient` to `trip` as a chat message carrying the invite.
 
     Args:
         sender: The profile sending the invite (must already be a trip member, and connected to `recipient`).
@@ -360,7 +364,8 @@ def recommend_friend_in_message(
     reply_to_id: int | None = None,
     client_uuid: UUID | None = None,
 ) -> DirectMessage:
-    """Recommend `recommended` (one of sender's own friends) to `recipient` as a chat message.
+    """
+    Recommend `recommended` (one of sender's own friends) to `recipient` as a chat message.
     Grants `recipient` temporary access to view `recommended`'s profile (as if they were already friends) for `FRIEND_RECOMMENDATION_ACCESS_DURATION`, so they can decide whether to connect.
 
     Args:

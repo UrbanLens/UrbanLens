@@ -1,4 +1,5 @@
-"""Revision history builds every revision, then paginates the list it built.
+"""
+Revision history builds every revision, then paginates the list it built.
 
 N21 H46, and a second door the finding did not name. Both the pin-article and
 the wiki-article revision endpoints do `list(article.revisions...)` and build a
@@ -158,7 +159,8 @@ class TheHistoryIsStillRightTests(_RevisionCase):
 
 
 class TheWindowRespectsTheCallersFilterTests(_RevisionCase):
-    """A revision the caller filtered out must not be what a delta measures against.
+    """
+    A revision the caller filtered out must not be what a delta measures against.
 
     The wiki door hands `revision_history_page` a queryset already narrowed by
     `visible_rows`, so a concealed viewer pages through a history with holes in
@@ -200,7 +202,8 @@ class TheWindowRespectsTheCallersFilterTests(_RevisionCase):
 
 
 class TheDeferredBodyIsNeverTouchedTests(_RevisionCase):
-    """`defer("content")` turns a stray `.content` read into a query per row.
+    """
+    `defer("content")` turns a stray `.content` read into a query per row.
 
     A different axis from the instantiation budget above: deferring the field is
     what stops the 200,000-character bodies being loaded, but a later caller

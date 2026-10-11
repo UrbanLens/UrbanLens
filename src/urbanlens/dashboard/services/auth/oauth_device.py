@@ -8,7 +8,8 @@ from oauthlib.oauth2.rfc6749.errors import InvalidGrantError
 
 
 def refuse_an_inactive_account(request: Any) -> None:
-    """Refuse a device-code exchange once the account that approved the device is deactivated.
+    """
+    Refuse a device-code exchange once the account that approved the device is deactivated.
 
     Runs after ``oauth2_provider.utils.set_oauthlib_user_to_device_request_user``, which sets the account straight
     from the device grant's row, so ``ActiveOwnerOAuth2Validator`` never sees it. Imported by settings, so it

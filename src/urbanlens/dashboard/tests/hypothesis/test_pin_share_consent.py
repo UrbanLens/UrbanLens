@@ -1,4 +1,5 @@
-"""A pin share reaches its recipient only as far as the sender consented, and is copied as of acceptance (P193).
+"""
+A pin share reaches its recipient only as far as the sender consented, and is copied as of acceptance (P193).
 
 What a share consents to (``docs/PRIVACY_MODEL.md`` §5): the place as it was when shared (``PinShare.location``),
 the site's objective facts (type, indoor/outdoor, dates, security indicators), a name only when the sender typed one

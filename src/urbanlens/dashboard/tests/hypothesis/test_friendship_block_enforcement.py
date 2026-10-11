@@ -39,7 +39,8 @@ class AreBlockedTests(TestCase):
         self.assertTrue(Profile.are_blocked(a, b))
 
     def test_reverse_direction_is_also_blocked(self) -> None:
-        """It must not matter which profile is checked as 'subject' - a block
+        """
+        It must not matter which profile is checked as 'subject' - a block
         by either party is a mutual veto."""
         a, b = _profile(), _profile()
         _block(a, b)
@@ -89,7 +90,8 @@ class BlockedDirectMessageEnforcementTests(TestCase):
         self.assertFalse(DirectMessage.objects.exists())
 
     def test_blocked_target_also_cannot_message_the_blocker(self) -> None:
-        """The party who did the blocking is protected in both send directions -
+        """
+        The party who did the blocking is protected in both send directions -
         blocking isn't a one-way mute of incoming messages only."""
         _set_dm_visibility(self.blocked, VisibilityChoice.ANYONE)
         _block(self.blocker, self.blocked)

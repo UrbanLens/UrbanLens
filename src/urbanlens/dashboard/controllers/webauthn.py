@@ -1,4 +1,5 @@
-"""Passkey (WebAuthn) management for the Settings > Security section.
+"""
+Passkey (WebAuthn) management for the Settings > Security section.
 
 Registration is JSON/fetch-driven because the browser ceremony
 (``navigator.credentials.create()``) has to run client-side between the
@@ -57,7 +58,8 @@ class PasskeyRegisterOptionsView(LoginRequiredMixin, View):
 
 
 class PasskeyRegisterView(LoginRequiredMixin, View):
-    """POST: verify a completed registration ceremony and save the new passkey.
+    """
+    POST: verify a completed registration ceremony and save the new passkey.
 
     ``purpose=unlock`` saves the credential with ``is_login_factor=False``: it can wrap the account's
     E2EE key (see ``E2EEPasskeyWrapView``) but never routes the account through a 2FA challenge at

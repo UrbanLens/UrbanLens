@@ -36,7 +36,8 @@ class SearchGroup:
 
 @dataclass(slots=True)
 class SearchResponse:
-    """Everything the results partial needs to render one search.
+    """
+    Everything the results partial needs to render one search.
 
     Attributes:
         parsed: The structured interpretation of the query.
@@ -53,7 +54,8 @@ class SearchResponse:
 
 
 class GlobalSearchEngine:
-    """Runs every applicable provider for a query and groups the results.
+    """
+    Runs every applicable provider for a query and groups the results.
     Callers that may not read everything - notably the external API, where a credential's scopes decide which domains it can touch at all - are expected to pass a narrowed chain rather than to filter the response afterwards.
 
     Args:
@@ -63,7 +65,8 @@ class GlobalSearchEngine:
         self.providers = providers if providers is not None else default_providers()
 
     def search(self, profile: Profile, raw_query: str, *, types: Iterable[str] | None = None, limit: int | None = None) -> SearchResponse:
-        """Search everything the profile has access to.
+        """
+        Search everything the profile has access to.
         A failing provider contributes an error notice instead of failing the whole search.
 
         Args:
@@ -127,7 +130,8 @@ class GlobalSearchEngine:
         return response
 
     def _run(self, profile: Profile, parsed: ParsedQuery, *, restrict: frozenset[str] | None = None, limit: int | None = None) -> SearchResponse:
-        """Fan one parsed query out to the applicable providers.
+        """
+        Fan one parsed query out to the applicable providers.
 
         Args:
             profile: The requesting user's profile.

@@ -1,4 +1,5 @@
-"""Share-chain tracking for places revealed through trip activities.
+"""
+Share-chain tracking for places revealed through trip activities.
 Both create ``PinShare`` rows with ``origin=TRIP_ACTIVITY`` and ``status=DETECTED`` (never actionable, never materializes a Pin), then record the recipient's ``LocationExposure`` so future pins they drop at the place chain back correctly."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None]:
-    """The (pin, location) pair an activity could reveal, or ``(None, None)``.
+    """
+    The (pin, location) pair an activity could reveal, or ``(None, None)``.
 
     Args:
         activity: The activity to inspect.
@@ -42,7 +44,8 @@ def _activity_place(activity: TripActivity) -> tuple[Pin | None, Location | None
 
 
 def _hidden_from(activities: list[TripActivity], viewer: Profile) -> set[int]:
-    """IDs of *activities* whose location ``viewer`` is not shown.
+    """
+    IDs of *activities* whose location ``viewer`` is not shown.
 
     Args:
         activities: The activities to test.
@@ -57,7 +60,8 @@ def _hidden_from(activities: list[TripActivity], viewer: Profile) -> set[int]:
 
 
 def _record_detected_trip_share(sharer: Profile, recipient: Profile, pin: Pin | None, location: Location) -> PinShare | None:
-    """Create one TRIP_ACTIVITY detected share, applying the shared dedup rules.
+    """
+    Create one TRIP_ACTIVITY detected share, applying the shared dedup rules.
 
     Args:
         sharer: The member who put the place on the itinerary.
@@ -113,7 +117,8 @@ def _joined_member_profiles(trip: Trip) -> list[Profile]:
 
 
 def record_trip_activity_shares(activity: TripActivity) -> list[PinShare]:
-    """Record detected shares for a freshly added activity to every joined member.
+    """
+    Record detected shares for a freshly added activity to every joined member.
 
     Args:
         activity: The just-created activity.
@@ -138,7 +143,8 @@ def record_trip_activity_shares(activity: TripActivity) -> list[PinShare]:
 
 
 def record_trip_shares_for_member(trip: Trip, profile: Profile) -> list[PinShare]:
-    """Record detected shares of every place already on ``trip`` to a member who just joined.
+    """
+    Record detected shares of every place already on ``trip`` to a member who just joined.
 
     Args:
         trip: The trip being joined.

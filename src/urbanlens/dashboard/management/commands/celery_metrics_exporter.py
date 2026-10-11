@@ -1,4 +1,5 @@
-"""Consume Celery's event stream and expose it as Prometheus metrics.
+"""
+Consume Celery's event stream and expose it as Prometheus metrics.
 
 It has to be a separate process rather than a thread in an existing one: the web tier runs
 ``WEB_CONCURRENCY`` gunicorn workers and each would open its own receiver and triple-count every
@@ -38,7 +39,8 @@ class Command(BaseCommand):
     help = "Consume Celery worker events and expose them as Prometheus metrics."
 
     def add_arguments(self, parser: Any) -> None:
-        """Register command-line options.
+        """
+        Register command-line options.
 
         Args:
             parser: The argument parser Django provides.
@@ -47,7 +49,8 @@ class Command(BaseCommand):
         parser.add_argument("--bind", default="0.0.0.0", help="Address to bind (default 0.0.0.0; the port is not published to the host).")  # noqa: S104
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Serve metrics and consume events until interrupted.
+        """
+        Serve metrics and consume events until interrupted.
 
         Args:
             *args: Unused. **options: Parsed command-line options.
@@ -66,7 +69,8 @@ class Command(BaseCommand):
         self._consume(metrics)
 
     def _serve(self, bind: str, port: int, metrics: CeleryEventMetrics) -> None:
-        """Start the metrics HTTP server on a daemon thread.
+        """
+        Start the metrics HTTP server on a daemon thread.
 
         Args:
             bind: Address to bind.
@@ -80,7 +84,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Serving Celery metrics on {bind}:{port}/metrics")
 
     def _consume(self, metrics: CeleryEventMetrics) -> None:
-        """Block on the Celery event stream, feeding events into metrics.
+        """
+        Block on the Celery event stream, feeding events into metrics.
 
         Reconnects on broker errors rather than exiting, because this service losing its broker is a
         transient condition that restarting the container would not fix any faster - and an exporter that
@@ -114,7 +119,8 @@ class Command(BaseCommand):
 
 
 def _build_handler(metrics: CeleryEventMetrics) -> type[BaseHTTPRequestHandler]:
-    """Build the request handler class bound to a metric set.
+    """
+    Build the request handler class bound to a metric set.
 
     Args:
         metrics: The metric set whose registry is served.
@@ -148,7 +154,8 @@ def _build_handler(metrics: CeleryEventMetrics) -> type[BaseHTTPRequestHandler]:
             self._respond(200, payload, prometheus_client.CONTENT_TYPE_LATEST)
 
         def _respond(self, status: int, body: bytes | str, content_type: str, extra: dict[str, str] | None = None) -> None:
-            """Write one complete response.
+            """
+            Write one complete response.
 
             Args:
                 status: HTTP status code.
@@ -167,7 +174,8 @@ def _build_handler(metrics: CeleryEventMetrics) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(payload)
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - signature fixed by the base class
-            """Route access logging to the app's logger instead of stderr.
+            """
+            Route access logging to the app's logger instead of stderr.
 
             Args:
                 format: Printf-style format string. *args: Format arguments.

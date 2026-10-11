@@ -82,7 +82,8 @@ class PinSuggestionsViewTests(TestCase):
         )
 
     def test_accepting_never_fabricates_a_visit(self) -> None:
-        """A discovery submission isn't evidence anyone visited - visit_dates
+        """
+        A discovery submission isn't evidence anyone visited - visit_dates
         must come out empty regardless of when the API call happened."""
         response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5})
         suggestion = PinSuggestion.objects.get(pk=response.json()["suggestion_id"])

@@ -63,7 +63,8 @@ class EffectiveScoreTests(TestCase):
         self.assertAlmostEqual(NO_REACTION_WEIGHT, 0.05)
 
     def test_enough_downvotes_alone_can_take_a_question_negative(self) -> None:
-        """Unlike SpotGuessr's photo thumbs-down, Trivia's downvote must carry real weight
+        """
+        Unlike SpotGuessr's photo thumbs-down, Trivia's downvote must carry real weight
         on its own - the spec wants downvotes alone able to retire a question."""
         question = _make_question()
         for _ in range(3):

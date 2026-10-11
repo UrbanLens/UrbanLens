@@ -1,4 +1,5 @@
-"""Searching your own comments must not read comments on somebody else's pin.
+"""
+Searching your own comments must not read comments on somebody else's pin.
 
 ``test_search_does_not_read_another_accounts_commented_trips.py`` covers the trip half of
 :class:`CommentSearchProvider`. This is the other half - ``Comment.objects`` scoped by
@@ -94,7 +95,8 @@ class _PinCommentCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the comment table.
+        """
+        The full capture, and the statements in it that read the comment table.
 
         Both are returned so a caller can pass a filtered statement's original position to
         ``session_preamble``: a statement's plan depends on the session GUCs active when it ran.

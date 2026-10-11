@@ -53,7 +53,8 @@ DEFAULT_ACHIEVEMENT_COLOR = "#FFC107"
 
 
 def metric_choices() -> list[tuple[str, str]]:
-    """Return ``(key, label)`` pairs for every registered achievement metric.
+    """
+    Return ``(key, label)`` pairs for every registered achievement metric.
 
     Passed to the ``metric`` field as a callable so that registering a new
     metric does not generate a migration, and so importing this module does not
@@ -65,7 +66,8 @@ def metric_choices() -> list[tuple[str, str]]:
 
 
 class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
-    """An award a site admin defines, earned by passing a threshold on one metric.
+    """
+    An award a site admin defines, earned by passing a threshold on one metric.
     Achievements are data, not code: an admin picks one of the registered metrics (see ``services.achievements.metrics``), a threshold, and an icon.
     Adding a new achievement therefore needs no deploy - a ``post_save`` hook backfills it against every existing profile so users who already qualify receive it immediately.
 
@@ -125,7 +127,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
 
     @classmethod
     def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Achievement:  # noqa: ARG003
-        """Track the persisted qualifying fields so a save can tell what changed.
+        """
+        Track the persisted qualifying fields so a save can tell what changed.
 
         Args:
             db: Database alias the row was loaded from.
@@ -143,7 +146,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
         return instance
 
     def save(self, *args, **kwargs) -> None:
-        """Save, then re-baseline the qualifying markers to what was just persisted.
+        """
+        Save, then re-baseline the qualifying markers to what was just persisted.
         ``post_save`` fires inside ``super().save()``, so the signal still sees the pre-save values and can tell what changed; re-baselining afterwards is what stops a *second* save of the same in-memory instance looking like another change.
 
         Args:
@@ -161,7 +165,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
                 setattr(self, f"_loaded_{field}", getattr(self, field))
 
     def qualifying_change(self) -> bool:
-        """Whether this instance's qualifying fields differ from the loaded row.
+        """
+        Whether this instance's qualifying fields differ from the loaded row.
 
         Returns:
             True when the award now covers a different set of profiles than the
@@ -177,7 +182,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
         return self.name or "achievement"
 
     def clean(self) -> None:
-        """Reject metrics that no longer exist in the registry.
+        """
+        Reject metrics that no longer exist in the registry.
 
         A metric can disappear when a plugin that registered it is removed, so
         this is validated on save rather than being assumed from ``choices``.
@@ -212,7 +218,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
         return definition.requirement(self.threshold)
 
     def progress_for(self, value: int) -> int:
-        """Return percent progress toward this award for a current metric *value*.
+        """
+        Return percent progress toward this award for a current metric *value*.
 
         Args:
             value: The profile's current value for this award's metric.
@@ -226,7 +233,8 @@ class Achievement(HeldUploadModel, abstract.PublicDashboardModel):
 
 
 class UserAchievement(abstract.FrontendDashboardModel):
-    """One award earned by one profile. Awards are permanent: lowering a metric (deleting pins, say) never revokes one.
+    """
+    One award earned by one profile. Awards are permanent: lowering a metric (deleting pins, say) never revokes one.
 
     Attributes:
         profile: Who earned it.
@@ -272,7 +280,8 @@ class UserAchievement(abstract.FrontendDashboardModel):
 
 
 class ProfileActivityDay(abstract.DashboardModel):
-    """A single calendar day on which a profile performed one kind of action.
+    """
+    A single calendar day on which a profile performed one kind of action.
     This is the source of truth behind streaks.
     Streak lengths are also cached on :class:`ProfileStreak` so reading them is a single indexed row rather than a scan, but they can always be rebuilt from these rows.
 
@@ -310,7 +319,8 @@ class ProfileActivityDay(abstract.DashboardModel):
 
 
 class ProfileStreak(abstract.DashboardModel):
-    """Cached current and longest run of consecutive days for one activity kind.
+    """
+    Cached current and longest run of consecutive days for one activity kind.
     ``longest_length`` is what achievements compare against, so a streak that is broken later still keeps whatever it earned.
 
     Attributes:
@@ -347,7 +357,8 @@ class ProfileStreak(abstract.DashboardModel):
         return f"{self.profile_id} {self.kind}: {self.current_length} (best {self.longest_length})"
 
     def current_length_as_of(self, today: datetime.date | None = None) -> int:
-        """Return the live current streak, treating a missed day as a reset.
+        """
+        Return the live current streak, treating a missed day as a reset.
 
         Args:
             today: The date to evaluate against; defaults to the local date.

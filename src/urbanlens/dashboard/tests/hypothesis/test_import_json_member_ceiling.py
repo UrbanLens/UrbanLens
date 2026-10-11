@@ -1,4 +1,5 @@
-"""No data file in an import archive is parsed whole past a per-file ceiling.
+"""
+No data file in an import archive is parsed whole past a per-file ceiling.
 
 ``json.load`` builds Python objects about twice the size of the indented JSON an export writes, and the only bound was
 the archive's extracted total, ``max(2 GiB, 2 x quota)``, so one ``pins.json`` could take several gigabytes of a sandbox

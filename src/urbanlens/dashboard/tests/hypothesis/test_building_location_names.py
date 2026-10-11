@@ -1,4 +1,5 @@
-"""A building's Location takes its own provider name, never the name of the campus it stands in (P231).
+"""
+A building's Location takes its own provider name, never the name of the campus it stands in (P231).
 
 On production (v0.8.0) the wiki of HRSH's "BLDG 33/POWERHOUSE & MACHINE SHOP (1929)" child pin was titled "Hudson
 River State Hospital" and reached by the Location's uuid. On the dev stack, ten building Locations under the campus
@@ -235,7 +236,8 @@ class CrisArrivalRefreshesNamesTests(SimpleTestCase):
 
 
 class TheBuildingsOwnRecordOutranksREDatasNameTests(SimpleTestCase):
-    """The child pin was named from CRIS's record, so its location takes the same provider's name (P231).
+    """
+    The child pin was named from CRIS's record, so its location takes the same provider's name (P231).
 
     On the dev stack BLDG 33's location also held REData's "POWERHOUSE & MACHINE SHOP", which won outright on any
     child pin's location.

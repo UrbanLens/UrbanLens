@@ -1,4 +1,5 @@
-"""Deciding which achievements a profile has earned, and granting them.
+"""
+Deciding which achievements a profile has earned, and granting them.
 The nightly sweep instead goes through :func:`evaluate_profiles_in_range`, one bounded pk-range chunk per Celery task, with the metric values computed in bulk for the whole chunk."""
 
 # Generic imports
@@ -24,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def active_metric_keys() -> set[str]:
-    """Return the metric keys at least one active achievement measures.
+    """
+    Return the metric keys at least one active achievement measures.
 
     Returns:
         The set of measured metric keys, or an empty set if the table cannot be read yet (mid-migration on a fresh database)."""
@@ -45,7 +47,8 @@ def evaluate_profile(
     *,
     notify: bool = True,
 ) -> list[UserAchievement]:
-    """Grant every active achievement *profile* now qualifies for.
+    """
+    Grant every active achievement *profile* now qualifies for.
     Only metrics that some active achievement actually uses are computed, so passing a narrow ``metric_keys`` after a single write is cheap.
 
     Args:
@@ -84,7 +87,8 @@ def _award_qualifying(
     *,
     notify: bool,
 ) -> list[UserAchievement]:
-    """Grant whichever of *pending* the precomputed *values* qualify *profile* for.
+    """
+    Grant whichever of *pending* the precomputed *values* qualify *profile* for.
     The shared award loop behind :func:`evaluate_profile` and :func:`evaluate_profiles_in_range`, so per-write and sweep evaluation cannot drift apart in how a threshold is judged.
 
     Args:
@@ -112,7 +116,8 @@ def _award_qualifying(
 
 
 def _grant(profile: Profile, achievement: Achievement, value: int) -> UserAchievement | None:
-    """Create the award row, tolerating a concurrent grant of the same award.
+    """
+    Create the award row, tolerating a concurrent grant of the same award.
 
     Args:
         profile: Who earned it.
@@ -142,7 +147,8 @@ def _grant(profile: Profile, achievement: Achievement, value: int) -> UserAchiev
 
 
 def _notify(profile: Profile, award: UserAchievement) -> None:
-    """Raise an in-app notification for a newly earned award.
+    """
+    Raise an in-app notification for a newly earned award.
     Notification failures must not roll back the award itself, so this swallows and logs rather than propagating."""
     from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
     from urbanlens.dashboard.services.notifications.notification_delivery import deliver_notification, delivery_preference
@@ -174,7 +180,8 @@ BACKFILL_CHUNK_SIZE = 1000
 
 
 def evaluate_achievement_in_range(achievement: Achievement, start_pk: int, end_pk: int, *, notify: bool = False) -> int:
-    """Grant one achievement to the profiles in a pk range that qualify and do not have it yet.
+    """
+    Grant one achievement to the profiles in a pk range that qualify and do not have it yet.
 
     One bulk metric pass for the range, the same one the nightly sweep uses, rather than a metric query per
     profile.
@@ -205,7 +212,8 @@ def evaluate_achievement_in_range(achievement: Achievement, start_pk: int, end_p
 
 
 def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = False) -> int:
-    """Grant a single achievement to every profile that already qualifies, in this process.
+    """
+    Grant a single achievement to every profile that already qualifies, in this process.
 
     Production work goes through ``tasks.backfill_achievement``, which runs the same ranges as separate tasks.
 
@@ -224,7 +232,8 @@ def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = Fal
 
 
 def evaluate_profiles_in_range(start_pk: int, end_pk: int, *, notify: bool = True) -> int:
-    """Re-evaluate every active achievement for one pk-range chunk of profiles.
+    """
+    Re-evaluate every active achievement for one pk-range chunk of profiles.
     One chunk of the nightly safety net, which catches awards no write touches - a "trips attended" threshold crossed simply because a trip's end date passed - and anything an enqueue lost when the broker was down.
 
     Args:
@@ -266,7 +275,8 @@ def evaluate_profiles_in_range(start_pk: int, end_pk: int, *, notify: bool = Tru
 
 
 def progress_for_profile(profile: Profile, viewer: Profile | None = None) -> list[dict[str, object]]:
-    """Return the full award catalogue annotated with one profile's standing.
+    """
+    Return the full award catalogue annotated with one profile's standing.
 
     Args:
         profile: The profile whose progress is being described.

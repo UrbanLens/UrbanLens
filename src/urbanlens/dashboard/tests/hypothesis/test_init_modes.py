@@ -21,7 +21,8 @@ _APPLY_ROLES = "python src/urbanlens/manage.py apply_database_roles"
 
 
 def _load_init_module() -> ModuleType:
-    """Import ``bin/container_init.py``, which is a script rather than a package member.
+    """
+    Import ``bin/container_init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.

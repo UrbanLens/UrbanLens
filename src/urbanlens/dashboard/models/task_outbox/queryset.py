@@ -16,7 +16,8 @@ class TaskOutboxEntryQuerySet(abstract.DashboardQuerySet["TaskOutboxEntry"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.task_outbox.model.TaskOutboxEntry`."""
 
     def due(self, now: datetime) -> TaskOutboxEntryQuerySet:
-        """Restrict to entries whose next attempt is due, the longest overdue first.
+        """
+        Restrict to entries whose next attempt is due, the longest overdue first.
 
         Args:
             now: The current time.

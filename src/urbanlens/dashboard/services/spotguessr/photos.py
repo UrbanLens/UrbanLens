@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 
 def _eligible_photo_filter(solo_profile: Profile | None) -> Q:
-    """The module's non-negotiable privacy gate - see the module docstring.
+    """
+    The module's non-negotiable privacy gate - see the module docstring.
     Shared by every eligibility check in this module so the wiki-only-unless- solo-viewer invariant can only ever be defined in one place."""
     photo_filter = Q(wiki__isnull=False)
     if solo_profile is not None:
@@ -36,7 +37,8 @@ def candidate_image_for_location(
     allow_arbitrary_external_photos: bool = False,
     solo_profile: Profile | None = None,
 ) -> Image | None:
-    """Pick a photo to show for ``location``, or None if it has no eligible photo.
+    """
+    Pick a photo to show for ``location``, or None if it has no eligible photo.
 
     Args:
         location: The round's answer location.
@@ -52,7 +54,8 @@ def candidate_image_for_location(
 
 
 def locations_with_eligible_photo(location_ids: Iterable[int], *, solo_profile: Profile | None = None) -> list[int]:
-    """Which of ``location_ids`` have at least one photo ``candidate_image_for_location`` could return.
+    """
+    Which of ``location_ids`` have at least one photo ``candidate_image_for_location`` could return.
 
     Args:
         location_ids: Candidate location ids (already eligibility-filtered).

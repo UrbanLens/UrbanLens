@@ -75,7 +75,8 @@ class ScanResult:
 
 
 def scan(text: str, source: str = "unknown") -> ScanResult:
-    """Scan untrusted text for prompt injection patterns.
+    """
+    Scan untrusted text for prompt injection patterns.
 
     Args:
         text: Content to check.
@@ -118,7 +119,8 @@ def scan(text: str, source: str = "unknown") -> ScanResult:
 
 
 def sanitize(text: str, source: str = "unknown") -> str:
-    """Scan text and return the sanitized version with injections neutralized.
+    """
+    Scan text and return the sanitized version with injections neutralized.
 
     Args:
         text: Content to sanitize.
@@ -131,7 +133,8 @@ def sanitize(text: str, source: str = "unknown") -> str:
 
 
 def wrap_user_data(text: str) -> str:
-    """Wrap user-supplied text in <USER_DATA> delimiters for the LLM context boundary.
+    """
+    Wrap user-supplied text in <USER_DATA> delimiters for the LLM context boundary.
     Any pre-existing <USER_DATA> / </USER_DATA> tags in the input are stripped first so that an attacker cannot escape the sandbox by injecting a closing tag.
 
     Args:

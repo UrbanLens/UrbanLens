@@ -59,7 +59,8 @@ class RequestNameLengthTests(TestCase):
         self.assertFalse(PinAlias.objects.filter(name__startswith="nnn").exists())
 
     def test_label_edit_rejects_an_overlong_name(self) -> None:
-        """The edit path, which chunk 559's fix to the create path did not reach.
+        """
+        The edit path, which chunk 559's fix to the create path did not reach.
 
         `controllers/labels.py` has the highest fix-density in the repository - 8 of 18 changes in three months
         were bug fixes, six of them about validating user-supplied label attributes on the way in."""
@@ -87,7 +88,8 @@ class RequestNameLengthTests(TestCase):
         self.assertNotEqual(label.icon, "not an icon at all", "edit stored free text as an icon")
 
     def test_label_customization_rejects_an_overlong_icon(self) -> None:
-        """The third of five Label icon write paths, and the only one that 500s.
+        """
+        The third of five Label icon write paths, and the only one that 500s.
 
         `upsert_label_customization` normalises the icon by stripping it and nothing else - no length bound and
         no `clean_icon` - so a value longer than `LabelCustomization.icon`'s 50 characters reaches the column."""

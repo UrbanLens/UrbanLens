@@ -118,7 +118,8 @@ class OrganizeFormTests(TestCase):
 
 
 class ControlMatchesServerTests(TestCase):
-    """The dialog must not offer a control the server ignores, or hide one it honours.
+    """
+    The dialog must not offer a control the server ignores, or hide one it honours.
 
     This is the invariant the previous gating test existed for (a checkbox was once shown on AI grounds alone,
     while the server decided on the user's own settings)."""

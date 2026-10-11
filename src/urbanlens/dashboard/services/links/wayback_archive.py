@@ -1,4 +1,5 @@
-"""Archiving links at the Wayback Machine, and asking again about the ones it has not archived yet.
+"""
+Archiving links at the Wayback Machine, and asking again about the ones it has not archived yet.
 
 A URL is looked up once, however many links name it: an auto link is a ``PinLink`` and a ``WikiLink`` at once, and a
 popular page is linked from many pins. What the lookup came to - a snapshot, a failure and when to ask again, or a
@@ -72,7 +73,8 @@ class ArchiveOutcome(StrEnum):
 
 
 def archive_link(link_model: str, link_id: int) -> ArchiveOutcome:
-    """Give a link a Wayback Machine snapshot, finding or making one.
+    """
+    Give a link a Wayback Machine snapshot, finding or making one.
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -121,7 +123,8 @@ def archive_link(link_model: str, link_id: int) -> ArchiveOutcome:
 
 
 def archive_links(link_model: str, link_ids: list[int]) -> dict[int, bool]:
-    """Archive a batch of links in turn, leaving the rest to a sweep once the Archive refuses for now.
+    """
+    Archive a batch of links in turn, leaving the rest to a sweep once the Archive refuses for now.
 
     Args:
         link_model: ``"PinLink"`` or ``"WikiLink"``.
@@ -150,7 +153,8 @@ def archive_links(link_model: str, link_ids: list[int]) -> dict[int, bool]:
 
 
 def sweep(limit: int = SWEEP_BATCH) -> Counter[ArchiveOutcome]:
-    """Ask about the links that have come due, the longest-waiting URL first, until the Archive refuses for now.
+    """
+    Ask about the links that have come due, the longest-waiting URL first, until the Archive refuses for now.
 
     Args:
         limit: The most URLs to ask about.
@@ -216,7 +220,8 @@ def _stored_snapshot(url: str) -> str:
 
 
 def _given(link_model: str, link_id: int, url: str, snapshot: str) -> ArchiveOutcome:
-    """Store *snapshot* on every link naming *url* that has none, and say whether link ``link_id`` was one.
+    """
+    Store *snapshot* on every link naming *url* that has none, and say whether link ``link_id`` was one.
 
     *snapshot* has passed ``is_link_url``, so it is what ``save`` would have stored. A bulk update sends no
     ``post_save``, so each pin whose link changed is marked changed here, as ``resync_pin_on_link_saved`` would have
@@ -261,7 +266,8 @@ def _give_up(url: str) -> None:
 
 
 def _due_links(limit: int) -> list[tuple[str, int]]:
-    """One link per URL that has come due, the longest-waiting first.
+    """
+    One link per URL that has come due, the longest-waiting first.
 
     A link never asked about is due once its own task has had :data:`NEW_LINK_GRACE` to run.
     """

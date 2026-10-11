@@ -1,4 +1,5 @@
-"""External-facing wiki endpoints: community pages, articles, comments, reviews.
+"""
+External-facing wiki endpoints: community pages, articles, comments, reviews.
 
 That call is the only way a Wiki is ever loaded here - never ``Wiki.objects.get()``, never a
 permission check that returns something other than a 404.
@@ -107,7 +108,8 @@ logger = logging.getLogger(__name__)
 
 
 class WikiApiView(ExternalApiView):
-    """Base for every wiki endpoint: uniform errors plus the visibility gate.
+    """
+    Base for every wiki endpoint: uniform errors plus the visibility gate.
 
     The ``{"error": ...}`` envelope is inherited, not opted into: since ``ExternalApiView`` itself mixes
     in ``ErrorEnvelopeMixin`` ahead of ``APIView``, naming the mixin again here would only restate the
@@ -116,7 +118,8 @@ class WikiApiView(ExternalApiView):
     """
 
     def resolve(self, request: Request, location_slug: str) -> tuple[Any, Any, Profile]:
-        """Resolve the Location/Wiki/Profile for *location_slug*, or 404.
+        """
+        Resolve the Location/Wiki/Profile for *location_slug*, or 404.
 
         Every handler in this module calls this as its first statement.
 
@@ -135,7 +138,8 @@ class WikiApiView(ExternalApiView):
 
 
 def _own_pin_or_404(view: OwnedPinMixin, request: Request, pin_slug: str) -> Pin:
-    """Resolve one of the caller's own pins, or raise the uniform 404.
+    """
+    Resolve one of the caller's own pins, or raise the uniform 404.
 
     Delegates to ``OwnedPinMixin.get_owned_pin`` so pin lookup (slug-or-uuid, ownership filter,
     select_related set) stays defined in exactly one place.
@@ -158,7 +162,8 @@ def _own_pin_or_404(view: OwnedPinMixin, request: Request, pin_slug: str) -> Pin
 
 
 def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
-    """Render one gated comment (and its replies) for the API.
+    """
+    Render one gated comment (and its replies) for the API.
 
     Args:
         item: A ``services.comments.comments.VisibleComment`` that has already passed every visibility
@@ -188,7 +193,8 @@ def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
 
 
 class WikiDetailApiView(WikiApiView):
-    """GET the community wiki for a place; PATCH its editable fields.
+    """
+    GET the community wiki for a place; PATCH its editable fields.
 
     PATCH applies a community edit through the same ``services.wiki.wiki_edits.apply_wiki_edit`` the
     dashboard's "Suggest edits" form uses, and records the identical ``WikiEdit`` audit row - including
@@ -311,7 +317,8 @@ class WikiStatVoteApiView(WikiApiView):
     }
 
     def _check_field(self, field: str) -> None:
-        """Reject an unknown stat field with the uniform 404.
+        """
+        Reject an unknown stat field with the uniform 404.
 
         Args:
             field: The stat field name from the URL.
@@ -364,7 +371,8 @@ class WikiStatVoteApiView(WikiApiView):
 
 
 class WikiAliasesView(WikiApiView):
-    """GET the wiki's alternate names; POST to add one.
+    """
+    GET the wiki's alternate names; POST to add one.
 
     The list includes the wiki's current name - the alias list is defined as every name the place is
     known by - so each row carries ``is_current`` to say which one that is.
@@ -401,7 +409,8 @@ class WikiAliasesView(WikiApiView):
 
 
 class WikiAliasUseView(WikiApiView):
-    """POST: make one of the wiki's aliases its current community name.
+    """
+    POST: make one of the wiki's aliases its current community name.
 
     The wiki counterpart of ``PinAliasUseView``, and shaped identically: no request body, and the full
     wiki detail in the response rather than the alias, so a client applies the rename (and everything
@@ -419,7 +428,8 @@ class WikiAliasUseView(WikiApiView):
 
     @extend_schema(request=None, responses={200: WikiDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str, alias_id: int) -> Response:
-        """Promote one alias to the wiki's name and return the updated wiki.
+        """
+        Promote one alias to the wiki's name and return the updated wiki.
 
         Promoting the alias that is already the name answers 200 with the unchanged wiki, not 400: "use this
         name" is an idempotent statement of intent, and a client retrying a request whose response it never
@@ -477,7 +487,8 @@ class WikiAliasDetailView(WikiApiView):
 
 
 class WikiAliasToggleNicknameView(WikiApiView):
-    """POST: flip one of the wiki's aliases between nickname-only and a plain alternate name.
+    """
+    POST: flip one of the wiki's aliases between nickname-only and a plain alternate name.
 
     Nickname-only aliases are excluded from external name-provider queries but still shown in the wiki's
     own alias list - toggling this is a display preference on shared data, not a rename, so unlike
@@ -491,7 +502,8 @@ class WikiAliasToggleNicknameView(WikiApiView):
 
     @extend_schema(request=None, responses={200: WikiAliasSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str, alias_id: int) -> Response:
-        """Flip one alias's nickname flag and return it.
+        """
+        Flip one alias's nickname flag and return it.
 
         Args:
             request: The authenticated request.
@@ -511,7 +523,8 @@ class WikiAliasToggleNicknameView(WikiApiView):
 
 
 class WikiBoundaryApiView(WikiApiView):
-    """GET the wiki page map's typed boundaries; POST to save or clear the community drawing of one.
+    """
+    GET the wiki page map's typed boundaries; POST to save or clear the community drawing of one.
 
     Thin wrapper over ``controllers.boundary.WikiBoundaryView`` - same resolution chain, same polling
     contract (``pending``/``refreshing``), and the same rule that a community drawing lives on a
@@ -525,7 +538,8 @@ class WikiBoundaryApiView(WikiApiView):
     }
 
     def _payload(self, wiki: Any, *, pending: bool, refreshing: bool, just_drawn: tuple[str, Any] | None = None) -> dict[str, Any]:
-        """Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``.
+        """
+        Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``.
 
         Args:
             wiki: The wiki whose boundaries to resolve - may be a concealed projection.
@@ -598,7 +612,8 @@ class WikiBoundaryApiView(WikiApiView):
 
 
 class WikiCoverPhotoApiView(WikiApiView):
-    """PUT to set the wiki's hero-banner cover photo; DELETE to clear it.
+    """
+    PUT to set the wiki's hero-banner cover photo; DELETE to clear it.
 
     The photo must already be in the wiki's own gallery (resolved by ``image_uuid``, matching the
     addressing every other photo route in this module uses) rather than accepted as an ad-hoc upload.
@@ -638,7 +653,8 @@ class WikiCoverPhotoApiView(WikiApiView):
 
 
 class WikiOwnershipView(PaginatedListMixin, WikiApiView):
-    """GET the wiki's shared Ownership card: current and past owners of this place.
+    """
+    GET the wiki's shared Ownership card: current and past owners of this place.
 
     Read-only this pass: the write side
     (adding/editing/unlinking an owner) is deferred rather than built here.
@@ -661,7 +677,8 @@ class WikiOwnershipView(PaginatedListMixin, WikiApiView):
 
 
 class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
-    """GET the wiki's shared Sale History tab, newest first.
+    """
+    GET the wiki's shared Sale History tab, newest first.
 
     Read-only this pass, for the same reason as :class:`WikiOwnershipView`.
     Party names are filtered by the same subscriber gate - see that class's docstring.
@@ -753,7 +770,8 @@ class WikiLinkDetailView(WikiApiView):
 
 
 def _gallery_row(image: Image) -> dict[str, Any]:
-    """Shape one gallery image into its API payload.
+    """
+    Shape one gallery image into its API payload.
 
     A module-level function rather than an inline comprehension so it can be handed to
     ``paginated_response`` as a ``row_builder`` and therefore run on the requested page only - see that
@@ -780,7 +798,8 @@ def _gallery_row(image: Image) -> dict[str, Any]:
 
 
 class WikiGalleryView(PaginatedListMixin, WikiApiView):
-    """GET the wiki's shared photo gallery.
+    """
+    GET the wiki's shared photo gallery.
 
     Read-only this pass: accepting uploads needs the async malware-scan
     handshake the comment image path uses, which is out of scope here.
@@ -891,7 +910,8 @@ class WikiArticleRevisionsView(PaginatedListMixin, WikiApiView):
 
 
 class WikiArticleRevisionDetailView(WikiApiView):
-    """GET one article revision, with its diff against the preceding one. DELETE to scrub it from history.
+    """
+    GET one article revision, with its diff against the preceding one. DELETE to scrub it from history.
 
     It never touches the article's *current* text: ``Article.content`` is its own denormalized field,
     not derived live from the newest revision, so deleting even the newest revision only removes it from
@@ -933,7 +953,8 @@ class WikiArticleRevisionDetailView(WikiApiView):
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, location_slug: str, revision_id: int) -> Response:
-        """Permanently remove one revision the caller themselves wrote.
+        """
+        Permanently remove one revision the caller themselves wrote.
 
         A caller who cannot see the wiki learns nothing beyond "no such revision" either way, so telling
         apart "wrong author" from "wrong wiki" would be a needless extra disclosure.
@@ -997,7 +1018,8 @@ class _CommentListMixin(PaginatedListMixin):
     """Shared list/create behavior for pin- and wiki-scoped comment endpoints."""
 
     def _list_comments(self, request: Request, comments_qs: Any, profile: Profile) -> Response:
-        """Return one page of the comments *profile* may see.
+        """
+        Return one page of the comments *profile* may see.
 
         Args:
             request: The request driving pagination.
@@ -1024,7 +1046,8 @@ class _CommentListMixin(PaginatedListMixin):
         )
 
     def _create_comment(self, request: Request, profile: Profile, *, pin: Pin | None = None, wiki: Any = None) -> Response:
-        """Validate and create a comment on a pin or wiki.
+        """
+        Validate and create a comment on a pin or wiki.
 
         Args:
             request: The request carrying the submitted comment.
@@ -1132,7 +1155,8 @@ class WikiCommentDetailView(WikiApiView):
     delete=extend_schema(responses={200: None, 400: ErrorSerializer, 404: ErrorSerializer}),
 )
 class WikiCommentReactionView(_ReactionMixin, WikiApiView):
-    """PUT to add an emoji reaction to a wiki comment; DELETE to remove it.
+    """
+    PUT to add an emoji reaction to a wiki comment; DELETE to remove it.
 
     Nothing but configuration: the idempotent toggle, the emoji check, the ``{"reactions": ...}``
     envelope and the 400/404 discipline all live in
@@ -1153,7 +1177,8 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
     reaction_summarizer = staticmethod(aggregate_reactions)
 
     def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[CommentModel, Profile]:
-        """Resolve the wiki comment being reacted to, or 404.
+        """
+        Resolve the wiki comment being reacted to, or 404.
 
         Every gate is a lookup rather than a permission branch: ``self.resolve`` 404s unless the caller has
         pinned the location (see the module docstring), ``wiki=wiki`` keeps a comment id from another wiki -
@@ -1179,7 +1204,8 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
 
 
 class PinCommentsView(OwnedPinMixin, _CommentListMixin, ExternalApiView):
-    """GET the caller's own comments on their pin; POST to add one.
+    """
+    GET the caller's own comments on their pin; POST to add one.
 
     Uses ``pins:*`` rather than ``wiki:*``: a pin's comment thread is the owner's own private annotation
     of their own pin, not shared community content.

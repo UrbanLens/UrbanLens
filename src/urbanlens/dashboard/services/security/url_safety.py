@@ -48,7 +48,8 @@ def is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -
 
 
 def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, str]:
-    """Validate ``url`` and return it alongside the address it resolved to.
+    """
+    Validate ``url`` and return it alongside the address it resolved to.
     Returning the address is the point: a caller that gets only the url back has no way to connect to the host it was told is safe, because the next resolution is a fresh, unvalidated one.
 
     Args:
@@ -95,7 +96,8 @@ def resolve_public_http_url(url: str, *, max_length: int = 2048) -> tuple[str, s
 
 
 def ensure_public_http_url(url: str, *, max_length: int = 2048) -> str:
-    """Validate ``url`` is http(s) and doesn't currently resolve to an internal host.
+    """
+    Validate ``url`` is http(s) and doesn't currently resolve to an internal host.
 
     Args:
         url: The url to validate.
@@ -140,7 +142,8 @@ _SOCKET_PATHS = (
 
 
 def _peer_address(response: requests.Response) -> str | None:
-    """The IP the response's socket is actually connected to, if determinable.
+    """
+    The IP the response's socket is actually connected to, if determinable.
     Every step is optional-by-construction, and the result is returned only if it actually parses as an IP address."""
     raw = getattr(response, "raw", None)
     if raw is None:
@@ -192,7 +195,8 @@ def _shutdown_fd(fd: int) -> None:
 
 
 class _Deadline:
-    """One request's wall-clock budget, and the connections to cut when it runs out.
+    """
+    One request's wall-clock budget, and the connections to cut when it runs out.
 
     A read timeout bounds each ``recv``, not their sum, so a server that sends a byte just inside it
     holds the caller indefinitely. A timer shuts the request's sockets down from outside, which ends
@@ -218,7 +222,8 @@ class _Deadline:
         return self.expires_at - time.monotonic()
 
     def track_socket(self, sock: socket.socket) -> None:
-        """Cut *sock*'s connection at expiry; a new connection is registered here as it opens.
+        """
+        Cut *sock*'s connection at expiry; a new connection is registered here as it opens.
 
         The descriptor rather than the object, because TLS wraps the socket into a new object and
         detaches this one.
@@ -234,7 +239,8 @@ class _Deadline:
         _shutdown_fd(fd)
 
     def forget(self) -> None:
-        """Drop everything tracked so far, before the hop that opened it closes its connection.
+        """
+        Drop everything tracked so far, before the hop that opened it closes its connection.
 
         A closed descriptor can be reused by anything in the process, so nothing may cut it later.
         """
@@ -243,7 +249,8 @@ class _Deadline:
             self._shutdowns.clear()
 
     def track_response(self, response: requests.Response) -> None:
-        """Cut *response*'s connection at expiry, covering one reused from a pool.
+        """
+        Cut *response*'s connection at expiry, covering one reused from a pool.
 
         Args:
             response: A streamed response whose body has not been read.
@@ -282,7 +289,8 @@ class _Deadline:
         self._timer.cancel()
 
     def hop_timeout(self, timeout: Timeout) -> Timeout:
-        """*timeout*, shortened to what is left of the budget.
+        """
+        *timeout*, shortened to what is left of the budget.
 
         Args:
             timeout: The caller's per-phase timeout.
@@ -305,7 +313,8 @@ _real_create_connection = urllib3.util.connection.create_connection
 
 
 def _tracked_create_connection(address: tuple[str, int], *args: Any, **kwargs: Any) -> socket.socket:
-    """urllib3's ``create_connection``, dialling a pinned host at its validated IP and registering the socket with this thread's deadline.
+    """
+    urllib3's ``create_connection``, dialling a pinned host at its validated IP and registering the socket with this thread's deadline.
 
     Dialling the IP literal leaves nothing for ``socket.getaddrinfo`` to answer, so a resolver
     patched in later (gevent, a DNS cache) cannot move the connection. This is also the only point
@@ -340,7 +349,8 @@ _install_connection_hook()
 
 
 def _host_allowed(hostname: str, allowed: Collection[str]) -> bool:
-    """Whether a redirect to *hostname* stays inside *allowed*.
+    """
+    Whether a redirect to *hostname* stays inside *allowed*.
 
     Args:
         hostname: The redirect target's host.
@@ -391,7 +401,8 @@ def _send(
     credential_headers: Collection[str],
     deadline: _Deadline | None,
 ) -> requests.Response:
-    """Send one request, following redirects by hand so every hop is resolved, pinned and checked.
+    """
+    Send one request, following redirects by hand so every hop is resolved, pinned and checked.
 
     Returns:
         The final streamed, non-redirect response.
@@ -470,7 +481,8 @@ def _send(
 
 
 def _close_connection(response: requests.Response) -> None:
-    """Close *response* and the connection under it, rather than returning that to the pool.
+    """
+    Close *response* and the connection under it, rather than returning that to the pool.
 
     ``Response.close`` leaves a fully read connection open for reuse, and a reused connection's
     header phase happens before any deadline has a response to cut.
@@ -483,7 +495,8 @@ def _close_connection(response: requests.Response) -> None:
 
 
 def read_limited(response: requests.Response, *, max_bytes: int) -> bytes:
-    """Read a streamed body, refusing one longer than *max_bytes*.
+    """
+    Read a streamed body, refusing one longer than *max_bytes*.
 
     Args:
         response: A response opened with ``stream=True``, as every one here is.
@@ -525,7 +538,8 @@ def open_public_url(
     credential_headers: Collection[str] = (),
     max_length: int = 2048,
 ) -> Iterator[requests.Response]:
-    """Open a request to a host a user or a stored row chose, bounded as a whole by *total_deadline*.
+    """
+    Open a request to a host a user or a stored row chose, bounded as a whole by *total_deadline*.
 
     Every hop is resolved, checked against internal ranges and connected to the address that was
     checked; redirects are followed by hand, within ``allowed_redirect_hosts``. The deadline covers
@@ -613,7 +627,8 @@ def request_public_url(
     credential_headers: Collection[str] = (),
     max_length: int = 2048,
 ) -> requests.Response:
-    """:func:`open_public_url`, with the body read under *max_bytes* before the deadline ends.
+    """
+    :func:`open_public_url`, with the body read under *max_bytes* before the deadline ends.
 
     Args:
         method: HTTP method.
@@ -669,7 +684,8 @@ def fetch_public_url(
     max_length: int = 2048,
     session: requests.Session | None = None,
 ) -> requests.Response:
-    """GET ``url`` through the same hop loop as :func:`open_public_url`, leaving the body to the caller.
+    """
+    GET ``url`` through the same hop loop as :func:`open_public_url`, leaving the body to the caller.
 
     There is no overall deadline here, because the caller reads the body after this returns; a
     caller that needs one uses :func:`open_public_url`.

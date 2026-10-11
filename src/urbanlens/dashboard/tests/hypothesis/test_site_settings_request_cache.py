@@ -25,7 +25,8 @@ def _settings_query_count(captured: CaptureQueriesContext) -> int:
 
 @contextmanager
 def simulated_request():
-    """Fire the request lifecycle signals exactly as Django's handlers do.
+    """
+    Fire the request lifecycle signals exactly as Django's handlers do.
 
     ``close_old_connections`` is disconnected around the signals the same way
     ``django.test.client.ClientHandler`` disconnects it - left connected, it would tear down the connection
@@ -55,7 +56,8 @@ class SiteSettingsOutsideARequestTests(TestCase):
         self.assertEqual(_settings_query_count(captured), 2)
 
     def test_a_row_updated_behind_save_is_still_seen(self) -> None:
-        """``queryset.update()`` bypasses ``save()``, so nothing invalidates a cache -
+        """
+        ``queryset.update()`` bypasses ``save()``, so nothing invalidates a cache -
         which is exactly why this context must not have one."""
         SiteSettings.objects.filter(pk=1).update(max_pins_per_list=7)
         self.assertEqual(SiteSettings.get_current().max_pins_per_list, 7)
@@ -104,7 +106,8 @@ class SiteSettingsDuringARequestTests(TestCase):
 
 @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class SiteSettingsRealRequestTests(TestCase):
-    """End to end: a genuine page render, whose many callers collapse to one fetch.
+    """
+    End to end: a genuine page render, whose many callers collapse to one fetch.
 
     The cache is pinned to locmem because the default backend is Redis-backed and the
     test suite's network guard only permits localhost connections.

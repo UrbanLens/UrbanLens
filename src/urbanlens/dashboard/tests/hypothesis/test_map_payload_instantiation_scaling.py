@@ -64,7 +64,8 @@ class MapPayloadInstantiationScalingTests(InstantiationScalingMixin, TestCase):
         self.assert_objects_per_row_bounded(reverse("map.pins"))
 
     def test_the_payload_service_itself_does_not_build_objects_per_pin(self) -> None:
-        """The service, measured directly - `all()` is the unbounded caller's path.
+        """
+        The service, measured directly - `all()` is the unbounded caller's path.
 
         `map.pins` pages at 500, so the endpoint above can only ever show the per-row cost."""
         self.seed_rows(self.second_batch)

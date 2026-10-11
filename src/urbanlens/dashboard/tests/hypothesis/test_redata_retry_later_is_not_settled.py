@@ -1,4 +1,5 @@
-"""A REData answer that says "ask again later" is never cached as REData's settled answer about the place.
+"""
+A REData answer that says "ask again later" is never cached as REData's settled answer about the place.
 
 REData answers ``parcels/lookup`` with a 404 for a permanent reason and a 503 for every other one, and answers
 ``cultural-resources/lookup`` with a 503 ``all_providers_unavailable`` or ``rate_limited`` when no register could be

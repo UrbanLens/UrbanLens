@@ -1,4 +1,5 @@
-"""How much the media volume holds, measured off the request.
+"""
+How much the media volume holds, measured off the request.
 
 Measuring means stat-ing every file the site stores, and the site-admin system panel
 polls every 60 seconds. The panel reads the last measurement and asks for a new one
@@ -36,7 +37,8 @@ _LABEL = "media usage"
 
 @dataclass(frozen=True)
 class MediaUsage:
-    """One measurement of the media volume.
+    """
+    One measurement of the media volume.
 
     Attributes:
         megabytes: Size of everything under ``MEDIA_ROOT``, in MiB.
@@ -53,7 +55,8 @@ class MediaUsage:
 
 
 def directory_size_mb(path: str) -> float:
-    """Return the disk usage of *path* in megabytes.
+    """
+    Return the disk usage of *path* in megabytes.
 
     Args:
         path: Directory to walk. A missing one measures as zero.
@@ -71,7 +74,8 @@ def directory_size_mb(path: str) -> float:
 
 
 def measured_media_usage() -> MediaUsage | None:
-    """The last measurement, asking for a new one when it is stale or missing.
+    """
+    The last measurement, asking for a new one when it is stale or missing.
 
     Never walks the tree itself.
 
@@ -85,7 +89,8 @@ def measured_media_usage() -> MediaUsage | None:
 
 
 def measure_media_usage() -> MediaUsage:
-    """Walk ``MEDIA_ROOT`` and store the result for the panel.
+    """
+    Walk ``MEDIA_ROOT`` and store the result for the panel.
 
     Releases the measuring guard however it ends.
 

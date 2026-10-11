@@ -74,7 +74,8 @@ def _posted_ids(data: Mapping[str, Any], key: str) -> list[int]:
 
 
 def _owned_pins(profile: Profile, uuids: list[str]) -> QuerySet[Pin]:
-    """Pins (root or child) owned by ``profile`` among the given uuids.
+    """
+    Pins (root or child) owned by ``profile`` among the given uuids.
 
     The main map's select tool can select both root and child (sub) pin
     markers, so bulk actions must be able to resolve either kind.
@@ -138,7 +139,8 @@ class PinBulkUndoView(LoginRequiredMixin, View):
 
 
 class PinBulkMergeView(LoginRequiredMixin, View):
-    """Merge selected pins: all but the target become the target's detail pins.
+    """
+    Merge selected pins: all but the target become the target's detail pins.
 
     The target becomes (or stays) the top-level pin; a target that's currently
     a child pin is promoted first (see the conflict check below).
@@ -291,7 +293,8 @@ class PinBulkEditLabelOptionsView(LoginRequiredMixin, View):
 
 
 class PinParentSearchView(LoginRequiredMixin, View):
-    """Search the requester's own pins by name or alias, to pick a bulk-edit parent target.
+    """
+    Search the requester's own pins by name or alias, to pick a bulk-edit parent target.
 
     GET /map/pins/parent-search/?q=...&exclude=<uuid>&exclude=<uuid>...
     """
@@ -319,7 +322,8 @@ class PinParentSearchView(LoginRequiredMixin, View):
 
 
 class PinBulkExportView(LoginRequiredMixin, View):
-    """Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
+    """
+    Download selected pins as GeoJSON/KML/GPX/CSV (UL-377/UL-382, plain form POST).
 
     A plain (non-JSON) form POST, not fetch/JSON like the other bulk views - submitted via a throwaway
     <form target="_blank"> so the browser handles the file download itself from the Content-Disposition

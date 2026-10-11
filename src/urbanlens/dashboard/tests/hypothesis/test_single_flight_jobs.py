@@ -51,7 +51,8 @@ class TheClaimTests(TestCase):
         self.assertFalse(single_flight.claim("job:1", 60), "adopting released the reservation")
 
     def test_an_unreadable_cache_refuses(self) -> None:
-        """The opposite of the throttle, deliberately: proceeding here would
+        """
+        The opposite of the throttle, deliberately: proceeding here would
         start a second copy of the most expensive work in the application."""
         with mock.patch.object(single_flight.cache, "add", side_effect=ConnectionError("dragonfly is gone")):
             self.assertFalse(single_flight.claim("job:1", 60))
@@ -119,7 +120,8 @@ class TheExportButtonTests(TestCase):
 
     @staticmethod
     def _export_calls(enqueue: mock.Mock) -> int:
-        """Only the export task. A request enqueues other work too, and counting
+        """
+        Only the export task. A request enqueues other work too, and counting
         every call would make these assertions about unrelated notifications."""
         from urbanlens.dashboard.tasks import run_user_data_export
 
@@ -139,7 +141,8 @@ class TheExportButtonTests(TestCase):
             self.assertEqual(self._export_calls(enqueue), 1, "a second press enqueued a second full-account export")
 
     def test_a_finished_export_releases_the_guard(self) -> None:
-        """The status vocabulary is "pending"/"running"/"done"/"error". A guessed
+        """
+        The status vocabulary is "pending"/"running"/"done"/"error". A guessed
         terminal set that missed "done" would hold the guard for its whole TTL
         after every successful export, which is the same bug wearing a fix."""
         from urbanlens.dashboard.services.import_export.export import ExportJobStatus

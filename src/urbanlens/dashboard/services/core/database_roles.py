@@ -1,4 +1,5 @@
-"""Postgres login roles, one per process tier, each with its own connection budget.
+"""
+Postgres login roles, one per process tier, each with its own connection budget.
 
 Each tier logs in as ``ul_<UL_PROCESS_ROLE>``, inheriting table privileges from one group role, with a
 ``CONNECTION LIMIT`` and a deadline. The limits sum to no more than the server accepts from non-superusers, so a
@@ -56,7 +57,8 @@ class SharedDatabasePasswordError(DatabaseRoleError):
 
 @dataclass(frozen=True, slots=True)
 class DatabaseRole:
-    """One process tier's login role.
+    """
+    One process tier's login role.
 
     Attributes:
         process_role: The ``UL_PROCESS_ROLE`` of every container that logs in as this role.
@@ -72,7 +74,8 @@ class DatabaseRole:
 
     @property
     def name(self) -> str:
-        """The login role's name.
+        """
+        The login role's name.
 
         Returns:
             ``ul_`` followed by the process role.
@@ -89,7 +92,8 @@ class AppliedRole:
 
 
 def declared_roles() -> tuple[DatabaseRole, ...]:
-    """Every tier's login role, sized to the concurrency ``docker-compose.yml`` and ``package.json`` give it.
+    """
+    Every tier's login role, sized to the concurrency ``docker-compose.yml`` and ``package.json`` give it.
 
     A Celery tier's limit covers each container's pool plus its parent process. ``test_connection_budget_wiring``
     fails when a tier's configured concurrency outgrows its limit.
@@ -121,7 +125,8 @@ def declared_roles() -> tuple[DatabaseRole, ...]:
 
 
 def app_role_password(owner_password: str) -> str:
-    """The password every login role uses.
+    """
+    The password every login role uses.
 
     Args:
         owner_password: ``UL_DB_PASS``, the owner's.
@@ -144,7 +149,8 @@ def app_role_password(owner_password: str) -> str:
 
 
 def apply_database_roles(roles: Sequence[DatabaseRole], password: str, *, using: str = "default") -> list[AppliedRole]:
-    """Create or converge the group role, every login role, and their privileges, in one transaction.
+    """
+    Create or converge the group role, every login role, and their privileges, in one transaction.
 
     Must run as a superuser: only one may grant the predefined roles. Concurrent runs against one database wait for
     each other; roles are cluster-wide, but the lock is not, so runs against two databases on one server may collide.
@@ -177,7 +183,8 @@ def apply_database_roles(roles: Sequence[DatabaseRole], password: str, *, using:
 
 
 def _password_verifier(connection: BaseDatabaseWrapper, password: str, role_name: str) -> str:
-    """The verifier the server will store for *password*, computed in this process.
+    """
+    The verifier the server will store for *password*, computed in this process.
 
     ``PQencryptPasswordConn`` reads the server's own ``password_encryption`` over the connection
     and produces the verifier that setting asks for, so the plaintext is never sent. psycopg3

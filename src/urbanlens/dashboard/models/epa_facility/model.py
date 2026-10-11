@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
 
 class EpaFacility(abstract.DashboardModel):
-    """A single EPA-regulated facility, keyed by its FRS Registry ID and persisted indefinitely.
+    """
+    A single EPA-regulated facility, keyed by its FRS Registry ID and persisted indefinitely.
     Every facility UrbanLens ever discovers via EPA ECHO (whether from a nearby-facility search or a full Detailed Facility Report lookup) is recorded here, project-wide - not scoped to any one pin or user.
     This is reference data, not a time-limited cache: a facility's registry ID and physical coordinates don't change, so rows are never expired or re-fetched automatically - only enriched further as more is learned about them.
     """
@@ -48,7 +49,8 @@ class EpaFacility(abstract.DashboardModel):
 
     @classmethod
     def known_details_by_registry_id(cls, registry_ids: Iterable[str]) -> dict[str, EpaFacility]:
-        """Return already-fetched DFR detail rows (real coordinates known) for the given IDs.
+        """
+        Return already-fetched DFR detail rows (real coordinates known) for the given IDs.
 
         Args:
             registry_ids: EPA FRS Registry IDs to look up.
@@ -65,7 +67,8 @@ class EpaFacility(abstract.DashboardModel):
 
     @classmethod
     def record_search_result(cls, registry_id: str, *, name: str, address: str, latitude: float | None, data: dict[str, Any]) -> None:
-        """Upsert a facility from a nearby-search result.
+        """
+        Upsert a facility from a nearby-search result.
         Never overwrites an existing row's coordinates or ``detail_fetched_at`` - a richer, already-fetched Detailed Facility Report must survive a later search-only sighting of the same facility.
 
         Args:
@@ -89,7 +92,8 @@ class EpaFacility(abstract.DashboardModel):
 
     @classmethod
     def record_detail_result(cls, registry_id: str, *, name: str, address: str, latitude: float | None, longitude: float | None, data: dict[str, Any]) -> EpaFacility:
-        """Upsert a facility's fetched Detailed Facility Report.
+        """
+        Upsert a facility's fetched Detailed Facility Report.
         A DFR without coordinates (ECHO has no Permits data for some facilities) is still recorded - ``detail_fetched_at`` marks it as "already checked, can never be an exact-site match" so future fetches never re-spend rate-limited budget on it - but ``None`` coordinates never overwrite real ones already on the row (e.g. a search-derived latitude, or a previous richer DFR).
 
         Args:
@@ -122,7 +126,8 @@ class EpaFacility(abstract.DashboardModel):
 
     @classmethod
     def _get_or_create_row(cls, registry_id: str, *, defaults: dict[str, Any]) -> tuple[EpaFacility, bool]:
-        """``get_or_create`` hardened against the concurrent-fetch race.
+        """
+        ``get_or_create`` hardened against the concurrent-fetch race.
 
         Args:
             registry_id: EPA FRS Registry ID (the unique key raced on).

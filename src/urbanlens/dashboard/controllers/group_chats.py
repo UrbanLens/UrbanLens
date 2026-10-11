@@ -1,4 +1,5 @@
-"""Group chat controllers - creation, thread view, membership management, shares.
+"""
+Group chat controllers - creation, thread view, membership management, shares.
 
 Sits beside ``controllers.direct_messages`` on the messages page: group
 threads swap into the same ``#dm-thread-pane``, live delivery rides the same
@@ -76,7 +77,8 @@ MEMBER_SEARCH_LIMIT = 8
 
 
 def _get_group(profile: Profile, group_uuid) -> tuple[GroupChat, GroupChatMembership]:
-    """Resolve a group the profile is an active member of, or 404.
+    """
+    Resolve a group the profile is an active member of, or 404.
 
     Args:
         profile: The requesting profile.
@@ -99,7 +101,8 @@ def _get_group(profile: Profile, group_uuid) -> tuple[GroupChat, GroupChatMember
 
 
 def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
-    """Attach HTMX triggers so the navbar label and sidebar list refresh.
+    """
+    Attach HTMX triggers so the navbar label and sidebar list refresh.
 
     Args:
         response: The response to annotate.
@@ -112,7 +115,8 @@ def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
 
 
 def _group_thread_context(profile: Profile, group: GroupChat, membership: GroupChatMembership) -> dict:
-    """Build the template context for one group thread.
+    """
+    Build the template context for one group thread.
 
     Marks the thread read - rendering it is the act of reading it.
 
@@ -163,7 +167,8 @@ class GroupCreateView(LoginRequiredMixin, View):
     """POST /messages/groups/create/ - create a group chat from the sidebar dialog."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Create a group with the caller plus the picked members.
+        """
+        Create a group with the caller plus the picked members.
 
         Args:
             request: The incoming request.
@@ -211,7 +216,8 @@ class GroupConversationView(LoginRequiredMixin, View):
     """GET /messages/g/<uuid>/ - one group thread, as a full page or an HTMX pane swap."""
 
     def get(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Render the group conversation.
+        """
+        Render the group conversation.
 
         Args:
             request: The incoming request.
@@ -244,7 +250,8 @@ class GroupSendView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/send/ - fallback send when the WebSocket is unavailable."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Create a message and return the refreshed thread partial.
+        """
+        Create a message and return the refreshed thread partial.
 
         Args:
             request: The incoming request.
@@ -305,7 +312,8 @@ class GroupOlderMessagesView(LoginRequiredMixin, View):
     """GET /messages/g/<uuid>/older/?before=<id> - one older page of a group thread."""
 
     def get(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Return the page of messages immediately older than ``before``.
+        """
+        Return the page of messages immediately older than ``before``.
 
         Args:
             request: The incoming request.
@@ -349,7 +357,8 @@ class GroupReadView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/read/ - mark the group's messages as read."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Advance the caller's read mark for this group.
+        """
+        Advance the caller's read mark for this group.
 
         Args:
             request: The incoming request.
@@ -370,7 +379,8 @@ class GroupRenameView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/rename/ - rename the group (any active member)."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Rename the group and return the refreshed thread.
+        """
+        Rename the group and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -406,7 +416,8 @@ class GroupMuteToggleView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/mute/ - toggle notification muting for this group."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Flip the caller's mute flag and return the refreshed thread.
+        """
+        Flip the caller's mute flag and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -427,7 +438,8 @@ class GroupMembersDialogView(LoginRequiredMixin, View):
     """GET /messages/g/<uuid>/members/ - the members-management dialog partial."""
 
     def get(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Render the members dialog.
+        """
+        Render the members dialog.
 
         Args:
             request: The incoming request.
@@ -463,7 +475,8 @@ class GroupAddMembersView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/members/add/ - add members (creator only)."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Add the posted members and return the refreshed thread.
+        """
+        Add the posted members and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -513,7 +526,8 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/members/remove/ - remove a member (creator only)."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Remove the posted member and return the refreshed thread.
+        """
+        Remove the posted member and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -557,7 +571,8 @@ class GroupLeaveView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/leave/ - leave the group (any member, including the creator)."""
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """End the caller's membership.
+        """
+        End the caller's membership.
 
         Args:
             request: The incoming request.
@@ -580,7 +595,8 @@ class GroupMessageDeleteView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/delete/<message_id>/ - sender deletes a message for everyone."""
 
     def post(self, request: HttpRequest, group_uuid, message_id: int) -> HttpResponse:
-        """Tombstone the message and return the refreshed thread.
+        """
+        Tombstone the message and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -611,7 +627,8 @@ class GroupSharePinView(LoginRequiredMixin, View):
     """GET/POST /messages/g/<uuid>/share/pin/ - share one of the sender's own pins with the group."""
 
     def get(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Render the pin-picker dialog body (reuses the 1:1 dialog partial).
+        """
+        Render the pin-picker dialog body (reuses the 1:1 dialog partial).
 
         Args:
             request: The incoming request.
@@ -626,7 +643,8 @@ class GroupSharePinView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/messages/_share_pin_dialog.html", {"group": group, "pins": pins})
 
     def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
-        """Create the per-member PinShares + chat message and return the refreshed thread.
+        """
+        Create the per-member PinShares + chat message and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -661,7 +679,8 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
     """POST /messages/g/<uuid>/share/pin/<message_id>/respond/ - accept/reject the caller's own copy."""
 
     def post(self, request: HttpRequest, group_uuid, message_id: int) -> HttpResponse:
-        """Apply the accept/reject decision and return the refreshed share card.
+        """
+        Apply the accept/reject decision and return the refreshed share card.
 
         Args:
             request: The incoming request.
@@ -699,7 +718,8 @@ class GroupSharePinRespondView(LoginRequiredMixin, View):
 
 
 class GroupMemberSearchView(LoginRequiredMixin, View):
-    """GET /messages/groups/member-search/?q=... - pickable profiles for group dialogs.
+    """
+    GET /messages/groups/member-search/?q=... - pickable profiles for group dialogs.
 
     Only profiles whose privacy settings permit a message from the requester
     are offered (the same rule ``create_group_chat``/``add_group_members``
@@ -707,7 +727,8 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Return matching, addable profiles for the member picker.
+        """
+        Return matching, addable profiles for the member picker.
 
         Args:
             request: The incoming request.

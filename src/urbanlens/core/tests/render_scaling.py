@@ -36,7 +36,8 @@ class RenderSample:
 
 
 class RenderTimeScalingMixin(SeedScalingMixin):
-    """Mixin asserting a row's render cost is small next to the page's own.
+    """
+    Mixin asserting a row's render cost is small next to the page's own.
 
     Subclasses implement :meth:`seed_rows`, exactly as for the query mixin.
     """
@@ -52,7 +53,8 @@ class RenderTimeScalingMixin(SeedScalingMixin):
     samples: int = SAMPLES
 
     def time_request(self, url: str, **extra: Any) -> RenderSample:
-        """Fetch *url* repeatedly, returning the fastest render.
+        """
+        Fetch *url* repeatedly, returning the fastest render.
 
         One warm-up request is discarded first.
 
@@ -76,7 +78,8 @@ class RenderTimeScalingMixin(SeedScalingMixin):
         return RenderSample(best_ms=min(timings), samples_ms=tuple(timings), body_bytes=len(response.content))
 
     def query_count(self, url: str, **extra: Any) -> int:
-        """How many queries *url* costs, for the failure message only.
+        """
+        How many queries *url* costs, for the failure message only.
 
         Deliberately a separate, untimed request: capturing queries turns on ``force_debug_cursor``, which would
         perturb every timing taken under it.
@@ -99,7 +102,8 @@ class RenderTimeScalingMixin(SeedScalingMixin):
         growth_waiver: str = "",
         **extra: Any,
     ) -> None:
-        """Assert one more row costs a small fraction of *url*'s empty render.
+        """
+        Assert one more row costs a small fraction of *url*'s empty render.
 
         Args:
             url: The URL to measure. max_row_cost: Fraction of the zero-row render one row may cost.

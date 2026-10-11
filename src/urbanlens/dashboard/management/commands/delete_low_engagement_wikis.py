@@ -1,4 +1,5 @@
-"""Delete community wikis nobody is actually using.
+"""
+Delete community wikis nobody is actually using.
 
 Most of those never attract a community: no one else pins the place, and no one ever edits the page.
 
@@ -55,7 +56,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _matching_wikis():
-        """Wikis qualifying for deletion, annotated with the counts that decided it.
+        """
+        Wikis qualifying for deletion, annotated with the counts that decided it.
 
         Both counts are ``distinct=True`` because they annotate across two separate reverse relations in one
         query: joining ``pins`` and ``edits`` together fans out to their cross product, which would

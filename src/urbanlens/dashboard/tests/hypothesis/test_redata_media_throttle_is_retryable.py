@@ -1,4 +1,5 @@
-"""A throttled REData answers the media proxies' callers "retry later", not "gone".
+"""
+A throttled REData answers the media proxies' callers "retry later", not "gone".
 
 Reproduces the HRSH location run's wiki gallery failure (2026-09-23 20:10): REData's per-key lookup budget
 answered every CRIS attachment download 429 ("Expected available in 989 seconds"), the gateway raised the same

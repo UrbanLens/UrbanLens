@@ -1,4 +1,5 @@
-"""Avatar resolution, download, emoji-avatar generation, and avatar writes.
+"""
+Avatar resolution, download, emoji-avatar generation, and avatar writes.
 Putting the write behind one function means a new surface (the external API's ``PUT /profiles/{slug}/avatar/``) cannot pick the unguarded variant by accident, because the unguarded variant no longer exists."""
 
 from __future__ import annotations
@@ -40,7 +41,8 @@ UNRECOGNIZED_AVATAR_COLOR_FALLBACK = MaterialColor.GREY.value
 
 
 class AvatarUploadError(Exception):
-    """Base class: an avatar write was refused before anything was stored.
+    """
+    Base class: an avatar write was refused before anything was stored.
     ``args[0]`` is log-only detail from whichever ``services.media.images.image_upload_error`` check failed - never surface it to a user."""
 
 
@@ -49,7 +51,8 @@ class AvatarTooLargeError(AvatarUploadError):
 
 
 class AvatarUnsupportedFormatError(AvatarUploadError):
-    """The upload isn't an accepted image type, or its declared type doesn't match its bytes.
+    """
+    The upload isn't an accepted image type, or its declared type doesn't match its bytes.
     The three checks live upstream in ``services.security.content_sniffing`` and are collapsed here because no catch site in this app treats them differently."""
 
 
@@ -74,7 +77,8 @@ _AVATAR_ERROR_TYPES_BY_STATUS: dict[int, type[AvatarUploadError]] = {
 
 
 class AvatarService:
-    """Avatar utilities: emoji SVG generation, provider-URL resolution, and image download.
+    """
+    Avatar utilities: emoji SVG generation, provider-URL resolution, and image download.
     All methods are class methods so callers never need to instantiate this class."""
 
     ANIMAL_EMOJIS: dict[str, str] = {
@@ -150,7 +154,8 @@ class AvatarService:
 
     @classmethod
     def generate_emoji_svg(cls, emoji: str, color: str) -> str:
-        """Return an SVG string: a filled circle with a centered emoji.
+        """
+        Return an SVG string: a filled circle with a centered emoji.
         The emoji carries a faint drop shadow so one the colour of its circle still shows. The shadow is a fixed dark tone because a file served as an image cannot read the page's theme.
 
         Args:
@@ -174,7 +179,8 @@ class AvatarService:
 
     @classmethod
     def random_options(cls, n: int = 4) -> list[dict[str, str]]:
-        """Return *n* random (animal, emoji, color) dicts for the avatar picker.
+        """
+        Return *n* random (animal, emoji, color) dicts for the avatar picker.
         Both animals and colors are sampled without replacement so that no two suggestions share the same animal or the same background color.
 
         Args:
@@ -193,7 +199,8 @@ class AvatarService:
 
     @classmethod
     def resolve_provider_url(cls, backend: Any, user: User, response: dict[str, Any]) -> str | None:
-        """Return the provider-specific or Gravatar avatar URL for this user.
+        """
+        Return the provider-specific or Gravatar avatar URL for this user.
 
         Args:
             backend: The social-auth backend in use.
@@ -230,7 +237,8 @@ class AvatarService:
 
     @classmethod
     def download(cls, url: str, timeout: int = 5) -> bytes | None:
-        """Fetch image bytes from a URL, returning None on any failure.
+        """
+        Fetch image bytes from a URL, returning None on any failure.
 
         Every caller today passes a provider CDN or Gravatar url, but the fetch goes through
         ``request_public_url`` regardless, so a redirect or a future caller cannot reach an internal host.
@@ -264,7 +272,8 @@ class AvatarService:
 
 
 def gravatar_preview_url(email: str) -> str:
-    """This site's copy of what Gravatar would give *email*, refreshed daily, so the page never asks Gravatar itself.
+    """
+    This site's copy of what Gravatar would give *email*, refreshed daily, so the page never asks Gravatar itself.
 
     Args:
         email: The account's address.
@@ -284,7 +293,8 @@ def gravatar_preview_url(email: str) -> str:
 
 
 def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile:
-    """Store an uploaded image as ``profile``'s avatar.
+    """
+    Store an uploaded image as ``profile``'s avatar.
     The sniffing step is the one that matters most here: an avatar is rendered by every page that names its owner, so a file that claims to be a PNG and isn't gets the widest possible distribution of anything a user can upload.
 
     Args:
@@ -334,7 +344,8 @@ GENERATED_AVATAR_PATTERN = r"^avatars/emoji_[0-9]+(_[A-Za-z0-9]{7})?\.svg$"
 
 
 def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> Profile:
-    """Generate an emoji avatar and store it as ``profile``'s avatar.
+    """
+    Generate an emoji avatar and store it as ``profile``'s avatar.
     Both inputs are coerced to known-good values rather than rejected, because the site's own picker offers a fixed set of suggestions and a stale one should still produce *an* avatar rather than an error dialog.
 
     Args:
@@ -365,7 +376,8 @@ def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> 
 
 
 def clear_profile_avatar(profile: Profile) -> Profile:
-    """Remove ``profile``'s avatar, deleting the stored file.
+    """
+    Remove ``profile``'s avatar, deleting the stored file.
     Idempotent - clearing an already-empty avatar is a no-op rather than an error, so a retried mobile DELETE stays safe.
 
     Args:

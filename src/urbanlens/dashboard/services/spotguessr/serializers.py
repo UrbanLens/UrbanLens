@@ -24,7 +24,8 @@ if TYPE_CHECKING:
 
 
 def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
-    """The session's configured ``geo_bounds``, as a Leaflet-ready ``[[south, west], [north, east]]`` bbox.
+    """
+    The session's configured ``geo_bounds``, as a Leaflet-ready ``[[south, west], [north, east]]`` bbox.
     Lets the frontend zoom the guess map to the configured area instead of always opening on a fixed default view."""
     geo_bounds_geojson = (session.config or {}).get("geo_bounds_geojson")
     if not geo_bounds_geojson:
@@ -61,7 +62,8 @@ def _round_expires_at(round_: GameRound) -> str | None:
 
 
 def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str] = (), rating_change: RatingChange | None = None) -> dict[str, Any]:
-    """One guess's own score - the HTTP response to whoever just guessed.
+    """
+    One guess's own score - the HTTP response to whoever just guessed.
     The answer is only included once ``round_`` is actually revealed (``revealed_at`` set - every joined participant has guessed).
 
     Args:
@@ -92,7 +94,8 @@ def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str]
 
 
 def _image_caption(round_: GameRound) -> str | None:
-    """The caption of the photo this round showed, or None when there wasn't one.
+    """
+    The caption of the photo this round showed, or None when there wasn't one.
 
     Args:
         round_: The round whose photo to describe.
@@ -105,7 +108,8 @@ def _image_caption(round_: GameRound) -> str | None:
 
 
 def serialize_round_reveal(round_: GameRound, rating_changes: dict[int, RatingChange] | None = None) -> dict[str, Any]:
-    """The answer + every participant's result - broadcast to the whole session once a round completes.
+    """
+    The answer + every participant's result - broadcast to the whole session once a round completes.
 
     Args:
         round_: The just-completed round.

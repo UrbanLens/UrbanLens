@@ -1,4 +1,5 @@
-"""Photo originals and Google's fixed-size map images are read through ``read_capped`` (Spark P356).
+"""
+Photo originals and Google's fixed-size map images are read through ``read_capped`` (Spark P356).
 
 Each was ``response.content``, which buffers whatever the far end sends into the worker. A photo original is a file the
 site is about to store, so it is bounded by the upload limit a browser upload gets; a Static Map or Street View image

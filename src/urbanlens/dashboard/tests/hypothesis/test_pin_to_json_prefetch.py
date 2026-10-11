@@ -46,7 +46,8 @@ class PinToJsonPrefetchTests(TestCase):
         return len(ctx)
 
     def test_labels_are_read_from_the_prefetch_cache(self) -> None:
-        """Guards the fix: `to_json()` must not re-query labels per pin.
+        """
+        Guards the fix: `to_json()` must not re-query labels per pin.
 
         Measured before the fix: 1 pin -> 6 queries, 5 pins -> 22, i.e. **4 per pin** despite
         `prefetch_related("labels")`, because `.filter()` on a prefetched m2m builds a fresh queryset and

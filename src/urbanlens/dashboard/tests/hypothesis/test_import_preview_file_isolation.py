@@ -1,4 +1,5 @@
-"""However one uploaded file is malformed, it fails alone, and nothing off the globe reaches the preview.
+"""
+However one uploaded file is malformed, it fails alone, and nothing off the globe reaches the preview.
 
 The per-file guard catches ``IMPORT_PARSE_ERRORS``. Anything else a parser raises leaves the guard and fails the whole
 preview as unreadable, every other file in the upload with it. A CSV cell past the csv module's field limit did that

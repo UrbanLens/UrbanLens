@@ -1,4 +1,5 @@
-"""What reading one import preview file costs in memory, per format (P95).
+"""
+What reading one import preview file costs in memory, per format (P95).
 
 A preview entry may be up to 1 GB, and media-worker parses two at once in 3 GB, so no parse may hold a structure
 built from the whole file. Each test reads a 12 MiB file and holds the parse's tracemalloc peak under an eighth of
@@ -303,7 +304,8 @@ class _MemoryCase(TestCase):
         self.addCleanup(single_flight.release, import_preview.guard_key(self.profile.pk))
 
     def _peak(self, name: str, upload: bytes) -> tuple[int, dict[str, Any]]:
-        """Read *upload* as a preview, returning the parse's tracemalloc peak and what the dialog would be told.
+        """
+        Read *upload* as a preview, returning the parse's tracemalloc peak and what the dialog would be told.
 
         The file is read once unmeasured first: the modules a format imports on its first use cost over 1 MB, which
         would count only against whichever test reached that format first.

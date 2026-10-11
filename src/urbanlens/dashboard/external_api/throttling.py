@@ -1,4 +1,5 @@
-"""Per-credential, tiered rate limiting for the external API.
+"""
+Per-credential, tiered rate limiting for the external API.
 
 Keyed by the credential itself, not the underlying user or IP: a user with several keys (e.g. one
 per connected app) shouldn't have one misbehaving app burn through a budget shared with their other
@@ -34,7 +35,8 @@ TIER_WRITE = "write"
 
 
 def request_tier(view: APIView, method: str) -> str:
-    """Classify one request as the read or the write tier.
+    """
+    Classify one request as the read or the write tier.
 
     Otherwise the tier follows the view's ``required_scopes_by_method`` declaration for *method*: any
     required scope ending in a write suffix makes the whole request a write.
@@ -60,7 +62,8 @@ def request_tier(view: APIView, method: str) -> str:
 
 
 class ExternalApiRateThrottle(SimpleRateThrottle):
-    """Base for the external API's per-credential throttles.
+    """
+    Base for the external API's per-credential throttles.
 
     Subclasses set ``scope`` (the ``DEFAULT_THROTTLE_RATES`` key) and optionally ``tier``.
     A throttle with a ``tier`` only counts requests in that tier and waves the rest through untouched;
@@ -72,7 +75,8 @@ class ExternalApiRateThrottle(SimpleRateThrottle):
     tier: ClassVar[str] = ""
 
     def allow_request(self, request: Request, view: APIView) -> bool:
-        """Apply this throttle only to requests in its tier.
+        """
+        Apply this throttle only to requests in its tier.
 
         Args:
             request: The incoming request.
@@ -87,7 +91,8 @@ class ExternalApiRateThrottle(SimpleRateThrottle):
         return super().allow_request(request, view)
 
     def get_cache_key(self, request: Request, view: APIView) -> str | None:
-        """Build the throttle cache key from the authenticated credential, or opt out entirely.
+        """
+        Build the throttle cache key from the authenticated credential, or opt out entirely.
 
         Returning ``None`` disables throttling for the request (DRF's convention) - correct here since a
         request with no resolved credential will already be rejected by authentication/permissions before
@@ -129,7 +134,8 @@ class ExternalApiBurstThrottle(ExternalApiRateThrottle):
 
 
 class ExternalApiMediaThrottle(ExternalApiRateThrottle):
-    """The cap on credential-authenticated media-file fetches.
+    """
+    The cap on credential-authenticated media-file fetches.
 
     Its own budget rather than a share of the read/burst caps, because media fetches have the opposite
     shape to API calls: one screen of a gallery is dozens of file requests in a couple of seconds, which
@@ -143,7 +149,8 @@ class ExternalApiMediaThrottle(ExternalApiRateThrottle):
 
 
 class ExternalApiResyncThrottle(ExternalApiRateThrottle):
-    """A much tighter cap for endpoints whose cost is unbounded in the caller's data.
+    """
+    A much tighter cap for endpoints whose cost is unbounded in the caller's data.
 
     The ordinary write cap bounds *how many* writes a credential makes, which is the right question when
     each one costs about the same.
@@ -153,7 +160,8 @@ class ExternalApiResyncThrottle(ExternalApiRateThrottle):
 
 
 class GameStartThrottle(ExternalApiRateThrottle):
-    """A resync-style cap on starting a game session.
+    """
+    A resync-style cap on starting a game session.
 
     ``tier`` is the write tier so that a view serving both a cheap list GET and an expensive create POST
     on one URL only charges the POST.
@@ -168,7 +176,8 @@ class GameStartThrottle(ExternalApiRateThrottle):
     fallback_rate: ClassVar[str] = "40/hour"
 
     def get_rate(self) -> str:
-        """Return the configured rate for this scope, or :attr:`fallback_rate`.
+        """
+        Return the configured rate for this scope, or :attr:`fallback_rate`.
 
         DRF raises ``ImproperlyConfigured`` for a scope missing from ``DEFAULT_THROTTLE_RATES``, which would
         take the whole endpoint down rather than merely leaving it untuned - a bad trade for a throttle
@@ -186,7 +195,8 @@ class GameStartThrottle(ExternalApiRateThrottle):
 
 
 class LocationSearchThrottle(ExternalApiReadThrottle):
-    """A separate budget for autocomplete, which is charged per keystroke.
+    """
+    A separate budget for autocomplete, which is charged per keystroke.
 
     Views using this replace :class:`ExternalApiReadThrottle` with it rather than stacking the two.
     Autocomplete is the one read endpoint whose request count tracks typing rather than data volume, so
@@ -198,7 +208,8 @@ class LocationSearchThrottle(ExternalApiReadThrottle):
 
 
 class GlobalSearchThrottle(ExternalApiRateThrottle):
-    """A separate budget for the cross-domain search endpoint.
+    """
+    A separate budget for the cross-domain search endpoint.
 
     Unlike :class:`LocationSearchThrottle`, which exists because autocomplete is charged per
     *keystroke*, this one exists because a single global search is not a single query: it fans out
@@ -213,7 +224,8 @@ class GlobalSearchThrottle(ExternalApiRateThrottle):
 
 
 class AssistantMessageThrottle(ExternalApiRateThrottle):
-    """A tight cap on AI assistant chat turns.
+    """
+    A tight cap on AI assistant chat turns.
 
     Unlike an ordinary write, one assistant turn bills real model-provider cost and can fan out to up to
     ``MAX_TOOL_CALLS`` (6) model round trips before it replies - resync-shaped cost, the same reasoning
@@ -238,7 +250,8 @@ class AssistantMessageThrottle(ExternalApiRateThrottle):
 
 
 class CalendarExportThrottle(ExternalApiRateThrottle):
-    """A tight cap on trip calendar export and unexport.
+    """
+    A tight cap on trip calendar export and unexport.
 
     These are the only external endpoints that talk to a third party *on the request path*, and a single
     call may fan out to one upstream request per trip activity.
@@ -252,7 +265,8 @@ class CalendarExportThrottle(ExternalApiRateThrottle):
 
 
 class SafetyLocationThrottle(ExternalApiRateThrottle):
-    """A generous cap on live-location PATCHes, sized for foreground GPS tracking.
+    """
+    A generous cap on live-location PATCHes, sized for foreground GPS tracking.
 
     An explorer sharing their position pings this every few seconds while a check-in is active - the
     ordinary write cap (300/hour) would exhaust itself in under an hour at that cadence.

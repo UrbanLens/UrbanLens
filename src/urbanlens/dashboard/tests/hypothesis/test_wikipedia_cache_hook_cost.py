@@ -1,4 +1,5 @@
-"""A location's Wikipedia match costs the same however many pins stand on it.
+"""
+A location's Wikipedia match costs the same however many pins stand on it.
 
 N29 batch 1 found the cache hook walking ``location.pins`` the first time a match gained a title, seeding an article
 and adding a link on every pin there. 40d418c1d (P181) took the loop out: the hook seeds the location's wiki, and a
@@ -51,7 +52,8 @@ class WikipediaCacheHookCostTests(TestCase):
         return location
 
     def _cache_a_match(self, location: Location) -> tuple[int, mock.MagicMock, mock.MagicMock]:
-        """Write the match the way a lookup does and run its commit hooks.
+        """
+        Write the match the way a lookup does and run its commit hooks.
 
         Any HTTP request fails the test here: the hook swallows a failed name refresh, so a request refused by the
         test network guard would otherwise go unseen.

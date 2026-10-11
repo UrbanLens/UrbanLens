@@ -1,4 +1,5 @@
-"""Write-time safety checks for the ``Label.parents`` hierarchy.
+"""
+Write-time safety checks for the ``Label.parents`` hierarchy.
 ``Label.parents`` is an unrestricted many-to-many self-relation, so nothing at the database level prevents a cycle."""
 
 from __future__ import annotations
@@ -12,7 +13,8 @@ if TYPE_CHECKING:
 
 
 def would_create_cycle(label: Label, parent_ids: Sequence[int]) -> bool:
-    """Whether making any of *parent_ids* a parent of *label* would close a loop.
+    """
+    Whether making any of *parent_ids* a parent of *label* would close a loop.
     If ``label`` is found, it is already an ancestor of that proposed parent, so adding the reverse edge (proposed parent -> label) would make ``label`` its own ancestor.
 
     Args:
@@ -45,7 +47,8 @@ def would_create_cycle(label: Label, parent_ids: Sequence[int]) -> bool:
 
 
 def safe_parent_ids(label: Label, parent_ids: Sequence[int]) -> list[int]:
-    """Filter *parent_ids* down to those that can be applied without a cycle.
+    """
+    Filter *parent_ids* down to those that can be applied without a cycle.
 
     Args:
         label: The label that would receive the parents.

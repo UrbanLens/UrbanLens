@@ -50,7 +50,8 @@ def _run(*args: str, timeout: int = TIMEOUT_SECONDS) -> subprocess.CompletedProc
 
 
 def _ruff_command() -> list[str] | None:
-    """The ruff to use, or None if this checkout has none installed.
+    """
+    The ruff to use, or None if this checkout has none installed.
 
     `git commit` from a shell with no activated virtualenv does not necessarily
     have ruff on PATH, so the project venv is checked explicitly.
@@ -83,7 +84,8 @@ def _patch_dir() -> Path:
 
 
 def _precommit_pid() -> int | None:
-    """The pid of the pre-commit process that invoked this hook, if knowable.
+    """
+    The pid of the pre-commit process that invoked this hook, if knowable.
 
     pre-commit names its stash patch `patch<unixtime>-<its pid>`, so matching on
     that pid identifies this run's patch exactly rather than by a time window.
@@ -108,7 +110,8 @@ def _precommit_pid() -> int | None:
 
 
 def stashed_paths() -> tuple[bool, set[str]]:
-    """Files that had unstaged changes when this commit started.
+    """
+    Files that had unstaged changes when this commit started.
 
     Returns:
         (uncertain, paths)."""
@@ -143,7 +146,8 @@ def stashed_paths() -> tuple[bool, set[str]]:
 
 
 def _patch_paths(patch: Path) -> set[str]:
-    """Every path a stash patch touches, or an empty set if git cannot read it.
+    """
+    Every path a stash patch touches, or an empty set if git cannot read it.
 
     `git apply --numstat -z` rather than reading the diff headers: git unquotes paths itself, so a non-ASCII or
     space-bearing name comes back intact, and it reports binary hunks, which carry no `---`/`+++` pair to parse."""
@@ -219,7 +223,8 @@ def _read(path: Path) -> bytes | None:
 
 
 def staged_format_drift(ruff: list[str], paths: list[str]) -> str:
-    """Skipped files whose *staged* content is not formatted.
+    """
+    Skipped files whose *staged* content is not formatted.
 
     A file that was staged and then edited again is skipped by the fixer, because rewriting it could cost the
     unstaged edit.
@@ -275,7 +280,8 @@ def unfixable_only(ruff: list[str], paths: list[str]) -> str:
 
 
 def sweep_mode(ruff: list[str] | None, *, write: bool) -> int:
-    """Apply (or report) the formatter across every tracked Python file.
+    """
+    Apply (or report) the formatter across every tracked Python file.
 
     The commit path only ever sees staged files, so nothing there would notice a file that drifted out of format
     some other way (a rebase, a merge resolution, an edit made with the hooks skipped).
@@ -324,7 +330,8 @@ def sweep_mode(ruff: list[str] | None, *, write: bool) -> int:
 
 
 def _stage(paths: list[str]) -> str | None:
-    """`git add` the paths, retrying briefly past a held index lock.
+    """
+    `git add` the paths, retrying briefly past a held index lock.
 
     This repo is worked in by more than one session at a time, so `index.lock` can be held by an unrelated `git`
     for a moment.
@@ -344,7 +351,8 @@ def _stage(paths: list[str]) -> str | None:
 
 
 def _already_staged() -> set[str] | None:
-    """Paths with staged changes, or None if that cannot be determined.
+    """
+    Paths with staged changes, or None if that cannot be determined.
 
     During a real commit every path pre-commit passes is staged, so this changes nothing there."""
     result = _run("git", "diff", "--cached", "--name-only", "-z", timeout=60)

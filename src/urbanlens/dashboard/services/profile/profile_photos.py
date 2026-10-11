@@ -23,7 +23,8 @@ def _not_fully_private() -> Q:
 
 
 def strip_photos_for_owner(profile: Profile) -> QuerySet[Image]:
-    """Photos to show *profile* on their own profile page's strip.
+    """
+    Photos to show *profile* on their own profile page's strip.
 
     Args:
         profile: The profile whose own page is being viewed.
@@ -34,7 +35,8 @@ def strip_photos_for_owner(profile: Profile) -> QuerySet[Image]:
 
 
 def strip_photos_visible_to(profile: Profile, viewer: Profile) -> QuerySet[Image]:
-    """Photos from *profile*'s uploads that *viewer* already has an independent way to see.
+    """
+    Photos from *profile*'s uploads that *viewer* already has an independent way to see.
     Deliberately conservative: only wiki-attached photos are included here.
 
     Args:
@@ -49,7 +51,8 @@ def strip_photos_visible_to(profile: Profile, viewer: Profile) -> QuerySet[Image
 
 
 def attachment_points_for_image(image: Image) -> list[dict]:
-    """Describe where one of the owner's own photos is attached, for the lightbox side panel.
+    """
+    Describe where one of the owner's own photos is attached, for the lightbox side panel.
 
     Args:
         image: The image to describe.

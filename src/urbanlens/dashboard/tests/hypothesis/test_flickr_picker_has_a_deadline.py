@@ -1,4 +1,5 @@
-"""The Flickr picker can hold a worker for seven and a half minutes.
+"""
+The Flickr picker can hold a worker for seven and a half minutes.
 
 N21 H36. The "visits" mode issues one Flickr search per visit date, because
 Flickr's `min_taken_date`/`max_taken_date` take a single range rather than a set
@@ -100,7 +101,8 @@ class OrdinarySearchesStillWorkTests(_FlickrPickerCase):
 
 
 class TheImmichPickerHasTheSameDoorTests(TestCase):
-    """The same shape, one provider over - and the finding named only Flickr.
+    """
+    The same shape, one provider over - and the finding named only Flickr.
 
     `ImmichGateway.search_by_dates` issues one metadata search per date for the
     same reason Flickr's does, and its "nearby" mode measures against a whole

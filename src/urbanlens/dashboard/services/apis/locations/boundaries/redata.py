@@ -27,7 +27,8 @@ def _largest_polygon(geom: Polygon | MultiPolygon | None) -> Polygon | None:
 
 
 def suggested_boundary(candidates: list[dict]) -> Polygon | MultiPolygon | None:
-    """Pick the candidate REData scored highest, by REData's own rule.
+    """
+    Pick the candidate REData scored highest, by REData's own rule.
     The array is not sorted, so taking the first element picks a boundary at random.
 
     Args:
@@ -61,7 +62,8 @@ _UNRELATED_MATCH_SCOPES = frozenset({"project", "archaeological_buffer"})
 
 
 def hull_buildings(buildings: list[dict], latitude: float, longitude: float) -> list[dict]:
-    """The building records that may outline the parcel at a coordinate.
+    """
+    The building records that may outline the parcel at a coordinate.
 
     Args:
         buildings: Records from ``RedataGateway.lookup_buildings``.
@@ -95,7 +97,8 @@ class RedataBoundaryProvider(BoundaryProvider):
         return _largest_polygon(self.get_typed_boundaries(latitude, longitude, name=name).get("property"))
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | MultiPolygon | None]:
-        """Fetch REData's parcel record for this coordinate and convert its geometry fields.
+        """
+        Fetch REData's parcel record for this coordinate and convert its geometry fields.
 
         Args:
             latitude: WGS-84 latitude.
@@ -136,7 +139,8 @@ class RedataBoundaryProvider(BoundaryProvider):
         }
 
     def _scored_boundary(self, gateway: RedataGateway, parcel_uuid: str | None) -> Polygon | MultiPolygon | None:
-        """REData's own best boundary for this parcel, when it has no cadastral line.
+        """
+        REData's own best boundary for this parcel, when it has no cadastral line.
         ``parcel_geometry`` is null for every New York parcel by construction - the state's Tier 1 source is a centroid point layer, so there is no ring to extract - which is why this path, not the cadastral one, is what a NY pin actually resolves through.
 
         Args:
@@ -165,7 +169,8 @@ class RedataBoundaryProvider(BoundaryProvider):
         return suggested_boundary(answer.candidates)
 
     def _defer_if_transient(self, exc: PropertyRecordsUnavailableError) -> None:
-        """Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback.
+        """
+        Raise a deferral for an outage, so it is retried rather than answered with a coarser fallback.
 
         A parcel REData is still computing is deferred for exactly the wait it named.
         """
@@ -174,7 +179,8 @@ class RedataBoundaryProvider(BoundaryProvider):
             raise BoundaryProviderDeferredError(self.service_key or "redata_boundary", retry_after=getattr(exc, "retry_after", None), computing=computing) from exc
 
     def _buildings_convex_hull(self, gateway: RedataGateway, parcel_uuid: str | None, latitude: float, longitude: float) -> Polygon | None:
-        """Approximate the property boundary as the convex hull of the parcel's own buildings.
+        """
+        Approximate the property boundary as the convex hull of the parcel's own buildings.
         A jurisdiction that never digitized a parcel-boundary shapefile can still publish individual building locations (county GIS or NY SHPO's CRIS inventory), since those only need a point each.
 
         Args:

@@ -48,7 +48,8 @@ def _host_is_localhost(host: Any) -> bool:
 
 
 def _host_needs_no_lookup(host: Any) -> bool:
-    """Return True when resolving ``host`` asks no resolver anything.
+    """
+    Return True when resolving ``host`` asks no resolver anything.
 
     That is no host, a local name, or an IP literal. A literal resolves to itself, so letting it through leaks
     nothing; connecting to a routable one is still refused by the connect guards. Anything else is a name, and
@@ -83,7 +84,8 @@ def _normalized_name(host: Any) -> str:
 
 
 def database_hosts(databases: Mapping[str, Mapping[str, Any]]) -> frozenset[str]:
-    """Names of the database servers a ``DATABASES`` setting points at.
+    """
+    Names of the database servers a ``DATABASES`` setting points at.
 
     psycopg resolves a server's name in Python before libpq connects, so under the guard a suite whose database is
     reached by a service name (a devcontainer's ``urbanlens_db``) could not open its connection. The name is the
@@ -122,7 +124,8 @@ def _address_host(address: Any) -> Any:
 
 
 class LocalhostOnlyNetwork:
-    """Deny non-localhost socket destinations and name lookups.
+    """
+    Deny non-localhost socket destinations and name lookups.
 
     Args:
         lookup_hosts: Names whose lookup is allowed although they are not local. Defaults to the configured
@@ -225,7 +228,8 @@ def verify_external_network_blocked(
     probe_address: tuple[str, int] = VERIFY_PROBE_ADDRESS,
     probe_hostname: str = VERIFY_PROBE_HOSTNAME,
 ) -> None:
-    """Confirm outbound non-localhost connections and name lookups are blocked.
+    """
+    Confirm outbound non-localhost connections and name lookups are blocked.
 
     Args:
         probe_address: Host/port pair that must be rejected.

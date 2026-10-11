@@ -15,7 +15,8 @@ _JSON_SCRIPT_ESCAPES = {ord(">"): "\\u003E", ord("<"): "\\u003C", ord("&"): "\\u
 
 
 def safe_json_for_script(value: Any) -> str:
-    """Serialize a value to JSON that is safe to embed inline inside a `<script>` block.
+    """
+    Serialize a value to JSON that is safe to embed inline inside a `<script>` block.
 
     Args:
         value: The JSON-serializable value (e.g. a list of dicts of label data).

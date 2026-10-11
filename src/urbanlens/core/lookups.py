@@ -1,4 +1,5 @@
-"""Set membership sent as one array rather than one parameter per element.
+"""
+Set membership sent as one array rather than one parameter per element.
 
 ``field__in=[...]`` compiles to ``field IN (%s, %s, ... )``. With server-side binding on - this
 project's setting - that is one bound parameter per element, and the cost lands before the planner
@@ -43,7 +44,8 @@ if TYPE_CHECKING:
 
 @Field.register_lookup
 class AnyOf(Lookup):
-    """``field = ANY(%s)``: the same rows as ``__in``, at one parameter rather than N.
+    """
+    ``field = ANY(%s)``: the same rows as ``__in``, at one parameter rather than N.
 
     Postgres only. Every other backend gets the ``IN`` form, which is what ``__in`` would have
     produced anyway, so a caller never has to ask which database it is on.
@@ -60,7 +62,8 @@ class AnyOf(Lookup):
         return [prepare(value) for value in values]
 
     def as_sql(self, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> tuple[str, tuple[Any, ...]]:
-        """The portable form, for backends without array parameters.
+        """
+        The portable form, for backends without array parameters.
 
         Args:
             compiler: The SQL compiler.
@@ -78,7 +81,8 @@ class AnyOf(Lookup):
         return f"{lhs} IN ({placeholders})", (*lhs_params, *self.rhs)
 
     def as_postgresql(self, compiler: SQLCompiler, connection: BaseDatabaseWrapper) -> tuple[str, tuple[Any, ...]]:
-        """The array form, with the values written into the statement so the planner can see them.
+        """
+        The array form, with the values written into the statement so the planner can see them.
 
         Args:
             compiler: The SQL compiler.

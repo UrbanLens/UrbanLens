@@ -1,4 +1,5 @@
-"""Stripe state is applied in Stripe's order, terminal states stick, and creates are idempotent (G2-16, G2-17).
+"""
+Stripe state is applied in Stripe's order, terminal states stick, and creates are idempotent (G2-16, G2-17).
 
 Stripe guarantees neither ordering nor single delivery. Every handler here runs sequentially on one connection; the
 concurrent versions live in ``test_billing_stripe_races.py``.
@@ -335,7 +336,8 @@ class DuplicateSubscriptionTests(TestCase):
 
 
 class CurrentApiShapeTests(TestCase):
-    """The SDK pins API ``2026-06-24.dahlia``: invoices name their subscription under ``parent``, charges carry no
+    """
+    The SDK pins API ``2026-06-24.dahlia``: invoices name their subscription under ``parent``, charges carry no
     ``invoice`` and no embedded ``refunds``. Webhook payloads follow the endpoint's configured version, so both shapes
     must resolve."""
 

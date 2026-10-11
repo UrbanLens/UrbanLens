@@ -1,4 +1,5 @@
-"""The boxes REData shards its Overture sync by, so UrbanLens knows where REData's mirror holds anything.
+"""
+The boxes REData shards its Overture sync by, so UrbanLens knows where REData's mirror holds anything.
 
 A copy of REData's ``parcels.services.overture.shards.US_STATE_BBOXES`` at release/0.3.7 c4e0de94. REData syncs
 each theme by these boxes, padded beyond each state and territory, and serves Overture only where its own
@@ -71,7 +72,8 @@ REDATA_OVERTURE_SHARD_BBOXES: dict[str, tuple[float, float, float, float]] = {
 
 
 def in_redata_overture_shard(latitude: float, longitude: float) -> bool:
-    """Whether any of REData's Overture shard boxes contains a coordinate, edges included.
+    """
+    Whether any of REData's Overture shard boxes contains a coordinate, edges included.
 
     Args:
         latitude: WGS-84 latitude.

@@ -1,4 +1,5 @@
-"""REData and Overpass for the Hudson River State Hospital campus, answered at the HTTP boundary.
+"""
+REData and Overpass for the Hudson River State Hospital campus, answered at the HTTP boundary.
 
 Patching ``requests.Session.request`` rather than gateway methods keeps every gateway's own sharing (the coalesced
 parcel lookup, the capability index cache) in play, so a count here is a count of real requests.
@@ -43,7 +44,8 @@ ASSESSOR_YEAR = 1900
 
 
 def campus_buildings(extra: int = 0) -> list[dict[str, Any]]:
-    """REData's reconciled building records for the campus; the campus point is on the main building, off its centre.
+    """
+    REData's reconciled building records for the campus; the campus point is on the main building, off its centre.
 
     Args:
         extra: Further numbered cottages along the south edge, to show a cost does not grow with the building count.
@@ -157,7 +159,8 @@ _UUID_SEGMENT = re.compile(r"/(cultural-resources|parcels)/(?!lookup/|fetch-deta
 
 
 class HrshUpstreams:
-    """REData for the campus - and Overpass, when REData is absent - counting every request by endpoint.
+    """
+    REData for the campus - and Overpass, when REData is absent - counting every request by endpoint.
 
     Attributes:
         calls: ``(method, path)`` per request, with resource ids collapsed to ``{id}``.

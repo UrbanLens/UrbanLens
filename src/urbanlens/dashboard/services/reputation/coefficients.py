@@ -1,4 +1,5 @@
-"""Every tunable number in the reputation model, in one place.
+"""
+Every tunable number in the reputation model, in one place.
 Those are operational safety valves rather than tuning - if the gate is wrong on launch day it has to be loosened without a deploy."""
 
 from __future__ import annotations

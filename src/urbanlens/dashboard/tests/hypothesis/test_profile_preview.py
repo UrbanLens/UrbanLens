@@ -247,7 +247,8 @@ class PreviewVisibilityPropertyTests(TestCase):
         return False
 
     def test_preview_matches_profile_visibility(self) -> None:
-        """The previewed page is visible iff the real audience would pass the check.
+        """
+        The previewed page is visible iff the real audience would pass the check.
 
         Exhaustive over every (simulated audience, profile_visibility) pair: a ghost sees the profile when it is
         visible to any logged-in user, or when the ghost's relationship satisfies Profile.visibility_permits()."""

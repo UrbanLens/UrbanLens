@@ -44,7 +44,8 @@ _PARAMETER_RE: Final = re.compile(r"<(?:([^>:]+):)?([^>]+)>")
 
 
 def _view(request: HttpRequest) -> HttpResponse:
-    """Stand-in view for synthetic urlconfs. Routing never calls it.
+    """
+    Stand-in view for synthetic urlconfs. Routing never calls it.
 
     Args:
         request: Unused - present only to satisfy the view signature.
@@ -55,7 +56,8 @@ def _view(request: HttpRequest) -> HttpResponse:
 
 
 def _route_parameters(route: str) -> list[tuple[str, str]]:
-    """Extract a route's captures as ``(converter_name, parameter_name)`` pairs.
+    """
+    Extract a route's captures as ``(converter_name, parameter_name)`` pairs.
 
     Args:
         route: A route string as passed to ``path()``, e.g.
@@ -66,7 +68,8 @@ def _route_parameters(route: str) -> list[tuple[str, str]]:
 
 
 def _registered_routes() -> list[tuple[str, str, dict[str, str | int]]]:
-    """Read every external-API route straight out of the live urlconf.
+    """
+    Read every external-API route straight out of the live urlconf.
 
     Reading the urlconf instead of hard-coding a list is what makes these tests cover routes that do not exist
     yet: the fifteen agents adding endpoints to the ``urls_*.py`` domain modules get the shadowing check for
@@ -107,7 +110,8 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         )
 
     def test_route_names_are_unique(self) -> None:
-        """Two routes sharing a name make reverse() silently pick one of them.
+        """
+        Two routes sharing a name make reverse() silently pick one of them.
 
         Names are global across the flat ``external_api:`` namespace, so two domain modules can collide without
         either author seeing the other's file."""
@@ -120,7 +124,8 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         )
 
     def test_every_converter_in_use_has_a_sample_value(self) -> None:
-        """A converter with no witness value would silently weaken the shadowing check.
+        """
+        A converter with no witness value would silently weaken the shadowing check.
 
         ``_registered_routes`` falls back to the ``str`` sample for unknown converters so the suite still runs,
         but that fallback can produce a value the converter rejects - which turns a real ordering failure into
@@ -138,7 +143,8 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         )
 
     def test_urlpatterns_are_ordered_by_specificity(self) -> None:
-        """The published list must be the sorted one, not a hand-ordered list that happens to work.
+        """
+        The published list must be the sorted one, not a hand-ordered list that happens to work.
 
         If someone assigns ``urlpatterns`` without running it through ``order_by_specificity`` the table may
         still resolve correctly today, purely by luck of declaration order, and then break the first time a
@@ -151,7 +157,8 @@ class ExternalApiRouteTableTests(SimpleTestCase):
         )
 
     def test_every_entry_is_a_flat_path_route(self) -> None:
-        """``include()`` here would break the flat namespace the whole API depends on.
+        """
+        ``include()`` here would break the flat namespace the whole API depends on.
 
         ``reverse("external_api:pins.detail")`` is used throughout the codebase and
         ``schema.preprocess_external_api_only`` selects endpoints by URL prefix; an included sub-namespace
@@ -168,7 +175,8 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
     """The round-trip: every route's own URL must resolve back to that route."""
 
     def test_every_route_reverses(self) -> None:
-        """A registered route that cannot be reversed is unreachable from client code.
+        """
+        A registered route that cannot be reversed is unreachable from client code.
 
         In practice this fails when a route is declared with capture names its callers cannot supply, or when
         the flat namespace has been broken by an ``include()`` - both of which turn ``reverse()`` into a
@@ -189,7 +197,8 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
                 )
 
     def test_every_route_resolves_back_to_itself(self) -> None:
-        """The shadowing check. Build each route's own URL, then ask who answers it.
+        """
+        The shadowing check. Build each route's own URL, then ask who answers it.
 
         Any pattern that claims another route's URLs shows up here as a name
         mismatch, no matter which module declared it.
@@ -210,7 +219,8 @@ class ExternalApiUrlResolutionTests(SimpleTestCase):
                 )
 
     def test_the_canonical_shadowing_case_still_resolves(self) -> None:
-        """``pins/deleted/`` is the route this whole mechanism was built around.
+        """
+        ``pins/deleted/`` is the route this whole mechanism was built around.
 
         It is covered by the data-driven test above, but named explicitly here
         so the next person to break it gets a failure that says what broke.
@@ -228,7 +238,8 @@ class SpecificityOrderingTests(SimpleTestCase):
 
     @staticmethod
     def _resolver(patterns: list[URLPattern]) -> URLResolver:
-        """Wrap a bare pattern list in a resolver rooted at ``/``.
+        """
+        Wrap a bare pattern list in a resolver rooted at ``/``.
 
         Args:
             patterns: Patterns to resolve against, in the order given.
@@ -238,7 +249,8 @@ class SpecificityOrderingTests(SimpleTestCase):
         return URLResolver(RegexPattern(r"^/"), patterns)
 
     def test_declaration_order_alone_really_does_shadow_a_literal(self) -> None:
-        """Prove the hazard is real before asserting the fix works on it.
+        """
+        Prove the hazard is real before asserting the fix works on it.
 
         Without this, the next test only shows that a sorted list resolves
         correctly - which would also be true if the ordering did nothing.
@@ -278,7 +290,8 @@ class SpecificityOrderingTests(SimpleTestCase):
         self.assertEqual([entry.name for entry in ordered], ["number", "slug", "any"])
 
     def test_ordering_is_stable_for_equally_specific_routes(self) -> None:
-        """Identically shaped routes keep their declared order rather than being reshuffled.
+        """
+        Identically shaped routes keep their declared order rather than being reshuffled.
 
         The sort must not invent a winner between two genuinely ambiguous routes; that is a conflict for the
         author to resolve, and silently picking one would make it harder to see."""
@@ -305,7 +318,8 @@ _SHAPES = st.lists(st.lists(_SEGMENT, min_size=1, max_size=3), min_size=1, max_s
 
 
 def _render_route(shape: list[tuple[str, str]]) -> str:
-    """Turn a generated shape into a ``path()`` route string.
+    """
+    Turn a generated shape into a ``path()`` route string.
 
     Args:
         shape: ``(kind, value)`` segments, where kind is ``"literal"`` or ``"converter"``.
@@ -321,7 +335,8 @@ def _render_route(shape: list[tuple[str, str]]) -> str:
 
 
 def _render_sample_path(shape: list[tuple[str, str]]) -> str:
-    """Build the concrete URL a shape's own route should claim.
+    """
+    Build the concrete URL a shape's own route should claim.
 
     Because every converter's sample value is rejected by every other converter (and by every literal in the
     alphabet), two different shapes can never produce the same sample path - so a mismatch below is always an
@@ -336,14 +351,16 @@ def _render_sample_path(shape: list[tuple[str, str]]) -> str:
 
 
 class SpecificityOrderingPropertyTests(SimpleTestCase):
-    """Property: for any set of routes, sorting makes each one claim its own URLs.
+    """
+    Property: for any set of routes, sorting makes each one claim its own URLs.
 
     The hand-written cases above cover the collisions we already know about."""
 
     @hyp_settings(max_examples=100, deadline=None)
     @given(_SHAPES)
     def test_every_route_claims_its_own_url_after_ordering(self, shapes: list[list[tuple[str, str]]]) -> None:
-        """Sort an arbitrary route set, then round-trip every route through it.
+        """
+        Sort an arbitrary route set, then round-trip every route through it.
 
         Args:
             shapes: Generated route shapes; duplicates are dropped because two identical routes are ambiguous by definition and no ordering can..."""

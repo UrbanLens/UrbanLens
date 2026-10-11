@@ -57,7 +57,8 @@ class AssignAvatarColorsTests(SimpleTestCase):
         assign_avatar_colors([], identity=lambda i: i.identity)  # must not raise
 
     def test_more_items_than_the_palette_still_all_get_valid_classes(self) -> None:
-        """Past PALETTE_SIZE, colors must repeat rather than the collision-avoidance
+        """
+        Past PALETTE_SIZE, colors must repeat rather than the collision-avoidance
         loop crashing, hanging, or producing an out-of-range slot."""
         items = [_Item(f"person-{n}") for n in range(PALETTE_SIZE + 3)]
         assign_avatar_colors(items, identity=lambda i: i.identity)

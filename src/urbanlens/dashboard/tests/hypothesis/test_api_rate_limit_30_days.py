@@ -75,7 +75,8 @@ class CheckRateLimitThirtyDayWindowTests(TestCase):
         self.assertTrue(check_rate_limit(self.service))
 
     def test_calls_well_within_the_30_day_window_still_count(self) -> None:
-        """Guards the window's *width*, not just its outer edge.
+        """
+        Guards the window's *width*, not just its outer edge.
 
         ``test_calls_older_than_30_days_do_not_count`` alone wouldn't catch the window being implemented too
         narrow (e.g. a copy-paste of ``this_week``'s 7-day span, or ``today``'s calendar day) - a call 31 days

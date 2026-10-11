@@ -31,7 +31,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
     """QuerySet for DirectMessage with conversation-oriented helpers."""
 
     def involving(self, profile: Profile) -> Self:
-        """Return every message the given profile sent or received.
+        """
+        Return every message the given profile sent or received.
 
         Args:
             profile: The profile whose messages to return.
@@ -42,7 +43,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         return self.filter(Q(sender=profile) | Q(recipient=profile))
 
     def between(self, profile: Profile, other: Profile) -> Self:
-        """Return the full two-way conversation between two profiles.
+        """
+        Return the full two-way conversation between two profiles.
 
         Args:
             profile: One participant.
@@ -57,7 +59,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         )
 
     def visible_to(self, profile: Profile) -> Self:
-        """Exclude messages `profile` has removed from their own view.
+        """
+        Exclude messages `profile` has removed from their own view.
         A message deleted "for everyone" by its sender stays visible here as a tombstone (rendered as removed text, not excluded) - for BOTH parties, including the sender: the sender always sees their own sent messages in full regardless of delete/expiry state (see ``DirectMessage.tombstone_text_for``), so ``deleted_by_sender_at`` never gates a sender's own row here.
 
         Args:
@@ -70,7 +73,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         return self.filter(Q(sender=profile) | Q(recipient=profile, deleted_by_recipient_at__isnull=True))
 
     def unread_for(self, profile: Profile) -> Self:
-        """Return messages addressed to the profile that have not been read yet.
+        """
+        Return messages addressed to the profile that have not been read yet.
 
         Args:
             profile: The recipient profile.
@@ -81,7 +85,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         return self.filter(recipient=profile, read_at__isnull=True)
 
     def unread_conversation_count(self, profile: Profile) -> int:
-        """Count distinct conversations with at least one unread message.
+        """
+        Count distinct conversations with at least one unread message.
         The navbar label shows this (one label per conversation needing attention), while each dropdown row still shows its own per-conversation unread message count.
 
         Args:
@@ -95,7 +100,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         return self.visible_to(profile).unread_for(profile).values("sender_id").distinct().count()
 
     def due_for_hard_delete(self) -> Self:
-        """Return messages whose disappearing-message timer has fully elapsed.
+        """
+        Return messages whose disappearing-message timer has fully elapsed.
         Mirrors ``DirectMessage.is_expired_for_recipient`` (same read_at + delta threshold per ``sender_delete_after``), but as a queryset filter so a sweep task can physically delete the rows rather than just hiding them from the recipient's view.
 
         Returns:
@@ -109,7 +115,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         return self.filter(q)
 
     def mark_read(self) -> int:
-        """Mark every unread message in this queryset as read now.
+        """
+        Mark every unread message in this queryset as read now.
 
         Returns:
             The number of rows updated.
@@ -117,7 +124,8 @@ class DirectMessageQuerySet(abstract.DashboardQuerySet["DirectMessage"]):
         return self.filter(read_at__isnull=True).update(read_at=timezone.now())
 
     def conversation_rows(self, profile: Profile) -> QuerySet[DirectMessage, ConversationRow]:
-        """Aggregate the profile's messages into one row per conversation partner.
+        """
+        Aggregate the profile's messages into one row per conversation partner.
 
         Args:
             profile: The profile whose conversations to summarize.
@@ -156,7 +164,8 @@ class DirectMessageMuteQuerySet(abstract.DashboardQuerySet["DirectMessageMute"])
     """Custom queryset for DirectMessageMute models."""
 
     def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageMuteQuerySet:
-        """The mute row (at most one - unique on viewer+sender) for a pair.
+        """
+        The mute row (at most one - unique on viewer+sender) for a pair.
         Row existence IS the mute state; callers chain ``.exists()`` to check it or ``.delete()`` to unmute.
 
         Args:
@@ -180,7 +189,8 @@ class DirectMessageImagePermissionQuerySet(abstract.DashboardQuerySet["DirectMes
     """Custom queryset for DirectMessageImagePermission models."""
 
     def for_pair(self, viewer: Profile, sender: Profile) -> DirectMessageImagePermissionQuerySet:
-        """The image-permission row (at most one - unique on viewer+sender) for a pair.
+        """
+        The image-permission row (at most one - unique on viewer+sender) for a pair.
 
         Args:
             viewer: The profile deciding whether to see images.

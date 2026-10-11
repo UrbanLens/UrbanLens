@@ -87,7 +87,8 @@ class GetJournalEntriesTests(TestCase):
         self.assertEqual(entries[0].title, "Old Factory")
 
     def test_review_has_no_redundant_rating_subtitle(self) -> None:
-        """Regression guard: the star row itself already conveys "this is a
+        """
+        Regression guard: the star row itself already conveys "this is a
         rating" - a "Rating" text label next to it was pure redundancy."""
         pin = _make_pin(self.profile, name="Old Factory")
         baker.make("dashboard.Review", profile=self.profile, pin=pin, rating=4)
@@ -251,7 +252,8 @@ class MemoriesJournalViewTests(TestCase):
 
 
 class JournalLimitTests(TestCase):
-    """The limit that lets a page of the journal cost a page's worth of rows.
+    """
+    The limit that lets a page of the journal cost a page's worth of rows.
 
     A limit is only safe here because it is *exact* - the newest N of a union can only contain entries that are
     in some source's own newest N - so these check the seam rather than just the count."""

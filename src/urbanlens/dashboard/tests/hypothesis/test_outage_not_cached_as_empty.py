@@ -121,7 +121,8 @@ class SiteConditionsOutageTests(RedataConfiguredMixin, TestCase):
 
 
 class RedataPartialProviderOutageTests(TestCase):
-    """A provider outage *inside* a successful request is still an outage.
+    """
+    A provider outage *inside* a successful request is still an outage.
 
     The tests above guard a failed request."""
 
@@ -179,7 +180,8 @@ class RedataPartialProviderOutageTests(TestCase):
         self.assertEqual(self._cached(), 1)
 
     def test_the_rule_is_inherited_by_every_panel_built_on_the_base(self) -> None:
-        """Stated as a property of the base rather than of one panel.
+        """
+        Stated as a property of the base rather than of one panel.
 
         Six panels share this fetch; asserting it on one of them only proves
         the base works, which is the point of moving the rule there.

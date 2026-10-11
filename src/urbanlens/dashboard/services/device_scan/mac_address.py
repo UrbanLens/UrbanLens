@@ -14,7 +14,8 @@ class InvalidMacAddressError(ValueError):
 
 
 def normalize_mac_address(raw_mac_address: str) -> str:
-    """Return *raw_mac_address* in canonical upper-case colon-separated form.
+    """
+    Return *raw_mac_address* in canonical upper-case colon-separated form.
 
     Args:
         raw_mac_address: A MAC address in any colon/hyphen/dot/no-separator style, in either case.

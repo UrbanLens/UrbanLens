@@ -73,7 +73,8 @@ def export_dir(job_id: str) -> str:
 
 
 def export_guard_key(user_id: int | None) -> str:
-    """One in-flight export per account.
+    """
+    One in-flight export per account.
 
     Args:
         user_id: The exporting account.
@@ -90,7 +91,8 @@ def export_guard_key(user_id: int | None) -> str:
 
 
 def release_export_guard(user_id: int | None, job_id: str) -> None:
-    """Give up *user_id*'s export claim, if *job_id* is what holds it.
+    """
+    Give up *user_id*'s export claim, if *job_id* is what holds it.
 
     Args:
         user_id: The exporting account.
@@ -104,7 +106,8 @@ def release_export_guard(user_id: int | None, job_id: str) -> None:
 
 
 class ExportJobStatus:
-    """Cache-backed progress state for a user export job.
+    """
+    Cache-backed progress state for a user export job.
     The export archive remains on disk as the final downloadable artifact; transient status lives in the application cache rather than a JSON sidecar in MEDIA_ROOT."""
 
     def __init__(self, job_id: str) -> None:
@@ -154,7 +157,8 @@ def schedule_export_cleanup(export_dir_path: str, job_status: ExportJobStatus | 
 
 
 def run_export(user_id: int, export_types: list[str], export_dir_path: str, base_url: str, *, job_id: str | None = None, email_to_user: bool = False) -> bool:
-    """Run all export steps for a user and return True on success.
+    """
+    Run all export steps for a user and return True on success.
 
     Args:
         user_id: PK of the user whose data to export.
@@ -284,7 +288,8 @@ def _build_zip(export_dir_path: str, temp_dir: str) -> None:
 
 
 def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id: str) -> str:
-    """Email the finished export ZIP to the user's account address (UL-373).
+    """
+    Email the finished export ZIP to the user's account address (UL-373).
     Small archives (up to ``EMAIL_ATTACHMENT_MAX_BYTES``) are attached directly; larger ones get a link to the existing authenticated download endpoint instead, which stays valid until the job's artifacts expire (``EXPORT_TTL_SECONDS``).
 
     Args:
@@ -352,7 +357,8 @@ _COPY_CHUNK_BYTES = 1024 * 1024
 
 
 class JsonArrayFile:
-    """A JSON array written one element at a time, so an export never holds a whole table.
+    """
+    A JSON array written one element at a time, so an export never holds a whole table.
 
     Writes the same bytes ``json.dump(rows, fh, indent=2, ensure_ascii=False)`` would.
 
@@ -370,7 +376,8 @@ class JsonArrayFile:
         return self
 
     def append(self, row: Any) -> None:
-        """Write one element.
+        """
+        Write one element.
 
         Args:
             row: Any JSON-serializable value.
@@ -396,7 +403,8 @@ class JsonArrayFile:
 
 
 def _write_json(temp_dir: str, filename: str, data: Any) -> None:
-    """Write one JSON file into the archive with the settings every exporter uses.
+    """
+    Write one JSON file into the archive with the settings every exporter uses.
 
     Args:
         temp_dir: The archive's staging directory.
@@ -408,7 +416,8 @@ def _write_json(temp_dir: str, filename: str, data: Any) -> None:
 
 
 def _copy_into_archive(stored: FieldFile | None, dest_dir: str, *, unique_suffix: object) -> str | None:
-    """Stream a stored media file into the archive through its storage, disambiguating name collisions.
+    """
+    Stream a stored media file into the archive through its storage, disambiguating name collisions.
     Never through a local path: object storage, which production uses, has none, and asking for one failed the whole export (see UrbanLens#300, "an export with photos fails outright on object storage"). Two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
 
     Args:
@@ -459,7 +468,8 @@ def _copy_into_archive(stored: FieldFile | None, dest_dir: str, *, unique_suffix
 
 
 def _stored_modified_time(source: File, storage: Storage, name: str) -> float | None:
-    """When a stored file was last modified, as a POSIX timestamp.
+    """
+    When a stored file was last modified, as a POSIX timestamp.
 
     Only a date for the archived copy, so a storage that cannot say, or fails to, gives None instead of failing the
     export.
@@ -636,7 +646,8 @@ def _notification_preferences_dict(profile: Any) -> dict[str, Any]:
 
 
 def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export the user's custom field definitions and every stored value.
+    """
+    Export the user's custom field definitions and every stored value.
     Each field row carries its values inline, with targets referenced by UUID (matching the UUIDs used in the other export files) plus a human-readable label so the export is useful on its own."""
     from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity
 
@@ -688,7 +699,8 @@ def _export_custom_fields(profile: Any, temp_dir: str, *, base_url: str = "") ->
 
 
 def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-    """Export all user pins as a rich JSON file (UrbanLens custom format).
+    """
+    Export all user pins as a rich JSON file (UrbanLens custom format).
     Only personal Pin data is exported here - never the shared Location or Wiki it may be linked to."""
     from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
     from urbanlens.dashboard.models.pin.model import Pin
@@ -1032,7 +1044,8 @@ def _export_pin_lists(profile: Any, temp_dir: str, *, base_url: str = "") -> Non
 
 
 class ExportType(ABC):
-    """One selectable export area, written into the archive as a single JSON file.
+    """
+    One selectable export area, written into the archive as a single JSON file.
     Instances are callable with the same ``(profile, temp_dir, *, base_url)`` signature the legacy functions use, so both kinds dispatch identically.
 
     Attributes:
@@ -1050,7 +1063,8 @@ class ExportType(ABC):
 
     @abstractmethod
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> Any:
-        """Build the JSON-serializable content of :attr:`filename`.
+        """
+        Build the JSON-serializable content of :attr:`filename`.
 
         Args:
             profile: The profile being exported.
@@ -1063,7 +1077,8 @@ class ExportType(ABC):
         """
 
     def __call__(self, profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-        """Run this export step.
+        """
+        Run this export step.
 
         Args:
             profile: The profile being exported.
@@ -1074,12 +1089,14 @@ class ExportType(ABC):
 
 
 class ModelExportType[ExportedModelT: Model](ExportType):
-    """An :class:`ExportType` backed by one profile-scoped queryset, one JSON row per object.
+    """
+    An :class:`ExportType` backed by one profile-scoped queryset, one JSON row per object.
     Types spanning several models (see :class:`MapAnnotationsExport`) subclass :class:`ExportType` directly instead."""
 
     @abstractmethod
     def queryset(self, profile: Any) -> Iterable[ExportedModelT]:
-        """Return this profile's rows, deterministically ordered and prefetched.
+        """
+        Return this profile's rows, deterministically ordered and prefetched.
 
         Args:
             profile: The profile being exported.
@@ -1090,7 +1107,8 @@ class ModelExportType[ExportedModelT: Model](ExportType):
 
     @abstractmethod
     def row(self, obj: ExportedModelT) -> dict[str, Any]:
-        """Return the exported dict for one object.
+        """
+        Return the exported dict for one object.
 
         Args:
             obj: A model instance from :meth:`queryset`.
@@ -1100,7 +1118,8 @@ class ModelExportType[ExportedModelT: Model](ExportType):
         """
 
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> list[dict[str, Any]]:
-        """Return one row per object in :meth:`queryset`.
+        """
+        Return one row per object in :meth:`queryset`.
 
         Args:
             profile: The profile being exported.
@@ -1113,7 +1132,8 @@ class ModelExportType[ExportedModelT: Model](ExportType):
         return [self.row(obj) for obj in self.queryset(profile)]
 
     def __call__(self, profile: Any, temp_dir: str, *, base_url: str = "") -> None:
-        """Run this export step, one row at a time.
+        """
+        Run this export step, one row at a time.
 
         Args:
             profile: The profile being exported.
@@ -1129,7 +1149,8 @@ class ModelExportType[ExportedModelT: Model](ExportType):
 
 
 def _markup_row(item: PinMarkup) -> dict[str, Any]:
-    """Return the exported dict for one markup annotation.
+    """
+    Return the exported dict for one markup annotation.
     Shared by the map-scoped items nested under each ``MarkupMap`` and the standalone pin/wiki-scoped items, so both carry identical fields.
 
     Args:
@@ -1154,7 +1175,8 @@ def _markup_row(item: PinMarkup) -> dict[str, Any]:
 
 
 class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
-    """Every safety check-in the user planned, with its contacts and message thread.
+    """
+    Every safety check-in the user planned, with its contacts and message thread.
     The shared ``destination_location`` is omitted for the reason ``_export_pins`` omits ``Location``: it is instance-owned community data, not this user's."""
 
     key = "safety_checkins"
@@ -1164,7 +1186,8 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
     description = "Check-ins, their emergency contacts, and messages"
 
     def queryset(self, profile: Any) -> Iterable[SafetyCheckin]:
-        """Return this profile's check-ins, oldest first.
+        """
+        Return this profile's check-ins, oldest first.
 
         Args:
             profile: The profile being exported.
@@ -1177,7 +1200,8 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
         return SafetyCheckin.objects.filter(profile=profile).select_related("trip", "markup_map").prefetch_related("contacts__contact_profile", "messages__sender_profile", "messages__sender_contact", "markup_maps").order_by("created")
 
     def row(self, obj: SafetyCheckin) -> dict[str, Any]:
-        """Return the exported dict for one check-in.
+        """
+        Return the exported dict for one check-in.
 
         Args:
             obj: The check-in to serialize.
@@ -1231,7 +1255,8 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
 
 
 class MapAnnotationsExport(ExportType):
-    """Standalone markup maps, the annotations drawn on them, and georeferenced image overlays.
+    """
+    Standalone markup maps, the annotations drawn on them, and georeferenced image overlays.
     Three models make one area because they are one feature: a ``MarkupMap`` is a saved viewport whose ``PinMarkup`` items are meaningless without it, and a ``MapImageOverlay`` is another drawing on the same maps."""
 
     key = "map_annotations"
@@ -1244,7 +1269,8 @@ class MapAnnotationsExport(ExportType):
     files_dir_name: ClassVar[str] = "map_annotations"
 
     def payload(self, profile: Any, temp_dir: str, base_url: str) -> dict[str, Any]:
-        """Build the three annotation sections, copying overlay files as it goes.
+        """
+        Build the three annotation sections, copying overlay files as it goes.
 
         Args:
             profile: The profile being exported.
@@ -1284,7 +1310,8 @@ class MapAnnotationsExport(ExportType):
         }
 
     def _overlay_row(self, overlay: MapImageOverlay, temp_dir: str) -> dict[str, Any]:
-        """Return the exported dict for one image overlay, copying its file into the archive.
+        """
+        Return the exported dict for one image overlay, copying its file into the archive.
 
         Args:
             overlay: The overlay to serialize.
@@ -1317,7 +1344,8 @@ class MapAnnotationsExport(ExportType):
 
 
 def _annotation_target(obj: Any) -> dict[str, Any]:
-    """Return the ``target_type``/``target_uuid`` pair for a pin- or wiki-parented annotation.
+    """
+    Return the ``target_type``/``target_uuid`` pair for a pin- or wiki-parented annotation.
     Uses the same vocabulary :func:`_resolve_target` produces for comments and photos ("pin" / "location"), so the importer can resolve all of them through one helper.
 
     Args:
@@ -1333,7 +1361,8 @@ def _annotation_target(obj: Any) -> dict[str, Any]:
 
 
 class SavedFiltersExport(ModelExportType["SavedFilter"]):
-    """The user's named, reusable main-map filter combinations.
+    """
+    The user's named, reusable main-map filter combinations.
     Reinterpreting it here would duplicate that module's knowledge, so the importer copies it back as-is the same way ``_import_pin_lists`` handles a smart list's ``smart_filter``."""
 
     key = "saved_filters"
@@ -1343,7 +1372,8 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
     description = "Your saved map and search filters"
 
     def queryset(self, profile: Any) -> Iterable[SavedFilter]:
-        """Return this profile's saved filters in display order.
+        """
+        Return this profile's saved filters in display order.
 
         Args:
             profile: The profile being exported.
@@ -1356,7 +1386,8 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
         return SavedFilter.objects.filter(profile=profile).order_by("order", "created")
 
     def row(self, obj: SavedFilter) -> dict[str, Any]:
-        """Return the exported dict for one saved filter.
+        """
+        Return the exported dict for one saved filter.
 
         Args:
             obj: The saved filter to serialize.
@@ -1377,7 +1408,8 @@ class SavedFiltersExport(ModelExportType["SavedFilter"]):
 
 
 class RoutesExport(ModelExportType["Route"]):
-    """GPS tracks and planned routes the user imported from GPX or Google Takeout.
+    """
+    GPS tracks and planned routes the user imported from GPX or Google Takeout.
     ``path`` is exported as GeoJSON - the stored simplified polyline, which is all the app itself keeps (raw points are discarded at import time), so the archive is not a lossier copy than the live row."""
 
     key = "routes"
@@ -1387,7 +1419,8 @@ class RoutesExport(ModelExportType["Route"]):
     description = "Recorded and imported GPS tracks"
 
     def queryset(self, profile: Any) -> Iterable[Route]:
-        """Return this profile's routes, oldest first.
+        """
+        Return this profile's routes, oldest first.
 
         Args:
             profile: The profile being exported.
@@ -1400,7 +1433,8 @@ class RoutesExport(ModelExportType["Route"]):
         return Route.objects.for_profile(profile).order_by("created")
 
     def row(self, obj: Route) -> dict[str, Any]:
-        """Return the exported dict for one route.
+        """
+        Return the exported dict for one route.
 
         Args:
             obj: The route to serialize.

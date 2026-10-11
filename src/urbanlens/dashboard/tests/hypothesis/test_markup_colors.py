@@ -68,7 +68,8 @@ class SanitizeOptionalColorTests(SimpleTestCase):
 
 
 class PinMarkupBulkCreateColorTests(TestCase):
-    """bulk_create never calls save(), so the coercion has to reach it separately.
+    """
+    bulk_create never calls save(), so the coercion has to reach it separately.
 
     The undo restore rebuilds a deleted map's annotations this way, from a payload captured at delete time -
     which is precisely where a value stored before this validation existed would still be sitting."""

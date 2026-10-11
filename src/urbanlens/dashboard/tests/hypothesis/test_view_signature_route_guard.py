@@ -18,7 +18,8 @@ _NON_ROUTE_ARGS = {"self", "request", "args", "kwargs"}
 
 
 def _routes() -> list[tuple[str | None, frozenset[str], object]]:
-    """Every URL pattern as ``(name, parameters, callback)``.
+    """
+    Every URL pattern as ``(name, parameters, callback)``.
 
     Parameters accumulate down the resolver tree, because a route nested under ``path("<str:label_kind>/",
     include(...))`` receives that parameter too - reading only the leaf pattern was what made an earlier sweep
@@ -59,7 +60,8 @@ def _unacceptable(func: object, supplied: frozenset[str]) -> set[str]:
 
 
 def _signature_mismatches() -> list[str]:
-    """Every handler that cannot accept a parameter one of its routes supplies.
+    """
+    Every handler that cannot accept a parameter one of its routes supplies.
 
     Checks *every* parameterised route, not only those on views wired to two or more."""
     problems: list[str] = []
@@ -113,7 +115,8 @@ class ViewSignatureRouteGuardTests(SimpleTestCase):
         self.assertGreater(len(_multi_route_views()), 20, "multi-route view discovery found suspiciously few classes")
 
     def test_the_scan_examines_single_route_views_too(self) -> None:
-        """The widened scope must actually be exercising handlers, not just present.
+        """
+        The widened scope must actually be exercising handlers, not just present.
 
         Counted the same way the check itself counts, so a refactor that stopped resolving view classes - and
         would then report zero problems forever - fails here instead of passing silently."""
@@ -130,7 +133,8 @@ class ViewSignatureRouteGuardTests(SimpleTestCase):
         self.assertGreater(checked, 200, "the signature check is barely examining anything")
 
     def test_the_scan_reads_inherited_parameters(self) -> None:
-        """Parameters from an enclosing include() must be counted, not just the leaf's.
+        """
+        Parameters from an enclosing include() must be counted, not just the leaf's.
 
         Reading only leaf patterns is the specific mistake that made an earlier
         sweep here blind to most parameterised routes.

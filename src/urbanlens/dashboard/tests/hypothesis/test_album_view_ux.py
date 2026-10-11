@@ -173,7 +173,8 @@ class AlbumPanelSectionsTests(TestCase):
         self.assertNotContains(response, f'data-id="{filed.pk}"')
 
     def test_a_loose_tile_does_not_take_the_gallery_tile_s_id(self) -> None:
-        """The pin and wiki pages render the gallery beside this panel, and a shared id sends one grid's lookups
+        """
+        The pin and wiki pages render the gallery beside this panel, and a shared id sends one grid's lookups
         to the other grid's tile (P121)."""
         image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
 
@@ -282,7 +283,8 @@ class AlbumUploadViewTests(TestCase):
         new=MagicMock(return_value=("Not an image.", 415)),
     )
     def test_a_rejected_file_creates_nothing(self) -> None:
-        """The album upload goes through the same gate as the galleries.
+        """
+        The album upload goes through the same gate as the galleries.
 
         Patched rather than fed a bad file so this asserts the wiring - that a refusal from the shared check
         reaches the client and leaves no row - rather than re-testing the sniffing rules themselves."""
@@ -305,7 +307,8 @@ class AlbumUploadViewTests(TestCase):
 
 
 class AlbumMapPayloadTests(TestCase):
-    """The album map only offers a drag the server would actually accept.
+    """
+    The album map only offers a drag the server would actually accept.
 
     Exercised at the payload level: whether a photo is *visible* to a viewer is already settled by
     ``album_images``, and mixing that in here would test the visibility gate rather than the map's own rules."""
@@ -337,7 +340,8 @@ class AlbumMapPayloadTests(TestCase):
         self.assertFalse(payload[0]["movable"])
 
     def test_a_photo_with_no_gps_sits_at_the_place_and_is_flagged_unplaced(self) -> None:
-        """It still appears, so the user can drag it to where it was actually taken.
+        """
+        It still appears, so the user can drag it to where it was actually taken.
 
         Every uploaded photo carries its place's Location (see
         services.photos.uploads), which is where an EXIF-less photo lands.

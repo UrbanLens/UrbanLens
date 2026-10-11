@@ -22,7 +22,8 @@ class ProviderAdapter(ABC):
 
     @abstractmethod
     def send(self, request: InferenceRequest) -> InferenceResponse:
-        """Call the provider and return a normalized response.
+        """
+        Call the provider and return a normalized response.
 
         Args:
             request: The validated, policy-checked inference request.
@@ -35,7 +36,8 @@ class ProviderAdapter(ABC):
         raise NotImplementedError
 
     def classify(self, request: ClassifyRequest) -> ClassifyResponse:
-        """Classify an image, returning scored labels.
+        """
+        Classify an image, returning scored labels.
 
         Not abstract: most providers have no classifier endpoint at all, and
         ``policy.validate_classify_request`` already refuses those before an adapter is built.

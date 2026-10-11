@@ -1,4 +1,5 @@
-"""Effective relevance for a materialized Media-gallery photo, and local-copy lookup.
+"""
+Effective relevance for a materialized Media-gallery photo, and local-copy lookup.
 The two are kept in entirely separate tables rather than commingled into one running total, precisely so each signal can still be queried/audited on its own - only ``effective_relevance()`` blends them, and only for display/ranking purposes."""
 
 from __future__ import annotations
@@ -67,7 +68,8 @@ _GAME_WEIGHTS: dict[str, float] = {
 
 
 def _decayed_report_penalty(image: Image, *, now: datetime | None = None) -> float:
-    """Total weight of this photo's reports, each decayed by its own age.
+    """
+    Total weight of this photo's reports, each decayed by its own age.
     Reports are read row-by-row rather than counted, because each contributes ``GAME_REPORT_WEIGHT * 0.5 ** (age_days / GAME_REPORT_HALF_LIFE_DAYS)``.
 
     Args:
@@ -89,7 +91,8 @@ def _decayed_report_penalty(image: Image, *, now: datetime | None = None) -> flo
 
 
 def effective_relevance(image: Image) -> float:
-    """This photo's blended relevance score, or 0.0 if it has no relevance identity at all.
+    """
+    This photo's blended relevance score, or 0.0 if it has no relevance identity at all.
     Only meaningful for a materialized external-media row (``media_source_key``/ ``media_item_key`` set - see ``Image.media_source_key``'s docstring).
 
     Args:
@@ -109,7 +112,8 @@ def effective_relevance(image: Image) -> float:
 
 
 def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
-    """Cast, flip, or clear one profile's community vote on a materialized media row.
+    """
+    Cast, flip, or clear one profile's community vote on a materialized media row.
     The same three-state write ``controllers.wiki_media.WikiMediaVoteView`` performs, addressed by an ``Image`` row instead of by a raw ``(source, item_key)`` pair from a gallery tile.
 
     Args:
@@ -157,7 +161,8 @@ MATERIALIZE_ERROR_MESSAGE = "Could not save this photo."
 
 
 class VotePolicy(StrEnum):
-    """How a "relevant" mark should treat a vote the profile already cast.
+    """
+    How a "relevant" mark should treat a vote the profile already cast.
 
     Attributes:
         EXPLICIT: The user deliberately clicked "relevant" - overwrite whatever they had before, including a previous down-vote.
@@ -168,7 +173,8 @@ class VotePolicy(StrEnum):
 
 
 class RelevantCacheResult(NamedTuple):
-    """Outcome of :func:`record_relevant_and_cache`.
+    """
+    Outcome of :func:`record_relevant_and_cache`.
 
     Attributes:
         image: The materialized local copy, or None when nothing was cached (the vote was declined, materialization was skipped, the download failed, or it was deferred to a worker).
@@ -198,7 +204,8 @@ def record_relevant_and_cache(
     policy: VotePolicy = VotePolicy.EXPLICIT,
     materialize: bool = True,
 ) -> RelevantCacheResult:
-    """Mark a transient gallery item relevant and cache a local copy of it.
+    """
+    Mark a transient gallery item relevant and cache a local copy of it.
     The one place the "write a MediaRelevance row, then download the item" sequence lives - shared by the pin and wiki vote endpoints and by the album add path, so the three can't drift.
 
     Args:
@@ -267,7 +274,8 @@ def record_relevant_and_cache(
 
 
 def local_images_for_gallery_items(location: Location, source: str, urls: Iterable[str]) -> dict[str, Image]:
-    """Bulk-lookup already-materialized local copies for a Media gallery panel's live results.
+    """
+    Bulk-lookup already-materialized local copies for a Media gallery panel's live results.
 
     Args:
         location: The location whose gallery is being rendered.

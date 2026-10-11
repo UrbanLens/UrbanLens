@@ -60,7 +60,8 @@ class CommentImageCleanupTests(TestCase):
         self.assertFalse(Comment.objects.filter(pk=comment.pk).exists())
 
     def test_a_storage_error_while_removing_the_file_does_not_fail_the_delete(self) -> None:
-        """_discard_comment_image is documented best-effort: the row is already gone by
+        """
+        _discard_comment_image is documented best-effort: the row is already gone by
         the time it runs, so a storage hiccup must not turn a successful delete into a 500."""
         comment = self._comment_with_image()
         comment_pk = comment.pk
@@ -72,7 +73,8 @@ class CommentImageCleanupTests(TestCase):
         self.assertFalse(Comment.objects.filter(pk=comment_pk).exists())
 
     def test_a_forbidden_delete_attempt_leaves_the_file_alone(self) -> None:
-        """The profile check in PinCommentDeleteView runs before comment.delete()/
+        """
+        The profile check in PinCommentDeleteView runs before comment.delete()/
         _discard_comment_image() - a denied delete must not touch the stored file."""
         other_profile = baker.make(User).profile
         comment = baker.make(Comment, pin=self.pin, profile=other_profile, text="not mine")

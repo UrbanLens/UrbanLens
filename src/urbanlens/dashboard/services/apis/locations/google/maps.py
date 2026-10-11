@@ -92,7 +92,8 @@ _TAKEOUT_URL_COLUMN_KEYS: tuple[str, ...] = ("url", "parking location")
 
 
 def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[str], profile: Profile) -> None:
-    """Best-effort: attach a freshly-created pin's extracted image/link URLs.
+    """
+    Best-effort: attach a freshly-created pin's extracted image/link URLs.
     Only meant for pins the import just created - an existing pin merged into by ``get_nearby_or_create`` is never touched, matching how its description itself is left alone on a merge.
 
     Args:
@@ -125,7 +126,8 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
 
 
 def confirmed_pin_cid(pin: dict[str, Any]) -> int | None:
-    """The CID a pin the browser posted back names, checked against the Google Maps URL it came from.
+    """
+    The CID a pin the browser posted back names, checked against the Google Maps URL it came from.
 
     The confirm step's pins are client data. A ``cid`` that crossed the browser as a JSON number has
     lost its low digits (REData P120); when the pin still carries its source URL, the URL's own CID
@@ -145,7 +147,8 @@ def confirmed_pin_cid(pin: dict[str, Any]) -> int | None:
 
 
 def _on_the_globe(latitude: Any, longitude: Any) -> tuple[float, float] | None:
-    """A coordinate pair as floats when both are finite numbers on the globe, else None.
+    """
+    A coordinate pair as floats when both are finite numbers on the globe, else None.
 
     JSON cannot carry infinity or NaN, and Python's parser reads them all the same.
     """
@@ -165,7 +168,8 @@ def _create_pin_from_confirmed(
     category_label: Label | None,
     auto_tag: bool,
 ) -> tuple[Pin | None, bool]:
-    """Create (or merge into) a Pin from one confirmed-import pin dict.
+    """
+    Create (or merge into) a Pin from one confirmed-import pin dict.
 
     Shared by the synchronous confirm-import loop (``iter_confirmed_import_events``,
     for pins that are already accurate - literal coords, or a cid already
@@ -288,7 +292,8 @@ def _create_pin_from_confirmed(
 
 
 def _notify_pin_import_parse_failure(fmt: str) -> None:
-    """Alert the site admin that a pin-import file failed to parse.
+    """
+    Alert the site admin that a pin-import file failed to parse.
     Only the file's detected format and the current time are included - never the filename, contents, or the underlying parse error, since those may reflect user-supplied data.
 
     Args:
@@ -305,7 +310,8 @@ def _notify_pin_import_parse_failure(fmt: str) -> None:
 
 
 def _filename_stem(filename: str) -> str:
-    """Return the filename without its extension or directory path.
+    """
+    Return the filename without its extension or directory path.
 
     Examples:
         "Demolished Structures.csv" -> "Demolished Structures"
@@ -326,14 +332,16 @@ logger = logging.getLogger(__name__)
 
 
 def _google_maps_api_key() -> str:
-    """Reads the configured Google Maps API key, if any.
+    """
+    Reads the configured Google Maps API key, if any.
     Deliberately does not raise when unset - most of GoogleMapsGateway's own methods (file-format parsing in particular) never touch the network, and the ones that do (e.g."""
     return settings.google_unrestricted_api_key or ""
 
 
 @dataclass
 class PreviewParse:
-    """What parsing a preview's files produced, and what is left for a process with network access.
+    """
+    What parsing a preview's files produced, and what is left for a process with network access.
 
     Attributes:
         lists: ``{"stem", "pins"}`` per file, pins in the preview shape.
@@ -353,7 +361,8 @@ class PreviewParse:
         return sum(len(entry["pins"]) for entry in self.lists)
 
     def add(self, stem: str, read: _PreviewFile) -> None:
-        """Add what one file held, once it has been read without error.
+        """
+        Add what one file held, once it has been read without error.
 
         Args:
             stem: The file's name without its extension, naming its list.
@@ -368,7 +377,8 @@ class PreviewParse:
 
 @dataclass
 class _PreviewFile:
-    """What one file holds for the preview, kept apart until the whole file has been read.
+    """
+    What one file holds for the preview, kept apart until the whole file has been read.
 
     Attributes:
         pins: Pins in the preview shape.
@@ -390,7 +400,8 @@ _STREET_VIEW_TRANSIENT_STATUSES = frozenset({"OVER_QUERY_LIMIT", "UNKNOWN_ERROR"
 
 
 class StreetViewStatusError(GatewayRequestError, ValueError):
-    """Street View answered with an account or request-level status instead of a panorama.
+    """
+    Street View answered with an account or request-level status instead of a panorama.
 
     Attributes:
         status: The API's ``status``, such as ``OVER_QUERY_LIMIT`` or ``REQUEST_DENIED``.
@@ -450,7 +461,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         height: int = 400,
         limit: int = -1,
     ) -> Generator[SatelliteSlide]:
-        """Return a server-fetched Google Maps Static satellite image as a SatelliteSlide.
+        """
+        Return a server-fetched Google Maps Static satellite image as a SatelliteSlide.
         The image is retrieved server-side (rather than via a browser URL) so that the API key is never exposed to the client.
 
         Args:
@@ -482,7 +494,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
 
     def get_satellite_image_bytes(self, latitude: float, longitude: float) -> bytes | None:
-        """Return the raw JPEG bytes of a Google Maps Static satellite image.
+        """
+        Return the raw JPEG bytes of a Google Maps Static satellite image.
 
         Args:
             latitude: WGS-84 latitude of the target location.
@@ -529,7 +542,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         max_radius=1000,
         radius_increment=50,
     ):
-        """Get the closest Street View image to the given latitude and longitude.
+        """
+        Get the closest Street View image to the given latitude and longitude.
 
         Returns:
             Tuple of ``(image_bytes, capture_date, pano_latitude, pano_longitude)`` - the pano's own coordinates are returned alongside the image (rather than just echoing back the input) since a widened search radius can resolve to a pano some distance from the requested point.
@@ -572,7 +586,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         raise StreetViewNotFoundError("No Street View imagery found within the maximum search radius.")
 
     def _nearest_street_view(self, latitude: float, longitude: float, radii: list[int], view: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str, Any]] | None:
-        """The smallest of *radii* whose search finds a pano: its index, the search's parameters and Google's metadata.
+        """
+        The smallest of *radii* whose search finds a pano: its index, the search's parameters and Google's metadata.
 
         Asks at the first radius, then at the last, then bisects between them, so a pano beside the point costs one
         search and none within reach two, where a sweep cost one per radius. A search reaching further finds whatever
@@ -602,7 +617,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return high, *found
 
     def _street_view_metadata(self, latitude: float, longitude: float, radius: int, view: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
-        """One metadata search: its parameters, and the metadata when it found a pano.
+        """
+        One metadata search: its parameters, and the metadata when it found a pano.
 
         Raises:
             StreetViewStatusError: The API answered with an account or request-level status a wider search can't fix.
@@ -630,7 +646,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
-        """Yield Street View slides for the given latitude and longitude.
+        """
+        Yield Street View slides for the given latitude and longitude.
 
         Raises:
             StreetViewStatusError: Google couldn't answer for now, such as an exhausted quota.
@@ -662,7 +679,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return (heading + 360) % 360
 
     def _csv_row_iter(self, file_contents: str | Iterable[str], user_profile: Profile, *, offline: bool = False) -> Generator[dict[str, Any] | None, None, None]:
-        """Generator yielding one pin_data dict per CSV row.
+        """
+        Generator yielding one pin_data dict per CSV row.
 
         Supports two CSV shapes:
 
@@ -765,7 +783,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         *,
         scratch: str | None = None,
     ) -> PreviewParse:
-        """Parse uploaded files without importing, and without any network request.
+        """
+        Parse uploaded files without importing, and without any network request.
 
         Runs in the sandbox worker, which has no route out: a CSV row only a lookup could
         place is set aside for :meth:`resolve_preview_rows`, and a file that fails to parse
@@ -826,7 +845,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return parse
 
     def _read_preview_file(self, fmt: str, filename: str, stream: IO[bytes], user_profile: Profile, *, room: int) -> _PreviewFile:
-        """Read one file of a known format for the preview, taking at most *room* pins.
+        """
+        Read one file of a known format for the preview, taking at most *room* pins.
 
         Args:
             fmt: What :func:`validate_content_type` made of the file.
@@ -887,7 +907,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return list(itertools.islice(self._iter_preview_pins(raw_pins, user_profile), room))
 
     def resolve_preview_rows(self, rows: list[dict[str, Any]], user_profile: Profile, *, room: int, deadline: float | None = None) -> tuple[list[dict[str, Any]], int]:
-        """Place the CSV rows :meth:`parse_for_preview` set aside, making the lookups it could not.
+        """
+        Place the CSV rows :meth:`parse_for_preview` set aside, making the lookups it could not.
 
         A lookup service that cannot answer - disabled, rate-limited or unreachable - ends the
         pass, because every remaining row would fail the same way. So does reaching ``deadline``.
@@ -933,7 +954,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     @staticmethod
     def _preview_pins(raw_pins: Iterable[dict[str, Any] | None], user_profile: Profile) -> list[dict[str, Any]]:
-        """Convert internal pin dicts into the serialisable preview shape.
+        """
+        Convert internal pin dicts into the serialisable preview shape.
 
         Args:
             raw_pins: Pin dicts as returned by any of the format parsers (``None``
@@ -991,7 +1013,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         user_profile: Profile,
         auto_tag: bool = True,
     ) -> Generator[dict[str, Any], None, None]:
-        r"""Import user-confirmed pin selections from the preview step, one event per pin.
+        r"""
+        Import user-confirmed pin selections from the preview step, one event per pin.
 
         Each ``confirmed_lists`` entry must have:
             - ``stem`` (str): list name used for category creation.
@@ -1196,7 +1219,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     @untrusted_parse("geo.kml")
     def takeout_kml_to_dict(self, file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
-        """Read every Placemark with a location out of a KML document, at any depth.
+        """
+        Read every Placemark with a location out of a KML document, at any depth.
 
         Args:
             file_contents: The KML, as bytes or a binary file; the encoding is taken from its XML declaration.
@@ -1218,7 +1242,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     @untrusted_parse("geo.kml")
     def iter_kml_pins(self, file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
-        """:meth:`takeout_kml_to_dict`, one placemark at a time, reading no more of the file than that takes.
+        """
+        :meth:`takeout_kml_to_dict`, one placemark at a time, reading no more of the file than that takes.
 
         Holds at most one placemark's subtree at a time, and matches elements by local name, so an ``https://`` KML
         namespace some exporters write reads like ``http://``.
@@ -1272,7 +1297,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
     @staticmethod
     def _geojson_name_and_description(properties: dict[str, Any]) -> tuple[str, str]:
-        """Guess a pin name/description from a GeoJSON feature's properties.
+        """
+        Guess a pin name/description from a GeoJSON feature's properties.
         Google Takeout's "Saved Places" export uses a fixed ``name``/``description``/ ``address`` property shape, which is tried first so existing Takeout imports are unaffected."""
         takeout_bits = [str(properties[key]).strip() for key in ("description", "address") if properties.get(key)]
         if "name" in properties or takeout_bits or not properties:
@@ -1281,7 +1307,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return pick_name_and_description(properties)
 
     def geojson_to_dict(self, file_contents: str | bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
-        """Convert a GeoJSON ``FeatureCollection`` into pin dicts.
+        """
+        Convert a GeoJSON ``FeatureCollection`` into pin dicts.
 
         Args:
             file_contents: The GeoJSON, as text, UTF-8 bytes or a binary file.
@@ -1303,7 +1330,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         return pins
 
     def iter_geojson_pins(self, file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
-        """:meth:`geojson_to_dict`, one feature at a time, reading no more of the file than that takes.
+        """
+        :meth:`geojson_to_dict`, one feature at a time, reading no more of the file than that takes.
 
         Args:
             file_contents: The GeoJSON, as UTF-8 bytes or a seekable binary file positioned at its start.
@@ -1352,7 +1380,8 @@ def _kml_local_name(tag: object) -> str:
 
 
 def _iter_kml_placemarks(content: IO[bytes]) -> Iterator[Element]:
-    """Yield each Placemark element as it closes, refusing a DTD, entity or external reference.
+    """
+    Yield each Placemark element as it closes, refusing a DTD, entity or external reference.
 
     Every element outside a placemark is freed as it closes, and a placemark once it has been read, so the tree
     never holds more than one placemark and the elements enclosing it.
@@ -1381,7 +1410,8 @@ def _kml_child_text(element: Element, name: str) -> str | None:
 
 
 def _iter_kml_coordinates(element: Element) -> Iterator[tuple[float, float]]:
-    """Each ``(longitude, latitude)`` of an element's ``coordinates``, parsed as it is reached.
+    """
+    Each ``(longitude, latitude)`` of an element's ``coordinates``, parsed as it is reached.
 
     One placemark's geometry may be the whole file, so neither its tokens nor its pairs are listed (P95).
     """
@@ -1396,7 +1426,8 @@ def _iter_kml_coordinates(element: Element) -> Iterator[tuple[float, float]]:
 
 
 def _kml_tuples(text: str) -> Iterator[str]:
-    """Each whitespace-separated tuple of a ``coordinates`` text, whitespace beside a comma taken as part of it.
+    """
+    Each whitespace-separated tuple of a ``coordinates`` text, whitespace beside a comma taken as part of it.
 
     The same tuples as removing the whitespace around every comma and then splitting, without a substitution: one
     builds a string for every piece between commas before joining them, about seven times the text (P95).

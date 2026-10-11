@@ -1,4 +1,5 @@
-"""img-src names the hosts pages load images from, and nothing wider (P165).
+"""
+img-src names the hosts pages load images from, and nothing wider (P165).
 
 Third-party pictures are served from this site's own copies, so what is left is map tiles, the Maps JavaScript API's
 imagery, and the images a vendor stylesheet draws from beside itself. A host missing here is a grey map for everyone, so

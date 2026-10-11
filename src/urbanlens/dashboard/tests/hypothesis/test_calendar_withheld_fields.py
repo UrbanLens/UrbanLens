@@ -1,4 +1,5 @@
-"""What a calendar export withholds is removed from the Google event (P335), and a Google rate limit is not a dead grant.
+"""
+What a calendar export withholds is removed from the Google event (P335), and a Google rate limit is not a dead grant.
 
 An update is a PATCH, and Google keeps every field a PATCH leaves out. A location the export stopped sending - hidden
 after export, or restricted by the trip-mate who added it - stayed on the event. These tests run the export against

@@ -13,7 +13,8 @@ from urbanlens.dashboard.models.direct_messages.meta import DirectMessageShareKi
 
 
 class DirectMessageShare(abstract.DashboardModel):
-    """The `@pin`/`@trip`/`@friend` action attached to one direct message.
+    """
+    The `@pin`/`@trip`/`@friend` action attached to one direct message.
     Exactly one of `pin_share`, (`trip` + `trip_membership`), or `recommended_profile` is populated, matching `kind`.
     `revoke()` is called when the message is deleted, and is a no-op once the underlying action has actually been acted on (accepted/rejected/responded) - deleting the message never undoes something the recipient already did.
     """
@@ -86,7 +87,8 @@ class DirectMessageShare(abstract.DashboardModel):
 
     @cached_property
     def _friend_request_exists(self) -> bool:
-        """True if a Friendship row already links the recommended profile and the recipient.
+        """
+        True if a Friendship row already links the recommended profile and the recipient.
         Cached on the instance: this is a hot per-render check (every DM thread render with a pending friend-share calls `is_actionable`, and `revoke()` may check it again for the same instance), and nothing this object does can change the underlying Friendship state, so a second read within the same instance's lifetime would always return the same answer anyway.
         """
         from django.db.models import Q

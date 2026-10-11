@@ -1,4 +1,5 @@
-"""A script's request after the session has ended is refused, not redirected to the login page (P192).
+"""
+A script's request after the session has ended is refused, not redirected to the login page (P192).
 
 ``fetch()`` and htmx follow a redirect, so the login page came back as a 200 and every caller that checks only the
 status ran its success path: the edit was not saved and the page said it was.

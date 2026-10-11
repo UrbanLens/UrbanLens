@@ -15,7 +15,8 @@ from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 
 
 def _strip_scripts(html: str) -> str:
-    """Remove <script> blocks so a substring check can't false-positive on the
+    """
+    Remove <script> blocks so a substring check can't false-positive on the
     click-to-edit wiring script's own inert HTML-shaped string literals
     (e.g. its renderText() closures build "...>Birthday: ..." as JS text)."""
     return re.sub(r"<script\b[^>]*>.*?</script>", "", html, flags=re.DOTALL)
@@ -55,7 +56,8 @@ class AdditionalDetailsSectionTests(TestCase):
         self.assertContains(response, "pending@example.com (unverified)")
 
     def test_section_hidden_for_owner_with_nothing_set_yet(self) -> None:
-        """Hidden rather than shown with a placeholder - adding a first
+        """
+        Hidden rather than shown with a placeholder - adding a first
         birthday is the Edit Profile page's job, matching the same
         empty-state treatment applied to area/started-exploring/contact."""
         response = self._get()

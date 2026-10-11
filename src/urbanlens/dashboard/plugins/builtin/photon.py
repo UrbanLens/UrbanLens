@@ -45,7 +45,8 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
     inspects_content = True
 
     def has_content(self, data: dict | None) -> bool:
-        """Mirror of :meth:`render_context`'s own emptiness test.
+        """
+        Mirror of :meth:`render_context`'s own emptiness test.
 
         Args:
             data: The cached payload.
@@ -87,7 +88,8 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
 
 
 class PhotonPlugin(UrbanLensPlugin):
-    """Photon geocoder: an alternate reverse-geocoded address panel, via REData.
+    """
+    Photon geocoder: an alternate reverse-geocoded address panel, via REData.
     No longer calls Photon directly (see the module docstring) - REData's own ``redata_geocode`` service-rate-limit row (``rate_limiter.SERVICE_REGISTRY``) covers this, so there is no per-plugin rate limit to register here anymore."""
 
     name: ClassVar[str] = "photon"

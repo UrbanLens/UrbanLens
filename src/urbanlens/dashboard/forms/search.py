@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 
 class SearchForm(forms.Form):
-    """Filter form for map pin search.
+    """
+    Filter form for map pin search.
 
     Fields are all optional; omitting a field means "no filter on that dimension."
     """
@@ -82,7 +83,8 @@ class SearchForm(forms.Form):
     exclude_regions = forms.CharField(required=False)
 
     def __init__(self, *args, profile: Profile | None = None, **kwargs) -> None:
-        """Build the form, adding one filter field per custom pin field when a profile is given.
+        """
+        Build the form, adding one filter field per custom pin field when a profile is given.
 
         Args:
             *args: Standard form args (usually the request data).
@@ -127,7 +129,8 @@ class SearchForm(forms.Form):
                 self.fields[f"cf_{cf.pk}"] = forms.CharField(required=False)
 
     def _clean_reference_field(self, cf: CustomField) -> int | None:
-        """Resolve and access-check one submitted ``cf_<id>`` reference value.
+        """
+        Resolve and access-check one submitted ``cf_<id>`` reference value.
 
         Only the single submitted pk is resolved (via :func:`resolve_reference`) instead of computing the
         full (up to 500-row) :meth:`CustomField.reference_choices` list just to validate one value.
@@ -155,7 +158,8 @@ class SearchForm(forms.Form):
         return target.pk
 
     def parse_custom_field_criteria(self) -> list[dict] | None:
-        """Collect active custom-field filters from cleaned_data.
+        """
+        Collect active custom-field filters from cleaned_data.
 
         Returns:
             List of criteria dicts (each carrying its ``field`` plus the active bounds/text), or None when
@@ -199,7 +203,8 @@ class SearchForm(forms.Form):
         return criteria or None
 
     def parse_region_geojson(self, key: str) -> MultiPolygon | None:
-        """Parse ``include_regions``/``exclude_regions`` raw GeoJSON text into a MultiPolygon.
+        """
+        Parse ``include_regions``/``exclude_regions`` raw GeoJSON text into a MultiPolygon.
 
         Args:
             key: "include_regions" or "exclude_regions".
@@ -228,7 +233,8 @@ class SearchForm(forms.Form):
             return None
 
     def parse_label_groups(self) -> list[dict] | None:
-        """Parse the ``label_groups`` JSON field into a list of group dicts.
+        """
+        Parse the ``label_groups`` JSON field into a list of group dicts.
 
         Returns:
             List of ``{"op": str, "ids": list[int]}`` dicts, or ``None`` when the field is absent or

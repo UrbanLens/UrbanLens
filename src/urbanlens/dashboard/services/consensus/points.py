@@ -1,4 +1,5 @@
-"""Points, leveling, and point-award constants for Consensus.
+"""
+Points, leveling, and point-award constants for Consensus.
 Consensus-only - not shared with SpotGuessr/Trivia's Glicko-2 ratings (see ``models.consensus.model.ConsensusProfile``)."""
 
 from __future__ import annotations
@@ -49,7 +50,8 @@ MANUAL_EDIT_POINTS_CAP = 6
 
 
 def points_required_for_level(level: int) -> int:
-    """Cumulative lifetime points required to advance from ``level`` to ``level + 1``.
+    """
+    Cumulative lifetime points required to advance from ``level`` to ``level + 1``.
 
     Args:
         level: The level being advanced *from* (1-indexed).
@@ -70,7 +72,8 @@ def level_for_points(points: int) -> int:
 
 
 def award_points(profile_id: int, amount: int, *, reason: str) -> bool:
-    """Award ``amount`` lifetime Consensus points to ``profile_id``, recomputing their level.
+    """
+    Award ``amount`` lifetime Consensus points to ``profile_id``, recomputing their level.
     Race-safe: locks the profile's ``ConsensusProfile`` row for the duration of the update, so two concurrent awards (e.g. two rounds resolving at once) can't read-modify-write past each other.
 
     Args:
@@ -100,7 +103,8 @@ def award_points_for_manual_edit(editor_id: int) -> None:
 
 
 def points_for_changes(changes: Mapping[str, object] | None) -> int:
-    """Value one wiki edit's diff, by what it actually changed.
+    """
+    Value one wiki edit's diff, by what it actually changed.
     Unrecognised keys fall to the cheaper tier rather than the dearer one, so a new edit kind cannot become the best rate in the game by being added.
 
     Args:
@@ -121,7 +125,8 @@ def points_for_changes(changes: Mapping[str, object] | None) -> int:
 
 
 def points_for_wiki_edit(edit: WikiEdit) -> int:
-    """What ``edit`` should pay its editor.
+    """
+    What ``edit`` should pay its editor.
 
     Args:
         edit: The edit to value.
@@ -134,7 +139,8 @@ def points_for_wiki_edit(edit: WikiEdit) -> int:
 
 
 def _adjust_points(profile_id: int, delta: int, *, reason: str) -> None:
-    """Move a profile's lifetime total by ``delta`` and recompute its level.
+    """
+    Move a profile's lifetime total by ``delta`` and recompute its level.
     Unlike :func:`award_points` this never creates a ``ConsensusProfile``: a retraction for a profile that has no row is a no-op, not a reason to materialise one at zero.
 
     Args:
@@ -154,7 +160,8 @@ def _adjust_points(profile_id: int, delta: int, *, reason: str) -> None:
 
 
 def record_wiki_edit_award(edit: WikiEdit) -> None:
-    """Pay ``edit``'s editor and record on the row what was paid.
+    """
+    Pay ``edit``'s editor and record on the row what was paid.
 
     Args:
         edit: The freshly created edit."""
@@ -170,7 +177,8 @@ def record_wiki_edit_award(edit: WikiEdit) -> None:
 
 
 def retract_wiki_edit_award(edit: WikiEdit) -> bool:
-    """Take back what ``edit`` paid, once.
+    """
+    Take back what ``edit`` paid, once.
 
     Args:
         edit: The edit whose award is being withdrawn.
@@ -190,7 +198,8 @@ def retract_wiki_edit_award(edit: WikiEdit) -> bool:
 
 
 def restore_wiki_edit_award(edit: WikiEdit) -> bool:
-    """Put back an award a later revert took away - the revert-of-a-revert case.
+    """
+    Put back an award a later revert took away - the revert-of-a-revert case.
 
     Args:
         edit: The edit whose award is being reinstated.
@@ -211,7 +220,8 @@ def restore_wiki_edit_award(edit: WikiEdit) -> bool:
 
 
 def restore_consensus_points_for(edit_ids: list[int]) -> None:
-    """Reinstate awards for edits whose revert was itself reverted.
+    """
+    Reinstate awards for edits whose revert was itself reverted.
     The batch form, called directly rather than left to the signal for the same reason ``services.wiki.wiki_edits._restore_reputation_for`` is: the caller clears the flag with a queryset ``update()``, which emits no ``post_save``.
 
     Args:
@@ -223,7 +233,8 @@ def restore_consensus_points_for(edit_ids: list[int]) -> None:
 
 
 def backfill_wiki_edit_points(wiki_edit_model: type[WikiEdit]) -> None:
-    """Record on every existing row what it was actually paid.
+    """
+    Record on every existing row what it was actually paid.
     Extracted from the migration that calls it so it can be exercised by a test - this repo has no migration-test harness, so logic left inline in a ``RunPython`` is logic nothing runs until deploy.
 
     Args:

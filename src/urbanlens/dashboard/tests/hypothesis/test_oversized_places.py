@@ -1,4 +1,5 @@
-"""P148: a county-sized "parcel" put strangers across a county into one wiki and pin-in-common domain.
+"""
+P148: a county-sized "parcel" put strangers across a county into one wiki and pin-in-common domain.
 
 Dev place 1740 ("103 Schermerhorn Rd, Cohoes") covered 1,322 km² and held 105 locations across the Capital
 District. It was the convex hull of the CRIS buildings REData linked to one house lot, taken as the parcel when
@@ -164,7 +165,8 @@ class DomainGuardTests(TestCase):
 
 
 class SplitGuardTests(TestCase):
-    """Correcting a county-sized parcel is not a subdivision.
+    """
+    Correcting a county-sized parcel is not a subdivision.
 
     A split grandfathers every holder of the old parcel into every successor, so treating the correction as one
     would give strangers across the county permanent access to each other's real parcels.

@@ -20,7 +20,8 @@ LEAFLET_MARKER_ARTWORK_ID = "ul-leaflet-marker-artwork"
 
 @register.simple_tag
 def vendor_asset(key: str) -> str:
-    """Render the ``<script>`` or ``<link>`` for a named third-party asset.
+    """
+    Render the ``<script>`` or ``<link>`` for a named third-party asset.
 
     Args:
         key: A key of ``VENDOR_ASSETS``.
@@ -33,7 +34,8 @@ def vendor_asset(key: str) -> str:
 
 @register.simple_tag
 def leaflet_marker_artwork() -> SafeString:
-    """Embed where Leaflet's default marker draws its images from, for ``map-layers.ts`` to hand to Leaflet.
+    """
+    Embed where Leaflet's default marker draws its images from, for ``map-layers.ts`` to hand to Leaflet.
 
     Returns:
         A ``<script type="application/json">`` block.
@@ -43,7 +45,8 @@ def leaflet_marker_artwork() -> SafeString:
 
 @register.simple_tag
 def leaflet_marker_url(option: str) -> str:
-    """The URL of one of Leaflet's marker images.
+    """
+    The URL of one of Leaflet's marker images.
 
     Args:
         option: The ``L.Icon.Default`` option it fills: ``iconUrl``, ``iconRetinaUrl`` or ``shadowUrl``.

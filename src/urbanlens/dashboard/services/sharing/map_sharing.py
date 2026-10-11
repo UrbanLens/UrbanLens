@@ -26,7 +26,8 @@ MAX_MARKED_PLACES_PER_SEND = 5
 
 
 def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup_map: MarkupMap) -> PinShare | None:
-    """Create a MAP_DETECTED PinShare for ``(pin, recipient)`` if one doesn't already exist.
+    """
+    Create a MAP_DETECTED PinShare for ``(pin, recipient)`` if one doesn't already exist.
 
     Args:
         sender: The profile whose pin was revealed (owns ``pin``).
@@ -63,7 +64,8 @@ def _record_detected_share(sender: Profile, recipient: Profile, pin: Pin, markup
 
 
 def _record_marked_place_share(sender: Profile, recipient: Profile, latitude: float, longitude: float, markup_map: MarkupMap) -> PinShare | None:
-    """Share a place the map marks outside the sender's shared pins, as a coordinate typed into a message is (P21).
+    """
+    Share a place the map marks outside the sender's shared pins, as a coordinate typed into a message is (P21).
 
     Args:
         sender: The map's owner at the time of sending.
@@ -111,7 +113,8 @@ def _record_marked_place_share(sender: Profile, recipient: Profile, latitude: fl
 
 
 def share_markup_map_with_profile(sender: Profile, recipient: Profile, markup_map: MarkupMap) -> list[PinShare]:
-    """Record what a map being sent from ``sender`` to ``recipient`` shares: the sender's pins it calls out, then the places it marks.
+    """
+    Record what a map being sent from ``sender`` to ``recipient`` shares: the sender's pins it calls out, then the places it marks.
 
     Args:
         sender: ``markup_map``'s owner at the time of sending.
@@ -138,7 +141,8 @@ class MapSharePermissionError(PermissionError):
 
 
 def share_markup_map(sender: Profile, recipient: Profile, markup_map: MarkupMap, *, message: str | None = None) -> tuple[MarkupMapShare, bool]:
-    """Share *markup_map* with *recipient*, once: sending it again refreshes the share rather than adding one.
+    """
+    Share *markup_map* with *recipient*, once: sending it again refreshes the share rather than adding one.
 
     The recipient is notified only the first time, and only as their ``pin_shared`` delivery preference allows.
     Pin-share detection runs on every send, so pins added to the map since the last one are picked up.
@@ -202,7 +206,8 @@ def _notify_map_shared(share: MarkupMapShare) -> None:
 
 
 def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> MarkupMap:
-    """ "Add to my maps": clone ``source`` (owned by ``sender``) into ``recipient``'s own maps.
+    """
+    "Add to my maps": clone ``source`` (owned by ``sender``) into ``recipient``'s own maps.
     Reuses ``MarkupMap.to_snapshot()``/``replace_items_from_snapshot()`` - the same round-trip already used by ``materialize_markup_map`` - so item cloning logic isn't duplicated.
 
     Args:
@@ -218,7 +223,8 @@ def clone_markup_map(source: MarkupMap, recipient: Profile, sender: Profile) -> 
 
 
 def infer_source_share_for_pin(pin: Pin) -> PinShare | None:
-    """Best-effort match of a self-created pin to a prior inbound map-detected share.
+    """
+    Best-effort match of a self-created pin to a prior inbound map-detected share.
 
     Args:
         pin: The pin to find a plausible inbound share for.

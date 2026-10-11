@@ -25,7 +25,8 @@ NUL_REFUSAL = "Text can't contain a NUL character."
 
 
 def holds_nul(value: object) -> bool:
-    """Whether any string in *value*, a decoded JSON value or a form's fields, holds a NUL character.
+    """
+    Whether any string in *value*, a decoded JSON value or a form's fields, holds a NUL character.
 
     Args:
         value: A string, or lists, tuples and dicts of them, keys included.
@@ -48,14 +49,16 @@ def holds_nul(value: object) -> bool:
 
 
 class MalformedBodyError(BadRequest, ValueError):
-    """Posted JSON that does not decode, or is not the shape asked for. Django answers it with a 400.
+    """
+    Posted JSON that does not decode, or is not the shape asked for. Django answers it with a 400.
 
     A ``ValueError`` as well, so a view that already catches one for undecodable JSON answers this the same way.
     """
 
 
 def decode_json(raw: str | bytes) -> Any:
-    """Decode client-supplied JSON of any shape: a body, a form field, a query parameter or a WebSocket frame.
+    """
+    Decode client-supplied JSON of any shape: a body, a form field, a query parameter or a WebSocket frame.
 
     ``json.loads`` raises ``RecursionError``, not a ``ValueError``, on input nested past the interpreter's limit.
 
@@ -80,7 +83,8 @@ def decode_json(raw: str | bytes) -> Any:
 
 
 def posted_json_object(request: HttpRequest) -> dict[str, Any]:
-    """The request's JSON body, which must be an object.
+    """
+    The request's JSON body, which must be an object.
 
     Args:
         request: The incoming request.
@@ -100,7 +104,8 @@ def posted_json_object(request: HttpRequest) -> dict[str, Any]:
 
 
 def json_body(request: HttpRequest) -> bytes:
-    """The raw body of a request a view decodes as JSON itself.
+    """
+    The raw body of a request a view decodes as JSON itself.
 
     A form's body may already have been read into ``request.POST``, by the CSRF check or the NUL refusal; reading
     ``request.body`` after that raises ``RawPostDataException``, a 500.
@@ -120,7 +125,8 @@ def json_body(request: HttpRequest) -> bytes:
 
 
 def posted_fields(request: HttpRequest) -> dict[str, Any]:
-    """A form post's fields, one value each, or the JSON object body.
+    """
+    A form post's fields, one value each, or the JSON object body.
 
     Args:
         request: The incoming request.
@@ -137,7 +143,8 @@ def posted_fields(request: HttpRequest) -> dict[str, Any]:
 
 
 def text_field(fields: Mapping[str, Any], name: str) -> str:
-    """A posted field's text, stripped: ``""`` when it is absent, or a JSON body posted anything but a string.
+    """
+    A posted field's text, stripped: ``""`` when it is absent, or a JSON body posted anything but a string.
 
     A form posts only strings; a JSON body may post any JSON value under a name a view reads as text.
 
@@ -153,7 +160,8 @@ def text_field(fields: Mapping[str, Any], name: str) -> str:
 
 
 def text_type_error(fields: Mapping[str, Any], *names: str) -> str | None:
-    """A refusal for the first of *names* a JSON body posted as neither a string nor null.
+    """
+    A refusal for the first of *names* a JSON body posted as neither a string nor null.
 
     An update that read it with :func:`text_field` would clear the field; refusing the request keeps it.
 
@@ -171,7 +179,8 @@ def text_type_error(fields: Mapping[str, Any], *names: str) -> str | None:
 
 
 def list_field(fields: Mapping[str, Any], name: str) -> list[Any]:
-    """A JSON body's list field: ``[]`` when it is absent or posted as anything but a list.
+    """
+    A JSON body's list field: ``[]`` when it is absent or posted as anything but a list.
 
     Args:
         fields: What :func:`posted_json_object` returned.
@@ -185,7 +194,8 @@ def list_field(fields: Mapping[str, Any], name: str) -> list[Any]:
 
 
 def drf_data_object(request: Request) -> Mapping[str, Any]:
-    """A DRF request's parsed body, which must be a mapping.
+    """
+    A DRF request's parsed body, which must be a mapping.
 
     Args:
         request: The incoming DRF request.
@@ -206,7 +216,8 @@ class FormParser(parsers.FormParser):
     """DRF's form parser, refusing a NUL in any field, as ``NulCharacterRefusalMiddleware`` does for a Django view."""
 
     def parse(self, stream: IO[bytes], media_type: str | None = None, parser_context: Mapping[str, Any] | None = None) -> Any:
-        """Parse *stream* as a urlencoded form.
+        """
+        Parse *stream* as a urlencoded form.
 
         Args:
             stream: The request body.
@@ -226,13 +237,15 @@ class FormParser(parsers.FormParser):
 
 
 class MultiPartParser(parsers.MultiPartParser):
-    """DRF's multipart parser, refusing a NUL in any field. An uploaded file's bytes are not read.
+    """
+    DRF's multipart parser, refusing a NUL in any field. An uploaded file's bytes are not read.
 
     The middleware leaves a CSRF-exempt view's multipart body unread, and every DRF view is CSRF-exempt.
     """
 
     def parse(self, stream: IO[bytes], media_type: str | None = None, parser_context: Mapping[str, Any] | None = None) -> Any:
-        """Parse *stream* as a multipart form.
+        """
+        Parse *stream* as a multipart form.
 
         Args:
             stream: The request body.
@@ -255,7 +268,8 @@ class JSONParser(parsers.JSONParser):
     """DRF's JSON parser, answering a body nested past the recursion limit with a 400 rather than a 500."""
 
     def parse(self, stream: IO[bytes], media_type: str | None = None, parser_context: Mapping[str, Any] | None = None) -> Any:
-        """Parse *stream* as JSON.
+        """
+        Parse *stream* as JSON.
 
         Args:
             stream: The request body.

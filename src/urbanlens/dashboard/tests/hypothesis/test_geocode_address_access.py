@@ -1,4 +1,5 @@
-"""The settings geocode endpoint spends paid and shared upstream budgets, so only a signed-in profile, within its own
+"""
+The settings geocode endpoint spends paid and shared upstream budgets, so only a signed-in profile, within its own
 budget, may reach them."""
 
 from __future__ import annotations

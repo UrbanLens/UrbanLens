@@ -20,7 +20,8 @@ if TYPE_CHECKING:
 
 
 def _resolve_survivor_loser(suggestion: PinMergeSuggestion, survivor_pk: int | None) -> tuple[Pin, Pin]:
-    """Resolve which of a suggestion's two pins is the survivor vs. the loser.
+    """
+    Resolve which of a suggestion's two pins is the survivor vs. the loser.
 
     Args:
         suggestion: The suggestion being accepted.
@@ -48,7 +49,8 @@ def accept_pin_merge_suggestion(
     survivor_pk: int | None = None,
     resolutions: dict[str, int] | None = None,
 ) -> Pin:
-    """Accept a pending merge suggestion, merging one pin into the other.
+    """
+    Accept a pending merge suggestion, merging one pin into the other.
 
     Args:
         suggestion: The pending suggestion being accepted.
@@ -76,7 +78,8 @@ def accept_pin_merge_suggestion(
 
 
 def reject_pin_merge_suggestion(suggestion: PinMergeSuggestion) -> None:
-    """Reject a pending PinMergeSuggestion - neither pin is touched.
+    """
+    Reject a pending PinMergeSuggestion - neither pin is touched.
 
     Args:
         suggestion: The pending suggestion being rejected.

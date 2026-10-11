@@ -152,7 +152,8 @@ class LabelTaxonomySignalTests(TestCase):
 
 
 class PinLabelAssignmentSignalTests(TestCase):
-    """queue_pin_assignment_sync now calls enqueue_follow_on (bulk_followup.py), which - outside any
+    """
+    queue_pin_assignment_sync now calls enqueue_follow_on (bulk_followup.py), which - outside any
     active batching_follow_on_work() collector, as in every test below - calls through to
     safely_enqueue_task exactly as before, but the name it calls through lives in bulk_followup's
     own namespace, not celery's (see "patch the name the module holds")."""

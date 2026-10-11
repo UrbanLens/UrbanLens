@@ -50,7 +50,8 @@ def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs)
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")
 def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """Queue a recompute of the profile's map centre, leaving the current one in place to serve.
+    """
+    Queue a recompute of the profile's map centre, leaving the current one in place to serve.
 
     Clearing it instead would charge the next visitor a read of every pin the account owns - 285 ms on a
     20,000-pin account - to move an opening map position by less than a pixel.
@@ -64,7 +65,8 @@ def invalidate_profile_map_center(sender: type[Pin], instance: Pin, created: boo
 
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")
 def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    """Durably record the deletion for external-API delta-sync clients.
+    """
+    Durably record the deletion for external-API delta-sync clients.
     Written synchronously (not ``on_commit``) so the tombstone commits or rolls back together with the delete itself.
     """
     origin = kwargs.get("origin")
@@ -78,7 +80,8 @@ def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_touch_pin")
 def touch_pin_for_labels(sender, instance, action: str, *, reverse: bool = False, pk_set: set[int] | None = None, **kwargs) -> None:
-    """A pin gaining or losing a label changes its chips, and can change its icon.
+    """
+    A pin gaining or losing a label changes its chips, and can change its icon.
     Writing ``Pin.labels.through`` does not write the pin row, so ``auto_now`` does not fire and the client's poll sees nothing.
     """
     from urbanlens.dashboard.services.map_pins.touch import touch_pin, touch_pins
@@ -97,7 +100,8 @@ def touch_pin_for_labels(sender, instance, action: str, *, reverse: bool = False
 
 @receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
 def touch_pins_for_edited_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
-    """A label's icon/colour can appear on any pin carrying it (Pin.effective_icon).
+    """
+    A label's icon/colour can appear on any pin carrying it (Pin.effective_icon).
 
     Editing the label never touches Pin.labels.through, so without this the pins
     carrying it keep drawing the old icon until the browser's own cache expires.
@@ -111,7 +115,8 @@ def touch_pins_for_edited_label(sender: type[Label], instance: Label, created: b
 
 @receiver(pre_delete, sender=Label, dispatch_uid="label_delete_touch_carrying_pins")
 def touch_pins_for_deleted_label(sender: type[Label], instance: Label, **kwargs) -> None:
-    """A deleted label takes a chip off every pin that carried it.
+    """
+    A deleted label takes a chip off every pin that carried it.
 
     ``pre_delete`` because the through rows go with the row: afterwards there is
     no way left to ask which pins carried it. Deleting them is a cascade in SQL,
@@ -132,7 +137,8 @@ def touch_pins_for_customized_label(sender: type[LabelCustomization], instance: 
 
 @receiver(post_delete, sender=LabelCustomization, dispatch_uid="label_customization_delete_touch_pins")
 def touch_pins_for_cleared_customization(sender: type[LabelCustomization], instance: LabelCustomization, **kwargs) -> None:
-    """Dropping an override changes what the pin draws as surely as setting one.
+    """
+    Dropping an override changes what the pin draws as surely as setting one.
 
     ``services.labels.customization`` also calls this directly, because it needs
     the count; a row deleted any other way has only this.
@@ -144,7 +150,8 @@ def touch_pins_for_cleared_customization(sender: type[LabelCustomization], insta
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_propagate_visited")
 def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
-    """Mark a child pin's ancestors Visited when the child gains the Visited label.
+    """
+    Mark a child pin's ancestors Visited when the child gains the Visited label.
     Visiting a child pin (an entrance, a building on a campus) means the parent place was visited too, so the profile's "Visited" status label cascades up the ``parent_pin`` chain.
     """
     if action != "post_add" or reverse or not pk_set or instance.parent_pin_id is None:
@@ -160,7 +167,8 @@ def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_sync_redata_assignments")
 def sync_redata_assignments_for_pin_labels(sender, instance, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
-    """Forward a pin's tag/category label set to REData whenever it changes.
+    """
+    Forward a pin's tag/category label set to REData whenever it changes.
     ``reverse`` matters here, as it does in ``touch_pin_for_labels`` above: in the reverse direction ``instance`` is the *Label*, not a Pin, and ``pk_set`` holds the affected *pin* ids rather than label ids.
     """
     if action not in {"post_add", "post_remove", "post_clear"}:
@@ -207,7 +215,8 @@ def touch_pin_for_deleted_review(sender, instance: Review, **kwargs) -> None:
 
 
 def _sync_pin_stat_to_wiki(wiki_id: int, profile_id: int, field: str, value: int | None) -> None:
-    """Upsert (1-5) or clear (anything else) one profile's WikiStatVote for a field.
+    """
+    Upsert (1-5) or clear (anything else) one profile's WikiStatVote for a field.
     Mirrors WikiStatVoteView's own upsert-or-delete behavior exactly, so a pin's star rating going back to "unset" clears the vote the same way manually clearing it on the wiki page would - never leaves a stale 0/None row skewing the wiki's composite average.
     """
 
@@ -256,7 +265,8 @@ _PIN_TO_WIKI_STAT_FIELDS = (
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_sync_stats_to_wiki")
 def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
-    """Mirror vulnerability/priority/danger onto the pin's wiki, per-field opt-in.
+    """
+    Mirror vulnerability/priority/danger onto the pin's wiki, per-field opt-in.
 
     Guarded on ``update_fields`` when present (a full save touches every
     field, so nothing to filter there) to skip the profile lookup entirely on
@@ -278,7 +288,8 @@ def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_wiki")
 def ensure_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """Queue background creation of the Wiki for a newly pinned Location.
+    """
+    Queue background creation of the Wiki for a newly pinned Location.
     Fires for every pin-creation path (manual add, CSV/Google Maps import, Flickr, Immich, GPX) since it's a model-level signal rather than a per-importer call - that's what makes this "still happens for bulk imports, but in the background" without slowing any of them down: the enqueue itself is a cheap non-blocking broker publish (see ``tasks.ensure_wiki_for_location``).
     """
     if not created or instance.location_id is None or not instance.profile.community_enabled:

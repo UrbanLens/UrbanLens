@@ -1,4 +1,5 @@
-"""Two uploads by one profile at once must behave as if they ran one after the other.
+"""
+Two uploads by one profile at once must behave as if they ran one after the other.
 
 Each test holds the first writer inside its critical section, just before the ``Image`` insert,
 until the second call has finished or ``_HOLD_SECONDS`` pass. Without a real per-profile critical
@@ -110,7 +111,8 @@ class _RaceCase(TransactionTestCase):
         self.profile = self.user.profile
 
     def race(self, first, second) -> tuple[list[object], list[BaseException]]:
-        """Run *first* until it is about to insert, then *second* to completion, then let *first* finish.
+        """
+        Run *first* until it is about to insert, then *second* to completion, then let *first* finish.
 
         Returns:
             The two calls' return values (in call order, missing when a call raised) and what they raised.

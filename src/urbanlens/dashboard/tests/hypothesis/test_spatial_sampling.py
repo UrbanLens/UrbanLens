@@ -1,4 +1,5 @@
-"""When a photo map is capped, the photos kept must still show the whole place.
+"""
+When a photo map is capped, the photos kept must still show the whole place.
 
 The pin and wiki photo-map layers plotted every geotagged photo, so a location
 with thousands of them built thousands of dicts - each resolving the uploader's
@@ -78,7 +79,8 @@ class TheSamplerTests(TestCase):
 
 
 class TheCoordinateReadIsBoundedTests(TestCase):
-    """Choosing for coverage means looking at every candidate, which is the one
+    """
+    Choosing for coverage means looking at every candidate, which is the one
     unbounded read the sampler introduces.
 
     Three columns and no joins is cheap per row and still O(account) if nothing
@@ -114,7 +116,8 @@ class TheCoordinateReadIsBoundedTests(TestCase):
         self.assertTrue(coordinate_reads, [query["sql"][-160:] for query in queries.captured_queries])
 
     def test_the_ceiling_is_the_one_select_spread_reads(self) -> None:
-        """Guards the patch target: a ceiling nothing reads would make the test
+        """
+        Guards the patch target: a ceiling nothing reads would make the test
         above assert against an unbounded query and still pass."""
         pins = Pin.objects.filter(profile=self.profile)
 

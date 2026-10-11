@@ -1,4 +1,5 @@
-"""Tests for PinMarkupQuerySet filter methods: for_pin and for_profile.
+"""
+Tests for PinMarkupQuerySet filter methods: for_pin and for_profile.
 
 All tests require the database - records are created with model_bakery.
 """

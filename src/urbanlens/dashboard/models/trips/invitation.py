@@ -56,7 +56,8 @@ class TripInvitationManager(_TripInvitationManagerBase):
 
 
 class TripInvitation(abstract.FrontendDashboardModel):
-    """A trip invitation addressed to an email, which may or may not belong to an account.
+    """
+    A trip invitation addressed to an email, which may or may not belong to an account.
 
     The inviter only ever sees the address they typed, so whether it is registered stays hidden. The invitee
     answers two questions independently: whether to join the trip, and whether to become friends with the
@@ -104,7 +105,8 @@ class TripInvitation(abstract.FrontendDashboardModel):
         return self.trip_response == TripInvitationResponse.PENDING and not self.is_expired()
 
     def addressed_to(self, profile: Profile) -> bool:
-        """Whether ``profile`` may answer: the bound invitee, or the account that verified the address of an unbound one.
+        """
+        Whether ``profile`` may answer: the bound invitee, or the account that verified the address of an unbound one.
 
         Holding the link is not enough; it can be forwarded.
         """

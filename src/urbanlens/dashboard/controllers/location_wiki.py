@@ -89,7 +89,8 @@ WIKI_STAT_FIELD_META = {
 
 
 def _wiki_stat_context(wiki: Wiki, field: str, profile: Profile | None, *, conceal: bool = False) -> dict:
-    """Build the template context for one community stat item.
+    """
+    Build the template context for one community stat item.
 
     Args:
         wiki: The wiki the vote/composite belongs to.
@@ -123,7 +124,8 @@ def _unstored[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:
 
 
 def redirect_to_canonical_location[**P](view: Callable[Concatenate[HttpRequest, P], HttpResponseBase]) -> Callable[Concatenate[HttpRequest, P], HttpResponseBase]:
-    """Wrap a ``location_slug`` route so a GET that names its Location by uuid or a former slug moves permanently to the slug.
+    """
+    Wrap a ``location_slug`` route so a GET that names its Location by uuid or a former slug moves permanently to the slug.
 
     Anything but GET and HEAD runs in place, because a redirect would turn a POST into a GET and drop its body.
     Anonymous requests run in place too, and reach the view's own login redirect.
@@ -148,7 +150,8 @@ def redirect_to_canonical_location[**P](view: Callable[Concatenate[HttpRequest, 
 
 
 def canonical_location_routes(patterns: list[URLPattern]) -> list[URLPattern]:
-    """Apply :func:`redirect_to_canonical_location` to every route in a ``location_slug`` group.
+    """
+    Apply :func:`redirect_to_canonical_location` to every route in a ``location_slug`` group.
 
     Args:
         patterns: Routes whose patterns capture ``location_slug``.
@@ -160,7 +163,8 @@ def canonical_location_routes(patterns: list[URLPattern]) -> list[URLPattern]:
 
 
 class LocationRedirectView(LoginRequiredMixin, View):
-    """``/location/<slug>/`` has no page of its own; it leads to the location's wiki.
+    """
+    ``/location/<slug>/`` has no page of its own; it leads to the location's wiki.
 
     GET  /location/<slug>/  → 302 to /location/<canonical slug>/wiki/
     """
@@ -171,7 +175,8 @@ class LocationRedirectView(LoginRequiredMixin, View):
 
 
 class LocationWikiView(LoginRequiredMixin, View):
-    """Main wiki page for a place.
+    """
+    Main wiki page for a place.
 
     GET  /location/<slug>/wiki/  → full wiki page
     """
@@ -315,14 +320,16 @@ class LocationWikiView(LoginRequiredMixin, View):
 
 
 class LocationWikiChildDetailsView(LoginRequiredMixin, View):
-    """HTMX: turn "child pin details" on or off on a wiki's page without reloading it.
+    """
+    HTMX: turn "child pin details" on or off on a wiki's page without reloading it.
 
     Responds with each panel that reads the setting as an out-of-band swap, loading afresh, and tells the map through
     ``HX-Trigger`` (``childDetailsChanged``) so it refetches its own layers.
     """
 
     def get(self, request: HttpRequest, location_slug: str) -> HttpResponse:
-        """Render the wiki page's child-details regions.
+        """
+        Render the wiki page's child-details regions.
 
         Args:
             request: The request; ``children=1`` turns the setting on, and ``album`` keeps an open album open.
@@ -348,7 +355,8 @@ class LocationWikiChildDetailsView(LoginRequiredMixin, View):
 
 
 class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
-    """GET: the wiki's shared Building Attributes card (REData building number/name/year built).
+    """
+    GET: the wiki's shared Building Attributes card (REData building number/name/year built).
 
     Location-scoped (``LocationCache``, not a Pin), so this reads whatever
     ``RedataBuildingAttributesEnrichmentSource``'s background enrichment cycle (or a visiting pin's own
@@ -386,7 +394,8 @@ class WikiBuildingAttributesPanelView(LoginRequiredMixin, View):
 
 
 class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
-    """GET: the wiki's shared list of every building standing on this property.
+    """
+    GET: the wiki's shared list of every building standing on this property.
 
     Like the Building Attributes card beside it, this never triggers a live fetch - it shows whatever
     ``ParcelBuildingsEnrichmentSource``'s background cycle (or a visiting pin's own panel fetch) already
@@ -424,7 +433,8 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
 
 
 class LocationWikiEditView(LoginRequiredMixin, View):
-    """Suggest (and immediately apply) a community edit to a Wiki's fields.
+    """
+    Suggest (and immediately apply) a community edit to a Wiki's fields.
 
     POST /location/<slug>/wiki/edit/
 
@@ -470,7 +480,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
 
 
 def _render_history(request, location: Location, wiki: Wiki):
-    """Render the edit-history partial, including the requester's own profile.
+    """
+    Render the edit-history partial, including the requester's own profile.
 
     Shared by the history list view and the revert/delete actions below so a successful action
     re-renders the up-to-date list in place, instead of leaving a stale row (or a raw JSON body) swapped
@@ -502,7 +513,8 @@ def _render_history(request, location: Location, wiki: Wiki):
 
 
 class LocationWikiHistoryView(LoginRequiredMixin, View):
-    """HTMX partial: edit history list for a wiki.
+    """
+    HTMX partial: edit history list for a wiki.
 
     GET /location/<slug>/wiki/history/
     """
@@ -513,7 +525,8 @@ class LocationWikiHistoryView(LoginRequiredMixin, View):
 
 
 class LocationWikiRevertView(LoginRequiredMixin, View):
-    """Revert a specific WikiEdit.
+    """
+    Revert a specific WikiEdit.
 
     POST /location/<slug>/wiki/history/<edit_id>/revert/
 
@@ -552,7 +565,8 @@ class LocationWikiRevertView(LoginRequiredMixin, View):
 
 
 class LocationWikiEditDeleteView(LoginRequiredMixin, View):
-    """Permanently erase one of the requesting user's own wiki edits.
+    """
+    Permanently erase one of the requesting user's own wiki edits.
 
     POST /location/<slug>/wiki/history/<edit_id>/delete/
 
@@ -609,7 +623,8 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
 
 
 class PublicPinVoteView(LoginRequiredMixin, View):
-    """Cast, change, or withdraw the requester's public-pin ballot.
+    """
+    Cast, change, or withdraw the requester's public-pin ballot.
 
     POST /location/<slug>/wiki/public-vote/
 
@@ -645,7 +660,8 @@ class PublicPinVoteView(LoginRequiredMixin, View):
 
 
 class BoundaryVoteView(LoginRequiredMixin, View):
-    """Cast or change the requester's vote for a location's official boundary.
+    """
+    Cast or change the requester's vote for a location's official boundary.
 
     POST /location/<slug>/wiki/boundary/vote/
 
@@ -684,7 +700,8 @@ class BoundaryVoteView(LoginRequiredMixin, View):
 
 
 class WikiStatVoteView(LoginRequiredMixin, View):
-    """Cast or clear the requester's vote on one community stat field.
+    """
+    Cast or clear the requester's vote on one community stat field.
 
     POST /location/<slug>/wiki/stat/<field>/vote/
 

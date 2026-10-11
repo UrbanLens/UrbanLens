@@ -37,7 +37,8 @@ class _Located(Protocol):
 
 
 def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T | None:
-    """The candidate closest to ``marker``, within building-match range - or None.
+    """
+    The candidate closest to ``marker``, within building-match range - or None.
     The proximity-only fallback: for anything not typed as a building (an entrance, a POI, a hazard - see :func:`_find_existing_match`), or when no REData footprint data settles it.
 
     Args:
@@ -58,7 +59,8 @@ def _nearest_uncovered[T: _Located](marker: _Located, candidates: list[T]) -> T 
 
 
 def _building_containing(marker: _Located, buildings: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """The first REData building record whose real footprint contains ``marker``'s point.
+    """
+    The first REData building record whose real footprint contains ``marker``'s point.
 
     Args:
         marker: A pin or wiki to locate.
@@ -75,7 +77,8 @@ def _building_containing(marker: _Located, buildings: list[dict[str, Any]]) -> d
 
 
 def _find_existing_match[T: _Located](marker: _Located, candidates: list[T], buildings: list[dict[str, Any]]) -> T | None:
-    """The candidate that already covers ``marker``.
+    """
+    The candidate that already covers ``marker``.
 
     Args:
         marker: The pin or wiki being matched.
@@ -97,7 +100,8 @@ def _find_existing_match[T: _Located](marker: _Located, candidates: list[T], bui
 
 
 def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) -> int:
-    """Create a matching child wiki for each selected child pin not already covered.
+    """
+    Create a matching child wiki for each selected child pin not already covered.
     Never creates the wiki itself - community pages are only ever created explicitly (``services.wiki.wiki_share.WikiShareService``); this silently does nothing when the property has none yet.
 
     Args:
@@ -159,7 +163,8 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
 
 
 def pull_children_from_wiki(parent_pin: Pin) -> int:
-    """Create a personal child pin for each of the wiki's child wikis not already covered.
+    """
+    Create a personal child pin for each of the wiki's child wikis not already covered.
 
     Args:
         parent_pin: The parent pin to add matching child pins under.

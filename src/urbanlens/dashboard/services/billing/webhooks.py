@@ -1,4 +1,5 @@
-"""Handlers for verified Stripe webhook events.
+"""
+Handlers for verified Stripe webhook events.
 
 Every handler resolves its target row and no-ops (logs + returns) if it isn't found yet rather than raising, since
 Stripe delivers events with no ordering guarantee. Handlers take the event's ``created`` time so that
@@ -43,7 +44,8 @@ def _id_of(value: object) -> str | None:
 
 
 def _invoice_subscription_id(invoice: dict) -> str | None:
-    """The subscription an invoice bills, from either API shape.
+    """
+    The subscription an invoice bills, from either API shape.
 
     Since API version 2025-03-31 it lives at ``parent.subscription_details.subscription``. Webhook payloads follow the
     endpoint's configured version, so the older top-level ``subscription`` is still read.
@@ -56,7 +58,8 @@ def _invoice_subscription_id(invoice: dict) -> str | None:
 
 
 def _charge_subscription_id(charge: dict) -> str | None:
-    """The subscription a charge paid for, via its invoice.
+    """
+    The subscription a charge paid for, via its invoice.
 
     Current API versions drop ``Charge.invoice``; the link runs through the InvoicePayment for the charge's
     PaymentIntent instead.
@@ -74,7 +77,8 @@ def _charge_subscription_id(charge: dict) -> str | None:
 
 
 def _cancel_duplicate(subscription_id: str, stripe_subscription: dict, live: RoleSubscription) -> None:
-    """Stop Stripe billing a second live subscription to a role the user already holds.
+    """
+    Stop Stripe billing a second live subscription to a role the user already holds.
 
     The one-live-row constraint means it could never be recorded, and nothing else would stop its renewals.
     """
@@ -91,7 +95,8 @@ def _cancel_duplicate(subscription_id: str, stripe_subscription: dict, live: Rol
 
 
 def _get_or_create_role_subscription(user: User, role: SubscriptionRole, subscription_id: str, stripe_subscription: dict, as_of: datetime | None) -> RoleSubscription | None:
-    """Create (or fetch) the RoleSubscription row for a Stripe subscription id.
+    """
+    Create (or fetch) the RoleSubscription row for a Stripe subscription id.
 
     Runs under the user's billing lock, so first sightings of two new subscriptions for one user are serialised.
 
@@ -137,7 +142,8 @@ def _get_or_create_role_subscription(user: User, role: SubscriptionRole, subscri
 
 
 def _recover_role_subscription_from_metadata(subscription_id: str) -> RoleSubscription | None:
-    """Create the RoleSubscription row for *subscription_id* from Stripe's own metadata.
+    """
+    Create the RoleSubscription row for *subscription_id* from Stripe's own metadata.
 
     For when a webhook that only ever carries a bare subscription id (never a Checkout Session) is delivered before
     ``checkout.session.completed`` has created the row - Stripe guarantees neither webhook ordering nor single delivery.
@@ -294,7 +300,8 @@ def _handle_charge_refunded(charge: dict, _occurred_at: datetime | None) -> None
 
 
 def _handle_charge_dispute_closed(dispute: dict, _occurred_at: datetime | None) -> None:
-    """Debit a lost dispute's amount from the banked pay-what-you-want balance.
+    """
+    Debit a lost dispute's amount from the banked pay-what-you-want balance.
 
     Only a dispute closing as ``lost`` moves money (Stripe has taken it back); every other closing status leaves the
     ledger alone.
@@ -329,7 +336,8 @@ _HANDLERS: dict[str, Callable[[dict, datetime | None], None]] = {
 
 
 def handle_event(event: dict) -> None:
-    """Dispatch a verified Stripe event to its handler, if one is registered.
+    """
+    Dispatch a verified Stripe event to its handler, if one is registered.
 
     Args:
         event: The full Stripe event payload (already signature-verified).

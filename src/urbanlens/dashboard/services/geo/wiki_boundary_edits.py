@@ -1,4 +1,5 @@
-"""Writing, reverting and auditing a wiki's community-drawn boundary.
+"""
+Writing, reverting and auditing a wiki's community-drawn boundary.
 
 The web editor, the external API and the history revert all change a wiki's boundary through here, so each records
 the same ``WikiEdit`` shape: ``{"boundary_<type>": {"from": <BoundaryRevision id | None>, "to": <id | None>}}``.
@@ -59,7 +60,8 @@ def _same_outline(first: MultiPolygon | None, second: MultiPolygon | None) -> bo
 
 
 def snapshot_outline(wiki: Wiki, boundary_type: str, polygon: MultiPolygon | None) -> BoundaryRevision | None:
-    """The revision holding *polygon*, reusing the latest one when it already does.
+    """
+    The revision holding *polygon*, reusing the latest one when it already does.
 
     Args:
         wiki: The wiki the outline belongs to.
@@ -96,7 +98,8 @@ def _lock(wiki: Wiki) -> None:
 
 
 def save_wiki_boundary(wiki: Wiki, boundary_type: str, polygon: MultiPolygon | None, editor: Profile) -> WikiEdit:
-    """Draw (or, with None, clear) a wiki's community boundary and record the edit.
+    """
+    Draw (or, with None, clear) a wiki's community boundary and record the edit.
 
     Args:
         wiki: The writable wiki row.
@@ -128,7 +131,8 @@ class BoundaryRevert:
 
 
 def revert_boundary_change(wiki: Wiki, boundary_type: str, change: Any) -> BoundaryRevert:
-    """Put a wiki's boundary back to an edit's ``from`` outline, if it still shows the edit's ``to``.
+    """
+    Put a wiki's boundary back to an edit's ``from`` outline, if it still shows the edit's ``to``.
 
     Args:
         wiki: The writable wiki row.
@@ -176,7 +180,8 @@ def referenced_revision_ids(changes_rows: Iterable[Any]) -> set[int]:
 
 
 def prune_unreferenced_revisions(wiki: Wiki) -> int:
-    """Delete the wiki's outlines no remaining edit names, as after an edit is expunged.
+    """
+    Delete the wiki's outlines no remaining edit names, as after an edit is expunged.
 
     Returns:
         How many revisions were deleted.

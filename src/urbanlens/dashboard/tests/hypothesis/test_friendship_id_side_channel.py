@@ -1,4 +1,5 @@
-"""P281: the friendship routes that take a profile id cost the same, and answer the same, for a hidden account as for none.
+"""
+P281: the friendship routes that take a profile id cost the same, and answer the same, for a hidden account as for none.
 
 They looked the id up, then decided in Python whether the actor could know of the account. An id nobody holds stopped
 after one statement and a hidden account's ran the rest, so walking ids told the actor which accounts are hidden from

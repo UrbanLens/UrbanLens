@@ -1,4 +1,5 @@
-"""Request/response types for the wireless device-scanning endpoints.
+"""
+Request/response types for the wireless device-scanning endpoints.
 
 Hand-rolled and deliberately minimal, like every other serializer in this
 package (see ``serializers``'s module docstring) - these never reuse an
@@ -36,7 +37,8 @@ class DeviceSignalReadingInputSerializer(serializers.Serializer):
 
 
 class DeviceScanEntryInputSerializer(serializers.Serializer):
-    """One device's data within a scan upload.
+    """
+    One device's data within a scan upload.
 
     ``detected=False`` reports that an expected device (see ``expected_marker_uuid``, sourced from a
     prior ``device-scans/nearby/`` response) was searched for near (``estimated_latitude``,
@@ -97,7 +99,8 @@ class NearbyDeviceMarkerDeviceSerializer(serializers.Serializer):
 
 
 class NearbyDeviceMarkerSerializer(serializers.Serializer):
-    """One wiki device marker, as reported to the mobile app.
+    """
+    One wiki device marker, as reported to the mobile app.
 
     ``marker_uuid`` is what a later upload's ``expected_marker_uuid`` refers
     back to when the client confirms or refutes this exact marker.

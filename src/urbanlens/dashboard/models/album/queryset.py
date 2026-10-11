@@ -20,7 +20,8 @@ class AlbumQuerySet(abstract.PublicDashboardQuerySet["Album"]):
     """Custom queryset for Album models."""
 
     def for_pin(self, pin: Pin | int) -> AlbumQuerySet:
-        """Albums belonging to one pin.
+        """
+        Albums belonging to one pin.
 
         Args:
             pin: The owning pin (accepts a Pin instance or a raw pk).
@@ -31,7 +32,8 @@ class AlbumQuerySet(abstract.PublicDashboardQuerySet["Album"]):
         return self.filter(parent_pin=pin)
 
     def for_wiki(self, wiki: Wiki | int) -> AlbumQuerySet:
-        """Albums belonging to one wiki.
+        """
+        Albums belonging to one wiki.
 
         Args:
             wiki: The owning wiki (accepts a Wiki instance or a raw pk).
@@ -42,7 +44,8 @@ class AlbumQuerySet(abstract.PublicDashboardQuerySet["Album"]):
         return self.filter(parent_wiki=wiki)
 
     def for_profile(self, profile: Profile | int) -> AlbumQuerySet:
-        """Vault albums belonging to one profile directly (not via a pin or wiki).
+        """
+        Vault albums belonging to one profile directly (not via a pin or wiki).
 
         Args:
             profile: The owning profile (accepts a Profile instance or a raw pk).
@@ -64,7 +67,8 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet["AlbumItem"]):
     """Custom queryset for AlbumItem models."""
 
     def for_album(self, album: Album | int) -> AlbumItemQuerySet:
-        """Every item in one album.
+        """
+        Every item in one album.
 
         Args:
             album: The album (accepts an Album instance or a raw pk).
@@ -75,7 +79,8 @@ class AlbumItemQuerySet(abstract.DashboardQuerySet["AlbumItem"]):
         return self.filter(album=album)
 
     def in_display_order(self, album: Album) -> AlbumItemQuerySet:
-        """This album's items in its current sort method. Date and name sorts join ``image`` and read live metadata.
+        """
+        This album's items in its current sort method. Date and name sorts join ``image`` and read live metadata.
 
         Args:
             album: The album whose ``sort`` to apply.

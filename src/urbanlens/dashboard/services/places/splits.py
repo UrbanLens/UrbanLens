@@ -23,7 +23,8 @@ SPLIT_SHRINK_RATIO = 0.66
 
 
 def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None) -> bool:
-    """Whether refreshed geometry suggests this parcel was subdivided.
+    """
+    Whether refreshed geometry suggests this parcel was subdivided.
 
     Args:
         place: The parcel whose geometry is being refreshed.
@@ -46,7 +47,8 @@ def looks_like_a_split(place: Place, new_geometry: MultiPolygon | None) -> bool:
 
 @transaction.atomic
 def process_split(place: Place, successors: list[MultiPolygon]) -> Place:
-    """Retire a parcel in favour of the parcels it was divided into.
+    """
+    Retire a parcel in favour of the parcels it was divided into.
 
     Args:
         place: The parcel being superseded.

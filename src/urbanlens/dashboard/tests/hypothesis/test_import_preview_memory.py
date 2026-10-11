@@ -1,4 +1,5 @@
-"""What one import preview may hold in the sandbox worker, and how many are read at once (P95).
+"""
+What one import preview may hold in the sandbox worker, and how many are read at once (P95).
 
 `media-worker` reads previews two at a time in 3 GB. A preview kept every extracted entry until the
 parser returned - up to the 2 GB extraction budget - so two side by side could not fit, and an OOM kill

@@ -1,4 +1,5 @@
-"""Checks a Google Maps CID must pass before anything is sent, stored or asked about it.
+"""
+Checks a Google Maps CID must pass before anything is sent, stored or asked about it.
 
 A CID is an unsigned 64-bit integer. Above 2**53 a float64 cannot hold one exactly, and a CID that
 went through one - a JavaScript ``Number``, ``float()``, ``Decimal(str(float))`` - comes back as the
@@ -31,7 +32,8 @@ _URL_CID = re.compile(r"[?&]cid=([0-9]{1,20})(?![0-9])")
 
 
 class InvalidCidError(ValueError):
-    """A value that cannot be a Google Maps CID, or one that has visibly lost precision.
+    """
+    A value that cannot be a Google Maps CID, or one that has visibly lost precision.
 
     Attributes:
         code: One of the ``CID_*`` codes in this module, as REData reports it.
@@ -45,7 +47,8 @@ class InvalidCidError(ValueError):
 
 
 def parse_cid(value: object) -> int:
-    """The CID *value* states, refusing anything that is not exactly an unsigned 64-bit integer.
+    """
+    The CID *value* states, refusing anything that is not exactly an unsigned 64-bit integer.
 
     Args:
         value: An ``int``, an integral ``Decimal`` (a ``DecimalField`` read), or a string of decimal digits.
@@ -85,7 +88,8 @@ def float_rounded(cid: int) -> int:
 
 
 def looks_float_rounded(cid: int) -> bool:
-    """Whether *cid* is exactly what a float64 prints for itself, which a real CID rarely is.
+    """
+    Whether *cid* is exactly what a float64 prints for itself, which a real CID rarely is.
 
     Above 2**53 only about one 64-bit integer in several hundred has this shape, and every CID that
     went through a JavaScript ``Number`` has it. Never conclusive on its own: refuse such a CID only
@@ -95,7 +99,8 @@ def looks_float_rounded(cid: int) -> bool:
 
 
 def cid_stated_by(url: str) -> int | None:
-    """The CID a Google Maps URL or feature id carries, if it carries one.
+    """
+    The CID a Google Maps URL or feature id carries, if it carries one.
 
     Args:
         url: A place URL with a ``!1s0x...:0x<cid>`` data segment, a ``?cid=<digits>`` URL, or a bare
@@ -120,7 +125,8 @@ def cid_stated_by(url: str) -> int | None:
 
 
 def reconcile_cid(claimed: object, *, url: str = "") -> int | None:
-    """The one CID an import entry names, from the CID it claims and the URL it came from.
+    """
+    The one CID an import entry names, from the CID it claims and the URL it came from.
 
     A URL that states a CID is authoritative: it is Google's own value, written by Google. A claimed
     CID that is that value after a float64 round trip is a copy that lost its low digits, and the

@@ -1,4 +1,5 @@
-"""Aerial & drone footage plugin: a Media-gallery source for overhead views of a pin, via REData.
+"""
+Aerial & drone footage plugin: a Media-gallery source for overhead views of a pin, via REData.
 An aerial view of a roofless mill or a fenced-off complex shows what no street-level photo can, which makes this its own gallery tab rather than rows mixed into the general media results."""
 
 from __future__ import annotations

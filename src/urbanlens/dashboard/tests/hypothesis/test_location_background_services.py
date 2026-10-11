@@ -136,7 +136,8 @@ class PlaceNameResolverChainTests(SimpleTestCase):
             self.assertIsNone(GoogleGeocodingNameResolver().resolve(40.0, -74.0))
 
     def test_google_places_resolver_skips_locality_only_result_for_next_poi(self) -> None:
-        """A bare city hit (e.g. a rural pin with no closer POI) must not become the pin's name.
+        """
+        A bare city hit (e.g. a rural pin with no closer POI) must not become the pin's name.
 
         The resolver must skip results whose types are exclusively administrative/regional ones."""
         from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
@@ -199,7 +200,8 @@ class BoundaryProviderChainTests(SimpleTestCase):
     """Typed boundary resolution fills property/building slots independently, with no bbox fallback."""
 
     def test_default_chain_tries_redata_first(self) -> None:
-        """RedataBoundaryProvider is authoritative when it has data - see boundaries.py's
+        """
+        RedataBoundaryProvider is authoritative when it has data - see boundaries.py's
         own docstring for why it runs before the community/ML-derived providers."""
         from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
         from urbanlens.dashboard.services.locations.boundaries import BoundaryProviderChain
@@ -342,7 +344,8 @@ class OverpassGatewayTests(SimpleTestCase):
         self.assertIn("out center tags qt", query)
 
     def test_default_tag_filter_splits_into_valid_clauses(self) -> None:
-        """Regression test: Overpass QL has no `|` OR-operator between bracket filters.
+        """
+        Regression test: Overpass QL has no `|` OR-operator between bracket filters.
 
         A previous version of `_DEFAULT_FEATURE_TAG_FILTER` chained filters with a bare `|` directly inside a
         single statement, which Overpass rejects with a parse error on every request."""
@@ -372,7 +375,8 @@ class OverpassGatewayTests(SimpleTestCase):
             self.assertEqual(gateway.element("way", 123), {"type": "way", "id": 123})
 
     def test_nearby_features_query_uses_configured_ql_timeout(self) -> None:
-        """The server-side ``[timeout:N]`` reflects the gateway's ``ql_timeout``.
+        """
+        The server-side ``[timeout:N]`` reflects the gateway's ``ql_timeout``.
 
         A low value made the busy public instances 504 while merely waiting for a
         dispatcher slot, so this must be tunable rather than hardcoded low.
@@ -533,7 +537,8 @@ class OverpassGatewayTests(SimpleTestCase):
         self.assertEqual(gateway.session.post.call_count, 1)
 
     def test_empty_fallback_result_is_cross_checked_and_the_liar_downed(self) -> None:
-        """A fallback answering 0 elements where the next endpoint has data is
+        """
+        A fallback answering 0 elements where the next endpoint has data is
         marked down as incomplete (the osm.ch lie-by-omission incident)."""
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway, _endpoint_is_down
 
@@ -569,7 +574,8 @@ class OverpassGatewayTests(SimpleTestCase):
         self.assertFalse(_endpoint_is_down(gateway.mirrors[0]))
 
     def test_suspect_empty_is_returned_when_the_cross_check_cannot_complete(self) -> None:
-        """If every endpoint after the suspect fails, its empty answer is the
+        """
+        If every endpoint after the suspect fails, its empty answer is the
         best information available - returned rather than raising."""
         from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 
@@ -626,7 +632,8 @@ class OverpassGatewayTests(SimpleTestCase):
 
 
 class SelfIntersectingRingTests(SimpleTestCase):
-    """Regression coverage for a real reported bug: a self-intersecting OSM way
+    """
+    Regression coverage for a real reported bug: a self-intersecting OSM way
 
     (GEOS logs "GEOS_NOTICE: Self-intersection at or near point ...") used to crash `_polygon_from_element` ->
     `_polygon_from_ring` -> `best_polygon_from_geometry` with `TypeError: Parameter must be a sequence of
@@ -700,7 +707,8 @@ class NominatimGatewayTests(SimpleTestCase):
         self.assertEqual(len(osm_ids.split(",")), 50)
 
     def test_reverse_geocode_surfaces_address_breakdown_as_extra_details(self) -> None:
-        """A point with no OSM tags of its own still gets neighbourhood/postcode/
+        """
+        A point with no OSM tags of its own still gets neighbourhood/postcode/
         county from addressdetails=1, so the pin-detail panel isn't empty for
         the common "no extra tags" case."""
         from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
@@ -783,7 +791,8 @@ class NominatimInfoViewTests(TestCase):
         self.assertContains(response, "info@example.com")
 
     def test_address_breakdown_only_result_is_rendered_not_204(self) -> None:
-        """A point with no OSM tags of its own, only the neighbourhood/postcode/
+        """
+        A point with no OSM tags of its own, only the neighbourhood/postcode/
         county now folded into extra_details, still renders."""
         response = self._cache_and_fetch(
             {"extra_details": [{"key": "postcode", "label": "Postcode", "value": "45237"}]}

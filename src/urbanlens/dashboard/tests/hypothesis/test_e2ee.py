@@ -254,7 +254,8 @@ class EnrollEndpointTests(TestCase):
 
 
 class OwnKeysEndpointTests(TestCase):
-    """The caller's own "keys" endpoint always returns 200, not 404.
+    """
+    The caller's own "keys" endpoint always returns 200, not 404.
 
     Not being enrolled is a common, expected state (checked unconditionally on every page load to render the
     encryption status indicator) - it must not surface as an HTTP error status, which would show up as a
@@ -518,7 +519,8 @@ class RewrapAllAndResetPreservationTests(TestCase):
 
     @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
     def test_reset_refuses_when_the_bundle_moved_mid_flight(self) -> None:
-        """A second reset landing between our read and our write must not be applied.
+        """
+        A second reset landing between our read and our write must not be applied.
 
         The client rewraps every conversation against the key it read at the start."""
         me, partner = _profile(), _profile()
@@ -770,7 +772,8 @@ class ExportTests(TestCase):
 
 
 class ConversationKeyGetOracleTests(TestCase):
-    """The conversation-key GET must not be a profile-slug existence oracle.
+    """
+    The conversation-key GET must not be a profile-slug existence oracle.
 
     Regression: the GET returned 200-with-empty-keys for any existing profile slug (no relationship required)
     and a 404 only for unknown slugs, letting a logged-in user enumerate which slugs exist - which

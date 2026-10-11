@@ -53,7 +53,8 @@ class VisitHistoryViewTests(TestCase):
         self.assertContains(response, "data-adaptive-pagination-controls")
 
     def test_visit_list_batch_size_exceeds_typical_client_page_size(self):
-        """The server-side batch must be comfortably larger than a typical
+        """
+        The server-side batch must be comfortably larger than a typical
         visible page, or the client-side height measurer has nothing to
         actually paginate against - see _VISITS_BATCH_MULTIPLIER."""
         from urbanlens.dashboard.controllers.visits import _VISITS_CLIENT_PAGE_SIZE, _VISITS_PAGE_SIZE
@@ -61,7 +62,8 @@ class VisitHistoryViewTests(TestCase):
         self.assertGreater(_VISITS_PAGE_SIZE, _VISITS_CLIENT_PAGE_SIZE)
 
     def test_visit_count_badge_shows_the_true_total_not_just_the_current_page(self):
-        """UL-114: the header badge used to render {{ visits|length }} - the
+        """
+        UL-114: the header badge used to render {{ visits|length }} - the
         current server-side page's slice, not the true total - so once a pin
         had more visits than one page holds, the badge understated the real
         count (and changed misleadingly as you paged/toggled children),
@@ -79,7 +81,8 @@ class VisitHistoryViewTests(TestCase):
         self.assertContains(response, f'<span class="visit-count badge">{total}</span>')
 
     def test_add_dialog_shows_three_attachment_buttons(self):
-        """Photos/Map/Participants collapse behind one button each instead of
+        """
+        Photos/Map/Participants collapse behind one button each instead of
         three always-visible "(optional)" field rows -."""
         response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
 
@@ -194,7 +197,8 @@ class VisitCreatePostTests(TestCase):
 
 
 class ChildVisitsSurviveAnEditTests(TestCase):
-    """Logging, editing or deleting a visit re-renders the panel without a ``children`` flag; the page's address,
+    """
+    Logging, editing or deleting a visit re-renders the panel without a ``children`` flag; the page's address,
     which the child-details toggle keeps current, says whether the child pins' visits belong in it."""
 
     def setUp(self):

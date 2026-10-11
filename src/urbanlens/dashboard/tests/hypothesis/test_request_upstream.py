@@ -1,4 +1,5 @@
-"""The request-path upstream policy: cache, throttle, slot and deadline in one call.
+"""
+The request-path upstream policy: cache, throttle, slot and deadline in one call.
 
 The properties that matter are the ones a view cannot see from its own response: a failure is never
 cached, a slot stays held by a fetch the request abandoned, and a cache hit costs the caller nothing

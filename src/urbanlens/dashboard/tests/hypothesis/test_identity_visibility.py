@@ -193,7 +193,8 @@ class TripCommentAuthorPrivacyTests(TestCase):
 
 
 class TripCommentVisibilityGateTests(TestCase):
-    """The author's comment_visibility gates the whole trip comment (all-or-nothing),
+    """
+    The author's comment_visibility gates the whole trip comment (all-or-nothing),
     matching pin/wiki comments - distinct from profile_visibility, which only
     masks the author's identity while keeping the content visible."""
 
@@ -256,7 +257,8 @@ class TripCommentVisibilityGateTests(TestCase):
 
 
 class LiveMessagePayloadMaskingTests(TestCase):
-    """WebSocket message payloads resolve the sender's identity per recipient.
+    """
+    WebSocket message payloads resolve the sender's identity per recipient.
 
     Payloads are now built per recipient."""
 
@@ -398,7 +400,8 @@ class GroupMessageSenderPrivacyTests(TestCase):
 
 
 class TripListCardPrivacyTests(TestCase):
-    """Trip list cards mask member avatars/creator badge per profile_visibility.
+    """
+    Trip list cards mask member avatars/creator badge per profile_visibility.
 
     A list is more diffuse than the single-trip render sites (member panel, activity and comment attribution):
     every card carries its own member avatars and creator badge, across however many trips are listed at once,
@@ -465,7 +468,8 @@ class TripListCardPrivacyTests(TestCase):
 
 
 class PinWikiCommentAuthorPrivacyTests(TestCase):
-    """Pin/wiki comment author identity is masked per profile_visibility - comment text still shows.
+    """
+    Pin/wiki comment author identity is masked per profile_visibility - comment text still shows.
 
     Two separate gates, easily mistaken for one: can_view_comments_from decides whether the comment is shown at
     all (comment_visibility), and profile_visibility decides whether its author is named."""
@@ -521,7 +525,8 @@ class PinWikiCommentAuthorPrivacyTests(TestCase):
 
 
 class TripInviteNotificationPrivacyTests(TestCase):
-    """Trip-invite notification text masks the inviter's identity when hidden.
+    """
+    Trip-invite notification text masks the inviter's identity when hidden.
 
     Notification text is baked in as a plain-text string at creation time, so a template-side fix cannot reach
     it later: the identity has to be resolved, and masked if needed, before the string is formatted."""
@@ -567,7 +572,8 @@ class TripInviteNotificationPrivacyTests(TestCase):
 
 
 class GroupAddNotificationTextPrivacyTests(TestCase):
-    """ "X added you to the group" notification text masks the actor's identity
+    """
+    "X added you to the group" notification text masks the actor's identity
     when hidden - _notify_group_event stores it as a plain-text NotificationLog
     (notification_type=MESSAGE, title=group.name)."""
 
@@ -624,7 +630,8 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
 
 
 class DirectMessageThreadPartnerMaskingTests(TestCase):
-    """_thread.html's block-confirm/empty-state/composer text masks a hidden partner.
+    """
+    _thread.html's block-confirm/empty-state/composer text masks a hidden partner.
 
     The thread header resolves the partner through display_identity_for, which is easy to read as covering the
     template - four other spots in the same file render the partner independently, and each has to mask on its
@@ -717,7 +724,8 @@ class SuggestMutualConnectionTests(TestCase):
         )
 
     def test_does_not_grant_profile_view_access(self) -> None:
-        """A masked (e.g. NO_ONE-visibility) profile must not become viewable just
+        """
+        A masked (e.g. NO_ONE-visibility) profile must not become viewable just
         because they were suggested as a connection - allow_friend_recommendations
         is about recommending someone to others, not unlocking their own profile."""
         suggest_mutual_connection(self.a, self.b)

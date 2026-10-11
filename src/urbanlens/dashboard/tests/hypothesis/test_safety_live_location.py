@@ -1,4 +1,5 @@
-"""Tests for safety check-in live location: sharing toggle, position updates, and the
+"""
+Tests for safety check-in live location: sharing toggle, position updates, and the
 chat consumer's location-group scoping (session route only, never the contact route).
 """
 
@@ -111,7 +112,8 @@ class UpdateLiveLocationTests(TestCase):
 
 
 class UpdateLiveLocationPrecisionTests(TestCase):
-    """update_live_location round-trips lat/lng through the DecimalField(9,6) column
+    """
+    update_live_location round-trips lat/lng through the DecimalField(9,6) column
     without silent truncation, for arbitrary real-world coordinates.
     """
 
@@ -143,7 +145,8 @@ class UpdateLiveLocationPrecisionTests(TestCase):
 
 
 def _run(coro):
-    """Run *coro* via async_to_sync - see test_safety_chat.py's identical helper for why
+    """
+    Run *coro* via async_to_sync - see test_safety_chat.py's identical helper for why
     a bare asyncio.run() won't work with database_sync_to_async's thread-sensitive mode.
     """
 
@@ -154,7 +157,8 @@ def _run(coro):
 
 
 class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
-    """The chat consumer's location group: session route only, never the contact route -
+    """
+    The chat consumer's location group: session route only, never the contact route -
     even for a profile that is simultaneously a contact *and* an accepted partner on the
     very same check-in.
     """

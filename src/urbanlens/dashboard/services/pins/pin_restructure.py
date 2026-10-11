@@ -1,4 +1,5 @@
-"""Suggest and apply hierarchy fixes for a pin that covers a whole property.
+"""
+Suggest and apply hierarchy fixes for a pin that covers a whole property.
 Both are "this pin's hierarchy doesn't match the ground", both are detectable from the same parcel data, and both are tedious to fix by hand - so they are offered together, once, as a single suggestion (see ``controllers.pin_restructure``)."""
 
 from __future__ import annotations
@@ -53,7 +54,8 @@ POINT_FEATURE_TYPES = frozenset({PinType.ENTRANCE, PinType.POINT_OF_INTEREST, Pi
 
 
 def building_footprint(building: dict[str, Any]) -> GEOSGeometry | None:
-    """The building's own footprint polygon, when its source published one.
+    """
+    The building's own footprint polygon, when its source published one.
 
     Args:
         building: A cached building record (see ``plugins.builtin.parcel_buildings``).
@@ -82,7 +84,8 @@ def _marker_point(marker) -> Point | None:
 
 
 def marker_covers_building(building: dict[str, Any], marker) -> bool:
-    """Whether an existing marker already stands for this building.
+    """
+    Whether an existing marker already stands for this building.
 
     Args:
         building: A cached building record.
@@ -106,7 +109,8 @@ def marker_covers_building(building: dict[str, Any], marker) -> bool:
 
 
 def match_marker(building: dict[str, Any], candidates: list) -> Any | None:
-    """The marker already covering a building, if one does.
+    """
+    The marker already covering a building, if one does.
 
     Args:
         building: A cached building record.
@@ -127,7 +131,8 @@ def match_marker(building: dict[str, Any], candidates: list) -> Any | None:
 
 
 def unmatched_buildings(buildings: list[dict[str, Any]], markers: list) -> list[dict[str, Any]]:
-    """Buildings that no marker covers yet.
+    """
+    Buildings that no marker covers yet.
 
     Args:
         buildings: Cached building records.
@@ -167,7 +172,8 @@ class RestructurePlan:
 
 
 def property_polygon(pin: Pin) -> GEOSGeometry | None:
-    """The pin's real property boundary, or None when only the fallback circle exists.
+    """
+    The pin's real property boundary, or None when only the fallback circle exists.
 
     Args:
         pin: The pin whose property boundary to resolve.
@@ -185,7 +191,8 @@ def property_polygon(pin: Pin) -> GEOSGeometry | None:
 
 
 def nestable_root_pins(pin: Pin) -> list[Pin]:
-    """The owner's other top-level pins standing inside this pin's property.
+    """
+    The owner's other top-level pins standing inside this pin's property.
 
     Args:
         pin: The prospective parent pin.
@@ -208,7 +215,8 @@ def nestable_root_pins(pin: Pin) -> list[Pin]:
 
 
 def plan_for(pin: Pin) -> RestructurePlan:
-    """What this pin's restructure suggestion would change.
+    """
+    What this pin's restructure suggestion would change.
     A read-only survey: it consults only already-cached parcel data and the owner's own pins, and never contacts an external service.
 
     Args:
@@ -220,7 +228,8 @@ def plan_for(pin: Pin) -> RestructurePlan:
 
 
 def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tuple[Any, Any]]:
-    """Which of ``buildings``' centroids this profile already has a pin on.
+    """
+    Which of ``buildings``' centroids this profile already has a pin on.
     Mirrors the rule ``pin_creation.resolve_child_pin_location`` enforces: a profile may not hold two pins at one exact point, counting *every* pin it owns rather than only this parcel's children.
 
     Args:
@@ -252,7 +261,8 @@ def already_pinned_points(pin: Pin, buildings: list[dict[str, Any]]) -> set[tupl
 
 
 def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
-    """Buildings on this pin's parcel that no pin of the owner's covers yet, one record per building.
+    """
+    Buildings on this pin's parcel that no pin of the owner's covers yet, one record per building.
 
     Args:
         pin: The parent pin.
@@ -271,7 +281,8 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
 
 
 def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children: Sequence[Marker], boundary: GEOSGeometry | None) -> frozenset[int]:
-    """Which of this parcel's buildings the import could actually create a pin for.
+    """
+    Which of this parcel's buildings the import could actually create a pin for.
     The rule behind :func:`missing_buildings`, expressed as *positions in* ``buildings_on_property(cached)`` rather than as records: one position per building no child covers - its cluster's representative (see ``services.pins.building_clusters``).
 
     Args:
@@ -299,7 +310,8 @@ def importable_building_indexes(pin: Pin, cached: list[dict[str, Any]], children
 
 
 def should_offer(pin: Pin) -> bool:
-    """Whether this pin may show a restructure suggestion at all.
+    """
+    Whether this pin may show a restructure suggestion at all.
     Checks only the cheap gates (settings, dismissal, hierarchy position), not whether there is anything to suggest - see :func:`plan_for` for that.
 
     Args:
@@ -316,7 +328,8 @@ def should_offer(pin: Pin) -> bool:
 
 
 def building_name(building: dict[str, Any]) -> str:
-    """A usable marker name for a building record.
+    """
+    A usable marker name for a building record.
 
     Args:
         building: A cached building record.
@@ -343,7 +356,8 @@ def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str])
 
 
 def building_markers[M: Marker](markers: Iterable[M]) -> list[M]:
-    """The child markers that can stand for a whole building: not a door, a hazard or a stairwell on one.
+    """
+    The child markers that can stand for a whole building: not a door, a hazard or a stairwell on one.
 
     Args:
         markers: Child pins or child wikis.
@@ -355,7 +369,8 @@ def building_markers[M: Marker](markers: Iterable[M]) -> list[M]:
 
 
 def property_buildings(buildings: list[dict[str, Any]], boundary: GEOSGeometry | None) -> list[dict[str, Any]]:
-    """The records that stand on this property: on it by the provider's word, and inside its real boundary.
+    """
+    The records that stand on this property: on it by the provider's word, and inside its real boundary.
 
     Args:
         buildings: Raw building records from either provider.
@@ -377,7 +392,8 @@ _GENERIC_BUILDING_TAGS = frozenset({"yes", "true", "1", "building", "constructio
 
 
 def building_kind(building: dict[str, Any]) -> str:
-    """What sort of building a record describes, from its OSM ``building`` tag, as a label.
+    """
+    What sort of building a record describes, from its OSM ``building`` tag, as a label.
 
     Args:
         building: A cached building record.
@@ -399,7 +415,8 @@ DatingYears = Literal["own", "any", "none"]
 
 
 def building_wiki_name(cluster: BuildingCluster, container_name: str = "", reserved: Iterable[str] = (), *, years: DatingYears = "own") -> str:
-    """A public, descriptive name for one building's child wiki.
+    """
+    A public, descriptive name for one building's child wiki.
     Built only from the building records and the campus's own public names, never from anybody's pin.
 
     Args:
@@ -464,7 +481,8 @@ class WikiMirror:
 
 @dataclass(eq=False, slots=True)
 class BuildingNester:
-    """One property's buildings, grouped into physical buildings once, and the places, wikis and pins standing for them.
+    """
+    One property's buildings, grouped into physical buildings once, and the places, wikis and pins standing for them.
 
     Every path that turns building records into markers - the automatic sweep, the "Organize this property?"
     dialog, the building import and the wiki mirror - goes through here, so they agree on what a building is,
@@ -479,7 +497,8 @@ class BuildingNester:
 
     @classmethod
     def build(cls, pin: Pin, buildings: list[dict[str, Any]], boundary: GEOSGeometry | None) -> BuildingNester:
-        """Group already-fetched records.
+        """
+        Group already-fetched records.
 
         Args:
             pin: The campus pin.
@@ -496,7 +515,8 @@ class BuildingNester:
 
     @classmethod
     def for_pin(cls, pin: Pin, fallback: list[dict[str, Any]] | None = None) -> BuildingNester:
-        """Group the pin's cached parcel buildings.
+        """
+        Group the pin's cached parcel buildings.
 
         Args:
             pin: The campus pin.
@@ -519,7 +539,8 @@ class BuildingNester:
         return {index for index, cluster in enumerate(self.clusters) if any(building_selection_key(member) in keys for member in cluster.members)}
 
     def points(self, cluster: BuildingCluster) -> list[tuple[float, float]]:
-        """Where this building's marker may stand, best first: its marker point, then elsewhere on it.
+        """
+        Where this building's marker may stand, best first: its marker point, then elsewhere on it.
 
         The alternatives matter only when the best point is taken - most often by the campus's own pin or wiki,
         whose coordinate is frequently one of its buildings' centroids. Each is one the building covers, so a
@@ -553,7 +574,8 @@ class BuildingNester:
         return enclosing_parcel(self.pin.location.place if self.pin.location_id and self.pin.location.place_id else None)
 
     def places(self) -> dict[int, Place]:
-        """Each cluster's building place, provisioned for every building known on the parcel.
+        """
+        Each cluster's building place, provisioned for every building known on the parcel.
 
         How many buildings stand on a property is a fact about the property; which of them somebody pinned is
         a fact about that person - so this covers every record, not only the ones being pinned.
@@ -594,7 +616,8 @@ class BuildingNester:
         return Wiki.objects.select_for_update(of=("self",)).select_related("location").get(pk=wiki.pk)
 
     def mirror_wikis(self, wanted: set[int], profile: Profile | None) -> WikiMirror:
-        """Give each wanted building a child wiki under the campus wiki, reusing any that already stands for it.
+        """
+        Give each wanted building a child wiki under the campus wiki, reusing any that already stands for it.
 
         Args:
             wanted: Positions in :attr:`clusters` to mirror.
@@ -642,7 +665,8 @@ class BuildingNester:
         return {ancestor.pk for ancestor in wiki.ancestor_chain()[:MAX_PARCEL_HOPS]}
 
     def _place_wiki(self, cluster: BuildingCluster, parent: Wiki, place: Place | None, campus: Wiki, unavailable: set[int]) -> tuple[Wiki | None, bool]:
-        """Create the building's child wiki at the first free point on it, or adopt a wiki already standing there.
+        """
+        Create the building's child wiki at the first free point on it, or adopt a wiki already standing there.
 
         Returns:
             The wiki (None when every point is taken by one this building may not adopt), and whether it is new.
@@ -705,7 +729,8 @@ class BuildingNester:
         return building_wiki_name(cluster, names[0] if names else "", reserved=names)
 
     def _given_names(self, cluster: BuildingCluster, campus: Wiki) -> set[str]:
-        """Every name a sweep may have given this building's wiki: before the campus had a name or since, and dated by
+        """
+        Every name a sweep may have given this building's wiki: before the campus had a name or since, and dated by
         any year its records carry, its own, or none. A wiki still holding one was named by a sweep, not by anybody,
         so a sweep may rename it as its records change."""
         names = self._campus_names(campus)
@@ -728,7 +753,8 @@ class BuildingNester:
     # Pins
 
     def create_pins(self, wanted: set[int], wikis: dict[int, Wiki] | None = None, *, swept: Sequence[SweptBuilding] = ()) -> dict[int, Pin]:
-        """Give each wanted building a child pin under the campus pin, standing on its wiki's own point.
+        """
+        Give each wanted building a child pin under the campus pin, standing on its wiki's own point.
 
         Args:
             wanted: Positions in :attr:`clusters` to pin.
@@ -794,7 +820,8 @@ class BuildingNester:
 
 
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
-    """Create a child pin for each given building, in one transaction.
+    """
+    Create a child pin for each given building, in one transaction.
 
     Args:
         pin: The parent pin.
@@ -807,7 +834,8 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
 
 
 def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
-    """Re-parent top-level pins under this pin, keeping everything else about them.
+    """
+    Re-parent top-level pins under this pin, keeping everything else about them.
 
     Args:
         pin: The new parent.
@@ -832,7 +860,8 @@ def nest_root_pins(pin: Pin, candidates: list[Pin]) -> int:
 
 
 def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile: Profile) -> int:
-    """Mirror imported buildings as child wikis of the pin's community wiki.
+    """
+    Mirror imported buildings as child wikis of the pin's community wiki.
 
     Args:
         pin: The parent pin, whose location's wiki is the parent wiki.

@@ -96,7 +96,8 @@ class VisibilityDefaultsTests(TestCase):
         self.assertEqual(self.profile.comment_visibility, VisibilityChoice.ANYTHING_IN_COMMON)
 
     def test_friend_request_visibility_still_defaults_to_anyone(self) -> None:
-        """Unlike its siblings above, this one was moved back to ANYONE - see
+        """
+        Unlike its siblings above, this one was moved back to ANYONE - see
         the class/module docstring."""
         self.assertEqual(self.profile.friend_request_visibility, VisibilityChoice.ANYONE)
 

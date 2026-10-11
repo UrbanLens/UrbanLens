@@ -12,7 +12,8 @@ _GMAIL_DOMAINS = frozenset({_GMAIL_DOMAIN, "googlemail.com"})
 
 
 def normalize_email(email: str) -> str:
-    """Return a canonical form of ``email`` suitable for equality comparisons.
+    """
+    Return a canonical form of ``email`` suitable for equality comparisons.
 
     Every spelling Gmail delivers to one mailbox collapses to one value: case, dots in the local part, a
     ``+tag`` suffix, and the ``googlemail.com`` alias. Other domains are only lowercased, since a dot or a
@@ -40,7 +41,8 @@ def is_gmail_address(email: str) -> bool:
 
 
 def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
-    """Look up a User whose primary or verified secondary email matches.
+    """
+    Look up a User whose primary or verified secondary email matches.
 
     Args:
         email: Raw email address to look up.
@@ -73,7 +75,8 @@ def find_user_by_email(email: str, *, active_only: bool = True) -> User | None:
 
 
 def find_verified_user_by_email(email: str) -> User | None:
-    """The active account that has proved it controls ``email``: a verified primary or a verified secondary.
+    """
+    The active account that has proved it controls ``email``: a verified primary or a verified secondary.
 
     Args:
         email: Raw email address.
@@ -125,7 +128,8 @@ def has_verified_address(user: User, email: str) -> bool:
 
 
 def is_email_taken(email: str, *, exclude_user_id: int | None = None) -> bool:
-    """Return True if ``email`` (normalized) is already the primary or a verified secondary email.
+    """
+    Return True if ``email`` (normalized) is already the primary or a verified secondary email.
 
     Args:
         email: Candidate email address.

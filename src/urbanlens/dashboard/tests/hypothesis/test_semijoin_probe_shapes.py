@@ -1,4 +1,5 @@
-"""The mechanism behind the ``test_search_does_not_read_another_accounts_*`` family, on its own.
+"""
+The mechanism behind the ``test_search_does_not_read_another_accounts_*`` family, on its own.
 
 Those files each drive one provider and assert the outcome: growing a stranger's rows must not make
 the viewer's search read more. They cannot say *why* it holds, so a rewrite that keeps one path
@@ -187,7 +188,8 @@ class AnyOfTests(_ProbeCase):
         self.assertIn(",".join(str(pk) for pk in pks), sql)
 
     def test_the_planner_can_see_the_values(self) -> None:
-        """Bound as a parameter the array is opaque when the statement is planned, and a small
+        """
+        Bound as a parameter the array is opaque when the statement is planned, and a small
         table then tips towards a scan of whatever the filter names. See the module docstring."""
         pks = list(Pin.objects.values_list("pk", flat=True))
         sql, _ = Pin.objects.filter(pk__anyof=pks).query.sql_with_params()

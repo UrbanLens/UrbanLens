@@ -105,7 +105,8 @@ class PinMoveWikiLossTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_invalid_coordinates_beat_the_confirmation_prompt(self) -> None:
-        """Input errors are reported before the user is asked to confirm - being
+        """
+        Input errors are reported before the user is asked to confirm - being
         prompted and then handed a 400 would be a pointless round trip."""
         response = self._patch(latitude=999.0, longitude=-73.0)
 
@@ -166,7 +167,8 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         self.assertEqual([w.pk for w in wikis_hidden_by_pin_move(pin, 41.0, -73.0)], [self.wiki.pk])
 
     def test_a_stay_put_move_is_not_reported_as_a_loss(self) -> None:
-        """Dropping the marker where it already was must not warn - including at
+        """
+        Dropping the marker where it already was must not warn - including at
         a place with no boundary data, where exact match is the only grant and
         the moved pin is excluded from the "other pins" set."""
         bare_location = Location.objects.create(latitude=12.0, longitude=34.0)
@@ -184,7 +186,8 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         self.assertEqual([w.pk for w in wikis_hidden_by_pin_move(pin, 12.5, 34.5)], [wiki.pk])
 
     def test_a_wiki_the_owner_cannot_see_is_never_listed(self) -> None:
-        """Nothing to lose if they never had access - and listing it would leak
+        """
+        Nothing to lose if they never had access - and listing it would leak
         that the wiki exists at all."""
         far_wiki_location = Location.objects.create(latitude=10.0, longitude=20.0)
         official_geometry(far_wiki_location, _square(20.0, 10.0, 0.003))

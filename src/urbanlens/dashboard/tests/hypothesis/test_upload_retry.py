@@ -1,4 +1,5 @@
-"""An upload storage keeps failing on waits for storage to recover, rather than being dropped or rejected (P119).
+"""
+An upload storage keeps failing on waits for storage to recover, rather than being dropped or rejected (P119).
 
 The upload is already in media storage, so nothing more is needed from its owner. Waiting must not cost anyone else:
 attempts back off, a sweep queues a bounded batch, and while storage fails for everyone only one upload probes it. One

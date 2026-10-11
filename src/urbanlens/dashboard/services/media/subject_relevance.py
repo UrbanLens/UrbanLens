@@ -1,4 +1,5 @@
-"""Whether an external media item is about the place it was found for .
+"""
+Whether an external media item is about the place it was found for .
 
 An item is about the place when it is geolocated inside the place's bounding box, or when it names the place: one of
 the place's names with a geographic indicator consistent with it, or a distinctive name alone when nothing geographic
@@ -484,7 +485,8 @@ def _has_two_specific_words(words: Sequence[str]) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class _Name:
-    """A name of the place, as it is looked for in text.
+    """
+    A name of the place, as it is looked for in text.
 
     Attributes:
         words: Its folded words, without a leading "the".
@@ -538,7 +540,8 @@ class _Name:
 
 
 def is_distinctive(name: str) -> bool:
-    """Whether a name identifies one place without a geographic indicator.
+    """
+    Whether a name identifies one place without a geographic indicator.
 
     An acronym of three or more capitals is distinctive, and so is a name with two words that are not generic (see
     :data:`GENERIC_WORDS`), or one such word among three or more.
@@ -555,7 +558,8 @@ def is_distinctive(name: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Judgement:
-    """Whether an item is about the place, and why.
+    """
+    Whether an item is about the place, and why.
 
     Attributes:
         relevant: Whether it is.
@@ -578,7 +582,8 @@ def _coordinate(value: object) -> float | None:
 
 @dataclass(frozen=True)
 class MediaSubject:
-    """The place media is being judged against.
+    """
+    The place media is being judged against.
 
     Attributes:
         names: Its names, in any order.
@@ -664,7 +669,8 @@ class MediaSubject:
         return self.judge(item).relevant
 
     def judge(self, item: MediaItem) -> Judgement:
-        """Whether ``item`` is about this place, with the rule that decided it.
+        """
+        Whether ``item`` is about this place, with the rule that decided it.
 
         Args:
             item: An item a provider returned for this place.
@@ -742,7 +748,8 @@ class MediaSubject:
             index += step
 
     def _classify(self, segment: list[_Token], index: int, size: int, *, shouting: bool) -> tuple[_Level, bool | None] | None:
-        """The level of the place the phrase at ``index`` names and whether it is this place's; None when it names none.
+        """
+        The level of the place the phrase at ``index`` names and whether it is this place's; None when it names none.
 
         A consistent phrase always counts. A conflicting one counts only where it reads as a place name, not as part
         of another proper noun ("Washington Street") or after "the" ("the Hudson").
@@ -864,7 +871,8 @@ def _state_at(span: list[_Token], *, shouting: bool) -> str | None:
 
 
 def _state_following(segment: list[_Token], index: int) -> str | None:
-    """The state named right after a city ("Salem OR", "Salem, Oregon"), as a lowercase postal code.
+    """
+    The state named right after a city ("Salem OR", "Salem, Oregon"), as a lowercase postal code.
 
     A full state name counts only after punctuation: "George Washington" is a man, not a George in Washington.
     """
@@ -923,7 +931,8 @@ def _bounding_box(location: Location) -> BoundingBox:
 
 
 def subject_for_location(location: Location, *, names: Iterable[str | None] = (), context: Sequence[str] = (), shared: Sequence[str] | None = None) -> MediaSubject:
-    """The subject everyone who can see a place shares: its public names, outline and address.
+    """
+    The subject everyone who can see a place shares: its public names, outline and address.
 
     A state or country the address lacks is taken from the nearest gazetteer city within 50 km.
 
@@ -958,7 +967,8 @@ def subject_for_location(location: Location, *, names: Iterable[str | None] = ()
 
 
 def subject_for_pin(pin: Pin, *, names: SearchNames | None = None) -> MediaSubject:
-    """The subject a pin's owner sees media judged against: the place's public names, the pin's own, and its site's.
+    """
+    The subject a pin's owner sees media judged against: the place's public names, the pin's own, and its site's.
 
     Args:
         pin: A pin with a location.

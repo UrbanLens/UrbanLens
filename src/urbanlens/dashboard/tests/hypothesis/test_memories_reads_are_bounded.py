@@ -1,4 +1,5 @@
-"""A memory source reads no more rows than its limit, and the timeline API pages with a cursor.
+"""
+A memory source reads no more rows than its limit, and the timeline API pages with a cursor.
 
 ``islice`` over ``for row in queryset`` bounded the merged list but not the reads: iterating a queryset
 loads every row before yielding the first, so a limit of 51 still hydrated every visit, route and photo

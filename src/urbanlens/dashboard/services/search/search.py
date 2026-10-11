@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 def search_web(query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
-    """Search the web via REData's ``/search/web/`` provider fallback chain.
+    """
+    Search the web via REData's ``/search/web/`` provider fallback chain.
     There is no local fallback: an install with no REData configured simply has no web search results, which degrades to the "Web Search" pin panel's existing empty state (see ``PinController._web_search_response``) rather than raising.
 
     Args:

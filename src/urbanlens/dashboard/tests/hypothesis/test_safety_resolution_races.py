@@ -104,7 +104,8 @@ class CheckinResolvedMidSweepTests(_CheckinRaceTestCase):
 
 
 class StaleInstanceResolutionTests(_CheckinRaceTestCase):
-    """``check_in``/``cancel_checkin`` must not clobber a resolution that landed first.
+    """
+    ``check_in``/``cancel_checkin`` must not clobber a resolution that landed first.
 
     A contact marking the owner safe in the same moment would have their resolution overwritten and every side
     effect (broadcast, conclusion, archival scheduling) run twice."""

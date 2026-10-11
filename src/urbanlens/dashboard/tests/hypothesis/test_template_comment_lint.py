@@ -1,4 +1,5 @@
-"""Lint: no ``{# ... #}`` comment may span lines.
+"""
+Lint: no ``{# ... #}`` comment may span lines.
 
 Django's template lexer matches comments with a non-DOTALL ``{#.*?#}``, so a
 ``{#`` whose ``#}`` is on a later line is never tokenised as a comment at all -

@@ -7,7 +7,8 @@ from typing import Any, NotRequired, TypedDict
 
 
 class ForecastSlot(TypedDict):
-    """One forecast time slot, in a shape independent of the source provider.
+    """
+    One forecast time slot, in a shape independent of the source provider.
     Time arithmetic (matching a slot to a scheduled activity, bucketing by day) must use ``date_utc`` instead."""
 
     #: Naive **UTC**, so slots from different providers are comparable and can be matched against
@@ -61,7 +62,8 @@ _OWM_CONDITION_ICONS: dict[str, str] = {
 
 
 def owm_item_to_slot(item: dict[str, Any]) -> ForecastSlot | None:
-    """Convert one raw OpenWeatherMap forecast entry into a ``ForecastSlot``.
+    """
+    Convert one raw OpenWeatherMap forecast entry into a ``ForecastSlot``.
 
     Args:
         item: One entry of OpenWeatherMap's ``list`` response, already carrying a parsed ``date`` field (see ``OpenWeatherMapGateway._parse_dates``).
@@ -115,7 +117,8 @@ def redata_condition_label(condition: str) -> str:
 
 
 def redata_forecast_to_slots(forecast: list[dict[str, Any]]) -> list[ForecastSlot]:
-    """Convert REData's ``weather.forecast`` list into ``ForecastSlot`` entries.
+    """
+    Convert REData's ``weather.forecast`` list into ``ForecastSlot`` entries.
 
     Args:
         forecast: The ``forecast`` array from one REData weather result entry (a mix of ``granularity: "hourly"``/``"daily"`` slots).
@@ -153,7 +156,8 @@ def redata_forecast_to_slots(forecast: list[dict[str, Any]]) -> list[ForecastSlo
 
 
 def redata_sun_to_sun_times(sun: dict[str, Any]) -> SunTimes | None:
-    """Convert REData's ``weather.sun`` block into a ``SunTimes``.
+    """
+    Convert REData's ``weather.sun`` block into a ``SunTimes``.
 
     Args:
         sun: The ``sun`` object from one REData weather result entry - ``{}`` for a provider that doesn't publish sun times (see REData's ``../REData/docs/api-reference.md``, "GET /weather/").

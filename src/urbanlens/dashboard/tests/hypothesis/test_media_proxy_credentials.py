@@ -27,7 +27,8 @@ _PHOTO_NAME = "places/ABC/photos/XYZ"
 
 
 def _signed_url(photo_name: str = _PHOTO_NAME) -> str:
-    """The proxy URL exactly as ``GoogleMapsPhotosPanelSource.media_items`` renders it.
+    """
+    The proxy URL exactly as ``GoogleMapsPhotosPanelSource.media_items`` renders it.
 
     Args:
         photo_name: The raw (unquoted) Places photo reference.
@@ -46,7 +47,8 @@ class MediaProxyCredentialAccessTests(TestCase):
     """``GoogleMapsPhotoProxyView`` under a bearer credential instead of a session."""
 
     def setUp(self) -> None:
-        """A key-holding user, an empty cache, and a configured Places key.
+        """
+        A key-holding user, an empty cache, and a configured Places key.
 
         The first user in a fresh database is auto-promoted to bootstrap site admin; a throwaway user absorbs
         that so the credential owner under test is an ordinary account."""
@@ -62,7 +64,8 @@ class MediaProxyCredentialAccessTests(TestCase):
         self.addCleanup(patcher.stop)
 
     def _key_with_scopes(self, scopes: list[ApiKeyScope], user: User | None = None) -> str:
-        """Issue an API key carrying exactly *scopes*.
+        """
+        Issue an API key carrying exactly *scopes*.
 
         Args:
             scopes: The scopes to store on the key row. user: The key's owner; defaults to the fixture user.
@@ -74,7 +77,8 @@ class MediaProxyCredentialAccessTests(TestCase):
         return raw
 
     def _get(self, url: str, raw_key: str | None = None) -> HttpResponse:
-        """Fetch *url*, optionally as a bearer-credential request.
+        """
+        Fetch *url*, optionally as a bearer-credential request.
 
         Args:
             url: The proxy URL to fetch. raw_key: A raw API key to present as a bearer token; omitted for an anonymous (no ``Authorization`` header)...
@@ -94,7 +98,8 @@ class MediaProxyCredentialAccessTests(TestCase):
         self.assertEqual(response["Content-Type"], "image/jpeg")
 
     def test_credential_fetch_is_charged_to_the_media_throttle_bucket(self) -> None:
-        """One screen of a gallery is dozens of these; unmetered they are free bandwidth.
+        """
+        One screen of a gallery is dozens of these; unmetered they are free bandwidth.
 
         Asserts the ``external_api_media`` throttle is the one consulted rather than counting requests: how big
         the budget is belongs to the throttle's own tests, while what matters here is that this view
@@ -164,7 +169,8 @@ class MediaProxyOrderingTests(TestCase):
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=[ApiKeyScope.MEDIA_READ.value])
 
     def test_signature_is_checked_before_the_credential_is_even_read(self) -> None:
-        """A credential is not a licence to fetch arbitrary photo references.
+        """
+        A credential is not a licence to fetch arbitrary photo references.
 
         The signature is the only thing binding a proxy URL to a photo name the server itself issued; if
         authentication were allowed to run first and satisfy the request, any key holder could burn the site's
@@ -182,7 +188,8 @@ class MediaProxyOrderingTests(TestCase):
         throttle.assert_not_called()
 
     def test_anonymous_request_cannot_read_an_already_cached_photo(self) -> None:
-        """Authentication runs ahead of the cache, which serves real bytes.
+        """
+        Authentication runs ahead of the cache, which serves real bytes.
 
         Regression guard for the obvious way to write this change: leaving the gate where the old profile lookup
         was (below the cache read) would turn a signed URL alone into anonymous access to any photo someone else

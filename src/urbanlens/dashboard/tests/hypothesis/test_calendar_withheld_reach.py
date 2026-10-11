@@ -1,4 +1,5 @@
-"""A location hidden after export does not stay on a calendar UrbanLens can still reach.
+"""
+A location hidden after export does not stay on a calendar UrbanLens can still reach.
 
 Three routes left it there. A change of what a member may see that did not save the trip queued no push, so an
 auto-synced calendar kept the address until the trip next changed. A deleted stop took its link with it and left its

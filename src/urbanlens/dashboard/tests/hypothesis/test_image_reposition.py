@@ -39,7 +39,8 @@ class ParseRepositionPayloadTests(SimpleTestCase):
         self.assertEqual(parsed_lng, Decimal("-74.25"))
 
     def test_non_numeric_string_raises_value_error_not_invalid_operation(self) -> None:
-        """The original bug: Decimal("abc") raises InvalidOperation, which the
+        """
+        The original bug: Decimal("abc") raises InvalidOperation, which the
         old per-endpoint handlers didn't catch."""
         with self.assertRaises(ValueError):
             parse_reposition_payload(_body("abc", "-74.0"))

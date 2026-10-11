@@ -26,7 +26,8 @@ class LabelEditViewConcurrentWriteTests(TestCase):
         self.client.force_login(self.user)
 
     def test_concurrent_edit_to_keywords_survives_a_rename(self) -> None:
-        """keywords has no control on this form at all - a bare save() would
+        """
+        keywords has no control on this form at all - a bare save() would
         always revert it to whatever was loaded at the top of the request."""
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name="Old", keywords="original")
         real_get = labels._owned_label

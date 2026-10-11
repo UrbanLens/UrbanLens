@@ -63,7 +63,8 @@ def _square(latitude: float, longitude: float, size: float) -> MultiPolygon:
 def _make_wiki_with_boundary(
     *, size: float | None, near: Wiki | None = None, near_offset: float = _NEAR_OFFSET
 ) -> Wiki:
-    """A wiki anchored to a place whose official outline is a square of ``size``.
+    """
+    A wiki anchored to a place whose official outline is a square of ``size``.
 
     ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s circle fallback."""
     if near is not None:
@@ -99,7 +100,8 @@ class ReconcileWikiNestingTests(TestCase):
     """Both directions of automatic merging."""
 
     def test_a_new_campus_absorbs_a_pre_existing_building_wiki(self) -> None:
-        """Building created first (direction 1 finds nothing yet); campus created and
+        """
+        Building created first (direction 1 finds nothing yet); campus created and
         reconciled second finds the building inside it (direction 2)."""
         building = _make_wiki_with_boundary(size=BUILDING_SIZE)
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE, near=building)
@@ -111,7 +113,8 @@ class ReconcileWikiNestingTests(TestCase):
         self.assertEqual(building.parent_wiki_id, campus.pk)
 
     def test_a_new_building_finds_its_pre_existing_campus(self) -> None:
-        """Campus already exists; the new building's own reconciliation (direction 1)
+        """
+        Campus already exists; the new building's own reconciliation (direction 1)
         finds it as a container."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
         building = _make_wiki_with_boundary(size=BUILDING_SIZE, near=campus)
@@ -125,7 +128,8 @@ class ReconcileWikiNestingTests(TestCase):
         self.assertEqual(building.parent_wiki_id, campus.pk)
 
     def test_the_tightest_fitting_container_wins_not_the_outermost(self) -> None:
-        """A building inside a wing inside a campus becomes the wing's child, not the campus's.
+        """
+        A building inside a wing inside a campus becomes the wing's child, not the campus's.
 
         One reconciliation call handles both hops: direction 1 (on wing) finds campus as wing's own container,
         and direction 2 (also on wing, using wing's own polygon) finds building already sitting inside it - both
@@ -170,7 +174,8 @@ class ReconcileWikiNestingTests(TestCase):
         self.assertIsNone(nearby.parent_wiki_id)
 
     def test_a_childs_own_missing_boundary_does_not_block_it_being_absorbed(self) -> None:
-        """Direction 1 only needs the *candidate parent's* real boundary - a child with
+        """
+        Direction 1 only needs the *candidate parent's* real boundary - a child with
         no boundary of its own (only the fallback circle) can still be absorbed by one."""
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE)
         bare = _make_wiki_with_boundary(size=None, near=campus)
@@ -217,7 +222,8 @@ class ReconcileWikiNestingTests(TestCase):
         self.assertIsNone(edit.editor, "an automatic merge has no human editor")
 
     def test_merging_never_touches_the_childs_own_location(self) -> None:
-        """The whole point of merging via parent_wiki alone: Pins/Articles/comments
+        """
+        The whole point of merging via parent_wiki alone: Pins/Articles/comments
         never need to move, since Wiki.location is untouched."""
         building = _make_wiki_with_boundary(size=BUILDING_SIZE)
         campus = _make_wiki_with_boundary(size=CAMPUS_SIZE, near=building)

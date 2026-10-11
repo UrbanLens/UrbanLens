@@ -1,4 +1,5 @@
-"""The Organize lists panel loads every pin on every list to print a count.
+"""
+The Organize lists panel loads every pin on every list to print a count.
 
 N21 H29. `PinListsIndexView` runs `prefetch_related("items__pin")` and the
 template uses exactly one thing from it - `pin_list.pin_count`, which is

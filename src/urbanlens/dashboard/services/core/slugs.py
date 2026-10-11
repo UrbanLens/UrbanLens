@@ -1,4 +1,5 @@
-"""URL-slug construction: parent prefixes, word-boundary truncation, uniqueness.
+"""
+URL-slug construction: parent prefixes, word-boundary truncation, uniqueness.
 ``PublicDashboardModel._generate_slug`` is the only writer."""
 
 from __future__ import annotations
@@ -72,7 +73,8 @@ _WRAPPING_PUNCTUATION = "()[]{}<>,.;:!?\"'"
 
 
 def is_uuid_slug(value: str | None) -> bool:
-    """Return True when ``value`` is a UUID (the Location and Wiki fallback slug).
+    """
+    Return True when ``value`` is a UUID (the Location and Wiki fallback slug).
     A Location keeps it until a provider names the place, when it is re-minted from that name.
 
     Args:
@@ -90,7 +92,8 @@ def is_uuid_slug(value: str | None) -> bool:
 
 
 def name_tokens(name: str) -> list[str]:
-    """Split a place name into words, keeping hyphenated compounds together.
+    """
+    Split a place name into words, keeping hyphenated compounds together.
     Whitespace (and only whitespace) is the separator, so ``non-contributing`` is one token while ``non contributing`` is two.
 
     Args:
@@ -107,7 +110,8 @@ def name_tokens(name: str) -> list[str]:
 
 
 def slug_tokens(name: str) -> list[str]:
-    """Slugify each :func:`name_tokens` entry, dropping tokens that slugify empty.
+    """
+    Slugify each :func:`name_tokens` entry, dropping tokens that slugify empty.
 
     Args:
         name: Raw display name.
@@ -123,7 +127,8 @@ def slug_tokens(name: str) -> list[str]:
 
 
 def parent_slug_prefix(names: Sequence[str]) -> str:
-    """Choose a short slug prefix from a parent's names and aliases.
+    """
+    Choose a short slug prefix from a parent's names and aliases.
 
     Args:
         names: Display name first, then aliases and any other candidates (including an already-short parent slug).
@@ -145,7 +150,8 @@ def parent_slug_prefix(names: Sequence[str]) -> str:
 
 
 def generate_short_prefix(name: str) -> str:
-    """Build a compact prefix from a long place name.
+    """
+    Build a compact prefix from a long place name.
 
     Args:
         name: The parent's canonical name.
@@ -192,7 +198,8 @@ def unique_slug(
     min_length: int = MIN_SLUG_LENGTH,
     fallback: str = "item",
 ) -> str:
-    """Build a unique slug, preferring whole words over a mid-word clip.
+    """
+    Build a unique slug, preferring whole words over a mid-word clip.
     Hyphenated compounds are one token, so ``non-contributing`` is dropped as a unit rather than becoming ``non-contributi``.
 
     Args:
@@ -233,7 +240,8 @@ def could_mint(
     min_length: int = MIN_SLUG_LENGTH,
     fallback: str = "item",
 ) -> bool:
-    """Whether :func:`unique_slug` could return ``slug`` for these arguments, whichever candidates were taken.
+    """
+    Whether :func:`unique_slug` could return ``slug`` for these arguments, whichever candidates were taken.
     Its last-resort uuid is not counted: it says nothing about the name.
 
     Args:
@@ -303,7 +311,8 @@ def _join(prefix: str, tokens: Sequence[str]) -> str:
 
 
 def _trim_at_hyphen(value: str, budget: int) -> str:
-    """Cut ``value`` to ``budget`` at the last hyphen, not mid-word.
+    """
+    Cut ``value`` to ``budget`` at the last hyphen, not mid-word.
 
     Args:
         value: A slug.
@@ -402,7 +411,8 @@ def _grow(
     min_length: int,
     limit: int,
 ) -> tuple[list[str], list[str], str]:
-    """Add dropped tokens until ``min_length`` or ``limit`` is reached.
+    """
+    Add dropped tokens until ``min_length`` or ``limit`` is reached.
     A partial token is used only when a whole one will not fit and the slug is still short of ``min_length``.
 
     Args:

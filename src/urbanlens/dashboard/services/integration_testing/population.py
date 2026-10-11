@@ -1,4 +1,5 @@
-"""A population of ordinary accounts, for measuring how many people the site can serve at once.
+"""
+A population of ordinary accounts, for measuring how many people the site can serve at once.
 
 The neighbour test asks what one account costs another; this asks what a thousand cost everyone. Each account is
 sized from a fixed heavy-tailed distribution, placed so neighbouring accounts share places, befriended to the accounts
@@ -64,7 +65,8 @@ AUTH_BACKEND = "urbanlens.dashboard.services.auth.auth_backend.EmailOrUsernameMo
 
 @dataclass(frozen=True, slots=True)
 class SizeTier:
-    """A share of the population, and the range of pin counts its accounts hold.
+    """
+    A share of the population, and the range of pin counts its accounts hold.
 
     Attributes:
         share: Fraction of accounts in this tier.
@@ -159,7 +161,8 @@ SHARED_ROUTES = (
 
 @dataclass(frozen=True, slots=True)
 class PopulationAccount:
-    """One account as the load harness uses it.
+    """
+    One account as the load harness uses it.
 
     Attributes:
         index: Position in the population, which fixes its size and placement.
@@ -189,7 +192,8 @@ class PopulationResult:
     seconds: float = 0.0
 
     def manifest(self, *, site_url: str, environment: str) -> dict[str, Any]:
-        """The document the capacity harness reads.
+        """
+        The document the capacity harness reads.
 
         Args:
             site_url: Where the accounts live.
@@ -216,7 +220,8 @@ def population_username(index: int) -> str:
 
 
 def pins_for(index: int, tiers: Sequence[SizeTier] | None = None) -> int:
-    """How many pins the account at *index* holds.
+    """
+    How many pins the account at *index* holds.
 
     Deterministic, so a re-run tops each account up to the same size. Log-uniform within a tier, because pin counts
     spread by orders of magnitude rather than evenly.
@@ -251,7 +256,8 @@ def shared_routes() -> dict[str, str]:
 
 
 def mint_session(user: User) -> dict[str, str]:
-    """Sign *user* in without a request, recording what `django.contrib.auth.login` records.
+    """
+    Sign *user* in without a request, recording what `django.contrib.auth.login` records.
 
     Args:
         user: The account to sign in.
@@ -280,7 +286,8 @@ def provision_population(
     analyze: bool = True,
     progress: Callable[[str], object] | None = None,
 ) -> PopulationResult:
-    """Create or top up *count* population accounts and sign each one in.
+    """
+    Create or top up *count* population accounts and sign each one in.
 
     Idempotent: accounts, pins, friendships, conversations, notifications, visits, comments, trips, smart lists and
     label customizations are only added where missing.
@@ -360,7 +367,8 @@ def _checked(tiers: Sequence[SizeTier] | None) -> Sequence[SizeTier]:
 
 @transaction.atomic
 def _ensure_account(index: int, password_hash: str) -> tuple[User, Profile, bool]:
-    """The account at *index*, created if absent, past every post-login diversion.
+    """
+    The account at *index*, created if absent, past every post-login diversion.
 
     Every account shares one password hash that nothing records, so no account can be signed into except through the
     sessions minted for the manifest.

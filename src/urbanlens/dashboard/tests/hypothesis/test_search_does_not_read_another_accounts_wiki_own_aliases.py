@@ -1,4 +1,5 @@
-"""Searching wikis must not read alias rows belonging to a wiki you cannot see.
+"""
+Searching wikis must not read alias rows belonging to a wiki you cannot see.
 
 ``test_search_does_not_read_another_accounts_wiki_labels.py`` already covers ``WikiSearchProvider``'s
 `label:`/`tag:` operator. Its bare-term path (``apply_text`` in ``WikiSearchProvider.search``) also
@@ -99,7 +100,8 @@ class _WikiOwnAliasCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the wiki-alias table.
+        """
+        The full capture, and the statements in it that read the wiki-alias table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

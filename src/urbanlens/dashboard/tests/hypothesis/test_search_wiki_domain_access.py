@@ -101,7 +101,8 @@ class CommentSearchDomainAccessTests(_BoundaryMateFixture):
 
 
 class PhotoSearchDomainAccessTests(_BoundaryMateFixture):
-    """Unlike the Wiki/Article/Comment siblings above, a photo is gated by ``ImageQuerySet.visible_to`` on top of the domain rule this file is about, and that gate has two independent halves that both must open before a stranger's photo is findable at all:
+    """
+    Unlike the Wiki/Article/Comment siblings above, a photo is gated by ``ImageQuerySet.visible_to`` on top of the domain rule this file is about, and that gate has two independent halves that both must open before a stranger's photo is findable at all:
 
     reach (``_shared_within_reach_of``)."""
 

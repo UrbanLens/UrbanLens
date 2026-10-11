@@ -134,6 +134,8 @@ line-ending = "auto"
 # "select = ['ALL']" turns on essentially everything Ruff knows about.
 # Expect to ignore a handful that conflict with your style or are too noisy.
 select = ["ALL"]
+# The docstring summary goes on the line after the opening quotes (D213, not D212).
+extend-select = ["D213"]
 
 # Turn on preview rules (newer checks; can be a bit more volatile)
 #preview = true
@@ -238,7 +240,11 @@ unfixable = ["RUF100"]
     "B017",    # crypto interop tests where "it fails somehow" IS the assertion
     # --- structure
     "TC",      # TYPE_CHECKING blocks: churn with runtime-breakage risk
-    "D",       # docstrings deliberately open with the identifier under test
+    # docstrings deliberately open with the identifier under test; D213 (summary on
+    # the second line) still applies, as everywhere else
+    "D1",
+    "D3",
+    "D4",
     "INP001",  # tests/contract/ has no __init__.py by design (pytest rootdir layout)
     "N802",    # getDescription overrides unittest.TextTestResult - stdlib API casing
     "E402",    # sys.path adjustment before imports

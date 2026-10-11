@@ -2,7 +2,8 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class VisibilityChoice(TextChoices):
-    """Who can see a particular piece of profile data, or who can perform an action.
+    """
+    Who can see a particular piece of profile data, or who can perform an action.
 
     Members are declared least → most restrictive; the settings page renders
     them in this order. Accepted friends qualify for every option except
@@ -54,7 +55,8 @@ class GuidanceLevel(TextChoices):
 
 
 class SyncAliasesDirection(TextChoices):
-    """Which direction(s) newly-added aliases sync between a pin and its wiki.
+    """
+    Which direction(s) newly-added aliases sync between a pin and its wiki.
 
     Sync is additive only in both directions (never deletes) and only fires
     for genuine new aliases, never edits to an existing one - see
@@ -68,7 +70,8 @@ class SyncAliasesDirection(TextChoices):
 
 
 class ConsentPreferenceWording:
-    """Shared label text for the interaction-preference choice fields below.
+    """
+    Shared label text for the interaction-preference choice fields below.
     A plain mixin, not itself an ``Enum`` - ``TextChoices`` can't be subclassed once it already defines members, so members can't be shared by inheritance the way regular class attributes can.
     """
 
@@ -122,7 +125,8 @@ class PhotoUsagePreference(ConsentPreferenceWording, TextChoices):
 
 
 class FriendRequestPreference(ConsentPreferenceWording, TextChoices):
-    """When this profile welcomes friend requests from other users.
+    """
+    When this profile welcomes friend requests from other users.
 
     A social preference statement only - who is actually permitted to send a
     request is the separate ``friend_request_visibility`` setting.

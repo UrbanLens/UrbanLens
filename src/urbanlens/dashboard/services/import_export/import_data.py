@@ -44,7 +44,8 @@ def import_dir(job_id: str) -> str:
 
 
 def import_guard_key(user_id: int | None) -> str:
-    """One in-flight import per account.
+    """
+    One in-flight import per account.
 
     Args:
         user_id: The importing account.
@@ -61,7 +62,8 @@ def import_guard_key(user_id: int | None) -> str:
 
 
 def import_guard_ttl() -> int:
-    """How long an import's claim survives unrefreshed.
+    """
+    How long an import's claim survives unrefreshed.
 
     Each run of the import task refreshes it, and a run may last up to the task's hard limit and then wait out the
     longest storage wait before the next, so it outlives both. A run killed at its hard limit gives it up on expiry.
@@ -82,7 +84,8 @@ def _hold_import_guard(user_id: int, job_id: str) -> None:
 
 
 def release_import_guard(user_id: int | None, job_id: str) -> None:
-    """Give up *user_id*'s import claim, if *job_id* is what holds it.
+    """
+    Give up *user_id*'s import claim, if *job_id* is what holds it.
 
     Args:
         user_id: The importing account.
@@ -99,7 +102,8 @@ _DEFERRED_KINDS = {"photos": "photo(s)", "map_overlays": "map overlay image(s)"}
 
 @dataclass
 class DeferredFiles:
-    """Archive files a run did not store because storage refused one, kept for a later run to store.
+    """
+    Archive files a run did not store because storage refused one, kept for a later run to store.
 
     Attributes:
         rows: Deferred-row key -> 1-based positions, in that list in the archive, of the rows whose file waits.
@@ -118,7 +122,8 @@ class DeferredFiles:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any] | None) -> DeferredFiles:
-        """Read deferred rows back from a task's arguments.
+        """
+        Read deferred rows back from a task's arguments.
 
         Args:
             data: A mapping from :meth:`to_dict`, or None.
@@ -138,7 +143,8 @@ class DeferredFiles:
         return {"rows": self.rows, "pins": self.pins, "labels": self.labels}
 
     def refuse(self, exc: BaseException) -> None:
-        """Note that storage refused a write, so this run's later files wait without trying.
+        """
+        Note that storage refused a write, so this run's later files wait without trying.
 
         Args:
             exc: What storage raised.
@@ -151,7 +157,8 @@ class DeferredFiles:
         self.refused = True
 
     def defer(self, key: str, position: int, row: Mapping[str, Any], *, pin_uuid_map: Mapping[str, int], label_uuid_map: Mapping[str, int]) -> None:
-        """Keep one row for a later run, with the local pins and labels it names.
+        """
+        Keep one row for a later run, with the local pins and labels it names.
 
         Args:
             key: Which list the row is in.
@@ -169,7 +176,8 @@ class DeferredFiles:
                 self.labels[label_uuid] = label_uuid_map[label_uuid]
 
     def describe(self) -> str:
-        """The deferred files in words, such as "2 photo(s) and 1 map overlay image(s)".
+        """
+        The deferred files in words, such as "2 photo(s) and 1 map overlay image(s)".
 
         Returns:
             The description.
@@ -179,7 +187,8 @@ class DeferredFiles:
 
 @dataclass
 class ImportResult:
-    """Summary of what the import created, skipped, and errored on.
+    """
+    Summary of what the import created, skipped, and errored on.
 
     Attributes:
         created: Rows created, by step key.
@@ -195,7 +204,8 @@ class ImportResult:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any] | None) -> ImportResult:
-        """Carry an earlier run's tally into this one.
+        """
+        Carry an earlier run's tally into this one.
 
         Args:
             data: A mapping from :meth:`to_dict`, or None.
@@ -225,7 +235,8 @@ class ImportResult:
 
 
 class ImportWaitingForStorageError(Exception):
-    """Storage refused some of an archive's files; everything else was imported, and the job runs again for those.
+    """
+    Storage refused some of an archive's files; everything else was imported, and the job runs again for those.
 
     Attributes:
         resume: What the next run needs: the tally so far and the deferred rows.
@@ -235,7 +246,8 @@ class ImportWaitingForStorageError(Exception):
     """
 
     def __init__(self, *, resume: dict[str, Any], storage_waits: int, countdown: int, message: str) -> None:
-        """Describe the wait.
+        """
+        Describe the wait.
 
         Args:
             resume: The tally so far and the deferred rows.
@@ -251,7 +263,8 @@ class ImportWaitingForStorageError(Exception):
 
 
 class ImportJobStatus:
-    """Cache-backed progress state for a user import job.
+    """
+    Cache-backed progress state for a user import job.
 
     Attributes:
         ttl_seconds: How long a status survives its last write.
@@ -317,7 +330,8 @@ def schedule_import_cleanup(import_dir_path: str, job_status: ImportJobStatus | 
 
 
 def _make_step_progress_reporter(job_status: ImportJobStatus, key: str, start_pct: int, end_pct: int) -> ProgressReporter:
-    """Return a throttled callback that reports (done, count) progress within [start_pct, end_pct].
+    """
+    Return a throttled callback that reports (done, count) progress within [start_pct, end_pct].
     Writes to the cache-backed job status at most once per whole-percentage-point change (so a 4000-row step doesn't issue 4000 cache writes), but always writes on the final item so the step reliably lands on ``end_pct`` before the next step starts."""
     step_message = _STEP_MESSAGES.get(key, f"Importing {key}...")
     last_reported_pct = -1
@@ -336,7 +350,8 @@ def _make_step_progress_reporter(job_status: ImportJobStatus, key: str, start_pc
 
 
 def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str, Any] | None = None, storage_waits: int = 0) -> bool:
-    """Parse a UrbanLens export ZIP and import data for the user.
+    """
+    Parse a UrbanLens export ZIP and import data for the user.
     Idempotent: records that already exist (matched by UUID) are skipped rather than duplicated.
 
     A photo or overlay image storage refuses waits, with the files after it, for a later run that stores just those
@@ -427,7 +442,8 @@ def run_import(user_id: int, zip_path: str, job_id: str, *, resume: Mapping[str,
 
 
 def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_status: ImportJobStatus) -> None:
-    """Run every import step the archive's manifest lists, in dependency order.
+    """
+    Run every import step the archive's manifest lists, in dependency order.
 
     Args:
         profile: The importing profile.
@@ -458,7 +474,8 @@ def _run_import_steps(profile: Any, data_dir: str, result: ImportResult, job_sta
 
 
 def _store_deferred_files(profile: Any, data_dir: str, result: ImportResult, deferred: DeferredFiles, job_status: ImportJobStatus) -> None:
-    """Store just the files an earlier run of this import deferred.
+    """
+    Store just the files an earlier run of this import deferred.
 
     A pin or label deleted since that run is dropped from the carried maps, so its rows resolve as they would have
     without it.
@@ -496,7 +513,8 @@ def _store_deferred_files(profile: Any, data_dir: str, result: ImportResult, def
 
 
 def _wait_for_storage(result: ImportResult, storage_waits: int, job_status: ImportJobStatus) -> None:
-    """Have the files this run deferred wait for another run, or give up on them with a warning.
+    """
+    Have the files this run deferred wait for another run, or give up on them with a warning.
 
     Args:
         result: The import's tally, its deferred files included.
@@ -567,7 +585,8 @@ _ZIP_EXTRACT_CHUNK_BYTES = 1024 * 1024
 
 
 def _extraction_size_ceiling(profile: Any | None) -> int:
-    """Upper bound on an archive's declared uncompressed size, in bytes.
+    """
+    Upper bound on an archive's declared uncompressed size, in bytes.
     Allows twice the profile's resolved storage quota (photo payload plus headroom for the JSON data and quota changes between export and import), never below the 2 GiB floor.
 
     Args:
@@ -584,7 +603,8 @@ def _extraction_size_ceiling(profile: Any | None) -> int:
 
 
 def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile: Any | None = None) -> str:
-    """Extract the ZIP and return the path to the data directory inside it.
+    """
+    Extract the ZIP and return the path to the data directory inside it.
 
     Args:
         zip_path: Path to the uploaded archive.
@@ -657,7 +677,8 @@ def _extract_zip_members_bounded(
     extract_root: str,
     ceiling: int,
 ) -> None:
-    """Extract *members* from *zf* into *extract_root* under a hard, live-enforced byte ceiling.
+    """
+    Extract *members* from *zf* into *extract_root* under a hard, live-enforced byte ceiling.
 
     Args:
         zf: The already-open ZipFile.
@@ -715,7 +736,8 @@ _STRUCTURED_DATA_EXTENSIONS = (".json", ".csv")
 
 
 def _scan_extracted_files(extract_root: str) -> None:
-    """Malware-scan and content-sniff every non-JSON file extracted from the archive.
+    """
+    Malware-scan and content-sniff every non-JSON file extracted from the archive.
 
     Args:
         extract_root: Root directory the archive was extracted into.
@@ -768,7 +790,8 @@ def _find_data_dir(root: str) -> str | None:
 
 
 def _read_json(data_dir: str, filename: str) -> Any:
-    """Read and parse a JSON file from the data directory; return None if missing.
+    """
+    Read and parse a JSON file from the data directory; return None if missing.
 
     Raises:
         _ImportMemberTooLargeError: The file is over :data:`_MAX_JSON_MEMBER_BYTES`, which extraction refuses first.
@@ -878,7 +901,8 @@ def _import_pins(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import user pins.
+    """
+    Import user pins.
     Pins are deduped per-profile by proximity via ``Pin.objects.get_nearby_or_create`` (the same helper the Google Takeout importer uses) rather than inserted directly."""
     from django.db import IntegrityError
 
@@ -980,7 +1004,8 @@ def _import_pins(
 
 
 def _restore_pin_alias(pin: Any, alias_row: Any) -> None:
-    """Re-create one user-authored alias on a freshly imported pin.
+    """
+    Re-create one user-authored alias on a freshly imported pin.
     An ``official`` alias is written by an external name provider and re-synced by that provider against whatever *this* instance resolves the pin to, so importing one would freeze a stale third-party name in place.
 
     Args:
@@ -1071,7 +1096,8 @@ def _import_connections(
     label_uuid_map: dict[str, int],
     report_progress: ProgressReporter | None = None,
 ) -> None:
-    """Import friendship connections as fresh friend requests.
+    """
+    Import friendship connections as fresh friend requests.
     The archive is user-supplied input, so its rows are treated as requests rather than facts: an import may only re-create actions the importing user could take themselves through the UI."""
     from django.db.models import Q
 
@@ -1465,7 +1491,8 @@ def _import_custom_fields(
 
 
 def _apply_exported_custom_field_value(value_obj: Any, field_type: str, exported: Any, pin_uuid_map: dict[str, int]) -> bool:
-    """Set ``value_obj`` from an ``export_value()``-shaped payload, through the same ``set_value`` a form uses.
+    """
+    Set ``value_obj`` from an ``export_value()``-shaped payload, through the same ``set_value`` a form uses.
 
     Args:
         value_obj: An unsaved CustomFieldValue with ``field``/target already set.
@@ -1509,7 +1536,8 @@ def _safe_uuid(value: Any) -> str | None:
 
 
 def _resolve_import_target(profile: Any, row: dict[str, Any], pin_uuid_map: dict[str, int]) -> tuple[int | None, Any | None, bool]:
-    """Resolve a comment/photo row's exported target to a local pin pk or Wiki.
+    """
+    Resolve a comment/photo row's exported target to a local pin pk or Wiki.
     Pin targets must resolve to the importing user's OWN pin - the archive is user-supplied, so a uuid pointing at someone else's pin must never attach content there.
 
     Args:
@@ -1618,7 +1646,8 @@ def _import_comments(
 
 
 def _queue_import_processing(image: Any) -> None:
-    """Hand a restored file to the upload pipeline, which re-encodes it and clears ``pending_scan``.
+    """
+    Hand a restored file to the upload pipeline, which re-encodes it and clears ``pending_scan``.
 
     Args:
         image: The saved ``Image`` row, stored pending.
@@ -1642,7 +1671,8 @@ def _import_photos(
     report_progress: ProgressReporter | None = None,
     only: Collection[int] | None = None,
 ) -> None:
-    """Import the archive's ``photos/`` files back into storage.
+    """
+    Import the archive's ``photos/`` files back into storage.
     Each photo re-enters storage through the same quota and max-file-size checks a fresh upload gets; ones that don't fit are skipped with a warning rather than blowing the quota.
     A photo storage refuses is deferred (``ImportResult.deferred``), with every photo after it.
 
@@ -1918,7 +1948,8 @@ def _import_direct_messages(
 
 @dataclass
 class ImportContext:
-    """Everything one import step needs, so adding a step never widens a signature.
+    """
+    Everything one import step needs, so adding a step never widens a signature.
 
     Attributes:
         profile: The profile being imported into.
@@ -1938,7 +1969,8 @@ class ImportContext:
     scratch: dict[str, Any] = field(default_factory=dict)
 
     def warn_capacity(self, exc: CapacityExceededError) -> None:
-        """Record, once per limit, that rows were skipped because the account is full.
+        """
+        Record, once per limit, that rows were skipped because the account is full.
 
         Args:
             exc: The refusal.
@@ -1946,7 +1978,8 @@ class ImportContext:
         _warn_capacity_once(self.result, exc)
 
     def bump(self, key: str, amount: int = 1) -> None:
-        """Increment a named counter in :attr:`scratch`.
+        """
+        Increment a named counter in :attr:`scratch`.
 
         Args:
             key: Counter name.
@@ -1956,7 +1989,8 @@ class ImportContext:
 
 
 class ImportType(ABC):
-    """One import step, reading a single file from the archive.
+    """
+    One import step, reading a single file from the archive.
 
     Attributes:
         key: Manifest/export-type key this step handles.
@@ -1968,7 +2002,8 @@ class ImportType(ABC):
     message: ClassVar[str]
 
     def load(self, data_dir: str) -> Any:
-        """Read this step's file from the archive.
+        """
+        Read this step's file from the archive.
 
         Args:
             data_dir: Directory holding the extracted archive's data files.
@@ -1980,7 +2015,8 @@ class ImportType(ABC):
 
     @abstractmethod
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Apply the loaded archive data to the importing profile.
+        """
+        Apply the loaded archive data to the importing profile.
 
         Args:
             data: Whatever :meth:`load` returned (never empty/None).
@@ -1997,7 +2033,8 @@ class ImportType(ABC):
         label_uuid_map: dict[str, int],
         report_progress: ProgressReporter | None = None,
     ) -> None:
-        """Run this import step.
+        """
+        Run this import step.
 
         Args:
             profile: The profile being imported into.
@@ -2024,7 +2061,8 @@ class ImportType(ABC):
 
 
 def _warn_capacity_once(result: ImportResult, exc: CapacityExceededError) -> None:
-    """Warn, once per limit, that rows were skipped because the account is full.
+    """
+    Warn, once per limit, that rows were skipped because the account is full.
 
     Args:
         result: The import's tally.
@@ -2039,7 +2077,8 @@ class RowImportType(ImportType):
     """An :class:`ImportType` over a JSON list, handling one row at a time."""
 
     def allowed(self, ctx: ImportContext) -> bool:
-        """Whether this step may run at all for the importing profile.
+        """
+        Whether this step may run at all for the importing profile.
 
         Args:
             ctx: The shared import context.
@@ -2051,7 +2090,8 @@ class RowImportType(ImportType):
 
     @abstractmethod
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
-        """Apply one archive row.
+        """
+        Apply one archive row.
 
         Args:
             row: The exported row.
@@ -2062,14 +2102,16 @@ class RowImportType(ImportType):
         """
 
     def finish(self, ctx: ImportContext) -> None:
-        """Hook for a summary warning once every row has been handled.
+        """
+        Hook for a summary warning once every row has been handled.
 
         Args:
             ctx: The shared import context.
         """
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Iterate the archive's rows, tallying and reporting as it goes.
+        """
+        Iterate the archive's rows, tallying and reporting as it goes.
 
         Args:
             data: The parsed JSON list.
@@ -2099,7 +2141,8 @@ class RowImportType(ImportType):
 
 
 def _decimal_or_none(value: Any) -> Any:
-    """Parse an exported decimal string, returning None when it isn't one.
+    """
+    Parse an exported decimal string, returning None when it isn't one.
 
     Args:
         value: The raw exported value.
@@ -2118,7 +2161,8 @@ def _decimal_or_none(value: Any) -> Any:
 
 
 def _connection_uuids(ctx: ImportContext) -> set[str]:
-    """Return (and cache) the uuids of the importing profile's connections.
+    """
+    Return (and cache) the uuids of the importing profile's connections.
 
     Args:
         ctx: The shared import context.
@@ -2159,7 +2203,8 @@ class ProfileImport(ImportType):
     )
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Apply the exported profile content to the importing profile.
+        """
+        Apply the exported profile content to the importing profile.
 
         Args:
             data: The parsed ``profile.json`` object.
@@ -2204,7 +2249,8 @@ class ProfileImport(ImportType):
         self._import_secondary_emails(data.get("secondary_emails"), ctx)
 
     def _import_social_links(self, rows: Any, ctx: ImportContext) -> None:
-        """Restore one link per platform, never overwriting one already set.
+        """
+        Restore one link per platform, never overwriting one already set.
 
         Args:
             rows: The exported ``social_links`` list.
@@ -2231,7 +2277,8 @@ class ProfileImport(ImportType):
                 ctx.result.inc_skipped("social_links")
 
     def _import_secondary_emails(self, rows: Any, ctx: ImportContext) -> None:
-        """Restore additional addresses as unverified rows.
+        """
+        Restore additional addresses as unverified rows.
 
         Args:
             rows: The exported ``secondary_emails`` list.
@@ -2280,7 +2327,8 @@ class SafetyCheckinsImport(RowImportType):
     message = "Importing safety check-ins..."
 
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
-        """Restore one check-in with its contacts and the owner's own messages.
+        """
+        Restore one check-in with its contacts and the owner's own messages.
 
         Args:
             row: The exported check-in row.
@@ -2354,7 +2402,8 @@ class SafetyCheckinsImport(RowImportType):
         return True
 
     def _resolve_trip(self, trip_uuid: Any, ctx: ImportContext) -> Any:
-        """Resolve an exported trip uuid to one of the importer's own trips.
+        """
+        Resolve an exported trip uuid to one of the importer's own trips.
 
         Args:
             trip_uuid: The exported uuid, if any.
@@ -2371,7 +2420,8 @@ class SafetyCheckinsImport(RowImportType):
         return Trip.objects.filter(uuid=parsed, profiles=ctx.profile).first()
 
     def _resolve_map(self, map_uuid: Any, ctx: ImportContext) -> Any:
-        """Resolve an exported markup-map uuid to one of the importer's own maps.
+        """
+        Resolve an exported markup-map uuid to one of the importer's own maps.
         The map annotations step runs first and preserves archive uuids where they were free, so a same-archive restore re-links; a uuid pointing at someone else's map resolves to nothing rather than borrowing it.
 
         Args:
@@ -2389,7 +2439,8 @@ class SafetyCheckinsImport(RowImportType):
         return MarkupMap.objects.filter(uuid=parsed, profile=ctx.profile).first()
 
     def _import_contacts(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
-        """Re-create the check-in's emergency contact snapshots.
+        """
+        Re-create the check-in's emergency contact snapshots.
 
         Args:
             checkin: The freshly created check-in.
@@ -2429,7 +2480,8 @@ class SafetyCheckinsImport(RowImportType):
             ctx.result.inc_created("safety_contacts")
 
     def _import_messages(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
-        """Restore only the messages the check-in's owner wrote themselves.
+        """
+        Restore only the messages the check-in's owner wrote themselves.
 
         Args:
             checkin: The freshly created check-in.
@@ -2455,7 +2507,8 @@ class SafetyCheckinsImport(RowImportType):
             ctx.result.inc_created("safety_messages")
 
     def finish(self, ctx: ImportContext) -> None:
-        """Explain the two ways a restored check-in differs from the exported one.
+        """
+        Explain the two ways a restored check-in differs from the exported one.
 
         Args:
             ctx: The shared import context.
@@ -2480,7 +2533,8 @@ class MapAnnotationsImport(ImportType):
     message = "Importing map annotations..."
 
     def run(self, data: Any, ctx: ImportContext) -> None:
-        """Restore the three annotation sections in dependency order.
+        """
+        Restore the three annotation sections in dependency order.
 
         Args:
             data: The parsed ``map_annotations.json`` object.
@@ -2516,7 +2570,8 @@ class MapAnnotationsImport(ImportType):
         self._warn(ctx)
 
     def store_deferred_overlays(self, ctx: ImportContext, positions: Collection[int]) -> None:
-        """Restore just the overlays an earlier run deferred because storage refused their image.
+        """
+        Restore just the overlays an earlier run deferred because storage refused their image.
 
         Args:
             ctx: The shared import context.
@@ -2532,7 +2587,8 @@ class MapAnnotationsImport(ImportType):
         self._warn(ctx)
 
     def _warn(self, ctx: ImportContext) -> None:
-        """Add the step's summary warnings.
+        """
+        Add the step's summary warnings.
 
         Args:
             ctx: The shared import context.
@@ -2552,7 +2608,8 @@ class MapAnnotationsImport(ImportType):
             ctx.result.warnings.append(f"Skipped {over_cap} map overlay(s) on pins that already hold {MAX_OVERLAYS_PER_MAP}.")
 
     def _import_map(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one standalone markup map and the items drawn on it.
+        """
+        Restore one standalone markup map and the items drawn on it.
 
         Args:
             row: The exported map row.
@@ -2588,7 +2645,8 @@ class MapAnnotationsImport(ImportType):
                 ctx.result.inc_created("map_annotation_items")
 
     def _import_standalone_markup(self, row: dict[str, Any], ctx: ImportContext) -> None:
-        """Restore one annotation drawn directly on the importer's own pin.
+        """
+        Restore one annotation drawn directly on the importer's own pin.
 
         Args:
             row: The exported markup row.
@@ -2613,7 +2671,8 @@ class MapAnnotationsImport(ImportType):
             ctx.result.inc_created("map_annotation_items")
 
     def _import_overlay(self, row: dict[str, Any], ctx: ImportContext, position: int) -> None:
-        """Restore one georeferenced image overlay onto the importer's own pin.
+        """
+        Restore one georeferenced image overlay onto the importer's own pin.
 
         Goes through the same service as the manage-overlays form, so the per-map cap holds and an archived
         ``image_url`` is downloaded rather than handed to viewers' browsers. An overlay whose image storage refuses
@@ -2703,7 +2762,8 @@ class MapAnnotationsImport(ImportType):
         ctx.result.inc_created("map_overlays")
 
     def _restore_overlay_image(self, row: dict[str, Any], ctx: ImportContext) -> Any:
-        """Re-upload an overlay's archived image file, honoring the storage quota.
+        """
+        Re-upload an overlay's archived image file, honoring the storage quota.
 
         Args:
             row: The exported overlay row.
@@ -2744,7 +2804,8 @@ class MapAnnotationsImport(ImportType):
 
 
 def _dict_rows(data: Mapping[str, Any], key: str) -> list[dict[str, Any]]:
-    """The object rows of one list in an archive file.
+    """
+    The object rows of one list in an archive file.
 
     Args:
         data: The parsed file.
@@ -2763,7 +2824,8 @@ MapAnnotationsExportDirName = "map_annotations"
 
 
 def _float_or_none(value: Any) -> float | None:
-    """Return ``value`` as a float, or None when it isn't numeric.
+    """
+    Return ``value`` as a float, or None when it isn't numeric.
 
     Args:
         value: The raw exported value.
@@ -2781,7 +2843,8 @@ def _float_or_none(value: Any) -> float | None:
 
 
 def _bounded_int(value: Any, *, default: int, low: int = 0, high: int = 100) -> int:
-    """Clamp an exported integer into a valid range, falling back to a default.
+    """
+    Clamp an exported integer into a valid range, falling back to a default.
 
     Args:
         value: The raw exported value.
@@ -2799,7 +2862,8 @@ def _bounded_int(value: Any, *, default: int, low: int = 0, high: int = 100) -> 
 
 
 def _valid_layer_mode(value: Any) -> str:
-    """Return an exported base-layer choice, or the model default.
+    """
+    Return an exported base-layer choice, or the model default.
 
     Args:
         value: The raw exported ``layer_mode``.
@@ -2813,7 +2877,8 @@ def _valid_layer_mode(value: Any) -> str:
 
 
 def _build_markup_item(row: dict[str, Any], profile: Any, *, parent_map: Any = None, parent_pin_id: int | None = None) -> Any:
-    """Create one PinMarkup from an exported annotation row.
+    """
+    Create one PinMarkup from an exported annotation row.
     ``geometry`` is stored as JSON and rendered client-side, so it is only accepted as an object; colours are re-sanitized by ``PinMarkup.save()`` itself, which is why they are passed through here rather than re-validated.
 
     Args:
@@ -2863,7 +2928,8 @@ class SavedFiltersImport(RowImportType):
     message = "Importing saved filters..."
 
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
-        """Restore one saved filter.
+        """
+        Restore one saved filter.
 
         Args:
             row: The exported filter row.
@@ -2901,7 +2967,8 @@ class SavedFiltersImport(RowImportType):
 
 
 class RoutesImport(RowImportType):
-    """Restore recorded GPS tracks and planned routes.
+    """
+    Restore recorded GPS tracks and planned routes.
     Deduped by uuid, then by the exported creation timestamp, which ``_apply_exported_created`` preserves so a re-import recognises its own work."""
 
     key = "routes"
@@ -2909,7 +2976,8 @@ class RoutesImport(RowImportType):
     message = "Importing routes..."
 
     def allowed(self, ctx: ImportContext) -> bool:
-        """Whether route data may be created for the importing profile.
+        """
+        Whether route data may be created for the importing profile.
 
         Args:
             ctx: The shared import context.
@@ -2922,7 +2990,8 @@ class RoutesImport(RowImportType):
         return route_import_allowed(ctx.profile)
 
     def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
-        """Restore one route.
+        """
+        Restore one route.
 
         Args:
             row: The exported route row.
@@ -2970,7 +3039,8 @@ class RoutesImport(RowImportType):
 
 
 def _linestring_from_geojson(value: Any) -> LineString | None:
-    """Parse an exported GeoJSON path into a WGS-84 LineString.
+    """
+    Parse an exported GeoJSON path into a WGS-84 LineString.
 
     Args:
         value: The exported ``path`` object.

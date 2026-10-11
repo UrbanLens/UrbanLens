@@ -19,7 +19,8 @@ _DEFAULT_MAX_SLUG_LENGTH = 255
 
 
 def is_slug_collision(error: IntegrityError) -> bool:
-    """Whether an IntegrityError is a *slug* unique-constraint violation.
+    """
+    Whether an IntegrityError is a *slug* unique-constraint violation.
     The retry loops below regenerate the slug and try again - which only helps when the slug was the colliding column.
     """
     message = str(error)
@@ -39,7 +40,8 @@ class DashboardModel(django_models.Model):
         id: int
 
     class Meta:
-        """Base Meta options shared by every dashboard model.
+        """
+        Base Meta options shared by every dashboard model.
         This class only sets ``abstract``/``app_label`` - it does not itself define ``db_table``, ``unique_together``, or ``indexes``.
 
         Attributes:
@@ -64,7 +66,8 @@ class FrontendDashboardModel(DashboardModel):
 
 
 class PublicDashboardModel(FrontendDashboardModel):
-    """A base model that users can visit on the frontend.
+    """
+    A base model that users can visit on the frontend.
     Concrete models must implement ``_slugify_base()`` returning the raw text from which the slug is derived, and may override ``_slugify_qs()`` to scope uniqueness checks (e.g. per-user instead of globally).
     """
 
@@ -91,7 +94,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         return qs
 
     def _slugify_base(self) -> str:
-        """Return the raw text from which the slug is derived.
+        """
+        Return the raw text from which the slug is derived.
 
         Must be overridden by every concrete model. Should return a non-empty
         fallback string (e.g. ``self.name or "item"``).
@@ -101,7 +105,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         )
 
     def _slug_parent_prefix(self) -> str:
-        """Short parent-derived prefix for a child entity's slug, or empty.
+        """
+        Short parent-derived prefix for a child entity's slug, or empty.
 
         Child pins and child wikis override this so a building at Hudson River
         State Hospital is addressed as ``hrsh-powerhouse`` rather than a
@@ -110,7 +115,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         return ""
 
     def _slug_preferred_length(self) -> int:
-        """Soft cap for the ideal slug; uniqueness may grow toward ``max_length``.
+        """
+        Soft cap for the ideal slug; uniqueness may grow toward ``max_length``.
 
         Child pins and child wikis use a shorter preferred length so trailing
         words (including hyphenated compounds) drop as a unit instead of being
@@ -119,7 +125,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         return self._slug_max_length()
 
     def _slug_is_taken(self, candidate: str) -> bool:
-        """Whether ``candidate`` is unavailable as this instance's slug.
+        """
+        Whether ``candidate`` is unavailable as this instance's slug.
 
         Args:
             candidate: A proposed slug.
@@ -130,7 +137,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         return self._slugify_qs().filter(slug=candidate).exists()
 
     def _generate_slug(self) -> str:
-        """Derive a unique slug for this instance.
+        """
+        Derive a unique slug for this instance.
         Truncates at a word boundary so a too-long name loses whole trailing tokens (``non-contributing`` as a unit) rather than a mid-word clip.
         """
         from urbanlens.dashboard.services.core.slugs import unique_slug
@@ -145,7 +153,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         )
 
     def ensure_slug(self) -> str:
-        """Ensure this instance has a URL slug, generating one if needed.
+        """
+        Ensure this instance has a URL slug, generating one if needed.
         Persists the slug immediately when the instance already exists in the database (``self.pk`` is set).
         For unsaved instances, only sets the attribute - the caller is responsible for saving.
 
@@ -157,7 +166,8 @@ class PublicDashboardModel(FrontendDashboardModel):
         return self.slug
 
     def regenerate_slug(self) -> str:
-        """Force a new slug to be generated and persisted, replacing any existing one.
+        """
+        Force a new slug to be generated and persisted, replacing any existing one.
         Useful when the source field (e.g. name or username) has changed and the old slug is stale.
 
         Returns:

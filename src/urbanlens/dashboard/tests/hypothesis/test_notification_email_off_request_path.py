@@ -1,4 +1,5 @@
-"""A notification email is sent by a worker after the triggering write commits, never during the request.
+"""
+A notification email is sent by a worker after the triggering write commits, never during the request.
 
 SMTP has a 10 s timeout, so a slow mail server used to hold a friend request, share, comment reply or trip add
 open for that long; and an email sent before commit could describe a write that then rolled back.

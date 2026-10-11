@@ -1,4 +1,5 @@
-"""``TripComment.objects.visible_to`` must admit exactly what the tree builder admits.
+"""
+``TripComment.objects.visible_to`` must admit exactly what the tree builder admits.
 
 The trip comment panel and the trip comment API both build the entire thread -
 every comment, every reply, every reaction - and never paginate it at all,

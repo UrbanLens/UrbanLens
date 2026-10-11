@@ -1,4 +1,5 @@
-"""GDELT plugin: geocoded global news panel for pinned locations, via REData.
+"""
+GDELT plugin: geocoded global news panel for pinned locations, via REData.
 REData's ``/search/news/`` already wraps GDELT's DOC 2.0 API (see ``../REData/docs/api-reference.md``, "GET /search/news/ - news-article search") - there is no local fallback, so this panel is REData-only."""
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ _SHOWN_ARTICLES = 8
 
 
 def _format_gdelt_date(raw: str | None) -> str:
-    """Format GDELT's compact ``YYYYMMDDTHHMMSSZ`` ``seendate`` as ``YYYY-MM-DD``.
+    """
+    Format GDELT's compact ``YYYYMMDDTHHMMSSZ`` ``seendate`` as ``YYYY-MM-DD``.
 
     Args:
         raw: The raw ``date`` field from a REData news-search result.

@@ -41,7 +41,8 @@ class WikiLocationRelationTests(TestCase):
         self.assertEqual(loc.wiki.pk, wiki.pk)
 
     def test_unnamed_location_placeholder_includes_area_when_known(self) -> None:
-        """Matches Location.display_name's own area-suffixed placeholder, so an
+        """
+        Matches Location.display_name's own area-suffixed placeholder, so an
         unnamed wiki reads as "Unnamed Location in Albany, NY" instead of a
         bare "Unnamed Location" that's indistinguishable from every other one."""
         loc = baker.make(
@@ -57,7 +58,8 @@ class WikiLocationRelationTests(TestCase):
 
 
 class WikiLookupTests(TestCase):
-    """``get_for_location`` and ``get_or_create_for_location``.
+    """
+    ``get_for_location`` and ``get_or_create_for_location``.
 
     Wikis are published on creation now, so what is left is the ordinary get-or-create contract - which is still
     worth pinning, because ``get_or_create_for_location`` is the only path that may create one and every other
@@ -107,7 +109,8 @@ class WikiLookupTests(TestCase):
 
 
 class EnrichWikiLocationNameTests(TestCase):
-    """tasks.enrich_wiki_location's placeholder-name replacement.
+    """
+    tasks.enrich_wiki_location's placeholder-name replacement.
 
     Previously verified by code review only (noted as a test gap when the area-suffixed placeholder shipped) -
     these lock in the three behaviors that matter: any non-meaningful seeded name gets replaced, a placeholder
@@ -210,7 +213,8 @@ class WikiCommentConstraintTests(TestCase):
 
 
 class WikiEffectiveDateLastActiveTests(SimpleTestCase):
-    """effective_date_last_active returns date_last_active, infers from abandoned, or None.
+    """
+    effective_date_last_active returns date_last_active, infers from abandoned, or None.
 
     The community "last active"/"abandoned" dates moved from Location to Wiki in
     the wiki split; these are pure-property tests on unsaved Wiki instances.

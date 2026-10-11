@@ -1,4 +1,5 @@
-"""Answer a map filter with identifiers when the client already holds the pins.
+"""
+Answer a map filter with identifiers when the client already holds the pins.
 
 The filter panel posts on every change, and the answer used to be every matching
 pin's full payload - for a 10,000-pin account, an 11.45MB document rebuilt each
@@ -36,7 +37,8 @@ STORE_FINGERPRINT_FIELD = "store_fingerprint"
 
 
 def client_holds_every_pin(profile: Profile, claimed_fingerprint: str) -> bool:
-    """Whether the asker's own store is the profile's current pin set.
+    """
+    Whether the asker's own store is the profile's current pin set.
 
     Args:
         profile: Whose pins the filter runs over.
@@ -53,7 +55,8 @@ def client_holds_every_pin(profile: Profile, claimed_fingerprint: str) -> bool:
 
 
 def matching_uuids(query: QuerySet[Any], limit: int | None = None) -> tuple[list[str], bool]:
-    """The identifiers of the matching pins, bounded.
+    """
+    The identifiers of the matching pins, bounded.
 
     Args:
         query: The filtered pin queryset.
@@ -72,7 +75,8 @@ def matching_uuids(query: QuerySet[Any], limit: int | None = None) -> tuple[list
 
 
 def bounded[Pins: QuerySet[Any]](query: Pins, limit: int | None = None) -> tuple[Pins, bool, int]:
-    """Cap a filter result that has to travel as payloads.
+    """
+    Cap a filter result that has to travel as payloads.
 
     Counting first costs a query the payload build dwarfs, and it is what lets
     the response say how much it left out rather than only that it did.

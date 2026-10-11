@@ -151,7 +151,8 @@ WATCHED_SIGNALS = (
 
 
 def _bulk_write_sites() -> list[tuple[str, int, str, str]]:
-    """Every ``bulk_create``/``bulk_update`` call in application code.
+    """
+    Every ``bulk_create``/``bulk_update`` call in application code.
 
     Migrations are excluded: they run against historical schema, deliberately do not fire current receivers, and
     rewriting them is not an option anyway.
@@ -180,7 +181,8 @@ def _bulk_write_sites() -> list[tuple[str, int, str, str]]:
 
 
 def _receiver_root(node: ast.expr) -> str | None:
-    """The leftmost name of an attribute chain, when it looks like a model.
+    """
+    The leftmost name of an attribute chain, when it looks like a model.
 
     ``Label.objects.bulk_update(...)`` and ``Label.bulk_update(...)`` both give ``"Label"``."""
     while isinstance(node, ast.Attribute):
@@ -191,7 +193,8 @@ def _receiver_root(node: ast.expr) -> str | None:
 
 
 def _receivers_by_model_name() -> dict[str, list[str]]:
-    """Map each model's class name to the signals it has live receivers for.
+    """
+    Map each model's class name to the signals it has live receivers for.
 
     Read from Django's own signal registry rather than by grepping for ``@receiver``,
     so receivers connected any other way are counted too.
@@ -233,7 +236,8 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
         )
 
     def test_the_reviewed_list_has_no_stale_entries(self):
-        """A reviewed entry that no longer matches real code is worse than none.
+        """
+        A reviewed entry that no longer matches real code is worse than none.
 
         It reads as coverage while guarding nothing, and hides the next real instance
         if the call site comes back.
@@ -244,7 +248,8 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
         self.assertEqual(stale, [], f"REVIEWED names call sites that no longer exist; delete them: {stale}")
 
     def test_the_scan_still_finds_call_sites(self):
-        """Guards the guard.
+        """
+        Guards the guard.
 
         If the AST walk or the path handling ever breaks, every other assertion here
         passes vacuously - a green test proving nothing. This fails instead.
@@ -252,7 +257,8 @@ class BulkWriteSignalGuardTests(SimpleTestCase):
         self.assertGreater(len(_bulk_write_sites()), 5)
 
     def test_the_signal_registry_lookup_returns_something(self):
-        """Also guards the guard: no receivers found means the app registry is not
+        """
+        Also guards the guard: no receivers found means the app registry is not
         loaded, and every bulk site would be waved through."""
         self.assertNotEqual(_receivers_by_model_name(), {})
 

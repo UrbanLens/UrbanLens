@@ -130,7 +130,8 @@ class WikiBoundaryRevertTests(TestCase):
         self.assertTrue(row.polygon.equals(_NEW))
 
     def test_an_unrecognized_boundary_type_is_silently_skipped(self) -> None:
-        """Not a conflict - just a key this code doesn't know how to act on (never
+        """
+        Not a conflict - just a key this code doesn't know how to act on (never
         recorded by the current writer, but a defensive case worth locking in)."""
         edit = baker.make(
             WikiEdit, wiki=self.wiki, changes={"boundary_bogus": {"from": self._rev(_OLD), "to": self._rev(_NEW)}}
@@ -142,7 +143,8 @@ class WikiBoundaryRevertTests(TestCase):
         self.assertEqual(skipped, [])
 
     def test_legacy_latitude_longitude_keys_are_skipped_without_error(self) -> None:
-        """Coordinates stopped being editable, but old WikiEdit rows recording
+        """
+        Coordinates stopped being editable, but old WikiEdit rows recording
         them must still revert (skipping just that field) instead of crashing."""
         self.wiki.name = "New Mill"
         self.wiki.save(update_fields=["name"])

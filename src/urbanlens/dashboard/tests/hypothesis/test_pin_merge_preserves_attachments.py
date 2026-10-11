@@ -113,7 +113,8 @@ class PinMergePreservesAttachmentsTests(TestCase):
         self.assertIsNone(marker.linked_pin_id)
 
     def test_an_existing_twin_on_survivor_is_undisturbed(self) -> None:
-        """Survivor is already another marker's twin - unlinking the loser's marker (rather
+        """
+        Survivor is already another marker's twin - unlinking the loser's marker (rather
         than reassigning it onto survivor) never touches that unrelated marker."""
         floor = baker.make(FloorplanFloor, floorplan=baker.make(Floorplan, profile=self.profile))
         existing = baker.make(FloorplanMarker, floor=floor, linked_pin=self.survivor, name="Existing")
@@ -150,7 +151,8 @@ class PinMergePreservesAttachmentsTests(TestCase):
         self.assertEqual(PinOwner.objects.filter(pin=self.survivor).count(), 2)
 
     def test_no_cascade_relation_to_pin_is_left_unhandled(self) -> None:
-        """The completeness arm: the next model with a parent_pin fails here.
+        """
+        The completeness arm: the next model with a parent_pin fails here.
 
         A relation that CASCADEs from Pin and is never mentioned in the merge is deleted along with the loser."""
         source = inspect.getsource(pin_merge)

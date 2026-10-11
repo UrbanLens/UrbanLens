@@ -29,7 +29,8 @@ _PHOTO_SIGNER_SALT = "urbanlens.media_proxy.google_maps_photo"
 
 
 def sign_photo_name(photo_name: str) -> str:
-    """Signature token binding a proxy URL to a server-issued photo name.
+    """
+    Signature token binding a proxy URL to a server-issued photo name.
 
     Args:
         photo_name: The raw (unquoted) Places API photo name.
@@ -52,7 +53,8 @@ _EXPIRED_SENTINEL = "expired"
 
 
 class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
-    """GET media-photo/google-maps/<photo_name>/ - proxies one Google Maps place photo.
+    """
+    GET media-photo/google-maps/<photo_name>/ - proxies one Google Maps place photo.
 
     Accepts either a logged-in session (the browser rendering a pin's Media gallery) or an external API
     credential holding ``media:read`` (the mobile client rendering the same gallery with no session
@@ -64,7 +66,8 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
     """
 
     def get(self, request: HttpRequest, photo_name: str) -> HttpResponseBase:
-        """Serve one Places photo's bytes, from cache or from the upstream API.
+        """
+        Serve one Places photo's bytes, from cache or from the upstream API.
 
         The order of the checks below is the security-relevant part:
 

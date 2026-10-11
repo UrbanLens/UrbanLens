@@ -200,7 +200,8 @@ class DefinitionCrudTests(_CustomFieldsApiTestCase):
         self.assertEqual(field.field_type, CustomFieldType.NUMBER)
 
     def test_patch_options_without_field_type_is_still_validated(self) -> None:
-        """Omitting field_type on a PATCH (the natural way to only edit options) still dedupes,
+        """
+        Omitting field_type on a PATCH (the natural way to only edit options) still dedupes,
         rejects an empty list, and enforces the option cap - not just when field_type is repeated.
         """
         field = CustomField.objects.create(

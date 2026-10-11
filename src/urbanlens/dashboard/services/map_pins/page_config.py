@@ -1,4 +1,5 @@
-"""Everything the map page's script needs from the server, as one JSON element.
+"""
+Everything the map page's script needs from the server, as one JSON element.
 
 The script itself is a static file, so the browser keeps it between visits; the few dozen values that differ per
 request travel beside it instead of being interpolated into it.
@@ -27,7 +28,8 @@ _LIST_UUID = "00000000-0000-0000-0000-000000000000"
 
 
 def _number(value: Any) -> float | None:
-    """*value* as a JSON number, or None when it is not set.
+    """
+    *value* as a JSON number, or None when it is not set.
 
     Args:
         value: A coordinate or radius, possibly a ``Decimal`` or None.
@@ -38,7 +40,8 @@ def _number(value: Any) -> float | None:
 
 
 def _urls() -> dict[str, str]:
-    """Every route the map script calls.
+    """
+    Every route the map script calls.
 
     Returns:
         Route names the script knows, mapped to paths."""
@@ -77,7 +80,8 @@ def _urls() -> dict[str, str]:
 
 
 def map_page_config(request: HttpRequest, profile: Profile, context: Mapping[str, Any]) -> dict[str, Any]:
-    """The map page's configuration, drawn from the context the page already renders.
+    """
+    The map page's configuration, drawn from the context the page already renders.
 
     Reading the same context the template does keeps the script's view of the request identical to the page's.
 

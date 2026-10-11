@@ -1,4 +1,5 @@
-"""`CalendarImportView`: the calendar import dialog and the import action (P57).
+"""
+`CalendarImportView`: the calendar import dialog and the import action (P57).
 
 The import service is tested in `test_calendar_sync.py`; these cover what only the view and the background import
 do - the no-account responses, turning the POST's per-event fields into a queued task's selections, the progress poll

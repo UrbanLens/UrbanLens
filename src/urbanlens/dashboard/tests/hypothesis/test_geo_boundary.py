@@ -72,7 +72,8 @@ class FromBboxesTests(SimpleTestCase):
         self.assertEqual(len(calls), 1)
 
     def test_a_failed_load_is_retried_once_the_cooldown_passes(self) -> None:
-        """A boundary is typically a plugin ``ClassVar``, so memoizing a *failure*
+        """
+        A boundary is typically a plugin ``ClassVar``, so memoizing a *failure*
         the way a success is memoized closes that plugin's gate for the life of
         the worker - days for a Celery process - over one transient error."""
         calls = []
@@ -121,7 +122,8 @@ class FromBboxesTests(SimpleTestCase):
         self.assertEqual(len(calls), 2)
 
     def test_a_loader_returning_none_is_memoized_permanently(self) -> None:
-        """Returning None is an answer - "this boundary does not resolve" - unlike
+        """
+        Returning None is an answer - "this boundary does not resolve" - unlike
         raising, which is the absence of one. Retrying it would re-query forever."""
         calls = []
 

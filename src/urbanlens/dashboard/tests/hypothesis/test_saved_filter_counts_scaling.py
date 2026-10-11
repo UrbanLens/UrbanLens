@@ -66,7 +66,8 @@ class TheMeasurementIsRealTests(_CountsCase):
     """Guards the scaling test: if these fail, the one above is measuring nothing."""
 
     def test_the_endpoint_really_counts_the_seeded_pins(self) -> None:
-        """Proves the view got past its early return and actually did the work.
+        """
+        Proves the view got past its early return and actually did the work.
 
         Asserted on this profile's own filter rather than on the number of filters: a profile is created with
         default saved filters of its own, so the response carries three counts here, not one."""
@@ -86,7 +87,8 @@ class TheMeasurementIsRealTests(_CountsCase):
         )
 
     def test_the_body_does_not_grow_with_the_pin_table(self) -> None:
-        """The premise of `expect_growth=False`, asserted rather than assumed.
+        """
+        The premise of `expect_growth=False`, asserted rather than assumed.
 
         Not byte-identical: the counts themselves are rendered as digits, so ten more pins can add a character
         or two."""

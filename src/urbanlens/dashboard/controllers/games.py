@@ -1,4 +1,5 @@
-"""Games hub - the site's directory of built-in games.
+"""
+Games hub - the site's directory of built-in games.
 
 Currently SpotGuessr and Trivia; a future game only needs an entry in
 ``GAMES`` below - the landing page itself has no per-game logic.
@@ -32,7 +33,8 @@ if TYPE_CHECKING:
 
 
 class AlphaFeatureRequiredMixin:
-    """Refuses users who do not hold :attr:`SiteFeature.ALPHA_FEATURES`.
+    """
+    Refuses users who do not hold :attr:`SiteFeature.ALPHA_FEATURES`.
 
     The games (SpotGuessr, Trivia, Consensus) are alpha features: the same entitlement that hides the
     games nav and the hub must also gate every in-game route, otherwise anyone with a URL can play.
@@ -51,7 +53,8 @@ class AlphaFeatureRequiredMixin:
 
 
 def participant_session_or_404[SessionT: Model](access: SessionAccess[SessionT], profile: Profile, session_id: int) -> SessionT:
-    """The session, only if ``profile`` actively participates in it.
+    """
+    The session, only if ``profile`` actively participates in it.
 
     404 rather than 403, so a session someone else is playing does not reveal that it exists.
 
@@ -65,7 +68,8 @@ def participant_session_or_404[SessionT: Model](access: SessionAccess[SessionT],
 
 
 def refuse_unless_joined(access: SessionAccess[Any], session: Model, profile: Profile) -> JsonResponse | None:
-    """A 403 for an invitee who has not accepted, else None.
+    """
+    A 403 for an invitee who has not accepted, else None.
 
     Reading a round advances the game (it creates the next round, or completes the session), which only a player
     may do.
@@ -80,7 +84,8 @@ def _is_id(raw: str) -> bool:
 
 
 def posted_invitees(request: HttpRequest, host: Profile) -> list[Profile] | None:
-    """The friends of *host* a game's start request invites, from its repeated ``invite_profile_ids`` field.
+    """
+    The friends of *host* a game's start request invites, from its repeated ``invite_profile_ids`` field.
 
     Returns:
         The profiles, empty for a solo start; None when any id is malformed or names no friend of *host*. An id
@@ -95,7 +100,8 @@ def posted_invitees(request: HttpRequest, host: Profile) -> list[Profile] | None
 
 
 def posted_invitee(request: HttpRequest, host: Profile) -> Profile | JsonResponse:
-    """The friend of *host* an invite request names in ``profile_id``, or the 400 to answer with.
+    """
+    The friend of *host* an invite request names in ``profile_id``, or the 400 to answer with.
 
     Call it only once the requester is known to be the host, or the answer tells a player who the host's friends
     are. An id nobody holds and one held by a stranger are refused after the same statement (P280).
@@ -108,7 +114,8 @@ def posted_invitee(request: HttpRequest, host: Profile) -> Profile | JsonRespons
 
 
 def posted_player(request: HttpRequest, players: QuerySet[Any]) -> Profile | JsonResponse:
-    """The player a kick request names in ``profile_id``, among a session's participant rows, or the 400 to answer with.
+    """
+    The player a kick request names in ``profile_id``, among a session's participant rows, or the 400 to answer with.
 
     An id nobody holds and one held by someone outside the session are refused after the same statement (P280).
     """
@@ -128,7 +135,8 @@ def deep_link_session_id(access: SessionAccess[Any], profile: Profile, raw_sessi
 
 
 class GameEntry:
-    """One row in the games directory.
+    """
+    One row in the games directory.
 
     ``url`` resolves ``url_name`` lazily (on template access, not at import time) - ``GAMES`` below is
     built at module import, before every URL pattern is necessarily registered yet.
@@ -181,7 +189,8 @@ class RatedRow(Protocol):
 
 
 def rating_stats(own_rating: RatedRow | None, friend_ratings: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """Stat chips for the shared game hero (``partials/games/_game_hero_body.html``).
+    """
+    Stat chips for the shared game hero (``partials/games/_game_hero_body.html``).
 
     SpotGuessr and Trivia expose structurally identical rating rows and identical
     ``visible_friend_ratings`` payloads, so both build their chips here rather than keeping two copies
@@ -216,7 +225,8 @@ def rating_stats(own_rating: RatedRow | None, friend_ratings: Iterable[Mapping[s
 
 
 class GamesOverviewView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The games hub: every built-in game.
+    """
+    The games hub: every built-in game.
 
     GET /games/
     """
@@ -236,7 +246,8 @@ def _parse_profile_ids(raw: str) -> set[int]:
 
 
 class GameFriendPickerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's friends as invite checkboxes, for every game's invite picker.
+    """
+    The profile's friends as invite checkboxes, for every game's invite picker.
 
     GET /games/friends/?exclude=<profile id>,<profile id>
 

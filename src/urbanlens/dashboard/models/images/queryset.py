@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 
 def _own_contribution_q() -> Q:
-    """Build the ORM form of ``Image.is_own_contribution``.
+    """
+    Build the ORM form of ``Image.is_own_contribution``.
     Three conjuncts, each ruling out a real row shape that ``source`` alone misreads: This is what excludes a photograph the profile merely up-voted, and ``LINKED_URL`` bytes fetched because a page referred to them. * No ``media_source_key``.
 
     Returns:
@@ -36,7 +37,8 @@ _TRIP_IDS_ATTR = "_ul_visible_trip_ids"
 
 
 def prime_viewer_scope(profile: Profile) -> None:
-    """Resolve a viewer's relationship sets once, for a caller about to reuse them.
+    """
+    Resolve a viewer's relationship sets once, for a caller about to reuse them.
     ``visible_to`` resolves the viewer's friends, trip memberships and reachable wikis as it builds its filter.
     Explicit rather than automatic, and this is the important part: caching on first read would change what ``visible_to`` means for every caller, including one that creates a pin and then asks about visibility in the same breath.
 
@@ -60,7 +62,8 @@ def prime_viewer_scope(profile: Profile) -> None:
 
 
 def _named_this_viewer(viewer_profile: Profile) -> Q:
-    """Containers whose membership *is* the consent, so settings do not apply.
+    """
+    Containers whose membership *is* the consent, so settings do not apply.
     A direct message and a safety check-in both work by naming one person.
 
     Args:
@@ -75,7 +78,8 @@ def _named_this_viewer(viewer_profile: Profile) -> Q:
 
 
 def _shared_within_reach_of(viewer_profile: Profile) -> Q:
-    """The container gate: shared deliberately, into a wiki this viewer can reach.
+    """
+    The container gate: shared deliberately, into a wiki this viewer can reach.
     This is the *first* of two gates, not the only one: ``photo_upload_visibility`` then decides which of the people who can reach that wiki may actually see it.
 
     Args:
@@ -95,7 +99,8 @@ def _shared_within_reach_of(viewer_profile: Profile) -> Q:
 
 
 def _viewer_scoped(profile: Profile, attribute: str, compute: Callable[[], set[int]]) -> set[int]:
-    """Read a viewer-scoped id set, using a primed value when there is one.
+    """
+    Read a viewer-scoped id set, using a primed value when there is one.
 
     These sets describe the *viewer*, not the queryset, so every
     ``visible_to`` call in one render wants the same answer - and a page can make
@@ -149,7 +154,8 @@ def _trip_ids_for(profile: Profile) -> set[int]:
 
 
 class _ViewerScope:
-    """The viewer's relationships, each resolved on first use.
+    """
+    The viewer's relationships, each resolved on first use.
 
     Which of them an answer depends on is decided by the settings being
     evaluated, not known in advance: ``ANYONE`` and ``NO_ONE`` need none,
@@ -195,7 +201,8 @@ class _ViewerScope:
 
 class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
     def visible_to(self, viewer_profile: Profile | None) -> Self:
-        """Filter to images the given viewer is allowed to see.
+        """
+        Filter to images the given viewer is allowed to see.
         Enforces two independent settings: - The uploader's ``photo_upload_visibility`` (who can see my photos). - The viewer's own ``viewer_photo_filter`` (whose photos I want to see).
         ``authorize_image`` enforces the same rule for a direct media-URL fetch; this is what keeps it out of a gallery listing in the first place, rather than appearing as a broken image.
         """
@@ -236,7 +243,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.filter(Q(profile=viewer_profile) | others_visible)
 
     def _allowed_uploader_ids(self, viewer_profile: Profile, viewer_filter: str) -> set[int]:
-        """Return the set of profile IDs whose photos this viewer may see.
+        """
+        Return the set of profile IDs whose photos this viewer may see.
 
         Takes into account both the viewer's filter preference and each
         uploader's own upload-visibility setting.
@@ -272,7 +280,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return _trip_ids_for(profile)
 
     def _relationship_allows(self, visibility: str, uploader_id: int, scope: _ViewerScope) -> bool:
-        """Evaluate one VisibilityChoice for a (viewer, uploader) pair.
+        """
+        Evaluate one VisibilityChoice for a (viewer, uploader) pair.
         Bulk twin of ``Profile.visibility_permits`` - the viewer's friend/ location/trip id sets are pre-computed once so the per-uploader work stays bounded.
 
         Args:
@@ -331,7 +340,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.filter(latitude__isnull=False, longitude__isnull=False, map_hidden=False)
 
     def uploaded_by(self, profile: Profile) -> Self:
-        """Filter to images uploaded by a given profile, newest first.
+        """
+        Filter to images uploaded by a given profile, newest first.
 
         Args:
             profile: The uploader whose photos to return.
@@ -342,7 +352,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.filter(profile=profile).order_by("-created")
 
     def own_contributions(self) -> Self:
-        """Filter to rows whose ``profile`` is the photographer, not the up-voter.
+        """
+        Filter to rows whose ``profile`` is the photographer, not the up-voter.
         The distinction ``source`` cannot draw: a photo imported from the uploader's own Immich server or Google Photos library carries that provider's name in ``source`` while still being their own picture, whereas a row materialised from somebody else's provider search carries the up-voter in ``profile``.
         Ownership questions - concealment, who may withdraw a photo from a wiki, whether a contribution earns reputation - all want this rather than ``source == UPLOAD``.
 
@@ -352,7 +363,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.filter(_own_contribution_q())
 
     def with_file(self) -> Self:
-        """Filter out rows whose stored file is missing.
+        """
+        Filter out rows whose stored file is missing.
         ``ImageField`` is non-null with a blank default, so a row can exist with no file behind it - the wiki gallery endpoint already excludes these.
 
         Returns:
@@ -361,7 +373,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.exclude(image="")
 
     def servable(self) -> Self:
-        """Filter out uploads still pending processing, whose stored file is about to be replaced.
+        """
+        Filter out uploads still pending processing, whose stored file is about to be replaced.
 
         Returns:
             The queryset without ``pending_scan`` rows.
@@ -369,7 +382,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.filter(pending_scan=False)
 
     def processing(self) -> Self:
-        """Uploads still awaiting their re-encode, excluding ones processing gave up on (``Image.is_processing``).
+        """
+        Uploads still awaiting their re-encode, excluding ones processing gave up on (``Image.is_processing``).
 
         Matches the ``idxdb_image_pending_created`` partial index, so the sweeps that walk these by age use it.
 
@@ -379,7 +393,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.filter(pending_scan=True, upload_failed_at__isnull=True)
 
     def of_kind(self, kind: str) -> Self:
-        """Filter to one :class:`MediaKind`.
+        """
+        Filter to one :class:`MediaKind`.
 
         Args:
             kind: The ``media_type`` to keep.
@@ -408,7 +423,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         return self.of_kind(MediaKind.VIDEO)
 
     def needs_attention(self, profile: Profile) -> Self:
-        """Filter to a profile's unfiled photos awaiting organization.
+        """
+        Filter to a profile's unfiled photos awaiting organization.
         These are photos the user uploaded that are not yet tied to a visit and have not been dismissed - the pool the Memories "needs attention" queue surfaces so they can be confirmed, pinned, or manually logged.
 
         Args:
@@ -427,7 +443,8 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet["Image"]):
         ).order_by("-created")
 
     def copied_from_others(self) -> Self:
-        """Filter to photos this queryset's owner holds a copy of, but did not author.
+        """
+        Filter to photos this queryset's owner holds a copy of, but did not author.
         Keyed on ``copied_from_profile`` (set at copy time - see ``services.photos.wiki_copy.copy_wiki_photo_to_pin``), not on comparing ``profile`` to some other row's uploader: a copy is *owned* by the profile that made it (that's what lets it survive the original being deleted), so "whose photo is this really" has to be answered by a separate field, not by ``profile`` itself.
         ``.filter(profile=viewer)``) - this only narrows further.
         """
@@ -445,7 +462,8 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet["MediaRelevance"]):
     """Custom queryset for MediaRelevance models."""
 
     def for_gallery(self, profile: Profile, location: Location | int, source: str) -> MediaRelevanceQuerySet:
-        """Every relevance mark one profile holds for one provider's gallery at a location.
+        """
+        Every relevance mark one profile holds for one provider's gallery at a location.
 
         Args:
             profile: The marking profile.
@@ -462,7 +480,8 @@ class MediaRelevanceQuerySet(abstract.DashboardQuerySet["MediaRelevance"]):
         return self.filter(is_vote=True)
 
     def vote_scores(self, location: Location | int, source: str) -> dict[str, int]:
-        """Net community vote score per item for one provider's gallery at a location.
+        """
+        Net community vote score per item for one provider's gallery at a location.
         On the community wiki, a relevance mark is read as a vote: every ``is_relevant=True`` row counts ``+1`` and every ``is_relevant=False`` row counts ``-1``, summed across all contributing profiles. A private "remove from my results" mark (``is_vote=False``) counts for nothing.
         Because :class:`MediaRelevance` is keyed by Location (not Pin), a relevance mark made on any user's Private Pin page for this place is already part of this aggregate - that's how a pin-detail thumbs-up "carries over" to the wiki with no extra bookkeeping.
 

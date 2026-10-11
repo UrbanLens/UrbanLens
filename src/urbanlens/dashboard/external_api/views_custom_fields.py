@@ -1,4 +1,5 @@
-"""External-facing custom-field endpoints: definitions and their values.
+"""
+External-facing custom-field endpoints: definitions and their values.
 
 Definitions (``custom-fields/``) span every entity type the model supports
 (pins, photos, people, maps) since they are one shared ``CustomField`` row;
@@ -39,7 +40,8 @@ if TYPE_CHECKING:
 
 
 class CustomFieldDefinitionsView(PaginatedListMixin, ExternalApiView):
-    """The caller's custom field definitions: GET lists them, POST creates one.
+    """
+    The caller's custom field definitions: GET lists them, POST creates one.
 
     Definitions span every entity type since they are one shared model - filter with ``?entity_type=``
     to scope to one (``pin``, ``photo``, ``profile``, or ``markup_map``).
@@ -115,7 +117,8 @@ class CustomFieldDefinitionDetailView(ExternalApiView):
 
     @extend_schema(request=CustomFieldDefinitionWriteSerializer, responses={200: CustomFieldDefinitionSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, field_id: int) -> Response:
-        """Apply a partial update to one of the caller's own field definitions.
+        """
+        Apply a partial update to one of the caller's own field definitions.
 
         ``entity_type`` is accepted by the serializer (for symmetry with create) but never applied here:
         migrating a field between entity types would orphan every value already stored under it, the same
@@ -176,7 +179,8 @@ class CustomFieldDefinitionDetailView(ExternalApiView):
 
 
 class PhotoCustomFieldsView(ExternalApiView):
-    """GET: every one of the caller's PHOTO-entity fields, with this photo's value.
+    """
+    GET: every one of the caller's PHOTO-entity fields, with this photo's value.
 
     Lists every defined field, not just ones with a value already set on this photo - a native client
     renders the whole set as an editable form, the same way the web lightbox strip does

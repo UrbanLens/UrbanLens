@@ -23,7 +23,8 @@ _coord_counter = 0
 
 
 def _location(**kwargs) -> Location:
-    """A Location with per-call unique coordinates.
+    """
+    A Location with per-call unique coordinates.
 
     Locations are unique per (latitude, longitude), so tests that create more than one (e.g. a wiki location
     plus a separate pin-only location) would otherwise hit the unique constraint (mirrors test_child_pins.py's
@@ -49,7 +50,8 @@ class StripPhotosForOwnerTests(TestCase):
         self.profile = self.user.profile
 
     def test_pin_only_photo_is_never_included(self) -> None:
-        """The overwhelming default - a bare upload attached to nothing but a
+        """
+        The overwhelming default - a bare upload attached to nothing but a
         private pin must never appear, even to its own owner."""
         pin = baker.make(Pin, profile=self.profile, location=_location())
         baker.make(Image, profile=self.profile, pin=pin, wiki=None, direct_message=None, media_type=MediaKind.PHOTO)
@@ -116,7 +118,8 @@ class StripPhotosVisibleToTests(TestCase):
         self.assertEqual(list(strip_photos_visible_to(self.owner, self.viewer)), [])
 
     def test_dm_attached_photo_is_never_shown_to_a_second_viewer(self) -> None:
-        """Deliberate scope decision (see profile_photos.py's own docstring) -
+        """
+        Deliberate scope decision (see profile_photos.py's own docstring) -
         DM attachments only ever make the OWNER's strip non-empty, never a
         second viewer's view of someone else's profile."""
         message = baker.make(DirectMessage, sender=self.owner, recipient=self.viewer, body="hi")

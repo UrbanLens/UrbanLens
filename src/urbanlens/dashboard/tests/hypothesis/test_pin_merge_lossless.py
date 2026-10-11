@@ -1,4 +1,5 @@
-"""merge_pins keeps what the merged-away pin held, even where the survivor has only one slot for it.
+"""
+merge_pins keeps what the merged-away pin held, even where the survivor has only one slot for it.
 Each test here covers something an earlier merge deleted outright: the losing article, boundary and custom field value, the loser's own columns, a duplicate owner's details and sales, a duplicate share's message and bundle - and the automatic visit that crashed the merge instead."""
 
 from __future__ import annotations

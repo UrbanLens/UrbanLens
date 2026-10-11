@@ -1,4 +1,5 @@
-"""Bytes proxied from somewhere else do not share a store with the sessions.
+"""
+Bytes proxied from somewhere else do not share a store with the sessions.
 
 A tile is cached per layer and coordinate, so the number of keys is the number of coordinates
 anyone looked at in a week. The store holding them is 1 GiB and refuses writes rather than
@@ -53,7 +54,8 @@ class ProxiedBytesGoToTheirOwnAliasTests(SimpleTestCase):
         self.assertIsNotNone(caches[settings.PROXIED_BYTES_CACHE])
 
     def test_every_helper_reads_and_writes_that_alias(self) -> None:
-        """One helper still on ``default`` would put a tile back beside the sessions, and no test
+        """
+        One helper still on ``default`` would put a tile back beside the sessions, and no test
         under these settings could see it."""
         source = pathlib.Path(bounded_cache.__file__).read_text()
         tree = ast.parse(source)
@@ -78,7 +80,8 @@ class ProxiedBytesGoToTheirOwnAliasTests(SimpleTestCase):
         self.assertNotIn("from django.core.cache import cache\n", source, "the module-level default cache is back")
 
     def test_nothing_spells_a_tile_key_by_hand(self) -> None:
-        """Anti-drift for the seeder tests below: one writer building the f-string itself is how
+        """
+        Anti-drift for the seeder tests below: one writer building the f-string itself is how
         the seeder and the proxy came apart, and a second store makes that silent rather than loud."""
         owner = pathlib.Path(REPO_ROOT / "src/urbanlens/dashboard/services/map/tile_cache_keys.py")
         sources = [
@@ -95,7 +98,8 @@ class ProxiedBytesGoToTheirOwnAliasTests(SimpleTestCase):
                     self.assertNotIn(prefix, text, "builds a tile cache key instead of importing one")
 
     def test_the_tile_authorisation_grant_stays_in_the_same_store_as_the_tile(self) -> None:
-        """The proxy reads the grant and the tile in one round trip, which stops being one the
+        """
+        The proxy reads the grant and the tile in one round trip, which stops being one the
         moment they live in different instances."""
         source = pathlib.Path(REPO_ROOT / "src/urbanlens/dashboard/services/map/tile_authorisation.py").read_text()
 
@@ -117,7 +121,8 @@ class TheProxiedBytesStoreIsProvisionedTests(SimpleTestCase):
         self.assertNotIn("cache_mode", _flags(yaml.safe_load(COMPOSE.read_text())["services"]["dragonfly"]["command"]))
 
     def test_dragonfly_refuses_to_start_below_256mib_per_thread(self) -> None:
-        """Its own startup check, so a thread count raised without the memory to back it takes the
+        """
+        Its own startup check, so a thread count raised without the memory to back it takes the
         stack down rather than degrading."""
         flags = _flags(_tile_cache_service()["command"])
         threads = int(flags["proactor_threads"].partition(":-")[2].rstrip("}") or flags["proactor_threads"])
@@ -137,7 +142,8 @@ class TheProxiedBytesStoreIsProvisionedTests(SimpleTestCase):
         self.assertEqual(compose["services"]["app"]["depends_on"]["tile-cache"]["condition"], "service_healthy")
 
     def test_it_is_reachable_from_every_service_that_is_told_about_it(self) -> None:
-        """The alias only resolves on the networks the service joins; elsewhere the cache silently
+        """
+        The alias only resolves on the networks the service joins; elsewhere the cache silently
         degrades to unreachable, which looks exactly like a cache that is simply cold."""
         compose = yaml.safe_load(COMPOSE.read_text())
         joined = set(_tile_cache_service()["networks"])
@@ -154,7 +160,8 @@ class TheProxiedBytesStoreIsProvisionedTests(SimpleTestCase):
 
 
 class WhatSeedsATileWritesWhereTheProxyReadsTests(TestCase):
-    """The load run's seeder addresses the same bytes the proxy does, from a different process.
+    """
+    The load run's seeder addresses the same bytes the proxy does, from a different process.
 
     It wrote them to the default cache while the proxy had moved to its own store, and nothing
     failed: a miss simply goes upstream, so the map still drew and the capacity run silently
@@ -213,7 +220,8 @@ class WhatSeedsATileWritesWhereTheProxyReadsTests(TestCase):
 
 class TheDefaultsStayInStepTests(SimpleTestCase):
     def test_the_compose_default_and_the_settings_fallback_name_the_same_thing(self) -> None:
-        """Compose names the container; settings fall back to the shared store when nothing does.
+        """
+        Compose names the container; settings fall back to the shared store when nothing does.
         A rename on one side alone puts every proxied body back where it started."""
         compose = yaml.safe_load(COMPOSE.read_text())
         url = compose["services"]["app"]["environment"]["UL_PROXY_CACHE_URL"]
@@ -222,7 +230,8 @@ class TheDefaultsStayInStepTests(SimpleTestCase):
         self.assertIn(alias, url.partition(":-")[2])
 
     def test_the_helper_and_the_alias_are_spelled_once(self) -> None:
-        """Anti-vacuity for the tests above: they read the name off settings, so a settings module
+        """
+        Anti-vacuity for the tests above: they read the name off settings, so a settings module
         that named the default alias would make all of them pass."""
         base = pathlib.Path(REPO_ROOT / "src/urbanlens/UrbanLens/settings/base.py").read_text()
         assignments = [line for line in base.splitlines() if line.startswith("PROXIED_BYTES_CACHE")]

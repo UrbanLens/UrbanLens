@@ -1,4 +1,5 @@
-"""Identical upstream asks made together cost one call.
+"""
+Identical upstream asks made together cost one call.
 
 Five panel sources on one Private Pin page each asked REData ``parcels/lookup`` for the same coordinate, in
 separate tasks started within a second of each other: 205 parcel lookups in the HRSH run's hour for 70 pins.
@@ -173,7 +174,8 @@ class SiteLevelAnswersTests(RedataConfiguredMixin, SimpleTestCase):
 
 
 class CulturalResourceTests(SimpleTestCase):
-    """Every building on a campus matches the campus's CRIS record, and each building's panel asked for it again.
+    """
+    Every building on a campus matches the campus's CRIS record, and each building's panel asked for it again.
 
     A root pin and three building pins cost 6 fetch-detail and 19 attachment-extract calls for 7 attachments.
     """

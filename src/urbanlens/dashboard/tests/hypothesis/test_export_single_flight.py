@@ -1,4 +1,5 @@
-"""An export's single-flight claim belongs to its job from the start, and nothing that stops the job keeps it held.
+"""
+An export's single-flight claim belongs to its job from the start, and nothing that stops the job keeps it held.
 
 ``test_single_flight_jobs`` covers one export at a time; these cover the claim's two gaps: a failure between taking
 it and queueing the job left it held for its whole TTL, and it held "pending" rather than the job, so a job could not

@@ -53,7 +53,8 @@ class PointsForDistanceTests(SimpleTestCase):
         self.assertEqual(points_for_distance(-5.0), MAX_ROUND_POINTS)
 
     def test_same_city_distance_still_earns_meaningful_points(self) -> None:
-        """Regression guard: a single fast exponential (the old curve) makes
+        """
+        Regression guard: a single fast exponential (the old curve) makes
         anything past ~10-15km read as ~0, which felt unfairly harsh - a
         10km miss (same city) should still earn a real chunk of points, not
         a token amount."""

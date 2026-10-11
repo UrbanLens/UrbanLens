@@ -1,4 +1,5 @@
-"""Parcel-vs-building scope for pins and wikis.
+"""
+Parcel-vs-building scope for pins and wikis.
 A ``Pin`` (and its community ``Wiki``) has always doubled as both *the parcel* and *the building* at a location, because for an ordinary place those are the same thing."""
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ _METERS_PER_DEGREE_LATITUDE = 111_320.0
 
 
 def meters_between(latitude_a: float, longitude_a: float, latitude_b: float, longitude_b: float) -> float:
-    """Approximate ground distance between two WGS-84 coordinates, in metres.
+    """
+    Approximate ground distance between two WGS-84 coordinates, in metres.
 
     Args:
         latitude_a: Latitude of the first point.
@@ -61,7 +63,8 @@ def _children(target: Pin | Wiki):
 
 
 def building_child_count(target: Pin | Wiki) -> int:
-    """How many of the target's direct children are typed as buildings.
+    """
+    How many of the target's direct children are typed as buildings.
 
     Args:
         target: The pin or wiki whose children to count.
@@ -76,7 +79,8 @@ def building_child_count(target: Pin | Wiki) -> int:
 
 
 def is_site_scope(target: Pin | Wiki) -> bool:
-    """Whether this marker describes a parcel/site rather than a single building.
+    """
+    Whether this marker describes a parcel/site rather than a single building.
 
     Args:
         target: The pin or wiki being rendered.
@@ -101,7 +105,8 @@ def is_site_scope(target: Pin | Wiki) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class CachedBuildings:
-    """The building list cached for a location's parcel.
+    """
+    The building list cached for a location's parcel.
 
     Attributes:
         buildings: The building records; ``[]`` when the providers were asked and found none.
@@ -114,7 +119,8 @@ class CachedBuildings:
 
 
 def cached_parcel_buildings(location: Location | None) -> CachedBuildings | None:
-    """The building list cached for this location's parcel, and whether it is all of them.
+    """
+    The building list cached for this location's parcel, and whether it is all of them.
     Never fetches - the cache is filled by ``ParcelBuildingsPanelSource`` (on demand, when a Private Pin page asks for its panel) and by that plugin's background enrichment source, so a page render only ever reads it.
 
     Args:
@@ -134,7 +140,8 @@ def cached_parcel_buildings(location: Location | None) -> CachedBuildings | None
 
 
 def parcel_buildings(location: Location | None) -> list[dict] | None:
-    """Every building known on this location's parcel, from cache only (see :func:`cached_parcel_buildings`).
+    """
+    Every building known on this location's parcel, from cache only (see :func:`cached_parcel_buildings`).
 
     Args:
         location: The location whose parcel to look up; None is tolerated.
@@ -146,7 +153,8 @@ def parcel_buildings(location: Location | None) -> list[dict] | None:
 
 
 def site_buildings(location: Location) -> list[dict]:
-    """Every building known on the parcel ``location`` stands on, from cache only.
+    """
+    Every building known on the parcel ``location`` stands on, from cache only.
 
     Args:
         location: A building's or a site's location.
@@ -173,7 +181,8 @@ def has_multiple_buildings(location: Location | None) -> bool:
 
 
 def nearest_building(buildings: list[dict], latitude: float, longitude: float, *, within_meters: float | None = None) -> dict | None:
-    """The building record closest to a coordinate.
+    """
+    The building record closest to a coordinate.
 
     Args:
         buildings: Building records (each optionally carrying ``latitude``/``longitude``).
@@ -203,7 +212,8 @@ def nearest_building(buildings: list[dict], latitude: float, longitude: float, *
 
 
 def nested_locations(location: Location) -> list[Location]:
-    """Every location a pin or wiki nested under one standing on ``location`` stands on.
+    """
+    Every location a pin or wiki nested under one standing on ``location`` stands on.
 
     Args:
         location: The site's location.
@@ -222,7 +232,8 @@ def nested_locations(location: Location) -> list[Location]:
 
 
 def enclosing_site_locations(location: Location) -> list[Location]:
-    """The locations of the outermost pins and wikis that markers standing on ``location`` are nested under.
+    """
+    The locations of the outermost pins and wikis that markers standing on ``location`` are nested under.
 
     Args:
         location: A nested marker's location.
@@ -255,7 +266,8 @@ def _outermost(marker: Pin | Wiki) -> Pin | Wiki | None:
 
 
 def looks_like_a_building(location: Location | None) -> bool:
-    """Whether a coordinate sits on a known building footprint.
+    """
+    Whether a coordinate sits on a known building footprint.
 
     Args:
         location: The location to test; None is tolerated.
@@ -275,7 +287,8 @@ def looks_like_a_building(location: Location | None) -> bool:
 
 
 def classify_building_pin_type(target: Pin | Wiki) -> bool:
-    """Type an unclassified marker as a building when it stands on one.
+    """
+    Type an unclassified marker as a building when it stands on one.
 
     Args:
         target: The pin or wiki to classify.
@@ -299,7 +312,8 @@ def classify_building_pin_type(target: Pin | Wiki) -> bool:
 
 
 def reclassify_markers_on_place(place, *, owner=None) -> int:
-    """Re-derive the cached scope of the wikis standing on a place, and of *owner*'s pins there.
+    """
+    Re-derive the cached scope of the wikis standing on a place, and of *owner*'s pins there.
 
     Another account's pins are never retyped from here: shared place data does not write to a private pin.
     Its owner's next visit re-derives it (:func:`rederive_pin_type`).
@@ -331,7 +345,8 @@ def reclassify_markers_on_place(place, *, owner=None) -> int:
 
 
 def rederive_pin_type(pin: Pin) -> bool:
-    """Store the type an owner's pin now reads as, which place changes since its last visit may have moved.
+    """
+    Store the type an owner's pin now reads as, which place changes since its last visit may have moved.
 
     A stored building is never demoted to a plain marker: it records a footprint under the pin, and its parent's
     building count reads it.

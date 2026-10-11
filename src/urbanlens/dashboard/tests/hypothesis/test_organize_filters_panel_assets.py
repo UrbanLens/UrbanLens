@@ -1,4 +1,5 @@
-"""The Organize page's Filters panel brings Leaflet and Leaflet.draw with it, and they must survive the swap.
+"""
+The Organize page's Filters panel brings Leaflet and Leaflet.draw with it, and they must survive the swap.
 
 htmx parses a response with DOMParser and keeps its <body>. A response that opens with <link> or <script>
 has those hoisted into <head> by the parser and dropped, so the saved-filter dialog's region map never

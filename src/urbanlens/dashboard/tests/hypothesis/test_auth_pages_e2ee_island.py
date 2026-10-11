@@ -1,4 +1,5 @@
-"""The sign-in pages configure the E2EE client from the ``#e2ee-urls`` island, then wire their form from auth.js.
+"""
+The sign-in pages configure the E2EE client from the ``#e2ee-urls`` island, then wire their form from auth.js.
 
 auth.js must load after e2ee.js and synchronously: the login form has to be wired before it can be submitted, or
 the raw password goes to the server.

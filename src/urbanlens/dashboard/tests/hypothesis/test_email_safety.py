@@ -46,7 +46,8 @@ class HashEmailTests(SimpleTestCase):
 
     @given(email=_EMAILS)
     def test_hash_does_not_contain_address(self, email):
-        """The stored digest is not a place the address can be read back out of.
+        """
+        The stored digest is not a place the address can be read back out of.
 
         Local parts made only of hex digits are excluded, and not for convenience: the digest is itself 64 hex
         characters, so a short all-hex local part turns up inside one by coincidence often enough to fail this

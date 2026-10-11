@@ -1,4 +1,5 @@
-"""An archived check-in's owner gets what the browser needs to unlock it: the E2EE client and its configuration.
+"""
+An archived check-in's owner gets what the browser needs to unlock it: the E2EE client and its configuration.
 
 The Unlock button used to call ``UrbanLensE2EE.decryptSafetyArchive`` on a page that never loaded ``e2ee.js`` or
 called ``init()``, so it did nothing.

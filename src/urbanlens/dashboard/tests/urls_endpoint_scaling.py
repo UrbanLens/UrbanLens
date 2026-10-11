@@ -24,7 +24,8 @@ PAYLOAD_CEILING = 3
 
 
 def bounded(request: HttpRequest) -> JsonResponse:
-    """A projection: no instances, one database row per rendered row, small.
+    """
+    A projection: no instances, one database row per rendered row, small.
 
     Args:
         request: The HTTP request.
@@ -41,7 +42,8 @@ COMPANIONS_PER_ROW = 3
 
 
 def builds_objects(request: HttpRequest) -> JsonResponse:
-    """Reads the same data through model instances, with companions per row.
+    """
+    Reads the same data through model instances, with companions per row.
 
     Deliberately builds its companions in memory rather than by querying: this view must break exactly one axis,
     and a per-row query would trip the statement counter too and make the harness ambiguous about which axis
@@ -61,7 +63,8 @@ def builds_objects(request: HttpRequest) -> JsonResponse:
 
 
 def fetches_every_row(request: HttpRequest) -> JsonResponse:
-    """Counts by dragging every row into Python, in one flat statement.
+    """
+    Counts by dragging every row into Python, in one flat statement.
 
     The shape `QueryScalingMixin` is blind to: the query count never moves, because there is only ever one
     query.
@@ -76,7 +79,8 @@ def fetches_every_row(request: HttpRequest) -> JsonResponse:
 
 
 def ships_too_much(request: HttpRequest) -> JsonResponse:
-    """Attaches several kilobytes of filler to every row.
+    """
+    Attaches several kilobytes of filler to every row.
 
     Args:
         request: The HTTP request.
@@ -89,7 +93,8 @@ def ships_too_much(request: HttpRequest) -> JsonResponse:
 
 
 def capped(request: HttpRequest) -> HttpResponse:
-    """Bounded on every per-row axis *and* on the total, which is the point.
+    """
+    Bounded on every per-row axis *and* on the total, which is the point.
 
     A per-row budget cannot express "and never more than N records"; this is what the ceiling axis reads.
 
@@ -105,7 +110,8 @@ def capped(request: HttpRequest) -> HttpResponse:
 
 
 def uncapped(request: HttpRequest) -> HttpResponse:
-    """The same shape with no ceiling - what the ceiling axis must catch.
+    """
+    The same shape with no ceiling - what the ceiling axis must catch.
 
     Args:
         request: The HTTP request.
@@ -117,7 +123,8 @@ def uncapped(request: HttpRequest) -> HttpResponse:
 
 
 def streams_too_much(request: HttpRequest) -> StreamingHttpResponse:
-    """The wasteful view again, streamed - the shape `map.document` serves.
+    """
+    The wasteful view again, streamed - the shape `map.document` serves.
 
     A `StreamingHttpResponse` has no `.content`, so an instrument that reads the body the obvious way cannot
     measure the largest endpoint in the application at all.
@@ -137,7 +144,8 @@ def streams_too_much(request: HttpRequest) -> StreamingHttpResponse:
 
 
 def streams_bounded(request: HttpRequest) -> StreamingHttpResponse:
-    """The same transport, honest per-row cost - the negative half.
+    """
+    The same transport, honest per-row cost - the negative half.
 
     Args:
         request: The HTTP request.

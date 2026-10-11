@@ -16,7 +16,8 @@ MAX_FORMER_SLUGS = 10
 
 
 class LocationSlugHistory(abstract.DashboardModel):
-    """A slug a Location was addressed by before, so links to it keep resolving.
+    """
+    A slug a Location was addressed by before, so links to it keep resolving.
 
     A former slug is never minted again for another Location, and resolves only through the same access gate as the
     current one.
@@ -37,7 +38,8 @@ class LocationSlugHistory(abstract.DashboardModel):
 
     @classmethod
     def record(cls, location: Location, former: str | None, current: str | None) -> None:
-        """Remember ``former`` for ``location`` after its slug became ``current``.
+        """
+        Remember ``former`` for ``location`` after its slug became ``current``.
 
         The Location's own uuid needs no row, since it always resolves; a slug the Location takes back is dropped.
         Only the newest :data:`MAX_FORMER_SLUGS` are kept, so a provider cycling through names cannot grow the

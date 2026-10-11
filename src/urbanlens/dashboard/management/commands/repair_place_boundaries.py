@@ -1,4 +1,5 @@
-"""Re-resolve parcels whose geometry predates REData's boundary ranking.
+"""
+Re-resolve parcels whose geometry predates REData's boundary ranking.
 
 Sweeping with the corrected polygon would visit only the locations that are still inside it and
 silently leave every wrongly re-homed location outside it attached to the wrong place, which looks
@@ -38,7 +39,8 @@ class Command(BaseCommand):
         )
 
     def _targets(self, *, include_generated: bool, limit: int):
-        """The parcels to repair, largest first.
+        """
+        The parcels to repair, largest first.
 
         Largest first because area is the symptom: an oversized boundary is both the most visible defect and
         the one whose sweep re-homes the most wrongly-attached locations, so a partial run (``--limit``)

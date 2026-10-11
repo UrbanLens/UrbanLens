@@ -1,4 +1,5 @@
-"""API key management for the Settings > Advanced section.
+"""
+API key management for the Settings > Advanced section.
 
 Creation and revocation are plain server-rendered form posts, like passkey
 rename/delete - there's no client-side ceremony involved, just generate (or
@@ -37,7 +38,8 @@ def _api_keys_section_response(request: HttpRequest, user: User, **extra: object
 
 
 class ApiKeySectionView(LoginRequiredMixin, View):
-    """GET: the API Keys section on its own, for a pagination click.
+    """
+    GET: the API Keys section on its own, for a pagination click.
 
     The full settings page still renders this section inline - the list is a handful of small queries,
     not something worth a second round trip - so this exists for the pagination bar, which needs a

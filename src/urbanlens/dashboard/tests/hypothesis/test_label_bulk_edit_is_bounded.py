@@ -1,4 +1,5 @@
-"""The label bulk editor lets the request choose how much work it is.
+"""
+The label bulk editor lets the request choose how much work it is.
 
 `ids`, `add_parent_ids` and `add_child_ids` all arrive as client-supplied JSON
 lists with no ceiling. Every (label, parent) pair then runs `_would_create_cycle`,

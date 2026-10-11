@@ -104,7 +104,8 @@ class PointsForChangesTests(SimpleTestCase):
         self.assertIn(points_for_changes({key: {} for key in keys}), range(MANUAL_EDIT_POINTS_CAP + 1))
 
     def test_the_cap_stays_below_an_in_game_answer(self) -> None:
-        """The stated intent of the award, asserted rather than only commented.
+        """
+        The stated intent of the award, asserted rather than only commented.
 
         ``points.py`` says the out-of-game wiki edit is "deliberately worth less than any in-game path so
         playing the game is still the primary way to rack up points"."""

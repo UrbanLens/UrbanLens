@@ -94,7 +94,8 @@ class KeywordKindEnabledForProfileTests(TestCase):
 
 
 class SuggestForPinStageGatingTests(TestCase):
-    """suggest_for_pin must only invoke the stages the profile allows.
+    """
+    suggest_for_pin must only invoke the stages the profile allows.
 
     The pin path's first stage is REData suggestions rather than keyword matching (a wiki, which has no owner
     and so no per-user taxonomy, still keyword-matches)."""

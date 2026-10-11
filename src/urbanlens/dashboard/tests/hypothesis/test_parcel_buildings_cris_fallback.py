@@ -1,4 +1,5 @@
-"""With REData's building list out of reach, the Overpass fallback roster still carries CRIS's inventory.
+"""
+With REData's building list out of reach, the Overpass fallback roster still carries CRIS's inventory.
 
 Reproduces the HRSH courtyard pin: REData's Dutchess budget was spent, the fallback found 8 OSM footprints on the
 campus, and "BLDG 45/MORTUARY & LAB (1896)" - one of 42 CRIS buildings on the parcel, none of which OSM has

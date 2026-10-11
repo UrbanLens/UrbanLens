@@ -1,4 +1,5 @@
-"""The catalogue of things an achievement can be defined against.
+"""
+The catalogue of things an achievement can be defined against.
 Site admins pick a metric plus a threshold when they create an :class:`~urbanlens.dashboard.models.achievements.model.Achievement`, so the set of metrics is the vocabulary the achievement system understands."""
 
 # Generic imports
@@ -42,7 +43,8 @@ class StreakSummaryRow(TypedDict):
 
 @dataclass(frozen=True)
 class Metric:
-    """One countable dimension of a profile's contribution.
+    """
+    One countable dimension of a profile's contribution.
 
     Attributes:
         key: Stable identifier stored on ``Achievement.metric``.
@@ -78,7 +80,8 @@ class Metric:
             return 0
 
     def values_for_many(self, profiles: Sequence[Profile]) -> dict[int, int]:
-        """Return this metric's current value for every profile, never raising.
+        """
+        Return this metric's current value for every profile, never raising.
 
         Args:
             profiles: The profiles to measure.
@@ -100,7 +103,8 @@ _METRICS: dict[str, Metric] = {}
 
 
 def register(metric: Metric) -> Metric:
-    """Add *metric* to the registry, replacing any metric with the same key.
+    """
+    Add *metric* to the registry, replacing any metric with the same key.
 
     Args:
         metric: The metric to register.
@@ -142,7 +146,8 @@ def grouped_metric_choices() -> list[tuple[str, list[tuple[str, str]]]]:
 
 
 def metrics_for_triggers(events: Iterable[str]) -> list[str]:
-    """Return the keys of metrics that any of *events* could have changed.
+    """
+    Return the keys of metrics that any of *events* could have changed.
 
     Args:
         events: Trigger names emitted by signal handlers.
@@ -176,7 +181,8 @@ TRIGGER_STREAK = "streak"
 
 
 def _grouped_count(queryset: QuerySet, group_field: str, count_field: str = "id", *, distinct: bool = False) -> dict[int, int]:
-    """Collapse *queryset* to a ``{group_field value: row count}`` mapping.
+    """
+    Collapse *queryset* to a ``{group_field value: row count}`` mapping.
 
     Args:
         queryset: Rows to count, already filtered to the profiles of interest.
@@ -310,7 +316,8 @@ def _trips_planned_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
 
 
 def _finished_trip_q(today: datetime.date) -> Q:
-    """Match trip memberships whose trip has ended as of *today*.
+    """
+    Match trip memberships whose trip has ended as of *today*.
     end_date is optional, so a trip with none falls back to its start_date."""
     return Q(trip__end_date__lt=today) | Q(trip__end_date__isnull=True, trip__start_date__lt=today)
 
@@ -423,7 +430,8 @@ _STREAK_LABELS: dict[str, tuple[str, str]] = {
 
 
 def _register_builtin_metrics() -> None:
-    """Register the metrics that ship with the app.
+    """
+    Register the metrics that ship with the app.
     Idempotent, so a re-import cannot duplicate entries."""
     for metric in (
         Metric(
@@ -592,7 +600,8 @@ _register_builtin_metrics()
 
 
 def compute_values(profile: Profile, keys: Iterable[str] | None = None) -> dict[str, int]:
-    """Return current values for *keys* (or every metric) for one profile.
+    """
+    Return current values for *keys* (or every metric) for one profile.
 
     Args:
         profile: The profile to measure.
@@ -605,7 +614,8 @@ def compute_values(profile: Profile, keys: Iterable[str] | None = None) -> dict[
 
 
 def compute_values_bulk(profiles: Sequence[Profile], keys: Iterable[str] | None = None) -> dict[int, dict[str, int]]:
-    """Return current values for *keys* (or every metric) for many profiles.
+    """
+    Return current values for *keys* (or every metric) for many profiles.
 
     Args:
         profiles: The profiles to measure.
@@ -622,7 +632,8 @@ def compute_values_bulk(profiles: Sequence[Profile], keys: Iterable[str] | None 
 
 
 def streak_summary(profile: Profile, today: datetime.date | None = None) -> list[StreakSummaryRow]:
-    """Return per-kind streak state for a profile, for display on the profile page.
+    """
+    Return per-kind streak state for a profile, for display on the profile page.
 
     Args:
         profile: The profile to summarise.

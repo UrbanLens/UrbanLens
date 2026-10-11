@@ -277,7 +277,8 @@ class MaterializeMarkupMapTests(TestCase):
         self.assertEqual(markup_map.title, default_markup_map_title(pin))
 
     def test_context_is_ignored_when_updating_an_existing_map(self) -> None:
-        """The user may have already renamed the map - an update must never
+        """
+        The user may have already renamed the map - an update must never
         silently overwrite a customized title just because a context was passed."""
         pin = baker.make("dashboard.Pin", name="Old Mill")
         existing = materialize_markup_map(self.profile, _snapshot())
@@ -541,7 +542,8 @@ class CheckinCreateLinksMapTests(TestCase):
 
 
 class DeleteFlagsAttachedContentTests(TestCase):
-    """Deleting a MarkupMap flags every Comment/TripComment/DirectMessage that referenced it.
+    """
+    Deleting a MarkupMap flags every Comment/TripComment/DirectMessage that referenced it.
 
     ``on_delete=SET_NULL`` already detaches the map without touching the host row's text, but without a separate
     flag there'd be no way to tell "never had a map" from "had one that was deleted" once the FK is nulled."""

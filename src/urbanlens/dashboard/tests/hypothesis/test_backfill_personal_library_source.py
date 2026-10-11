@@ -90,7 +90,8 @@ class BackfillPersonalLibraryImageSourceTests(TestCase):
         self.assertIn("Would relabel 1", output)
 
     def test_the_url_shape_comes_from_the_code_that_writes_it(self) -> None:
-        """Guard against the prefix being restated and drifting.
+        """
+        Guard against the prefix being restated and drifting.
 
         The backfill recognises a row by the prefix of the URL its importer wrote."""
         self.assertTrue(self.account.asset_web_url("asset-3").startswith(self.account.asset_url_prefix()))

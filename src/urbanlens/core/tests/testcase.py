@@ -97,7 +97,8 @@ class _MessagePrefixMixin:
 
 
 class _CacheIsolationMixin:
-    """Start every test with an empty cache.
+    """
+    Start every test with an empty cache.
 
     Django rolls the database back between tests; it does not roll the cache back. Those two facts
     interact badly, because rollback *reuses primary keys*: a test that warms a cache entry keyed

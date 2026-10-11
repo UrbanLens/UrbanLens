@@ -62,7 +62,8 @@ class DeletedPhotoLeavesNoBytesTests(TestCase):
         self.assertFalse(default_storage.exists(path), "the cascade left the bytes behind")
 
     def test_a_file_shared_by_two_rows_survives_the_first_delete(self) -> None:
-        """Sharing a pin reuses one storage key across rows, so the bytes go
+        """
+        Sharing a pin reuses one storage key across rows, so the bytes go
         only when the last row pointing at them does."""
         first = _photo(self.profile, pin=self.pin)
         path = first.image.name

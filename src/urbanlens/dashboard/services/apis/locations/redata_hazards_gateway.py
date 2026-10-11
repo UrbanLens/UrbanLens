@@ -26,7 +26,8 @@ class RedataHazardsGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch recorded natural-hazard events near a coordinate.
+        """
+        Fetch recorded natural-hazard events near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

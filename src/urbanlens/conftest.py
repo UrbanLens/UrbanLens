@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 def _disable_hypothesis_example_patching() -> None:
-    """Stop Hypothesis trying to codemod an ``@example`` suggestion on failure.
+    """
+    Stop Hypothesis trying to codemod an ``@example`` suggestion on failure.
 
     Building the suggestion runs a ``libcst`` codemod that raises
     ``INTERNALERROR`` inside ``pytest_runtest_makereport`` on long runs,
@@ -46,7 +47,8 @@ def _disable_hypothesis_example_patching() -> None:
 
 
 def _configure_hypothesis() -> None:
-    """Point Hypothesis' example database somewhere the test user can write.
+    """
+    Point Hypothesis' example database somewhere the test user can write.
 
     Hypothesis defaults to ``.hypothesis/examples`` beside the cwd, which in
     the test container is root-owned while tests run as ``appuser`` - so past
@@ -97,7 +99,8 @@ _LONGEST_FILES = (
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """On a pytest-xdist worker, move the longest files' ``TestCase`` tests to the front of the collection.
+    """
+    On a pytest-xdist worker, move the longest files' ``TestCase`` tests to the front of the collection.
 
     pytest-django has already sorted the collection the way Django's runner does - ``TestCase`` first, then
     ``TransactionTestCase``, whose teardown empties every table, including rows a migration seeded. With
@@ -125,7 +128,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture(scope="session")
 def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: None) -> None:  # noqa: ARG001
-    """Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130).
+    """
+    Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130).
 
     Asked over a bare driver connection: Django caches PostGIS type ids per connection alias for the whole process, so
     asking through ``django.db.connection`` kept the configured database's ids for a reused test database, and every
@@ -169,7 +173,8 @@ _BINDS_DISPATCHER = re.compile(r"^from urbanlens\.dashboard\.services\.core\.cel
 
 @pytest.fixture(scope="session", autouse=True)
 def bind_real_dispatcher() -> None:
-    """Import every module that keeps its own name for ``safely_enqueue_task`` before any test can patch it.
+    """
+    Import every module that keeps its own name for ``safely_enqueue_task`` before any test can patch it.
 
     Several are first imported lazily, from a signal or a view; a test that patched ``celery.safely_enqueue_task``
     at that moment left the module holding the mock for the rest of the run.
@@ -184,7 +189,8 @@ def bind_real_dispatcher() -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def block_ai_gateway() -> Iterator[None]:
-    """Stop any test reaching a real LLM provider.
+    """
+    Stop any test reaching a real LLM provider.
 
     Mirrors ``TestRunner.setup_test_environment``'s patching, which pytest
     never runs since pytest-django ignores ``TEST_RUNNER``.

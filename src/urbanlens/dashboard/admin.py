@@ -189,7 +189,8 @@ class PinAdmin(admin.ModelAdmin):
 
 
 def _delete_unedited_child_wikis(modeladmin, request: HttpRequest, queryset) -> None:
-    """Delete child wikis never saved after creation (updated - created < 10s).
+    """
+    Delete child wikis never saved after creation (updated - created < 10s).
 
     Deletion is permanent; users must re-add them manually.
     """

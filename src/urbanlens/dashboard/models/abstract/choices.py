@@ -56,7 +56,8 @@ class SecurityLevel(TextChoices):
 
 
 class IndoorOutdoor(TextChoices):
-    """Whether a location is enclosed, open-air, or a mix of both.
+    """
+    Whether a location is enclosed, open-air, or a mix of both.
     Shared between :class:`~urbanlens.dashboard.models.pin.model.Pin` and :class:`~urbanlens.dashboard.models.wiki.model.Wiki` - each stores its own value rather than deferring to Location, mirroring how ``pin_type`` is independently classified on both.
     """
 

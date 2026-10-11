@@ -85,7 +85,8 @@ class EmailVerificationLimitTests(TestCase):
         send.assert_called_once()
 
     def test_a_resend_releases_the_in_flight_reservation_it_took(self) -> None:
-        """The check reserves a slot until the send is logged; every other sender gives it back, and a resend that did
+        """
+        The check reserves a slot until the send is logged; every other sender gives it back, and a resend that did
         not left the slot counted against the hourly limit for five minutes after the send was already in the ledger."""
         self._add("second@example.test")
         import datetime

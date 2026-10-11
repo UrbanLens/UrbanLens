@@ -17,7 +17,8 @@ _BARE_URL_PATTERN = re.compile(r'https?://[^\s<>"\')]+[^\s<>"\').,;:!?]')
 
 
 def strip_html(text: str) -> str:
-    """Strip HTML tags from *text*, keeping it readable.
+    """
+    Strip HTML tags from *text*, keeping it readable.
 
     Args:
         text: Raw text that may contain HTML markup.
@@ -33,7 +34,8 @@ def strip_html(text: str) -> str:
 
 
 def extract_image_urls(html: str) -> list[str]:
-    """Return every ``<img src="...">`` URL in *html*, in document order, deduplicated.
+    """
+    Return every ``<img src="...">`` URL in *html*, in document order, deduplicated.
 
     Args:
         html: Raw description text that may contain ``<img>`` tags.
@@ -53,7 +55,8 @@ def extract_image_urls(html: str) -> list[str]:
 
 
 def extract_link_urls(html: str) -> list[str]:
-    """Return every link URL in *html*: ``<a href="...">`` tags and bare ``http(s)://`` URLs in plain text.
+    """
+    Return every link URL in *html*: ``<a href="...">`` tags and bare ``http(s)://`` URLs in plain text.
 
     Args:
         html: Raw description text that may contain markup and/or bare URLs.

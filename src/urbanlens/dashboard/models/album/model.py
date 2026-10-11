@@ -1,4 +1,5 @@
-"""Album models - named, optionally-ordered groupings of a place's photos.
+"""
+Album models - named, optionally-ordered groupings of a place's photos.
 An album belongs to exactly one owner: a ``Pin`` (personal, owner-only), a ``Wiki`` (community, editable by anyone who can see the wiki), or a ``Profile`` directly (personal, Vault-level - not tied to any one pin or wiki), mirroring how ``CustomLayer`` scopes its own pin/wiki split.
 Only ``TIMELAPSE`` exists so far and nothing acts on it yet; it's declared now so the column and its validation rules are in place before the feature that reads them (a series of shots of the same scene from the same angle, rendered to video) is built.
 """
@@ -26,7 +27,8 @@ class AlbumKind(TextChoices):
 
 @dataclass(frozen=True, slots=True)
 class AlbumKindSpec:
-    """Per-kind presentation and behaviour, so adding a kind is a one-place change.
+    """
+    Per-kind presentation and behaviour, so adding a kind is a one-place change.
 
     Attributes:
         kind: The :class:`AlbumKind` this describes.
@@ -70,7 +72,8 @@ ALBUM_KIND_SPECS: dict[str, AlbumKindSpec] = {
 
 
 def album_kind_spec(kind: str) -> AlbumKindSpec:
-    """Return the spec for *kind*, falling back to plain for an unknown value.
+    """
+    Return the spec for *kind*, falling back to plain for an unknown value.
 
     Args:
         kind: An :class:`AlbumKind` value.
@@ -82,7 +85,8 @@ def album_kind_spec(kind: str) -> AlbumKindSpec:
 
 
 class Album(abstract.PublicDashboardModel):
-    """A named grouping of photos belonging to one pin, one wiki, or one profile's Vault.
+    """
+    A named grouping of photos belonging to one pin, one wiki, or one profile's Vault.
 
     Attributes:
         name: User-facing album title.
@@ -136,7 +140,8 @@ class Album(abstract.PublicDashboardModel):
 
     @property
     def photo_count(self) -> int:
-        """Number of photos currently in this album.
+        """
+        Number of photos currently in this album.
         ``len(self.items.all())`` rather than ``self.items.count()`` so a caller that already ran ``prefetch_related("items")`` reuses that cached result instead of issuing a COUNT per album on an index render (same reasoning as ``PinList.pin_count``).
         """
         return len(self.items.all())
@@ -145,7 +150,8 @@ class Album(abstract.PublicDashboardModel):
         return self.name or "album"
 
     def _slugify_qs(self):
-        """Scope slug uniqueness to this album's own owner.
+        """
+        Scope slug uniqueness to this album's own owner.
 
         Two different pins (or a pin and a wiki, or a vault) may each have an
         album named "Interior", so uniqueness is per-owner rather than global.
@@ -184,7 +190,8 @@ class Album(abstract.PublicDashboardModel):
 
 
 class AlbumItem(abstract.DashboardModel):
-    """One photo's membership in one album.
+    """
+    One photo's membership in one album.
     A photo may belong to any number of albums at once - the unique constraint is on the (album, image) pair, not on the image alone.
 
     Attributes:

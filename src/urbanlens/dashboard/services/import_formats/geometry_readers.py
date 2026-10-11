@@ -1,4 +1,5 @@
-"""Reading an import's WKT and WKB without handing GEOS what it cannot read safely.
+"""
+Reading an import's WKT and WKB without handing GEOS what it cannot read safely.
 
 GEOS reads both formats recursively, so tens of thousands of nested collections overflow its stack and kill the
 process. WKT whose parentheses nest deeper than :data:`MAX_NESTING`, or WKB whose collections do, is refused before GEOS
@@ -45,7 +46,8 @@ class UnreadableGeometryError(ValueError):
 
 
 def read_wkt(line: str) -> BaseGeometry:
-    """A WKT line as a geometry.
+    """
+    A WKT line as a geometry.
 
     Args:
         line: One WKT geometry.
@@ -68,7 +70,8 @@ def read_wkt(line: str) -> BaseGeometry:
 
 
 def read_wkb(data: bytes) -> BaseGeometry:
-    """A WKB geometry, once its nesting is known to be shallow enough for GEOS.
+    """
+    A WKB geometry, once its nesting is known to be shallow enough for GEOS.
 
     Args:
         data: One WKB or EWKB geometry.
@@ -86,7 +89,8 @@ def read_wkb(data: bytes) -> BaseGeometry:
 
 
 def geojson_nests_too_deep(geometry: object) -> bool:
-    """Whether a GeoJSON geometry's collections nest deeper than :data:`MAX_NESTING`, which shapely's recursive ``shape``
+    """
+    Whether a GeoJSON geometry's collections nest deeper than :data:`MAX_NESTING`, which shapely's recursive ``shape``
     cannot read: past about a thousand levels it raises ``RecursionError``, which no import handler expects.
 
     Args:
@@ -216,7 +220,8 @@ _FIRST_COORDINATE: Final = re.compile(rf"(?P<coordinate>{_NUMBER}(?:\s++{_NUMBER
 
 
 class _WktToWkb:
-    """One WKT geometry as little-endian ISO WKB, read without a token object per number.
+    """
+    One WKT geometry as little-endian ISO WKB, read without a token object per number.
 
     Dimensions follow GEOS's WKT reader. A geometry takes its tag's ordinates, or else its first coordinate's; one with
     no coordinate, and an untagged collection, is two-dimensional. Each part of a multi-geometry has its owner's. A

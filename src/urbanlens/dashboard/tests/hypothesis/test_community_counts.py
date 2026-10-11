@@ -77,7 +77,8 @@ class WikiCommunitySummaryPlaceAwareTests(TestCase):
     """``wiki_community_summary`` must count root pins across every Location sharing the wiki's Place, not just the single Location the caller resolved it through - ``resolve_visible_wiki`` deliberately allows a caller's own (possibly non-canonical) Location to differ from ``wiki.location`` so long as they share a Place, so counting only the passed-in Location undercounts "N users have this pinned" whenever more than one Location exists under the Place."""
 
     def _spy_exact_count(self, wiki: Wiki, location: Location) -> int:
-        """Call wiki_community_summary and return the exact_count it computed,
+        """
+        Call wiki_community_summary and return the exact_count it computed,
         bypassing approximate_pin_count's fuzz/threshold so small counts are
         directly assertable."""
         with mock.patch(
@@ -109,7 +110,8 @@ class WikiCommunitySummaryPlaceAwareTests(TestCase):
         self.assertEqual(self._spy_exact_count(wiki, location), 2)
 
     def test_the_count_is_the_same_regardless_of_which_shared_location_is_passed(self) -> None:
-        """The same wiki must report the same count no matter which of the
+        """
+        The same wiki must report the same count no matter which of the
         place's several pinned coordinates the viewer's URL happened to name."""
         place = baker.make(Place, kind=PlaceKind.PARCEL)
         wiki_location = Location.objects.create(latitude=40.0, longitude=-74.0, place=place)

@@ -1,4 +1,5 @@
-"""Shared, cross-domain bases and mixins for the external API's endpoints.
+"""
+Shared, cross-domain bases and mixins for the external API's endpoints.
 
 Most of this package is credential-only: ``ExternalApiView`` accepts an ``ApiKey``/OAuth2 token and
 nothing else, and an ordinary logged-in browser request cannot reach it (see the package docstring).
@@ -42,7 +43,8 @@ if TYPE_CHECKING:
 
 
 class IsSessionAuthenticated(BasePermission):
-    """Permits a request authenticated by a browser session rather than a credential.
+    """
+    Permits a request authenticated by a browser session rather than a credential.
 
     This exists because :class:`~urbanlens.dashboard.external_api.permissions.HasApiKeyScope` fails
     closed on ``auth is None`` - which is correct and must stay that way.
@@ -52,7 +54,8 @@ class IsSessionAuthenticated(BasePermission):
     """
 
     def has_permission(self, request: Request, view: APIView) -> bool:
-        """Return True when this request carries a logged-in session and no credential.
+        """
+        Return True when this request carries a logged-in session and no credential.
 
         Args:
             request: The incoming DRF request.
@@ -67,7 +70,8 @@ class IsSessionAuthenticated(BasePermission):
 
 
 class DualAuthJsonView(ErrorEnvelopeMixin, APIView):
-    """A JSON endpoint reachable by browser cookies *or* an API key / OAuth2 token.
+    """
+    A JSON endpoint reachable by browser cookies *or* an API key / OAuth2 token.
 
     Session-first answered "the cookie", which silently discarded the credential: ``request.auth``
     stayed None, ``IsSessionAuthenticated`` passed, and ``HasApiKeyScope`` was never consulted.
@@ -96,7 +100,8 @@ class DualAuthJsonView(ErrorEnvelopeMixin, APIView):
 
 
 class _ReactionMixin:
-    """Declarative PUT/DELETE handlers for one emoji reaction on one row.
+    """
+    Declarative PUT/DELETE handlers for one emoji reaction on one row.
 
     The only method a subclass writes is :meth:`resolve_reaction_target`, because "which row, and is
     this caller allowed near it" is genuinely per-domain.
@@ -145,7 +150,8 @@ class _ReactionMixin:
     reaction_invalid_emoji_message: ClassVar[str] = "That is not a supported reaction."
 
     def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[Model, Profile]:
-        """Resolve the row being reacted to and the profile doing the reacting.
+        """
+        Resolve the row being reacted to and the profile doing the reacting.
 
         Implementations **must** express authorization as part of the lookup (``get_object_or_404(Comment,
         id=..., wiki=wiki)``) rather than as a permission branch that returns 403, so that a row belonging
@@ -166,7 +172,8 @@ class _ReactionMixin:
 
     @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: None})
     def put(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Ensure the caller's reaction is present, idempotently.
+        """
+        Ensure the caller's reaction is present, idempotently.
 
         Args:
             request: The authenticated request. *args: Unused positional URL arguments. **kwargs: URL
@@ -180,7 +187,8 @@ class _ReactionMixin:
 
     @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT, 400: OpenApiTypes.OBJECT, 404: None})
     def delete(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Ensure the caller's reaction is absent, idempotently.
+        """
+        Ensure the caller's reaction is absent, idempotently.
 
         Args:
             request: The authenticated request. *args: Unused positional URL arguments. **kwargs: URL
@@ -193,7 +201,8 @@ class _ReactionMixin:
         return self._react(request, want_present=False, **kwargs)
 
     def _react(self, request: Request, *, want_present: bool, **kwargs: Any) -> Response:
-        """Drive one reaction to the requested state and return the fresh summary.
+        """
+        Drive one reaction to the requested state and return the fresh summary.
 
         Args:
             request: The authenticated request.

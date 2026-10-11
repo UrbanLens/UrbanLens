@@ -1,4 +1,5 @@
-"""Tests for EXIF preservation and the upload downscale/WebP pipeline.
+"""
+Tests for EXIF preservation and the upload downscale/WebP pipeline.
 
 Covers:
 - _json_safe() - EXIF values (bytes, rationals, NaN, nesting) become JSON-safe
@@ -52,7 +53,8 @@ def _jpeg_bytes(width: int, height: int, with_exif: bool = True, with_gps: bool 
 
 
 def _mpo_bytes(width: int = 64, height: int = 48) -> bytes:
-    """Build a real multi-picture JPEG carrying a GPS IFD on its first frame.
+    """
+    Build a real multi-picture JPEG carrying a GPS IFD on its first frame.
 
     Phones produce these for depth and second-lens captures, usually named
     ``.jpg``. Pillow reports the format as ``MPO`` and loads only frame 0.
@@ -146,7 +148,8 @@ class DownscaleStoredImageTests(TestCase):
             self.assertIsNone(stored.getexif().get(0x0110), "the camera model rode along into the stored file")
 
     def test_a_file_another_row_shares_is_not_deleted_when_replaced(self):
-        """Pin sharing points two rows at one storage key; re-encoding one must not blank the other.
+        """
+        Pin sharing points two rows at one storage key; re-encoding one must not blank the other.
 
         ``services.sharing.pin_sharing`` copies a shared pin's photos by reusing the same ``image`` name rather
         than duplicating bytes, and the ``strip_exif_from_stored_photos`` command re-encodes every stored photo
@@ -219,7 +222,8 @@ class DownscaleStoredImageTests(TestCase):
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class GpsIsStrippedWithoutBeingAskedTests(TestCase):
-    """GPS removal is unconditional, not a setting the uploader has to find.
+    """
+    GPS removal is unconditional, not a setting the uploader has to find.
 
     The flag is gone: a stored file is served to everyone who can reach the container it was contributed to, so
     the whole EXIF block comes off every time, and there is no opt-out to get wrong."""
@@ -263,7 +267,8 @@ class GpsIsStrippedWithoutBeingAskedTests(TestCase):
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class MultiPictureJpegTests(TestCase):
-    """A multi-picture JPEG must not skip the strip by being an unlisted format.
+    """
+    A multi-picture JPEG must not skip the strip by being an unlisted format.
 
     MPO is a JPEG container holding several images; Pillow reports it as its own format, which was in none of
     this module's format sets, so downscale_stored_image returned before doing anything and the file was kept

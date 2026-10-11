@@ -216,7 +216,8 @@ class PlanMergeConflictsTests(TestCase):
 
 
 class PlanMergeConflictsBulkTests(TestCase):
-    """The batched form answers identically, in three queries however many pairs.
+    """
+    The batched form answers identically, in three queries however many pairs.
 
     The dialog behind "Organize this property" plans conflicts for every candidate pin standing inside the
     property before the owner picks anything, and that list is capped at 500 - so per-pair queries there are the
@@ -289,7 +290,8 @@ class PlanMergeConflictsBulkTests(TestCase):
         self.assertNotEqual(forward.pin_a_summary, forward.pin_b_summary)
 
     def test_an_unsaved_pin_has_nothing_to_collide_with(self) -> None:
-        """It can hold none of the three relations, so the answer is "no conflicts".
+        """
+        It can hold none of the three relations, so the answer is "no conflicts".
 
         Worth pinning because the batched fetch has to skip it - there is no id to query for - and the
         comparison then has to answer rather than fail on the missing entry."""
@@ -300,7 +302,8 @@ class PlanMergeConflictsBulkTests(TestCase):
         self.assertEqual(plan_merge_conflicts_bulk([(unsaved, saved)])[(None, saved.pk)], [])
 
     def test_the_single_pair_function_still_reads_current_state(self) -> None:
-        """``merge_pins`` deletes the loser's row when it sees no conflict, so a
+        """
+        ``merge_pins`` deletes the loser's row when it sees no conflict, so a
         cached answer here would be silent data loss rather than a stale warning."""
         pin_a = self._pin(article=True)
         pin_b = self._pin(article=True)

@@ -1,4 +1,5 @@
-"""A block the base layout renders on its own must not sit inside another block of a child template.
+"""
+A block the base layout renders on its own must not sit inside another block of a child template.
 
 Django renders such a block twice: where the child nested it, and in the base's own slot. A page script nested in
 ``{% block content %}`` ran twice, and the second copy threw on a map that was already built.

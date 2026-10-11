@@ -81,7 +81,8 @@ class AirQualityPanelSource(RedataInfoPanelSource):
 
 
 def _observed_label(readings: list[dict]) -> str:
-    """When the newest of ``readings`` was taken, for the card.
+    """
+    When the newest of ``readings`` was taken, for the card.
 
     Args:
         readings: REData air-quality rows, each with an ISO 8601 ``observed_at``.

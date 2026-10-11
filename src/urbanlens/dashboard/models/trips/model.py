@@ -45,7 +45,8 @@ ACTIVITY_SCHEDULE_LATEST = datetime.datetime(2200, 1, 1, tzinfo=datetime.UTC)
 
 
 def within_activity_schedule(value: datetime.datetime | None) -> bool:
-    """Whether an activity may be scheduled at *value*; None (unscheduled) always may.
+    """
+    Whether an activity may be scheduled at *value*; None (unscheduled) always may.
 
     Args:
         value: The proposed time. A naive value is read as UTC.
@@ -68,7 +69,8 @@ def _schedule_bound(field: str) -> Q:
 
 
 class Trip(abstract.PublicDashboardModel):
-    """A planned trip shared among one or more users.
+    """
+    A planned trip shared among one or more users.
     The creator is the user who created the trip.
     Only members can view and edit the trip.
     """
@@ -157,7 +159,8 @@ class Trip(abstract.PublicDashboardModel):
 
     @property
     def effective_start_date(self) -> date | None:
-        """``start_date`` if set, else the earliest scheduled activity's date.
+        """
+        ``start_date`` if set, else the earliest scheduled activity's date.
         Resolved from a ``_eff_start`` annotation when the queryset supplied one (see ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on the instance.
         """
         # try/except rather than a sentinel: None is a legitimate cached value here, so "absent"
@@ -180,7 +183,8 @@ class Trip(abstract.PublicDashboardModel):
 
     @property
     def effective_end_date(self) -> date | None:
-        """``end_date`` if set, else the latest scheduled activity's end (or start) date.
+        """
+        ``end_date`` if set, else the latest scheduled activity's end (or start) date.
 
         Annotation-aware and memoized for the same reason as
         :attr:`effective_start_date`.
@@ -227,7 +231,8 @@ class Trip(abstract.PublicDashboardModel):
 
     @property
     def elapsed_day(self) -> int | None:
-        """1-indexed day number within the trip while it's active, else ``None``.
+        """
+        1-indexed day number within the trip while it's active, else ``None``.
 
         Clamped to ``duration_days`` so activities scheduled past a declared
         ``end_date`` can't push this above the trip's own day count.
@@ -254,7 +259,8 @@ class Trip(abstract.PublicDashboardModel):
 
 
 class TripActivity(abstract.DashboardModel):
-    """A single planned activity within a trip.
+    """
+    A single planned activity within a trip.
 
     Each activity is associated with a Location and has an optional scheduled
     date/time and free-form notes.  Activities are ordered by ``order`` within
@@ -367,7 +373,8 @@ class TripActivity(abstract.DashboardModel):
 
 
 class TripMembership(abstract.DashboardModel):
-    """RSVP through-model linking a Profile to a Trip.
+    """
+    RSVP through-model linking a Profile to a Trip.
 
     Replaces the implicit M2M join table so each membership can carry an RSVP
     status independently of whether the person is in or out of the trip.
@@ -430,7 +437,8 @@ class TripMembership(abstract.DashboardModel):
 
 
 class TripActivityRSVP(abstract.DashboardModel):
-    """A member's explicit RSVP override for one trip activity.
+    """
+    A member's explicit RSVP override for one trip activity.
     The absence of a row means the activity inherits the member's :class:`TripMembership` RSVP.
     Keeping only overrides makes a later change to the trip RSVP flow through automatically without overwriting deliberate per-activity choices.
     """
@@ -453,7 +461,8 @@ class TripActivityRSVP(abstract.DashboardModel):
 
     @classmethod
     def effective_for(cls, activity: TripActivity, profile: Profile) -> str | None:
-        """Return the activity override, falling back to the trip RSVP.
+        """
+        Return the activity override, falling back to the trip RSVP.
 
         Args:
             activity: Activity whose effective response is needed.
@@ -543,7 +552,8 @@ class TripComment(LocationMentioningModel, abstract.DashboardModel):
 
     @property
     def map_data(self) -> dict | None:
-        """Client snapshot of the attached markup map, if any.
+        """
+        Client snapshot of the attached markup map, if any.
         Kept as a property so templates and viewer JS that consumed the old ``map_data`` JSON column keep working against the MarkupMap relation.
 
         Returns:
@@ -562,7 +572,8 @@ class TripComment(LocationMentioningModel, abstract.DashboardModel):
 
 
 class TripActivityVote(abstract.DashboardModel):
-    """A member's thumbs-up or thumbs-down vote on a proposed activity.
+    """
+    A member's thumbs-up or thumbs-down vote on a proposed activity.
 
     Only one vote per (activity, profile) pair is allowed. Votes are only
     meaningful while the activity is in the 'proposed' status.

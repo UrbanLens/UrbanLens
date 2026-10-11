@@ -1,4 +1,5 @@
-"""Tests for environment configuration classes and factory.
+"""
+Tests for environment configuration classes and factory.
 
 No database access - pure Pydantic model logic.
 """

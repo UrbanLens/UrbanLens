@@ -26,7 +26,8 @@ _seed_vip_role = import_module("urbanlens.dashboard.migrations.0020_seed_vip_sub
 
 
 class VipRoleSeedTests(TestCase):
-    """The built-in "vip" role is seeded once by migration 0020, not recreated at runtime.
+    """
+    The built-in "vip" role is seeded once by migration 0020, not recreated at runtime.
 
     Each test seeds it itself: a TransactionTestCase earlier on the same worker flushes migration-seeded rows.
     """

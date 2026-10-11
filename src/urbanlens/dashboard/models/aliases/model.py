@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class AliasType(TextChoices):
-    """The type of alias. * NICKNAME: A user-defined nickname for the pin or wiki.
+    """
+    The type of alias. * NICKNAME: A user-defined nickname for the pin or wiki.
     Created by checking the "nickname" checkbox when adding an alias. * OFFICIAL: An official name for the pin or location.
     """
 
@@ -26,7 +27,8 @@ class AliasType(TextChoices):
 
 
 class AliasSource:
-    """Well-known alias ``source`` values.
+    """
+    Well-known alias ``source`` values.
     ``source`` is a free-text slug so plugin name providers can attribute aliases to themselves (e.g.
     """
 
@@ -61,7 +63,8 @@ class _AliasBase(abstract.DashboardModel):
         return self.kind == AliasType.NICKNAME
 
     def toggle_nickname(self) -> None:
-        """Flip this alias between nickname-only and a plain alternate name.
+        """
+        Flip this alias between nickname-only and a plain alternate name.
 
         Toggling off an ``official`` alias demotes it to ``alternate`` rather
         than restoring ``official`` - that designation is only re-established
@@ -72,7 +75,8 @@ class _AliasBase(abstract.DashboardModel):
 
 
 class PinAlias(_AliasBase):
-    """An alternate name for a Pin, visible only to the pin's owner.
+    """
+    An alternate name for a Pin, visible only to the pin's owner.
 
     Ownership is derived from pin.profile; no separate profile FK is needed.
     The unique constraint prevents duplicate alias names on the same pin.
@@ -105,7 +109,8 @@ class PinAlias(_AliasBase):
 
 
 class WikiAlias(_AliasBase):
-    """An alternate name for a Wiki, visible to all users who have its place pinned.
+    """
+    An alternate name for a Wiki, visible to all users who have its place pinned.
 
     ``created_by`` is optional attribution only - deleting a profile does not
     cascade-delete the alias.

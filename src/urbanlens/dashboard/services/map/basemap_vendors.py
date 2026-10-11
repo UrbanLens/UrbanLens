@@ -1,4 +1,5 @@
-"""Where a raster basemap tile is actually fetched from.
+"""
+Where a raster basemap tile is actually fetched from.
 
 REData publishes the basemap catalogue and serves the tiles, but none of the raster layers it
 offers needs its API key - every one of them is a public, keyless vendor endpoint that REData is
@@ -24,7 +25,8 @@ import re
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class VendorTiles:
-    """One vendor's raster tile endpoint.
+    """
+    One vendor's raster tile endpoint.
 
     Attributes:
         url_template: The vendor URL, with ``{z}``/``{x}``/``{y}`` placeholders and optionally
@@ -53,7 +55,8 @@ class VendorTiles:
 
     @property
     def cache_tag(self) -> str:
-        """Short fingerprint of this endpoint, for cache keys and the published tile URL.
+        """
+        Short fingerprint of this endpoint, for cache keys and the published tile URL.
 
         A tile is held for a week by layer and coordinate, in this deployment's own store and again
         at the CDN. Neither key would otherwise say which vendor produced the bytes, so repointing a
@@ -66,7 +69,8 @@ class VendorTiles:
 
     @property
     def esri_service(self) -> str | None:
-        """The ArcGIS Online service these tiles come from, when they are Esri's.
+        """
+        The ArcGIS Online service these tiles come from, when they are Esri's.
 
         Esri credits each basemap's data providers by area and zoom, and publishes which ones apply
         where at ``static.arcgis.com/attribution/<service>``. The browser asks that for the view it
@@ -80,7 +84,8 @@ class VendorTiles:
         return match.group(1) if match else None
 
     def url_for(self, z: int, x: int, y: int) -> str:
-        """Fill this template in for one tile.
+        """
+        Fill this template in for one tile.
 
         Args:
             z: Tile zoom level.
@@ -141,7 +146,8 @@ VENDOR_TILES: dict[str, VendorTiles] = {
 
 
 def vendor_for(layer: str) -> VendorTiles | None:
-    """The vendor endpoint for a layer, if this deployment fetches it directly.
+    """
+    The vendor endpoint for a layer, if this deployment fetches it directly.
 
     Args:
         layer: Layer id from REData's catalogue.

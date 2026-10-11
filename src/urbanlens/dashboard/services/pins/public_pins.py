@@ -1,4 +1,5 @@
-"""Public-pin eligibility engine and vote handling (UL-58).
+"""
+Public-pin eligibility engine and vote handling (UL-58).
 A location becomes a public-pin candidate only when EVERY criterion in :class:`PublicPinConfig` holds; the community then votes, and a passed vote makes the location public - suggested to every account (opt-out)."""
 
 from __future__ import annotations
@@ -37,7 +38,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True, frozen=True)
 class PublicPinConfig:
-    """Every tunable threshold for public-pin eligibility and voting.
+    """
+    Every tunable threshold for public-pin eligibility and voting.
 
     Attributes:
         region_radius_km: Only one public location per circle of this radius ("about the size of a city").
@@ -102,7 +104,8 @@ class UnrecognizedVoteChoiceError(PublicVoteError):
 
 
 def is_meaningful_name(name: str | None) -> bool:
-    """Whether a wiki name is a real place name rather than a placeholder.
+    """
+    Whether a wiki name is a real place name rather than a placeholder.
 
     Args:
         name: The wiki's community name.
@@ -118,14 +121,16 @@ def is_meaningful_name(name: str | None) -> bool:
 
 
 def pinned_by_floor(active_user_count: int, config: PublicPinConfig = CONFIG) -> int:
-    """Minimum distinct pinners required, scaled to community size.
+    """
+    Minimum distinct pinners required, scaled to community size.
     ``max(floor_min, min(floor_max, ceil(share x active_users)))`` - small communities need only a couple of pinners; large ones cap out so the bar stays reachable."""
     scaled = math.ceil(config.pinner_share * active_user_count)
     return max(config.pinner_floor_min, min(config.pinner_floor_max, scaled))
 
 
 def _passed_within(point: Point | OuterRef, config: PublicPinConfig) -> QuerySet[PublicPinCandidate]:
-    """Passed candidates whose location lies within the region radius of *point*, measured by PostGIS.
+    """
+    Passed candidates whose location lies within the region radius of *point*, measured by PostGIS.
 
     Args:
         point: A geography point, or an ``OuterRef`` to one for use in ``Exists``.
@@ -144,7 +149,8 @@ def _active_user_count(now: datetime, config: PublicPinConfig) -> int:
 
 
 def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
-    """Compute the full set of currently-eligible location ids.
+    """
+    Compute the full set of currently-eligible location ids.
     Runs on the beat schedule only - never in a request."""
     floor = pinned_by_floor(_active_user_count(now, config), config)
 
@@ -239,7 +245,8 @@ def _check_hard_fail(candidate: PublicPinCandidate, now: datetime, config: Publi
 
 
 def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str, int]:
-    """Recompute eligibility, transition candidates, and settle votes.
+    """
+    Recompute eligibility, transition candidates, and settle votes.
 
     Returns:
         Counters for logging/tests: opened, reopened, suspended, passed, rejected."""
@@ -300,7 +307,8 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
 
 
 def sync_public_pin_suggestions() -> int:
-    """Ensure every opted-in profile has a suggestion for each public location.
+    """
+    Ensure every opted-in profile has a suggestion for each public location.
 
     Returns:
         Number of suggestions created."""
@@ -336,7 +344,8 @@ def sync_public_pin_suggestions() -> int:
 
 
 def public_vote_context(location: Location, profile: Profile | None, *, conceal: bool = False) -> dict | None:
-    """Build the template context for the public-vote block on a wiki page.
+    """
+    Build the template context for the public-vote block on a wiki page.
     Returns None when nothing should render (no candidate, suspended, rejected, or the viewer can't vote) - ineligibility is never explained in the UI.
 
     Args:
@@ -359,7 +368,8 @@ def public_vote_context(location: Location, profile: Profile | None, *, conceal:
 
 
 def cast_public_vote(location: Location, profile: Profile, choice: str, config: PublicPinConfig = CONFIG) -> None:
-    """Record, change, or withdraw ``profile``'s ballot for ``location``.
+    """
+    Record, change, or withdraw ``profile``'s ballot for ``location``.
 
     Args:
         location: The place under vote.

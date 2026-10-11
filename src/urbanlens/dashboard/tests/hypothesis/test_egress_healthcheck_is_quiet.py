@@ -1,4 +1,5 @@
-"""The egress proxy's own healthcheck must not flood its log with errors.
+"""
+The egress proxy's own healthcheck must not flood its log with errors.
 
 `nc -z` opens a TCP connection and closes it without sending anything, so
 tinyproxy logs `ERROR ... read_request_line: Client closed socket before read.`
@@ -50,7 +51,8 @@ class TheHealthcheckCompletesARequestTests(SimpleTestCase):
         self.assertNotIn("nc -z", probe)
 
     def test_the_probe_asks_for_a_host_the_allowlist_refuses(self) -> None:
-        """The refusal is the point: a probe aimed at a permitted provider would
+        """
+        The refusal is the point: a probe aimed at a permitted provider would
         send real traffic to that provider every 30 seconds."""
         probe = " ".join(_service("egress-proxy")["healthcheck"]["test"])
         allowlist = (REPO_ROOT / "src" / "urbanlens" / "config" / "egress" / "filter").read_text(encoding="utf-8")

@@ -1,4 +1,5 @@
-"""Wiki-sync: mirror newly-added aliases between a pin and its community wiki.
+"""
+Wiki-sync: mirror newly-added aliases between a pin and its community wiki.
 Additive only in both directions (never deletes an alias on either side - see each handler's docstring) and only fires for genuine new aliases, never edits to an existing one (Profile.sync_aliases' docstring documents this scope explicitly - "edits to aliases will not be synced" is a deliberate product decision, not a gap).
 """
 
@@ -22,7 +23,8 @@ WIKI_SYNC_SOURCE = "wiki_sync"
 
 
 def _drop_name_sensitive_cache(location_id: int | None) -> None:
-    """Drop the location's shared lookups a new shared name could improve.
+    """
+    Drop the location's shared lookups a new shared name could improve.
 
     The shared Wikimedia search is by name, so it always goes. An owner's own row is keyed by the names it
     searched, so one built from the old shared names is simply no longer read. A Wikipedia match is kept: the lookup takes
@@ -44,7 +46,8 @@ def _drop_name_sensitive_cache(location_id: int | None) -> None:
 
 @receiver(post_save, sender=PinAlias, dispatch_uid="pin_alias_sync_to_wiki")
 def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: bool, **kwargs) -> None:
-    """Mirror a newly-added pin alias onto the pin's wiki, if the owner opted in.
+    """
+    Mirror a newly-added pin alias onto the pin's wiki, if the owner opted in.
 
     Deleting a pin alias never propagates (see controllers.aliases.PinAliasDeleteView -
     no signal hooks post_delete here on purpose), matching the "additive only" spec.
@@ -74,7 +77,8 @@ def sync_pin_alias_to_wiki(sender: type[PinAlias], instance: PinAlias, created: 
 
 @receiver(post_save, sender=WikiAlias, dispatch_uid="wiki_alias_sync_to_pins")
 def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, created: bool, **kwargs) -> None:
-    """Mirror a newly-added wiki alias onto every opted-in profile's pin at that location.
+    """
+    Mirror a newly-added wiki alias onto every opted-in profile's pin at that location.
 
     A location can have many pins, so this is sized by the place's popularity rather than the
     alias author's own data - hence the bulk queue (services.aliases.fanout) rather than inline
@@ -93,7 +97,8 @@ def sync_wiki_alias_to_pins(sender: type[WikiAlias], instance: WikiAlias, create
 
 @receiver(post_save, sender=WikiAlias, dispatch_uid="wiki_alias_invalidate_name_sensitive_cache")
 def invalidate_name_sensitive_cache_for_new_wiki_alias(sender: type[WikiAlias], instance: WikiAlias, created: bool, **kwargs) -> None:
-    """Drop the location's shared Wikipedia/Wikimedia rows when a new wiki alias appears.
+    """
+    Drop the location's shared Wikipedia/Wikimedia rows when a new wiki alias appears.
 
     A missing row reads as "never queried" (see ``LocationCache``), so the next panel view looks again
     with the wider name set. A pin's own alias changes only its own audience's searches (P188), so it

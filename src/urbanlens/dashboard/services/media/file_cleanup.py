@@ -1,4 +1,5 @@
-"""Delete a stored file when the row that named it stops naming it.
+"""
+Delete a stored file when the row that named it stops naming it.
 Django stopped removing `FileField` files on delete in 1.3, deliberately - a rolled-back transaction would otherwise leave a row pointing at a file that no longer exists."""
 
 from __future__ import annotations
@@ -37,7 +38,8 @@ _REPLACED = "_ul_replaced_files"
 
 
 def _fields_for(instance: Model) -> tuple[str, ...]:
-    """The managed field names on `instance`'s model, if any.
+    """
+    The managed field names on `instance`'s model, if any.
 
     Args:
         instance: The model instance being saved or deleted.
@@ -50,7 +52,8 @@ def _fields_for(instance: Model) -> tuple[str, ...]:
 
 
 def _discard(instance: Model, field: str, name: str) -> None:
-    """Remove one stored file, never raising into the caller's write.
+    """
+    Remove one stored file, never raising into the caller's write.
 
     Args:
         instance: The row the file belonged to, for the log line.
@@ -69,7 +72,8 @@ def _discard(instance: Model, field: str, name: str) -> None:
 
 
 def _unlink(storage, name: str, instance: Model, field: str) -> None:
-    """Remove one file from storage, never raising into the caller.
+    """
+    Remove one file from storage, never raising into the caller.
 
     Args:
         storage: The field's storage backend.
@@ -87,7 +91,8 @@ def _unlink(storage, name: str, instance: Model, field: str) -> None:
 
 
 def remember_replaced_file(sender, instance, **kwargs) -> None:
-    """Note the file a save is about to replace, before the column changes.
+    """
+    Note the file a save is about to replace, before the column changes.
     Read here and deleted in `post_save`: the stored name is only knowable before the write, and deleting it is only safe after the write succeeds."""
     fields = _fields_for(instance)
     if not fields or instance.pk is None:
@@ -134,7 +139,8 @@ def delete_removed_file(sender, instance, **kwargs) -> None:
 
 
 def connect() -> None:
-    """Wire the receivers to the four models that have a managed file.
+    """
+    Wire the receivers to the four models that have a managed file.
     Per sender rather than globally: see the module docstring."""
     from django.apps import apps as django_apps
 

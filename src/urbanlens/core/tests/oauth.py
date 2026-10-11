@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 
 def first_party_application() -> Model:
-    """Return the first-party OAuth2 ``Application``, creating it if absent.
+    """
+    Return the first-party OAuth2 ``Application``, creating it if absent.
 
     Field-for-field identical to what the data migration writes, including ``hash_client_secret=False`` - see
     that migration for why blanking the secret without it would store a *valid* hash of the empty string.

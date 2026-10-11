@@ -1,4 +1,5 @@
-"""Who may act inside a participant-session game, shared by every such game.
+"""
+Who may act inside a participant-session game, shared by every such game.
 
 "Participant" here means an *active* one, as each game's participant queryset defines ``active()``: a row that
 still exists after its owner left or was removed is history, not access.
@@ -31,7 +32,8 @@ class ActiveParticipantManager(Protocol):
 
 
 class SessionAccess[SessionT: Model]:
-    """Resolves and enforces active participation in one game's sessions.
+    """
+    Resolves and enforces active participation in one game's sessions.
 
     Args:
         name: Which game this is, e.g. ``"trivia"``.
@@ -57,7 +59,8 @@ class SessionAccess[SessionT: Model]:
         return self.participants.joined().filter(session_id=session_id, profile_id=profile_id).exists()
 
     def session_for(self, session_id: int, profile_id: int) -> SessionT | None:
-        """The session, only if ``profile_id`` actively participates in it.
+        """
+        The session, only if ``profile_id`` actively participates in it.
 
         A missing session and someone else's session both return None, so callers cannot tell them apart.
         """
@@ -65,7 +68,8 @@ class SessionAccess[SessionT: Model]:
         return self.session_model._default_manager.filter(Exists(membership), pk=session_id).first()  # noqa: SLF001
 
     def require(self, session_id: int, profile_id: int) -> None:
-        """Raise unless ``profile_id`` actively participates in ``session_id``.
+        """
+        Raise unless ``profile_id`` actively participates in ``session_id``.
 
         Raises:
             NotAnActiveParticipantError: It does not.

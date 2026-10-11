@@ -1,4 +1,5 @@
-"""The comment and photo batches must answer what the per-pair gates answer.
+"""
+The comment and photo batches must answer what the per-pair gates answer.
 
 Both surfaces already memoise per distinct author or uploader, which stops one
 person being resolved twice and does nothing about the resolution: at
@@ -52,7 +53,8 @@ def _profile(**kwargs) -> Profile:
 
 
 class GateAgreementMixin:
-    """Shared scenarios; each subclass names one gate and its field.
+    """
+    Shared scenarios; each subclass names one gate and its field.
 
     A mixin rather than a base ``TestCase``: a base that is itself collected
     runs every scenario against no field at all, which is six failures that say
@@ -226,7 +228,8 @@ class PhotoUploaderBatchTests(GateAgreementMixin, TestCase):
 
 
 class CommentThreadGateScalingTests(TestCase):
-    """A thread's gate cost must not track how many people wrote in it.
+    """
+    A thread's gate cost must not track how many people wrote in it.
 
     The per-author memo made the cost *distinct* authors rather than comments,
     which is the axis a thread actually grows along: a busy pin or a community

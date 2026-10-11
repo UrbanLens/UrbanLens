@@ -1,4 +1,5 @@
-"""Account-wide 2FA orchestration: which factors an account has, and backup codes.
+"""
+Account-wide 2FA orchestration: which factors an account has, and backup codes.
 Backup codes are not a factor of their own; they're a recovery mechanism that only makes sense once at least one real factor is enabled, and they're cleared automatically once an account no longer has any (see ``maybe_clear_backup_codes``)."""
 
 from __future__ import annotations
@@ -51,7 +52,8 @@ def has_second_factor(user: User) -> bool:
 
 
 def security_settings_context(user: User, request: HttpRequest, **extra: object) -> dict:
-    """Context for Settings > Security: passkeys, TOTP status, backup codes.
+    """
+    Context for Settings > Security: passkeys, TOTP status, backup codes.
     Shared by the full settings page render and every 2FA action view (``TOTPSetupStartView`` etc.) so an htmx request can re-render just the security section with fully up-to-date state after a mutation, instead of falling back to a full page redirect.
 
     Args:
@@ -95,7 +97,8 @@ def totp_provisioning_uri(user: User, secret: str) -> str:
 
 
 def _totp_matched_step(secret: str, code: str, valid_window: int = 1) -> int | None:
-    """Return the time-step ``code`` matches against ``secret``, or None.
+    """
+    Return the time-step ``code`` matches against ``secret``, or None.
     Reimplements ``pyotp.TOTP.verify()``'s window search by hand (rather than calling it directly) so the caller learns *which* step matched - needed for replay protection, which ``verify()`` alone can't provide."""
     totp = pyotp.TOTP(secret)
     # Some authenticator apps display/copy the code with a middle space (e.g.
@@ -109,7 +112,8 @@ def _totp_matched_step(secret: str, code: str, valid_window: int = 1) -> int | N
 
 
 def enroll_totp(user: User, secret: str) -> TOTPDevice:
-    """Persist a confirmed TOTP secret as this account's authenticator device.
+    """
+    Persist a confirmed TOTP secret as this account's authenticator device.
 
     Args:
         user: The account enrolling.
@@ -128,7 +132,8 @@ def disable_totp(user: User) -> None:
 
 
 def verify_totp_code(user: User, code: str) -> bool:
-    """Verify a submitted code against the account's TOTP device, if any.
+    """
+    Verify a submitted code against the account's TOTP device, if any.
 
     Args:
         user: The account attempting to verify.
@@ -177,7 +182,8 @@ def _normalize_backup_code(code: str) -> str:
 
 
 def generate_backup_codes(user: User) -> list[str]:
-    """Replace this account's backup codes with a fresh set and return them in plaintext.
+    """
+    Replace this account's backup codes with a fresh set and return them in plaintext.
     The plaintext is only ever available here, at generation time - only salted hashes are persisted.
 
     Args:
@@ -197,7 +203,8 @@ def remaining_backup_code_count(user: User) -> int:
 
 
 def verify_and_consume_backup_code(user: User, code: str) -> bool:
-    """Check a submitted backup code and mark it used if it matches.
+    """
+    Check a submitted backup code and mark it used if it matches.
 
     Args:
         user: The account attempting to verify.

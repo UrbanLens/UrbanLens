@@ -1,4 +1,5 @@
-"""The memories feed must be bounded by the server, not by the client's honesty.
+"""
+The memories feed must be bounded by the server, not by the client's honesty.
 
 `MemoriesFeedDataView`'s own docstring says "a date range is always applied
 (defaulting to the trailing 90 days) so a profile's full history is never loaded
@@ -129,7 +130,8 @@ class TheFeedEndpointIsBoundedTests(_FeedCase):
         self.assertIsNone(body["next_before"])
 
     def test_a_single_day_holding_more_than_a_page_still_advances(self) -> None:
-        """The reason the cursor is a timestamp and not a date. With a date
+        """
+        The reason the cursor is a timestamp and not a date. With a date
         cursor, a day with more events than the cap returns the same page
         forever, because the cursor can never move past that day."""
         from unittest import mock

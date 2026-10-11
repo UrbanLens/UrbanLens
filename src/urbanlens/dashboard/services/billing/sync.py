@@ -1,4 +1,5 @@
-"""The nightly re-sync of RoleSubscription rows from Stripe, a safety net for webhooks Stripe could not deliver.
+"""
+The nightly re-sync of RoleSubscription rows from Stripe, a safety net for webhooks Stripe could not deliver.
 
 The sweep walks ``Subscription.list`` one page per task, then retrieves individually only the live rows no page (and no
 event since the sweep began) reached: the default listing omits canceled subscriptions, so those are the rows whose
@@ -30,7 +31,8 @@ RECONCILE_CHUNK = 100
 
 @dataclass(frozen=True)
 class Progress:
-    """How far one step of the sweep got.
+    """
+    How far one step of the sweep got.
 
     Attributes:
         applied: Rows the step brought up to date.
@@ -52,7 +54,8 @@ def _apply(row: RoleSubscription, snapshot: dict, as_of: datetime) -> bool:
 
 
 def sync_page(starting_after: str | None) -> Progress:
-    """Apply one page of ``Subscription.list`` to the rows it names.
+    """
+    Apply one page of ``Subscription.list`` to the rows it names.
 
     Subscriptions with no local row (another deployment's, or one whose checkout webhook has not landed) are skipped.
 
@@ -77,7 +80,8 @@ def sync_page(starting_after: str | None) -> Progress:
 
 
 def reconcile_unlisted(since: datetime, after_pk: int, limit: int = RECONCILE_CHUNK) -> Progress:
-    """Retrieve, one by one, live rows that no Stripe state newer than *since* has reached.
+    """
+    Retrieve, one by one, live rows that no Stripe state newer than *since* has reached.
 
     Args:
         since: When the sweep started.

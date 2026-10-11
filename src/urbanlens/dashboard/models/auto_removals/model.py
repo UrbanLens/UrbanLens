@@ -1,4 +1,5 @@
-"""Tombstones for user-deleted auto-added items (aliases, links, labels, owners).
+"""
+Tombstones for user-deleted auto-added items (aliases, links, labels, owners).
 Several kinds of Pin/Wiki sub-records can be created either by the user directly, or automatically by background/on-demand code (external name-provider syncs, AI link/alias extraction, keyword/AI auto-tagging, ...).
 A row here means "the user removed this and it must not come back on its own." Automatic-creation code should check ``was_removed()`` before creating a record; manual delete views should call ``record()`` when the deleted record was itself auto-added (a purely user-created-and-user-deleted record has nothing to suppress - there's no automation that would ever recreate it).
 """
@@ -24,7 +25,8 @@ class AutoRemovalKind(TextChoices):
 
 
 class _AutoRemovalBase(abstract.DashboardModel):
-    """Shared fields: which kind of item, and its normalized identifying value.
+    """
+    Shared fields: which kind of item, and its normalized identifying value.
     ``value`` is normalized per-kind before storage/lookup so a re-add attempt with cosmetically different text still matches: alias/owner names are lowercased (case-insensitive, matching the alias/owner uniqueness rules), label values are the label's primary key as a string, link values are the exact URL (case-sensitive by nature).
     """
 

@@ -41,7 +41,8 @@ def store_for_session(session_id: int, sequence_index: int, location: Location, 
 
 
 def consume_for_session(session_id: int, sequence_index: int) -> _PickedRound | None:
-    """Pop (get-then-delete) a session's prewarmed round, if one is cached.
+    """
+    Pop (get-then-delete) a session's prewarmed round, if one is cached.
 
     Args:
         session_id: The session whose round is about to be generated.
@@ -62,7 +63,8 @@ def store_for_solo_start(profile_id: int, mode: str, config: GameConfig, locatio
 
 
 def consume_for_solo_start(profile_id: int, mode: str, config: GameConfig) -> _PickedRound | None:
-    """Pop a solo player's speculatively prewarmed first round, if the config matches exactly.
+    """
+    Pop a solo player's speculatively prewarmed first round, if the config matches exactly.
 
     Returns:
         ``(location_id, content)``, or None on a miss (never prewarmed, expired, or the config doesn't fingerprint-match what was prewarmed)."""

@@ -48,7 +48,8 @@ class PinSuggestionStatus(abstract.TextChoices):
 
 
 class PinSuggestion(abstract.DashboardModel):
-    """A place a batch photo scan (Immich library sweep or local folder scan) found evidence of visiting.
+    """
+    A place a batch photo scan (Immich library sweep or local folder scan) found evidence of visiting.
     Unlike :class:`~urbanlens.dashboard.models.visit_suggestions.model.VisitSuggestion`, this is always self-directed (no recipient/notification-preference routing) and may propose creating a brand-new pin rather than only logging a visit on one that already exists.
 
     Attributes:
@@ -115,7 +116,8 @@ class PinSuggestion(abstract.DashboardModel):
 
     @property
     def is_actionable(self) -> bool:
-        """Whether this suggestion is still awaiting a response.
+        """
+        Whether this suggestion is still awaiting a response.
 
         Returns:
             True when status is pending.
@@ -124,7 +126,8 @@ class PinSuggestion(abstract.DashboardModel):
 
     @property
     def is_new_pin(self) -> bool:
-        """Whether accepting this suggestion would create a brand-new pin.
+        """
+        Whether accepting this suggestion would create a brand-new pin.
 
         Returns:
             True when no existing pin matched this cluster.
@@ -132,7 +135,8 @@ class PinSuggestion(abstract.DashboardModel):
         return self.pin_id is None
 
     def __str__(self) -> str:
-        """Return a human-readable description of this suggestion.
+        """
+        Return a human-readable description of this suggestion.
 
         Returns:
             String like "Pin suggestion for <profile_id> at <lat>,<lon>".

@@ -1,4 +1,5 @@
-"""Choose a bounded subset of points that still shows the whole area.
+"""
+Choose a bounded subset of points that still shows the whole area.
 
 A photo map layer that plots everything costs one serialized row per photo, and
 a popular location accumulates thousands. Capping is the fix; capping with a
@@ -45,7 +46,8 @@ MAX_SAMPLE_POINTS = 50_000
 
 
 def _grid_size(count: int, limit: int) -> int:
-    """How many cells per axis to lay over the points.
+    """
+    How many cells per axis to lay over the points.
 
     Aims for rather more cells than the limit, so most cells hold one point and
     the first pass alone nearly fills the quota - which is what makes coverage
@@ -63,7 +65,8 @@ def _grid_size(count: int, limit: int) -> int:
 
 
 def spread_across_space(points: Sequence[Point], limit: int) -> list[int]:
-    """Pick at most *limit* ids, spread over the area *points* covers.
+    """
+    Pick at most *limit* ids, spread over the area *points* covers.
 
     Args:
         points: ``(id, latitude, longitude)`` for each candidate.
@@ -117,7 +120,8 @@ def spread_across_space(points: Sequence[Point], limit: int) -> list[int]:
 
 
 def select_spread[Rows: QuerySet[Any]](rows: Rows, limit: int, *, latitude_field: str = "latitude", longitude_field: str = "longitude") -> Rows:
-    """Narrow *rows* to at most *limit* of them, spread over the area they cover.
+    """
+    Narrow *rows* to at most *limit* of them, spread over the area they cover.
 
     Args:
         rows: Anything with coordinates reachable by field path.
@@ -137,7 +141,8 @@ def select_spread[Rows: QuerySet[Any]](rows: Rows, limit: int, *, latitude_field
 
 
 def bound_map_layer[Images: QuerySet[Any]](images: Images, limit: int | None = None) -> tuple[Images, bool, int]:
-    """Cap what a map layer plots, keeping the area covered.
+    """
+    Cap what a map layer plots, keeping the area covered.
 
     Counts first and reads coordinates only when the count is over the limit, so
     the ordinary case pays one cheap query rather than a projection of the whole

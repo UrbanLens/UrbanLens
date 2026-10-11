@@ -23,7 +23,8 @@ def _redata_configured() -> bool:
 
 
 def _source_host(image: Image) -> str | None:
-    """Best-effort site host this photo came from, for REData's ``source`` field.
+    """
+    Best-effort site host this photo came from, for REData's ``source`` field.
     Only meaningful for a photo materialized from an external provider (``source_url`` set) - a plain personal upload has no "site" to report, so this returns None for one rather than something like ``"upload"``."""
     if not image.source_url:
         return None
@@ -49,7 +50,8 @@ def _years_from_abandoned(image: Image) -> float | None:
 
 
 def _submission_payload(image: Image) -> dict[str, Any] | None:
-    """Build one ``POST /photos/`` submission dict for ``image``, or None if it can't be scored.
+    """
+    Build one ``POST /photos/`` submission dict for ``image``, or None if it can't be scored.
 
     Args:
         image: A photo with ``location`` set - REData scores relevance against a place, so a photo with no resolved location has nothing to submit yet (it may be submitted later, once ``tasks.process_image_upload`` resolves one).
@@ -93,7 +95,8 @@ def _submission_payload(image: Image) -> dict[str, Any] | None:
 
 
 def submit_photos(images: list[Image]) -> None:
-    """Submit observations for ``images`` to REData and cache the confidence each gets back.
+    """
+    Submit observations for ``images`` to REData and cache the confidence each gets back.
     Called from the ``submit_redata_photos`` Celery task - never call this synchronously from a request/view.
 
     Args:
@@ -144,7 +147,8 @@ def submit_photos(images: list[Image]) -> None:
 
 
 def queue_photo_submission(image: Image) -> None:
-    """Queue ``image`` for REData submission, if REData is configured and it has a location.
+    """
+    Queue ``image`` for REData submission, if REData is configured and it has a location.
 
     Args:
         image: The newly created (or newly located) photo."""
@@ -158,7 +162,8 @@ def queue_photo_submission(image: Image) -> None:
 
 
 def queue_relevance_vote(image: Image, profile: Profile, *, is_relevant: bool) -> None:
-    """Queue one relevance vote on ``image`` for submission to REData.
+    """
+    Queue one relevance vote on ``image`` for submission to REData.
     REData has no "retract a vote" endpoint, so this is only meaningful for an explicit relevant/not-relevant vote, not for clearing one back to neutral (callers should simply not call this for a clear).
 
     Args:

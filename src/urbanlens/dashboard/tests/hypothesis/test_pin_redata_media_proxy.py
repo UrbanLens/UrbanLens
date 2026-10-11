@@ -53,7 +53,8 @@ class PinLoopnetPhotoViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unconfigured_gateway_returns_404_not_500(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
+        """
+        RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
         The unconfigured state is forced rather than assumed: this previously relied on the machine running the
         tests having no REData credentials, so on a dev box that does have them the gateway constructed happily,
@@ -97,7 +98,8 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unconfigured_gateway_returns_404_not_500(self) -> None:
-        """The unconfigured state is forced, not assumed - see the matching
+        """
+        The unconfigured state is forced, not assumed - see the matching
         Loopnet test for why relying on ambient credentials broke this."""
         with (
             patch.object(RedataGateway, "__post_init__", side_effect=ValueError("REData is not configured")),
@@ -124,7 +126,8 @@ class RedataMediaCacheReadBackTests(SimpleTestCase):
 
 
 class CrisAttachmentPreviewModeTests(TestCase):
-    """``?preview=1`` means "give me something an <img> can render".
+    """
+    ``?preview=1`` means "give me something an <img> can render".
 
     CRIS attachments are routinely scanned PDFs and TIFFs, which no browser displays - the Media gallery pointed
     an ``<img>`` at them and got a broken tile (or, for documents, an anonymous grey icon) even though the file
@@ -218,7 +221,8 @@ class CrisAttachmentPreviewModeTests(TestCase):
 
 
 class PinPlaceCidMediaViewTests(SimpleTestCase):
-    """``RedataCidGateway`` raises ``GatewayRequestError``, not ``PropertyRecordsUnavailableError``
+    """
+    ``RedataCidGateway`` raises ``GatewayRequestError``, not ``PropertyRecordsUnavailableError``
     - this proxy's own ``unavailable_errors`` tuple must actually cover what its gateway raises."""
 
     def setUp(self) -> None:
@@ -257,7 +261,8 @@ class PinPlaceCidMediaViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unconfigured_gateway_returns_404_not_500(self) -> None:
-        """The unconfigured state is forced, not assumed - see the matching
+        """
+        The unconfigured state is forced, not assumed - see the matching
         Loopnet test for why relying on ambient credentials broke this."""
         with (
             patch.object(RedataCidGateway, "__post_init__", side_effect=ValueError("REData is not configured")),

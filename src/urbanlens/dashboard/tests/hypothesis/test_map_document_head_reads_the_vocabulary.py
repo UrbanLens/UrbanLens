@@ -1,4 +1,5 @@
-"""The map document defines its labels from the account's vocabulary, not by walking every label on every pin.
+"""
+The map document defines its labels from the account's vocabulary, not by walking every label on every pin.
 
 The head's dictionary was the distinct labels on the account's pins. For the capacity population's heaviest account that
 read all 53,160 pin-label pairs, 113-171 ms of every document build, to name 17 of the 63 labels it can see.

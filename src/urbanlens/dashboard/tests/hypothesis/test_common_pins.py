@@ -200,7 +200,8 @@ class ProfileViewCommonPinsContextTests(TestCase):
 
 
 class CommonPinsJsonXssTests(TestCase):
-    """CommonPinsView embeds `common_pins_json` inline via `|safe` (common_pins.html:25).
+    """
+    CommonPinsView embeds `common_pins_json` inline via `|safe` (common_pins.html:25).
 
     A pin description reaching that `<script type="application/json">` block unescaped could contain a literal
     `</script>` and break out of it, injecting arbitrary markup/script - the same class of bug covered for map

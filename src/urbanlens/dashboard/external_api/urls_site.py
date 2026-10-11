@@ -1,4 +1,5 @@
-"""External-API routes for site-level, non-user-scoped information.
+"""
+External-API routes for site-level, non-user-scoped information.
 
 Owns what a client needs to know about the *installation* rather than about the person holding the
 credential: the parts of ``SiteSettings`` that change how a client must behave (quotas, limits,

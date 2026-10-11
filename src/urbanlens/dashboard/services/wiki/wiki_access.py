@@ -1,4 +1,5 @@
-"""Shared visibility gate for wiki-scoped views.
+"""
+Shared visibility gate for wiki-scoped views.
 Wikis are opt-in shared: a profile may see (or act on) a Wiki only for a place they have pinned themselves."""
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ MAX_EARNING_ROUNDS = 16
 
 
 def _point_is_at(point, location: Location) -> bool:
-    """Whether *point* resolves to *location*'s own coordinates.
+    """
+    Whether *point* resolves to *location*'s own coordinates.
     Compared at the precision ``Location`` stores rather than as raw floats, because that rounding is what decides which Location row a point lands on.
 
     Args:
@@ -48,7 +50,8 @@ def _point_is_at(point, location: Location) -> bool:
 
 
 def _earn_aggregates(domains: set[int]) -> set[int]:
-    """Extend a domain set with every aggregate its members fully cover.
+    """
+    Extend a domain set with every aggregate its members fully cover.
     Repeated to a fixpoint, because earning one tier can complete the member set of the tier above it: with campus -> {A, B} and A -> {A1, A2}, holding A1 and A2 earns A, which together with B then earns the campus.
 
     Walks up from the domains already held rather than sweeping the site's
@@ -96,7 +99,8 @@ def _earn_aggregates(domains: set[int]) -> set[int]:
 
 
 def _snapshot_earned_split_families(profile: Profile, domain_ids: set[int]) -> None:
-    """Permanently grant a profile any split-derived family they've just earned.
+    """
+    Permanently grant a profile any split-derived family they've just earned.
     An *organic* multi-parcel site (``PlaceStatus.CURRENT``, never split) is deliberately excluded - it was never one thing, so there is nothing to be grandfathered back into, and it keeps the ordinary hold-every-member rule.
 
     Args:
@@ -118,7 +122,8 @@ def _snapshot_earned_split_families(profile: Profile, domain_ids: set[int]) -> N
 
 
 def _domains_given_pins(pins, profile: Profile | None, *, extra_point=None) -> set[int]:
-    """Every access domain the given pins (plus any grants) reach.
+    """
+    Every access domain the given pins (plus any grants) reach.
 
     Args:
         pins: A ``Pin`` queryset standing in for the viewer's pins.
@@ -153,7 +158,8 @@ def _domains_given_pins(pins, profile: Profile | None, *, extra_point=None) -> s
 
 
 def accessible_domain_ids(profile: Profile) -> set[int]:
-    """Every access domain *profile* can reach.
+    """
+    Every access domain *profile* can reach.
 
     Args:
         profile: The viewing profile.
@@ -166,7 +172,8 @@ def accessible_domain_ids(profile: Profile) -> set[int]:
 
 
 def place_visible_to(place: Place | None, profile: Profile) -> bool:
-    """Whether *profile* can reach a place's access domain.
+    """
+    Whether *profile* can reach a place's access domain.
 
     Args:
         place: The place to check; None is never visible on its own.
@@ -181,7 +188,8 @@ def place_visible_to(place: Place | None, profile: Profile) -> bool:
 
 
 def _visible_given_pins(location: Location, pins, profile: Profile | None, *, extra_point=None) -> bool:
-    """Whether *location*'s wiki is visible to the owner of *pins*.
+    """
+    Whether *location*'s wiki is visible to the owner of *pins*.
 
     Args:
         location: The Location whose wiki is being tested.
@@ -208,7 +216,8 @@ def _visible_given_pins(location: Location, pins, profile: Profile | None, *, ex
 
 
 def location_visible_to(location: Location, profile: Profile) -> bool:
-    """Whether *profile* has a pin at *location*, or anywhere in its access domain.
+    """
+    Whether *profile* has a pin at *location*, or anywhere in its access domain.
 
     Args:
         location: The Location to check.
@@ -225,7 +234,8 @@ type VisibleWikiLocations = QuerySet[Pin, int] | QuerySet[Location, int]
 
 
 def visible_wiki_locations(profile: Profile) -> VisibleWikiLocations:
-    """Location ids of every Wiki visible to *profile*, as a subquery to filter with.
+    """
+    Location ids of every Wiki visible to *profile*, as a subquery to filter with.
 
     The ids stay in the database, so a query filtering on them costs the same to build and plan however many
     places the viewer has pinned.
@@ -246,7 +256,8 @@ def visible_wiki_locations(profile: Profile) -> VisibleWikiLocations:
 
 
 def visible_wiki_location_ids(profile: Profile) -> set[int]:
-    """:func:`visible_wiki_locations` read into a set, for membership tests.
+    """
+    :func:`visible_wiki_locations` read into a set, for membership tests.
 
     Args:
         profile: The viewing profile.
@@ -261,7 +272,8 @@ _CACHE_ATTR = "_ul_visible_wiki_locations"
 
 
 def visible_wiki_locations_cached(profile: Profile) -> VisibleWikiLocations:
-    """:func:`visible_wiki_locations`, memoised on the profile instance.
+    """
+    :func:`visible_wiki_locations`, memoised on the profile instance.
     Cached on the instance rather than in a module-level dict deliberately: a ``Profile`` is loaded fresh per request, so the entry cannot outlive the request that made it. What it saves is the domain lookup; the pinned half is read by each query that filters on it.
 
     Args:
@@ -279,7 +291,8 @@ def visible_wiki_locations_cached(profile: Profile) -> VisibleWikiLocations:
 
 
 def visible_wiki_locations_if_primed(profile: Profile) -> VisibleWikiLocations | None:
-    """The memoised subquery, but only when somebody has already asked for it.
+    """
+    The memoised subquery, but only when somebody has already asked for it.
 
     Args:
         profile: The viewing profile.
@@ -290,7 +303,8 @@ def visible_wiki_locations_if_primed(profile: Profile) -> VisibleWikiLocations |
 
 
 def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> list[Wiki]:
-    """Wikis the owner can see now but would lose by moving *pin* to this point.
+    """
+    Wikis the owner can see now but would lose by moving *pin* to this point.
     Only wikis this pin is actually keeping visible are returned: one the owner also reaches through another of their own pins is never listed, and neither is one they can't see in the first place.
 
     Args:
@@ -320,7 +334,8 @@ def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> lis
 
 
 def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
-    """The wiki's parent, but only when *profile* may actually open it.
+    """
+    The wiki's parent, but only when *profile* may actually open it.
 
     Args:
         wiki: The wiki being rendered.
@@ -337,7 +352,8 @@ def visible_parent_wiki(wiki: Wiki, profile: Profile) -> Wiki | None:
 
 
 def wiki_accessible_to(wiki: Wiki, profile: Profile) -> bool:
-    """Whether *profile* may open *wiki*; a child wiki is reached through its parent, as the child-wiki routes are.
+    """
+    Whether *profile* may open *wiki*; a child wiki is reached through its parent, as the child-wiki routes are.
 
     Args:
         wiki: The wiki being acted on.
@@ -352,7 +368,8 @@ def wiki_accessible_to(wiki: Wiki, profile: Profile) -> bool:
 
 
 def visible_locations_filter(profile: Profile) -> Q:
-    """The rule :func:`location_visible_to` applies, as a filter on ``Location``.
+    """
+    The rule :func:`location_visible_to` applies, as a filter on ``Location``.
 
     Everything it reads up front is the profile's own, so applying it costs the same whatever it is applied to.
 
@@ -368,7 +385,8 @@ def visible_locations_filter(profile: Profile) -> Q:
 
 
 def visible_location_or_404(profile: Profile, location_slug: str, *, related: tuple[str, ...] = ()) -> Location:
-    """The Location a slug, a former slug or a uuid names, when *profile* may see it; else a bare Http404.
+    """
+    The Location a slug, a former slug or a uuid names, when *profile* may see it; else a bare Http404.
 
     Visibility is part of the one query that finds the row, so a Location the profile cannot see 404s at the same cost
     as a slug nothing ever used. Bare, so a DEBUG page cannot tell the two apart either.
@@ -416,7 +434,8 @@ def _visible_location(request: HttpRequest, location_slug: str) -> tuple[Locatio
 
 
 def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
-    """Find a Location and its Wiki, 404ing unless the requester can see it.
+    """
+    Find a Location and its Wiki, 404ing unless the requester can see it.
 
     The bare gate: unlike :func:`resolve_visible_wiki` it neither records engagement nor conceals, so it suits a
     caller that only needs to know where the wiki is.
@@ -440,7 +459,8 @@ def locate_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Locat
 
 
 def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | None:
-    """The slug a wiki route should be addressed by, when *location_slug* reaches it under another name.
+    """
+    The slug a wiki route should be addressed by, when *location_slug* reaches it under another name.
 
     A uuid or a former slug names a Location other than by its current slug. Only a Location the requester may see
     is found at all, so a hidden one costs what a missing one does and gets no redirect naming it.
@@ -462,7 +482,8 @@ def canonical_location_slug(request: HttpRequest, location_slug: str) -> str | N
 
 
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
-    """Resolve a Location and its Wiki, 404ing unless the requester can see it.
+    """
+    Resolve a Location and its Wiki, 404ing unless the requester can see it.
 
     Args:
         request: The current request (used for the requesting profile).

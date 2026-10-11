@@ -243,7 +243,8 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(labels_values["Owner/renter occupied"], "68% / 32%")
 
     def test_demographics_are_hidden_from_the_default_unresolvable_viewer(self) -> None:
-        """``self.pin`` is None in this class, so ``_may_see_nearby_research`` fails closed -
+        """
+        ``self.pin`` is None in this class, so ``_may_see_nearby_research`` fails closed -
         the ordinary ``render_context`` path never shows demographics here, matching
         ``show_owner``'s existing behaviour in this same class."""
         data = self._base_available_data(demographics={"population": 295911})
@@ -281,7 +282,8 @@ class PanelRenderContextTests(SimpleTestCase):
 
 
 class RenderContextViewerGatingTests(TestCase):
-    """The full stack, with a real pin/profile: ``render_context`` actually resolves the
+    """
+    The full stack, with a real pin/profile: ``render_context`` actually resolves the
     viewer and wires ``_may_see_nearby_research`` through - what
     ``PanelRenderContextTests`` above can't prove, since its ``self.pin`` is always None."""
 
@@ -339,7 +341,8 @@ class RenderContextViewerGatingTests(TestCase):
 
 
 class CoverageWorthCallingTests(SimpleTestCase):
-    """Unit tests for the coverage-precheck gate that ``_fetch_payload`` applies to
+    """
+    Unit tests for the coverage-precheck gate that ``_fetch_payload`` applies to
     the assessments/sale_records calls only (see the task's own PART A note that
     liens/tax_payments have no coverage-registry domain to gate on)."""
 
@@ -463,7 +466,8 @@ class FetchPayloadTransientErrorTests(TestCase):
 
 
 class FetchPayloadSupplementaryCallsTests(TestCase):
-    """The coverage-gated assessments/sale_records calls, the two ungated
+    """
+    The coverage-gated assessments/sale_records calls, the two ungated
     liens/tax_payments calls, and the demographics/national-parks best-effort
     calls - all once ``lookup_parcel`` resolves a uuid."""
 
@@ -530,7 +534,8 @@ class FetchPayloadSupplementaryCallsTests(TestCase):
         gateway.lookup_sale_records.assert_called_once_with("parcel-1")
 
     def test_a_failed_coverage_precheck_falls_back_to_calling_both(self) -> None:
-        """Coverage is an optimization, not a dependency - a failure must not lose the card's
+        """
+        Coverage is an optimization, not a dependency - a failure must not lose the card's
         most useful supplementary sections."""
         from unittest import mock
 
@@ -548,7 +553,8 @@ class FetchPayloadSupplementaryCallsTests(TestCase):
         gateway.lookup_sale_records.assert_called_once_with("parcel-1")
 
     def test_liens_and_tax_payments_are_called_regardless_of_coverage(self) -> None:
-        """liens/tax_payments are not coverage-registry domains, so coverage saying
+        """
+        liens/tax_payments are not coverage-registry domains, so coverage saying
         unavailable for everything else must not skip them."""
         from unittest import mock
 
@@ -589,7 +595,8 @@ class FetchPayloadSupplementaryCallsTests(TestCase):
         self.assertNotIn("demographics", payload)
 
     def test_a_503_demographics_failure_is_swallowed_not_raised(self) -> None:
-        """The endpoint 503s wholesale without ``RD_US_CENSUS_API_KEY`` configured server-side -
+        """
+        The endpoint 503s wholesale without ``RD_US_CENSUS_API_KEY`` configured server-side -
         a supplementary-source failure like any other, must not blank the card."""
         from unittest import mock
 
@@ -744,7 +751,8 @@ class WriteOfficialOwnersAndSalesTests(TestCase):
 
 
 class DemographicsAskedOncePerParcelTests(RedataConfiguredMixin, TestCase):
-    """Background enrichment of every location on one parcel, against a stubbed REData.
+    """
+    Background enrichment of every location on one parcel, against a stubbed REData.
 
     Production (0.8.0) asked REData for one parcel's demographics 24 times: once for each location on it, because the
     answer was neither shared nor remembered per parcel.

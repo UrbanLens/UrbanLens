@@ -18,7 +18,8 @@ from urbanlens.dashboard.models.subscriptions.model import PendingSubscriptionGr
 
 
 class PendingFriendInvitationTests(TestCase):
-    """Verifying a new account shows it the invitations sent to its address, and answers none of them.
+    """
+    Verifying a new account shows it the invitations sent to its address, and answers none of them.
 
     Creating a friend request here would change the inviter's pending entry and so tell them the address just
     registered.
@@ -125,7 +126,8 @@ class EmailNormalizedFieldTests(TestCase):
 
 
 class EmailNormalizedBackfillMigrationTests(TestCase):
-    """The 0048 migration's data backfill, exercised directly against a real row.
+    """
+    The 0048 migration's data backfill, exercised directly against a real row.
 
     Regression coverage for the migration function itself (app label/field-name typos, the
     only()/iterator()/bulk_update plumbing) that a plain model-level test of save() can't reach, since save()

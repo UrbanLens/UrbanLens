@@ -24,7 +24,8 @@ class GenerateApiKeyTests(TestCase):
     """generate_api_key issues a usable, uniquely-prefixed, hash-backed key."""
 
     def test_raw_key_is_shaped_like_label_then_prefix_then_secret(self) -> None:
-        """The prefix/secret boundary is fixed-length, not delimiter-based - see
+        """
+        The prefix/secret boundary is fixed-length, not delimiter-based - see
         authenticate_api_key's docstring for why (token_urlsafe's alphabet
         includes "_", so a delimiter split could misparse a lucky prefix)."""
         user = baker.make(User)
@@ -43,7 +44,8 @@ class GenerateApiKeyTests(TestCase):
         self.assertNotEqual(api_key.key_hash, secret)
 
     def test_default_scopes_are_the_original_fixed_grant(self) -> None:
-        """Every new key gets exactly the original four-scope grant, not the full vocabulary.
+        """
+        Every new key gets exactly the original four-scope grant, not the full vocabulary.
 
         See ``_default_api_key_scopes``'s docstring and ``test_external_api_scopes.py::DefaultScopesTests`` -
         deliberately not widened as ``ApiKeyScope`` grew, so an existing (or newly issued PAT-style) key never
@@ -78,7 +80,8 @@ class GenerateApiKeyTests(TestCase):
         self.assertNotEqual(first.prefix, second.prefix)
 
     def test_exhausting_prefix_collision_retries_raises(self) -> None:
-        """Every retry hitting an existing prefix must surface, not loop forever
+        """
+        Every retry hitting an existing prefix must surface, not loop forever
         or silently proceed with a duplicate (which would violate the unique
         column and raise the wrong exception type to the caller)."""
         user = baker.make(User)
@@ -140,7 +143,8 @@ class AuthenticateApiKeyTests(TestCase):
         self.assertIsNotNone(api_key.last_used_at)
 
     def test_key_for_a_deactivated_user_is_rejected(self) -> None:
-        """revoke_api_key() only fires on explicit user action - an admin disabling
+        """
+        revoke_api_key() only fires on explicit user action - an admin disabling
         a compromised account (User.is_active=False) must also cut off its keys."""
         user = baker.make(User)
         api_key, raw_key = generate_api_key(user, "Zapier")

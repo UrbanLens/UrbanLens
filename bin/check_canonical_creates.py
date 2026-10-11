@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fail if a Location, Label or alias is get-or-created by hand instead of through its canonical helper.
+"""
+Fail if a Location, Label or alias is get-or-created by hand instead of through its canonical helper.
 
 Each table carries a unique constraint a plain ``get_or_create`` cannot match: Location's
 ``(latitude, longitude)`` is numeric(9,6), so a raw float's lookup misses the rounded row and the insert
@@ -70,7 +71,8 @@ def _offending_call(node: ast.Call, aliases: dict[str, str]) -> tuple[str, str] 
 
 
 def offences(source: str, display_path: str) -> list[str]:
-    """Every unmarked hand-written create in *source*.
+    """
+    Every unmarked hand-written create in *source*.
 
     Args:
         source: A Python module's text.

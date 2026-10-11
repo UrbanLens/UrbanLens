@@ -155,7 +155,8 @@ REVIEWED: dict[str, str] = {
 
 
 def _noop_reverse_files() -> dict[str, list[str]]:
-    """Migration files containing a ``RunPython``/``RunSQL`` that reverses to noop.
+    """
+    Migration files containing a ``RunPython``/``RunSQL`` that reverses to noop.
 
     Returns:
         ``{filename: [forward callable names]}``.

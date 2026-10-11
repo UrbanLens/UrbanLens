@@ -78,7 +78,8 @@ def _favicon_url(domain: str) -> str:
 
 
 def _with_local_images(results: Iterable[dict]) -> list[dict]:
-    """Web-search results with their thumbnail and favicon pointing at this site's copies, never at another host.
+    """
+    Web-search results with their thumbnail and favicon pointing at this site's copies, never at another host.
 
     Args:
         results: One page of cached results.
@@ -99,7 +100,8 @@ def _with_local_images(results: Iterable[dict]) -> list[dict]:
 
 
 def _with_local_slides[SlideT: (SatelliteSlide, StreetViewSlide)](slides: Sequence[SlideT], service_key: str) -> list[SlideT]:
-    """Carousel slides showing this site's copies of their pictures.
+    """
+    Carousel slides showing this site's copies of their pictures.
 
     A slide dated "Current" is an address whose picture the provider replaces, so it is copied once a month.
 
@@ -118,7 +120,8 @@ def _with_local_slides[SlideT: (SatelliteSlide, StreetViewSlide)](slides: Sequen
 
 
 def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
-    """Whether the user holds the feature a panel requires.
+    """
+    Whether the user holds the feature a panel requires.
 
     Args:
         request: The current request, for its authenticated user.
@@ -140,7 +143,8 @@ def _visible_panel_sources(request: HttpRequest) -> list[PanelSource]:
 
 
 def _property_tab_sources(sources: Iterable[PanelSource], pin: Pin) -> list[InfoPanelSource]:
-    """The Property Records card's tabs after its Overview, in tab order.
+    """
+    The Property Records card's tabs after its Overview, in tab order.
 
     Args:
         sources: The panel sources the viewer may see.
@@ -161,7 +165,8 @@ _BESPOKE_CARD_KEYS = ("azure_maps", "parcel_buildings", "yelp", "nps", "loopnet"
 
 
 def _probe_page_panels(request: HttpRequest, pin: Pin, info_panels: Sequence[InfoPanelSource], visible: Sequence[PanelSource]) -> tuple[PanelProbe, list[str]]:
-    """Which of the Private Pin page's enrichment panels to leave out, because they are known to have nothing (P53).
+    """
+    Which of the Private Pin page's enrichment panels to leave out, because they are known to have nothing (P53).
 
     Args:
         request: The current request, for its viewer.
@@ -370,7 +375,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
 
     def _debug_entry(self, request: HttpRequest, source: str, query: str, *, from_cache: bool, count: int | None = None):
-        """Build a `DebugEntry` for the external-API debug overlay, admins only.
+        """
+        Build a `DebugEntry` for the external-API debug overlay, admins only.
 
         Args:
             request: The current HttpRequest.
@@ -402,7 +408,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return 0
 
     def _pending_panel(self, request: HttpRequest, pin: Pin, source_key: str, hide_tab_id: str | None = None, section_id: str | None = None, *, in_tab: bool = False):
-        """Schedule a panel fetch and return its polling placeholder.
+        """
+        Schedule a panel fetch and return its polling placeholder.
 
         Args:
             request: The current request.
@@ -430,7 +437,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @staticmethod
     def _unavailable_here(request: HttpRequest, source: PanelSource, *, section_id: str, in_tab: bool) -> HttpResponse:
-        """Say a panel's source is not called from this environment (D26), rather than showing it empty or hiding it.
+        """
+        Say a panel's source is not called from this environment (D26), rather than showing it empty or hiding it.
 
         Args:
             request: The current request.
@@ -455,7 +463,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         )
 
     def _pending_placeholder(self, request: HttpRequest, source: PanelSource, *, section_id: str, in_tab: bool, title: str | None = None, hide_tab_id: str | None = None) -> HttpResponse:
-        """The self-polling placeholder for a panel whose fetch is in flight.
+        """
+        The self-polling placeholder for a panel whose fetch is in flight.
 
         Args:
             request: The current request; its path is polled.
@@ -490,7 +499,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @staticmethod
     def _notify_panel_ready(request: HttpRequest, response: HttpResponse, *events: str) -> HttpResponse:
-        """Notify sibling panels to refresh via HX-Trigger.
+        """
+        Notify sibling panels to refresh via HX-Trigger.
 
         Args:
             request: The current request.
@@ -505,7 +515,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return response
 
     def _pending_media(self, request: HttpRequest, pin: Pin, source_key: str):
-        """Schedule a media provider's fetch and return its polling loader.
+        """
+        Schedule a media provider's fetch and return its polling loader.
 
         The pending response therefore (a) retargets the swap back onto the requesting loader itself via
         HX-Retarget/HX-Reswap, and (b) carries the UL-Panel-Pending header so the gallery JS ignores it
@@ -628,7 +639,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/pins/pin_media_items.html", context)
 
     def _photos_media_preview(self, request: HttpRequest, pin_slug: str):
-        """Render the pin owner's own most-recent photos as Media-gallery tiles.
+        """
+        Render the pin owner's own most-recent photos as Media-gallery tiles.
 
         A lightweight, read-only preview (view + open in the lightbox; no relevance marking, since that
         concept doesn't apply to your own upload) feeding the combined Media section's default "All" view
@@ -692,7 +704,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["post"])
     def media_relevance(self, request: Request, pin_slug: str):
-        """Set (or clear) the requesting user's relevance mark on one Media gallery item.
+        """
+        Set (or clear) the requesting user's relevance mark on one Media gallery item.
 
         An optional ``latitude``/``longitude`` pair (sent when the item was dragged onto the map rather than
         clicked "relevant") is applied to the materialized ``Image`` in the same request, so a freshly
@@ -802,7 +815,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["post"])
     def media_send_to_wiki(self, request: Request, pin_slug: str):
-        """Queue selected Media gallery items for attachment to this location's wiki.
+        """
+        Queue selected Media gallery items for attachment to this location's wiki.
 
         The download itself runs in ``tasks.cache_media_item_into_wiki`` - see there
         for why a selection of up to 20 is not fetched inside the request.
@@ -855,7 +869,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["get"])
     def nearby_pins_json(self, request: Request, pin_slug: str):
-        """Return the profile's other pins near this one, for the "Nearby Pins" map layer.
+        """
+        Return the profile's other pins near this one, for the "Nearby Pins" map layer.
 
         Off by default on the Private Pin page map - only fetched once the
         user turns the layer on.
@@ -872,7 +887,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"pins": [p.to_detail_json() for p in nearby]})
 
     def land_use_areas_json(self, request: Request, pin_slug: str):
-        """Return the Special Land Use Area boundaries around this pin's parcel, for the "Land Use" map layer.
+        """
+        Return the Special Land Use Area boundaries around this pin's parcel, for the "Land Use" map layer.
 
         Off by default on the Private Pin page map - only fetched once the user turns the layer on.
         """
@@ -912,7 +928,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return JsonResponse({"sort": sort})
 
     def set_map_height(self, request: Request):
-        """Persist the requesting user's dragged Private Pin page map height (px).
+        """
+        Persist the requesting user's dragged Private Pin page map height (px).
 
         Applies to every Private Pin page's map going forward, not just the one being viewed when the drag
         happened - it's a display preference, not per-pin data.
@@ -1083,7 +1100,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         deadline_name: str,
         extra_context: dict[str, object] | None = None,
     ) -> HttpResponse:
-        """Shared flow behind the satellite and street-view multi-source carousels.
+        """
+        Shared flow behind the satellite and street-view multi-source carousels.
 
         Both carousels merge several external providers into one slide list behind the same
         warm-cache-then-render-with-a-deadline flow; this is the one piece of that flow the generic
@@ -1186,7 +1204,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["get"])
     def import_form(self, request: HttpRequest):
-        """View the import wizard dialog.
+        """
+        View the import wizard dialog.
 
         The same wizard powers both the pin importer and the Memories "Import routes & history" flow; only
         the surrounding copy differs.
@@ -1216,7 +1235,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=False, methods=["post"])
     def parse_for_preview(self, request: HttpRequest):
-        """Store uploaded files for the sandbox worker to read, and answer with where to follow them.
+        """
+        Store uploaded files for the sandbox worker to read, and answer with where to follow them.
 
         Nothing here opens an upload: every format the preview reads is an ``untrusted_parse``
         operation, so the reading happens in ``services.pins.import_preview``'s tasks.
@@ -1421,7 +1441,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/pins/pin_nps.html", context)
 
     def location_data_overview(self, request: HttpRequest, pin_slug: str):
-        """HTMX partial: the Location Data card's Overview, merging what each of its tabs knows about the place.
+        """
+        HTMX partial: the Location Data card's Overview, merging what each of its tabs knows about the place.
 
         See :meth:`_card_overview`.
         """
@@ -1435,7 +1456,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return self._card_overview(request, pin, [(source.key, [source]) for source in tabs], overview_id="location-data-overview-body")
 
     def property_records_overview(self, request: HttpRequest, pin_slug: str):
-        """HTMX partial: the Property Records card's Overview - owner, parcel, year built, historic status and register number.
+        """
+        HTMX partial: the Property Records card's Overview - owner, parcel, year built, historic status and register number.
 
         See :meth:`_card_overview`. A tab showing other panels inside it (Historic Preservation) is summarised from all of them.
         """
@@ -1450,7 +1472,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @staticmethod
     def _overview_pin(request: HttpRequest, pin_slug: str) -> Pin | HttpResponse:
-        """The viewer's pin an Overview describes, or the response for one it cannot.
+        """
+        The viewer's pin an Overview describes, or the response for one it cannot.
 
         Args:
             request: The current request.
@@ -1468,7 +1491,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return pin
 
     def _card_overview(self, request: HttpRequest, pin: Pin, tabs: Sequence[tuple[str, Sequence[LocationCachePanelSource]]], *, overview_id: str) -> HttpResponse:
-        """A tabbed card's Overview: each tab's :meth:`~LocationCachePanelSource.overview_summary`, merged without attribution.
+        """
+        A tabbed card's Overview: each tab's :meth:`~LocationCachePanelSource.overview_summary`, merged without attribution.
 
         Schedules a fetch for any source without fresh data, renders what is ready and keeps polling while anything is
         pending. Names, in an ``HX-Trigger`` event, the tabs whose sources all settled with nothing to show, so the page
@@ -1561,7 +1585,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @staticmethod
     def _notify_empty_tabs(response: HttpResponse, empty_keys: list[str]) -> HttpResponse:
-        """Attach an HX-Trigger event naming the tabs confirmed to have no content.
+        """
+        Attach an HX-Trigger event naming the tabs confirmed to have no content.
 
         Args:
             response: The response to annotate.
@@ -1648,7 +1673,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/pins/pin_azure_maps.html", context)
 
     def _ai_extract_context(self, request: HttpRequest, pin: Pin) -> dict:
-        """Context for the AI extract buttons on this pin's external links.
+        """
+        Context for the AI extract buttons on this pin's external links.
 
         Single source shared by every panel render path (generic ``panel_info`` dispatch plus the bespoke
         Wikipedia/LoopNet/web-search panels), so the buttons exist-or-don't - and honor the same per-link
@@ -1667,7 +1693,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return ai_extract_button_context(request.user, pin.profile, pin)
 
     def child_details(self, request: HttpRequest, pin_slug: str):
-        """HTMX: turn "child pin details" on or off without reloading the page.
+        """
+        HTMX: turn "child pin details" on or off without reloading the page.
 
         Responds with each panel that reads the setting as an out-of-band swap, loading afresh, and tells the map
         through ``HX-Trigger`` (``childDetailsChanged``) so it refetches its own layers.
@@ -1693,7 +1720,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return response
 
     def parcel_buildings(self, request: HttpRequest, pin_slug: str):
-        """HTMX partial: every building standing on this pin's property, and every child pin it has.
+        """
+        HTMX partial: every building standing on this pin's property, and every child pin it has.
 
         One list (P172): the property's buildings from REData, OpenStreetMap and CRIS, each marked and opened in place
         when a child pin covers it, and a Child pins tab with every child of any type. A pin the Buildings list does not
@@ -1788,7 +1816,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return self._render_info_panel(request, pin_slug, panel_key, in_building_card=False)
 
     def building_panel_info(self, request: HttpRequest, pin_slug: str, panel_key: str):
-        """HTMX partial: a ``building_level`` info panel for a building child pin, inside its card on the parent's page.
+        """
+        HTMX partial: a ``building_level`` info panel for a building child pin, inside its card on the parent's page.
 
         Rendered nested, under a DOM id carrying the building's slug, so several buildings' cards and the parent's own
         panels can share one page.
@@ -1796,7 +1825,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return self._render_info_panel(request, pin_slug, panel_key, in_building_card=True)
 
     def _render_info_panel(self, request: HttpRequest, pin_slug: str, panel_key: str, *, in_building_card: bool):
-        """Render one info panel for a pin, or its pending placeholder.
+        """
+        Render one info panel for a pin, or its pending placeholder.
 
         Args:
             request: The current request.
@@ -1864,7 +1894,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         return response
 
     def _render_merged_panel(self, request: HttpRequest, pin: Pin, members: Sequence[InfoPanelSource], *, section_id: str, in_tab: bool, nested: bool) -> HttpResponse:
-        """Render a panel and the panels shown inside it as one, each under its own title, a repeated fact given once.
+        """
+        Render a panel and the panels shown inside it as one, each under its own title, a repeated fact given once.
 
         Each member keeps its own gate, fetch and failure handling: a member still fetching is scheduled and polled for
         while the others show.
@@ -1986,7 +2017,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=False, methods=["post"])
     def import_confirmed(self, request: Request):
-        """Queue user-confirmed pin selections from the preview step as a background import.
+        """
+        Queue user-confirmed pin selections from the preview step as a background import.
 
         Returns:
             202 with ``job_id``, ``total``, ``status_url`` and ``cancel_url``. 400 for a
@@ -2071,7 +2103,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
 
 def _confirmed_import_urls(job_id: str) -> dict[str, str]:
-    """Where the import dialog follows and cancels a confirmed import.
+    """
+    Where the import dialog follows and cancels a confirmed import.
 
     Args:
         job_id: The import.
@@ -2110,7 +2143,8 @@ REDATA_MEDIA_METHODS = frozenset({"GET"})
 
 
 class RedataMediaProxyMixin:
-    """Shared caching + preview handling for the REData-backed media proxies.
+    """
+    Shared caching + preview handling for the REData-backed media proxies.
 
     Each of these views fetches one file's bytes from REData (whose API key must never reach the
     browser) and serves them through ``proxied_media_response``: the routes are unauthenticated and the bytes
@@ -2120,7 +2154,8 @@ class RedataMediaProxyMixin:
     """
 
     def serve_media(self, request: HttpRequest, cache_key: str, download: Callable[[], tuple[bytes, str]], *, unavailable_errors: tuple[type[Exception], ...] | None = None) -> HttpResponse:
-        """Serve one REData file, or a rendering of it a browser can show.
+        """
+        Serve one REData file, or a rendering of it a browser can show.
 
         Args:
             request: The current request. ``?preview=thumb`` asks for a gallery tile's rendering and ``?preview=1`` for
@@ -2216,7 +2251,8 @@ class RedataMediaProxyMixin:
 
 
 class PinLoopnetPhotoView(RedataMediaProxyMixin, View):
-    """GET pin/loopnet/photo/<listing_uuid>/<photo_id>/ - proxies one LoopNet listing photo.
+    """
+    GET pin/loopnet/photo/<listing_uuid>/<photo_id>/ - proxies one LoopNet listing photo.
 
     REData's API key must never reach the browser, so photo bytes are fetched server-side (same
     reasoning as ``PinImmichThumbnailView``) and cached briefly to avoid re-hitting REData on every
@@ -2238,7 +2274,8 @@ class PinLoopnetPhotoView(RedataMediaProxyMixin, View):
 
 
 class PinCrisAttachmentView(RedataMediaProxyMixin, View):
-    """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/ - proxies one CRIS attachment/photo.
+    """
+    GET pin/cris/attachment/<resource_uuid>/<attachment_id>/ - proxies one CRIS attachment/photo.
 
     Same reasoning as ``PinLoopnetPhotoView`` - no login required (CRIS documents/photos are public
     historic-preservation records, and ``materialize_media_item`` needs an unauthenticated URL to
@@ -2256,7 +2293,8 @@ class PinCrisAttachmentView(RedataMediaProxyMixin, View):
 
 
 class PinCrisExtractedImageView(RedataMediaProxyMixin, View):
-    """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/extracted/<image_id>/ - proxies
+    """
+    GET pin/cris/attachment/<resource_uuid>/<attachment_id>/extracted/<image_id>/ - proxies
     one photo OCR/AI-extracted from a CRIS document attachment.
 
     Same reasoning as ``PinCrisAttachmentView`` - no login required.
@@ -2273,7 +2311,8 @@ class PinCrisExtractedImageView(RedataMediaProxyMixin, View):
 
 
 class PinPlaceCidMediaView(RedataMediaProxyMixin, View):
-    """GET pin/place-cid/media/<cid>/<media_id>/ - proxies one REData deep-scrape media item.
+    """
+    GET pin/place-cid/media/<cid>/<media_id>/ - proxies one REData deep-scrape media item.
 
     Same reasoning as ``PinLoopnetPhotoView``/``PinCrisAttachmentView`` - REData's API key must never
     reach the browser - and the same "no login required" call: this is REData's
@@ -2299,7 +2338,8 @@ class PinPlaceCidMediaView(RedataMediaProxyMixin, View):
 
 
 class PinRedataMediaView(RedataMediaProxyMixin, View):
-    """GET pin/redata/media/<media_uuid>/ - proxies REData's mirrored copy of one nearby media item.
+    """
+    GET pin/redata/media/<media_uuid>/ - proxies REData's mirrored copy of one nearby media item.
 
     Same reasoning and the same "no login required" call as ``PinPlaceCidMediaView``: the key stays server-side, the
     items are public photographs (Commons, Flickr, NPS galleries), and ``materialize_media_item`` re-downloads this
@@ -2319,7 +2359,8 @@ class PinRedataMediaView(RedataMediaProxyMixin, View):
 
 
 class PinRedataStreetViewView(RedataMediaProxyMixin, View):
-    """GET pin/redata/street-view/<capture_uuid>/ - proxies REData's permanent archive of one street-level capture.
+    """
+    GET pin/redata/street-view/<capture_uuid>/ - proxies REData's permanent archive of one street-level capture.
 
     The archive is what still shows a frame after its contributor deleted the sequence upstream. Same "no login
     required" call as ``PinRedataMediaView``. REData fetches the frame from its network on the first request, so the

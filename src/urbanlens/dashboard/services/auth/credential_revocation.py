@@ -1,4 +1,5 @@
-"""What a password change revokes, decided in one place for every path that changes a password.
+"""
+What a password change revokes, decided in one place for every path that changes a password.
 
 Browser sessions need nothing here: Django signs each session with a hash of the password, so every other
 session stops authenticating the moment the hash changes, and ``update_session_auth_hash`` re-signs the one
@@ -60,7 +61,8 @@ def revoke_credentials_on_password_change(
     request: HttpRequest | None = None,
     revoke_api_keys: bool = False,
 ) -> RevokedCredentials:
-    """Revoke what should not outlive ``user``'s new password, keeping the requester's own session.
+    """
+    Revoke what should not outlive ``user``'s new password, keeping the requester's own session.
 
     Call after the new password is saved, in the same transaction.
 
@@ -93,7 +95,8 @@ def revoke_credentials_on_password_change(
 
 
 def revoke_oauth_grants(user: User) -> int:
-    """End every OAuth2 grant ``user`` has given: tokens, ID tokens, and authorization and device codes.
+    """
+    End every OAuth2 grant ``user`` has given: tokens, ID tokens, and authorization and device codes.
 
     Refresh tokens are deleted rather than marked revoked, because DOT honours a revoked refresh token for
     ``REFRESH_TOKEN_GRACE_PERIOD_SECONDS`` after revocation.

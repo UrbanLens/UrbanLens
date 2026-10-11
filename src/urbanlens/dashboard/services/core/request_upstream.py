@@ -1,4 +1,5 @@
-"""Calling an upstream from a request thread: cache, then throttle, then a slot, then a deadline.
+"""
+Calling an upstream from a request thread: cache, then throttle, then a slot, then a deadline.
 
 Each upstream a view calls is one :class:`RequestUpstream` subclass. It is an :class:`UpstreamSlots`, so
 it has its own per-process count, and it names the deadline and per-caller rate that apply to it.
@@ -65,7 +66,8 @@ _REFUSAL_STATUS = {Outcome.THROTTLED: 429, Outcome.BUSY: 503, Outcome.TIMED_OUT:
 
 @dataclass(frozen=True, slots=True)
 class UpstreamResult[T]:
-    """What a call produced, and why when it produced nothing.
+    """
+    What a call produced, and why when it produced nothing.
 
     Attributes:
         outcome: How the call ended.
@@ -97,7 +99,8 @@ class UpstreamResult[T]:
         return _REFUSAL_STATUS.get(self.outcome, 200)
 
     def value_or(self, default: T) -> T:
-        """The value when the upstream answered, else *default*.
+        """
+        The value when the upstream answered, else *default*.
 
         Args:
             default: What to use when there is no answer.
@@ -110,7 +113,8 @@ class UpstreamResult[T]:
 
 @dataclass(slots=True)
 class Pending[T]:
-    """A call that has been started, or answered without starting.
+    """
+    A call that has been started, or answered without starting.
 
     Attributes:
         upstream: The policy the call runs under.
@@ -127,7 +131,8 @@ class Pending[T]:
     errors: tuple[type[Exception], ...] = UPSTREAM_ERRORS
 
     def result(self, timeout: float | None = None) -> UpstreamResult[T]:
-        """Wait for the answer, up to *timeout* seconds.
+        """
+        Wait for the answer, up to *timeout* seconds.
 
         Args:
             timeout: Seconds to wait; defaults to the upstream's deadline. After :func:`wait_all`, pass 0.
@@ -169,7 +174,8 @@ class Pending[T]:
 
 
 class RequestUpstream(UpstreamSlots):
-    """The policy for one upstream called on a request thread.
+    """
+    The policy for one upstream called on a request thread.
 
     Subclass it and set :attr:`name`; override :attr:`deadline`, :attr:`rate` or :meth:`limit` where the
     upstream needs them. Each subclass gets its own semaphore, so one slow upstream cannot take another's
@@ -189,7 +195,8 @@ class RequestUpstream(UpstreamSlots):
 
     @classmethod
     def limit(cls) -> int:
-        """How many fetches from this upstream one process may have in flight.
+        """
+        How many fetches from this upstream one process may have in flight.
 
         Returns:
             ``request_upstream_concurrency``.
@@ -198,7 +205,8 @@ class RequestUpstream(UpstreamSlots):
 
     @classmethod
     def throttle_scope(cls) -> str:
-        """The throttle counter this upstream charges.
+        """
+        The throttle counter this upstream charges.
 
         Returns:
             The scope.
@@ -207,7 +215,8 @@ class RequestUpstream(UpstreamSlots):
 
     @classmethod
     def cache_key(cls, key: str) -> str:
-        """The cache key for one answer, hashed so any caller-supplied text makes a valid key.
+        """
+        The cache key for one answer, hashed so any caller-supplied text makes a valid key.
 
         Args:
             key: What identifies the answer, e.g. a normalised query.
@@ -220,7 +229,8 @@ class RequestUpstream(UpstreamSlots):
 
     @classmethod
     def cached(cls, key: str) -> Any | None:
-        """A stored answer, or None when there is none or the cache cannot answer.
+        """
+        A stored answer, or None when there is none or the cache cannot answer.
 
         Args:
             key: What identifies the answer.
@@ -232,7 +242,8 @@ class RequestUpstream(UpstreamSlots):
 
     @classmethod
     def store(cls, key: str, value: object, ttl: int) -> bool:
-        """Store an answer, tolerating a cache that cannot take it.
+        """
+        Store an answer, tolerating a cache that cannot take it.
 
         Args:
             key: What identifies the answer.
@@ -259,7 +270,8 @@ class RequestUpstream(UpstreamSlots):
         cacheable: Callable[[T], bool] | None = None,
         errors: tuple[type[Exception], ...] = (),
     ) -> Pending[T]:
-        """Answer from the cache, or start the fetch without waiting for it.
+        """
+        Answer from the cache, or start the fetch without waiting for it.
 
         Args:
             fetch: Zero-argument callable that asks the upstream.
@@ -315,7 +327,8 @@ class RequestUpstream(UpstreamSlots):
         cacheable: Callable[[T], bool] | None = None,
         errors: tuple[type[Exception], ...] = (),
     ) -> UpstreamResult[T]:
-        """:meth:`start` the call and wait up to :attr:`deadline` for it.
+        """
+        :meth:`start` the call and wait up to :attr:`deadline` for it.
 
         Args:
             fetch: Zero-argument callable that asks the upstream.
@@ -332,7 +345,8 @@ class RequestUpstream(UpstreamSlots):
 
 
 def wait_all(pendings: Iterable[Pending[Any]], *, timeout: float) -> None:
-    """Wait for several started calls under one budget; read each with ``result(0)`` afterwards.
+    """
+    Wait for several started calls under one budget; read each with ``result(0)`` afterwards.
 
     Args:
         pendings: The calls.
@@ -344,7 +358,8 @@ def wait_all(pendings: Iterable[Pending[Any]], *, timeout: float) -> None:
 
 
 def refusal_json(result: UpstreamResult[Any], payload: dict[str, Any]) -> JsonResponse:
-    """A JSON answer for a call that produced nothing, with the status and wait it implies.
+    """
+    A JSON answer for a call that produced nothing, with the status and wait it implies.
 
     Args:
         result: The unanswered result.

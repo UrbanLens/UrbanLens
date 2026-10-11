@@ -25,7 +25,8 @@ class SubscriptionRoleQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
     """Custom queryset for SubscriptionRole models."""
 
     def get_by_slug(self, slug: str):
-        """Return the role with this slug, or None if it doesn't exist.
+        """
+        Return the role with this slug, or None if it doesn't exist.
 
         Args:
             slug: The role's unique slug.
@@ -47,7 +48,8 @@ class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
     """Custom queryset for UserSubscription models."""
 
     def not_revoked(self) -> UserSubscriptionQuerySet:
-        """Subscriptions that haven't been explicitly revoked.
+        """
+        Subscriptions that haven't been explicitly revoked.
 
         Returns:
             Matching subscriptions.
@@ -55,7 +57,8 @@ class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(revoked_at__isnull=True)
 
     def active(self) -> UserSubscriptionQuerySet:
-        """Subscriptions that are both not revoked and not expired.
+        """
+        Subscriptions that are both not revoked and not expired.
 
         Returns:
             Matching subscriptions.
@@ -64,7 +67,8 @@ class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.not_revoked().filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
 
     def active_for(self, user: User) -> UserSubscriptionQuerySet:
-        """A user's currently-active (not revoked, not expired) subscriptions.
+        """
+        A user's currently-active (not revoked, not expired) subscriptions.
 
         Args:
             user: The user to look up.
@@ -75,7 +79,8 @@ class UserSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.active().filter(user=user)
 
     def grants_for_site_admin(self) -> UserSubscriptionQuerySet:
-        """Every not-revoked grant, whoever made it, with what the grant list shows of each preloaded.
+        """
+        Every not-revoked grant, whoever made it, with what the grant list shows of each preloaded.
 
         Returns:
             Matching subscriptions.
@@ -94,7 +99,8 @@ class PendingSubscriptionGrantQuerySet(abstract.DashboardQuerySet["PendingSubscr
     """Custom queryset for PendingSubscriptionGrant models."""
 
     def for_invitation(self, invitation: FriendInvitation) -> PendingSubscriptionGrantQuerySet:
-        """Grants attached to one invitation, ready to redeem once it's accepted.
+        """
+        Grants attached to one invitation, ready to redeem once it's accepted.
 
         Args:
             invitation: The invitation whose pending grants to return.

@@ -104,7 +104,8 @@ class PinListsCollectionTests(ListsApiTestCase):
         self.assertIn("error", response.json())
 
     def test_a_racing_create_is_a_clean_400_not_a_500(self) -> None:
-        """The loser of the exists()-then-save race gets the same 400, not an IntegrityError 500.
+        """
+        The loser of the exists()-then-save race gets the same 400, not an IntegrityError 500.
 
         A concurrent POST can insert its row between this request's ``exists()`` pre-check and its ``save()`` -
         neutering the check reproduces that ordering deterministically."""
@@ -172,7 +173,8 @@ class PinListDetailTests(ListsApiTestCase):
         self.assertEqual(self.pin_list.name, "Renamed")
 
     def test_rename_alone_does_not_resync(self) -> None:
-        """A rename must not trigger a full membership recompute.
+        """
+        A rename must not trigger a full membership recompute.
 
         The item below is non-manual and matches no rule, so it would be
         removed by a resync - its survival is what proves none ran.

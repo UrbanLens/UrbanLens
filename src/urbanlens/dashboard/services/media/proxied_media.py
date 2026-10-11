@@ -43,7 +43,8 @@ _MEDIA_CSP = f"{_PDF_CSP}; sandbox"
 
 
 def media_csp(served_type: str | None) -> str:
-    """The Content-Security-Policy for proxied bytes served as *served_type*.
+    """
+    The Content-Security-Policy for proxied bytes served as *served_type*.
 
     Args:
         served_type: The type the response is served as, or None when it is served as an attachment.
@@ -55,7 +56,8 @@ def media_csp(served_type: str | None) -> str:
 
 
 def looks_like_pdf(content: bytes) -> bool:
-    """Whether bytes carry a PDF header where a browser would look for one.
+    """
+    Whether bytes carry a PDF header where a browser would look for one.
 
     Args:
         content: The file's bytes.
@@ -67,7 +69,8 @@ def looks_like_pdf(content: bytes) -> bool:
 
 
 def inline_media_type(content: bytes, content_type: str | None) -> str | None:
-    """The type a proxied file may be displayed inline as, or None when it must be a download.
+    """
+    The type a proxied file may be displayed inline as, or None when it must be a download.
 
     Args:
         content: The file's bytes.
@@ -85,7 +88,8 @@ def inline_media_type(content: bytes, content_type: str | None) -> str | None:
 
 
 def proxied_media_response(content: bytes, content_type: str | None) -> HttpResponse:
-    """Serve bytes a third party supplied without letting them act as a page on this origin.
+    """
+    Serve bytes a third party supplied without letting them act as a page on this origin.
 
     An allow-listed type is served inline under a policy that loads nothing; anything else becomes an
     ``application/octet-stream`` attachment. ``nosniff`` keeps a browser from second-guessing either.
@@ -110,7 +114,8 @@ def proxied_media_response(content: bytes, content_type: str | None) -> HttpResp
 
 
 def retry_later_response(retry_after: int) -> HttpResponse:
-    """A 503 telling the client when to ask again, for an upstream that is busy rather than missing the file.
+    """
+    A 503 telling the client when to ask again, for an upstream that is busy rather than missing the file.
 
     Args:
         retry_after: Seconds to wait.

@@ -1,4 +1,5 @@
-"""Tests for RedataPhotosGateway, the REST client for REData's photo-relevance endpoints.
+"""
+Tests for RedataPhotosGateway, the REST client for REData's photo-relevance endpoints.
 
 All HTTP calls are mocked so no real network access occurs.
 """

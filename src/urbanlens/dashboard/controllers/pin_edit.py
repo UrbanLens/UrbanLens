@@ -35,7 +35,8 @@ logger = logging.getLogger(__name__)
 
 
 def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
-    """Return the pin if it belongs to the requesting user.
+    """
+    Return the pin if it belongs to the requesting user.
 
     Any other user's pin - whether it exists or not - returns 404: the lookup is scoped to the
     requester's own profile, so a pin owned by someone else is indistinguishable from a nonexistent one
@@ -51,7 +52,8 @@ def _pin_for_user(pin_slug, request) -> Pin | HttpResponse:
 
 
 def _pin_version(pin: Pin) -> str:
-    """Return an opaque version token for the pin's last-saved state.
+    """
+    Return an opaque version token for the pin's last-saved state.
 
     Clients echo this back on quick-edit requests (star clicks) so the server can tell whether anything
     else changed since that client last rendered the pin - see PinEditView.post for how this drives the
@@ -146,7 +148,8 @@ def _overview_context(pin: Pin) -> dict:
 
 
 def _pin_hero_oob(request, pin: Pin, *, linked_wiki_locations: list[Location]) -> str:
-    """Render the Private Pin page hero as an out-of-band HTMX swap.
+    """
+    Render the Private Pin page hero as an out-of-band HTMX swap.
 
     The hero (with its Community Wiki box) lives in base.html's ``{% block hero %}`` (see
     ``pages/location/index.html``), outside ``#pin-overview`` - so ``PinOverviewView``'s slug backfill
@@ -178,7 +181,8 @@ def _pin_hero_oob(request, pin: Pin, *, linked_wiki_locations: list[Location]) -
 
 
 class PinOverviewView(LoginRequiredMixin, View):
-    """Render the swappable pin overview partial (title + details card).
+    """
+    Render the swappable pin overview partial (title + details card).
 
     GET /map/pin/<uuid>/overview/
     """
@@ -206,7 +210,8 @@ class PinOverviewView(LoginRequiredMixin, View):
 
 
 class PinEditView(LoginRequiredMixin, View):
-    """Update editable pin fields.
+    """
+    Update editable pin fields.
 
     POST /map/pin/<uuid>/edit/
     Re-renders the pin overview partial on success.
@@ -357,7 +362,8 @@ class PinEditView(LoginRequiredMixin, View):
 
 
 class PinNotesView(LoginRequiredMixin, View):
-    """Personal notes panel for a pin.
+    """
+    Personal notes panel for a pin.
 
     GET  /map/pin/<uuid>/notes/  → render panel
     POST /map/pin/<uuid>/notes/  → add note, re-render panel
@@ -387,7 +393,8 @@ class PinNotesView(LoginRequiredMixin, View):
 
 
 class PinNoteDeleteView(LoginRequiredMixin, View):
-    """Delete a single personal note.
+    """
+    Delete a single personal note.
 
     DELETE /map/pin/<uuid>/notes/<int:note_id>/delete/
     """
@@ -403,7 +410,8 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
 
 
 class PinDetachChildView(LoginRequiredMixin, View):
-    """Promote a child (sub) pin back to a top-level pin of its own.
+    """
+    Promote a child (sub) pin back to a top-level pin of its own.
 
     POST /map/pin/<pin_slug>/detach-parent/
 
@@ -431,7 +439,8 @@ class PinDetachChildView(LoginRequiredMixin, View):
 
 
 class PinPromoteChildrenView(LoginRequiredMixin, View):
-    """Promote a pin's direct children up one level, from the map popup.
+    """
+    Promote a pin's direct children up one level, from the map popup.
 
     POST /map/pin/<pin_slug>/promote-children/
 
@@ -454,7 +463,8 @@ class PinPromoteChildrenView(LoginRequiredMixin, View):
 
 
 class PinSwapParentView(LoginRequiredMixin, View):
-    """Swap a child pin with its parent - the child becomes the parent, and vice versa.
+    """
+    Swap a child pin with its parent - the child becomes the parent, and vice versa.
 
     POST /map/pin/<pin_slug>/swap-parent/
 
@@ -485,7 +495,8 @@ class PinRelinkView(LoginRequiredMixin, View):
     """POST /map/pin/<slug>/link/<location_slug>/: switch the pin to the given Location."""
 
     def post(self, request, pin_slug, location_slug):
-        """Relink the pin to a named Location, or merge it into an existing pin there.
+        """
+        Relink the pin to a named Location, or merge it into an existing pin there.
 
         Args:
             request: The HTTP request.

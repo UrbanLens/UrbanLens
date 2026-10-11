@@ -1,4 +1,5 @@
-"""A rate-limit row created from the generic fallback takes the service's defaults once they exist (P93).
+"""
+A rate-limit row created from the generic fallback takes the service's defaults once they exist (P93).
 
 `get_limit_config` creates a missing row from the registered defaults, or from a generic 20/min, 500/day fallback
 when there are none. Registering defaults later changed nothing for a row that already existed, so a deployment kept

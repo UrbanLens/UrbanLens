@@ -25,7 +25,8 @@ _STAT_FIELD_ORDINALS = {"danger": 0, "vulnerability": 1, "priority": 2, "rating"
 
 @dataclass(slots=True, frozen=True)
 class WikiStatComposite:
-    """The community composite for one stat field on one Wiki.
+    """
+    The community composite for one stat field on one Wiki.
 
     Attributes:
         rounded: Nearest whole star (1-5) for the filled-star display, or
@@ -51,7 +52,8 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         return self.filter(field=field)
 
     def composite(self, wiki: Wiki, field: str, *, viewer_conceals: bool = False, viewer: Profile | None = None) -> WikiStatComposite:
-        """Compute the community composite for ``field`` on ``wiki``.
+        """
+        Compute the community composite for ``field`` on ``wiki``.
 
         Args:
             wiki: The wiki whose votes to aggregate.
@@ -113,7 +115,8 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         return vote.value if vote else None
 
     def cast(self, wiki: Wiki, profile: Profile, field: str, value: int) -> WikiStatVote:
-        """Record ``profile``'s vote of ``value`` on ``field`` for ``wiki``.
+        """
+        Record ``profile``'s vote of ``value`` on ``field`` for ``wiki``.
         One vote per ``(wiki, profile, field)``: re-voting replaces the previous value rather than adding a second ballot.
 
         Args:
@@ -131,7 +134,8 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         return vote
 
     def clear(self, wiki: Wiki, profile: Profile, field: str) -> bool:
-        """Withdraw ``profile``'s vote on ``field`` for ``wiki``.
+        """
+        Withdraw ``profile``'s vote on ``field`` for ``wiki``.
 
         Args:
             wiki: The wiki whose vote to withdraw.

@@ -22,7 +22,8 @@ class SiteSettingsManager(_SiteSettingsManagerBase["SiteSettings"]):
     """Manager for SiteSettings. Use get_current() for the singleton record."""
 
     def get_current(self) -> SiteSettings:
-        """Return (and create if missing) the singleton settings record.
+        """
+        Return (and create if missing) the singleton settings record.
         Memoised for the duration of a request (see :mod:`urbanlens.dashboard.models.site_settings.request_cache`) - the row cannot change mid-request, and this is called several times over on every page.
 
         Returns:

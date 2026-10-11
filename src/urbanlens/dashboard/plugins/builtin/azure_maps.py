@@ -39,7 +39,8 @@ class AzureMapsPanelSource(LocationCachePanelSource):
         return bool(data and (data.get("formatted_address") or data.get("poi")))
 
     def fetch(self, pin: Pin) -> None:
-        """Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
+        """
+        Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
         An empty result is cached explicitly when neither call finds anything, so the panel degrades to quietly absent rather than polling forever; a failed call caches nothing."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations.azure.geocoding import AzureMapsGeocodingGateway
@@ -55,7 +56,8 @@ class AzureMapsPanelSource(LocationCachePanelSource):
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The reverse-geocoded address and nearest POI as an information card, or None.
+        """
+        The reverse-geocoded address and nearest POI as an information card, or None.
         Applies the web panel's emptiness rule, :meth:`has_content`.
 
         Args:
@@ -99,7 +101,8 @@ class AzureMapsNameProvider(NameProvider):
         super().__init__(source="azure_maps", verbose_name="Azure Maps")
 
     def candidates(self, location: Location) -> list[str | None]:
-        """Return the cached nearest-POI name and the reverse-geocoded locality.
+        """
+        Return the cached nearest-POI name and the reverse-geocoded locality.
 
         Args:
             location: The location to name.
@@ -129,7 +132,8 @@ class AzureMapsPlugin(UrbanLensPlugin):
     order: ClassVar[int] = 15
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Azure Maps Search/Geocoding APIs.
+        """
+        Rate-limit defaults for the Azure Maps Search/Geocoding APIs.
         Both product areas share one subscription key and one quota, so they share a single ``azure_maps`` service key/rate-limit row too."""
         return {
             "azure_maps": ServiceDefaults(

@@ -1,4 +1,5 @@
-"""The Places layer: landmarks, national parks and Wikipedia articles near a map click.
+"""
+The Places layer: landmarks, national parks and Wikipedia articles near a map click.
 
 A click is snapped to a grid cell and each source is queried at the cell's centre, so a cached answer
 describes exactly the key it is stored under and neighbouring clicks share it. Each source is cached on
@@ -91,7 +92,8 @@ _US_STATE_CODES: dict[str, str] = {
 
 
 def radius_bucket(requested: int) -> int:
-    """The smallest bucket covering *requested*, or the largest bucket.
+    """
+    The smallest bucket covering *requested*, or the largest bucket.
 
     Args:
         requested: The radius the client asked for, in metres.
@@ -103,7 +105,8 @@ def radius_bucket(requested: int) -> int:
 
 
 def grid_cell(latitude: float, longitude: float) -> tuple[float, float]:
-    """The centre of the grid cell a coordinate falls in.
+    """
+    The centre of the grid cell a coordinate falls in.
 
     Args:
         latitude: WGS-84 latitude.
@@ -116,7 +119,8 @@ def grid_cell(latitude: float, longitude: float) -> tuple[float, float]:
 
 
 def expand_state_codes(states: str) -> str:
-    """Expand comma-separated US state abbreviations to full state names.
+    """
+    Expand comma-separated US state abbreviations to full state names.
 
     Args:
         states: e.g. ``"NY,NJ"``.
@@ -130,7 +134,8 @@ def expand_state_codes(states: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class NearbySources:
-    """Which sources a caller wants.
+    """
+    Which sources a caller wants.
 
     Attributes:
         landmarks: Historical landmarks from REData or Google.
@@ -145,7 +150,8 @@ class NearbySources:
 
 @dataclass(slots=True)
 class NearbyPlaces:
-    """The combined answer.
+    """
+    The combined answer.
 
     Attributes:
         places: Place dicts in the Places layer's marker shape.
@@ -215,7 +221,8 @@ def _wikipedia(latitude: float, longitude: float) -> list[dict[str, Any]]:
 
 
 def find_nearby_places(latitude: float, longitude: float, *, radius: int, sources: NearbySources, caller: str | None, ttl: int) -> NearbyPlaces:
-    """Places near a coordinate from every wanted source, fetched in parallel under one deadline.
+    """
+    Places near a coordinate from every wanted source, fetched in parallel under one deadline.
 
     Args:
         latitude: WGS-84 latitude of the click.

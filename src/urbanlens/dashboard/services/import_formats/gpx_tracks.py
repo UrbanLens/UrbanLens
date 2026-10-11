@@ -42,7 +42,8 @@ class RawTrackPoint(NamedTuple):
 
 
 def track_point(latitude: object, longitude: object, time: datetime | None) -> RawTrackPoint | None:
-    """A track point, or None when its coordinates are not a place on the globe.
+    """
+    A track point, or None when its coordinates are not a place on the globe.
 
     Args:
         latitude: The point's latitude in degrees, as parsed.
@@ -64,7 +65,8 @@ class ParsedRoute(NamedTuple):
     raw_points: list[RawTrackPoint]
 
     def to_json(self) -> dict[str, Any]:
-        """A JSON-serialisable form, without the profile, for :meth:`from_json` to rebuild.
+        """
+        A JSON-serialisable form, without the profile, for :meth:`from_json` to rebuild.
 
         Raw points are kept only when one carries a timestamp, since dwell detection needs nothing else.
 
@@ -91,7 +93,8 @@ class ParsedRoute(NamedTuple):
 
     @classmethod
     def from_json(cls, data: dict[str, Any], profile: Profile) -> ParsedRoute:
-        """Rebuild an unsaved Route for *profile* from :meth:`to_json`'s output.
+        """
+        Rebuild an unsaved Route for *profile* from :meth:`to_json`'s output.
 
         Args:
             data: One serialised route.
@@ -179,7 +182,8 @@ def _build_route(
 
 @untrusted_parse("geo.gpx")
 def gpx_tracks_to_routes(file_contents: bytes | IO[bytes], user_profile: Profile, source_filename: str) -> list[ParsedRoute]:
-    """Parse every ``<trk>`` and ``<rte>`` in a GPX file into unsaved Route instances.
+    """
+    Parse every ``<trk>`` and ``<rte>`` in a GPX file into unsaved Route instances.
 
     Args:
         file_contents: The GPX file, as bytes or a seekable binary file positioned at its start.
@@ -205,7 +209,8 @@ def gpx_tracks_to_routes(file_contents: bytes | IO[bytes], user_profile: Profile
 
 @dataclass
 class GpxContents:
-    """What a GPX file holds for an import.
+    """
+    What a GPX file holds for an import.
 
     Attributes:
         waypoints: One pin dict per ``<wpt>``, in document order.
@@ -218,7 +223,8 @@ class GpxContents:
 
 @untrusted_parse("geo.gpx")
 def read_gpx(file_contents: bytes | IO[bytes], user_profile: Profile, source_filename: str, *, max_waypoints: int | None = None, routes: bool = True) -> GpxContents:
-    """Read a GPX file's waypoints, tracks and routes in one pass, an element at a time.
+    """
+    Read a GPX file's waypoints, tracks and routes in one pass, an element at a time.
 
     Each ``wpt``, ``trkpt`` and ``rtept`` is read by gpxpy's own field parser as it closes, then freed, so the file is
     never held as a tree. defusedxml reads the file, so gpxpy never parses untrusted XML itself.
@@ -250,7 +256,8 @@ def read_gpx(file_contents: bytes | IO[bytes], user_profile: Profile, source_fil
 
 
 def _read_fields[T](cls: type[T], element: Element, version: str) -> T:
-    """Read one element into a gpxpy object with gpxpy's own field parser, as gpxpy reads each element of its tree.
+    """
+    Read one element into a gpxpy object with gpxpy's own field parser, as gpxpy reads each element of its tree.
 
     Args:
         cls: The gpxpy class the element is, e.g. ``GPXTrackPoint``.
@@ -293,7 +300,8 @@ class _GpxReader:
         self._climbed = False
 
     def feed(self, event: str, item: Any) -> None:
-        """Take one iterparse event.
+        """
+        Take one iterparse event.
 
         Args:
             event: ``"start-ns"``, ``"start"`` or ``"end"``.
@@ -389,7 +397,8 @@ class _GpxReader:
 
 
 def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint], profile: Profile) -> int:
-    """Scan a route's raw points for dwells near the profile's own pins and create visits.
+    """
+    Scan a route's raw points for dwells near the profile's own pins and create visits.
 
     Args:
         route: The already-saved Route these points belong to.

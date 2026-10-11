@@ -1,4 +1,5 @@
-"""Tests for the safety check-in archival/encryption pipeline: the PyNaCl seal/secretbox
+"""
+Tests for the safety check-in archival/encryption pipeline: the PyNaCl seal/secretbox
 wire format, archive_checkin's idempotency and no-bundle-yet handling, SafetyContactOptOut
 FK integrity after a contact is scrubbed, and schedule_checkin_archival's immediate-vs-
 grace-window logic.
@@ -138,7 +139,8 @@ class ArchiveCheckinTests(TestCase):
         self.assertEqual(SafetyCheckinArchive.objects.filter(checkin=self.checkin).count(), 1)
 
     def test_email_only_contact_email_is_replaced_not_nulled(self):
-        """Regression guard: nulling email on a contact with no linked profile would
+        """
+        Regression guard: nulling email on a contact with no linked profile would
         violate SafetyCheckinContact's exactly-one-of(contact_profile, email) CheckConstraint.
         """
         _enroll(self.owner)
@@ -290,7 +292,8 @@ class ArchiveCheckinFailureCapTests(TestCase):
 
 
 class ChatBlockedAfterArchivalTests(TestCase):
-    """create_chat_message must reject new messages once a checkin is archived -
+    """
+    create_chat_message must reject new messages once a checkin is archived -
     otherwise plaintext could keep accumulating in SafetyCheckinMessage.body with no
     re-archival trigger to ever scrub it again.
     """
@@ -391,7 +394,8 @@ class MapAttachViewRejectsPrimaryMapTests(TestCase):
 
 
 class ScheduleCheckinArchivalTests(TestCase):
-    """schedule_checkin_archival picks immediate vs. +1h archival correctly across
+    """
+    schedule_checkin_archival picks immediate vs. +1h archival correctly across
     every combination of accepted-partner/contact presence.
     """
 
@@ -469,7 +473,8 @@ class ArchivedCheckinDetailViewTests(TestCase):
 
 
 class ArchiveCountdownRenderingTests(TestCase):
-    """The detail page shows a countdown once resolved-with-viewers, and switches to the
+    """
+    The detail page shows a countdown once resolved-with-viewers, and switches to the
     locked notice only once actually archived - never both, never neither.
     """
 

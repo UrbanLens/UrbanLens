@@ -1,4 +1,5 @@
-"""JSON nested past the interpreter's recursion limit is a 400 wherever a client can send it, and changes nothing (P195).
+"""
+JSON nested past the interpreter's recursion limit is a 400 wherever a client can send it, and changes nothing (P195).
 
 ``json.loads`` raises ``RecursionError`` on it, which is not a ``ValueError``, so an ``except ValueError`` around the
 decode let it through as a 500. Each route here is reached as its owner, so the request gets as far as the decode.

@@ -39,7 +39,8 @@ def official_geometry(
     parent: Place | None = None,
     relation: str = PlaceRelation.PART_OF,
 ) -> Place:
-    """Give a location official geometry, the way the provider chain would.
+    """
+    Give a location official geometry, the way the provider chain would.
 
     Args:
         location: The location the geometry was fetched for.
@@ -59,7 +60,8 @@ def official_geometry(
 
 
 def nest_by_containment(place: Place) -> Place:
-    """Attach a place to whichever existing place geometrically encloses it.
+    """
+    Attach a place to whichever existing place geometrically encloses it.
 
     Only a test convenience: it reproduces the lineage the provider chain builds for real (a footprint
     ``PART_OF`` the parcel around it) without having to spell it out at every call site.

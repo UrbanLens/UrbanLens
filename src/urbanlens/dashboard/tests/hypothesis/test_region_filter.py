@@ -193,7 +193,8 @@ class FilterCriteriaRegionSerializationTests(TestCase):
 
 
 class FiltersTabViewRenderingTests(TestCase):
-    """Smoke tests that the new Filters tab and region-search views actually render.
+    """
+    Smoke tests that the new Filters tab and region-search views actually render.
 
     Template-syntax checks alone (get_template) don't catch context bugs like a bad attribute lookup or a
     missing context var - these hit the real views end-to-end with a logged-in client."""
@@ -294,7 +295,8 @@ class SavedFilterLabelPickerTests(TestCase):
 
 
 class PinListBoundaryDrawButtonTests(TestCase):
-    """A pin list with no smart_boundary yet must expose a way to draw a first one,
+    """
+    A pin list with no smart_boundary yet must expose a way to draw a first one,
     not just a "Clear" button that only appears once a boundary already exists."""
 
     def setUp(self) -> None:

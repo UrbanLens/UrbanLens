@@ -46,7 +46,8 @@ class ContributionSignalTests(TestCase):
         self.assertEqual(rows[0].wiki_id, self.wiki.pk)
 
     def test_a_materialised_external_photo_records_nothing(self) -> None:
-        """`Image.profile` is the up-voter on those rows, not the photographer.
+        """
+        `Image.profile` is the up-voter on those rows, not the photographer.
 
         Writing a row here would credit somebody for another person's work, and
         a bulk import would credit the importer hundreds of times over.
@@ -125,7 +126,8 @@ class RevertSignalTests(TestCase):
         self.assertTrue(self._event().retracted)
 
     def test_reverting_the_revert_restores_it(self) -> None:
-        """`WikiEdit.reverted` is current state - a revert-of-a-revert clears it.
+        """
+        `WikiEdit.reverted` is current state - a revert-of-a-revert clears it.
 
         So retraction has to be re-applicable in both directions rather than a
         one-way subtraction.

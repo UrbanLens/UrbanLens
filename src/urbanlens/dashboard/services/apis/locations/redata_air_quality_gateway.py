@@ -1,4 +1,5 @@
-"""Gateway for REData's ``/air-quality/`` near-a-coordinate endpoint.
+"""
+Gateway for REData's ``/air-quality/`` near-a-coordinate endpoint.
 Two keyless providers answering the same question differently, returned side by side rather than reconciled:"""
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ class RedataAirQualityGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch air-quality readings near a coordinate.
+        """
+        Fetch air-quality readings near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

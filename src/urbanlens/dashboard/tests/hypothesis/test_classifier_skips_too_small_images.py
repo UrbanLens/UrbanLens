@@ -1,4 +1,5 @@
-"""An analysis copy too small for Cloudflare's classifier is refused before it is sent, and the refusal is counted (P324).
+"""
+An analysis copy too small for Cloudflare's classifier is refused before it is sent, and the refusal is counted (P324).
 
 ResNet-50 on Workers AI answers an image under 4x4 pixels with HTTP 400, code 3011, "image too small" (P320), and that
 call still costs a request. The analysis copy is downscaled to 512 px on its long side, so a tiny original or a wide

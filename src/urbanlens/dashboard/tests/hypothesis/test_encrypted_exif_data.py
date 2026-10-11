@@ -77,7 +77,8 @@ class UndecryptableExifDataTests(TestCase):
         self.assertEqual(image.exif_data.get("Make"), None)
 
     def test_saving_the_row_does_not_destroy_the_ciphertext(self) -> None:
-        """The gap UndecryptableValue leaves for nullable fields, closed for this one.
+        """
+        The gap UndecryptableValue leaves for nullable fields, closed for this one.
 
         Without it, any save for an unrelated reason overwrites the still- recoverable ciphertext with the
         degraded default - and for this column there is no file left to re-extract it from."""

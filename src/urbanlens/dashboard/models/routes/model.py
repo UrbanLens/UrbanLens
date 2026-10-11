@@ -29,7 +29,8 @@ class RouteSource(TextChoices):
 
 
 class Route(abstract.FrontendDashboardModel):
-    """A recorded path a profile travelled, imported from GPX or Google Takeout.
+    """
+    A recorded path a profile travelled, imported from GPX or Google Takeout.
     The stored ``path`` is a simplified polyline (see ``services.import_formats.route_geometry.simplify_and_measure``) - raw GPS points are not retained after import.
     ``distance_meters`` is computed from the raw points before simplification, so it remains accurate regardless of how aggressively the display geometry was simplified.
 
@@ -75,7 +76,8 @@ class Route(abstract.FrontendDashboardModel):
     objects = RouteManager()
 
     def __str__(self) -> str:
-        """Return a human-readable description of this route.
+        """
+        Return a human-readable description of this route.
 
         Returns:
             The route's name, or a fallback describing its source and date.

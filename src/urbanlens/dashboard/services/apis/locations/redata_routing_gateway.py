@@ -1,4 +1,5 @@
-"""Gateway for REData's ``POST /routes/`` - route between waypoints.
+"""
+Gateway for REData's ``POST /routes/`` - route between waypoints.
 Not cacheable (a route is a function of its waypoint list, an unbounded space), so unlike every other gateway in this package this is a plain passthrough with no REData-side cache to lean on."""
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ class RedataRoutingGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_routing"
 
     def get_route(self, waypoints: list[tuple[float, float]], *, capability: RoutingCapability = "as_given", profile: RoutingProfile = "driving") -> dict[str, Any] | None:
-        """Route between an ordered list of waypoints.
+        """
+        Route between an ordered list of waypoints.
 
         Args:
             waypoints: Ordered ``(latitude, longitude)`` pairs, 2-20 per

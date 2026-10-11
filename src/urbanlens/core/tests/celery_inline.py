@@ -1,4 +1,5 @@
-"""Run selected Celery tasks inline, for tests whose subject *is* the task's effect.
+"""
+Run selected Celery tasks inline, for tests whose subject *is* the task's effect.
 
 Most tests want an enqueued task to stay enqueued: they assert a request returned quickly and
 handed work off, and stub ``safely_enqueue_task`` to check that it did. A few are the opposite -
@@ -45,7 +46,8 @@ if TYPE_CHECKING:
 
 @contextmanager
 def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
-    """Execute the given Celery tasks synchronously when they are enqueued.
+    """
+    Execute the given Celery tasks synchronously when they are enqueued.
 
     Any other task enqueued while this is active is recorded and skipped, exactly as it would be with no worker
     running.
@@ -103,7 +105,8 @@ def tasks_run_inline(*tasks) -> Iterator[mock.MagicMock]:
 
 @contextmanager
 def broadcasts_delivered_inline() -> Iterator[mock.MagicMock]:
-    """Run channel-layer broadcast tasks immediately instead of enqueueing them.
+    """
+    Run channel-layer broadcast tasks immediately instead of enqueueing them.
 
     The common case of :func:`tasks_run_inline` - see this module's docstring for why a consumer test needs it.
 
@@ -117,7 +120,8 @@ def broadcasts_delivered_inline() -> Iterator[mock.MagicMock]:
 
 @contextmanager
 def notification_emails_sent() -> Iterator[mock.MagicMock]:
-    """Send the notification emails queued inside the block, as a worker would once the write commits.
+    """
+    Send the notification emails queued inside the block, as a worker would once the write commits.
 
     Yields:
         The patched ``safely_enqueue_task`` mock."""

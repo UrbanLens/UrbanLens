@@ -52,7 +52,8 @@ class GetSunTimesTests(SimpleTestCase):
 
 
 class WeatherPanelSunTimesTests(TestCase):
-    """The weather panel's *direct-provider* path.
+    """
+    The weather panel's *direct-provider* path.
 
     Both the forecast and the sun-times lookup now go through ``weather_resolution``, which asks REData first
     whenever it is configured and only then falls back to OpenWeatherMap/Open-Meteo."""
@@ -110,7 +111,8 @@ class WeatherPanelSunTimesTests(TestCase):
         self.assertNotContains(response, "wx-sun-times")
 
     def test_sun_times_fetched_even_when_openweathermap_serves_the_forecast(self) -> None:
-        """OpenWeatherMap's 5-day/3-hour forecast has no sunrise/sunset field,
+        """
+        OpenWeatherMap's 5-day/3-hour forecast has no sunrise/sunset field,
         so sun times must still come from Open-Meteo even on that path."""
         sun_times = {
             "sunrise": datetime.fromisoformat("2026-06-15T05:32"),

@@ -1,4 +1,5 @@
-"""Who is on a trip: inviting, joining, leaving, RSVPs, and organizer status.
+"""
+Who is on a trip: inviting, joining, leaving, RSVPs, and organizer status.
 The cross-cutting obligations a caller must never skip are enforced here:"""
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ NOT_A_MEMBER = "You are not a member of this trip."
 
 
 def resolve_trip_member(trip: Trip, *, profile_id: int | str | None = None, slug: str | None = None) -> Profile:
-    """Resolve a target member of *trip*, scoped to that trip's own roster.
+    """
+    Resolve a target member of *trip*, scoped to that trip's own roster.
     Lookups here never leave the trip: a real profile that simply isn't on this trip is indistinguishable from one that doesn't exist.
 
     Args:
@@ -75,7 +77,8 @@ def resolve_trip_member(trip: Trip, *, profile_id: int | str | None = None, slug
 
 
 def require_trip_creator(trip: Trip, actor: Profile, message: str = ORGANIZER_DENIED) -> None:
-    """Raise unless *actor* is the trip's creator.
+    """
+    Raise unless *actor* is the trip's creator.
     Called before :func:`resolve_trip_member` on the organizer endpoints so a non-creator is refused identically whether or not the member they named exists - the permission answer must not depend on the target.
 
     Args:
@@ -90,7 +93,8 @@ def require_trip_creator(trip: Trip, actor: Profile, message: str = ORGANIZER_DE
 
 
 def list_members(trip: Trip, viewer: Profile) -> list[TripMembership]:
-    """Return the trip's memberships with each member's identity resolved for *viewer*.
+    """
+    Return the trip's memberships with each member's identity resolved for *viewer*.
 
     Args:
         trip: The trip whose roster is wanted.
@@ -111,7 +115,8 @@ def list_members(trip: Trip, viewer: Profile) -> list[TripMembership]:
 
 
 def notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None:
-    """Send an ADDED_TO_TRIP notification, respecting the invitee's delivery preference.
+    """
+    Send an ADDED_TO_TRIP notification, respecting the invitee's delivery preference.
 
     Args:
         inviter: The profile who added *invitee*.
@@ -145,7 +150,8 @@ def notify_added_to_trip(inviter: Profile, invitee: Profile, trip: Trip) -> None
 
 
 def suggest_connections_for_new_member(new_member: Profile, existing_members: Iterable[Profile]) -> None:
-    """Soft-introduce a newly added trip member to existing members they aren't friends with.
+    """
+    Soft-introduce a newly added trip member to existing members they aren't friends with.
     Both sides must allow friend recommendations (see ``services.social.connections.recommendable_strangers``) - never presumes on anyone's behalf, just makes an already-opted-in connection discoverable.
 
     Args:
@@ -158,7 +164,8 @@ def suggest_connections_for_new_member(new_member: Profile, existing_members: It
 
 
 def addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
-    """The viewer's friends not already on this trip, for the add-member picker.
+    """
+    The viewer's friends not already on this trip, for the add-member picker.
     Empty unless the viewer currently has permission to add members, so the picker reflects the trip's "Allow members to add people" setting instead of only ever working for the creator.
 
     Args:
@@ -178,7 +185,8 @@ def addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
 
 
 def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[TripMembership, bool]:
-    """Invite a user to the trip by their username.
+    """
+    Invite a user to the trip by their username.
     Idempotent: re-inviting someone already on the roster returns their existing membership with ``created`` False and sends no second notification, so a client retrying an unacknowledged invite is harmless.
 
     Args:
@@ -228,7 +236,8 @@ def add_member_by_username(trip: Trip, actor: Profile, username: str) -> tuple[T
 
 
 def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
-    """Remove a member from a trip.
+    """
+    Remove a member from a trip.
     Members may remove themselves; only the creator may remove anyone else.
 
     Args:
@@ -252,7 +261,8 @@ def remove_member(trip: Trip, actor: Profile, target: Profile) -> None:
 
 
 def set_member_organizer(trip: Trip, actor: Profile, target: Profile, *, is_organizer: bool) -> TripMembership:
-    """Set (not toggle) a member's organizer flag.
+    """
+    Set (not toggle) a member's organizer flag.
     An explicit target value rather than a toggle: a mobile client retrying a request it never saw acknowledged would otherwise flip the flag back.
 
     Args:
@@ -282,7 +292,8 @@ def set_member_organizer(trip: Trip, actor: Profile, target: Profile, *, is_orga
 
 
 def join_trip(trip: Trip, profile: Profile) -> None:
-    """Accept a trip invitation, unlocking contribution rights.
+    """
+    Accept a trip invitation, unlocking contribution rights.
     Separate from RSVP, which only says whether the member expects to show up.
 
     Args:
@@ -297,7 +308,8 @@ def join_trip(trip: Trip, profile: Profile) -> None:
 
 
 def leave_trip(trip: Trip, profile: Profile) -> None:
-    """Leave a trip, or decline an invitation that was never accepted.
+    """
+    Leave a trip, or decline an invitation that was never accepted.
 
     Args:
         trip: The trip being left.
@@ -315,7 +327,8 @@ def leave_trip(trip: Trip, profile: Profile) -> None:
 
 
 def set_trip_rsvp(trip: Trip, profile: Profile, rsvp: str | None) -> TripMembership:
-    """Set or clear the profile's trip-wide RSVP.
+    """
+    Set or clear the profile's trip-wide RSVP.
 
     Args:
         trip: The trip being answered.

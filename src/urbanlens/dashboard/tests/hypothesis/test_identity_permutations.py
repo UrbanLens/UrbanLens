@@ -1,4 +1,5 @@
-"""Every spelling of a username or of one of an account's addresses names that account, everywhere one is typed.
+"""
+Every spelling of a username or of one of an account's addresses names that account, everywhere one is typed.
 
 Registration refuses any spelling of a name or address another account holds; login, invitations and user search
 accept any spelling of the primary address, of each verified secondary, and of the username.

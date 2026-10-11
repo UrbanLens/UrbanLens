@@ -1,4 +1,5 @@
-"""Broadcast helpers for GameSessionConsumer's channel-layer group.
+"""
+Broadcast helpers for GameSessionConsumer's channel-layer group.
 Binds ``services.core.session_realtime.SessionBroadcaster``, shared by every participant-session game."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
-"""Media archive plugins: providers for the Private Pin page's combined Media gallery.
+"""
+Media archive plugins: providers for the Private Pin page's combined Media gallery.
 Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.DocumentMediaPanelSource`, which the gallery fetches independently so a slow provider never blocks the others.
 The books and scans a provider finds are listed under Article > Sources; a REData archive's only from what its gallery search cached (``fetched_for_sources=False``)."""
 

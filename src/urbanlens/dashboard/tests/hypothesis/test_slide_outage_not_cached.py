@@ -89,7 +89,8 @@ class SlideOutageCachingTests(TestCase):
 
 
 class DegradationReachesTheCallerTests(TestCase):
-    """The provider-level cache skip was only half the rule.
+    """
+    The provider-level cache skip was only half the rule.
 
     A two-minute outage emptied the carousel for the rest of the day."""
 

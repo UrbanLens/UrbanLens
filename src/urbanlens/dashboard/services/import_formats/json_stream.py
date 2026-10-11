@@ -1,4 +1,5 @@
-"""Reading a JSON import a value at a time, so the document is never built whole.
+"""
+Reading a JSON import a value at a time, so the document is never built whole.
 
 ``json.loads`` on a Takeout export holds Python objects several times the file's size, and an import preview entry
 may be up to 1 GB. ijson's C backend reads the file in chunks and builds one array item at a time.
@@ -34,7 +35,8 @@ class MalformedJSONError(ValueError):
 
 
 class _StrictWhitespace:
-    """A JSON file whose reads refuse a vertical tab or form feed, which yajl reads as whitespace and JSON does not.
+    """
+    A JSON file whose reads refuse a vertical tab or form feed, which yajl reads as whitespace and JSON does not.
 
     Neither byte can be part of a UTF-8 sequence, or stand unescaped inside a JSON string.
     """
@@ -51,7 +53,8 @@ class _StrictWhitespace:
 
 @untrusted_parse("json.stream")
 def top_level_keys(stream: IO[bytes]) -> set[str] | None:
-    """The keys of the object a JSON file holds, reading the whole file but building none of it.
+    """
+    The keys of the object a JSON file holds, reading the whole file but building none of it.
 
     Args:
         stream: A seekable file positioned at its start. A byte-order mark and leading whitespace are skipped.
@@ -72,7 +75,8 @@ def top_level_keys(stream: IO[bytes]) -> set[str] | None:
 
 @untrusted_parse("json.stream")
 def top_level_value_kind(stream: IO[bytes], key: str) -> str | None:
-    """What a top-level JSON object holds under *key*, reading only as far as the key.
+    """
+    What a top-level JSON object holds under *key*, reading only as far as the key.
 
     Args:
         stream: A seekable file positioned at its start. A byte-order mark and leading whitespace are skipped.
@@ -102,7 +106,8 @@ def top_level_value_kind(stream: IO[bytes], key: str) -> str | None:
 
 @untrusted_parse("json.stream")
 def iter_array_items(stream: IO[bytes], key: str) -> Iterator[Any]:
-    """Each item of the array a top-level JSON object holds under *key*, built one at a time.
+    """
+    Each item of the array a top-level JSON object holds under *key*, built one at a time.
 
     Numbers come back as ``int`` and ``float``, as ``json.loads`` returns them.
 
@@ -125,7 +130,8 @@ def iter_array_items(stream: IO[bytes], key: str) -> Iterator[Any]:
 
 @untrusted_parse("json.stream")
 def iter_geojson_features(stream: IO[bytes]) -> Iterator[Any]:
-    """Each item of a GeoJSON file's ``features`` array, as :func:`iter_array_items` builds it, but compact.
+    """
+    Each item of a GeoJSON file's ``features`` array, as :func:`iter_array_items` builds it, but compact.
 
     A geometry's array of positions - every item a list of two or three numbers - arrives as one ``float64`` array of
     shape ``(n, 2)`` or ``(n, 3)``, where a list of lists costs about seven times its text. Any other array under
@@ -249,7 +255,8 @@ class _PositionArray:
 
 
 def _read[T](stream: IO[bytes], read: Callable[[Any, _StrictWhitespace], Iterator[T]]) -> Iterator[T]:
-    """What *read* makes of *stream* through yajl, or through ijson's own parser once yajl meets a wide integer.
+    """
+    What *read* makes of *stream* through yajl, or through ijson's own parser once yajl meets a wide integer.
 
     The re-read starts where the first did and skips what the first already produced.
     """

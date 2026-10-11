@@ -1,4 +1,5 @@
-"""A stranger's places must not cost a viewer anything.
+"""
+A stranger's places must not cost a viewer anything.
 
 ``accessible_domain_ids`` runs on every wiki page, every wiki-scoped API call
 and - via ``services.media.access`` - every request for a photo the viewer does
@@ -38,7 +39,8 @@ from .test_places_campus import make_place, square
 
 
 def _earn_aggregates_site_wide(domains: set[int]) -> set[int]:
-    """The pre-2026-09-12 implementation, kept as the oracle for the new one.
+    """
+    The pre-2026-09-12 implementation, kept as the oracle for the new one.
 
     Reads every aggregate on the site and every member row beneath one, then
     sweeps to a fixpoint. Correct, and the reason this file exists.
@@ -172,7 +174,8 @@ class EarningAgreesWithTheSiteWideSweepTests(TestCase):
 
 
 class DeepLineageConvergesTests(TestCase):
-    """One tier per round, and a ceiling that says so when it is hit.
+    """
+    One tier per round, and a ceiling that says so when it is hit.
 
     The sweep this replaced could resolve several tiers in a single pass, since
     it re-read every aggregate each time and dict order decided what it saw

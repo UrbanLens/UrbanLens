@@ -7,7 +7,8 @@ from urbanlens.dashboard.models.links.model import PinLink, WikiLink
 
 @receiver(post_save, sender=PinLink, dispatch_uid="pin_link_archive_wayback")
 def archive_pin_link(sender: type[PinLink], instance: PinLink, created: bool, **kwargs) -> None:
-    """Queue a best-effort Wayback Machine archive for a newly added pin link.
+    """
+    Queue a best-effort Wayback Machine archive for a newly added pin link.
 
     A confirmed import can create many PinLinks at once (one per link extracted from each
     pin's description) - ``enqueue_follow_on`` coalesces those into bounded chunks inside a

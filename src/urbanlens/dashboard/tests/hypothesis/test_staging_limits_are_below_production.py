@@ -1,4 +1,5 @@
-"""Staging and production share a host, so staging's limits have to lose to it.
+"""
+Staging and production share a host, so staging's limits have to lose to it.
 
 Measured on damballa on 2026-09-11: `urbanlens_staging_app` and
 `urbanlens_staging_db` each carried `CpuShares: 2048`, while every production
@@ -42,7 +43,8 @@ _NESTED_DEFAULT = re.compile(r"\$\{[A-Z_]+:-([^}]+)\}")
 
 
 def _compose_defaults() -> dict[str, str]:
-    """Every resource variable `docker-compose.yml` reads, with its default.
+    """
+    Every resource variable `docker-compose.yml` reads, with its default.
 
     Returns:
         Variable name to default value, with the nested ``${CPU_LIMIT:-n}``
@@ -57,7 +59,8 @@ def _compose_defaults() -> dict[str, str]:
 
 
 def _sample_values() -> dict[str, str]:
-    """The staging overrides, parsed.
+    """
+    The staging overrides, parsed.
 
     Returns:
         Variable name to value.
@@ -72,7 +75,8 @@ def _sample_values() -> dict[str, str]:
 
 
 def _as_number(value: str) -> float:
-    """One limit as a comparable number.
+    """
+    One limit as a comparable number.
 
     Args:
         value: A share count, a CPU count, or a memory size like ``512m``.
@@ -123,7 +127,8 @@ class StagingLosesToProductionTests(SimpleTestCase):
                 )
 
     def test_every_staging_weight_is_below_an_unset_container(self) -> None:
-        """Against 1024, not against the file's default.
+        """
+        Against 1024, not against the file's default.
 
         Production's containers carry no `cpu_shares` at all, so halving a 2048
         default gives staging a tie rather than a loss - which is precisely the

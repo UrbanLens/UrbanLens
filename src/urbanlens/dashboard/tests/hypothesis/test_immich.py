@@ -100,7 +100,8 @@ class EncryptedTextFieldTests(TestCase):
         self.assertEqual(account.api_key, "s3cret-key")
 
     def test_key_is_derived_from_djangos_stable_secret_key_not_appsettings(self) -> None:
-        """Regression test: the Fernet key must come from Django's SECRET_KEY.
+        """
+        Regression test: the Fernet key must come from Django's SECRET_KEY.
 
         AppSettings.secret_key (a separate pydantic field, env var UL_SECRET_KEY) has no wired env var in any
         deployment of this app and silently falls back to a fresh random value in every process - using it here
@@ -353,7 +354,8 @@ class ImmichSettingsViewTests(TestCase):
 
 
 def _corrupt_api_key(account: ImmichAccount) -> None:
-    """Overwrite a stored api_key with ciphertext that will never decrypt.
+    """
+    Overwrite a stored api_key with ciphertext that will never decrypt.
 
     Simulates the real-world failure mode (a field-encryption-key change)
     without needing to actually swap keys process-wide.
@@ -449,7 +451,8 @@ class ImmichLibraryScanStartViewTests(TestCase):
 
 
 class ImmichLibraryScanResumeTests(TestCase):
-    """The active scan task id survives navigation, so a page reload can resume polling
+    """
+    The active scan task id survives navigation, so a page reload can resume polling
     instead of only ever offering a fresh "start scan" button (see get_active_scan_task_id)."""
 
     def setUp(self) -> None:
@@ -889,7 +892,8 @@ class SweepImmichLibraryLocationsTaskTests(TestCase):
         self.assertTrue(any("so far" in message for message in messages))
 
     def test_undecryptable_account_is_a_noop_not_a_crash(self) -> None:
-        """Regression test for the InvalidToken crash seen in production (see tasks.py).
+        """
+        Regression test for the InvalidToken crash seen in production (see tasks.py).
 
         This is the exact traceback reported: sweep_immich_library_locations raised
         cryptography.fernet.InvalidToken instead of failing gracefully, because the account had been connected

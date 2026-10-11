@@ -1,4 +1,5 @@
-r"""Detect coordinates and street addresses in direct-message text.
+r"""
+Detect coordinates and street addresses in direct-message text.
 Typing a place into a chat is sharing it, so it must count in the sender's reshare chain exactly like an explicit pin share."""
 
 from __future__ import annotations
@@ -96,7 +97,8 @@ def _dms_to_decimal(degrees: str, minutes: str, seconds: str | None, hemisphere:
 
 
 def parse_coordinates(text: str) -> list[CoordinateMatch]:
-    r"""Extract every coordinate pair from free-form text.
+    r"""
+    Extract every coordinate pair from free-form text.
     Formats are tried most-specific first (URLs, DMS, hemisphere-suffixed decimals, then plain decimal pairs) and overlapping matches are dropped, so "40°42'46\"N 74°00'22\"W" never double-matches its embedded numbers.
 
     Args:
@@ -141,7 +143,8 @@ def parse_coordinates(text: str) -> list[CoordinateMatch]:
 
 
 def parse_addresses(text: str) -> list[str]:
-    """Extract street-address-looking substrings from free-form text.
+    """
+    Extract street-address-looking substrings from free-form text.
 
     Args:
         text: The message body to scan.
@@ -162,7 +165,8 @@ def parse_addresses(text: str) -> list[str]:
 
 
 def _record_mention(message: DirectMessage, location: Location, kind: str, matched_text: str) -> DirectMessageLocationMention | None:
-    """Create the mention row (and, when it counts, the DM_DETECTED share) for one place.
+    """
+    Create the mention row (and, when it counts, the DM_DETECTED share) for one place.
 
     Args:
         message: The message the place was detected in.
@@ -231,7 +235,8 @@ def _record_mention(message: DirectMessage, location: Location, kind: str, match
 
 
 def detect_coordinate_mentions(message: DirectMessage) -> list[DirectMessageLocationMention]:
-    """Scan a message for coordinates and record mentions/shares.
+    """
+    Scan a message for coordinates and record mentions/shares.
 
     Args:
         message: The just-created message (plaintext; encrypted bodies skip).
@@ -257,7 +262,8 @@ def detect_coordinate_mentions(message: DirectMessage) -> list[DirectMessageLoca
 
 
 def _geocode_address(address: str) -> tuple[float, float] | None:
-    """Forward-geocode one address candidate to coordinates.
+    """
+    Forward-geocode one address candidate to coordinates.
     Only street-level results are accepted - a bare city/region match means the candidate wasn't really a street address.
 
     Args:
@@ -295,7 +301,8 @@ def _geocode_address(address: str) -> tuple[float, float] | None:
 
 
 def detect_address_mentions(message: DirectMessage) -> list[DirectMessageLocationMention]:
-    """Scan a message for street addresses and record mentions/shares.
+    """
+    Scan a message for street addresses and record mentions/shares.
     Forward-geocodes each candidate, so this belongs in a Celery task (``tasks.detect_dm_address_mentions``), never in the request path.
 
     Args:

@@ -1,4 +1,5 @@
-"""External-API routes for pin-detail panels.
+"""
+External-API routes for pin-detail panels.
 
 Endpoints here are therefore job-shaped rather than resource-shaped - ask for a panel, get either a
 cached result or a pending marker, poll - and every route must keep the per-plugin rate limiting and

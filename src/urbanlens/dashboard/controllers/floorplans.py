@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def _building_place(pin: Pin) -> Place | None:
-    """The building place a pin's floorplan belongs to.
+    """
+    The building place a pin's floorplan belongs to.
 
     A multi-building parcel has no single plan - each building carries its own, so the editor offers a
     picker instead (see :func:`_building_choices`).
@@ -43,7 +44,8 @@ def _building_place(pin: Pin) -> Place | None:
 
 
 def _building_choices(pin: Pin) -> list[dict]:
-    """The buildings on a pin's parcel that a floorplan could belong to.
+    """
+    The buildings on a pin's parcel that a floorplan could belong to.
 
     Each entry names the child pin covering that building when there is one, so the picker can send the
     user to the marker they already have rather than a bare place.
@@ -69,7 +71,8 @@ def _building_choices(pin: Pin) -> list[dict]:
 
 
 def _parse_bbox(raw: str | None) -> tuple[float, float, float, float] | None:
-    """Parse a ``min_lng,min_lat,max_lng,max_lat`` viewport filter.
+    """
+    Parse a ``min_lng,min_lat,max_lng,max_lat`` viewport filter.
 
     Raises:
         ValueError: Malformed, or with a minimum exceeding its maximum - which would silently match
@@ -108,7 +111,8 @@ def _parse_uuid(raw: object) -> uuid.UUID | None:
 
 
 def _building_outline(pin: Pin) -> list[list[float]]:
-    """The building's footprint as a ring of ``[lat, lng]`` pairs, or empty.
+    """
+    The building's footprint as a ring of ``[lat, lng]`` pairs, or empty.
 
     Handed to the editor so a new floor can start from the real exterior instead of asking someone to
     trace a wall they can already see.
@@ -148,7 +152,8 @@ class FloorplanJsonView(LoginRequiredMixin, View):
     """GET /map/pin/<pin_slug>/floorplan/json/ - the plan document, resolved by date."""
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        """Return the pin's building floorplan as a document, or 204 when none.
+        """
+        Return the pin's building floorplan as a document, or 204 when none.
 
         Args:
             request: May carry ``?date=YYYY-MM-DD`` to resolve a historical version.
@@ -215,7 +220,8 @@ def _document_for_version(place: Place, profile, version_uuid: uuid.UUID) -> dic
 
 
 class FloorplanFeaturesView(LoginRequiredMixin, View):
-    """GET /map/pin/<pin_slug>/floorplan/features/ - drawable items as GeoJSON.
+    """
+    GET /map/pin/<pin_slug>/floorplan/features/ - drawable items as GeoJSON.
 
     The map-facing counterpart to the document endpoint, for renderers and for any other software that
     speaks GeoJSON.
@@ -225,7 +231,8 @@ class FloorplanFeaturesView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        """Return a GeoJSON FeatureCollection, or 204 when there is no plan.
+        """
+        Return a GeoJSON FeatureCollection, or 204 when there is no plan.
 
         Returns:
             JsonResponse with the collection; 400 when a filter is malformed.
@@ -286,7 +293,8 @@ class FloorplanSaveView(LoginRequiredMixin, View):
     """POST /map/pin/<pin_slug>/floorplan/save/ - write the edited document."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        """Persist a full floorplan document for the pin's building.
+        """
+        Persist a full floorplan document for the pin's building.
 
         Args:
             request: JSON body holding the document; ``date`` inside it names the version being written.
@@ -364,7 +372,8 @@ class FloorplanPublishView(LoginRequiredMixin, View):
     """POST /map/pin/<pin_slug>/floorplan/publish/ - share a plan on the wiki."""
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        """Copy the named version onto the place's community wiki.
+        """
+        Copy the named version onto the place's community wiki.
 
         Returns:
             JsonResponse with the published document, 404 when the version isn't the caller's, or 409 when
@@ -400,7 +409,8 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
     template_name = "dashboard/pages/floorplans/editor.html"
 
     def get_context_data(self, **kwargs):
-        """Editor context: the pin, its building place, and its overlays.
+        """
+        Editor context: the pin, its building place, and its overlays.
 
         Returns:
             Context with ``pin``, ``place`` (may be None - the page explains), and the pin's georeferenced

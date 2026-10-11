@@ -1,4 +1,5 @@
-"""Four unauthenticated proxies wrote third-party bytes into the shared Dragonfly.
+"""
+Four unauthenticated proxies wrote third-party bytes into the shared Dragonfly.
 
 `RedataMediaProxyMixin.serve_media` downloads a file from REData and does
 `cache.set(cache_key, original, 3600)` with no size bound, into the same shared
@@ -55,7 +56,8 @@ class TheProxyCachesOnlyWhatItShouldTests(RedataConfiguredMixin, TestCase):
             return self.client.get(self.url)
 
     def test_an_ordinary_photo_is_served_and_cached(self) -> None:
-        """The positive half. Without it, the refusal test below would pass just
+        """
+        The positive half. Without it, the refusal test below would pass just
         as well against a proxy that had stopped caching altogether."""
         # Read back rather than mocking `set`: the download is kept by the thread that fetched it, and
         # `caches[...]` hands each thread its own client over the same store.
@@ -66,7 +68,8 @@ class TheProxyCachesOnlyWhatItShouldTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(bounded_cache.get_or_none(_CACHE_KEY, label="test"), (b"x" * 1024, "image/jpeg"))
 
     def test_an_oversized_body_is_still_served(self) -> None:
-        """The failure that would be worse than the bug: bounding the cache by
+        """
+        The failure that would be worse than the bug: bounding the cache by
         refusing the request."""
         from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
 
@@ -86,7 +89,8 @@ class TheProxyCachesOnlyWhatItShouldTests(RedataConfiguredMixin, TestCase):
         self.assertIsNone(bounded_cache.get_or_none(_CACHE_KEY, label="test"))
 
     def test_the_ceiling_is_larger_than_the_thumbnail_default(self) -> None:
-        """These are scanned PDFs and TIFFs. Inheriting the thumbnail ceiling
+        """
+        These are scanned PDFs and TIFFs. Inheriting the thumbnail ceiling
         would refuse to cache almost all of them, turning every view into a
         fresh REData download - a different resource spent, not a saving."""
         from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_MAX_CACHED_BYTES
@@ -96,7 +100,8 @@ class TheProxyCachesOnlyWhatItShouldTests(RedataConfiguredMixin, TestCase):
 
 
 class TheProxyIsRateLimitedTests(TestCase):
-    """The how-many half. Without it the per-entry ceiling bounds one entry.
+    """
+    The how-many half. Without it the per-entry ceiling bounds one entry.
 
     Asserted off the URLconf rather than by making six hundred requests: a
     behavioural test at this limit is slow, and - worse - a route somebody
@@ -124,7 +129,8 @@ class TheProxyIsRateLimitedTests(TestCase):
                 self.assertEqual(getattr(view, "throttle_rate", None), REDATA_MEDIA_RATE)
 
     def test_a_get_is_counted(self) -> None:
-        """`throttled` counted only unsafe methods, which for a download proxy
+        """
+        `throttled` counted only unsafe methods, which for a download proxy
         is every method but the one that matters."""
         for name, kwargs in self.ROUTES:
             with self.subTest(name):
@@ -133,7 +139,8 @@ class TheProxyIsRateLimitedTests(TestCase):
                 )
 
     def test_the_rate_is_generous_enough_for_a_gallery(self) -> None:
-        """A page of photos is many requests. A limit tight enough to break
+        """
+        A page of photos is many requests. A limit tight enough to break
         ordinary browsing would be reverted, not tuned."""
         from urbanlens.dashboard.controllers.pin import REDATA_MEDIA_RATE
 
@@ -144,7 +151,8 @@ class TheDecoratorCanCountSafeMethodsTests(TestCase):
     """The mechanism the above rests on, tested where it lives."""
 
     def test_the_default_still_ignores_a_get(self) -> None:
-        """Throttling every GET by default would put a limiter in front of every
+        """
+        Throttling every GET by default would put a limiter in front of every
         page on the site."""
         self.assertNotIn("GET", throttle.COUNTED_METHODS)
 
@@ -167,7 +175,8 @@ class TheDecoratorCanCountSafeMethodsTests(TestCase):
 
 
 class TheBudgetIsChargedPerAccountTests(TestCase):
-    """An address is a poor identity and a poor isolation boundary.
+    """
+    An address is a poor identity and a poor isolation boundary.
 
     Behind NAT one office shares one budget, so a limit sized for a person
     refuses a team. And the requirement these limits exist for is that one
@@ -200,7 +209,8 @@ class TheBudgetIsChargedPerAccountTests(TestCase):
         self.assertEqual(account_or_address(request), "203.0.113.7")
 
     def test_the_two_namespaces_cannot_collide(self) -> None:
-        """A budget shared by accident between an account and an address would
+        """
+        A budget shared by accident between an account and an address would
         be one that could be spent on the other's behalf."""
         from django.contrib.auth.models import User
         from django.test import RequestFactory

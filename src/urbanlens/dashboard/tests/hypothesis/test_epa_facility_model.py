@@ -142,7 +142,8 @@ class KnownDetailsByRegistryIdTests(TestCase):
         self.assertEqual(list(result), ["R1"])
 
     def test_a_stale_row_still_counts_as_known_forever(self) -> None:
-        """EpaFacility is reference data, not a time-limited cache - even a very
+        """
+        EpaFacility is reference data, not a time-limited cache - even a very
         old detail_fetched_at must still be reported as known, not expired."""
         entry = EpaFacility.record_detail_result(
             "R1", name="Old Facility", address="1 Main St", latitude=40.0, longitude=-74.0, data={}

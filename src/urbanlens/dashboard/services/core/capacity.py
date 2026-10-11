@@ -1,4 +1,5 @@
-"""Per-owner row limits configured in ``SiteSettings``.
+"""
+Per-owner row limits configured in ``SiteSettings``.
 
 Each limit names the ``SiteSettings`` field that sets it (``0`` means unlimited) and the rows that count
 against it. Every write path that adds such a row - form, API, import, undo - goes through
@@ -25,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Capacity:
-    """One configurable ceiling on how many rows an owner may hold.
+    """
+    One configurable ceiling on how many rows an owner may hold.
 
     Attributes:
         setting: The ``SiteSettings`` integer field holding the limit; ``0`` means unlimited.
@@ -43,7 +45,8 @@ class Capacity:
     in_use: Callable[[int], QuerySet[Any]]
 
     def limit(self) -> int | None:
-        """The configured limit, or None when unlimited.
+        """
+        The configured limit, or None when unlimited.
 
         Returns:
             The positive limit, or None.
@@ -54,7 +57,8 @@ class Capacity:
         return configured if configured > 0 else None
 
     def ceiling(self) -> int:
-        """A finite bound: the limit, or the setting's maximum when unlimited.
+        """
+        A finite bound: the limit, or the setting's maximum when unlimited.
 
         Returns:
             A positive ceiling.
@@ -74,7 +78,8 @@ class CapacityExceededError(Exception):
 
     @property
     def user_message(self) -> str:
-        """Why the add was refused, for the person who asked.
+        """
+        Why the add was refused, for the person who asked.
 
         Returns:
             A sentence naming the limit and, when some room remains, how much.
@@ -87,7 +92,8 @@ class CapacityExceededError(Exception):
 
 @contextmanager
 def reserve(capacity: Capacity, owner_pk: int, *, adding: int = 1, in_use: QuerySet[Any] | None = None) -> Iterator[None]:
-    """Hold room for *adding* rows under *owner_pk* while the body inserts them.
+    """
+    Hold room for *adding* rows under *owner_pk* while the body inserts them.
 
     Opens a transaction, serialises this owner's adds for this limit on an advisory lock, and counts.
     The insert must happen inside the ``with`` block for the count to still be true when it commits.
@@ -119,7 +125,8 @@ def reserve(capacity: Capacity, owner_pk: int, *, adding: int = 1, in_use: Query
 
 @contextmanager
 def reserve_each(capacity: Capacity, adding_by_owner: Mapping[int, int]) -> Iterator[None]:
-    """:func:`reserve` for several owners at once, locking in key order so two batches cannot deadlock.
+    """
+    :func:`reserve` for several owners at once, locking in key order so two batches cannot deadlock.
 
     Args:
         capacity: The limit being reserved against.
@@ -138,7 +145,8 @@ def reserve_each(capacity: Capacity, adding_by_owner: Mapping[int, int]) -> Iter
 
 
 def ensure_room(capacity: Capacity, owner_pk: int, *, adding: int = 1) -> None:
-    """Refuse early, before expensive work such as an upload, when the owner is already full.
+    """
+    Refuse early, before expensive work such as an upload, when the owner is already full.
 
     Takes no lock, so it only saves wasted work; the insert itself must still go through :func:`reserve`.
 

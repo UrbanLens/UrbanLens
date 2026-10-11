@@ -1,4 +1,5 @@
-"""Every place UrbanLens starts names its ``UL_ENVIRONMENT``, and none of them names it production by default.
+"""
+Every place UrbanLens starts names its ``UL_ENVIRONMENT``, and none of them names it production by default.
 
 Since 2026-10-07 an unset or blank ``UL_ENVIRONMENT`` refuses to start (Jess's ruling). These pin the start-up
 inventory that change was checked against, so a new compose tier or CI job cannot quietly rely on a default.
@@ -78,7 +79,8 @@ class ComposeTests(SimpleTestCase):
                 self.assertIn(value, {_PASSED_THROUGH, *known})
 
     def test_no_runtime_value_defaults_to_production(self) -> None:
-        """``${UL_ENVIRONMENT:-production}`` was the compose half of "unset means production".
+        """
+        ``${UL_ENVIRONMENT:-production}`` was the compose half of "unset means production".
 
         Container names and the image's build argument still fall back to it: a name is not a policy, and the build
         argument picks the image's dependencies (production's are the smaller set), not the environment it runs as.

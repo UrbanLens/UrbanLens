@@ -1,4 +1,5 @@
-"""Tests for wiki-sync: automatically mirroring rating/vulnerability/priority/
+"""
+Tests for wiki-sync: automatically mirroring rating/vulnerability/priority/
 danger (pin -> wiki, via WikiStatVote) and newly-added aliases (either or both
 directions, additive only) between a pin's private details and its community
 wiki - see models.pin.signals, models.aliases.signals, and Profile's
@@ -74,7 +75,8 @@ class ProfileDefaultsAndGatingTests(TestCase):
         self.assertEqual(self.profile.sync_aliases, SyncAliasesDirection.OFF)
 
     def test_re_enabling_community_does_not_auto_restore_prior_sync_settings(self) -> None:
-        """Matches the existing precedent for the gated visibility fields -
+        """
+        Matches the existing precedent for the gated visibility fields -
         forced-off values stay off until explicitly re-chosen."""
         self.profile.community_enabled = False
         self.profile.save()
@@ -272,7 +274,8 @@ class PinAliasToWikiSyncTests(TestCase):
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True, CELERY_TASK_EAGER_PROPAGATES=True)
 class WikiAliasToPinSyncTests(TestCase):
-    """A newly-added wiki alias mirrors onto every opted-in profile's pin at that location.
+    """
+    A newly-added wiki alias mirrors onto every opted-in profile's pin at that location.
 
     The mirror runs in a Celery task now (one wiki alias used to write a row
     into every other profile's pin at that location, synchronously in the
@@ -312,7 +315,8 @@ class WikiAliasToPinSyncTests(TestCase):
         self.assertFalse(PinAlias.objects.filter(pin=self.pin, name="Nothing Happens").exists())
 
     def test_only_opted_in_pins_at_a_shared_location_receive_it(self) -> None:
-        """Two different users each have a pin at the same location; only the
+        """
+        Two different users each have a pin at the same location; only the
         one with sync_aliases enabled picks up a new wiki alias."""
         other_user = baker.make(User)
         other_profile = other_user.profile
@@ -350,7 +354,8 @@ class WikiAliasToPinSyncTests(TestCase):
         self.assertFalse(PinAlias.objects.filter(pin=self.pin, name="Renamed").exists())
 
     def test_both_ways_round_trip_does_not_loop_or_duplicate(self) -> None:
-        """Adding a pin alias with BOTH enabled mirrors to the wiki, which then
+        """
+        Adding a pin alias with BOTH enabled mirrors to the wiki, which then
         tries to mirror back to the same pin - get_or_create's idempotency
         must stop this at one row each, not recurse or duplicate."""
         Profile.objects.filter(pk=self.owner_profile.pk).update(sync_aliases=SyncAliasesDirection.BOTH)
@@ -420,7 +425,8 @@ class SettingsViewWikiSyncSectionTests(TestCase):
 
 
 class MediaCacheInvalidationOnNewAliasTests(TestCase):
-    """A new wiki alias is a new name everyone knows the place by, so the shared Wikimedia search, and a Wikipedia
+    """
+    A new wiki alias is a new name everyone knows the place by, so the shared Wikimedia search, and a Wikipedia
     lookup that missed, run again with it. A pin's own aliases are searched only in its own audience's row (P188), so
     they leave every shared row alone."""
 

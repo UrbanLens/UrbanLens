@@ -18,7 +18,8 @@ class PhotoIssueStatus(abstract.TextChoices):
 
 
 class PhotoUploadFailureKind(abstract.TextChoices):
-    """Why a photo is on the "couldn't upload" list, and what can be done about it.
+    """
+    Why a photo is on the "couldn't upload" list, and what can be done about it.
     The two differ in whether there is anything left to retry.
     A rejected upload never became a row - the bytes are gone, so retrying means picking the file again.
     """
@@ -28,7 +29,8 @@ class PhotoUploadFailureKind(abstract.TextChoices):
 
 
 class PhotoUploadFailure(abstract.DashboardModel):
-    """A photo that failed to upload or could not be shown after upload.
+    """
+    A photo that failed to upload or could not be shown after upload.
     Surfaced on Vault → Photos so the user can see the filename and retry without hunting through a toast that has already disappeared - which is also what covers the uploader who navigated away before the failure happened, since nothing about this waits for them to be on the page.
 
     Attributes:
@@ -80,7 +82,8 @@ class PhotoUploadFailure(abstract.DashboardModel):
 
 
 class PhotoMetadataConflict(abstract.DashboardModel):
-    """Two copies of the same photo (same bytes) disagree on metadata.
+    """
+    Two copies of the same photo (same bytes) disagree on metadata.
     Created when a user re-uploads a file they already have, we reuse the stored bytes, and at least one field (caption, author, dates, GPS) cannot be merged automatically.
     Review lives on Memories so it does not interrupt the upload.
 

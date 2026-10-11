@@ -1,4 +1,5 @@
-"""National Register of Historic Places listings: NPS's record of one, and which listings are a building's own.
+"""
+National Register of Historic Places listings: NPS's record of one, and which listings are a building's own.
 
 A listing's boundary can hold a whole campus while it lists one building there, so a building is the listing's only
 when a record says so: the listing's own point stands on it, or CRIS's record of the building calls it listed.
@@ -41,7 +42,8 @@ _SITE_SCOPE = "site"
 
 
 def nps_record_url(reference: str | None) -> str | None:
-    """NPS's page for a National Register reference number.
+    """
+    NPS's page for a National Register reference number.
 
     Args:
         reference: An NRIS reference number.
@@ -55,7 +57,8 @@ def nps_record_url(reference: str | None) -> str | None:
 
 
 def nara_record_url(value: object) -> str | None:
-    """The National Archives catalogue record a ``NARA_URL`` names, rebuilt from its id.
+    """
+    The National Archives catalogue record a ``NARA_URL`` names, rebuilt from its id.
 
     The value comes from NPS's layer through REData, so nothing of it reaches a page but the record's number: only
     ``http(s)://catalog.archives.gov/id/<digits>``, with no credentials, port, query or fragment, is accepted.
@@ -82,7 +85,8 @@ def nara_record_url(value: object) -> str | None:
 
 
 def nara_record_field(row: dict[str, Any]) -> dict[str, str] | None:
-    """A National Register row's archives record as a summary field, when its cached ``nara_url`` is one.
+    """
+    A National Register row's archives record as a summary field, when its cached ``nara_url`` is one.
 
     Args:
         row: A cached Historic Registers row.
@@ -97,7 +101,8 @@ def nara_record_field(row: dict[str, Any]) -> dict[str, str] | None:
 
 
 def reference_field(reference: str | None) -> dict[str, str] | None:
-    """A reference number as a summary field, linked to NPS's record.
+    """
+    A reference number as a summary field, linked to NPS's record.
 
     Args:
         reference: An NRIS reference number, or None.
@@ -112,7 +117,8 @@ def reference_field(reference: str | None) -> dict[str, str] | None:
 
 
 def reference_number(row: dict[str, Any]) -> str | None:
-    """The NRIS reference number of a cached National Register row.
+    """
+    The NRIS reference number of a cached National Register row.
 
     Args:
         row: A Historic Registers row.
@@ -135,7 +141,8 @@ class BuildingPoints:
     """Decides which published points are on one building, reading its outline and its parcel's buildings once."""
 
     def __init__(self, location: Location, *, buildings: list[dict] | None = None) -> None:
-        """Args:
+        """
+        Args:
         location: A building's location.
         buildings: ``site_scope.site_buildings(location)``, when the caller already has it.
         """
@@ -147,7 +154,8 @@ class BuildingPoints:
         self._rivals: list[tuple[float, float]] | None = None
 
     def holds(self, latitude: Any, longitude: Any) -> bool:
-        """Whether a published point is on the building.
+        """
+        Whether a published point is on the building.
 
         Args:
             latitude: The point's latitude.
@@ -196,7 +204,8 @@ class BuildingPoints:
 
 
 def stands_on(location: Location, latitude: Any, longitude: Any, *, buildings: list[dict] | None = None) -> bool:
-    """Whether a published point is on the building at ``location``; see ``BuildingPoints.holds``.
+    """
+    Whether a published point is on the building at ``location``; see ``BuildingPoints.holds``.
 
     Args:
         location: A building's location.
@@ -211,7 +220,8 @@ def stands_on(location: Location, latitude: Any, longitude: Any, *, buildings: l
 
 
 def cris_lists_building(location: Location) -> bool:
-    """Whether CRIS's own record of the building at ``location`` says it is listed.
+    """
+    Whether CRIS's own record of the building at ``location`` says it is listed.
 
     Args:
         location: A building's location.
@@ -229,7 +239,8 @@ def cris_lists_building(location: Location) -> bool:
 
 
 def building_register_rows(location: Location, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The register rows that are one building's own record, for a building standing among others on a site.
+    """
+    The register rows that are one building's own record, for a building standing among others on a site.
 
     Args:
         location: The building's location.
@@ -257,7 +268,8 @@ def building_register_rows(location: Location, rows: list[dict[str, Any]]) -> li
 
 
 def containing_listings(location: Location, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The register rows describing the place at ``location`` rather than a neighbour.
+    """
+    The register rows describing the place at ``location`` rather than a neighbour.
 
     Args:
         location: The pin's location.
@@ -284,7 +296,8 @@ def _comparable(name: str) -> str:
 
 
 def listing_named(location: Location, name: str) -> dict[str, Any] | None:
-    """The National Register row with a reference number cached at ``location`` under exactly this name.
+    """
+    The National Register row with a reference number cached at ``location`` under exactly this name.
 
     Args:
         location: Where the Historic Registers rows are cached.
@@ -300,7 +313,8 @@ def listing_named(location: Location, name: str) -> dict[str, Any] | None:
 
 
 def link_listings(pin: Pin, rows: list[dict[str, Any]]) -> None:
-    """Add NPS's record of each National Register listing in ``rows``, and the National Archives' where REData gave
+    """
+    Add NPS's record of each National Register listing in ``rows``, and the National Archives' where REData gave
     one, to the pin's links and its wiki's.
 
     Args:

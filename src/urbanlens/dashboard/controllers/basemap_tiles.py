@@ -1,4 +1,5 @@
-"""Proxy and catalogue for the basemap tile layers REData publishes.
+"""
+Proxy and catalogue for the basemap tile layers REData publishes.
 
 The fetch happens server-side for two different reasons, and only one of them is about a key.
 REData's own endpoints require its API key, which must never reach the browser. The raster layers
@@ -58,7 +59,8 @@ _UNDERLAY_CACHE_TTL = 365 * 86400
 
 
 def _ttl_for(z: int) -> int:
-    """How long a tile at this depth is worth keeping.
+    """
+    How long a tile at this depth is worth keeping.
 
     Args:
         z: Tile zoom level.
@@ -70,7 +72,8 @@ def _ttl_for(z: int) -> int:
 
 
 def _ttl_for_absence(z: int) -> int:
-    """How long "no such tile" is worth keeping, which is not as long as the tile itself.
+    """
+    How long "no such tile" is worth keeping, which is not as long as the tile itself.
 
     The long life above is earned by bytes that will never change. An absence is a claim about the
     vendor rather than about the coordinate, and at world zoom a wrong one is a quadrant of every
@@ -104,7 +107,8 @@ class UpstreamSlots(BaseUpstreamSlots):
 
     @classmethod
     def limit(cls) -> int:
-        """How many basemap tile fetches one process may have in flight.
+        """
+        How many basemap tile fetches one process may have in flight.
 
         Returns:
             ``basemap_tile_upstream_concurrency``.
@@ -113,7 +117,8 @@ class UpstreamSlots(BaseUpstreamSlots):
 
 
 class BasemapTileCatalogueView(LoginRequiredMixin, View):
-    """GET map/basemap-tiles/sources/ - the layers this deployment can offer.
+    """
+    GET map/basemap-tiles/sources/ - the layers this deployment can offer.
 
     A fallback path, not the main one: every page built on ``themes/base.html`` already carries this
     same catalogue inline (``{% basemap_tile_catalogue %}``), because a map has to know which tiles
@@ -121,7 +126,8 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
-        """Return the layer catalogue for the signed-in viewer.
+        """
+        Return the layer catalogue for the signed-in viewer.
 
         Args:
             request: The current request.
@@ -136,7 +142,8 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
 
 
 def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
-    """Fetch one uncached tile, from the vendor where that is possible.
+    """
+    Fetch one uncached tile, from the vendor where that is possible.
 
     REData needs its API key and so cannot be called from a browser, but the raster layers it
     publishes are keyless vendor endpoints it is itself fetching - so going through it is a second
@@ -162,7 +169,8 @@ def _fetch_tile(layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
 
 
 def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpResponse:
-    """Tell the browser it may keep this answer, and nothing between it and this deployment may.
+    """
+    Tell the browser it may keep this answer, and nothing between it and this deployment may.
 
     A tile is immutable for a layer and coordinate, so a re-ask gets the answer the browser already
     has. Without this the proxy is asked again for every tile on every pan back over the same
@@ -188,7 +196,8 @@ def _keep_for(response: HttpResponse, ttl: int = _TILE_CACHE_TTL) -> HttpRespons
 
 
 def _browser_ttl(layer: str, ttl: int) -> int:
-    """*ttl*, cut to what the layer's vendor lets a client keep its tiles for.
+    """
+    *ttl*, cut to what the layer's vendor lets a client keep its tiles for.
 
     Args:
         layer: Layer id from the catalogue.
@@ -211,7 +220,8 @@ def _browser_ttl(layer: str, ttl: int) -> int:
 @method_decorator(csp_exempt(REPORT_ONLY=True), name="dispatch")
 @method_decorator(csp_exempt(REPORT_ONLY=False), name="dispatch")
 class BasemapTileView(AccessMixin, View):
-    """GET map/basemap-tiles/<layer>/<z>/<x>/<y>/ - one basemap tile.
+    """
+    GET map/basemap-tiles/<layer>/<z>/<x>/<y>/ - one basemap tile.
 
     Not ``LoginRequiredMixin``: the gate is the same, but it is answered from the cache the tile
     itself comes out of, so a viewport does not spend a query per tile re-establishing that the
@@ -220,7 +230,8 @@ class BasemapTileView(AccessMixin, View):
     """
 
     def get(self, request: HttpRequest, layer: str, z: int, x: int, y: int) -> HttpResponse:
-        """Serve one tile from cache or REData.
+        """
+        Serve one tile from cache or REData.
 
         Args:
             request: The current request.

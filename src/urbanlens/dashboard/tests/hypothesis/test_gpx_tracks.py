@@ -148,7 +148,8 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         self.assertEqual(visit.route_id, route.pk)
 
     def test_visit_logging_off_saves_the_route_but_logs_no_visit(self):
-        """track_routes and track_pin_visits are separate consents.
+        """
+        track_routes and track_pin_visits are separate consents.
 
         The route is the user's own track; a dwell writes a PinVisit, which is what track_pin_visits governs -
         and its help text already promises it covers imports."""
@@ -213,7 +214,8 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
 
 
 class DwellVisitProvenanceTests(DetectDwellsAndCreateVisitsTests):
-    """A dwell detected in an uploaded track file is an *import*, not a live device ping.
+    """
+    A dwell detected in an uploaded track file is an *import*, not a live device ping.
 
     ``VisitSource.GEOLOCATION`` is documented as "added when the user's device provided a geolocation" and is
     what ``record_geolocation_visits`` writes, gated by ``track_geolocation``."""

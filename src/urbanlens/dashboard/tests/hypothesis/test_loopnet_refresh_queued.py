@@ -1,4 +1,5 @@
-"""LoopNet's ``refresh_queued`` is honoured: a parcel whose listings REData has only just gone to fetch is asked again soon.
+"""
+LoopNet's ``refresh_queued`` is honoured: a parcel whose listings REData has only just gone to fetch is asked again soon.
 
 REData's listings endpoint never fetches inline. On a cold parcel it answers ``results: []`` with
 ``refresh_queued: true``, and caching that as "no listings" hid the parcel's listings for a week.

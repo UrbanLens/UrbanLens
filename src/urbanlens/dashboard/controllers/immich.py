@@ -1,4 +1,5 @@
-"""Immich integration controller.
+"""
+Immich integration controller.
 
 Two groups of views:
 
@@ -73,7 +74,8 @@ _EMPTY_MESSAGES: dict[str, str] = {
 
 
 class _HasAssetId(Protocol):
-    """The only thing this view needs from whichever endpoint answered.
+    """
+    The only thing this view needs from whichever endpoint answered.
 
     A read-only property rather than ``id: str``: both result types are frozen dataclasses, and a
     protocol declaring a settable attribute is not satisfied by one that cannot be set.
@@ -99,7 +101,8 @@ def _scan_task_cache_key(profile_id: int) -> str:
 
 
 def get_active_scan_task_id(profile_id: int) -> str | None:
-    """Return the task id of `profile_id`'s in-progress library scan, if any.
+    """
+    Return the task id of `profile_id`'s in-progress library scan, if any.
 
     Lets a fresh page load (a new visit, or returning after navigating away) resume polling an
     already-running scan instead of only ever offering the bare "start a scan" button - see
@@ -160,7 +163,8 @@ class ImmichDisconnectView(LoginRequiredMixin, View):
 
 
 class ImmichLibraryScanStartView(LoginRequiredMixin, View):
-    """POST /settings/immich/scan/ - enqueue a full-library location sweep.
+    """
+    POST /settings/immich/scan/ - enqueue a full-library location sweep.
 
     Explicit, opt-in action (a button on the Immich settings subsection) - never triggered automatically
     on connect.
@@ -224,7 +228,8 @@ class ImmichLibraryScanProgressView(LoginRequiredMixin, View):
 
 
 class PinImmichSearchView(LoginRequiredMixin, View):
-    """GET pin/<slug>/immich/search/ - photos on the user's Immich server, filtered by mode.
+    """
+    GET pin/<slug>/immich/search/ - photos on the user's Immich server, filtered by mode.
 
     Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on one of the pin's
     recorded PinVisit dates, or unfiltered (most recent first).
@@ -308,7 +313,8 @@ class PinImmichSearchView(LoginRequiredMixin, View):
 
 
 class PinImmichThumbnailView(LoginRequiredMixin, View):
-    """GET pin/<slug>/immich/thumbnail/<asset_id>/ - proxies one Immich thumbnail.
+    """
+    GET pin/<slug>/immich/thumbnail/<asset_id>/ - proxies one Immich thumbnail.
 
     The API key must never reach the browser, so thumbnails can't be linked to directly - this view
     fetches them server-side and caches the bytes briefly to avoid re-hitting the user's server on every
@@ -328,7 +334,8 @@ class ImmichThumbnailSlots(UpstreamSlots):
 
     @classmethod
     def limit(cls) -> int:
-        """How many Immich thumbnail fetches one process may have in flight.
+        """
+        How many Immich thumbnail fetches one process may have in flight.
 
         Returns:
             ``immich_upstream_concurrency``.
@@ -343,7 +350,8 @@ class ImmichProfileSlots(KeyedUpstreamSlots):
 
     @classmethod
     def limit(cls) -> int:
-        """How many Immich thumbnail fetches one account may have in flight.
+        """
+        How many Immich thumbnail fetches one account may have in flight.
 
         Returns:
             ``immich_profile_upstream_concurrency``.
@@ -352,7 +360,8 @@ class ImmichProfileSlots(KeyedUpstreamSlots):
 
     @classmethod
     def lease_seconds(cls) -> int:
-        """Longer than the fetch deadline, so a live fetch never loses its slot.
+        """
+        Longer than the fetch deadline, so a live fetch never loses its slot.
 
         Returns:
             Seconds.
@@ -361,7 +370,8 @@ class ImmichProfileSlots(KeyedUpstreamSlots):
 
 
 def immich_thumbnail_response(account: ImmichAccount, asset_id: str) -> HttpResponse:
-    """Serve one Immich thumbnail from the cache, or fetch it inside this process's and this account's slots.
+    """
+    Serve one Immich thumbnail from the cache, or fetch it inside this process's and this account's slots.
 
     Shared by the pin picker and the pin-suggestion cards, which differ only in how they authorise the asset.
 

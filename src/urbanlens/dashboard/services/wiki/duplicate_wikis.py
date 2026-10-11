@@ -1,4 +1,5 @@
-"""Merging one community wiki into another when both turn out to describe the same building.
+"""
+Merging one community wiki into another when both turn out to describe the same building.
 Two building places that were one real building each grew a wiki (REData P98's drifting Overture refs, see ``services.places.building_merge``). One page has to go, but nothing written on it may:
 
 - Article: the kept page's article stays live; every revision of the other moves into its history, and the other's text, when it differs, is appended as a "Merged from <name>" section in one new revision attributed to that article's last human editor.
@@ -48,7 +49,8 @@ class WikiMergeError(RuntimeError):
 
 @dataclass(slots=True)
 class WikiMergeResult:
-    """What one wiki merge moved and dropped, for the ``PlaceMerge`` record.
+    """
+    What one wiki merge moved and dropped, for the ``PlaceMerge`` record.
 
     Attributes:
         moved: Counts and ids of what moved onto the kept page.
@@ -64,7 +66,8 @@ class WikiMergeResult:
 
 
 def gap_filled_columns() -> list[str]:
-    """Every Wiki column a merge gap-fills: all of them but identity and companion columns.
+    """
+    Every Wiki column a merge gap-fills: all of them but identity and companion columns.
 
     Returns:
         Column names.
@@ -116,7 +119,8 @@ def _merge_columns(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
 
 
 def _concealed_base(article: Article, wiki: Wiki, editor: Profile | None) -> str:
-    """The article text *editor* could see, which is all a revision attributed to them may carry.
+    """
+    The article text *editor* could see, which is all a revision attributed to them may carry.
     With concealment off (or for an editor it does not apply to) that is the live text.
     """
     from urbanlens.dashboard.services.wiki.concealment import concealment_active, visible_rows
@@ -201,7 +205,8 @@ def _merge_stat_votes(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> No
 
 
 def _merge_boundaries(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> dict[str, dict[str, int | None]]:
-    """Move the absorbed page's community boundaries; the kept page's wins per type and the other's outline becomes a revision.
+    """
+    Move the absorbed page's community boundaries; the kept page's wins per type and the other's outline becomes a revision.
 
     Returns:
         ``WikiEdit.changes`` entries naming each losing outline (``from``) and the kept one (``to``), so the merge edit
@@ -268,7 +273,8 @@ def _repoint_reputation_targets(kept: Wiki, absorbed: Wiki) -> None:
 
 
 def _untangle_nesting(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
-    """Re-nest so that handing the absorbed page's children to the kept page cannot close a loop.
+    """
+    Re-nest so that handing the absorbed page's children to the kept page cannot close a loop.
     When the absorbed page is anywhere above the kept one (K -> M -> A), its children include the kept page's own
     ancestors: moving M under K would make K -> M -> K, and deleting A would CASCADE through K. So the kept page first
     takes the absorbed page's place in the tree (A's parent), and each absorbed child is moved explicitly - under the
@@ -295,7 +301,8 @@ def _untangle_nesting(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> No
 
 
 def merge_duplicate_wiki(kept: Wiki, absorbed: Wiki) -> WikiMergeResult:
-    """Fold *absorbed* into *kept* and delete it, once nothing references it.
+    """
+    Fold *absorbed* into *kept* and delete it, once nothing references it.
 
     Args:
         kept: The page that stays - the survivor place's wiki.

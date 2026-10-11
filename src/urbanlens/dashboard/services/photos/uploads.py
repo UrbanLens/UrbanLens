@@ -1,4 +1,5 @@
-"""Creating a photo from a browser upload, for a Pin, a Wiki, or a Vault.
+"""
+Creating a photo from a browser upload, for a Pin, a Wiki, or a Vault.
 They must agree on every gate an upload passes - file-type/malware validation, the per-uploader duplicate check, and the storage quota - so those gates live here rather than being restated per view."""
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class UploadRejection:
-    """A refused upload, carrying the message and status the caller should return.
+    """
+    A refused upload, carrying the message and status the caller should return.
 
     Attributes:
         message: User-facing explanation, safe to show in a toast.
@@ -40,7 +42,8 @@ class UploadRejection:
 
 
 def _owner_fields(owner: Pin | Wiki | Profile) -> dict:
-    """Return the Image ownership FKs for *owner*.
+    """
+    Return the Image ownership FKs for *owner*.
     It is **not** attached to the location's wiki: everything on a wiki is there because somebody put it there.
 
     Args:
@@ -62,7 +65,8 @@ def existing_photo_for_upload(
     *,
     checksum: str | None = None,
 ) -> Image | None:
-    """Return this uploader's existing photo of the same file on *owner*, if any.
+    """
+    Return this uploader's existing photo of the same file on *owner*, if any.
     Album upload uses this to file the existing row instead of treating a 409 as a hard failure.
 
     Args:
@@ -82,7 +86,8 @@ def existing_photo_for_upload(
 
 
 def existing_photo_for_profile(profile: Profile, checksum: str) -> Image | None:
-    """Return this uploader's existing row of the same file, on any pin or wiki.
+    """
+    Return this uploader's existing row of the same file, on any pin or wiki.
     Same bytes and the same person: a second upload should reuse the stored file rather than charge quota twice.
 
     Args:
@@ -135,7 +140,8 @@ def _queue_metadata_conflict(existing: Image, new_row: Image, incoming_caption: 
 
 
 def attach_deduped_copy(existing: Image, owner: Pin | Wiki | Profile, profile: Profile, caption: str) -> Image:
-    """Create a new Image row that reuses *existing*'s stored file.
+    """
+    Create a new Image row that reuses *existing*'s stored file.
 
     Args:
         existing: The earlier row with the same checksum.
@@ -191,7 +197,8 @@ def record_photo_upload_failure(
     pin: Pin | None = None,
     album=None,
 ) -> None:
-    """Persist a failed upload so Memories can show it for retry.
+    """
+    Persist a failed upload so Memories can show it for retry.
 
     Args:
         profile: The uploader.
@@ -205,7 +212,8 @@ def record_photo_upload_failure(
 
 
 def resolve_photo_metadata_conflict(conflict, choices: dict[str, int]) -> int:
-    """Apply the owner's field picks to every copy of this file.
+    """
+    Apply the owner's field picks to every copy of this file.
 
     Args:
         conflict: A pending :class:`PhotoMetadataConflict`.
@@ -250,7 +258,8 @@ def resolve_photo_metadata_conflict(conflict, choices: dict[str, int]) -> int:
 
 
 def _duplicate_scope(owner: Pin | Wiki | Profile) -> tuple[dict, str]:
-    """Return the filter isolating *owner*'s photos, and the noun for the error.
+    """
+    Return the filter isolating *owner*'s photos, and the noun for the error.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) being uploaded to.
@@ -265,7 +274,8 @@ def _duplicate_scope(owner: Pin | Wiki | Profile) -> tuple[dict, str]:
 
 
 def upload_photo_for_owner(owner: Pin | Wiki | Profile, profile: Profile, image_file: UploadedFile, caption: str = "") -> Image | UploadRejection:
-    """Validate and store one uploaded photo against *owner*.
+    """
+    Validate and store one uploaded photo against *owner*.
     The same person uploading the same bytes to a *different* pin reuses the stored file (``QuotaExemption.DEDUPLICATED``) instead of charging quota twice.
 
     Args:

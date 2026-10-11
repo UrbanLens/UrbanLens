@@ -1,4 +1,5 @@
-"""Work every process must do once, done at boot instead of on request one.
+"""
+Work every process must do once, done at boot instead of on request one.
 
 Both servers need this and neither can share the other's mechanism: gunicorn
 warms from `post_worker_init` in `gunicorn.conf.py`, daphne from `asgi.py` at
@@ -14,7 +15,8 @@ import sys
 
 
 def warm_urlconf() -> tuple[int, int]:
-    """Import the URLconf and build its reverse table.
+    """
+    Import the URLconf and build its reverse table.
 
     Two separate pieces of lazy work, and warming only the first is what H63
     was. Reading ``url_patterns`` imports the URLconf module, which reaches
@@ -42,7 +44,8 @@ def warm_urlconf() -> tuple[int, int]:
 
 
 def freeze_warm_heap() -> int:
-    """Keep the warmed heap out of every later full collection.
+    """
+    Keep the warmed heap out of every later full collection.
 
     A full collection walks every tracked object, and a warmed worker holds about 400,000 that live as long as the
     process: 175-207 ms of CPU per collection on chiron, holding the GIL for every thread (P207). Frozen, a collection

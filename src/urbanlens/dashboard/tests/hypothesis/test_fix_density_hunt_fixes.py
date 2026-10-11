@@ -73,7 +73,8 @@ class ActivityLocationRefTests(TestCase):
         self.assertEqual(self._resolve(location_uuid=str(uuid_module.uuid4())), (None, None))
 
     def test_the_itinerary_row_and_the_dialog_agree_on_the_attribute_name(self) -> None:
-        """The rename is the reason this happened; a drift here reintroduces it.
+        """
+        The rename is the reason this happened; a drift here reintroduces it.
 
         The row emits a slug, so the attribute may not be called `uuid` - it was, on both sides, which is how it
         came to be posted into a UUID filter."""
@@ -90,7 +91,8 @@ class ActivityLocationRefTests(TestCase):
 
 
 class HiddenActivityLocationTests(TestCase):
-    """Hiding an activity's location must hide it everywhere, not just to the eye.
+    """
+    Hiding an activity's location must hide it everywhere, not just to the eye.
 
     `effective_location_hidden` covers both routes: the owner ticking Hide location, and
     `Profile.trip_pin_location_visibility` refusing this viewer."""
@@ -136,7 +138,8 @@ class HiddenActivityLocationTests(TestCase):
         self.assertEqual(row["display_location_ref"], self.location.slug)
 
     def test_the_panel_reads_only_the_masked_values(self) -> None:
-        """Structural: the leak was a template reaching past the guard.
+        """
+        Structural: the leak was a template reaching past the guard.
 
         Any `act.location.*` or `act.effective_title` in this panel is a place the mask can be forgotten again,
         so the template is pinned to the already-masked row fields."""
@@ -153,7 +156,8 @@ class HiddenActivityLocationTests(TestCase):
         self.assertIn('data-act-location-name="{{ item.display_location_name }}"', panel)
 
     def test_the_hidden_flag_itself_reflects_the_effective_answer(self) -> None:
-        """It emitted the raw `location_hidden`, so a viewer hidden by the
+        """
+        It emitted the raw `location_hidden`, so a viewer hidden by the
         owner's *visibility setting* was told the location was not hidden."""
         from pathlib import Path
 
@@ -174,7 +178,8 @@ def _png_bytes() -> bytes:
 
 
 class LabelIconUploadValidationTests(TestCase):
-    """Creating a label must check an uploaded icon exactly as editing one does.
+    """
+    Creating a label must check an uploaded icon exactly as editing one does.
 
     `_resize_custom_icon` deliberately returns the file untouched when PIL cannot open it (that fallback has its
     own test), and `label_icons/` is served to the label's owner (everyone, for a global label) with a Content-Type
@@ -241,7 +246,8 @@ class LabelIconUploadValidationTests(TestCase):
         self.assertTrue(Label.objects.filter(profile=self.profile, name="Rooftops").exists())
 
     def test_both_paths_go_through_the_one_guard(self) -> None:
-        """Structural: the asymmetry existed because there were two code paths.
+        """
+        Structural: the asymmetry existed because there were two code paths.
 
         A future create path that reaches for the raw upload helper instead reintroduces exactly this defect, so
         the storing call sites are pinned to the validating helper."""
@@ -256,7 +262,8 @@ class LabelIconUploadValidationTests(TestCase):
 
 
 class TwoFactorLockoutCounterTests(TestCase):
-    """The counter that brakes TOTP guessing must not lose increments.
+    """
+    The counter that brakes TOTP guessing must not lose increments.
 
     Read-then-write loses them exactly when it matters: parallel guesses all read the same value and write the
     same successor, so a spray advances the counter once per batch rather than once per attempt."""
@@ -276,7 +283,8 @@ class TwoFactorLockoutCounterTests(TestCase):
         self.assertEqual([self._record() for _ in range(3)], [1, 2, 3])
 
     def test_two_overlapping_requests_count_as_two_attempts_not_one(self) -> None:
-        """The defect, simulated deterministically rather than with real threads.
+        """
+        The defect, simulated deterministically rather than with real threads.
 
         A lost update is precisely "both requests read before either wrote", so the interleaving is reproduced
         by freezing what ``cache.get`` returns across the pair."""
@@ -295,7 +303,8 @@ class TwoFactorLockoutCounterTests(TestCase):
         self.assertEqual(cache.get(key), 2)
 
     def test_the_counter_goes_through_the_shared_atomic_helper(self) -> None:
-        """Structural companion: the two login counters beside it already did.
+        """
+        Structural companion: the two login counters beside it already did.
 
         This one was left on the old pattern when they were converted, which is how the gap survived - the fix
         is not "add locking here" but "stop being the one caller that does it differently"."""

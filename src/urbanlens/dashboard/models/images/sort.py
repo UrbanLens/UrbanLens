@@ -1,4 +1,5 @@
-"""How the Vault's photo/document gallery is ordered.
+"""
+How the Vault's photo/document gallery is ordered.
 
 Mirrors ``models.album.sort`` but over a plain ``Image`` queryset - the Vault gallery has no
 per-item custom order.
@@ -27,7 +28,8 @@ class GallerySort(TextChoices):
 
 @dataclass(frozen=True, slots=True)
 class GallerySortSpec:
-    """One sort method's SQL ordering.
+    """
+    One sort method's SQL ordering.
 
     Attributes:
         sort: The :class:`GallerySort` this describes.
@@ -40,7 +42,8 @@ class GallerySortSpec:
     order_by: tuple
 
     def apply[QS: QuerySet](self, queryset: QS) -> QS:
-        """Return *queryset* ordered by this method.
+        """
+        Return *queryset* ordered by this method.
 
         Generic over the queryset's own type so chaining an ``ImageQuerySet`` method after
         this one keeps that type.
@@ -63,7 +66,8 @@ GALLERY_SORT_SPECS: dict[str, GallerySortSpec] = {
 
 
 def gallery_sort_spec(sort: str) -> GallerySortSpec:
-    """Return the spec for *sort*, falling back to recent-uploads for an unknown value.
+    """
+    Return the spec for *sort*, falling back to recent-uploads for an unknown value.
 
     Args:
         sort: A :class:`GallerySort` value.

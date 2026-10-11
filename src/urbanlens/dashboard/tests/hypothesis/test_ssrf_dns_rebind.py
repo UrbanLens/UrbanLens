@@ -116,7 +116,8 @@ class PinnedConnectionTests(SimpleTestCase):
 
 
 class PeerAddressTests(SimpleTestCase):
-    """The backstop, exercised against a real socket rather than a double.
+    """
+    The backstop, exercised against a real socket rather than a double.
 
     This is deliberately not mocked."""
 
@@ -140,7 +141,8 @@ class PeerAddressTests(SimpleTestCase):
         )
 
     def test_a_real_connection_to_an_unvalidated_peer_is_refused(self) -> None:
-        """End-to-end, with the pin disabled - the condition the backstop exists for.
+        """
+        End-to-end, with the pin disabled - the condition the backstop exists for.
 
         While the pin holds, the connection goes to the validated address by construction and this check can
         never fire."""
@@ -162,7 +164,8 @@ class _CountingHandler(_Handler):
 
 
 class PinSurvivesALaterResolverPatchTests(SimpleTestCase):
-    """A resolver installed after url_safety's import (gevent, a DNS cache) must not route around the pin.
+    """
+    A resolver installed after url_safety's import (gevent, a DNS cache) must not route around the pin.
 
     The replacement rebinds: public for the validation, loopback for every later lookup."""
 
@@ -261,7 +264,8 @@ class FetchPublicUrlTests(SimpleTestCase):
         return response
 
     def test_without_a_session_it_goes_through_requests_get(self) -> None:
-        """The default path is ``requests.get``, which every caller's tests mock.
+        """
+        The default path is ``requests.get``, which every caller's tests mock.
 
         Routing the default through a Session instead moves the seam out from under those mocks: the fetch stops
         being intercepted and starts making real connections."""
@@ -278,7 +282,8 @@ class FetchPublicUrlTests(SimpleTestCase):
         self.assertEqual(get.call_args.kwargs["stream"], True, "the body must not be read before the peer is checked")
 
     def test_a_response_without_a_socket_is_not_rejected(self) -> None:
-        """ "Peer unknown" leaves the pin as the control; it must not fail the fetch.
+        """
+        "Peer unknown" leaves the pin as the control; it must not fail the fetch.
 
         A cached response, a non-``requests`` adapter, or a test double exposes no socket."""
 

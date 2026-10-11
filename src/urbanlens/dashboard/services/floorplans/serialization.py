@@ -1,4 +1,5 @@
-"""Floorplan documents: the JSON shape the editor and consumers speak.
+"""
+Floorplan documents: the JSON shape the editor and consumers speak.
 Coordinates are plan-local metres throughout (see ``models.floorplans.model``), never degrees; ``services.floorplans.features`` is where they become WGS-84 for a map."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class FloorplanValidationError(ValueError):
-    """A document failed validation, with a message written for the submitter.
+    """
+    A document failed validation, with a message written for the submitter.
     Subclasses ``ValueError`` so existing handlers keep working."""
 
 
@@ -74,7 +76,8 @@ def _marker_dict(marker: FloorplanMarker, source_uuids: dict, reference_uuids: d
 
 
 def document_for(floorplan: Floorplan) -> dict[str, Any]:
-    """Assemble one plan version's full nested document.
+    """
+    Assemble one plan version's full nested document.
     Bounded query count regardless of plan size - everything is prefetched per relation, never per row.
 
     Args:
@@ -194,7 +197,8 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
 
 
 def _int_in(raw, field: str) -> int | None:
-    """An optional integer from a document payload.
+    """
+    An optional integer from a document payload.
 
     Raises:
         ValueError: Present but not a number - reported to the caller as a 400 naming the field, rather than reaching the database and surfacing as a 500."""
@@ -207,7 +211,8 @@ def _int_in(raw, field: str) -> int | None:
 
 
 def _float_in(raw, field: str) -> float | None:
-    """An optional float from a document payload.
+    """
+    An optional float from a document payload.
 
     Raises:
         ValueError: Present but not a number.
@@ -224,7 +229,8 @@ def _float_in(raw, field: str) -> float | None:
 
 
 def _coordinate_in(raw, field: str, *, bound: float) -> float | None:
-    """An optional latitude or longitude from a document payload.
+    """
+    An optional latitude or longitude from a document payload.
 
     Raises:
         ValueError: Present but not a number within ``±bound``.
@@ -236,7 +242,8 @@ def _coordinate_in(raw, field: str, *, bound: float) -> float | None:
 
 
 def _required_float_in(raw, field: str) -> float:
-    """A coordinate the document must carry.
+    """
+    A coordinate the document must carry.
 
     Raises:
         ValueError: Absent or not a number."""
@@ -247,7 +254,8 @@ def _required_float_in(raw, field: str) -> float:
 
 
 def _date_in(raw) -> datetime.date | None:
-    """Parse an ISO date or None.
+    """
+    Parse an ISO date or None.
 
     Raises:
         ValueError: Not an ISO date."""
@@ -270,7 +278,8 @@ _MAX_MARKERS_PER_FLOOR = 2_000
 
 
 def _text_in(raw, field: str, limit: int) -> str:
-    """Coerce a payload value to text this column can actually hold.
+    """
+    Coerce a payload value to text this column can actually hold.
     Django does not enforce ``max_length`` on save, so an over-long string is not caught until Postgres refuses it - as a ``DataError``, which reaches the client as a 500 with nothing in it that says which field was wrong.
 
     Args:
@@ -290,12 +299,14 @@ def _text_in(raw, field: str, limit: int) -> str:
 
 
 class StaleDocumentError(ValueError):
-    """A save built on a version of the plan that has since been replaced.
+    """
+    A save built on a version of the plan that has since been replaced.
     Separate from the other ValueErrors this module raises because it is not a malformed request: the document is perfectly valid, it is just no longer current."""
 
 
 def _reject_stale(floorplan: Floorplan, document: dict[str, Any]) -> None:
-    """Refuse a save whose base version is no longer the current one.
+    """
+    Refuse a save whose base version is no longer the current one.
     A whole-document save deletes by omission, so two tabs editing one plan do not merge - the second one to save silently discards everything the first did.
 
     Args:
@@ -319,7 +330,8 @@ def _reject_stale(floorplan: Floorplan, document: dict[str, Any]) -> None:
 
 
 def _reject_oversized(document: dict[str, Any]) -> None:
-    """Refuse a document that would write an unreasonable number of rows.
+    """
+    Refuse a document that would write an unreasonable number of rows.
 
     Args:
         document: The whole payload.
@@ -351,7 +363,8 @@ def _reject_oversized(document: dict[str, Any]) -> None:
 
 
 def _choice_in(raw, choices, field: str, default: str) -> str:
-    """One of an enum's values, defaulting when absent.
+    """
+    One of an enum's values, defaulting when absent.
 
     Raises:
         ValueError: Present but unrecognised."""
@@ -412,7 +425,8 @@ class _Pools:
 
 
 def _stored_values(row: FloorplanItem) -> dict[str, Any] | None:
-    """Every concrete column's current value, or None for a row not yet in the database.
+    """
+    Every concrete column's current value, or None for a row not yet in the database.
     Read by attname, so a foreign key is compared as its id rather than by fetching the object it points at."""
     if row.pk is None:
         return None
@@ -469,7 +483,8 @@ _TWIN_FIELDS = ("name", "name_is_user_provided", "pin_type", "pin_type_is_user_p
 
 
 def _sync_linked_pin(marker: FloorplanMarker, payload: dict[str, Any], floorplan: Floorplan) -> None:
-    """Create, move, or restyle a marker's detail-pin twin to match it.
+    """
+    Create, move, or restyle a marker's detail-pin twin to match it.
 
     Args:
         marker: The marker to link, already saved (has a pk).
@@ -567,7 +582,8 @@ def _sync(existing_by_uuid: dict, payloads: list[dict] | None, build, pools: _Po
 
 
 def _reject_duplicate_levels(payload: Any) -> None:
-    """Refuse a document whose floors would share a storey.
+    """
+    Refuse a document whose floors would share a storey.
 
     Args:
         payload: The document's ``floors`` value, whatever the client sent.
@@ -589,7 +605,8 @@ def _reject_duplicate_levels(payload: Any) -> None:
 
 @transaction.atomic
 def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Profile | None) -> Floorplan:
-    """Fully replace one floorplan version's contents from a document.
+    """
+    Fully replace one floorplan version's contents from a document.
 
     Args:
         floorplan: The version being written.

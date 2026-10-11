@@ -1,4 +1,5 @@
-"""External-API routes for Memories - the retrospective view of a user's history.
+"""
+External-API routes for Memories - the retrospective view of a user's history.
 
 Owns the surfaces that re-present a user's own past rather than their current data: the journal feed
 (whose first route, ``memories/journal/``, still lives in ``urls.py``), on-this-day and per-period

@@ -1,4 +1,5 @@
-"""External-API routes for pin surfaces beyond the core CRUD and sync contract.
+"""
+External-API routes for pin surfaces beyond the core CRUD and sync contract.
 
 Wiring: ``urls.py`` concatenates the ``urlpatterns`` below into the flat ``external_api:`` namespace
 and re-sorts the combined list with

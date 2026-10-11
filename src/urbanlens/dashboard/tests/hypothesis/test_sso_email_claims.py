@@ -31,7 +31,8 @@ def _request():
 
 
 def _sign_in(provider: str, response: dict[str, Any]) -> Any:
-    """Run the configured social-auth pipeline for ``response``, as the completion view does.
+    """
+    Run the configured social-auth pipeline for ``response``, as the completion view does.
 
     Returns:
         The signed-in user, or the response a pipeline step answered with.

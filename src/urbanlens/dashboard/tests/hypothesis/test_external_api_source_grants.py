@@ -30,13 +30,15 @@ _PAT_SAFE_SCOPES = sorted({scope.value for scope in ApiKeyScope} - {scope.value 
 
 
 class _FakeApiKey:
-    """A PAT-style credential stand-in: a plain ``scopes`` list, no DB row.
+    """
+    A PAT-style credential stand-in: a plain ``scopes`` list, no DB row.
 
     ``credential_grants`` discriminates on the presence of ``allow_scopes``, so an object without it is treated
     exactly as an ``ApiKey`` row is."""
 
     def __init__(self, scopes: Iterable[str]) -> None:
-        """Store the scopes this fake credential claims.
+        """
+        Store the scopes this fake credential claims.
 
         Args:
             scopes: Scope values the credential grants.
@@ -45,13 +47,15 @@ class _FakeApiKey:
 
 
 class _FakeAccessToken:
-    """An OAuth2 credential stand-in, discriminated by ``allow_scopes``.
+    """
+    An OAuth2 credential stand-in, discriminated by ``allow_scopes``.
 
     Mirrors django-oauth-toolkit's ``AccessToken.allow_scopes`` contract: the token is already known to be
     unexpired and unrevoked by the time a permission asks it anything, so only the scope subset test remains."""
 
     def __init__(self, scopes: Iterable[str]) -> None:
-        """Store the scopes this fake token was issued with.
+        """
+        Store the scopes this fake token was issued with.
 
         Args:
             scopes: Scope values the token grants.
@@ -59,7 +63,8 @@ class _FakeAccessToken:
         self.scopes = set(scopes)
 
     def allow_scopes(self, scopes: list[str]) -> bool:
-        """Whether this token covers every scope in *scopes*.
+        """
+        Whether this token covers every scope in *scopes*.
 
         Args:
             scopes: The scopes being demanded.
@@ -88,7 +93,8 @@ class SourceGrantsDmLeakTests(SimpleTestCase):
         self.assertIn("messages", result.omitted)
 
     def test_pat_claiming_messages_read_is_still_refused(self) -> None:
-        """A hand-edited ``scopes`` column cannot buy a PAT into DM excerpts.
+        """
+        A hand-edited ``scopes`` column cannot buy a PAT into DM excerpts.
 
         ``OAUTH2_ONLY_SCOPES`` is a restriction on the credential *kind*, so it has to hold even when the row
         itself claims otherwise - a scope-picker bug or a direct UPDATE must not become a DM reader."""
@@ -145,7 +151,8 @@ class SourceGrantsShapeTests(SimpleTestCase):
         self.assertTrue(result)
 
     def test_empty_scope_declaration_fails_closed(self) -> None:
-        """A section declaring nothing is dropped, not waved through.
+        """
+        A section declaring nothing is dropped, not waved through.
 
         An endpoint that derives its per-section requirements at runtime and produces an empty set has a bug;
         granting the section would turn that bug into a silent disclosure, so it is omitted instead - matching
@@ -162,7 +169,8 @@ class SourceGrantsShapeTests(SimpleTestCase):
         self.assertFalse(result)
 
     def test_generator_values_are_not_silently_consumed(self) -> None:
-        """A one-shot iterable value must still be evaluated correctly.
+        """
+        A one-shot iterable value must still be evaluated correctly.
 
         ``credential_grants`` iterates the scopes it is handed; if the filter forwarded a generator
         unmaterialized and anything read it twice, the second read would see an empty set and fail closed on a
@@ -187,7 +195,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
     def test_granted_and_omitted_partition_the_mapping(
         self, held: list[str], sections: dict[str, frozenset[str]]
     ) -> None:
-        """Every declared key lands in exactly one of the two tuples.
+        """
+        Every declared key lands in exactly one of the two tuples.
 
         A key that fell out of both would be a section silently missing from
         the response with nothing telling the client it was dropped.
@@ -209,7 +218,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
     def test_a_granted_section_always_agrees_with_credential_grants(
         self, held: list[str], sections: dict[str, frozenset[str]]
     ) -> None:
-        """The filter must never be more permissive than the shared scope check.
+        """
+        The filter must never be more permissive than the shared scope check.
 
         This is the whole point of building on ``credential_grants``: if the two ever disagree, the disagreement
         is a section reaching a credential that the DRF permission layer would have refused."""
@@ -223,7 +233,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
     @_hyp
     @given(extra=st.lists(st.sampled_from(_PAT_SAFE_SCOPES), unique=True))
     def test_no_pat_scope_combination_unlocks_the_messages_section(self, extra: list[str]) -> None:
-        """Whatever else a bearer key holds, DMs stay out of reach.
+        """
+        Whatever else a bearer key holds, DMs stay out of reach.
 
         The property form matters here: it is not enough that the one scope combination someone thought to test
         is refused - ``messages:read`` must be unreachable across the whole PAT scope space."""
@@ -233,7 +244,8 @@ class SourceGrantsPropertyTests(SimpleTestCase):
 
 
 class SourceGrantsRealCredentialTests(TestCase):
-    """The same rules against real ``ApiKey`` rows, not stand-ins.
+    """
+    The same rules against real ``ApiKey`` rows, not stand-ins.
 
     The stubs above encode an assumption about what an ``ApiKey`` looks like to ``credential_grants``; this
     class is what notices if the model ever stops matching that assumption (e.g."""
@@ -244,7 +256,8 @@ class SourceGrantsRealCredentialTests(TestCase):
         self.user = baker.make(User, username="keyholder")
 
     def _key_with_scopes(self, scopes: list[str]) -> ApiKey:
-        """Issue a key carrying exactly *scopes*.
+        """
+        Issue a key carrying exactly *scopes*.
 
         Args:
             scopes: Raw scope values to store on the row.

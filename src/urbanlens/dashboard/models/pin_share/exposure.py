@@ -1,4 +1,5 @@
-"""LocationExposure - a durable record that a profile learned about a place via a share.
+"""
+LocationExposure - a durable record that a profile learned about a place via a share.
 This is the "infection" half of share-chain tracking.
 A ``PinShare`` row alone is not enough to keep reshare chains honest, because a recipient's Pin is mutable while its Location is immutable:
 """
@@ -25,7 +26,8 @@ class ExposureSource(abstract.TextChoices):
 
 
 class LocationExposure(abstract.DashboardModel):
-    """One profile's exposure to one Location through one share.
+    """
+    One profile's exposure to one Location through one share.
     Read as: "``profile`` first learned about ``location`` via ``share``".
     """
 
@@ -44,7 +46,8 @@ class LocationExposure(abstract.DashboardModel):
         share_id: int
 
     def __str__(self) -> str:
-        """Return a human-readable description of this exposure.
+        """
+        Return a human-readable description of this exposure.
 
         Returns:
             String like "Exposure profile=3 location=9 share=12".

@@ -75,7 +75,8 @@ class LabelCustomizePinCacheInvalidationTests(TestCase):
 
 
 class LabelDetailViewPinCacheInvalidationTests(TestCase):
-    """The external API's PATCH endpoint had the same gap as LabelEditView -
+    """
+    The external API's PATCH endpoint had the same gap as LabelEditView -
     editing icon/color through it never bumped Pin.updated, so a label edit
     made via the API left the client's map pin cache silently stale."""
 

@@ -68,7 +68,8 @@ class PanelApiFailClosedTests(SimpleTestCase):
         self.assertEqual(_StubPanelSource.api_kinds, frozenset())
 
     def test_bare_source_returns_no_payload(self) -> None:
-        """The second, independent lock: even a source that declared kinds by
+        """
+        The second, independent lock: even a source that declared kinds by
         mistake still has to write a payload before anything is emitted."""
         self.assertIsNone(_StubPanelSource().api_payload(None))  # type: ignore[arg-type]
 
@@ -85,7 +86,8 @@ class PanelApiFailClosedTests(SimpleTestCase):
         self.assertEqual(GalleryMediaSource.api_kinds, frozenset({PanelApiKind.MEDIA}))
 
     def test_imagery_carousels_are_deliberately_excluded(self) -> None:
-        """Regression guard for the base64-slide payload-size decision.
+        """
+        Regression guard for the base64-slide payload-size decision.
 
         They stay off the API until a signed slide-image proxy exists - if someone "helpfully" wires them up,
         this fails."""
@@ -117,7 +119,8 @@ class PanelApiRegistryConsistencyTests(TestCase):
                 self.assertTrue(set(source.api_kinds) <= set(PanelApiKind))
 
     def test_every_gated_panel_is_actually_gated(self) -> None:
-        """A panel declaring a feature must be refused to a viewer without it.
+        """
+        A panel declaring a feature must be refused to a viewer without it.
         Asserted as a property rather than a list of gated keys, so a newly gated panel is covered the day it is added."""
         from urbanlens.dashboard.services.pins.external_data import panel_visible_to
 
@@ -180,7 +183,8 @@ class InfoPanelApiPayloadTests(TestCase):
         self.assertIsNone(self.source.api_payload(self.pin))
 
     def test_presentation_only_context_keys_are_not_published(self) -> None:
-        """Regression guard for the allowlist projection.
+        """
+        Regression guard for the allowlist projection.
 
         ``nested`` is a template layout flag."""
         card = info_card_from_render_context(
@@ -211,7 +215,8 @@ class GalleryMediaApiPayloadTests(TestCase):
         self.assertEqual(payload, {PanelApiKind.MEDIA.value: []})
 
     def test_items_serialize_field_for_field(self) -> None:
-        """Every MediaItem field survives the trip to JSON.
+        """
+        Every MediaItem field survives the trip to JSON.
 
         ``content_type`` and ``author`` are included even when the provider publishes neither: an API client
         deciding whether it can render an item needs to see the field as empty rather than have to guess whether
@@ -251,7 +256,8 @@ class BoundaryApiPayloadTests(TestCase):
         self.assertEqual(self.source.api_kinds, frozenset({PanelApiKind.BOUNDARY}))
 
     def test_synthesized_circle_is_flagged_as_a_fallback(self) -> None:
-        """Regression guard: a client must never draw the circle as a parcel line.
+        """
+        Regression guard: a client must never draw the circle as a parcel line.
 
         With no real geometry anywhere, ``resolve_for_pin`` synthesizes a fixed-radius circle so the map has
         something to show."""
@@ -297,7 +303,8 @@ class PanelReadinessTests(TestCase):
         self.assertEqual(set(panel_readiness(self.pin, sources)), {source.key for source in sources})
 
     def test_cache_backed_sources_cost_a_constant_number_of_queries(self) -> None:
-        """The whole point: readiness for N panels is not N queries.
+        """
+        The whole point: readiness for N panels is not N queries.
 
         One query for the pin's own names (which cached searches it reads), one for the site's cache-age setting,
         one for the location's fresh rows, and one more for the payloads of the panels that opt into a content
@@ -309,7 +316,8 @@ class PanelReadinessTests(TestCase):
             panel_readiness(self.pin, cache_backed)
 
     def test_the_content_check_does_not_scale_with_how_many_panels_use_it(self) -> None:
-        """The property the count above is a proxy for.
+        """
+        The property the count above is a proxy for.
 
         A per-source payload fetch would reintroduce exactly the N+1 this function exists to remove, so every
         opted-in source must be served by the same single extra query."""
@@ -399,7 +407,8 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         self.assertTrue(all(row["child_pin_uuid"] is None and row["child_pin_name"] is None for row in rows))
 
     def test_a_building_on_the_parent_pins_own_point_is_not_creatable(self) -> None:
-        """Unpinned is not the same as creatable, and the count follows creatable.
+        """
+        Unpinned is not the same as creatable, and the count follows creatable.
 
         This fixture's Tool Shed sits at the parcel pin's own coordinates, which is not contrived - a parcel's
         coordinate is frequently one of its buildings' centroids."""
@@ -414,7 +423,8 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         self.assertEqual(payload["unpinned_count"], 1)
 
     def test_the_count_is_exactly_the_rows_flagged_creatable(self) -> None:
-        """The invariant that makes the number and the list one answer.
+        """
+        The invariant that makes the number and the list one answer.
 
         Deriving them separately is how they came to disagree inside a single
         response, with no way for a client to tell which rows the number meant.
@@ -428,7 +438,8 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         )
 
     def test_the_count_matches_what_the_web_dialog_would_add(self) -> None:
-        """The two surfaces must not answer this differently.
+        """
+        The two surfaces must not answer this differently.
 
         The web button asks ``missing_buildings``; this asks the same rule through
         ``importable_building_indexes``."""
@@ -451,7 +462,8 @@ class ParcelBuildingsApiPayloadTests(TestCase):
             self.assertNotIn("selection_key", row)
 
     def test_covering_child_pin_is_reported_by_uuid_and_name(self) -> None:
-        """The pairing a client cannot compute for itself, resolved server-side.
+        """
+        The pairing a client cannot compute for itself, resolved server-side.
 
         Without it a mobile client would offer to create a duplicate pin for a
         building someone has already pinned.
@@ -503,7 +515,8 @@ class BuildingFootprintGeojsonTests(SimpleTestCase):
     """The "is this a real outline?" test that backs ``has_geometry``."""
 
     def test_point_placeholder_is_dropped(self) -> None:
-        """REData sends a Point when the county published no outline.
+        """
+        REData sends a Point when the county published no outline.
 
         Keeping it would double a hundred-building payload to repeat the
         latitude/longitude already on the row.
@@ -533,7 +546,8 @@ class CrisBuildingApiPayloadTests(TestCase):
         self.source = CrisBuildingPanelSource()
 
     def test_declares_both_kinds(self) -> None:
-        """Regression guard for the MRO trap.
+        """
+        Regression guard for the MRO trap.
 
         ``CrisBuildingPanelSource`` inherits from an info base and a media base; Python resolves ``api_kinds``
         to the first, silently dropping the media half, unless the class declares it explicitly."""
@@ -581,7 +595,8 @@ class CrisBuildingApiPayloadTests(TestCase):
         self.assertTrue(url.startswith("/"))
 
     def test_district_only_record_still_serves_its_media(self) -> None:
-        """A location inside a historic district with no surveyed building of
+        """
+        A location inside a historic district with no surveyed building of
         its own has no info card, but may still have attachments worth serving."""
         LocationCache.set(
             self.pin.location,
@@ -792,7 +807,8 @@ class InfoCardContractTests(SimpleTestCase):
     def test_key_set_is_stable_for_any_input(
         self, heading_name: str | None, chips: list[str], description: str | None
     ) -> None:
-        """A consumer lays the card out once, so keys can't come and go.
+        """
+        A consumer lays the card out once, so keys can't come and go.
 
         A missing key is indistinguishable from an older server to a client, so
         every field is always present even when the source never fills it.
@@ -807,7 +823,8 @@ class InfoCardContractTests(SimpleTestCase):
 
     @given(heading_name=st.text(alphabet=" \t", max_size=5))
     def test_blank_scalars_normalize_to_none(self, heading_name: str) -> None:
-        """Only truly empty strings normalize - whitespace is the source's business.
+        """
+        Only truly empty strings normalize - whitespace is the source's business.
 
         Trimming here would quietly diverge from what the web panel renders for the same cached row, which is
         exactly the drift this contract exists to prevent."""

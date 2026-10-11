@@ -1,4 +1,5 @@
-"""Searching pins via `label:` must not read label rows belonging to a pin you cannot see.
+"""
+Searching pins via `label:` must not read label rows belonging to a pin you cannot see.
 
 ``test_search_does_not_read_another_accounts_labels.py`` already covers ``PinSearchProvider``'s
 bare-term path (``"labels__name"`` in ``apply_text``'s field list, ``icontains``). That file's own
@@ -70,7 +71,8 @@ TOLERANCE = 20
 
 
 class _PinLabelOperatorCase(TestCase):
-    """A viewer with one pin (one exactly-named label), and a stranger's pin whose unrelated labels
+    """
+    A viewer with one pin (one exactly-named label), and a stranger's pin whose unrelated labels
     share the table."""
 
     def setUp(self) -> None:
@@ -128,7 +130,8 @@ class _PinLabelOperatorCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the label table at all.
+        """
+        The full capture, and the statements in it that read the label table at all.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan
@@ -169,7 +172,8 @@ class SearchDoesNotReadAnotherAccountsPinLabelOperatorTests(_PinLabelOperatorCas
     """One account's labels must not be read to answer a `label:` search for a different account's pin."""
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_elsewhere(self) -> None:
-        """A `label:` search that DOES match the viewer's own pin must not also scan the stranger's.
+        """
+        A `label:` search that DOES match the viewer's own pin must not also scan the stranger's.
 
         Not xfailed: measured, not assumed, to already hold - see the module docstring. Unlike Photo's
         and Wiki's identical call to `apply_label_clause`, Pin's matching variant does not grow here.
@@ -177,7 +181,8 @@ class SearchDoesNotReadAnotherAccountsPinLabelOperatorTests(_PinLabelOperatorCas
         self.assertDoesNotGrow(MINE)
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_nothing(self) -> None:
-        """A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
+        """
+        A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
 
         Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
         """

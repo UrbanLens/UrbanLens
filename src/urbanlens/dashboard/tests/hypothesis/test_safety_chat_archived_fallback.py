@@ -39,7 +39,8 @@ class ArchivedCheckinChatFallbackTests(TestCase):
         self.assertTrue(issubclass(SafetyValidationError, ValueError))
 
     def _archive(self) -> None:
-        """Archive the check-in for real, rather than faking the closed state.
+        """
+        Archive the check-in for real, rather than faking the closed state.
 
         `archive_checkin` seals the plaintext to the owner's E2EE public key, so the bundle needs a genuine
         32-byte key - a placeholder string makes NaCl reject it and the archive silently never happens."""

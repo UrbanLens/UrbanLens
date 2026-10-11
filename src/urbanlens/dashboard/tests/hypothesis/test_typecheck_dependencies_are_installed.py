@@ -1,4 +1,5 @@
-"""A typecheck that cannot resolve its imports reports nothing useful.
+"""
+A typecheck that cannot resolve its imports reports nothing useful.
 
 `bun run typecheck` runs two projects: the root one, and
 `tests/integration/tsconfig.json`. The integration suite is a self-contained npm
@@ -34,7 +35,8 @@ _PACKAGE_JSON = _REPO_ROOT / "package.json"
 
 
 def _typechecked_projects() -> list[str]:
-    """The tsconfig paths the root `typecheck` script runs.
+    """
+    The tsconfig paths the root `typecheck` script runs.
 
     Returns:
         Repo-relative paths, in the order they appear.
@@ -44,7 +46,8 @@ def _typechecked_projects() -> list[str]:
 
 
 def _nested_projects() -> list[str]:
-    """Typechecked projects whose dependencies come from their own install.
+    """
+    Typechecked projects whose dependencies come from their own install.
 
     Returns:
         The directory of each such project, repo-relative.
@@ -58,7 +61,8 @@ def _nested_projects() -> list[str]:
 
 
 def _job_running_typecheck() -> dict:
-    """The CI job whose steps run `bun run typecheck`.
+    """
+    The CI job whose steps run `bun run typecheck`.
 
     Returns:
         The job definition.

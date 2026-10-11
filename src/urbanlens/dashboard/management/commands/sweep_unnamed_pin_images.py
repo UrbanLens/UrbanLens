@@ -16,7 +16,8 @@ class Command(BaseCommand):
     help = "Find files under pin_images/ that no Image row names. Reports only, unless --delete is given."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Register the command's flags.
+        """
+        Register the command's flags.
 
         Args:
             parser: The argument parser.
@@ -24,7 +25,8 @@ class Command(BaseCommand):
         parser.add_argument("--delete", action="store_true", help="Delete what it finds instead of only reporting it.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Run the sweep and print what it found.
+        """
+        Run the sweep and print what it found.
 
         Args:
             *args: Unused.

@@ -53,7 +53,8 @@ _HEURISTIC_CONFIDENCE = 0.35
 
 
 def guess_device_type(*, mac_address: str, display_name: str) -> tuple[str, float]:
-    """Best-effort device-type guess from a name and MAC address.
+    """
+    Best-effort device-type guess from a name and MAC address.
 
     Args:
         mac_address: Normalized (colon-separated, upper-case) MAC address.

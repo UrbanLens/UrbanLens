@@ -69,7 +69,8 @@ def _body(response) -> bytes:
 
 
 def _gps_jpeg_bytes() -> bytes:
-    """A JPEG carrying GPS coordinates and a place-naming description in its EXIF.
+    """
+    A JPEG carrying GPS coordinates and a place-naming description in its EXIF.
 
     This is what a phone actually uploads, and every one of these tags points at
     the round's answer - which is why the upload pipeline re-encodes every photo
@@ -325,7 +326,8 @@ class SpotGuessrGuessTests(_SpotGuessrApiTestCase):
         self.round_id = started["round"]["round_id"]
 
     def test_guessing_the_exact_coordinates_scores_a_zero_distance(self) -> None:
-        """Proves the Point argument order: swapping lat/lng yields a valid point ~5000km away.
+        """
+        Proves the Point argument order: swapping lat/lng yields a valid point ~5000km away.
 
         Nothing raises on a swap - the guess simply scores as a total miss - so this assertion is the only thing
         standing between the game and a silently unwinnable one."""

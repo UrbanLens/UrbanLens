@@ -88,7 +88,8 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
         enqueue.assert_called_once()
 
     def test_message_type_is_excluded_from_the_generic_pipeline(self) -> None:
-        """DM alerts keep their own streak-debounced pipeline - the generic one
+        """
+        DM alerts keep their own streak-debounced pipeline - the generic one
         must not double-text for MESSAGE notifications."""
         self._prefs(message_whatsapp=True)
         notification = self._notification(ntype=NotificationType.MESSAGE)
@@ -104,7 +105,8 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
         enqueue.assert_not_called()
 
     def test_every_alertable_type_has_both_preference_fields(self) -> None:
-        """Resolved by enum *member name*, which is how production reads them.
+        """
+        Resolved by enum *member name*, which is how production reads them.
 
         That held only because the one type whose value and column stem disagree
         (``SAFETY_CHECKIN_PARTNER_INVITE`` -> ``safety_ci_partner_invite`` vs
@@ -119,7 +121,8 @@ class ScheduleNotificationTextAlertsTests(_AlertTestBase):
             self.assertTrue(hasattr(prefs, f"{stem}_sms"), ntype)
 
     def test_signal_schedules_on_creation(self) -> None:
-        """The post_save signal wires creation to scheduling after commit.
+        """
+        The post_save signal wires creation to scheduling after commit.
 
         The native-push signal shares safely_enqueue_task, so assert on the
         specific task rather than the total call count.

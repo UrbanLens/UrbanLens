@@ -1,4 +1,5 @@
-"""Without REData (``UL_REDATA_API_URL`` unset), every REData-backed surface is cleanly unavailable.
+"""
+Without REData (``UL_REDATA_API_URL`` unset), every REData-backed surface is cleanly unavailable.
 
 Unavailable means: not scheduled, nothing logged as a failure, and nothing cached - an empty answer cached now would
 still be served after REData is configured, for the rest of the cache window.

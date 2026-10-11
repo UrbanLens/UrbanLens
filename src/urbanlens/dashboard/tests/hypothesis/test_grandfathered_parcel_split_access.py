@@ -1,4 +1,5 @@
-"""Integration coverage for grandfathered access after a real-estate parcel split.
+"""
+Integration coverage for grandfathered access after a real-estate parcel split.
 
 Two mechanisms, tested separately because they are triggered independently and
 must not be confused with each other:
@@ -211,7 +212,8 @@ class GrandfatheredParcelSplitAccessTests(TestCase):
 
 
 class WikiEngagementGrandfatheringTests(TestCase):
-    """An ordinary (never-split) parcel: viewing or sharing while access is held
+    """
+    An ordinary (never-split) parcel: viewing or sharing while access is held
     grandfathers a profile in permanently; never doing either does not."""
 
     def setUp(self) -> None:

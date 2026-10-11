@@ -39,7 +39,8 @@ class ProfileContactEditableRenderingTests(TestCase):
         return self.client.get(reverse("profile.view"))
 
     def test_contact_section_hidden_for_owner_with_no_contact_info_yet(self) -> None:
-        """Same "hide the section entirely" behavior as other viewers now -
+        """
+        Same "hide the section entirely" behavior as other viewers now -
         an owner adds a first contact value via the Edit Profile page."""
         response = self._get_own()
         self.assertNotContains(response, ">Contact<")
@@ -111,7 +112,8 @@ class ProfileBirthDateEditableRenderingTests(TestCase):
         return self.client.get(reverse("profile.view"))
 
     def test_additional_details_hidden_for_owner_with_no_birth_date_and_no_secondary_emails(self) -> None:
-        """Same reasoning as the Contact section - an owner adds a first
+        """
+        Same reasoning as the Contact section - an owner adds a first
         birthday via the Edit Profile page rather than an inline placeholder."""
         response = self._get_own()
         self.assertNotContains(response, "Additional Details")
@@ -130,7 +132,8 @@ class ProfileBirthDateEditableRenderingTests(TestCase):
         self.assertContains(response, "Birthday: June 15, 1990")
 
     def test_additional_details_shown_for_secondary_email_alone_but_no_birth_date_row(self) -> None:
-        """The section has two independent triggers - a secondary email with
+        """
+        The section has two independent triggers - a secondary email with
         no birthday set yet must still show the section (for the email), just
         without the birth-date editable row itself."""
         from urbanlens.dashboard.models.profile.email import ProfileEmail
@@ -161,7 +164,8 @@ class ProfileFieldUpdateContactAndBirthDateTests(TestCase):
             self.assertEqual(getattr(self.profile, field), "new-value", field)
 
     def test_clearing_a_contact_field_sets_it_to_empty(self) -> None:
-        """phone_number etc. are CharField(blank=True, default="") - the empty
+        """
+        phone_number etc. are CharField(blank=True, default="") - the empty
         sentinel is "", not None, unlike bio/area's null=True TextFields."""
         self.profile.phone_number = "555-0100"
         self.profile.save(update_fields=["phone_number"])

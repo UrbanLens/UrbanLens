@@ -1,4 +1,5 @@
-"""The Jinja2 backend renders, shares the Django engine's context processors, and resolves lazy context values.
+"""
+The Jinja2 backend renders, shares the Django engine's context processors, and resolves lazy context values.
 
 Templates move to this engine one file at a time, so a value that renders under the Django engine has to render
 the same way here. Jinja does not call callables the way Django's variable resolution does, which is the one

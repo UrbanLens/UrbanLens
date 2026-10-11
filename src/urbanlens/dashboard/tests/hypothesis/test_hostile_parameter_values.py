@@ -1,4 +1,5 @@
-"""A parameter value no parser expects is refused or ignored, never a 500 or a stored row (P283).
+"""
+A parameter value no parser expects is refused or ignored, never a 500 or a stored row (P283).
 
 ``float()`` reads ``inf`` and ``nan``, ``Decimal()`` reads both and ``1e999``, ``int()`` reads a number past a 64-bit
 column, and a ``UUIDField`` lookup raises ``ValidationError`` on anything that is not a UUID.

@@ -1,4 +1,5 @@
-"""The Immich gateway talks to a server the account holder chose, so every request is an SSRF door.
+"""
+The Immich gateway talks to a server the account holder chose, so every request is an SSRF door.
 
 The form checks the url when it is saved. Nothing checked it when it was used: the host could
 re-resolve to an internal address, redirect there with the API key attached, drip bytes forever, or

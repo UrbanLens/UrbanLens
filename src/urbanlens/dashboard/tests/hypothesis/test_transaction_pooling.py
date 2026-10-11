@@ -1,4 +1,5 @@
-"""What the app needs to run behind a transaction-mode PgBouncer.
+"""
+What the app needs to run behind a transaction-mode PgBouncer.
 
 A transaction pool hands each transaction whichever server connection is free, so anything held by the session
 outlives the transaction on a connection the next, unrelated client inherits. Two things here did that: a named
@@ -70,7 +71,8 @@ class ProbeScopeHoldsNoSessionStateTests(TestCase):
 
 class ProbeScopeOutsideATransactionTests(TransactionTestCase):
     def test_the_probes_share_one_transaction(self) -> None:
-        """Under autocommit each probe would otherwise be its own transaction, free to land on a server
+        """
+        Under autocommit each probe would otherwise be its own transaction, free to land on a server
         connection that never saw the setting."""
         with probe_scope():
             self.assertTrue(connection.in_atomic_block)

@@ -57,7 +57,8 @@ EMPTY_COMMENT = "Please add some text, a photo, or a map."
 
 
 def get_comment(trip: Trip, comment_id: int) -> TripComment:
-    """Return one of the trip's own comments.
+    """
+    Return one of the trip's own comments.
 
     Args:
         trip: The trip that must own the comment.
@@ -75,7 +76,8 @@ def get_comment(trip: Trip, comment_id: int) -> TripComment:
 
 
 def can_delete_comment(comment: TripComment, viewer: Profile, trip: Trip) -> bool:
-    """Return True when *viewer* may delete *comment*.
+    """
+    Return True when *viewer* may delete *comment*.
 
     Args:
         comment: The comment in question.
@@ -88,7 +90,8 @@ def can_delete_comment(comment: TripComment, viewer: Profile, trip: Trip) -> boo
 
 
 def _unhidden_reactions(reactions: Iterable[Reaction], blocks: SharedSpaceBlocks) -> list[Reaction]:
-    """The reactions a block does not hide from the viewer *blocks* describes.
+    """
+    The reactions a block does not hide from the viewer *blocks* describes.
 
     Args:
         reactions: A comment's reactions, typically prefetched.
@@ -101,7 +104,8 @@ def _unhidden_reactions(reactions: Iterable[Reaction], blocks: SharedSpaceBlocks
 
 
 def comment_reactions_for(comment: TripComment, viewer: Profile) -> dict[str, _ReactionData]:
-    """One comment's reaction tally as *viewer* may see it.
+    """
+    One comment's reaction tally as *viewer* may see it.
 
     Args:
         comment: The comment.
@@ -116,7 +120,8 @@ def comment_reactions_for(comment: TripComment, viewer: Profile) -> dict[str, _R
 
 
 def visible_comment_queryset(trip: Trip, viewer: Profile):
-    """Top-level comments of *trip* that *viewer* may see, ready to be paged.
+    """
+    Top-level comments of *trip* that *viewer* may see, ready to be paged.
 
     Every gate is applied in SQL (see ``TripComment.objects.visible_to``), which
     is what lets a caller take a page with LIMIT rather than building the whole
@@ -149,7 +154,8 @@ def visible_comment_queryset(trip: Trip, viewer: Profile):
 
 
 def visible_comment_count(trip: Trip, viewer: Profile) -> int:
-    """How many of *trip*'s comments and replies *viewer* may see.
+    """
+    How many of *trip*'s comments and replies *viewer* may see.
 
     Counted over the whole thread rather than the page, so the badge does not
     shrink the moment paging starts, and gated so it cannot disagree with what
@@ -166,7 +172,8 @@ def visible_comment_count(trip: Trip, viewer: Profile) -> int:
 
 
 def build_comment_tree(trip: Trip, viewer: Profile, *, comments: Any = None) -> list[TripCommentData]:
-    """Build the trip's visible comment tree for one viewer.
+    """
+    Build the trip's visible comment tree for one viewer.
 
     Args:
         trip: The trip whose comments are wanted.
@@ -299,7 +306,8 @@ def add_comment(
     existing_image_id: str = "",
     map_data: Any = None,
 ) -> TripComment:
-    """Post a comment (or a reply) on a trip.
+    """
+    Post a comment (or a reply) on a trip.
 
     Args:
         trip: The trip being commented on.
@@ -361,7 +369,8 @@ def add_comment(
 
 
 def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
-    """Delete a trip comment, along with any markup map it carried.
+    """
+    Delete a trip comment, along with any markup map it carried.
 
     Args:
         trip: The trip owning the comment.
@@ -382,7 +391,8 @@ def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
 
 
 def trip_comment_is_visible(comment: TripComment, viewer: Profile) -> bool:
-    """Whether one trip comment survives every gate :func:`build_comment_tree` applies.
+    """
+    Whether one trip comment survives every gate :func:`build_comment_tree` applies.
     The single-comment counterpart to that function, for the paths that address a comment by id rather than rendering the panel.
 
     Args:
@@ -413,7 +423,8 @@ def trip_comment_is_visible(comment: TripComment, viewer: Profile) -> bool:
 
 
 def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, reacted: bool) -> None:
-    """Add or remove one emoji reaction on a trip comment.
+    """
+    Add or remove one emoji reaction on a trip comment.
     An explicit target state rather than a toggle, so a retried request can't silently undo itself.
 
     Args:

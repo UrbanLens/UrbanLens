@@ -1,4 +1,5 @@
-"""Tests for Vault > Documents (Batch 5 of the Vault feature): the
+"""
+Tests for Vault > Documents (Batch 5 of the Vault feature): the
 media_type=DOCUMENT gallery mirroring Vault Photos' grid/sort infrastructure,
 and the .photos()/.documents() queryset split it depends on (see
 models.images.queryset.ImageQuerySet and every call site that needed
@@ -44,7 +45,8 @@ class ImageQuerySetMediaSplitTests(TestCase):
         self.assertEqual(list(Image.objects.filter(profile=self.profile).videos()), [video])
 
     def test_the_three_kind_filters_partition_the_library(self) -> None:
-        """Every row in exactly one of them - which is what makes counting two of
+        """
+        Every row in exactly one of them - which is what makes counting two of
         three a silent undercount rather than a visible error."""
         for kind in (MediaKind.PHOTO, MediaKind.DOCUMENT, MediaKind.VIDEO):
             baker.make(Image, profile=self.profile, media_type=kind, _quantity=2)
@@ -160,7 +162,8 @@ class DocumentItemsViewTests(TestCase):
         self.assertEqual(captions, ["Apple.pdf", "Zebra.pdf"])
 
     def test_items_carry_the_server_resolved_document_icon(self) -> None:
-        """The grid renders the icon from the payload rather than re-deriving it.
+        """
+        The grid renders the icon from the payload rather than re-deriving it.
 
         The client only ever sees the caption, while the server falls back to the stored filename when a
         document has no caption - a client-side copy of the extension map therefore disagrees with the
@@ -177,7 +180,8 @@ class DocumentItemsViewTests(TestCase):
         self.assertEqual(item["document_icon"], "")
 
     def test_query_count_does_not_grow_with_the_number_of_documents(self) -> None:
-        """The gallery selects ``profile__user``, so listing is flat, not per-row.
+        """
+        The gallery selects ``profile__user``, so listing is flat, not per-row.
 
         ``image_to_gallery_json`` names the uploader through ``Profile.username`` -> ``self.user.username``."""
         from django.db import connection
@@ -352,7 +356,8 @@ class PhotoActionViewRefusesDocumentsTests(TestCase):
 
 
 class CommentImageAttachExcludesDocumentsTests(TestCase):
-    """attach_existing_comment_image (controllers.comments) must not let a
+    """
+    attach_existing_comment_image (controllers.comments) must not let a
     document through - comment.image is always rendered as an <img>.
     """
 
@@ -372,7 +377,8 @@ class CommentImageAttachExcludesDocumentsTests(TestCase):
 
 
 class PinWikiGalleriesExcludeDocumentsTests(TestCase):
-    """_pin_gallery_images/_wiki_gallery_images (controllers.image_gallery) -
+    """
+    _pin_gallery_images/_wiki_gallery_images (controllers.image_gallery) -
     defense in depth alongside the PhotoActionView guards above, since these
     galleries have no document rendering at all.
     """
@@ -394,7 +400,8 @@ class PinWikiGalleriesExcludeDocumentsTests(TestCase):
 
 
 class AchievementMetricExcludesDocumentsTests(TestCase):
-    """The 'photos_uploaded' achievement metric (services.achievements.metrics)
+    """
+    The 'photos_uploaded' achievement metric (services.achievements.metrics)
     must count only photos, matching its own label.
     """
 
@@ -412,7 +419,8 @@ class AchievementMetricExcludesDocumentsTests(TestCase):
 
 
 class MemoriesHeroStatsExcludeDocumentsTests(TestCase):
-    """_compute_hero_stats' photo_count (controllers.memories) backs the
+    """
+    _compute_hero_stats' photo_count (controllers.memories) backs the
     Memories page hero, labeled "Photos".
     """
 
@@ -429,7 +437,8 @@ class MemoriesHeroStatsExcludeDocumentsTests(TestCase):
 
 
 class DocumentLightboxActionsTests(TestCase):
-    """The lightbox must not offer the actions PhotoActionView refuses.
+    """
+    The lightbox must not offer the actions PhotoActionView refuses.
 
     File-to-a-pin and send-to-a-wiki are both refused server-side for a document (see
     PhotoActionViewRefusesDocumentsTests); rendering the buttons anyway leaves a user searching their pins,

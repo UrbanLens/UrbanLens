@@ -1,4 +1,5 @@
-"""Nearby photos plugin: members' photos of the places around a pin, found through REData's photo relevance index.
+"""
+Nearby photos plugin: members' photos of the places around a pin, found through REData's photo relevance index.
 
 This site submits every located photo to REData for relevance scoring (``services.photos.redata_relevance``), so
 REData can say which of them belong to the places near a point - matched on each photo's place, not where the camera
@@ -70,7 +71,8 @@ class NearbyPhotosSource(GalleryMediaSource):
         return bool(pin.effective_latitude and pin.effective_longitude) and redata_configured()
 
     def fetch(self, pin: Pin) -> None:
-        """Cache which of this site's photos REData places near the pin, and on its parcel, with their scores.
+        """
+        Cache which of this site's photos REData places near the pin, and on its parcel, with their scores.
 
         The parcel's photos are asked for only when the Property Records card has already resolved the parcel, and
         are a bonus: a parcel REData does not hold, or a failure asking, leaves the nearby photos to stand alone.
@@ -100,7 +102,8 @@ class NearbyPhotosSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, data, query_key=point_key(latitude, longitude))
 
     def for_viewer(self, data: dict, viewer: Profile, location: Location) -> dict:
-        """The cached photos ``viewer`` may see, as tiles: their own, or ones shared into a wiki they can reach.
+        """
+        The cached photos ``viewer`` may see, as tiles: their own, or ones shared into a wiki they can reach.
 
         Photos of ``location`` itself are left out - filed there, or under its pin or wiki - and so is a photo shown to
         the viewer only because a direct message or safety check-in named them: that consent does not extend to a

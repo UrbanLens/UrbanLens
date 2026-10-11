@@ -1,4 +1,5 @@
-"""A data export copies photos and overlay images out of a storage that has no local paths (P321).
+"""
+A data export copies photos and overlay images out of a storage that has no local paths (P321).
 
 Production stores media with ``GatedS3Storage``, which, like every ``S3Storage``, has no ``path()``. The export asked
 each file for its path, so one stored photo or image overlay failed the whole export.
@@ -41,7 +42,8 @@ _OVERLAY = b"\x89PNG\r\n\x1a\n overlay bytes " * 64
 
 
 class PathlessInMemoryStorage(InMemoryStorage):
-    """Django's in-memory backend without ``path()``, which ``S3Storage`` does not have either.
+    """
+    Django's in-memory backend without ``path()``, which ``S3Storage`` does not have either.
 
     ``InMemoryStorage.path`` answers with a path nothing exists at, so the old export skipped the file silently there
     instead of failing as it does on S3; this backend raises the way S3 does.
@@ -192,7 +194,8 @@ def _key(request: AWSRequest) -> str:
 def _bucket(
     objects: dict[str, bytes], *, deleted_after_head: frozenset[str] = frozenset()
 ) -> Callable[[AWSRequest], AWSResponse]:
-    """Answer HEAD and GET (whole or ranged) for *objects*, keyed by object name; anything else is a 404.
+    """
+    Answer HEAD and GET (whole or ranged) for *objects*, keyed by object name; anything else is a 404.
 
     Args:
         objects: The bucket's contents.

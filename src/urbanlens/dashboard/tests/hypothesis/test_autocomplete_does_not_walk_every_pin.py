@@ -1,4 +1,5 @@
-"""Map autocomplete must read the viewer's pins, not every pin on the site.
+"""
+Map autocomplete must read the viewer's pins, not every pin on the site.
 
 Measured on the capacity population (471,756 pins, X28): one keystroke cost 405 ms of SQL, and
 `EXPLAIN (ANALYZE, BUFFERS)` put 197 ms of it in a single node:
@@ -61,7 +62,8 @@ THEIRS = 30000
 
 
 def _select_list(sql: str) -> str:
-    """The columns a statement returns, without the clauses that only mention them.
+    """
+    The columns a statement returns, without the clauses that only mention them.
 
     Args:
         sql: A statement, as executed.
@@ -88,7 +90,8 @@ class AutocompleteReadsOneAccountsPinsTests(TestCase):
             cursor.execute(f"ANALYZE {Pin._meta.db_table}, {Location._meta.db_table}")  # noqa: S608 - names from the ORM
 
     def _pins(self, profile: Profile, count: int) -> None:
-        """Give *profile* *count* pins, each at its own coordinates.
+        """
+        Give *profile* *count* pins, each at its own coordinates.
 
         Locations are unique on (latitude, longitude), so every pin needs its own. Built with
         `bulk_create` because the row count this test needs is set by the planner rather than by
@@ -126,7 +129,8 @@ class AutocompleteReadsOneAccountsPinsTests(TestCase):
         return captured
 
     def _pin_rows_read(self) -> int:
-        """Rows the pin search reads out of the pin table, counting rows a filter discarded.
+        """
+        Rows the pin search reads out of the pin table, counting rows a filter discarded.
 
         Planned with ``enable_sort = off``, which is what makes this measurable at a scale a test
         can seed. The production plan was chosen because the ``Unique`` wanted presorted input and
@@ -153,7 +157,8 @@ class AutocompleteReadsOneAccountsPinsTests(TestCase):
         )
 
     def test_the_statement_that_scans_selects_one_column(self) -> None:
-        """What the scanning query returns is what sets its planning cost.
+        """
+        What the scanning query returns is what sets its planning cost.
 
         `select_related` on the filtering query puts four tables' columns in a select list the
         query then has to `DISTINCT` over, and the planner searches join orders for all of them

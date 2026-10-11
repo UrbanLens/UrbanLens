@@ -1,4 +1,5 @@
-"""Article models - long-form, Wikipedia-style write-ups for pins and wikis.
+"""
+Article models - long-form, Wikipedia-style write-ups for pins and wikis.
 An :class:`Article` is the full free-form article body for exactly one host: Everyone who can see the wiki can read it, and anyone with access may edit it (every edit is recorded as an :class:`ArticleRevision`, so vandalism can be reverted). - ``pin`` set: a user's private article about their own pin.
 """
 
@@ -23,7 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 class Article(abstract.DashboardModel):
-    """The current state of one pin's or one wiki's article.
+    """
+    The current state of one pin's or one wiki's article.
 
     Exactly one of ``pin`` or ``wiki`` is set (DB-enforced). The row holds the
     latest Markdown source plus its cached sanitized-HTML rendering; the full
@@ -108,7 +110,8 @@ class Article(abstract.DashboardModel):
 
 
 class ArticleRevision(abstract.DashboardModel):
-    """One saved version of an article's Markdown source.
+    """
+    One saved version of an article's Markdown source.
     A new revision is written on every successful save (including restores), each carrying the *complete* text at that moment - so any revision can be viewed, diffed against its predecessor, or restored wholesale without replaying a chain of diffs.
     """
 
@@ -148,7 +151,8 @@ class ArticleRevision(abstract.DashboardModel):
 
     @property
     def editor_display_name(self) -> str:
-        """The name to show for who made this revision.
+        """
+        The name to show for who made this revision.
 
         Returns:
             The editor's username, "Wikipedia" for a system-seeded revision,
@@ -161,7 +165,8 @@ class ArticleRevision(abstract.DashboardModel):
         return "Deleted user"
 
     def size_delta(self, previous: ArticleRevision | None) -> int:
-        """Character-count change relative to ``previous`` (Wikipedia-style +N/-N).
+        """
+        Character-count change relative to ``previous`` (Wikipedia-style +N/-N).
 
         Args:
             previous: The revision immediately before this one, or None for
@@ -175,7 +180,8 @@ class ArticleRevision(abstract.DashboardModel):
 
     @property
     def content_size(self) -> int:
-        """The revision's length in characters, from a ``content_length`` annotation when the row carries one.
+        """
+        The revision's length in characters, from a ``content_length`` annotation when the row carries one.
 
         A history page annotates it and defers ``content``, so listing revisions does not load every full text.
         """

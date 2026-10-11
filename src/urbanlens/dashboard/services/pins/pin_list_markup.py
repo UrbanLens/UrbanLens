@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 
 
 def build_list_markup_snapshot(pin_list: PinList) -> dict | None:
-    """Build a markup snapshot dict with one pin marker per list item.
+    """
+    Build a markup snapshot dict with one pin marker per list item.
 
     Args:
         pin_list: The list to snapshot.

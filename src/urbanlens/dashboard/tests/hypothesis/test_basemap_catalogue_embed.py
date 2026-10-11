@@ -1,4 +1,5 @@
-"""The basemap catalogue embedded in the page, ahead of any map.
+"""
+The basemap catalogue embedded in the page, ahead of any map.
 
 A map that fetches the catalogue over HTTP has already drawn a vendor's tiles by the time the
 answer lands, which hands that vendor the coordinates the proxy exists to keep from it. These
@@ -48,7 +49,8 @@ _VECTOR = {
 
 
 def _warm(sources: list[dict[str, object]]) -> None:
-    """Populate the catalogue cache the way a client's own fetch does.
+    """
+    Populate the catalogue cache the way a client's own fetch does.
 
     The embed never fetches - see ``basemap_tile_catalogue``'s ``allow_fetch`` - so a test that
     only mocks the gateway and renders would be testing the cold path every time.
@@ -182,7 +184,8 @@ class BasemapCatalogueEmbedTests(RedataConfiguredMixin, TestCase):
 
 
 class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCase):
-    """The catalogue is cached for a day with no jitter, so it goes cold at one moment for
+    """
+    The catalogue is cached for a day with no jitter, so it goes cold at one moment for
     everybody. Every authenticated page load's `registerRedataLayers()` XHR misses in the ~1.5s
     that refill takes (P131), and each miss holds a request thread for the whole of it: production
     runs 6 workers x 4 threads, so 24 concurrent misses is the whole site. The tile proxy got a
@@ -222,7 +225,8 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
         self.assertEqual(second, [[]], "a caller that did not fetch must degrade, not invent layers")
 
     def test_a_waiting_caller_is_served_the_answer_the_holder_published(self) -> None:
-        """Degrading is the fallback, not the behaviour: a map that drops back to vendor tiles has
+        """
+        Degrading is the fallback, not the behaviour: a map that drops back to vendor tiles has
         told that vendor the coordinates the proxy exists to keep from it."""
         from urbanlens.dashboard.services.map import basemap_catalogue
         from urbanlens.dashboard.services.map.basemap_catalogue import _await_catalogue, basemap_tile_catalogue
@@ -248,7 +252,8 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
         self.assertEqual([entry["id"] for entry in waited], ["street"])
 
     def test_a_waiting_caller_stops_as_soon_as_the_holder_gives_up(self) -> None:
-        """A failed refill releases the key without publishing; waiting out the rest of the budget
+        """
+        A failed refill releases the key without publishing; waiting out the rest of the budget
         after that only holds a request thread for nothing."""
         from urbanlens.dashboard.services.map import basemap_catalogue
         from urbanlens.dashboard.services.map.basemap_catalogue import _await_catalogue
@@ -267,7 +272,8 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
         self.assertEqual(naps, 1, "it kept sleeping after the holder was gone")
 
     def test_the_next_cold_window_fetches_again(self) -> None:
-        """Anti-vacuity: a reservation that is never released would make the catalogue
+        """
+        Anti-vacuity: a reservation that is never released would make the catalogue
         unrefreshable for as long as its own TTL, which is the failure it is meant to prevent."""
         from urbanlens.dashboard.services.map import basemap_catalogue
         from urbanlens.dashboard.services.map.basemap_catalogue import basemap_tile_catalogue
@@ -299,7 +305,8 @@ class TheCatalogueIsFetchedOncePerColdWindowTests(RedataConfiguredMixin, TestCas
 
 
 class TheProxyTemplateSurvivesTheLayerIdTests(TestCase):
-    """The template is built by reversing the route with sentinel coordinates and swapping those
+    """
+    The template is built by reversing the route with sentinel coordinates and swapping those
     for `{z}/{x}/{y}`. A layer id comes from REData and the route's alphabet is `[-a-zA-Z0-9_]`,
     so there is no numeric sentinel an id cannot contain."""
 

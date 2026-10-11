@@ -1,4 +1,5 @@
-"""DirectMessageLocationMention - coordinates/address detected in a message's text.
+"""
+DirectMessageLocationMention - coordinates/address detected in a message's text.
 One row per distinct place detected in one direct message (see ``services.messaging.dm_location_detection``).
 """
 
@@ -45,7 +46,8 @@ class DirectMessageLocationMention(abstract.DashboardModel):
 
     @property
     def can_add_to_map(self) -> bool:
-        """Whether the "Add to map" action is currently available for this mention.
+        """
+        Whether the "Add to map" action is currently available for this mention.
         True while the backing share can still be accepted - PENDING (DM-detected) or DETECTED (the place reached the recipient earlier via map/trip detection, which never auto-materializes a pin).
 
         Returns:
@@ -56,7 +58,8 @@ class DirectMessageLocationMention(abstract.DashboardModel):
         return self.pin_share is not None and self.pin_share.status in (PinShareStatus.PENDING, PinShareStatus.DETECTED)
 
     def recipient_pin(self):
-        """The message recipient's own top-level pin at this place, if any.
+        """
+        The message recipient's own top-level pin at this place, if any.
         Private data: only ever render the result to the pin's owner (the message recipient) - never to the sender.
 
         Returns:
@@ -67,7 +70,8 @@ class DirectMessageLocationMention(abstract.DashboardModel):
         return find_profile_pin_near_location(self.message.recipient_id, self.location)
 
     def __str__(self) -> str:
-        """Return a human-readable description of this mention.
+        """
+        Return a human-readable description of this mention.
 
         Returns:
             String like "Mention message=5 location=9 (coordinates)".

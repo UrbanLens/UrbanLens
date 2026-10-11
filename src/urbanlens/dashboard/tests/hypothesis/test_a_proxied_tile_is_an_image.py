@@ -1,4 +1,5 @@
-"""A tile proxy serves whatever the upstream sent, under this deployment's own origin.
+"""
+A tile proxy serves whatever the upstream sent, under this deployment's own origin.
 
 Both proxies pass the upstream ``Content-Type`` straight to the browser, and the basemap one is
 ``csp_exempt`` - a Content-Security-Policy governs what a document may load, so on a tile it is
@@ -76,14 +77,16 @@ class ABasemapTileIsNeverADocumentTests(_TileCase):
                 self.assertNotIn(b"<script", responses[0].content)
 
     def test_an_unusable_answer_is_not_remembered_for_a_week(self) -> None:
-        """A refusal cached per coordinate would keep the layer broken long after the upstream
+        """
+        A refusal cached per coordinate would keep the layer broken long after the upstream
         stopped sending markup, which is a worse outage than the one it is guarding."""
         _responses, download = self._serve(_SCRIPT, "text/html", times=2)
 
         self.assertEqual(download.call_count, 2, "the refusal was cached")
 
     def test_a_refusal_does_not_cost_the_client_five_attempts_per_tile(self) -> None:
-        """An upstream sending markup will send it again. The client retries 408/429/502/503/504
+        """
+        An upstream sending markup will send it again. The client retries 408/429/502/503/504
         on a schedule of four attempts, and a viewport is ~30 tiles, so answering with one of
         those turns a layer that cannot be served into 150 calls to the upstream that cannot
         serve it."""
@@ -107,7 +110,8 @@ class ABasemapTileIsNeverADocumentTests(_TileCase):
         self.assertEqual(responses[0]["Content-Type"], "image/png")
 
     def test_a_vendor_that_names_no_type_is_still_served(self) -> None:
-        """Assuming PNG for a tile with no declared type is the pre-existing behaviour, and the
+        """
+        Assuming PNG for a tile with no declared type is the pre-existing behaviour, and the
         bytes are still not a document."""
         responses, _download = self._serve(b"\x89PNG\r\n\x1a\n", "")
 
@@ -115,7 +119,8 @@ class ABasemapTileIsNeverADocumentTests(_TileCase):
         self.assertEqual(responses[0]["Content-Type"], "image/png")
 
     def test_the_browser_is_told_not_to_guess(self) -> None:
-        """The allow-list decides what leaves this process; nosniff decides what the browser does
+        """
+        The allow-list decides what leaves this process; nosniff decides what the browser does
         with bytes that do not match the type. Neither covers the other."""
         responses, _download = self._serve(b"\x89PNG\r\n\x1a\n", "image/png")
 

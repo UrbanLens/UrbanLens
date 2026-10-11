@@ -1,4 +1,5 @@
-"""Tests for the DM "attach a map" flow: DirectMessageMapPickerView (the
+"""
+Tests for the DM "attach a map" flow: DirectMessageMapPickerView (the
 "Choose Existing" tab's data source) and the thread composer's single
 attach-map button (replacing the old two-button/two-dialog setup).
 """

@@ -1,4 +1,5 @@
-"""The Anthropic adapter sends a request's temperature in the body, where SDK 1.x still accepts it.
+"""
+The Anthropic adapter sends a request's temperature in the body, where SDK 1.x still accepts it.
 
 anthropic 1.x removed ``temperature`` from ``messages.create``; passing it raises ``TypeError`` before any request is
 made. ``autospec`` holds the mock to the installed SDK's real signature, so these fail the way production would.

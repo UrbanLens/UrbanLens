@@ -1,4 +1,5 @@
-"""`UL_SITE_URL` without a scheme still builds absolute links (P23).
+"""
+`UL_SITE_URL` without a scheme still builds absolute links (P23).
 
 Production's containers set `UL_SITE_URL=urbanlens.org`. Every request-less link is built as
 `f"{SITE_URL}{path}"` - emails, notifications, safety alerts - so each one came out as

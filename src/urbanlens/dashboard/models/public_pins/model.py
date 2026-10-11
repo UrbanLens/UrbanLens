@@ -1,4 +1,5 @@
-"""Public-pin voting - the community process that can make a Location public.
+"""
+Public-pin voting - the community process that can make a Location public.
 A tiny, highly selective set of locations can be voted "public" by the users who have them pinned.
 Public locations are suggested to every account (opt-out), which gives new users a populated map without exposing anything vulnerable.
 """
@@ -15,7 +16,8 @@ from urbanlens.dashboard.models.public_pins.queryset import PublicPinCandidateMa
 
 
 class PublicPinCandidateStatus(abstract.TextChoices):
-    """Lifecycle of a public-pin candidate.
+    """
+    Lifecycle of a public-pin candidate.
 
     OPEN and SUSPENDED flip back and forth as eligibility comes and goes;
     PASSED and REJECTED are terminal.
@@ -28,7 +30,8 @@ class PublicPinCandidateStatus(abstract.TextChoices):
 
 
 class PublicPinCandidate(abstract.DashboardModel):
-    """One Location's public-pin vote, created only by the eligibility engine.
+    """
+    One Location's public-pin vote, created only by the eligibility engine.
 
     Attributes:
         location: The shared Location under vote. One candidate per location,
@@ -71,7 +74,8 @@ class PublicPinCandidate(abstract.DashboardModel):
 
 
 class PublicPinVote(abstract.DashboardModel):
-    """A single profile's yes/no vote on making a location public.
+    """
+    A single profile's yes/no vote on making a location public.
     Withdrawing a vote deletes the row (mirroring WikiStatVote), so tallies never include "no opinion" entries.
 
     Attributes:

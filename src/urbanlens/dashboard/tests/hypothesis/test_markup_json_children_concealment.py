@@ -65,7 +65,8 @@ class MarkupJsonChildrenConcealmentTests(TestCase):
         self.assertIn(str(self.stranger_item.uuid), uuids)
 
     def test_the_viewers_own_item_on_a_descendant_wiki_still_shows_when_concealed(self) -> None:
-        """Anti-vacuity the other way: the fix must be visible_rows, not a blanket hide.
+        """
+        Anti-vacuity the other way: the fix must be visible_rows, not a blanket hide.
 
         Own contributions survive concealment everywhere else in this file's
         siblings; children=1 must not become the one path that forgets that.

@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 class _NorthernLatitude:
-    """A latitude between 0 and 90 degrees, as a field of either kind stores it.
+    """
+    A latitude between 0 and 90 degrees, as a field of either kind stores it.
 
     Baker's own decimal for a ``DecimalField(max_digits=9, decimal_places=6)`` runs to 99.999999, so about one baked
     location in ten was past the pole, and code that checks a coordinate refused it at random (P50). Its longitude,
@@ -31,7 +32,8 @@ class _NorthernLatitude:
 
 
 class SignalSafeBaker(Baker):
-    """A ``model_bakery`` Baker that tolerates the ``Profile`` auto-create signal.
+    """
+    A ``model_bakery`` Baker that tolerates the ``Profile`` auto-create signal.
 
     ``dashboard.models.profile.signals.create_user_profile`` runs on every ``User`` post_save and creates that
     user's ``Profile`` via ``get_or_create``.

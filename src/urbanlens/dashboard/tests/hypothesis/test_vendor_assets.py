@@ -32,7 +32,8 @@ class VendorAssetTableTests(SimpleTestCase):
             self.assertTrue(asset.fallback.startswith("https://"), f"{key} falls back to {asset.fallback!r}")
 
     def test_every_asset_pins_a_version(self) -> None:
-        """An unpinned URL serves whatever the CDN publishes next.
+        """
+        An unpinned URL serves whatever the CDN publishes next.
 
         One template asked for `unpkg.com/leaflet/dist/leaflet.js` with no
         version at all, which is a different library on any given day.
@@ -68,7 +69,8 @@ class VendorAssetResolutionTests(SimpleTestCase):
             self.assertNotIn("//vendor", vendor_asset_url("toastr_js").removeprefix("https://"))
 
     def test_integrity_is_claimed_only_for_the_bytes_it_describes(self) -> None:
-        """An SRI hash describes the CDN's copy. A mirror serving a re-minified
+        """
+        An SRI hash describes the CDN's copy. A mirror serving a re-minified
         or re-compressed file would fail that check and drop the script."""
         with _mirrored(""):
             self.assertIn("integrity=", vendor_asset_tag("toastr_js"))
@@ -238,7 +240,8 @@ class VendorMirrorIsAllowedByThePolicyTests(SimpleTestCase):
 
 
 class BasemapStyleOriginIsAllowedByThePolicyTests(SimpleTestCase):
-    """A self-hosted vector basemap is the one map layer the browser fetches itself.
+    """
+    A self-hosted vector basemap is the one map layer the browser fetches itself.
 
     A raster layer is proxied, so the browser only ever talks to this origin and the policy needs
     no exception. A vector layer is the opposite: REData publishes a ``style_url`` and the browser

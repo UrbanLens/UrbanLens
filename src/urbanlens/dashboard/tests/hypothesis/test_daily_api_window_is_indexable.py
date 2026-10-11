@@ -1,4 +1,5 @@
-"""The outbound-API daily budget check must be able to use its index.
+"""
+The outbound-API daily budget check must be able to use its index.
 
 ``check_rate_limit`` runs on every outbound call, and its daily window counted
 rows with ``created__date = <today>``. Wrapping the column in a date extraction

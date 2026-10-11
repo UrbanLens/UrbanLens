@@ -1,4 +1,5 @@
-"""A deployment missing configuration refuses to start instead of running on a local default.
+"""
+A deployment missing configuration refuses to start instead of running on a local default.
 
 Each test reloads ``settings.base`` under a controlled environment and a command line that is not pytest's, because
 every guard stands aside under pytest (test settings import ``base`` before overriding what it needs). Keys are set
@@ -56,7 +57,8 @@ class _ReloadsSettings(SimpleTestCase):
         self.addCleanup(importlib.reload, settings_base)
 
     def _reload(self, environment: str, **env: str) -> ModuleType:
-        """Reload ``settings.base`` as a daphne process would see it.
+        """
+        Reload ``settings.base`` as a daphne process would see it.
 
         Args:
             environment: ``UL_ENVIRONMENT``; "" for unset.
@@ -80,7 +82,8 @@ class _ReloadsSettings(SimpleTestCase):
 
 
 class AnUnsetEnvironmentRefusesTests(SimpleTestCase):
-    """Jess, 2026-10-07: a process that does not say which environment it is refuses to start. Unset used to mean
+    """
+    Jess, 2026-10-07: a process that does not say which environment it is refuses to start. Unset used to mean
     production (aa4b83003), so a deployment that lost the variable spent production's budgets and sent real mail."""
 
     def _refusal(self, environ: dict[str, str]) -> str:
@@ -120,7 +123,8 @@ class AnUnsetEnvironmentRefusesTests(SimpleTestCase):
 
 
 class TheAppSettingsFieldReadsTheSameVariableTests(SimpleTestCase):
-    """``AppSettings.environment_name`` read ``UL_ENVIRONMENT_NAME``, which nothing sets, and defaulted to local.
+    """
+    ``AppSettings.environment_name`` read ``UL_ENVIRONMENT_NAME``, which nothing sets, and defaulted to local.
 
     The integration commands' production lock and ``seed_dev_environment``'s refusal both read it, so neither ever
     engaged on production."""
@@ -290,7 +294,8 @@ class TheChannelLayerHasItsOwnStoreTests(_ReloadsSettings):
 
 
 class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
-    """A test run is never a deployment, so one started without UL_ENVIRONMENT (a worktree with no .env) runs as
+    """
+    A test run is never a deployment, so one started without UL_ENVIRONMENT (a worktree with no .env) runs as
     ``testing``, CI's name, rather than refusing; xdist workers and subprocesses inherit it from ``os.environ``."""
 
     def _reload_as(self, argv: list[str], **env: str) -> tuple[str, str]:
@@ -307,7 +312,8 @@ class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
                 )
 
     def test_an_xdist_worker_is_a_test_run_too_not_just_named_one(self) -> None:
-        """A worker hides pytest from argv. Given only the name, it computed TESTING false and, with HTTP not allowed
+        """
+        A worker hides pytest from argv. Given only the name, it computed TESTING false and, with HTTP not allowed
         under ``testing``, redirected every request to HTTPS (301s throughout a ``-n 2`` run with no ``.env``)."""
         with mock.patch.dict("os.environ", dict.fromkeys(_INPUTS, "")):
             with mock.patch("sys.argv", ["/app/.venv/bin/pytest", "-n", "2"]):
@@ -330,7 +336,8 @@ class ATestRunWithoutAnEnvironmentIsTheSuiteTests(_ReloadsSettings):
 
 
 class AMistypedBooleanRefusesToStartTests(_ReloadsSettings):
-    """Spark P404: ``_env_bool`` in base.py mapped every unrecognised string to False, so ``SESSION_COOKIE_SECURE=ture``
+    """
+    Spark P404: ``_env_bool`` in base.py mapped every unrecognised string to False, so ``SESSION_COOKIE_SECURE=ture``
     shipped a deployment with insecure cookies and nothing said so."""
 
     _FLAGS = (

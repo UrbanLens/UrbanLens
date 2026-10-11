@@ -21,7 +21,8 @@ _DEFAULT_MIN_WRITERS = 3
 
 
 def _model_names() -> set[str]:
-    """Every Django model class defined in the project.
+    """
+    Every Django model class defined in the project.
 
     Returns:
         Class names of models, used to attribute writes to a model."""
@@ -40,7 +41,8 @@ def _model_names() -> set[str]:
 
 
 def _freshly_constructed(tree: ast.AST, models: set[str]) -> set[tuple[int, str]]:
-    """Locals that hold an instance this function just built, per function.
+    """
+    Locals that hold an instance this function just built, per function.
 
     A ``save()`` on one of those is an INSERT, not a whole-row overwrite of a row somebody else may have changed
     - there is no earlier load to be stale relative to.
@@ -71,7 +73,8 @@ def _freshly_constructed(tree: ast.AST, models: set[str]) -> set[tuple[int, str]
 
 
 def _enclosing_function(tree: ast.AST) -> dict[int, int]:
-    """Map every node to the id of the function that contains it.
+    """
+    Map every node to the id of the function that contains it.
 
     Args:
         tree: The module's parsed AST.
@@ -87,7 +90,8 @@ def _enclosing_function(tree: ast.AST) -> dict[int, int]:
 
 
 def _instance_hint(node: ast.Call, models: set[str]) -> str | None:
-    """Guess which model a write targets.
+    """
+    Guess which model a write targets.
 
     Uses the receiver's spelling: ``Pin.objects.filter(...).update(...)`` names its model outright, and
     ``pin.save()`` names it by convention.
@@ -116,7 +120,8 @@ def _instance_hint(node: ast.Call, models: set[str]) -> str | None:
 
 
 def main(argv: list[str]) -> int:
-    """Print the writer-cardinality report.
+    """
+    Print the writer-cardinality report.
 
     Args:
         argv: Command-line arguments.

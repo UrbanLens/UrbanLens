@@ -1,4 +1,5 @@
-"""Shared template components for the Memories section.
+"""
+Shared template components for the Memories section.
 
 - ``{% memories_tabs active %}`` renders the Timeline | Maps | Sharing | Journal | Visits |
   Locations tab strip (``partials/memories/_photos_tabs.html``). The ...
@@ -15,7 +16,8 @@ register = template.Library()
 
 @register.inclusion_tag("dashboard/partials/memories/_photos_tabs.html", takes_context=True)
 def memories_tabs(context: template.Context, active: str) -> dict[str, Any]:
-    """Render the Memories section's tab strip.
+    """
+    Render the Memories section's tab strip.
 
     The "Visits" tab only appears when the viewer has visited-but-unlogged pins; the count is reused
     from the page context when the view already fetched it (e.g. for the unlogged-visits band), and

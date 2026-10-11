@@ -230,7 +230,8 @@ class RedataBoundaryProviderConfiguredTests(SimpleTestCase):
 
 
 class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
-    """When parcel_geometry is missing, the property slot falls back to the convex
+    """
+    When parcel_geometry is missing, the property slot falls back to the convex
     hull of the parcel's own buildings (county GIS + CRIS) rather than leaving the
     location with nothing but the synthesized default circle."""
 
@@ -340,7 +341,8 @@ class RedataBoundaryProviderBuildingsConvexHullFallbackTests(SimpleTestCase):
 
 
 class SuggestedBoundaryTests(SimpleTestCase):
-    """REData ranks its own candidates; picking one ourselves picks wrong.
+    """
+    REData ranks its own candidates; picking one ourselves picks wrong.
 
     It routinely finds a county parcel line too small, a CRIS consultation polygon too small and a CRIS
     archaeological buffer absurdly too large for one parcel at once."""
@@ -489,7 +491,8 @@ class RedataBoundaryProviderScoredBoundaryTests(SimpleTestCase):
         gw_cls.return_value.lookup_parcel_buildings.assert_not_called()
 
     def test_buildings_spread_across_a_county_never_become_the_parcel(self) -> None:
-        """P148: REData's live answer for 19 Schultz Rd, one house lot.
+        """
+        P148: REData's live answer for 19 Schultz Rd, one house lot.
 
         115 CRIS records flagged ``is_on_property`` sat 0-28 km away, matched by a survey roster or a
         consultation project, and their hull was 332 km².

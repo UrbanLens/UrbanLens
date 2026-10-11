@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Batch-convert images in a directory into 125x125 WebP thumbnails with EXIF stripped.
+"""
+Batch-convert images in a directory into 125x125 WebP thumbnails with EXIF stripped.
 
 For each input file "foo_bar.jpg" (or .jpeg/.png/.webp), writes
 "foo_bar.webp" to a "converted/" subdirectory (or custom -o/--outdir).

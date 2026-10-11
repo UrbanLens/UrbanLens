@@ -1,4 +1,5 @@
-"""Per-user Immich server connection.
+"""
+Per-user Immich server connection.
 Each user connects *their own* self-hosted Immich server via a personal API key - there is no site-wide Immich instance.
 """
 
@@ -13,7 +14,8 @@ from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
 class ImmichAccount(abstract.DashboardModel):
-    """Credentials for one user's own self-hosted Immich server.
+    """
+    Credentials for one user's own self-hosted Immich server.
 
     One row per profile. Created by the Settings "Connect Immich" form after
     the server URL and API key are verified with a live ``ping()`` call, and
@@ -36,7 +38,8 @@ class ImmichAccount(abstract.DashboardModel):
         profile_id: int
 
     def asset_web_url(self, asset_id: str) -> str:
-        """Return the Immich web URL for one asset.
+        """
+        Return the Immich web URL for one asset.
         Used both as the "view on Immich" attribution link and as the de-dup key stored on ``Image.source_url`` - an asset already imported to a pin is recognised by matching this URL, without re-downloading it.
 
         Args:
@@ -48,7 +51,8 @@ class ImmichAccount(abstract.DashboardModel):
         return f"{self.asset_url_prefix()}{asset_id}"
 
     def asset_url_prefix(self) -> str:
-        """Every asset URL from this account starts with this.
+        """
+        Every asset URL from this account starts with this.
         Split out so a backfill can recognise rows this account created without restating the URL shape - two spellings of one format drift, and the one that drifts is always the copy.
 
         Returns:

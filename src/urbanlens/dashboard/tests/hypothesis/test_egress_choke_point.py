@@ -1,4 +1,5 @@
-"""The egress policy is applied where every external call passes (D26), and a refusal is neither failure nor deferral.
+"""
+The egress policy is applied where every external call passes (D26), and a refusal is neither failure nor deferral.
 
 ``_reserve_call``, ``api_call_slot`` and the rate-limited session refuse with ``EnvironmentRefusedError`` before
 anything is sent or recorded; ``service_is_enabled`` answers the callers that ask first.

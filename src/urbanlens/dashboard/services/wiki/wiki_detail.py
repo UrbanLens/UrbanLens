@@ -25,7 +25,8 @@ def _isoformat_or_none(value: Any) -> str | None:
 
 
 def _boundary_geojson(wiki: Wiki) -> dict[str, Any] | None:
-    """The wiki's effective property boundary as a GeoJSON geometry dict, if any.
+    """
+    The wiki's effective property boundary as a GeoJSON geometry dict, if any.
 
     Args:
         wiki: The wiki whose boundary to resolve.
@@ -38,7 +39,8 @@ def _boundary_geojson(wiki: Wiki) -> dict[str, Any] | None:
 
 
 def masked_editor_name(profile: Profile | None, viewer: Profile) -> str | None:
-    """Resolve an editor's display name as *viewer* is permitted to see it.
+    """
+    Resolve an editor's display name as *viewer* is permitted to see it.
     Wiki content is authored by many people a viewer may have no standing to see, so every attributed name on this surface goes through the same identity-visibility masking the comment thread uses.
 
     Args:
@@ -55,7 +57,8 @@ def masked_editor_name(profile: Profile | None, viewer: Profile) -> str | None:
 
 
 def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
-    """Summarize the wiki's article without shipping its full body.
+    """
+    Summarize the wiki's article without shipping its full body.
 
     Args:
         wiki: The wiki whose article to summarize.
@@ -90,7 +93,8 @@ def _article_summary(wiki: Wiki, profile: Profile) -> dict[str, Any] | None:
 
 
 def _stats(wiki: Wiki, profile: Profile, *, conceal: bool = False) -> dict[str, dict[str, Any]]:
-    """The four community stat composites plus the viewer's own votes.
+    """
+    The four community stat composites plus the viewer's own votes.
 
     Args:
         wiki: The wiki whose stats to read.
@@ -112,7 +116,8 @@ def _stats(wiki: Wiki, profile: Profile, *, conceal: bool = False) -> dict[str, 
 
 
 def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[str, Any]:
-    """Assemble the full detail payload for one wiki.
+    """
+    Assemble the full detail payload for one wiki.
 
     Args:
         wiki: The wiki to serialize.

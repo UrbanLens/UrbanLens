@@ -17,7 +17,8 @@ _PATH = st.lists(_SEGMENT, min_size=1, max_size=4).map(lambda parts: "/".join(pa
 
 
 def _load_checker():
-    """Import ``bin/check_typescript_coverage.py`` as a module.
+    """
+    Import ``bin/check_typescript_coverage.py`` as a module.
 
     Returns:
         The imported module.

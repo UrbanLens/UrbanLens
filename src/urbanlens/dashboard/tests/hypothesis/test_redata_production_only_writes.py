@@ -54,7 +54,8 @@ def _labels(session: mock.Mock) -> RedataLabelsGateway:
 
 
 def _as_environment(name: str | None):
-    """Run a block as if ``UL_ENVIRONMENT`` were ``name``.
+    """
+    Run a block as if ``UL_ENVIRONMENT`` were ``name``.
 
     Drives ``IS_PRODUCTION`` through the real classifier rather than restating the rule, so a test naming an
     environment proves the whole chain from the env var to the guard."""
@@ -240,7 +241,8 @@ class TrueWriteSurfacesAreAttemptedOnProductionTests(SimpleTestCase):
 
 
 class ReadAndCacheFillSurfacesAreUnaffectedTests(SimpleTestCase):
-    """Everything that is not a contribution still calls REData from any environment.
+    """
+    Everything that is not a contribution still calls REData from any environment.
 
     This is the whole point of the distinction: dev pointed at production REData is *better* than dev with its
     own instance, so the guard must not creep past the four surfaces that actually store our data."""

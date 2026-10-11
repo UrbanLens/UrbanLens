@@ -1,4 +1,5 @@
-"""Searching your own pins must not read private note rows belonging to a pin you cannot see.
+"""
+Searching your own pins must not read private note rows belonging to a pin you cannot see.
 
 ``PinSearchProvider.search`` feeds ``notes__text`` to ``apply_text`` alongside ``labels__name`` and
 ``aliases__name`` - Pin's own reverse foreign key to ``PinNote`` (``related_name="notes"``). Notes are
@@ -97,7 +98,8 @@ class _PinNoteCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the pin-note table.
+        """
+        The full capture, and the statements in it that read the pin-note table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

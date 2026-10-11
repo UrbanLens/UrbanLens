@@ -1,4 +1,5 @@
-"""Converting a global label must never hand one profile a label that is sitting on another profile's pins.
+"""
+Converting a global label must never hand one profile a label that is sitting on another profile's pins.
 
 ``_apply_kind_conversion`` sets ``label.profile`` to the editor when a label becomes a category or a status. Applied
 to a *global* tag - which anyone holding ``dashboard.edit_global_label`` may edit - that label keeps every

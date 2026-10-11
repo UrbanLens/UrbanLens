@@ -1,4 +1,5 @@
-"""Place lineage - attaching places to each other and keeping domains correct.
+"""
+Place lineage - attaching places to each other and keeping domains correct.
 Every write that changes a ``Place``'s parent or relation goes through :func:`set_parent`, because two derived columns have to move with it:"""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ class PlaceLineageError(Exception):
 
 
 def ancestors_of(place: Place) -> list[Place]:
-    """Parent, grandparent, ... for a place, nearest first.
+    """
+    Parent, grandparent, ... for a place, nearest first.
 
     Args:
         place: The place whose ancestry to walk.
@@ -48,7 +50,8 @@ def ancestors_of(place: Place) -> list[Place]:
 
 
 def enclosing_parcel(place: Place | None) -> Place | None:
-    """The nearest place above ``place`` (or ``place`` itself) that is not a building.
+    """
+    The nearest place above ``place`` (or ``place`` itself) that is not a building.
 
     Args:
         place: The place a location resolved onto.
@@ -66,7 +69,8 @@ def enclosing_parcel(place: Place | None) -> Place | None:
 
 
 def would_create_cycle(place: Place, new_parent: Place | None) -> bool:
-    """Whether attaching ``place`` under ``new_parent`` would form a cycle.
+    """
+    Whether attaching ``place`` under ``new_parent`` would form a cycle.
 
     Args:
         place: The place being re-parented.
@@ -84,7 +88,8 @@ def would_create_cycle(place: Place, new_parent: Place | None) -> bool:
 
 @transaction.atomic
 def set_parent(place: Place, parent: Place | None, relation: str = PlaceRelation.PART_OF) -> Place:
-    """Attach a place to a parent (or detach it) and repair the derived columns.
+    """
+    Attach a place to a parent (or detach it) and repair the derived columns.
 
     Args:
         place: The place to re-parent.
@@ -113,7 +118,8 @@ def set_parent(place: Place, parent: Place | None, relation: str = PlaceRelation
 
 
 def propagate_domain_root(place: Place) -> int:
-    """Push a place's domain root down through its ``PART_OF`` subtree.
+    """
+    Push a place's domain root down through its ``PART_OF`` subtree.
 
     Args:
         place: The place whose subtree to repair.
@@ -144,7 +150,8 @@ def propagate_domain_root(place: Place) -> int:
 
 
 def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
-    """Recompute the cached child summaries on the given places.
+    """
+    Recompute the cached child summaries on the given places.
     ``building_child_count`` counts only CURRENT buildings: a superseded one - a duplicate merged away, an implausible outline - no longer stands on the parcel, so it must not tip a one-building parcel into "multi-building" scope.
 
     Args:
@@ -171,7 +178,8 @@ def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
 
 
 def member_children(place: Place) -> list[Place]:
-    """The places that must *all* be held to earn access to ``place``.
+    """
+    The places that must *all* be held to earn access to ``place``.
 
     Args:
         place: The aggregate (or superseded) place.

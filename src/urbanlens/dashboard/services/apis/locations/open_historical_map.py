@@ -1,4 +1,5 @@
-"""OpenHistoricalMap gateway: dated vector features via the public OHM Overpass API.
+"""
+OpenHistoricalMap gateway: dated vector features via the public OHM Overpass API.
 It is a direct integration only because there is nothing yet on REData's side to swap it for."""
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ _YEAR_RE = re.compile(r"^-?\d{1,4}")
 
 
 def _extract_year(value: Any) -> int | None:
-    """Pull the leading calendar year out of a raw OHM date-tag value.
+    """
+    Pull the leading calendar year out of a raw OHM date-tag value.
 
     Args:
         value: A ``start_date``/``end_date`` tag value, or anything else (missing tags surface as ``None`` from ``dict.get``).
@@ -45,7 +47,8 @@ def _extract_year(value: Any) -> int | None:
 
 
 def _way_geometry(element: dict[str, Any]) -> dict[str, Any] | None:
-    """Build a LineString/Polygon geometry from a way element's inline ``geometry``.
+    """
+    Build a LineString/Polygon geometry from a way element's inline ``geometry``.
 
     Args:
         element: An Overpass ``out geom`` way element.
@@ -66,7 +69,8 @@ def _way_geometry(element: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _element_to_feature(element: dict[str, Any]) -> dict[str, Any] | None:
-    """Convert one Overpass element into a GeoJSON Feature.
+    """
+    Convert one Overpass element into a GeoJSON Feature.
 
     Args:
         element: One entry from an Overpass ``out geom``/``out tags`` response.
@@ -96,13 +100,15 @@ def _element_to_feature(element: dict[str, Any]) -> dict[str, Any] | None:
 
 
 class OpenHistoricalMapUnavailableError(Exception):
-    """Raised when an OHM Overpass request fails outright.
+    """
+    Raised when an OHM Overpass request fails outright.
     Reserved for network/timeout/malformed-response failure - never for a query that reached OHM and simply found nothing nearby, which is a normal empty result (``OhmCoverage(available=False, years=[])``, or an empty FeatureCollection), not an error."""
 
 
 @dataclass(frozen=True, slots=True)
 class OhmCoverage:
-    """Whether OHM has any dated coverage near a point, and for which years.
+    """
+    Whether OHM has any dated coverage near a point, and for which years.
 
     Attributes:
         available: True when at least one dated (``start_date``/``end_date`` tagged) feature exists within the query radius.
@@ -125,7 +131,8 @@ class OpenHistoricalMapGateway(Gateway):
         require_in_range(self.service_key, "radius_meters", radius_meters, minimum=0, exclusive_minimum=True)
 
     def get_coverage(self, latitude: float, longitude: float, *, radius_meters: float = 300) -> OhmCoverage:
-        """Check whether OHM has any dated features near a point, and for which years.
+        """
+        Check whether OHM has any dated features near a point, and for which years.
         Requests tags only (``out tags``, no geometry) - this only needs to answer "does dated data exist nearby" and "what years", so there's no reason to pay for the geometry payload.
 
         Args:
@@ -161,7 +168,8 @@ class OpenHistoricalMapGateway(Gateway):
         return OhmCoverage(available=bool(elements), years=sorted(years))
 
     def get_features_at(self, latitude: float, longitude: float, year: int, *, radius_meters: float = 300) -> dict[str, Any]:
-        """Fetch OHM features that existed at ``year``, as a GeoJSON FeatureCollection.
+        """
+        Fetch OHM features that existed at ``year``, as a GeoJSON FeatureCollection.
         Requests full inline geometry (``out geom``) so ways come back without a separate node-resolution pass.
 
         Args:
@@ -209,7 +217,8 @@ class OpenHistoricalMapGateway(Gateway):
         return {"type": "FeatureCollection", "features": features}
 
     def _query(self, query: str) -> dict[str, Any]:
-        """POST one Overpass QL query and return its decoded JSON body.
+        """
+        POST one Overpass QL query and return its decoded JSON body.
 
         Args:
             query: A complete Overpass QL query string.

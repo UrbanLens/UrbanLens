@@ -1,4 +1,5 @@
-"""Bounds how many discrete Celery tasks one bulk action's per-row signals can create.
+"""
+Bounds how many discrete Celery tasks one bulk action's per-row signals can create.
 
 A signal that queues one follow-on task per saved row (P109) turns an N-row bulk action into N
 broker messages sharing a FIFO queue with every other account's bulk work, drained at that queue's
@@ -41,7 +42,8 @@ class _PendingChunk:
 
 @dataclass(slots=True)
 class BulkFollowUpCollector:
-    """Buffers follow-on work ids per batch task, flushing bounded chunks rather than one per id.
+    """
+    Buffers follow-on work ids per batch task, flushing bounded chunks rather than one per id.
 
     Attributes:
         chunk_size: Ids buffered per batch task before an early flush.
@@ -51,7 +53,8 @@ class BulkFollowUpCollector:
     _pending: dict[str, _PendingChunk] = field(default_factory=dict)
 
     def add(self, batch_task: Any, item_id: int, *, queue: str | None) -> None:
-        """Buffer *item_id* for *batch_task*, flushing early once a chunk fills.
+        """
+        Buffer *item_id* for *batch_task*, flushing early once a chunk fills.
 
         Args:
             batch_task: The chunk-shaped task to eventually enqueue - takes one positional
@@ -82,7 +85,8 @@ _active: ContextVar[BulkFollowUpCollector | None] = ContextVar("bulk_followup_co
 
 @contextmanager
 def batching_follow_on_work(chunk_size: int = DEFAULT_CHUNK_SIZE) -> Iterator[None]:
-    """Buffer this block's :func:`enqueue_follow_on` calls into bounded chunks.
+    """
+    Buffer this block's :func:`enqueue_follow_on` calls into bounded chunks.
 
     Flushes on the way out even when the block raised, so a bulk action that fails partway through
     still queues the follow-on work for the rows it did finish rather than dropping it silently.
@@ -107,7 +111,8 @@ def batching_follow_on_work(chunk_size: int = DEFAULT_CHUNK_SIZE) -> Iterator[No
 
 
 def enqueue_follow_on(item_task: Any, batch_task: Any, item_id: int, *, queue: str | None) -> None:
-    """Enqueue one row's follow-on work, buffered into a bounded chunk when a collector is active.
+    """
+    Enqueue one row's follow-on work, buffered into a bounded chunk when a collector is active.
 
     Args:
         item_task: The per-item task a caller outside any collector enqueues directly - unaffected

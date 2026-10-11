@@ -1,4 +1,5 @@
-"""AI writing assistant that expands pin/wiki articles from a linked page.
+"""
+AI writing assistant that expands pin/wiki articles from a linked page.
 Applies are append-only and non-destructive to existing article Markdown."""
 
 from __future__ import annotations
@@ -68,7 +69,8 @@ paragraph two
 
 
 def sanitize_article_plain_text(raw: str | None) -> str:
-    """Force AI/writing output down to bounded plain text with no markup.
+    """
+    Force AI/writing output down to bounded plain text with no markup.
 
     Args:
         raw: Untrusted model output (may already have ANSWER tags stripped).
@@ -135,7 +137,8 @@ def append_to_article(
     wiki: Wiki | None = None,
     edit_summary: str = EDIT_SUMMARY_EXPANDED_FROM_LINK,
 ) -> tuple[bool, str]:
-    """Append sanitized text to a host article when room remains.
+    """
+    Append sanitized text to a host article when room remains.
 
     Args:
         editor: Profile credited on the revision.
@@ -181,7 +184,8 @@ def append_to_article(
 
 
 def _known_facts_block(wiki: Wiki) -> str:
-    """Render this wiki's trusted Facts as a short bullet list for the writing prompt.
+    """
+    Render this wiki's trusted Facts as a short bullet list for the writing prompt.
     Handing the model our already-confirmed data (rather than only the raw page text) lets it defer to what we're confident about instead of re-guessing or restating a conflicting value from the linked source."""
     from urbanlens.dashboard.services.facts import registry
     from urbanlens.dashboard.services.facts.consumption import get_trusted_facts
@@ -274,7 +278,8 @@ def _draft_new_paragraphs(
 
 
 def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> list[dict[str, Any]]:
-    """Draft, sanitize, safety-check, and append article text from a page.
+    """
+    Draft, sanitize, safety-check, and append article text from a page.
 
     Args:
         extraction: The in-flight link-extraction run (pin + profile loaded).

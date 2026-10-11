@@ -50,7 +50,8 @@ class MediaGateTests(TestCase):
         target.write_bytes(data)
 
     def _get_bytes(self, response) -> bytes:
-        """Materialize a (possibly streaming) response body.
+        """
+        Materialize a (possibly streaming) response body.
 
         Closes only the underlying file handle (so the temp MEDIA_ROOT can be removed on Windows) - never
         ``response.close()``, which fires the ``request_finished`` signal and would close the test DB
@@ -111,7 +112,8 @@ class MediaGateTests(TestCase):
         return friend_user
 
     def test_a_friend_cannot_fetch_a_photo_that_was_never_shared(self):
-        """A photo is private until its owner shares it, and being someone's friend is not the same as being shown their photo.
+        """
+        A photo is private until its owner shares it, and being someone's friend is not the same as being shown their photo.
 
         Visibility is two gates: the photo has to have been shared to a wiki, and then the uploader's setting
         decides which of the people who can reach that wiki may see it."""
@@ -122,7 +124,8 @@ class MediaGateTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_a_friend_can_fetch_a_photo_that_was_shared(self):
-        """And with both gates open, they can - which is the point of sharing.
+        """
+        And with both gates open, they can - which is the point of sharing.
 
         Both gates means both."""
         from urbanlens.dashboard.models.location.model import Location
@@ -142,7 +145,8 @@ class MediaGateTests(TestCase):
         self.assertEqual(self._get_bytes(response), _IMAGE_BYTES)
 
     def test_a_friend_cannot_fetch_a_photo_on_a_wiki_they_cannot_reach(self):
-        """Wiki access is earned per place, and a friendship does not carry across.
+        """
+        Wiki access is earned per place, and a friendship does not carry across.
 
         The uploader's setting admits this friend; the wiki is at a place they have never pinned, so the
         container gate is shut and the setting never gets to speak."""
@@ -188,7 +192,8 @@ class MediaGateTests(TestCase):
         self._get_bytes(response)
 
     def test_file_with_no_owning_row_is_denied(self):
-        """A file the gate cannot attribute is refused, not served.
+        """
+        A file the gate cannot attribute is refused, not served.
 
         An orphan left behind by a deleted row is indistinguishable from a live file whose owning row this
         viewer is not allowed to learn about, and assuming the harmless case is what served every thumbnail to
@@ -202,7 +207,8 @@ class MediaGateTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unregistered_path_family_is_denied(self):
-        """A directory with no registered authorizer is refused by default.
+        """
+        A directory with no registered authorizer is refused by default.
 
         The point of the registry is that forgetting to add one fails closed.
         """
@@ -290,7 +296,8 @@ class MediaGateTests(TestCase):
     # -- Files backed by more than one row ---------------------------------------
 
     def test_a_share_recipient_reaches_a_photo_they_were_given(self):
-        """Accepting a share hands over a row, not a second copy of the bytes.
+        """
+        Accepting a share hands over a row, not a second copy of the bytes.
 
         Several rows therefore point at one storage key, and whichever one the lookup happened to return decided
         the answer - so a recipient could be refused a photo that was deliberately shared with them."""
@@ -366,7 +373,8 @@ class MediaGateTests(TestCase):
 
 
 class CommentImageMediaGateTests(TestCase):
-    """``comment_images/`` must also respect the comment author's ``comment_visibility``.
+    """
+    ``comment_images/`` must also respect the comment author's ``comment_visibility``.
 
     Host-level access (owning the pin, being able to see the wiki, being a trip member) is necessary but not
     sufficient - the same author privacy setting that hides a comment's text from ``visible_comment_tree``/
@@ -499,7 +507,8 @@ class CommentImageMediaGateTests(TestCase):
 
 
 class SafetyCheckinMediaGateTests(TestCase):
-    """A check-in is a container, and the people watching it can see its photos.
+    """
+    A check-in is a container, and the people watching it can see its photos.
 
     The container gate reads reachability off the photo's container."""
 
@@ -616,7 +625,8 @@ class SafetyCheckinMediaGateTests(TestCase):
 
 
 class SafetyContactTokenPhotoTests(TestCase):
-    """A signed-out emergency contact can see the check-in's photos.
+    """
+    A signed-out emergency contact can see the check-in's photos.
 
     An emergency contact is frequently somebody with no account at all - that is the point of the magic-link
     portal - so the login-gated media path can never serve them."""
@@ -688,7 +698,8 @@ class SafetyContactTokenPhotoTests(TestCase):
         self.assertEqual(response.status_code, 404, "a contact's token reached a photo on a different check-in")
 
     def test_the_portal_lists_the_photo(self):
-        """Photos only surface to a contact once the check-in has escalated - see
+        """
+        Photos only surface to a contact once the check-in has escalated - see
         SafetyContactPortalEscalationGateTests in test_safety.py for the
         pre-escalation guard this must not regress."""
         from django.urls import reverse

@@ -1,4 +1,5 @@
-"""Mail is sent on the request path, and nothing bounds how long a send may take.
+"""
+Mail is sent on the request path, and nothing bounds how long a send may take.
 
 H51's other half, and the half `throttled(...)` does not reach. That decorator
 caps how *often* an anonymous caller may hit signup, resend-verification and

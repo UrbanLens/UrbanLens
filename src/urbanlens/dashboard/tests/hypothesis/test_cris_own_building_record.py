@@ -1,4 +1,5 @@
-"""A building's CRIS card holds a record only when that record's own point is on the building (P255).
+"""
+A building's CRIS card holds a record only when that record's own point is on the building (P255).
 
 On the dev stack, HRSH's "Building at Hudson River State Hospital" (location 98254) held "BLDG 166/OLD POLICE STATION
 (1932)", the record another child pin's location (99719) also held, with no position: both fetch paths took the

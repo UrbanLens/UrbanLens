@@ -1,4 +1,5 @@
-"""A per-row bulk endpoint reports rows that failed apart from rows it skipped (N29 G1-15).
+"""
+A per-row bulk endpoint reports rows that failed apart from rows it skipped (N29 G1-15).
 
 The suggestion and unlogged-visit bulk endpoints answered ``ok: true`` whatever happened, and ``requested -
 processed`` lumped a crashed row in with an id that was simply already handled, so the page blamed every shortfall on

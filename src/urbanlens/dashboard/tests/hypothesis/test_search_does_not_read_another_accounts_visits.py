@@ -1,4 +1,5 @@
-"""Searching your own visits must not read somebody else's visit log.
+"""
+Searching your own visits must not read somebody else's visit log.
 
 :class:`VisitSearchProvider` scopes by ``pin__profile=profile`` - a join, so which table Postgres
 starts from is its choice, not the scope's. At capacity scale it starts from the visit table:

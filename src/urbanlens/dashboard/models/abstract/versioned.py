@@ -1,4 +1,5 @@
-"""Field-granular revision history, and the interception that keeps it honest.
+"""
+Field-granular revision history, and the interception that keeps it honest.
 One row per ``(target, field, write)``.
 That granularity is what lets a viewer be shown a *subset* of the history - automatic writes, plus their own, plus their friends' - as a single indexed query rather than a replay:
 """
@@ -39,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 
 class AbstractFieldRevision(Model):
-    """One recorded write of one field.
+    """
+    One recorded write of one field.
     Concrete subclasses add ``target`` as a real ForeignKey to their own model - per-model tables rather than one contenttypes table, so each gets a typed FK, its own indexes and its own retention policy.
 
     Attributes:
@@ -81,7 +83,8 @@ class AbstractFieldRevision(Model):
 
 
 class VersionedQuerySet(QuerySet):
-    """A QuerySet that records revisions for bulk writes.
+    """
+    A QuerySet that records revisions for bulk writes.
     ``update()`` is the reason this class exists.
     It bypasses ``save()`` *and* every signal, so a model-level hook cannot see it - which is exactly how the three existing bypasses became invisible.
     """
@@ -110,7 +113,8 @@ class VersionedQuerySet(QuerySet):
         return updated
 
     def bulk_create(self, objs: Sequence[Any], *args: Any, **kwargs: Any) -> list[Any]:
-        """Create in bulk, recording each new row's initial field state.
+        """
+        Create in bulk, recording each new row's initial field state.
         A create is revision 1: the whole versioned field set is the state the row started in, with whatever source the context says made it.
         Without this, a bulk-created row has no provenance at all, and every one of its fields resolves to a default for a concealed viewer - which reads as an empty wiki rather than the one that was actually created.
         """
@@ -144,7 +148,8 @@ class VersionedQuerySet(QuerySet):
 
 
 class VersionedModel(Model):
-    """Mixin for a model whose scalar fields carry provenance.
+    """
+    Mixin for a model whose scalar fields carry provenance.
     Declare ``versioned_fields`` and ``revision_model`` on the concrete model.
     Every write to a listed field records who made it, so that a filtered view of the field set can be assembled later for a viewer entitled to only part of it.
     """
@@ -159,7 +164,8 @@ class VersionedModel(Model):
 
     @classmethod
     def from_db(cls, db: Any, field_names: Any, values: Any) -> Any:
-        """Load, snapshotting the versioned fields so ``save()`` can diff them.
+        """
+        Load, snapshotting the versioned fields so ``save()`` can diff them.
         Snapshots only the versioned fields actually present in this load.
         """
         instance = super().from_db(db, field_names, values)
@@ -168,7 +174,8 @@ class VersionedModel(Model):
         return instance
 
     def save(self, *args: Any, **kwargs: Any) -> None:
-        """Save, recording a revision only for versioned fields that changed.
+        """
+        Save, recording a revision only for versioned fields that changed.
         Recording *every* versioned field on an untargeted save would be worse than noisy - it would be wrong.
         """
         update_fields = kwargs.get("update_fields")
@@ -194,7 +201,8 @@ class VersionedModel(Model):
 
 
 def _revision_model(model: type[Model]) -> type[AbstractFieldRevision] | None:
-    """Resolve a model's revision table, which is declared as a label string.
+    """
+    Resolve a model's revision table, which is declared as a label string.
 
     A string rather than a class so the model module does not have to import
     its own revision module at definition time, which would be circular - the
@@ -213,7 +221,8 @@ def _revision_model(model: type[Model]) -> type[AbstractFieldRevision] | None:
 
 
 def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
-    """Write one revision row per field written.
+    """
+    Write one revision row per field written.
 
     Never raises in production. A provenance record that takes down the write
     it was describing would be worse than the gap it leaves - but in DEBUG and
@@ -254,7 +263,8 @@ def _record_fields(model: type[Model], pk: Any, values: dict[str, Any]) -> None:
 
 
 def concrete_field(model: type[Model], field_name: str) -> Field | None:
-    """Return a versioned field's definition, or None if it is not a real column.
+    """
+    Return a versioned field's definition, or None if it is not a real column.
 
     ``_meta.get_field`` also returns reverse relations, which have no
     ``to_python`` and cannot be versioned. Narrowing here keeps the two call
@@ -286,7 +296,8 @@ def resolve_fields(
     actor_ids: Iterable[int] = (),
     up_to_revision: int | None = None,
 ) -> dict[str, Any]:
-    """Return the latest qualifying value of every versioned field.
+    """
+    Return the latest qualifying value of every versioned field.
     The one query every filtered view of a versioned row goes through.
 
     Args:
@@ -339,7 +350,8 @@ def resolve_fields(
 
 
 def purge_recorded_value(target: Model, field_name: str, value: Any) -> int:
-    """Delete revision rows on *target* that stored this exact value for a field.
+    """
+    Delete revision rows on *target* that stored this exact value for a field.
     The revision log is append-only by design, and that is at odds with one existing user-facing promise: permanently deleting your own wiki edit ("intended for cases like accidentally pasting private information into a public wiki field") is supposed to leave *no copy anywhere*.
 
     Args:

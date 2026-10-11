@@ -1,4 +1,5 @@
-"""Per-profile encryption key bundle - the server-side anchor of DM end-to-end encryption.
+"""
+Per-profile encryption key bundle - the server-side anchor of DM end-to-end encryption.
 
 Every blob stored here was encrypted (or generated) in the user's browser;
 the server never sees the private key, the wrapping keys, or the passwords
@@ -21,7 +22,8 @@ DEFAULT_KDF_MEMLIMIT = 67_108_864  # 64 MiB
 
 
 class MessagingKeyBundle(abstract.DashboardModel):
-    """One profile's public key plus wrapped (client-encrypted) copies of its private key.
+    """
+    One profile's public key plus wrapped (client-encrypted) copies of its private key.
     Unwrap paths, in the order clients try them: ``password_wrapped_secret`` - private key encrypted under an Argon2id key derived from the login password in the browser (never transmitted).
     """
 
@@ -63,7 +65,8 @@ class MessagingKeyBundle(abstract.DashboardModel):
         profile_id: int
 
     def __str__(self) -> str:
-        """Return a human-readable description of this bundle.
+        """
+        Return a human-readable description of this bundle.
 
         Returns:
             String like "MessagingKeyBundle(profile=3, v1)".

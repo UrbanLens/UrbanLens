@@ -1,4 +1,5 @@
-"""Read-only list of Wayback snapshots taken of links that work as a password (P289).
+"""
+Read-only list of Wayback snapshots taken of links that work as a password (P289).
 
 Until the archive task refused them, a share link on a pin or wiki was handed to Save Page Now, which publishes its
 capture. A removal from the Wayback Machine is requested from the Internet Archive, by snapshot URL.

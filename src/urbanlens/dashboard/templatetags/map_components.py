@@ -1,4 +1,5 @@
-"""Reusable map UI components shared by every Leaflet map on the site.
+"""
+Reusable map UI components shared by every Leaflet map on the site.
 
 Because the markup and the JS are single-sourced, every map is guaranteed to present layers and
 search identically.
@@ -30,7 +31,8 @@ register = template.Library()
 
 @dataclass(frozen=True)
 class MapLayerSpec:
-    """Declarative description of one layer button in the layers panel.
+    """
+    Declarative description of one layer button in the layers panel.
 
     Attributes:
         key: Stable identifier bound to ``data-map-layer`` and matched by the JS engine (``street``,
@@ -73,7 +75,8 @@ MAP_LAYER_REGISTRY: dict[str, MapLayerSpec] = {}
 
 
 def register_map_layer(spec: MapLayerSpec) -> MapLayerSpec:
-    """Register a layer button so templates can request it by key.
+    """
+    Register a layer button so templates can request it by key.
 
     Plugins may call this at import time to contribute new layer buttons; pages opt in by listing the
     key in their ``{% map_layers_panel %}`` call and registering a matching custom toggle with the JS
@@ -307,7 +310,8 @@ register_map_layer(
 
 
 def custom_layer_button(layer: Any) -> MapLayerSpec:
-    """Wrap a CustomLayer row as a MapLayerSpec so it renders in the layers panel.
+    """
+    Wrap a CustomLayer row as a MapLayerSpec so it renders in the layers panel.
 
     The panel template only ever duck-types on a button's key/kind/label/icon/... attributes, so a
     per-pin/wiki user-created layer can reuse the exact same rendering path as the static,
@@ -333,7 +337,8 @@ def custom_layer_button(layer: Any) -> MapLayerSpec:
 
 
 def viewer_default_base(context: Any, offered: list[MapLayerSpec]) -> str:
-    """Which base the viewer's settings say this panel's map should open on.
+    """
+    Which base the viewer's settings say this panel's map should open on.
 
     Args:
         context: Template context, read for ``request.user``'s profile.
@@ -366,7 +371,8 @@ def map_layers_panel(  # noqa: PLR0917 - an inclusion tag: the template engine p
     manage_layers_url: str = "",
     manage_overlays_url: str = "",
 ) -> dict[str, Any]:
-    """Render the shared map layers component.
+    """
+    Render the shared map layers component.
 
     Args:
         context: Template context, read for the viewer's ``default_map_view``.
@@ -407,7 +413,8 @@ def map_search_bar(
     show_geolocate: bool = False,
     extra_class: str = "",
 ) -> dict[str, Any]:
-    """Render the shared "jump to location" search bar.
+    """
+    Render the shared "jump to location" search bar.
 
     The emitted ids follow the ``{prefix}-search-*`` scheme consumed by
     ``window.LocationSearchEngine.attach(prefix, options)``.
@@ -433,7 +440,8 @@ def map_search_bar(
 
 @dataclass(frozen=True)
 class MapToolSpec:
-    """Declarative description of one top-right toolbar button.
+    """
+    Declarative description of one top-right toolbar button.
 
     Attributes:
         key: Stable identifier matched against the ``tools`` argument of :func:`map_toolbar`.
@@ -475,7 +483,8 @@ MAP_TOOL_REGISTRY: dict[str, MapToolSpec] = {}
 
 
 def register_map_tool(spec: MapToolSpec) -> MapToolSpec:
-    """Register a toolbar tool so templates can request it by key.
+    """
+    Register a toolbar tool so templates can request it by key.
 
     Args:
         spec: The tool description to register.
@@ -704,7 +713,8 @@ def map_toolbar(
     screenshot_action: str = "screenshot",
     screenshot_trip_name: str = "",
 ) -> dict[str, Any]:
-    """Render the shared top-right map toolbar (tools only).
+    """
+    Render the shared top-right map toolbar (tools only).
 
     Every map on the site renders this exact markup so the screenshot tool - and any future toolbar tool
 
@@ -744,7 +754,8 @@ def map_toolbar(
 
 @register.simple_tag(takes_context=True)
 def basemap_tile_catalogue(context: template.Context) -> SafeString:
-    """Embed this deployment's basemap layer catalogue in the document, ahead of any map.
+    """
+    Embed this deployment's basemap layer catalogue in the document, ahead of any map.
 
     Rendered in ``themes/base.html`` immediately before ``core.js``, so ``map-layers.ts`` can read
     it synchronously at the moment it is asked for a tile source - before the first tile request
@@ -777,7 +788,8 @@ def basemap_tile_catalogue(context: template.Context) -> SafeString:
 
 @register.simple_tag
 def hosted_basemap_tiles() -> SafeString:
-    """Embed where this deployment's browsers fetch the street and dark basemaps' tiles, when not from our own mirror.
+    """
+    Embed where this deployment's browsers fetch the street and dark basemaps' tiles, when not from our own mirror.
 
     Read by ``frontend/ts/shared/hosted-basemap.ts`` before the first tile request, like the catalogue above. The key
     is in the template on purpose: the browser fetches Protomaps directly, and the key's allowed origins are what

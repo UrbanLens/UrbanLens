@@ -66,7 +66,8 @@ class FriendRequestNotificationReadOnViewTests(TestCase):
 
 
 class FriendRequestResolutionStateTests(TestCase):
-    """A friend_request notification whose underlying request has already been
+    """
+    A friend_request notification whose underlying request has already been
     accepted or declined must reflect that instead of looking like a still-
     pending action item with no buttons and stale wording."""
 
@@ -123,7 +124,8 @@ class FriendRequestResolutionStateTests(TestCase):
         self.assertIsNone(notification.friend_request_resolution)
 
     def test_accept_response_view_dismisses_notification_with_accepted_resolution(self) -> None:
-        """End-to-end: accepting from the panel dismisses the friend_request
+        """
+        End-to-end: accepting from the panel dismisses the friend_request
         notification from the inbox while leaving its resolution readable on
         the history page."""
         Friendship.objects.create(

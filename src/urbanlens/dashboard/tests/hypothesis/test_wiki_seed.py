@@ -516,7 +516,8 @@ class ArticleImagesFetchedWhileTheMatchWasStaleTests(TestCase):
 
 
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
-    """``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a Wikipedia match was already cached for the location beforehand.
+    """
+    ``tasks.ensure_wiki_for_location``: seed the article on wiki creation when a Wikipedia match was already cached for the location beforehand.
 
     Pages appear on the first pin now, so the seeding moved with the creation rather than being lost with the
     button."""
@@ -526,7 +527,8 @@ class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
         self.profile = self.user.profile
 
     def _create_wiki(self, location) -> Wiki:
-        """Run the creation task directly.
+        """
+        Run the creation task directly.
 
         Not via ``baker.make(Pin, ...)``: that fires the pin post_save chain, which under eager Celery runs the
         real enrichment task inline and reaches for external services."""
@@ -555,7 +557,8 @@ class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
 
 
 class CampusSiblingLocationSeedingTests(TestCase):
-    """A campus is several Locations of one Place; the wiki hangs off one of them.
+    """
+    A campus is several Locations of one Place; the wiki hangs off one of them.
 
     A Wikipedia match cached on any sibling must still reach the place's one wiki - the lookup goes through
     ``Wiki.objects.existing_for_location``, not the OneToOne on the Location that happened to be written."""

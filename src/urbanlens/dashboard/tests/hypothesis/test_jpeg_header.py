@@ -1,4 +1,5 @@
-"""A JPEG's pixel size is read from its frame header, never by decoding it (P324).
+"""
+A JPEG's pixel size is read from its frame header, never by decoding it (P324).
 
 Pillow appears here only to write fixtures and to say what size a decoder sees.
 """

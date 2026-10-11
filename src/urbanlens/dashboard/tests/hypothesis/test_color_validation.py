@@ -17,7 +17,8 @@ class CleanColorTests(SimpleTestCase):
         self.assertIsNone(clean_color("#1a2b3c4"))
 
     def test_three_digit_shorthand_is_rejected(self) -> None:
-        """Storage is restricted to what the renderers can actually mean.
+        """
+        Storage is restricted to what the renderers can actually mean.
 
         The merged rule is the stricter one that arrived with the markup XSS work: a 6-digit hex colour,
         matching `safeColor` in `frontend/ts/shared/markup-engine.ts`, so neither side has to guess what the
@@ -42,7 +43,8 @@ class CleanColorTests(SimpleTestCase):
         self.assertEqual(clean_color(None, default=""), "")
 
     def test_the_none_keyword_is_only_allowed_where_it_means_something(self) -> None:
-        """Markup borders use "none" to mean "no border"; nothing else should accept
+        """
+        Markup borders use "none" to mean "no border"; nothing else should accept
         a bare CSS keyword."""
         self.assertEqual(clean_color("none", allow_none_keyword=True), NO_COLOR)
         self.assertIsNone(clean_color("none"))
@@ -58,7 +60,8 @@ class CleanColorTests(SimpleTestCase):
 
     @given(st.text(max_size=40))
     def test_output_is_always_a_colour_a_default_or_none(self, value: str) -> None:
-        """The property that actually matters: whatever is thrown at it, the result is
+        """
+        The property that actually matters: whatever is thrown at it, the result is
         never an arbitrary string that could reach a style attribute."""
         result = clean_color(value, allow_none_keyword=True)
 

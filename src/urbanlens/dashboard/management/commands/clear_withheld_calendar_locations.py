@@ -1,4 +1,5 @@
-"""Rewrite the Google Calendar events that may still hold a location or title now withheld from their owner.
+"""
+Rewrite the Google Calendar events that may still hold a location or title now withheld from their owner.
 
 An export without auto-sync is never pushed, so an event keeps what it was last given until its owner exports the
 trip again. Exports made under 0.8.0 left a stop's address on the event, and its place's name in the title, after the
@@ -45,7 +46,8 @@ class Command(BaseCommand):
     help = "Rewrite UrbanLens-made Google Calendar events that may hold a location or title now withheld. Dry-run unless --apply."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Register the command's flags.
+        """
+        Register the command's flags.
 
         Args:
             parser: The argument parser.
@@ -54,7 +56,8 @@ class Command(BaseCommand):
         parser.add_argument("--no-wait", action="store_true", help="Stop when the calendar budget runs out instead of waiting for it.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Walk every trip on a connected calendar, oldest link first, and rewrite (or count) what may be withheld.
+        """
+        Walk every trip on a connected calendar, oldest link first, and rewrite (or count) what may be withheld.
 
         Args:
             *args: Unused.

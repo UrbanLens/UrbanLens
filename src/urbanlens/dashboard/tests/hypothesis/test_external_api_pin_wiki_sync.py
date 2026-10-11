@@ -49,7 +49,8 @@ class PinWikiSyncApiTests(TestCase):
         self.pin = create_pin_for_profile(self.profile, name="Old Mill", latitude=42.5, longitude=-73.5).pin
 
     def _headers(self, raw_key: str | None = None) -> dict:
-        """Bearer-header kwargs for the fixture key, or an explicitly given one.
+        """
+        Bearer-header kwargs for the fixture key, or an explicitly given one.
 
         Args:
             raw_key: A raw key to use instead of the fixture's.
@@ -59,7 +60,8 @@ class PinWikiSyncApiTests(TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, direction: str, *, pin_slug: str | None = None) -> str:
-        """Build a wiki-sync URL.
+        """
+        Build a wiki-sync URL.
 
         Args:
             direction: ``"push"`` or ``"pull"``. pin_slug: Pin to address; defaults to the fixture pin.
@@ -70,7 +72,8 @@ class PinWikiSyncApiTests(TestCase):
         return f"{BASE}/{slug}/wiki-sync/{direction}/"
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
-        """Issue a second key carrying exactly *scopes*.
+        """
+        Issue a second key carrying exactly *scopes*.
 
         Args:
             scopes: Raw scope values to store on the row.
@@ -82,7 +85,8 @@ class PinWikiSyncApiTests(TestCase):
         return raw
 
     def _wiki(self) -> Wiki:
-        """Give the fixture pin's location a community wiki.
+        """
+        Give the fixture pin's location a community wiki.
 
         Returns:
             The created wiki.
@@ -90,7 +94,8 @@ class PinWikiSyncApiTests(TestCase):
         return baker.make("dashboard.Wiki", location=self.pin.location, name="Old Mill")
 
     def _child_pin(self, latitude: float, longitude: float, name: str) -> Pin:
-        """Add one child pin under the fixture pin.
+        """
+        Add one child pin under the fixture pin.
 
         Args:
             latitude: The child's latitude. longitude: The child's longitude. name: The child's name.
@@ -101,7 +106,8 @@ class PinWikiSyncApiTests(TestCase):
         return baker.make("dashboard.Pin", profile=self.profile, parent_pin=self.pin, location=location, name=name)
 
     def _push(self, uuids: list[str], *, raw_key: str | None = None):
-        """POST a push with the given child-pin uuids.
+        """
+        POST a push with the given child-pin uuids.
 
         Args:
             uuids: Raw uuid strings for the body. raw_key: A raw key to use instead of the fixture's.
@@ -152,7 +158,8 @@ class PinWikiSyncApiTests(TestCase):
         self.assertEqual(second.json(), {"created": 0, "wiki_exists": True})
 
     def test_push_ignores_uuids_that_are_not_this_pins_children(self) -> None:
-        """A uuid naming another user's pin cannot be used to publish it.
+        """
+        A uuid naming another user's pin cannot be used to publish it.
 
         The filter is scoped to ``pin.detail_pins``, so a foreign uuid simply does not match - the same no-op
         the internal toolbar performs when a selection has gone stale."""
@@ -199,7 +206,8 @@ class PinWikiSyncApiTests(TestCase):
         self.assertIn("child_pin_uuids", response.json()["fields"])
 
     def test_another_users_pin_is_not_found(self) -> None:
-        """Both directions resolve through the owner-scoped pin lookup.
+        """
+        Both directions resolve through the owner-scoped pin lookup.
 
         Skipping that would not be a metadata leak - it would let a caller write
         to a stranger's pin hierarchy and to their property's community wiki.

@@ -24,7 +24,8 @@ class RedataNatureObservationsGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch recorded wildlife/plant observations near a coordinate.
+        """
+        Fetch recorded wildlife/plant observations near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

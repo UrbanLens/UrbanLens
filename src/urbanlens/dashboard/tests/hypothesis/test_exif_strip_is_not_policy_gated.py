@@ -1,4 +1,5 @@
-"""Stripping EXIF does not depend on the uploader's downscale policy.
+"""
+Stripping EXIF does not depend on the uploader's downscale policy.
 
 Driven through ``_process_photo_upload`` rather than the queryset beneath it, so
 the gate itself is what is under test.

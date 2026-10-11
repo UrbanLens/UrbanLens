@@ -27,7 +27,8 @@ from urbanlens.dashboard.services.visits.safety import MAX_CHAT_MESSAGE_LENGTH, 
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the auth header kwargs for a bearer-key request.
+    """
+    Build the auth header kwargs for a bearer-key request.
 
     Args:
         raw_key: The plaintext API key.
@@ -69,7 +70,8 @@ class _SafetyChatTestCase(TestCase):
         self.url = reverse("external_api:safety.checkins.messages", kwargs={"checkin_slug": self.checkin.slug})
 
     def _issue_key(self, user: User, scopes: list[str] | None = None) -> str:
-        """Issue an API key for *user* carrying the safety scopes.
+        """
+        Issue an API key for *user* carrying the safety scopes.
 
         Args:
             user: The key's owner. scopes: Scope values to grant, defaulting to safety read + write.
@@ -85,7 +87,8 @@ class _SafetyChatTestCase(TestCase):
         return raw
 
     def _post(self, raw_key: str, body: str):
-        """POST a chat message.
+        """
+        POST a chat message.
 
         Args:
             raw_key: The plaintext API key to authenticate with. body: The message body to submit.
@@ -96,7 +99,8 @@ class _SafetyChatTestCase(TestCase):
 
 
 class SafetyChatBodyValidationProperties(SimpleTestCase):
-    """Property-based bounds on the submitted-message serializer.
+    """
+    Property-based bounds on the submitted-message serializer.
 
     Deliberately DB-free and client-free: the property being checked is a pure function of the string, and
     driving it through ``self.client`` would make a few hundred examples take minutes for no extra coverage."""
@@ -110,7 +114,8 @@ class SafetyChatBodyValidationProperties(SimpleTestCase):
     @settings(max_examples=250, deadline=None)
     @given(st.text(alphabet=SAFE_ALPHABET, max_size=60))
     def test_validity_matches_the_services_own_rule(self, body: str) -> None:
-        """A body is valid here exactly when the service would accept it.
+        """
+        A body is valid here exactly when the service would accept it.
 
         Args:
             body: Arbitrary submitted text, weighted toward the blank and nearly-blank cases where the two rules could disagree."""
@@ -120,7 +125,8 @@ class SafetyChatBodyValidationProperties(SimpleTestCase):
     @settings(max_examples=50, deadline=None)
     @given(st.integers(min_value=1, max_value=MAX_CHAT_MESSAGE_LENGTH))
     def test_any_length_up_to_the_cap_is_accepted(self, length: int) -> None:
-        """The cap is inclusive at every length below it, not just at 1.
+        """
+        The cap is inclusive at every length below it, not just at 1.
 
         Args:
             length: How many characters the submitted body should have.
@@ -130,7 +136,8 @@ class SafetyChatBodyValidationProperties(SimpleTestCase):
     @settings(max_examples=50, deadline=None)
     @given(st.integers(min_value=MAX_CHAT_MESSAGE_LENGTH + 1, max_value=MAX_CHAT_MESSAGE_LENGTH + 500))
     def test_any_length_past_the_cap_is_rejected(self, length: int) -> None:
-        """Nothing over the cap gets through, however slightly it overshoots.
+        """
+        Nothing over the cap gets through, however slightly it overshoots.
 
         Args:
             length: How many characters the submitted body should have.
@@ -157,7 +164,8 @@ class SafetyChatAccessTests(_SafetyChatTestCase):
         self.assertEqual(response.json()["count"], 1)
 
     def test_merely_invited_partner_gets_404(self) -> None:
-        """An unaccepted invite must not open someone's live conversation.
+        """
+        An unaccepted invite must not open someone's live conversation.
 
         The case a status-less ``partners.filter()`` would let through: the row exists from the moment the
         invite is sent, so a membership test that ignores status admits someone who never took on the
@@ -255,7 +263,8 @@ class SafetyChatReadTests(_SafetyChatTestCase):
         self.assertEqual(row["sender_profile_uuid"], str(self.partner.uuid))
 
     def test_contact_sender_has_a_name_but_no_account(self) -> None:
-        """An email-only contact is a participant without being a user.
+        """
+        An email-only contact is a participant without being a user.
 
         ``sender_kind`` is the discriminator so a client branches on the kind rather than on which field
         happened to be null - a contact has no profile page to link to, and inventing one is worse than omitting
@@ -271,7 +280,8 @@ class SafetyChatReadTests(_SafetyChatTestCase):
         self.assertFalse(row["is_mine"])
 
     def test_orphaned_sender_still_renders(self) -> None:
-        """Both sender FKs are SET_NULL, so a deleted account leaves its messages behind.
+        """
+        Both sender FKs are SET_NULL, so a deleted account leaves its messages behind.
 
         The transcript has to survive that rather than 500 - a safety conversation losing its history because
         one participant closed their account would destroy the record of what was said during an incident."""
@@ -323,7 +333,8 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         )
 
     def test_partner_posts_a_message_attributed_to_their_own_profile(self) -> None:
-        """A partner's message is theirs, not the owner's.
+        """
+        A partner's message is theirs, not the owner's.
 
         Worth pinning: ``resolve_message_sender`` is handed the request's user and no contact, and a lazy
         implementation that simply used ``checkin.profile`` would attribute every REST message to the explorer -
@@ -336,7 +347,8 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertIsNone(message.sender_contact_id)
 
     def test_a_rest_message_is_broadcast_to_the_live_socket(self) -> None:
-        """The whole point of reusing the service's send pair.
+        """
+        The whole point of reusing the service's send pair.
 
         A message that is only *saved* is invisible in real time to everyone holding an open socket until they
         happen to reload - and nothing errors, so the sender's own view looks entirely correct."""
@@ -356,7 +368,8 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertEqual(SafetyCheckinMessage.objects.filter(checkin=self.checkin).count(), 0)
 
     def test_whitespace_only_body_is_400(self) -> None:
-        """Spaces are blank once stripped, so they must be refused up front.
+        """
+        Spaces are blank once stripped, so they must be refused up front.
 
         Otherwise the request passes validation and then fails inside the
         service with a differently-shaped error body for the same user mistake.
@@ -382,7 +395,8 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_archived_checkin_is_409_not_400(self) -> None:
-        """ "This conversation is over" is a different answer from "your message is bad".
+        """
+        "This conversation is over" is a different answer from "your message is bad".
 
         A client must be able to tell them apart: one means retire the thread, the other means ask the user to
         retype."""
@@ -396,7 +410,8 @@ class SafetyChatWriteTests(_SafetyChatTestCase):
         self.assertFalse(SafetyCheckinMessage.objects.filter(body="one last thing").exists())
 
     def test_archived_checkin_still_reads(self) -> None:
-        """Archival closes the chat to writes, not to reads.
+        """
+        Archival closes the chat to writes, not to reads.
 
         The transcript's bodies are scrubbed by archival itself; the endpoint must not additionally start
         404ing, or a client would be unable to tell an archived check-in from one it may not see."""

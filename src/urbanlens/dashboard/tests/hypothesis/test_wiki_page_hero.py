@@ -1,4 +1,5 @@
-"""The wiki page must use the shared _page_hero.html component (like every
+"""
+The wiki page must use the shared _page_hero.html component (like every
 other page) instead of its own one-off gradient banner. Also covers the About
 card's link-chip row picking up real styling now that it's no longer scoped to
 only the pin details page.
@@ -87,7 +88,8 @@ class WikiActionsFabVisibilityTests(TestCase):
         self.client.force_login(self.user)
 
     def test_hierarchy_items_hidden_but_the_fab_remains_for_its_article_actions(self) -> None:
-        """The fab itself always renders on a wiki page too - it also holds the
+        """
+        The fab itself always renders on a wiki page too - it also holds the
         Article tab's Source/Clear controls (see _hierarchy_actions_fab.html)."""
         content = self.client.get(reverse("location.wiki", args=[self.location.slug])).content.decode()
         self.assertIn("pin-actions-fab", content)
@@ -120,7 +122,8 @@ class WikiAboutCardLinkStylingTests(TestCase):
         self.assertIn('class="pin-link-chip"', content)
 
     def test_add_link_trigger_opens_the_shared_dialog(self) -> None:
-        """Regression guard: clicking "add a link" must open the shared
+        """
+        Regression guard: clicking "add a link" must open the shared
         add-link dialog, not reveal an always-present inline form - see
         _pin_link_add_dialog.html."""
         baker.make(WikiLink, wiki=self.wiki, url="https://example.com/history")

@@ -13,7 +13,8 @@ _INIT_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "container_in
 
 
 def _load_init_module():
-    """Import ``bin/container_init.py``, which is a script rather than a package member.
+    """
+    Import ``bin/container_init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.

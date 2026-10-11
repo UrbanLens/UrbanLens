@@ -34,7 +34,8 @@ def pick_next_question(
     difficulty: float,
     weight_overrides: dict[int, float] | None = None,
 ) -> TriviaQuestion | None:
-    """Weighted-random pick from ``candidates`` (already eligibility-filtered, not yet asked this session).
+    """
+    Weighted-random pick from ``candidates`` (already eligibility-filtered, not yet asked this session).
 
     Args:
         candidates: Eligible questions for this round.

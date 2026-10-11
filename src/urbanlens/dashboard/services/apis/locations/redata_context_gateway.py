@@ -43,7 +43,8 @@ MAX_NEAR_POINT_LIMIT = 200
 
 
 class LocationContextUnavailableError(GatewayRequestError):
-    """Raised when a REData location-context request fails or answers with a blackout.
+    """
+    Raised when a REData location-context request fails or answers with a blackout.
 
     Attributes:
         reason: One of the module's ``REASON_*`` constants, or REData's own ``error`` code verbatim for a ``400`` (e.g. ``"invalid_coordinates"``, ``"unknown_provider"``) - REData's fixed reason taxonomy for these endpoints (see the module docstring).
@@ -63,7 +64,8 @@ class LocationContextUnavailableError(GatewayRequestError):
 
 
 class LocationContextRefusedError(ImpossibleInputError, LocationContextUnavailableError):
-    """An input REData could only answer 400 for, refused before asking: the same settled answer as that 400.
+    """
+    An input REData could only answer 400 for, refused before asking: the same settled answer as that 400.
 
     Both an :class:`ImpossibleInputError`, for callers that know refusals, and a rejected
     :class:`LocationContextUnavailableError`, for the callers that already handle REData's own 400.
@@ -76,7 +78,8 @@ class LocationContextRefusedError(ImpossibleInputError, LocationContextUnavailab
 
 @contextmanager
 def refused_as_rejection() -> Iterator[None]:
-    """Re-raise an :class:`ImpossibleInputError` from the checks inside as a :class:`LocationContextRefusedError`.
+    """
+    Re-raise an :class:`ImpossibleInputError` from the checks inside as a :class:`LocationContextRefusedError`.
 
     Raises:
         LocationContextRefusedError: A check inside refused its input.
@@ -98,7 +101,8 @@ class LocationContextBusyError(LocationContextUnavailableError, UpstreamBusyErro
 
 
 def cap_per_provider(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
-    """The first ``limit`` rows of each provider, in their original order, as REData applies ``limit``.
+    """
+    The first ``limit`` rows of each provider, in their original order, as REData applies ``limit``.
 
     Args:
         rows: Near-point results, each tagged with its ``provider`` (rows without one share a group).
@@ -118,7 +122,8 @@ def cap_per_provider(rows: list[dict[str, Any]], limit: int) -> list[dict[str, A
 
 
 def redata_configured() -> bool:
-    """Whether REData is configured for this install (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY``).
+    """
+    Whether REData is configured for this install (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY``).
     Always ``False`` under :attr:`~services.sandbox.guard.ProcessRole.AI`: the assistant's tool loop must never reach REData, regardless of whether ``ai-worker``'s environment happens to carry the credentials (it shouldn't, per the compose anchors)."""
     from urbanlens.dashboard.services.sandbox.guard import ProcessRole, current_role
 
@@ -129,7 +134,8 @@ def redata_configured() -> bool:
 
 @dataclass(slots=True, frozen=True)
 class LocationContextEnvelope:
-    """A parsed near-a-coordinate REData response.
+    """
+    A parsed near-a-coordinate REData response.
 
     Attributes:
         count: Number of entries in ``results``.
@@ -144,7 +150,8 @@ class LocationContextEnvelope:
 
     @property
     def unanswered_sources(self) -> list[str]:
-        """The providers that did not answer, when the answer is incomplete; ``[]`` for a complete one.
+        """
+        The providers that did not answer, when the answer is incomplete; ``[]`` for a complete one.
 
         Returns:
             Provider names, or ``["unknown"]`` for an incomplete answer that names none.
@@ -155,7 +162,8 @@ class LocationContextEnvelope:
         return named or ["unknown"]
 
     def marked(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``payload``, marked partial when this answer is, so the cache keeps it only briefly.
+        """
+        ``payload``, marked partial when this answer is, so the cache keeps it only briefly.
 
         Args:
             payload: What a caller is about to cache from this answer.
@@ -206,7 +214,8 @@ class RedataLocationContextGateway(Gateway):
         limit: int | None = None,
         extra_params: dict[str, Any] | None = None,
     ) -> LocationContextEnvelope:
-        """GET a near-a-coordinate REData endpoint and parse its envelope.
+        """
+        GET a near-a-coordinate REData endpoint and parse its envelope.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional), e.g.
@@ -257,7 +266,8 @@ class RedataLocationContextGateway(Gateway):
         return LocationContextEnvelope(count=len(kept), complete=envelope.complete, results=kept, providers=envelope.providers)
 
     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        """GET any REData endpoint outside the near-a-coordinate envelope and return its raw JSON body.
+        """
+        GET any REData endpoint outside the near-a-coordinate envelope and return its raw JSON body.
         Use :meth:`near_point` instead for anything shaped like REData's near-a-coordinate contract.
 
         Args:
@@ -279,7 +289,8 @@ class RedataLocationContextGateway(Gateway):
         return self._raise_for_error_status(response, path)
 
     def post_json(self, path: str, json_body: dict[str, Any]) -> Any:
-        """POST a JSON body to a REData endpoint and return its raw JSON response.
+        """
+        POST a JSON body to a REData endpoint and return its raw JSON response.
         ``POST /routes/``) that share this gateway's auth/error handling but take a body rather than query params.
 
         Args:
@@ -314,7 +325,8 @@ class RedataLocationContextGateway(Gateway):
         return self._raise_for_error_status(response, path)
 
     def get_bytes(self, path: str, *, what: str) -> tuple[bytes, str]:
-        """GET one of REData's file endpoints (a mirrored image, an archived capture).
+        """
+        GET one of REData's file endpoints (a mirrored image, an archived capture).
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
@@ -392,7 +404,8 @@ class RedataLocationContextGateway(Gateway):
             raise LocationContextUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {type(exc).__name__}") from exc
 
     def _raise_for_error_status(self, response: requests.Response, path: str) -> NoReturn:
-        """Translate a non-200 REData response into a :class:`LocationContextUnavailableError`.
+        """
+        Translate a non-200 REData response into a :class:`LocationContextUnavailableError`.
         Always raises - callers reach this only once ``response.status_code != 200``."""
         if response.status_code in (400, 503):
             try:

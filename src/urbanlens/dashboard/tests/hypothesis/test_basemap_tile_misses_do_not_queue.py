@@ -1,4 +1,5 @@
-"""Two uncached tiles at once do not wait for each other on the database.
+"""
+Two uncached tiles at once do not wait for each other on the database.
 
 On 0.8.0 every vendor tile reserved its call under ``SELECT ... FOR UPDATE`` on the service's one ``ApiRateLimit``
 row. A cold viewport is ~30 misses at once, so they took that lock one after another while each held a pooled

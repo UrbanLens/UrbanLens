@@ -1,4 +1,5 @@
-"""A map saved turned, a label saved turned, and the credits for the area an Esri basemap shows.
+"""
+A map saved turned, a label saved turned, and the credits for the area an Esri basemap shows.
 
 The composer can turn the map and each text label. Both are saved as degrees: the map's ``bearing``
 is the compass direction that points up (MapLibre's sense), and a label's ``rotation`` is clockwise

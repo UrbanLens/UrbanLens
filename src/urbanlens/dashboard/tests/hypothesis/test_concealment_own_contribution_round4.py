@@ -90,7 +90,8 @@ class OwnContributionVisibleRowsTests(TestCase):
         self.assertNotIn(stranger_sale.pk, {s.pk for s in visible_sales})
 
     def test_wiki_owner_official_record_with_no_creator_is_automatic_not_hidden(self) -> None:
-        """plugins.builtin.property_records writes OwnerSource.OFFICIAL rows with no created_by.
+        """
+        plugins.builtin.property_records writes OwnerSource.OFFICIAL rows with no created_by.
 
         Null actor here is genuinely ambiguous (also caused by account deletion), so - like WikiLink - it
         defaults to automatic rather than being treated as a departed account."""
@@ -119,7 +120,8 @@ class OwnContributionVisibleRowsTests(TestCase):
 
 
 class LayerUuidNullingAndWriteSafetyTests(TestCase):
-    """The read-side layer_uuid nulling, and the write-path fix that stops it destroying real data.
+    """
+    The read-side layer_uuid nulling, and the write-path fix that stops it destroying real data.
 
     Round 4's adversarial review caught the write-safety bug directly: nulling a hidden layer for *display*
     means the edit panel's own <select> shows no selection, so editing any other field on the item echoes that
@@ -295,7 +297,8 @@ class WikiScopedBoundaryConcealmentTests(TestCase):
 
 
 class SearchResultUsesConcealedValuesTests(TestCase):
-    """A surviving search candidate's displayed text must be the concealed value, not the live row.
+    """
+    A surviving search candidate's displayed text must be the concealed value, not the live row.
 
     This is the critical content-leak the fourth round's adversarial review caught in the search fix itself: the
     over-fetch+reverify gate only decided whether a concealed wiki could appear in results at all: the

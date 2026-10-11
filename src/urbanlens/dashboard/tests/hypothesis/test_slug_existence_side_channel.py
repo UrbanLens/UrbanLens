@@ -1,4 +1,5 @@
-"""P236: a slug-addressed URL must cost the same for something the requester cannot see as for nothing at all.
+"""
+P236: a slug-addressed URL must cost the same for something the requester cannot see as for nothing at all.
 
 Each test compares the SQL a request runs for a slug no row has ever used with the SQL it runs for a row the requester
 may not reach. Any difference - a query more, a query fewer, a different statement - is a timing side channel that
@@ -41,7 +42,8 @@ _REGEX_ARGS = {"label_kind": "tags"}
 
 
 def _shape(queries: list[dict], probe: str) -> list[str]:
-    """The statements a request ran, with the probed slug (or uuid, which Postgres is sent undashed), savepoint
+    """
+    The statements a request ran, with the probed slug (or uuid, which Postgres is sent undashed), savepoint
     names and the request's own timestamp made comparable."""
     shapes = []
     for query in queries:

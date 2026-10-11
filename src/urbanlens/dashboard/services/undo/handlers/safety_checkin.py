@@ -97,7 +97,8 @@ class SafetyCheckinUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[SafetyCheckin]:
-        """Recreate check-ins, their contact snapshots, and their partners.
+        """
+        Recreate check-ins, their contact snapshots, and their partners.
 
         Raises:
             UndoExpiredError: If the owning profile, destination location, attached markup map(s), a contact's linked profile, or a partner's profile/inviter was independently deleted during the retention window, since recreating the row would otherwise fail with an uncaught IntegrityError."""

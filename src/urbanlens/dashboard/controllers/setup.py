@@ -27,7 +27,8 @@ _TITLE_NORMALIZE_RE = re.compile(r"[^a-zA-Z0-9]+")
 
 
 def _request_host(request) -> str:
-    """Return the request hostname without port or leading ``www.``.
+    """
+    Return the request hostname without port or leading ``www.``.
 
     Reads directly from META to avoid DisallowedHost exceptions; this function is used only for branding
     decisions, not security validation.
@@ -45,7 +46,8 @@ def _request_host(request) -> str:
 
 
 def is_official_urbanlens_site(request) -> bool:
-    """Whether this request is served from the canonical UrbanLens domain.
+    """
+    Whether this request is served from the canonical UrbanLens domain.
 
     Args:
         request: The current HttpRequest.
@@ -57,7 +59,8 @@ def is_official_urbanlens_site(request) -> bool:
 
 
 def normalize_app_title(title: str) -> str:
-    """Strip spaces and punctuation, then lowercase, for reserved-name checks.
+    """
+    Strip spaces and punctuation, then lowercase, for reserved-name checks.
 
     Args:
         title: Raw app title from the user.
@@ -69,7 +72,8 @@ def normalize_app_title(title: str) -> str:
 
 
 def is_reserved_urbanlens_title(title: str) -> bool:
-    """Whether ``title`` matches the reserved ``UrbanLens`` name.
+    """
+    Whether ``title`` matches the reserved ``UrbanLens`` name.
 
     Args:
         title: Raw app title from the user.
@@ -81,7 +85,8 @@ def is_reserved_urbanlens_title(title: str) -> bool:
 
 
 def personalized_map_title(user: User) -> str:
-    """Build a default app title from the user's first name or username.
+    """
+    Build a default app title from the user's first name or username.
 
     Args:
         user: The bootstrap administrator.
@@ -98,7 +103,8 @@ def personalized_map_title(user: User) -> str:
 
 
 def app_title_name_suggestions(user: User) -> list[str]:
-    """Return alternative app-title ideas for non-official instances.
+    """
+    Return alternative app-title ideas for non-official instances.
 
     Args:
         user: The bootstrap administrator.
@@ -118,7 +124,8 @@ def app_title_name_suggestions(user: User) -> list[str]:
 
 
 def setup_app_title_value(request: HttpRequest, user: User, current_title: str) -> str:
-    """Resolve the app title shown in the setup wizard.
+    """
+    Resolve the app title shown in the setup wizard.
 
     On non-official hosts, replace the factory default ``UrbanLens`` with a personalized suggestion so
     installers are not nudged toward the reserved name.
@@ -142,7 +149,8 @@ URBANLENS_TITLE_NOTICE = "UrbanLens is the name of the public project at urbanle
 
 
 def _build_feature_groups(app_settings) -> list[dict]:
-    """Build the feature-availability matrix for the integrations step.
+    """
+    Build the feature-availability matrix for the integrations step.
 
     Args:
         app_settings: The AppSettings singleton.
@@ -269,7 +277,8 @@ def _build_feature_groups(app_settings) -> list[dict]:
 
 
 class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """First-run setup wizard for the bootstrap administrator.
+    """
+    First-run setup wizard for the bootstrap administrator.
 
     GET /setup/ → render wizard
     POST /setup/ → handle action (save_title | complete)
@@ -282,7 +291,8 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
 
     def get(self, request):
-        """Render the setup wizard.
+        """
+        Render the setup wizard.
 
         Args:
             request: The current HttpRequest.
@@ -327,7 +337,8 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
         )
 
     def post(self, request):
-        """Handle wizard POST actions.
+        """
+        Handle wizard POST actions.
 
         Args:
             request: The current HttpRequest.

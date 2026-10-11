@@ -1,4 +1,5 @@
-"""The uploader is never handed the URL of a file that the upload's re-encode renames away (P58).
+"""
+The uploader is never handed the URL of a file that the upload's re-encode renames away (P58).
 
 The re-encode stores the upload under a new name and deletes the old file, after which the old path has no
 owning row and 404s, correctly. These run a real upload and a real ``process_image_upload`` and check that

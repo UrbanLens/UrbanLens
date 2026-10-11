@@ -1,4 +1,5 @@
-"""When a pinned place was built, read from the building, register and parcel records already cached for it.
+"""
+When a pinned place was built, read from the building, register and parcel records already cached for it.
 
 Nothing here calls an upstream. A year is written only where nobody has set a date, so an owner's own date always wins.
 """
@@ -50,7 +51,8 @@ class BuildYear:
 
 
 def plausible_year(value: Any) -> int | None:
-    """A construction year from a record's field, or None when it is missing or impossible.
+    """
+    A construction year from a record's field, or None when it is missing or impossible.
 
     Args:
         value: The raw ``year_built``: an int, or text such as ``"1871"``.
@@ -68,7 +70,8 @@ def plausible_year(value: Any) -> int | None:
 
 
 def own_build_year(record: Mapping[str, Any]) -> int | None:
-    """The year a building record says that building itself was built.
+    """
+    The year a building record says that building itself was built.
 
     REData's ``year_built_basis`` says what a ``year_built`` dates. ``"building"`` is the building's own year.
     ``"parcel"`` is the assessor's one year for the parcel's principal improvement, which REData sets on at most the
@@ -88,7 +91,8 @@ def own_build_year(record: Mapping[str, Any]) -> int | None:
 
 
 def cluster_build_year(cluster: BuildingCluster) -> int | None:
-    """The year one physical building was built, from the first of its records that dates it (:func:`own_build_year`).
+    """
+    The year one physical building was built, from the first of its records that dates it (:func:`own_build_year`).
 
     Args:
         cluster: The building's records.
@@ -100,7 +104,8 @@ def cluster_build_year(cluster: BuildingCluster) -> int | None:
 
 
 def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
-    """The best year for what a root pin stands for, most specific record first.
+    """
+    The best year for what a root pin stands for, most specific record first.
 
     A register listing drawn around the pin names the place itself. Failing that, the building the pin stands on is
     what its owner pointed at, when its records date it. The parcel record's year is last, and only for a pin standing
@@ -135,7 +140,8 @@ def site_build_year(pin: Pin, nester: BuildingNester) -> BuildYear | None:
 
 
 def standing_year(pin: Pin, nester: BuildingNester) -> int | None:
-    """The own year of the innermost building the pin stands on that has one (:func:`standing_on`, :func:`cluster_build_year`).
+    """
+    The own year of the innermost building the pin stands on that has one (:func:`standing_on`, :func:`cluster_build_year`).
 
     Args:
         pin: The pin.
@@ -148,7 +154,8 @@ def standing_year(pin: Pin, nester: BuildingNester) -> int | None:
 
 
 def parcel_year_may_date(marker: Pin | Wiki) -> bool:
-    """Whether the parcel record's year may date a pin or wiki: not one that reads as a building.
+    """
+    Whether the parcel record's year may date a pin or wiki: not one that reads as a building.
 
     A campus pin standing on its main building's place reads as that building, and the assessor's year for the
     parcel's principal improvement is not known to be that building's.
@@ -166,7 +173,8 @@ def parcel_year_may_date(marker: Pin | Wiki) -> bool:
 
 
 def standing_on(pin: Pin, nester: BuildingNester) -> list[BuildingCluster]:
-    """The buildings a pin stands on, innermost first: those whose footprint holds it, else a footprintless one at it.
+    """
+    The buildings a pin stands on, innermost first: those whose footprint holds it, else a footprintless one at it.
 
     Args:
         pin: The pin.
@@ -187,7 +195,8 @@ def standing_on(pin: Pin, nester: BuildingNester) -> list[BuildingCluster]:
 
 
 def fill_build_dates(pin: Pin) -> int:
-    """Date a root pin and its building pins from the records cached for its property, where nobody has.
+    """
+    Date a root pin and its building pins from the records cached for its property, where nobody has.
 
     Also records each year on the community wikis standing for them, for anyone whose community features are on.
 
@@ -224,7 +233,8 @@ def fill_build_dates(pin: Pin) -> int:
 
 
 def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | None) -> None:
-    """Record the campus's and each building's year on the wikis standing for them.
+    """
+    Record the campus's and each building's year on the wikis standing for them.
 
     A building record's year is taken back only on a building list REData answered in full: with no list cached, or
     one a source did not answer, a missing year says nothing.
@@ -258,7 +268,8 @@ def _record_wiki_years(pin: Pin, nester: BuildingNester, site_year: BuildYear | 
 
 
 def record_wiki_build_year(wiki: Wiki, built: BuildYear) -> bool:
-    """Record a record's year on a wiki's ``built_year`` fact, once per source.
+    """
+    Record a record's year on a wiki's ``built_year`` fact, once per source.
 
     Re-reading a record that still says the same thing adds nothing; one that now says something else replaces that
     source's earlier observation rather than outvoting it.
@@ -281,7 +292,8 @@ def record_wiki_build_year(wiki: Wiki, built: BuildYear) -> bool:
 
 
 def retract_wiki_build_year(wiki: Wiki, source: str) -> bool:
-    """Withdraw a source's observations of a wiki's year once that source no longer dates it.
+    """
+    Withdraw a source's observations of a wiki's year once that source no longer dates it.
 
     Args:
         wiki: The wiki the year was about.
@@ -309,7 +321,8 @@ def retract_wiki_build_year(wiki: Wiki, source: str) -> bool:
 
 
 def wiki_build_year(wiki: Wiki) -> int | None:
-    """The year a wiki's place was built, for its About card.
+    """
+    The year a wiki's place was built, for its About card.
 
     The community's estimate once it has one; until then the newest record's. A record is one observation, which the
     fact's crowd threshold would otherwise never let show.

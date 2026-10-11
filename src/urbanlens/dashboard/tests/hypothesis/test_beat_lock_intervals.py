@@ -16,7 +16,8 @@ _TASKS_PATH = Path(tasks_module.__file__)
 
 
 def _takes_a_lock(node: ast.FunctionDef) -> bool:
-    """Whether a task guards itself with an overlap lock.
+    """
+    Whether a task guards itself with an overlap lock.
 
     Matching only one would make this scan quietly find nothing - which is what
     ``test_the_scan_still_finds_the_known_locks`` exists to catch.
@@ -40,7 +41,8 @@ def _takes_a_lock(node: ast.FunctionDef) -> bool:
 
 
 def _parse_function(source: str) -> ast.FunctionDef:
-    """The function *source* defines first.
+    """
+    The function *source* defines first.
 
     Args:
         source: Python source starting with a function definition.
@@ -80,7 +82,8 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
 
 
 def _effective_period_seconds(schedule: crontab | float) -> int:
-    """The shortest gap, in seconds, between two firings of an interval or crontab schedule.
+    """
+    The shortest gap, in seconds, between two firings of an interval or crontab schedule.
 
     A crontab's firings over one day are compared, wrapping midnight, so a crontab firing every hour gets the
     shortest gap between its minutes (wrapping the hour) and one limited to some hours the shortest gap between
@@ -99,7 +102,8 @@ def _effective_period_seconds(schedule: crontab | float) -> int:
 
 
 def _too_long_locks(locked_tasks: dict[str, int], beat_schedule: dict) -> dict[str, str]:
-    """Every entry whose TTL does not expire before its next scheduled tick.
+    """
+    Every entry whose TTL does not expire before its next scheduled tick.
 
     Split out of the test body so the boundary itself (``ttl >= interval``) can be pinned directly with
     synthetic data, rather than only ever being exercised by production values that all sit comfortably clear of
@@ -137,7 +141,8 @@ class BeatLockIntervalTests(SimpleTestCase):
         self.assertEqual(unknown, [])
 
     def test_every_beat_scheduled_task_that_takes_a_lock_is_covered(self) -> None:
-        """The completeness arm: a new lock-guarded beat task must be added above.
+        """
+        The completeness arm: a new lock-guarded beat task must be added above.
 
         Finds every function in ``tasks.py`` that calls ``cache.add(...)`` - the overlap-guard idiom - and
         checks that the ones reachable from the beat schedule appear in the map."""
@@ -164,7 +169,8 @@ class BeatLockIntervalTests(SimpleTestCase):
         self.assertGreaterEqual(guarded, len(_LOCKED_BEAT_TASKS))
 
     def test_takes_a_lock_matches_the_raw_cache_add_idiom(self) -> None:
-        """Every current task has migrated to ``acquire_lock``/``beat_lock``, so this
+        """
+        Every current task has migrated to ``acquire_lock``/``beat_lock``, so this
         idiom has zero real matches in ``tasks.py`` today - nothing else in this
         file would notice if this arm silently broke.
         """
@@ -183,7 +189,8 @@ class BeatLockIntervalTests(SimpleTestCase):
         self.assertTrue(_takes_a_lock(node))
 
     def test_takes_a_lock_is_false_for_an_unrelated_function(self) -> None:
-        """The negative case: nothing here currently proves the matcher can say no.
+        """
+        The negative case: nothing here currently proves the matcher can say no.
         A ``_takes_a_lock`` that always returns ``True`` would still pass every
         other test in this file that only checks names already known to lock.
         """
@@ -198,7 +205,8 @@ class BeatLockIntervalTests(SimpleTestCase):
         self.assertEqual(_effective_period_seconds(crontab(minute=12)), 60 * 60)
 
     def test_effective_period_seconds_single_hour_crontab_is_daily(self) -> None:
-        """No entry in ``_LOCKED_BEAT_TASKS`` uses a limited-hour crontab, so this
+        """
+        No entry in ``_LOCKED_BEAT_TASKS`` uses a limited-hour crontab, so this
         branch of the helper is otherwise never exercised by production data.
         """
         self.assertEqual(_effective_period_seconds(crontab(hour=3, minute=10)), 24 * 60 * 60)

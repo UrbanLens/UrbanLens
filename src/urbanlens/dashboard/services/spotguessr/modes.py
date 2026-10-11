@@ -1,4 +1,5 @@
-"""Per-mode strategy registry - the single place a new SpotGuessr mode is wired in.
+"""
+Per-mode strategy registry - the single place a new SpotGuessr mode is wired in.
 Adding a fourth mode now means adding one ``ModeStrategy`` entry to ``_STRATEGIES`` below - everything else reads the registry instead of repeating its own copy of the mode list."""
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ class RoundContent:
 
 @dataclass(frozen=True)
 class ModeStrategy:
-    """Everything mode-specific about generating, serializing, and reacting to a round.
+    """
+    Everything mode-specific about generating, serializing, and reacting to a round.
 
     Attributes:
         mode: The ``SpotGuessrMode`` value this strategy implements.

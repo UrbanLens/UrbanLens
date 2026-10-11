@@ -1,4 +1,5 @@
-"""What one basemap tile costs this deployment, and what a viewport of them costs together.
+"""
+What one basemap tile costs this deployment, and what a viewport of them costs together.
 
 The tile proxy is the highest-frequency authenticated endpoint on the site: a viewport is ~30 tiles
 and the browser asks for all of them at once, so whatever one tile costs is paid ~30 times per map
@@ -74,7 +75,8 @@ MAX_HEADER_BYTES_PER_TILE = 600
 
 
 def _tile_store():
-    """The store the proxy reads tiles out of, which is not the default cache.
+    """
+    The store the proxy reads tiles out of, which is not the default cache.
 
     Returns:
         The proxied-bytes cache.
@@ -83,7 +85,8 @@ def _tile_store():
 
 
 class CountingStore:
-    """A proxied-bytes store that records the calls made to it, and forwards them all.
+    """
+    A proxied-bytes store that records the calls made to it, and forwards them all.
 
     Args:
         wrapped: The real store every call is passed through to.
@@ -113,7 +116,8 @@ class CountingStore:
 
 
 def header_bytes(response: HttpResponseBase) -> int:
-    """Roughly what this response's headers cost on the wire.
+    """
+    Roughly what this response's headers cost on the wire.
 
     Args:
         response: The response to measure.
@@ -179,7 +183,8 @@ class BasemapTileCostTests(TestCase):
         self.assertLessEqual(len(queries), MAX_QUERIES_PER_CACHED_TILE)
 
     def test_a_cached_tile_is_one_round_trip_to_the_cache(self) -> None:
-        """The gate and the bytes are fetched together, and a split back into two reads doubles the
+        """
+        The gate and the bytes are fetched together, and a split back into two reads doubles the
         cache traffic of the busiest endpoint on the site without changing a single response.
 
         Queries cannot see this - both reads are Dragonfly, not Postgres - so the query budget above
@@ -201,7 +206,8 @@ class BasemapTileCostTests(TestCase):
         self.assertEqual(len(counting.batches[0]), 2, "the session's tile grant is meant to ride along with the tile")
 
     def test_the_first_tile_of_a_session_pays_once(self) -> None:
-        """Where the cost the rest of the tiles avoid actually goes, so it is bounded rather than moved.
+        """
+        Where the cost the rest of the tiles avoid actually goes, so it is bounded rather than moved.
 
         A budget of zero per tile measured only on a warmed session would say nothing about a
         session that opens a map for the first time - which every session does.
@@ -229,7 +235,8 @@ class BasemapTileCostTests(TestCase):
         self.assertLessEqual(len(second), MAX_QUERIES_PER_CACHED_TILE)
 
     def test_the_tile_view_itself_asks_the_database_for_nothing(self) -> None:
-        """Separates this view's own cost from the chain's, so a regression lands on whoever caused it.
+        """
+        Separates this view's own cost from the chain's, so a regression lands on whoever caused it.
 
         The same request served from cache and refused outright touch entirely different code inside
         the view, so a query either of them makes that the other does not is the view's own."""
@@ -246,7 +253,8 @@ class BasemapTileCostTests(TestCase):
         self.assertEqual(len(served.captured_queries), len(fetched.captured_queries))
 
     def test_a_cached_tile_tells_the_browser_it_may_keep_it(self) -> None:
-        """Without this the browser re-asks for every tile on every pan back over the same ground.
+        """
+        Without this the browser re-asks for every tile on every pan back over the same ground.
 
         A tile is immutable for a given layer and coordinate - that is why the server keeps it for a
         week - so the answer it already has is the answer it would get. For as long as the vendor allows
@@ -261,7 +269,8 @@ class BasemapTileCostTests(TestCase):
         self.assertLessEqual(max_age, VENDOR_TILES["street"].browser_max_age or max_age)
 
     def test_no_shared_cache_may_keep_a_tile(self) -> None:
-        """The endpoint is behind a login. A CDN holding a tile would answer it to anyone, and its hit or miss
+        """
+        The endpoint is behind a login. A CDN holding a tile would answer it to anyone, and its hit or miss
         would say whether somebody here has looked at that coordinate."""
         for response in (self._serve_cached(), self._serve_fetched(x=1214)):
             directives = {part.strip() for part in cache_directives(response).split(",")}
@@ -277,7 +286,8 @@ class BasemapTileCostTests(TestCase):
             return self.client.get(self._url(x=x))
 
     def test_an_uncached_tile_asks_the_database_nothing(self) -> None:
-        """The miss path, through the real rate-limited session to a stubbed vendor: the budget is checked on the
+        """
+        The miss path, through the real rate-limited session to a stubbed vendor: the budget is checked on the
         cache's counters, the outcome is tallied there, and the ledger is written by the roll-up a minute later.
         On 0.8.0 a miss cost seven queries, two under a lock on the service's one ``ApiRateLimit`` row.
 
@@ -312,7 +322,8 @@ class BasemapTileCostTests(TestCase):
         self.assertLessEqual(measured, MAX_HEADER_BYTES_PER_TILE)
 
     def test_a_tile_keeps_the_security_headers_that_do_something_to_an_image(self) -> None:
-        """The header budget above is met by dropping what a PNG cannot use, never a real protection.
+        """
+        The header budget above is met by dropping what a PNG cannot use, never a real protection.
 
         ``nosniff`` is the one that matters most here: it is exactly what stops a proxied image
         being re-interpreted as something executable."""
@@ -324,7 +335,8 @@ class BasemapTileCostTests(TestCase):
         self.assertNotIn("Content-Security-Policy-Report-Only", response.headers)
 
     def test_the_first_viewer_of_an_area_may_keep_the_tile_too(self) -> None:
-        """The freshly-fetched tile is a different return path from the cached one.
+        """
+        The freshly-fetched tile is a different return path from the cached one.
 
         It is also the expensive one - it cost an upstream fetch - so it is the last tile that
         should have to be asked for twice."""
@@ -348,7 +360,8 @@ class BasemapTileCostTests(TestCase):
         self.assertIn("max-age=", cache_directives(response))
 
     def test_no_content_security_policy_is_sent_in_either_mode(self) -> None:
-        """A tile is exempted from both spellings, because a deployment sends one or the other.
+        """
+        A tile is exempted from both spellings, because a deployment sends one or the other.
 
         The site emits the report-only header until ``UL_CSP_ENFORCE`` flips it, so an exemption
         written for only the header this deployment happens to send today comes back the day that
@@ -380,7 +393,8 @@ class BasemapTileCostTests(TestCase):
         self.assertIn("max-age=", cache_directives(response))
 
     def test_a_deployment_with_no_redata_is_not_remembered_as_having_no_tiles(self) -> None:
-        """This 404 says "not configured", which is a deployment's state and not a fact about the
+        """
+        This 404 says "not configured", which is a deployment's state and not a fact about the
         tile - cached in the browser, configuring REData would leave every map blank until it aged
         out."""
         with mock.patch(_CONFIGURED, return_value=False):
@@ -456,7 +470,8 @@ class BasemapViewportCostTests(TestCase):
             )
 
     def test_a_warm_viewport_stays_inside_the_budget_every_tile_agreed_to(self) -> None:
-        """One viewport, served entirely from cache: the ordinary case once an area has any visitors.
+        """
+        One viewport, served entirely from cache: the ordinary case once an area has any visitors.
 
         Measured here rather than multiplied out from the single-tile test, because per-request
         state (a cached session, a reused connection) makes the thirtieth tile cheaper than the
@@ -482,7 +497,8 @@ class BasemapViewportCostTests(TestCase):
         self.assertLessEqual(len(queries), MAX_QUERIES_PER_WARM_VIEWPORT)
 
     def test_a_cold_viewport_never_asks_the_upstream_for_more_than_its_slots(self) -> None:
-        """The bound is what keeps one cold map from occupying every request thread in the process.
+        """
+        The bound is what keeps one cold map from occupying every request thread in the process.
 
         Held directly rather than from threads: this test's own transaction owns its connection, so
         a request served on another thread cannot see the user it signed in as."""
@@ -506,7 +522,8 @@ class BasemapViewportCostTests(TestCase):
         self.assertEqual(download.call_count, 0, "every slot was taken, so nothing may have reached the upstream")
 
     def test_refusing_a_viewport_costs_no_more_queries_than_serving_one(self) -> None:
-        """Under load the proxy refuses far more tiles than it serves, so a refusal that cost more
+        """
+        Under load the proxy refuses far more tiles than it serves, so a refusal that cost more
         than a hit would make load worse in proportion to how loaded it already is.
 
         Asserted on queries and reported on time: the two timings below are dominated by whatever

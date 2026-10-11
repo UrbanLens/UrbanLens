@@ -25,7 +25,8 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
 
 def _run(coro):
-    """Run *coro* through async_to_sync, matching the other consumer tests.
+    """
+    Run *coro* through async_to_sync, matching the other consumer tests.
 
     ``database_sync_to_async``'s thread-sensitive mode needs the CurrentThreadExecutor that only async_to_sync's
     sync->async->sync bridge sets up; a coroutine driven by ``asyncio.run()`` hangs on the first database access
@@ -38,7 +39,8 @@ def _run(coro):
 
 
 class WebSocketVolumeSettingsTests(SimpleTestCase):
-    """The settings the other tests override have to exist in production.
+    """
+    The settings the other tests override have to exist in production.
 
     ``override_settings`` invents a name it does not find, so a budget test reading a misspelled setting passes
     green against code that reads nothing."""
@@ -58,7 +60,8 @@ class WebSocketVolumeSettingsTests(SimpleTestCase):
 
 
 class DaphneFrameSizeWiringTests(SimpleTestCase):
-    """Daphne is actually started with a cap at or above the application's.
+    """
+    Daphne is actually started with a cap at or above the application's.
 
     Autobahn refuses an oversized frame at the protocol layer, with nothing sent and nothing logged, so a
     transport cap below the application cap reaches a user as an unexplained disconnect."""
@@ -76,7 +79,8 @@ class DaphneFrameSizeWiringTests(SimpleTestCase):
         ).stdout.split()
 
     def test_the_cap_daphne_gets_tracks_the_documented_setting(self):
-        """The one knob has to reach daphne, whatever the operator set it to.
+        """
+        The one knob has to reach daphne, whatever the operator set it to.
 
         Written into docker-compose.yml instead, the flag's value would be substituted by compose from the shell
         before any container starts, and could not track a cap Django derives at import time."""
@@ -88,7 +92,8 @@ class DaphneFrameSizeWiringTests(SimpleTestCase):
                 self.assertEqual(int(argv[argv.index(flag) + 1]), 400_000)
 
     def test_the_shell_default_matches_the_python_default(self):
-        """Unset, both sides have to land on the same number.
+        """
+        Unset, both sides have to land on the same number.
 
         They are derived twice - once in shell for daphne's argv, once in settings/base.py for the guard - so
         the defaults are the one place the two derivations can silently disagree."""
@@ -98,7 +103,8 @@ class DaphneFrameSizeWiringTests(SimpleTestCase):
         self.assertEqual(derived, settings.UL_WEBSOCKET_MAX_MESSAGE_BYTES)
 
     def test_the_entrypoint_resolves_the_helper_where_the_image_puts_it(self):
-        """The path has to be absolute, and the entrypoint has to die without it.
+        """
+        The path has to be absolute, and the entrypoint has to die without it.
 
         The image copies the entrypoint to ``/`` and the repository to ``/app``, so resolving the helper
         relative to ``dirname "$0"`` looks for it in the root directory."""
@@ -140,7 +146,8 @@ class DaphneFrameSizeWiringTests(SimpleTestCase):
 
 @override_settings(UL_WEBSOCKET_FRAMES_PER_MINUTE=0)
 class SafetyChatVolumeLimitTests(TransactionTestCase):
-    """Inbound frames on the safety check-in chat socket are bounded.
+    """
+    Inbound frames on the safety check-in chat socket are bounded.
 
     The frame budget is disabled for the class so each test exercises exactly
     the one bound it names; the frame-budget test re-enables it.
@@ -186,7 +193,8 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         _run(self._refusal_is_an_error_frame())
 
     async def _refusal_is_an_error_frame(self):
-        """A throttled sender is told, on the socket, without being disconnected.
+        """
+        A throttled sender is told, on the socket, without being disconnected.
 
         Closing would put the client into a reconnect loop over a condition retrying cannot fix - the convention
         ``_ParticipantSessionConsumer`` already documents."""
@@ -235,7 +243,8 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         _run(self._oversized_frame_is_refused_before_parsing())
 
     async def _oversized_frame_is_refused_before_parsing(self):
-        """The size check has to run ahead of ``json.loads``, not after it.
+        """
+        The size check has to run ahead of ``json.loads``, not after it.
 
         The frame sent here is both oversized *and* unparseable."""
         comm = self._owner_communicator()
@@ -254,7 +263,8 @@ class SafetyChatVolumeLimitTests(TransactionTestCase):
         _run(self._non_writing_frames_are_budgeted())
 
     async def _non_writing_frames_are_budgeted(self):
-        """A keep-alive costs the server real work, so it is charged too.
+        """
+        A keep-alive costs the server real work, so it is charged too.
 
         Budgeting only the writing frames leaves an unbounded flood of frames that each parse, dispatch and
         return - and on the DM socket the equivalent frame fans out to the *recipient's* tabs."""

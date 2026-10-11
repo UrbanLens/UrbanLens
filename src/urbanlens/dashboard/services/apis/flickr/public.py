@@ -1,4 +1,5 @@
-"""Public (unauthenticated) Flickr album import - any user's public photoset by URL.
+"""
+Public (unauthenticated) Flickr album import - any user's public photoset by URL.
 This module only ever uses the site's Flickr API key (no OAuth, no stored per-user token) to read a *public* photoset belonging to *any* Flickr user, given the album's own public URL - the "Import a Flickr Album" action on pin/wiki Media."""
 
 from __future__ import annotations
@@ -46,7 +47,8 @@ class FlickrAlbum:
 
 
 def photo_web_url(owner_nsid: str, photo_id: str) -> str:
-    """Return the Flickr web URL for one photo.
+    """
+    Return the Flickr web URL for one photo.
 
     Args:
         owner_nsid: The photo owner's Flickr NSID.
@@ -58,7 +60,8 @@ def photo_web_url(owner_nsid: str, photo_id: str) -> str:
 
 
 def parse_album_url(url: str) -> tuple[str, str] | None:
-    """Extract (user path segment, photoset id) from a Flickr album/photoset URL.
+    """
+    Extract (user path segment, photoset id) from a Flickr album/photoset URL.
 
     Args:
         url: The URL as pasted by the user.
@@ -82,7 +85,8 @@ class FlickrPublicGateway(Gateway):
         Gateway.__post_init__(self)
 
     def _call(self, method: str, extra_params: dict[str, Any]) -> dict[str, Any]:
-        """Call one public ``flickr.*`` REST method and return its decoded JSON body.
+        """
+        Call one public ``flickr.*`` REST method and return its decoded JSON body.
 
         Args:
             method: The Flickr API method name (e.g. ``flickr.photosets.getInfo``).
@@ -110,7 +114,8 @@ class FlickrPublicGateway(Gateway):
         return body
 
     def _resolve_user_nsid(self, user_path_segment: str) -> str:
-        """Resolve a Flickr URL path segment (NSID or path-alias) to a real NSID.
+        """
+        Resolve a Flickr URL path segment (NSID or path-alias) to a real NSID.
 
         Args:
             user_path_segment: The path segment right after ``/photos/`` in
@@ -128,7 +133,8 @@ class FlickrPublicGateway(Gateway):
         return body["user"]["id"]
 
     def get_album(self, url: str, limit: int = MAX_ALBUM_PHOTOS) -> FlickrAlbum:
-        """Resolve a public Flickr album URL into its metadata and photo list.
+        """
+        Resolve a public Flickr album URL into its metadata and photo list.
 
         Args:
             url: The album/photoset URL as pasted by the user.
@@ -181,7 +187,8 @@ class FlickrPublicGateway(Gateway):
         )
 
     def download_photo(self, photo: FlickrAlbumPhoto) -> tuple[bytes, str, str]:
-        """Download one album photo's file bytes.
+        """
+        Download one album photo's file bytes.
 
         Args:
             photo: The photo to download (from a prior :meth:`get_album` call).

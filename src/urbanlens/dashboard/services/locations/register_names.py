@@ -1,4 +1,5 @@
-"""Historic-register listing names, as place-name candidates of the highest tier.
+"""
+Historic-register listing names, as place-name candidates of the highest tier.
 
 Only a listing whose own boundary contains the point is a candidate. Registers list neighbours too: at
 the Hudson River State Hospital campus REData's National Register answer can hold the Isaac Roosevelt
@@ -25,7 +26,8 @@ _NOT_A_PROPERTY = frozenset({"archaeological_buffer_area"})
 
 
 def geometry_contains_point(geometry: Any, latitude: float, longitude: float) -> bool:
-    """Whether a GeoJSON polygon contains a coordinate. A point or missing geometry never does.
+    """
+    Whether a GeoJSON polygon contains a coordinate. A point or missing geometry never does.
 
     Args:
         geometry: A GeoJSON geometry dict, or anything else.
@@ -46,7 +48,8 @@ def geometry_contains_point(geometry: Any, latitude: float, longitude: float) ->
 
 
 def register_listing_names(location: Location) -> list[str]:
-    """Names of the register listings whose boundary contains this location, site-level first.
+    """
+    Names of the register listings whose boundary contains this location, site-level first.
 
     On a building's own page only the building's own listings count, by the rule its Historic Registers tab uses
     (:func:`~urbanlens.dashboard.services.locations.national_register.building_register_rows`): a campus listing's
@@ -78,7 +81,8 @@ def register_listing_names(location: Location) -> list[str]:
 
 
 def cris_register_listing(location: Location) -> str | None:
-    """The name of CRIS's National Register listing or district for this location, when its boundary contains it.
+    """
+    The name of CRIS's National Register listing or district for this location, when its boundary contains it.
 
     Args:
         location: The location being named.

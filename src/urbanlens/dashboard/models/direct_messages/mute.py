@@ -11,7 +11,8 @@ from urbanlens.dashboard.models.direct_messages.queryset import DirectMessageMut
 
 
 class DirectMessageMute(abstract.DashboardModel):
-    """A viewer's standing choice to stop being notified about a sender's messages.
+    """
+    A viewer's standing choice to stop being notified about a sender's messages.
     Muting only suppresses notifications (in-app NotificationLog rows and the delayed "new message" email) - the conversation itself, unread counts, and message delivery are all unaffected.
     """
 

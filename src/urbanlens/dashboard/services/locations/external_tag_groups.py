@@ -26,7 +26,8 @@ _VOCABULARY_CACHE_KEY = "external_tag_vocabulary:all"
 
 
 def _cached_vocabulary_entries() -> list[ExternalTagVocabularyEntry]:
-    """The full vocabulary table, served from cache and refilled lazily on a miss.
+    """
+    The full vocabulary table, served from cache and refilled lazily on a miss.
 
     Returns:
         Every :class:`ExternalTagVocabularyEntry`, in no particular order.
@@ -68,7 +69,8 @@ class EntryNotInGroupError(ExternalTagGroupError):
 
 
 def default_group_key(value: str) -> str:
-    """The default-matching key for a tag value: its normalized display text.
+    """
+    The default-matching key for a tag value: its normalized display text.
 
     Args:
         value: A raw tag value (not yet humanized).
@@ -84,7 +86,8 @@ def _bucket_key(entry: ExternalTagVocabularyEntry) -> str:
 
 
 def visible_tags_for_place(place: Place) -> list[PlaceExternalTag]:
-    """One representative :class:`PlaceExternalTag` per equivalence group on ``place``.
+    """
+    One representative :class:`PlaceExternalTag` per equivalence group on ``place``.
     Only ever compares tags ``place`` actually has - dedup is between tags on the same place, so there's no need to know about a group's other members elsewhere.
 
     Args:
@@ -124,7 +127,8 @@ def visible_tags_for_place(place: Place) -> list[PlaceExternalTag]:
 
 @dataclass(frozen=True)
 class SuggestedCluster:
-    """A group of currently-ungrouped vocabulary entries that default-match.
+    """
+    A group of currently-ungrouped vocabulary entries that default-match.
 
     Attributes:
         key: The shared :func:`default_group_key` value.
@@ -136,7 +140,8 @@ class SuggestedCluster:
 
 
 def suggested_clusters() -> list[SuggestedCluster]:
-    """Currently-ungrouped entries clustered by default-matching key.
+    """
+    Currently-ungrouped entries clustered by default-matching key.
     Computed live, never persisted - an admin can "confirm" a cluster into a real :class:`ExternalTagGroup` via :func:`create_group`, or leave it: the default match keeps applying either way.
 
     Returns:
@@ -148,7 +153,8 @@ def suggested_clusters() -> list[SuggestedCluster]:
 
 
 def _loosely_contains(haystack: str, needle: str) -> bool:
-    """Substring match tolerant of a simple trailing-``s`` plural mismatch.
+    """
+    Substring match tolerant of a simple trailing-``s`` plural mismatch.
     Exists so searching "restaurants" finds a tag whose humanized value is "Restaurant" - plain ``in`` fails there since the longer word is never a substring of the shorter one.
 
     Args:
@@ -166,7 +172,8 @@ def _loosely_contains(haystack: str, needle: str) -> bool:
 
 
 def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
-    """Every vocabulary entry equivalent to any entry whose display text matches ``term``.
+    """
+    Every vocabulary entry equivalent to any entry whose display text matches ``term``.
     "Equivalent" is the same bucketing :func:`visible_tags_for_place` uses - an explicit group, or a shared :func:`default_group_key` - run in the opposite direction: starting from a search term rather than a place's tags.
 
     Args:
@@ -185,7 +192,8 @@ def matching_vocabulary(term: str) -> list[ExternalTagVocabularyEntry]:
 
 
 def tag_match_q(term: str, path: str) -> Q:
-    """A Q object matching :class:`PlaceExternalTag` rows equivalent to ``term``.
+    """
+    A Q object matching :class:`PlaceExternalTag` rows equivalent to ``term``.
 
     Args:
         term: A single search token.
@@ -204,7 +212,8 @@ def tag_match_q(term: str, path: str) -> Q:
 
 @transaction.atomic
 def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -> ExternalTagGroup:
-    """Create a new group containing the given vocabulary entries.
+    """
+    Create a new group containing the given vocabulary entries.
 
     Args:
         entry_ids: Vocabulary entry ids to group together.
@@ -239,7 +248,8 @@ def create_group(entry_ids: Sequence[int], *, preferred_id: int | None = None) -
 
 @transaction.atomic
 def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
-    """Move one entry to a different group, or ungroup it (``target_group_id=None``).
+    """
+    Move one entry to a different group, or ungroup it (``target_group_id=None``).
 
     Args:
         entry_id: The vocabulary entry to move.
@@ -281,7 +291,8 @@ def move_entry(entry_id: int, target_group_id: int | None) -> int | None:
 
 
 def set_preferred(entry_id: int, group_id: int) -> None:
-    """Mark one entry as the member shown for its group.
+    """
+    Mark one entry as the member shown for its group.
 
     Args:
         entry_id: The vocabulary entry to prefer.

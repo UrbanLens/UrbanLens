@@ -69,7 +69,8 @@ def _seconds_until_next_day() -> int:
 
 
 def _mark_endpoint_down(url: str, *, stated_seconds: int | None = None) -> None:
-    """Take an Overpass endpoint out of rotation after a transient failure.
+    """
+    Take an Overpass endpoint out of rotation after a transient failure.
 
     For the wait it stated, or else for :data:`DOWN_BASE_SECONDS`, doubled for each failure since it last answered,
     up to :data:`DOWN_CAP_SECONDS`. Cache failures are swallowed: an outage that can't be remembered only means the
@@ -247,7 +248,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
                 self.mirror_session = self.session
 
     def _endpoints(self) -> list[str]:
-        """Ordered, de-duplicated list of every Overpass endpoint this deployment may ask.
+        """
+        Ordered, de-duplicated list of every Overpass endpoint this deployment may ask.
 
         The public mirrors are their own ``quota`` service, :data:`PUBLIC_MIRROR_SERVICE`: where the environment
         does not call it (off production by default, D26) only the self-hosted primary is asked.
@@ -272,7 +274,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return available
 
     def query(self, query: str, *, timeout: int | None = None) -> dict[str, Any]:
-        """Run a raw Overpass QL query and return the decoded JSON payload.
+        """
+        Run a raw Overpass QL query and return the decoded JSON payload.
         An endpoint that fails transiently is taken out of rotation for a while, longer on each repeat (:func:`_mark_endpoint_down`).
 
         Args:
@@ -349,7 +352,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return {}
 
     def elements_for_query(self, query: str, *, timeout: int | None = None, strict: bool = False) -> list[dict[str, Any]]:
-        """Run Overpass QL and return the element list.
+        """
+        Run Overpass QL and return the element list.
 
         Args:
             query: The Overpass QL program to execute.
@@ -388,7 +392,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
         include_nodes: bool = True,
         include_geometry: bool = False,
     ) -> list[dict[str, Any]]:
-        """Return OSM features around a coordinate for generic location enrichment.
+        """
+        Return OSM features around a coordinate for generic location enrichment.
 
         Raises:
             ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``, open ocean OSM maps nothing at.
@@ -406,7 +411,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return self.elements_for_query(query)
 
     def nearby_boundary_candidates(self, latitude: float, longitude: float, radius_meters: int = 100) -> list[dict[str, Any]]:
-        """Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate.
+        """
+        Return OSM ways/relations likely to describe a real place boundary near, or around, a coordinate.
 
         Raises:
             ImpossibleInputError: The point is not on the globe, or is ``(0, 0)``.
@@ -427,7 +433,8 @@ class OverpassGateway(Gateway, BoundaryProvider):
         return self.elements_for_query(query, strict=True)
 
     def buildings_within(self, polygon: Polygon | MultiPolygon) -> list[dict[str, Any]]:
-        """Return every OSM building whose footprint falls inside a polygon.
+        """
+        Return every OSM building whose footprint falls inside a polygon.
         Overpass's own ``poly:`` filter takes the real boundary instead, so a 40-acre campus is queried exactly, in one request.
 
         Args:
@@ -487,7 +494,8 @@ out body geom;
 
     @staticmethod
     def _largest_exterior_ring(polygon: Polygon | MultiPolygon | None) -> list[tuple[float, float]] | None:
-        """The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
+        """
+        The exterior ring of the largest part of a polygonal geometry, as (lon, lat) pairs.
         Overpass's ``poly:`` filter accepts a single ring, so a MultiPolygon (the shape every stored ``Boundary`` uses) has to be reduced to one - its largest part is the parcel proper, any others being outbuildings or slivers.
 
         Args:
@@ -506,7 +514,8 @@ out body geom;
         return [(float(x), float(y)) for x, y in largest.exterior_ring.coords]
 
     def element(self, element_type: OsmElementType, osm_id: int, *, include_geometry: bool = True) -> dict[str, Any] | None:
-        """Return a single OSM node, way, or relation by id via Overpass.
+        """
+        Return a single OSM node, way, or relation by id via Overpass.
 
         Raises:
             ImpossibleInputError: ``osm_id`` is not positive; OSM issues no such id.
@@ -591,7 +600,8 @@ out body geom;
         return candidates
 
     def _is_property_area(self, element: dict, polygon: Polygon, point: Point) -> bool:
-        """Whether a non-building polygon containing the point can stand for its property.
+        """
+        Whether a non-building polygon containing the point can stand for its property.
 
         A zoning landuse never can. An area reached only by containment (every edge beyond the search
         radius) must be a named site no larger than :data:`MAX_CONTAINING_SITE_AREA_SQM`.
@@ -606,7 +616,8 @@ out body geom;
         return bool(tags.get("name")) and polygon.area * _METERS_PER_DEGREE * scale <= MAX_CONTAINING_SITE_AREA_SQM
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> dict[str, Polygon | None]:
-        """Return the smallest containing building footprint and property perimeter.
+        """
+        Return the smallest containing building footprint and property perimeter.
 
         Args:
             latitude: WGS-84 latitude.

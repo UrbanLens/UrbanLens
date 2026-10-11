@@ -61,7 +61,8 @@ def month_param(value: datetime.date) -> str:
 
 
 def parse_month(raw: str | None, today: datetime.date) -> datetime.date:
-    """The first day of the month *raw* names (``YYYY-MM``), or of *today*'s month when it names none.
+    """
+    The first day of the month *raw* names (``YYYY-MM``), or of *today*'s month when it names none.
 
     Args:
         raw: The ``month`` query parameter, possibly absent or malformed.
@@ -78,7 +79,8 @@ def parse_month(raw: str | None, today: datetime.date) -> datetime.date:
 
 
 def trip_month(profile: Profile, month: datetime.date) -> TripMonth:
-    """Lay out *profile*'s trips that meet *month* on a Sunday-first grid.
+    """
+    Lay out *profile*'s trips that meet *month* on a Sunday-first grid.
 
     One query reads just the trips overlapping the month, whatever the account's history.
 

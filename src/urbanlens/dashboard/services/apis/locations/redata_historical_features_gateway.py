@@ -1,4 +1,5 @@
-"""Gateway for REData's ``/historical-features/`` near-a-coordinate endpoint.
+"""
+Gateway for REData's ``/historical-features/`` near-a-coordinate endpoint.
 The source's ``start_date`` frequently means "first documented on a source of that date" (a Sanborn map, say) rather than "built in that year" - ``source_note`` names what the feature was traced from, and is what tells the two cases apart."""
 
 from __future__ import annotations
@@ -40,7 +41,8 @@ class RedataHistoricalFeaturesGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch mapped historical features near a coordinate.
+        """
+        Fetch mapped historical features near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

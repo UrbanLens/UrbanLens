@@ -10,7 +10,8 @@ from urbanlens.dashboard.models.abstract.versioned import AbstractFieldRevision
 
 
 class WikiFieldRevision(AbstractFieldRevision):
-    """One recorded write of one Wiki field.
+    """
+    One recorded write of one Wiki field.
 
     Attributes:
         target: The wiki the write landed on.

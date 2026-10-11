@@ -1,4 +1,5 @@
-"""Merges two of a profile's own pins into one, consolidating every relation without losing what either held.
+"""
+Merges two of a profile's own pins into one, consolidating every relation without losing what either held.
 Distinct from ``controllers.pin_bulk.PinBulkMergeView`` (the map multi-select "Merge" button), which only re-parents pins as children - both rows survive, untouched, just nested.
 
 Only the loser row is deleted. Everything it held either moves onto the survivor, folds into the survivor's equivalent row, or - where the survivor has exactly one slot and keeps its own value - is written down:
@@ -65,14 +66,16 @@ logger = logging.getLogger(__name__)
 
 
 class UnresolvedMergeConflictError(ValueError):
-    """Raised when merge_pins is called without a resolution for a real conflict.
+    """
+    Raised when merge_pins is called without a resolution for a real conflict.
 
     Attributes:
         keys: The MergeFieldConflict.key values that had no resolution supplied.
     """
 
     def __init__(self, keys: list[str]) -> None:
-        """Store the unresolved keys and build a descriptive message.
+        """
+        Store the unresolved keys and build a descriptive message.
 
         Args:
             keys: The conflict keys missing a resolution.
@@ -86,7 +89,8 @@ class PinMergeCollisionError(ValueError):
 
 
 class SurvivorRelocationCollisionError(PinMergeCollisionError):
-    """The survivor is one of loser's direct children and must move to loser's own parent - avoiding being deleted with it - but another top-level pin already occupies that location.
+    """
+    The survivor is one of loser's direct children and must move to loser's own parent - avoiding being deleted with it - but another top-level pin already occupies that location.
     Only possible when loser's parent is None, i.e. the survivor would become a new top-level pin."""
 
 
@@ -96,7 +100,8 @@ class ChildDetachCollisionError(PinMergeCollisionError):
 
 @dataclass(frozen=True, slots=True)
 class MergeFieldConflict:
-    """One place two pins hold genuinely different data for the same slot.
+    """
+    One place two pins hold genuinely different data for the same slot.
     Only the three relations where both sides can hold distinct, real content for one slot ever produce one of these - see the module docstring's "ask the user" bucket."""
 
     key: str
@@ -130,7 +135,8 @@ _NOTHING = _PinConflictData(article=None, boundaries={}, values={})
 
 
 def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
-    """Everything :func:`plan_merge_conflicts` compares, for many pins at once.
+    """
+    Everything :func:`plan_merge_conflicts` compares, for many pins at once.
     The dict-per-pin collapse is safe because both relations are unique per key - ``boundary_unique_pin`` over ``(pin, boundary_type)`` and ``db_cfv_unique_pin`` over ``(field, pin)`` - which is the assumption the comparison already made.
 
     Args:
@@ -160,7 +166,8 @@ def _conflict_data(pins: Sequence[Pin]) -> dict[int, _PinConflictData]:
 
 
 def _conflicts_between(pin_a: Pin, pin_b: Pin, data: dict[int, _PinConflictData]) -> list[MergeFieldConflict]:
-    """The comparison half of :func:`plan_merge_conflicts`, over fetched data.
+    """
+    The comparison half of :func:`plan_merge_conflicts`, over fetched data.
 
     Args:
         pin_a: One pin under consideration.
@@ -212,7 +219,8 @@ def _conflicts_between(pin_a: Pin, pin_b: Pin, data: dict[int, _PinConflictData]
 
 
 def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
-    """Every field where pin_a and pin_b both hold real, possibly-divergent data.
+    """
+    Every field where pin_a and pin_b both hold real, possibly-divergent data.
 
     Args:
         pin_a: One pin under consideration.
@@ -224,7 +232,8 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
 
 
 def plan_merge_conflicts_bulk(pairs: Sequence[tuple[Pin, Pin]]) -> dict[tuple[int, int], list[MergeFieldConflict]]:
-    """Conflicts for many pairs, in three queries for the whole batch.
+    """
+    Conflicts for many pairs, in three queries for the whole batch.
     A caller that then *merges* must re-plan per pair with :func:`plan_merge_conflicts`, because each merge changes what the next one collides with.
 
     Args:
@@ -237,7 +246,8 @@ def plan_merge_conflicts_bulk(pairs: Sequence[tuple[Pin, Pin]]) -> dict[tuple[in
 
 
 def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
-    """Save a row that may collide with a uniqueness constraint, recoverably.
+    """
+    Save a row that may collide with a uniqueness constraint, recoverably.
 
     Args:
         instance: The model instance being reassigned onto the survivor.
@@ -255,7 +265,8 @@ def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
 
 @dataclass(slots=True)
 class _MergeRecord:
-    """What the survivor kept its own value for, written to it as one private note once the merge is done.
+    """
+    What the survivor kept its own value for, written to it as one private note once the merge is done.
 
     Attributes:
         lines: ``(label, value)`` pairs, in the order they were found.
@@ -264,7 +275,8 @@ class _MergeRecord:
     lines: list[tuple[str, str]] = field(default_factory=list)
 
     def add(self, label: str, value: str) -> None:
-        """Record one value the survivor did not keep.
+        """
+        Record one value the survivor did not keep.
 
         Args:
             label: What the value was, e.g. ``"Priority"``.
@@ -279,7 +291,8 @@ def _pin_label(pin: Pin) -> str:
 
 
 def _join_text(kept: str | None, extra: str | None) -> str | None:
-    """Append *extra* to *kept* as its own paragraph, unless it adds nothing.
+    """
+    Append *extra* to *kept* as its own paragraph, unless it adds nothing.
 
     Args:
         kept: The text that stays first.
@@ -340,7 +353,8 @@ _OWNER_DETAIL_FIELDS = ("company_name", "address", "care_of", "phone", "email")
 
 
 def _fold_owner(duplicate: PinOwner, kept: PinOwner) -> None:
-    """Fold *duplicate* - the same owner name, differently cased - into *kept*, then delete it.
+    """
+    Fold *duplicate* - the same owner name, differently cased - into *kept*, then delete it.
     The name is the only thing the two are known to share: the duplicate's contact details fill the kept row's blanks, any that differ are written into its notes, and every sale that listed the duplicate lists the kept row instead.
 
     Args:
@@ -424,7 +438,8 @@ def _merge_auto_removals(survivor: Pin, loser: Pin) -> None:
 
 
 def _fold_share(duplicate: PinShare, kept: PinShare) -> None:
-    """Fold a duplicate share of the loser into the survivor's share to the same recipient, then delete it.
+    """
+    Fold a duplicate share of the loser into the survivor's share to the same recipient, then delete it.
     Only one pending (or one map-detected) share per pin and recipient may exist, but the duplicate can carry its own message, photos and map, and other rows hang off it - reshares, bundled shares (which CASCADE), direct-message links, exposure rows - so all of that moves to the kept share rather than going with the delete.
 
     Args:
@@ -469,7 +484,8 @@ def _merge_shares(survivor: Pin, loser: Pin) -> None:
 
 
 def _merge_custom_field_values(survivor: Pin, loser: Pin, resolutions: dict[str, int], record: _MergeRecord, labels: dict[int, str]) -> None:
-    """Reassign loser's custom field values onto survivor, applying the user's choice for any conflicting field.
+    """
+    Reassign loser's custom field values onto survivor, applying the user's choice for any conflicting field.
     A pin holds one value per field, so the value not chosen is written into the merge note.
 
     Args:
@@ -500,7 +516,8 @@ def _merge_custom_field_values(survivor: Pin, loser: Pin, resolutions: dict[str,
 
 
 def _keep_outline(survivor: Pin, boundary: Boundary, profile: Profile, source_label: str) -> int:
-    """Copy a boundary the survivor cannot hold onto its Markup layer, one polygon per part.
+    """
+    Copy a boundary the survivor cannot hold onto its Markup layer, one polygon per part.
     A pin holds one boundary per type, and pin boundaries have no revision history (``BoundaryRevision`` is wiki-only), so the outline not kept would otherwise be deleted. The Markup layer is the pin's own private geometry store: the outline stays visible on the pin's map and the user can redraw the boundary from it.
     Only a drawn outline is kept - a pin's generated outline is fitted from its child pins, which all move to the survivor, so it is regenerated rather than lost.
 
@@ -530,7 +547,8 @@ def _keep_outline(survivor: Pin, boundary: Boundary, profile: Profile, source_la
 
 
 def _merge_boundaries(survivor: Pin, loser: Pin, resolutions: dict[str, int], profile: Profile, record: _MergeRecord, labels: dict[int, str]) -> None:
-    """Reassign loser's boundaries onto survivor, applying the user's choice for any conflicting boundary type.
+    """
+    Reassign loser's boundaries onto survivor, applying the user's choice for any conflicting boundary type.
     The outline not chosen is kept as markup on the survivor - see :func:`_keep_outline`.
 
     Args:
@@ -563,7 +581,8 @@ def _merge_boundaries(survivor: Pin, loser: Pin, resolutions: dict[str, int], pr
 
 
 def _merge_article(survivor: Pin, loser: Pin, resolutions: dict[str, int], profile: Profile, record: _MergeRecord, labels: dict[int, str]) -> None:
-    """Keep one pin's Article live when both have one (per resolutions["article"]), and the other's whole history behind it.
+    """
+    Keep one pin's Article live when both have one (per resolutions["article"]), and the other's whole history behind it.
     The article not chosen stops being live text but none of it is deleted: every one of its revisions moves onto the kept article, where the history page can show, diff and restore it.
 
     Args:
@@ -657,7 +676,8 @@ def _merge_floorplan_marker(survivor: Pin, loser: Pin) -> None:
 
 
 def _merge_albums(survivor: Pin, loser: Pin) -> None:
-    """Move the loser's albums onto the survivor, re-slugging on collision.
+    """
+    Move the loser's albums onto the survivor, re-slugging on collision.
     ``uq_album_pin_slug`` is unique on ``(parent_pin, slug)``, so a plain reassign fails when both pins have an album with the same slug - two pins each carrying a "Photos" album is the ordinary case, and both hold real images, so neither may be dropped.
 
     Args:
@@ -773,7 +793,8 @@ _NOT_NOTED = frozenset({"name"})
 
 
 def _has_value(pin: Pin, name: str) -> bool:
-    """Whether *pin* holds a real value for column *name*, as opposed to an empty or default one.
+    """
+    Whether *pin* holds a real value for column *name*, as opposed to an empty or default one.
 
     Args:
         pin: Either pin.
@@ -794,7 +815,8 @@ def _has_value(pin: Pin, name: str) -> bool:
 
 
 def _display(pin: Pin, name: str) -> str:
-    """One column's value as the merge note shows it.
+    """
+    One column's value as the merge note shows it.
 
     Args:
         pin: The pin holding the value.
@@ -815,7 +837,8 @@ def _display(pin: Pin, name: str) -> str:
 
 
 def _merge_scalars(survivor: Pin, loser: Pin, record: _MergeRecord, labels: dict[int, str]) -> None:
-    """Merge the loser's own columns into the survivor's per ``PIN_FIELD_POLICY``, noting every value not kept.
+    """
+    Merge the loser's own columns into the survivor's per ``PIN_FIELD_POLICY``, noting every value not kept.
 
     Args:
         survivor: The pin that stays.
@@ -876,7 +899,8 @@ def _merge_scalars(survivor: Pin, loser: Pin, record: _MergeRecord, labels: dict
 
 
 def _fold_visit(duplicate: PinVisit, kept: PinVisit) -> None:
-    """Fold the loser's automatic visit into the survivor's one for the same UTC day, then delete it.
+    """
+    Fold the loser's automatic visit into the survivor's one for the same UTC day, then delete it.
     ``db_pv_one_geo_per_pin_day`` allows one geolocation visit per pin per day, so moving the loser's alongside the survivor's crashed the whole merge. They describe the same day at the same place, so they become one visit: the earlier arrival, both sets of notes and participants, whichever map and route exist, and every row that pointed at the duplicate (its photos, suggestions, external participants).
     A second map the kept visit has no room for stays the owner's, associated with the survivor pin.
 
@@ -915,7 +939,8 @@ def _merge_visits(survivor: Pin, loser: Pin) -> None:
 
 
 def _note_texts(header: str, body: str) -> list[str]:
-    """Split a merge note into texts that each fit a ``PinNote``, without losing a character.
+    """
+    Split a merge note into texts that each fit a ``PinNote``, without losing a character.
     Each text starts with the header (``(continued)`` after the first). A break falls on a paragraph boundary when one
     is in the second half of the room left, else mid-text - a single value longer than a note (a full description)
     simply continues in the next one.
@@ -940,7 +965,8 @@ def _note_texts(header: str, body: str) -> list[str]:
 
 
 def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str], loser_pk: int) -> None:
-    """Write what the survivor did not keep as one private note on it, continued across notes only when it exceeds one.
+    """
+    Write what the survivor did not keep as one private note on it, continued across notes only when it exceeds one.
 
     Args:
         survivor: The pin that stays.
@@ -957,7 +983,8 @@ def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str
 
 
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
-    """Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
+    """
+    Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
     Nothing the loser held is lost with it: see the module docstring for where each kind of data goes when the survivor already has its own.
 
         Args:

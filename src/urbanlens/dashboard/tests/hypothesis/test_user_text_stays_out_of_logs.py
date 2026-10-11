@@ -1,4 +1,5 @@
-"""What a user wrote - a prompt, a model's answer about it, a search, a direct message - never reaches a log line.
+"""
+What a user wrote - a prompt, a model's answer about it, a search, a direct message - never reaches a log line.
 
 Pin names name undisclosed sites (``services.security.redact.redact_text``), and every one of these carries them.
 """

@@ -41,7 +41,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.factory = RequestFactory()
 
     def _request(self, profile: Profile):
-        """A bare request attributed to *profile*'s user.
+        """
+        A bare request attributed to *profile*'s user.
 
         The view base reads only ``request.user``; building the request directly keeps these tests on the
         resolution rule itself rather than on whichever URL a later batch wires it to.
@@ -56,7 +57,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         return request
 
     def _partner(self, profile: Profile, status: str) -> SafetyCheckinPartner:
-        """Attach *profile* to the fixture check-in with the given status.
+        """
+        Attach *profile* to the fixture check-in with the given status.
 
         Args:
             profile: The profile being named as a partner. status: One of ``SafetyCheckinPartnerStatus``.
@@ -81,7 +83,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.assertEqual(resolved.pk, self.checkin.pk)
 
     def test_merely_invited_partner_is_refused(self) -> None:
-        """An unaccepted invite must not open a live location feed.
+        """
+        An unaccepted invite must not open a live location feed.
 
         This is the case a bare ``partners.filter(profile=...)`` would let through: the invite row exists from
         the moment it is sent, so a membership test that ignores ``status`` admits someone who has not taken on
@@ -102,7 +105,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.assertIsNone(self.view.get_viewable_checkin(self._request(self.stranger), self.checkin.slug))
 
     def test_partner_on_a_different_checkin_is_refused(self) -> None:
-        """Being an accepted partner somewhere is not being one here.
+        """
+        Being an accepted partner somewhere is not being one here.
 
         Guards against an entitlement test that forgets to scope by check-in -
         which would hand one accepted invitation to every check-in on the site.
@@ -136,14 +140,16 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.assertEqual(resolved.pk, self.checkin.pk)
 
     def test_non_uuid_garbage_does_not_raise(self) -> None:
-        """A malformed identifier is a miss, not a 500.
+        """
+        A malformed identifier is a miss, not a 500.
 
         Comparing a non-uuid string against a ``UUIDField`` raises rather than simply not matching, so the uuid
         fallback has to catch it - otherwise any client typo becomes a server error."""
         self.assertIsNone(self.view.get_viewable_checkin(self._request(self.owner), "not-a-uuid-@@@"))
 
     def test_viewer_profile_is_created_on_first_use(self) -> None:
-        """A credential holder with no profile row yet still resolves to one.
+        """
+        A credential holder with no profile row yet still resolves to one.
 
         Profiles are created lazily, so refusing a user without one would make the API's behaviour depend on
         whether they had ever visited the site - an account created purely through OAuth2 would be locked out of
@@ -160,7 +166,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.assertEqual(Profile.objects.filter(user=fresh_user).count(), 1)
 
     def test_not_found_body_matches_the_owner_scoped_base(self) -> None:
-        """Both safety surfaces refuse with the identical envelope.
+        """
+        Both safety surfaces refuse with the identical envelope.
 
         If the watcher-scoped and owner-scoped bases answered differently, a client probing both would learn
         which one rejected it - which is itself information about the check-in."""
@@ -170,7 +177,8 @@ class SafetyCheckinViewerScopeTests(TestCase):
         self.assertEqual(watcher_response.data, owner_response.data)
 
     def test_owner_scoped_base_still_refuses_accepted_partners(self) -> None:
-        """The new base must not have widened the owner-only write surface.
+        """
+        The new base must not have widened the owner-only write surface.
 
         Every endpoint on ``SafetyCheckinScopedView`` is an owner action (edit, cancel, delete, invite)."""
         self._partner(self.accepted, SafetyCheckinPartnerStatus.ACCEPTED)

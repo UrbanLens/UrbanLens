@@ -56,7 +56,8 @@ def serialize_form_criteria(
     custom_field_criteria: list[dict] | None,
     regions: dict[str, MultiPolygon | None] | None = None,
 ) -> dict[str, Any]:
-    """Convert cleaned SearchForm data into a JSON-safe criteria dict.
+    """
+    Convert cleaned SearchForm data into a JSON-safe criteria dict.
 
     Args:
         cleaned_data: A ``SearchForm.cleaned_data``-shaped dict.
@@ -129,7 +130,8 @@ def _serialize_custom_field_criterion(criterion: dict[str, Any]) -> dict[str, An
 
 
 def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, Any]:
-    """Rehydrate a stored criteria dict for ``Pin.objects.filter_by_criteria()``.
+    """
+    Rehydrate a stored criteria dict for ``Pin.objects.filter_by_criteria()``.
 
     Args:
         stored: A dict previously produced by ``serialize_form_criteria``.
@@ -176,7 +178,8 @@ def _is_id_list(value: object) -> bool:
 
 
 def validate_criteria_shape(stored: object) -> None:
-    """Refuse criteria that :func:`deserialize_criteria` or the pin filter would fail on.
+    """
+    Refuse criteria that :func:`deserialize_criteria` or the pin filter would fail on.
 
     Scalar bounds are not checked: the filter already ignores one it cannot parse.
 
@@ -228,7 +231,8 @@ class CustomFieldOwnershipError(CriteriaOwnershipError):
 
 
 def referenced_label_ids(stored: dict[str, Any]) -> set[int]:
-    """Every Label primary key a stored criteria dict refers to.
+    """
+    Every Label primary key a stored criteria dict refers to.
 
     Args:
         stored: A criteria dict in the stored (JSON-safe) shape.
@@ -250,7 +254,8 @@ def referenced_label_ids(stored: dict[str, Any]) -> set[int]:
 
 
 def referenced_custom_field_ids(stored: dict[str, Any]) -> set[int]:
-    """Every CustomField primary key a stored criteria dict refers to.
+    """
+    Every CustomField primary key a stored criteria dict refers to.
 
     Args:
         stored: A criteria dict in the stored (JSON-safe) shape.
@@ -266,7 +271,8 @@ def referenced_custom_field_ids(stored: dict[str, Any]) -> set[int]:
 
 
 def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> None:
-    """Refuse criteria that reference labels or custom fields *profile* may not use.
+    """
+    Refuse criteria that reference labels or custom fields *profile* may not use.
     This check does not exist on the internal write paths, and its absence is invisible there: the web form builds its label and custom-field pickers from querysets already scoped to the user, so the browser never offers an id the user cannot see.
 
     Args:

@@ -1,4 +1,5 @@
-"""What the photo-visibility gate answers today, pinned before its internals move.
+"""
+What the photo-visibility gate answers today, pinned before its internals move.
 
 `ImageQuerySet.visible_to` is the gate behind every photo the application serves,
 and N21 H44 is a reason to change how it resolves: authorizing one media file

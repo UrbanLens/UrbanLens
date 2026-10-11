@@ -1,4 +1,5 @@
-"""OpenAPI schema scoping for the external API.
+"""
+OpenAPI schema scoping for the external API.
 
 drf-spectacular walks every DRF view in the project by default; UrbanLens's internal REST surface
 (``dashboard/rest/``) has no public contract and must not leak into the published schema.
@@ -38,7 +39,8 @@ SCHEMA_PATH_PREFIX_PATTERN = "^(?:" + "|".join(pattern for _prefix, pattern in _
 
 
 def _pin_schema_path_prefix() -> None:
-    """Stop drf-spectacular from guessing the common path prefix.
+    """
+    Stop drf-spectacular from guessing the common path prefix.
 
     Pinning the prefix to the mounts we actually publish keeps the existing operation ids and tags
     exactly as they were, and gives the e2ee operations the same treatment (``keys_retrieve``, tag
@@ -49,7 +51,8 @@ def _pin_schema_path_prefix() -> None:
 
 
 def preprocess_external_api_only(endpoints: list, **_kwargs) -> list:
-    """drf-spectacular preprocessing hook: keep only publicly-contracted endpoints.
+    """
+    drf-spectacular preprocessing hook: keep only publicly-contracted endpoints.
 
     Doing it as an import side effect would fire whenever anything merely referenced this module.
 
@@ -87,7 +90,8 @@ def _error_response(description: str) -> dict:
 
 
 def document_error_responses(result: dict, generator, request, public) -> dict:
-    """Declare the refusals every operation can already produce.
+    """
+    Declare the refusals every operation can already produce.
 
     Done as a postprocessing hook rather than per view because the omission is not per view: responses
     are not declared individually anywhere, so declaring them individually would be ~284 edits that the
@@ -121,7 +125,8 @@ def document_error_responses(result: dict, generator, request, public) -> dict:
 
 
 class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
-    """Documents ``ApiKeyAuthentication`` in the generated OpenAPI schema.
+    """
+    Documents ``ApiKeyAuthentication`` in the generated OpenAPI schema.
 
     Without this, drf-spectacular logged "could not resolve authenticator" for every external-API view -
     some 200 warnings - and, far worse, emitted a schema documenting **no authentication at all**, so a
@@ -148,7 +153,8 @@ _extension_load_lock = threading.Lock()
 
 
 def patch_extension_thread_safety() -> None:
-    """Serialize drf-spectacular's per-extension ``target_class`` resolution.
+    """
+    Serialize drf-spectacular's per-extension ``target_class`` resolution.
 
     Two schema requests arriving together (the web tier runs threaded workers, so genuinely concurrent
     requests to one process are ordinary) can both see the string, both start resolving, and one can

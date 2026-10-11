@@ -1,4 +1,5 @@
-"""Tests for Location model properties and LocationQuerySet / LocationManager methods.
+"""
+Tests for Location model properties and LocationQuerySet / LocationManager methods.
 
 Pure property tests use unsaved Location instances (no DB).
 Queryset and Manager tests use baker and require PostGIS.
@@ -111,13 +112,15 @@ class LocationHasPlaceNameTests(TestCase):
         self.assertFalse(loc.has_place_name())
 
     def test_no_cached_name_returns_false(self) -> None:
-        """place_name is cache-only (see its docstring) - no GooglePlace row at
+        """
+        place_name is cache-only (see its docstring) - no GooglePlace row at
         all means has_place_name() is False, not a live fallback lookup."""
         loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=None)
         self.assertFalse(loc.has_place_name())
 
     def test_no_cached_name_never_calls_get_place_name(self) -> None:
-        """Regression guard: has_place_name()/place_name must never trigger a
+        """
+        Regression guard: has_place_name()/place_name must never trigger a
         live Google call from a plain property access - see
         tasks.resolve_location_place_name for where that now happens instead."""
         loc: Location = baker.make(Location, latitude="40.0", longitude="-74.0", google_place=None)

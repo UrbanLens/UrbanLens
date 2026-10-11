@@ -34,7 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
-    """Attach a showToast HX-Trigger to a response.
+    """
+    Attach a showToast HX-Trigger to a response.
 
     Args:
         response: The response to annotate.
@@ -51,7 +52,8 @@ def _show_toast(response: HttpResponse, message: str, level: str = "success") ->
 
 
 def _get_pin(request: HttpRequest, pin_slug: str) -> Pin:
-    """Return the requesting user's own pin (with its location), or 404.
+    """
+    Return the requesting user's own pin (with its location), or 404.
 
     Args:
         request: The current request.
@@ -65,7 +67,8 @@ def _get_pin(request: HttpRequest, pin_slug: str) -> Pin:
 
 
 def _owner_fields_from_post(request: HttpRequest) -> dict[str, str]:
-    """Extract and strip the owner-form fields common to create and update.
+    """
+    Extract and strip the owner-form fields common to create and update.
 
     Args:
         request: The POST request carrying the owner form.
@@ -97,7 +100,8 @@ def _owner_fields_error(fields: Mapping[str, str]) -> str | None:
 
 
 def _parse_owner_names(raw: str) -> list[str]:
-    """Split a comma-separated owner-name field into a deduped, ordered list.
+    """
+    Split a comma-separated owner-name field into a deduped, ordered list.
 
     Args:
         raw: The raw form value (e.g. ``"Alice Smith, Bob Jones"``).
@@ -110,7 +114,8 @@ def _parse_owner_names(raw: str) -> list[str]:
 
 
 def _parse_sale_owner_names(request: HttpRequest) -> tuple[list[str], list[str], str | None]:
-    """Parse and cross-validate a sale form's previous/new owner-name fields.
+    """
+    Parse and cross-validate a sale form's previous/new owner-name fields.
 
     Args:
         request: The POST request carrying ``previous_owners``/``new_owners``.
@@ -130,7 +135,8 @@ def _parse_sale_owner_names(request: HttpRequest) -> tuple[list[str], list[str],
 
 
 def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, datetime.date | None, str | None]:
-    """Parse and validate a sale form's price/date fields.
+    """
+    Parse and validate a sale form's price/date fields.
 
     Args:
         request: The POST request carrying ``sale_price``/``sale_date``.
@@ -171,7 +177,8 @@ def _official_owners_of(pin: Pin) -> list[WikiOwner]:
 
 
 def _render_pin_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the Private Pin page's Ownership card: the official owners of record, then the pin's own notes.
+    """
+    Render the Private Pin page's Ownership card: the official owners of record, then the pin's own notes.
 
     Putting a subscription in front of a user's own notes would be taking something away rather than
     offering something - only the county-sourced records UrbanLens looks up *for* them are gated (see
@@ -242,7 +249,8 @@ class PinOwnerUpdateView(LoginRequiredMixin, View):
 
 
 class PinOwnerRemoveView(LoginRequiredMixin, View):
-    """DELETE: remove one of this pin's private owners.
+    """
+    DELETE: remove one of this pin's private owners.
 
     Unlike the shared/wiki side, there is nowhere else a PinOwner could be "still current" - it belongs
     to exactly this one pin, so removal is a real delete rather than an unlink.
@@ -266,7 +274,8 @@ def _newest_first(sale: PinPropertySale | WikiPropertySale) -> tuple[bool, datet
 
 
 def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the Private Pin page's Sale History tab: the pin's own sale notes and the location's recorded sales.
+    """
+    Render the Private Pin page's Sale History tab: the pin's own sale notes and the location's recorded sales.
 
     A recorded sale's parties are official owners, withheld from a viewer not entitled to them as on the wiki's tab;
     a pin's own parties are ``PinOwner`` rows, always user-entered, and never withheld.
@@ -338,7 +347,8 @@ class PinPropertySaleDeleteView(LoginRequiredMixin, View):
 
 
 def _render_wiki_ownership_panel(request: HttpRequest, location: Location, wiki: Wiki, profile: Profile, error: str | None = None) -> HttpResponse:
-    """Render the wiki page's shared Ownership card.
+    """
+    Render the wiki page's shared Ownership card.
 
     Officially-sourced owners (looked up from county records via REData) are filtered out for a viewer
     without ``SiteFeature.PROPERTY_OWNERS`` - see ``services.property.owner_access``.
@@ -419,7 +429,8 @@ class WikiOwnerUpdateView(LoginRequiredMixin, View):
 
 
 class WikiOwnerRemoveView(LoginRequiredMixin, View):
-    """DELETE: unlink a shared owner from this property (the record itself is kept - they
+    """
+    DELETE: unlink a shared owner from this property (the record itself is kept - they
     may own other properties, or be referenced by this property's own sale history);
     never an OFFICIAL record."""
 
@@ -439,7 +450,8 @@ class WikiOwnerRemoveView(LoginRequiredMixin, View):
 
 
 def _render_wiki_sale_tab(request: HttpRequest, location: Location, wiki: Wiki, profile: Profile, error: str | None = None) -> HttpResponse:
-    """Render the wiki page's shared Sale History tab.
+    """
+    Render the wiki page's shared Sale History tab.
 
     Party names are filtered the same way the Ownership panel's are: a deed's grantor/grantee written
     from county records is an ``OFFICIAL`` owner, so leaving this tab ungated would hand back exactly

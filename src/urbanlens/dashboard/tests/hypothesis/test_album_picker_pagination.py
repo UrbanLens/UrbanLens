@@ -98,7 +98,8 @@ class AlbumEligibleImagesEndpointTests(TestCase):
         self.assertEqual(offered & {image.pk for image in self.images[:3]}, set())
 
     def test_a_tile_carries_the_same_fields_the_album_grid_gets(self) -> None:
-        """A page of ids the client cannot draw is not a page.
+        """
+        A page of ids the client cannot draw is not a page.
 
         Compared against ``AlbumItemsView``'s own payload rather than against a hand-written list: both go
         through ``_photo_tile``, and holding them to each other is what catches one of them drifting."""

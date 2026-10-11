@@ -21,7 +21,8 @@ class DemoLoginView(View):
     """POST: seed a throwaway account and sign in as it."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Create a demo account and log the visitor into it.
+        """
+        Create a demo account and log the visitor into it.
 
         POST rather than GET deliberately: seeding writes several hundred rows, and a GET would be fired by
         every crawler, link preview and prefetch that ever saw the button.

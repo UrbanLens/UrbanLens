@@ -1,4 +1,5 @@
-"""Upsert/clear logic for a profile's own star rating on a pin.
+"""
+Upsert/clear logic for a profile's own star rating on a pin.
 Both the internal star-rating widget and the external API act on that pair rather than on a Review id, so the "create it the first time, update it afterwards" rule lives here instead of being written twice."""
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ if TYPE_CHECKING:
 
 
 def upsert_review(profile: Profile, pin: Pin, rating: int) -> tuple[Review, bool]:
-    """Set *profile*'s rating for *pin*, creating the Review if needed.
+    """
+    Set *profile*'s rating for *pin*, creating the Review if needed.
 
     Args:
         profile: The rating profile.
@@ -27,7 +29,8 @@ def upsert_review(profile: Profile, pin: Pin, rating: int) -> tuple[Review, bool
 
 
 def clear_review(profile: Profile, pin: Pin) -> bool:
-    """Remove *profile*'s rating for *pin*, if one exists.
+    """
+    Remove *profile*'s rating for *pin*, if one exists.
 
     Args:
         profile: The profile whose rating to remove.

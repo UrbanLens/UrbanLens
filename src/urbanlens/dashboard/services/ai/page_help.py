@@ -1,4 +1,5 @@
-"""Static "how do I…" help content for the assistant (plan §10, batch 4).
+"""
+Static "how do I…" help content for the assistant (plan §10, batch 4).
 This is the *only* source the assistant is allowed to answer a "how do I…" question from (see ``services.ai.assistant``'s system prompt) - hand-written and reviewed, never scraped or inferred from a page's own markup."""
 
 from __future__ import annotations
@@ -8,7 +9,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class PageHelp:
-    """One page's help content, verbatim what the assistant may quote.
+    """
+    One page's help content, verbatim what the assistant may quote.
 
     Attributes:
         title: The page's name, as a user would recognize it.
@@ -118,7 +120,8 @@ PAGE_HELP: dict[str, PageHelp] = {
 
 
 def get_page_help(url_name: str) -> PageHelp | None:
-    """Return the help content for ``url_name``, or ``None`` if this page has none.
+    """
+    Return the help content for ``url_name``, or ``None`` if this page has none.
 
     Args:
         url_name: A Django URL name, e.g. ``"map.view"``.

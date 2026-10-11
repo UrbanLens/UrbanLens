@@ -1,4 +1,5 @@
-"""Load a public-location export into a demo instance.
+"""
+Load a public-location export into a demo instance.
 
 Refuses to run anywhere else: the export is a set of real coordinates, and importing it into a
 database that also holds real user pins would silently merge the two - ``get_exact_or_create``
@@ -31,7 +32,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        """Load the export.
+        """
+        Load the export.
 
         Raises:
             CommandError: Not a demo instance, or the file is missing/invalid.

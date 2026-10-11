@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 
 def _haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Great-circle distance in metres.
+    """
+    Great-circle distance in metres.
 
     Args:
         lat1: First latitude in degrees.
@@ -58,7 +59,8 @@ def _haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> flo
 
 
 class MarkupMap(abstract.FrontendDashboardModel):
-    """A standalone, reusable map view with user-drawn markup on it.
+    """
+    A standalone, reusable map view with user-drawn markup on it.
     A MarkupMap owns a saved viewport (centre, zoom, base layer, borders overlay) plus a set of :class:`PinMarkup` items (``items`` related name).
     Other models attach a map by holding a nullable FK to it - safety check-ins (``SafetyCheckin.markup_map``), comments (``Comment.markup_map`` / ``TripComment.markup_map``), and pin visits (``PinVisit.markup_map``) - so a map can exist before its host does (e.g. drawn on the check-in creation page and linked once the check-in is created) and can be reused or managed independently on the Memories > Maps page.
 
@@ -150,7 +152,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
         clones: QuerySet[MarkupMap]
 
     def _attached_rows(self, relation: str, *select_related: str) -> Any:
-        """Rows from one attachment relation, using a prefetch when there is one.
+        """
+        Rows from one attachment relation, using a prefetch when there is one.
         Reading ``_prefetched_objects_cache`` first is what makes a `Prefetch` on this relation actually count; without one, the `select_related` still applies.
 
         Args:
@@ -168,7 +171,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
         return manager.select_related(*select_related).all() if select_related else manager.all()
 
     def _first_attached_row(self, relation: str, *select_related: str) -> Any:
-        """The first row of one attachment relation, or None.
+        """
+        The first row of one attachment relation, or None.
         Separate from :meth:`_attached_rows` so the unprefetched path keeps ``.first()``'s ``LIMIT 1`` rather than fetching every row to discard all but one - which is what a single-map caller (a detail page, a delete confirmation) does.
 
         Args:
@@ -186,7 +190,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     @property
     def attachment(self) -> tuple[str, Any] | None:
-        """Return the first host object this map is attached to, if any.
+        """
+        Return the first host object this map is attached to, if any.
 
         Returns:
             Tuple of (kind, instance) where kind is one of ``safety_checkin``
@@ -215,7 +220,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     @property
     def is_attached(self) -> bool:
-        """Whether any host model currently links to this map.
+        """
+        Whether any host model currently links to this map.
 
         Returns:
             True when a safety check-in, comment, trip comment, or visit
@@ -225,7 +231,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
     @property
     def attachments(self) -> list[tuple[str, Any]]:
-        """Return every host object currently attached to this map.
+        """
+        Return every host object currently attached to this map.
 
         Returns:
             List of (kind, instance) tuples, kind one of ``safety_checkin``
@@ -242,7 +249,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
         return results
 
     def to_snapshot(self) -> dict:
-        """Serialize this map (viewport + items) into the client snapshot format.
+        """
+        Serialize this map (viewport + items) into the client snapshot format.
         The snapshot format is the JSON schema the shared frontend map composer/viewer speaks: ``{center_lat, center_lng, zoom, layer_mode, show_borders, bearing, markup: [shape, ...]}`` with shapes carrying ``latlngs`` as ``[lat, lng]`` pairs.
         It is embedded into templates (via ``json_script``) for read-only rendering and prefilled into the composer when editing.
 
@@ -267,7 +275,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
         }
 
     def replace_items_from_snapshot(self, snapshot: dict) -> None:
-        """Replace this map's viewport and items with a sanitized snapshot's content.
+        """
+        Replace this map's viewport and items with a sanitized snapshot's content.
 
         Args:
             snapshot: A snapshot dict already validated by
@@ -290,7 +299,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
             item.save()
 
     def __str__(self) -> str:
-        """Return a human-readable description of this map.
+        """
+        Return a human-readable description of this map.
 
         Returns:
             String like "<title> (profile <id>)".
@@ -307,7 +317,8 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
 
 class CustomLayer(abstract.FrontendDashboardModel):
-    """A user-created, independently-toggleable group of markup items on a Pin or Wiki map.
+    """
+    A user-created, independently-toggleable group of markup items on a Pin or Wiki map.
     Lets a user pull a subset of their :class:`PinMarkup` annotations (e.g. every shape marking a tunnel system) into a named layer that shows/hides as one unit in the map's layers panel, separately from the base "Markup" layer.
     Exactly one of ``parent_pin`` / ``parent_wiki`` is set - the same convention PinMarkup itself uses for parent_pin/parent_wiki/parent_map, enforced by the owning controller rather than a DB constraint.
 
@@ -361,7 +372,8 @@ class CustomLayer(abstract.FrontendDashboardModel):
     objects = CustomLayerManager()
 
     def to_json(self) -> dict:
-        """Compact serialisation for the layers panel and manage-layers dialog.
+        """
+        Compact serialisation for the layers panel and manage-layers dialog.
 
         Returns:
             dict with uuid, name, color, icon, order, default_visible.
@@ -386,7 +398,8 @@ class CustomLayer(abstract.FrontendDashboardModel):
 
 
 class PinMarkup(abstract.FrontendDashboardModel):
-    """A map annotation attached to a user's Pin, a Wiki page, or a MarkupMap.
+    """
+    A map annotation attached to a user's Pin, a Wiki page, or a MarkupMap.
     Markup items let users annotate a map view with lines, arrows, text labels, and geometric shapes (squares, circles, free polygons).
     Pin-scoped markup is personal (only the owning profile can see/edit it, rendered on the "Markup" layer in the pin detail map); Wiki-scoped markup is shared community data, editable by any signed-in user, rendered on the wiki map; map-scoped markup belongs to a standalone :class:`MarkupMap` (safety check-in routes, comment maps, visit maps).
 
@@ -476,21 +489,24 @@ class PinMarkup(abstract.FrontendDashboardModel):
     objects = PinMarkupManager()
 
     def coerce_colors(self) -> None:
-        """Reduce this item's colours to values a renderer can actually mean.
+        """
+        Reduce this item's colours to values a renderer can actually mean.
         Separate from ``save`` because a bulk write never calls it: the undo restore rebuilds a deleted map's annotations with ``bulk_create``, which would otherwise reinstate a stored value verbatim - and a payload written before this validation existed is exactly where a bad one would be.
         """
         self.color = sanitize_hex_color(self.color, "#e53e3e")
         self.border_color = sanitize_optional_color(self.border_color)
 
     def save(self, *args, **kwargs) -> None:
-        """Persist the item, coercing its colours first.
+        """
+        Persist the item, coercing its colours first.
         Enforced here rather than in each view because both colours are written by several paths (the create/edit JSON endpoints, ``from_snapshot_shape`` on import, map clones) and are interpolated into markup that reaches ``innerHTML`` on the client, where an arbitrary string would be a stored XSS vector.
         """
         self.coerce_colors()
         super().save(*args, **kwargs)
 
     def to_json(self) -> dict:
-        """Compact serialisation for Leaflet rendering.
+        """
+        Compact serialisation for Leaflet rendering.
 
         Returns:
             dict with uuid, markup_type, geometry, label, color, stroke_width,
@@ -511,7 +527,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
         }
 
     def to_snapshot_shape(self) -> dict | None:
-        """Convert this item into the client snapshot shape format.
+        """
+        Convert this item into the client snapshot shape format.
         The snapshot format carries ``latlngs`` as ``[lat, lng]`` pairs and uses ``rect`` for squares - it is what ``MarkupEngine.renderShape`` consumes on read-only comment/visit/memories map renders.
 
         Returns:
@@ -576,7 +593,8 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
     @classmethod
     def from_snapshot_shape(cls, shape: dict) -> PinMarkup | None:
-        """Build an (unsaved) PinMarkup from a sanitized client snapshot shape.
+        """
+        Build an (unsaved) PinMarkup from a sanitized client snapshot shape.
 
         Args:
             shape: A shape dict already cleaned by

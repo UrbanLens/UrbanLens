@@ -27,7 +27,8 @@ def _venv_sqlmap(venv_dir: Path) -> Path:
 
 
 def _sqlmap_works(venv_dir: Path) -> bool:
-    """Return True if the installed sqlmap can actually start.
+    """
+    Return True if the installed sqlmap can actually start.
 
     Probes with ``-h`` rather than ``--version``: the pip-packaged ``--version`` prints its banner and then
     waits on a "Press Enter to continue..." prompt that only resolves itself when stdin is already closed (as it
@@ -43,7 +44,8 @@ def _sqlmap_works(venv_dir: Path) -> bool:
 
 
 def ensure_installed(*, force: bool = False) -> Path:
-    """Create the isolated venv (if needed) and hash-verify-install sqlmap into it.
+    """
+    Create the isolated venv (if needed) and hash-verify-install sqlmap into it.
 
     Args:
         force: Reinstall even if a working sqlmap is already present.
@@ -85,7 +87,8 @@ def ensure_installed(*, force: bool = False) -> Path:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    """Parse CLI arguments.
+    """
+    Parse CLI arguments.
 
     Args:
         argv: Argument list without the program name.
@@ -98,7 +101,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Install sqlmap and print where it landed.
+    """
+    Install sqlmap and print where it landed.
 
     Every informational message goes to stderr; stdout carries only the final executable path, so
     ``bin/run_sqlmap_scan.sh`` can capture it directly with ``SQLMAP_BIN="$(python bin/install_sqlmap.py)"``.

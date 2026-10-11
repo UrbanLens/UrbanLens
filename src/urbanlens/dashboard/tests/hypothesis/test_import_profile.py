@@ -14,7 +14,8 @@ from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
 
 def _export_area(key: str, profile, temp_dir: str) -> None:
-    """Run one registered export area by key.
+    """
+    Run one registered export area by key.
 
     The private ``_export_*`` functions these tests called were replaced by the ``ExportType`` registry."""
     from urbanlens.dashboard.services.import_export.export import _REGISTERED_EXPORTERS

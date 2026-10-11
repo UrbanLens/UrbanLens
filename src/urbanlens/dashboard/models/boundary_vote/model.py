@@ -1,4 +1,5 @@
-"""BoundaryVote - one profile's pick of a location's most accurate official boundary.
+"""
+BoundaryVote - one profile's pick of a location's most accurate official boundary.
 When more than one external provider has geometry for a place (REData's county parcel vs.
 Votes are recency-weighted (see ``services.geo.boundary_voting``), so a newer vote outweighs an equally-split older one and the consensus can drift as the underlying data improves.
 """
@@ -14,7 +15,8 @@ from urbanlens.dashboard.models.boundary_vote.queryset import BoundaryVoteManage
 
 
 class BoundaryVote(abstract.DashboardModel):
-    """A single profile's vote for one candidate official boundary of a location.
+    """
+    A single profile's vote for one candidate official boundary of a location.
 
     Attributes:
         place: The real-world thing whose official boundary is under vote.

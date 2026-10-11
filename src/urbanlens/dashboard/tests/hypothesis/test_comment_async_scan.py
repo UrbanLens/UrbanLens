@@ -265,7 +265,8 @@ class ScanTripCommentImageTaskTests(TestCase):
 
 
 class CommentVisibilityWhilePendingScanTests(TestCase):
-    """controllers.comments._build_context - a pending-scan comment is visible only to its author.
+    """
+    controllers.comments._build_context - a pending-scan comment is visible only to its author.
 
     Pin comments are always self-authored (the pin owner is the only possible viewer), so this only matters in
     practice for wiki (and trip) comments - covered here via the wiki panel, which any pin-having viewer of the

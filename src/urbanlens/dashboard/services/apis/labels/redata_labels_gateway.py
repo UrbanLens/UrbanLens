@@ -22,7 +22,8 @@ MAX_SUGGEST_LIMIT = 50
 
 
 def _empty_define_result() -> dict[str, Any]:
-    """A "no definitions were sent" result.
+    """
+    A "no definitions were sent" result.
     Shared by the empty-input and the skipped-off-production paths so the two are indistinguishable to callers."""
     return {"created": 0, "updated": 0, "unknown_parents": {}, "rejected_edges": [], "implied_created": 0, "implied_removed": 0, "statistics_deferred": False}
 
@@ -59,7 +60,8 @@ class RedataLabelsGateway(RedataJsonGateway):
     api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
 
     def get_model(self) -> dict[str, Any]:
-        """Return what is currently producing label suggestions, and how well.
+        """
+        Return what is currently producing label suggestions, and how well.
         Nothing here is about a person: REData hashes user ids with a keyed HMAC on arrival and never stores the raw value, and this endpoint reports on the model rather than on anyone's labels.
 
         Returns:
@@ -70,7 +72,8 @@ class RedataLabelsGateway(RedataJsonGateway):
         return self._get_json("/api/v1/labels/model/", timeout=_MODEL_READ_TIMEOUT)
 
     def define_labels(self, user_id: str, labels: list[dict[str, Any]]) -> dict[str, Any]:
-        """Upsert (by ``external_id``) one user's tag/category label definitions.
+        """
+        Upsert (by ``external_id``) one user's tag/category label definitions.
 
         Args:
             user_id: UrbanLens profile identifier (see
@@ -94,7 +97,8 @@ class RedataLabelsGateway(RedataJsonGateway):
         return self._post_json("/api/v1/labels/", {"user_id": user_id, "labels": labels})
 
     def sync_assignments(self, user_id: str, locations: list[dict[str, Any]]) -> dict[str, Any]:
-        """Sync which labels apply to which of one user's places.
+        """
+        Sync which labels apply to which of one user's places.
 
         Args:
             user_id: UrbanLens profile identifier.
@@ -128,7 +132,8 @@ class RedataLabelsGateway(RedataJsonGateway):
         limit: int | None = None,
         min_confidence: float | None = None,
     ) -> dict[str, Any]:
-        """Ask which of this user's own tag/category labels likely apply to a place.
+        """
+        Ask which of this user's own tag/category labels likely apply to a place.
         A POST rather than a GET because the question carries lists; it is still a pure read and stores nothing on REData's end.
 
         Args:

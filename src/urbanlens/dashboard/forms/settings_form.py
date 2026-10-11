@@ -23,7 +23,8 @@ if TYPE_CHECKING:
 
 
 class ProfileSettingsForm(forms.ModelForm):
-    """Base for the settings page's per-section forms over ``Profile``.
+    """
+    Base for the settings page's per-section forms over ``Profile``.
 
     Writes only the columns the form declares.
     Subclasses must declare ``Meta.fields``; ``exclude`` would leave ``_meta.fields`` as None and
@@ -31,7 +32,8 @@ class ProfileSettingsForm(forms.ModelForm):
     """
 
     def save(self, commit: bool = True) -> Profile:
-        """Persist only this form's own fields.
+        """
+        Persist only this form's own fields.
 
         Args:
             commit: Whether to write to the database, matching ``ModelForm``.
@@ -46,7 +48,8 @@ class ProfileSettingsForm(forms.ModelForm):
         return instance
 
     def finalize_instance(self, instance: Profile) -> None:
-        """Adjust *instance* after binding but before the scoped write.
+        """
+        Adjust *instance* after binding but before the scoped write.
 
         Args:
             instance: The profile about to be saved.
@@ -99,7 +102,8 @@ _HOTKEY_COMBO_RE = re.compile(r"^(ctrl\+)?(shift\+)?(alt\+)?[a-z0-9/?]+$")
 
 
 class HotkeySettingsForm(ProfileSettingsForm):
-    """Per-action keyboard shortcut overrides (Settings > Shortcuts).
+    """
+    Per-action keyboard shortcut overrides (Settings > Shortcuts).
 
     One hidden field carries the whole override mapping as JSON, built client-side by the Shortcuts
     section's key-capture inputs - mirrors MarkupDefaultsForm's hidden-input pattern, but a
@@ -202,7 +206,8 @@ class PrivacySettingsForm(ProfileSettingsForm):
         ]
 
     def __init__(self, *args, **kwargs):
-        """Disable every field while Community is off - they're forced to "No one" in Profile.save() anyway.
+        """
+        Disable every field while Community is off - they're forced to "No one" in Profile.save() anyway.
 
         ``disabled=True`` both greys the field out in rendering and makes Django ignore any posted value for
         it, so this is also the belt to Profile.save()'s suspenders against a tampered POST re-enabling one
@@ -381,7 +386,8 @@ class ContactMethodsForm(ProfileSettingsForm):
         ]
 
     def clean_discord_username(self) -> str:
-        """Validate the Discord username against the allowed character set.
+        """
+        Validate the Discord username against the allowed character set.
 
         Returns:
             The stripped handle, or an empty string when blank.
@@ -475,7 +481,8 @@ class MapCenterForm(ProfileSettingsForm):
         return zoom if zoom is not None else 13
 
     def finalize_instance(self, instance: Profile) -> None:
-        """Keep the saved custom location when the mode isn't CUSTOM.
+        """
+        Keep the saved custom location when the mode isn't CUSTOM.
 
         In GPS or AUTO modes the hidden form fields contain whatever the preview map happened to be showing,
         which must not overwrite the user's saved custom location.
@@ -580,7 +587,8 @@ class AISettingsForm(ProfileSettingsForm):
 
 
 class KeywordTaggingSettingsForm(ProfileSettingsForm):
-    """Keyword-based auto-tagging preferences - independent of the AI settings above.
+    """
+    Keyword-based auto-tagging preferences - independent of the AI settings above.
 
     Keyword matching is local pattern/substring matching with no external API
     call, so it's available to every user regardless of AI subscription.

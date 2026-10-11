@@ -289,7 +289,8 @@ class CreateGroupMessageTests(TestCase):
 
 
 class GroupMessageLiveIdentityPrivacyTests(TestCase):
-    """serialize_group_message must not leak a masked sender's real identity.
+    """
+    serialize_group_message must not leak a masked sender's real identity.
 
     Regression: the name was already resolved through resolve_visible_identity, but ``sender_slug`` was still
     copied from the raw sender unconditionally - so a viewer who couldn't see the masked sender's profile could
@@ -370,7 +371,8 @@ class GroupPinShareTests(TestCase):
 
 
 class GroupMessageReplayScopingTests(TestCase):
-    """create_group_message's idempotency guard must never cross groups.
+    """
+    create_group_message's idempotency guard must never cross groups.
 
     Regression: GroupMessage.client_uuid is uniquely constrained per *sender* only
     (db_gmsg_unique_client_uuid_per_sender - by design, since scoping to the group too would let two different
@@ -446,7 +448,8 @@ class ConversationMergeTests(TestCase):
         self.assertIsNone(rows[0]["last_message"])
 
     def test_multiple_groups_report_correct_per_group_breakdowns(self) -> None:
-        """Regression test for the N+1 fix: batched queries must still attribute
+        """
+        Regression test for the N+1 fix: batched queries must still attribute
         each group's own last message/unread count/member count correctly,
         not mix them up across groups."""
         third = _profile()
@@ -467,7 +470,8 @@ class ConversationMergeTests(TestCase):
         self.assertEqual(rows[group_b.pk]["member_count"], 3)
 
     def test_group_conversations_for_query_count_is_independent_of_group_count(self) -> None:
-        """The N+1 regression this batch fixed: query count must not grow with the number of groups the profile belongs to.
+        """
+        The N+1 regression this batch fixed: query count must not grow with the number of groups the profile belongs to.
 
         The invariant is *independence*, not an absolute number, so this measures the same call at two sizes and
         compares."""
@@ -492,7 +496,8 @@ class ConversationMergeTests(TestCase):
         )
 
     def test_query_count_is_independent_of_group_count_with_distinct_senders(self) -> None:
-        """The blind spot in the test above: every group had the *same* last sender.
+        """
+        The blind spot in the test above: every group had the *same* last sender.
 
         The sidebar resolves each last sender's name through the viewer's own visibility, and that answer was
         resolved one sender at a time."""
@@ -520,7 +525,8 @@ class ConversationMergeTests(TestCase):
         )
 
     def test_only_the_newest_message_per_group_is_materialised(self) -> None:
-        """Rows fetched, not queries run - the cost this function actually had.
+        """
+        Rows fetched, not queries run - the cost this function actually had.
 
         The query count was always flat; the row count was every message in every group the viewer belongs to,
         each with `sender`/`sender__user` joined on, discarded after the first per group."""
@@ -569,7 +575,8 @@ class ConversationMergeTests(TestCase):
 
 
 class GroupMessageNotificationCostTests(TestCase):
-    """``_notify_group_message`` must not cost a query per member.
+    """
+    ``_notify_group_message`` must not cost a query per member.
 
     Its own docstring promises "a small, fixed number of queries regardless of group size", and it goes to some
     length to keep that: preferences arrive by ``select_related``, unread state by one grouped query, friendship
@@ -589,7 +596,8 @@ class GroupMessageNotificationCostTests(TestCase):
         return create_group_chat(self.me, name, members)
 
     def _notify_reads(self, group: GroupChat) -> int:
-        """How many *reads* notifying a fresh message costs.
+        """
+        How many *reads* notifying a fresh message costs.
 
         Writes are excluded because one row per notified member is the work itself - it is the lookups feeding
         those rows that must not scale."""
@@ -767,7 +775,8 @@ class GroupKeyEndpointTests(TestCase):
         self.assertTrue(group_e2ee_ready(self.group))
 
     def test_rotation_payload_never_contains_member_slugs(self) -> None:
-        """The whole point of the opaque tokens (PR #111
+        """
+        The whole point of the opaque tokens (PR #111
         finding): fetching the rotation payload must not reveal the real slug
         of any member - their profile_visibility may mask them elsewhere."""
         _enroll(self.creator)
@@ -821,7 +830,8 @@ class GroupKeyEndpointTests(TestCase):
         self.assertEqual(self._post({"version": 5, "wrapped": wrapped}).status_code, 409)
 
     def test_removing_a_member_flags_rotation(self) -> None:
-        """The direction that protects *future* messages from a removed member.
+        """
+        The direction that protects *future* messages from a removed member.
 
         Removal is already covered on the delivery side - the server stops sending to them (see
         test_group_removal_stops_delivery)."""

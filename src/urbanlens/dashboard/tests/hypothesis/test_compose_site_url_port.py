@@ -35,7 +35,8 @@ class ComposeSiteUrlTests(SimpleTestCase):
         self.assertEqual({value for value in _defaults("UL_SITE_URL") if "://" in value}, set())
 
     def test_every_django_process_is_passed_it(self) -> None:
-        """An empty value reads as unset, which refuses to start in a deployment. A tier left out of the pass-through
+        """
+        An empty value reads as unset, which refuses to start in a deployment. A tier left out of the pass-through
         (beat has no env_file) would be the one that could not start."""
         services = yaml.safe_load(_COMPOSE_PATH.read_text(encoding="utf-8"))["services"]
         django_tiers = {

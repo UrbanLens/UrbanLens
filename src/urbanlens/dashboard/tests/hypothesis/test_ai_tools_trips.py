@@ -176,7 +176,8 @@ class AddTripActivityTests(TestCase):
 
 
 class AddTripActivityPermissionTests(TestCase):
-    """The AI tool must enforce the same permissions the trip views do.
+    """
+    The AI tool must enforce the same permissions the trip views do.
 
     `_add_trip_activity` gated on `Trip.objects.filter(slug=..., profiles=profile)` path every other caller
     uses, gates on `require_perform(actor, trip, trip.allow_add_activities, ...)`."""

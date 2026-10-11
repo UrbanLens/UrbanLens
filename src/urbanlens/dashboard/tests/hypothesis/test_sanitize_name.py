@@ -164,7 +164,8 @@ class ModelSaveSanitizesNameTests(TestCase):
 
 
 class UnderscoreIsKeptTests(SimpleTestCase):
-    """Underscore survives sanitization, unlike other punctuation that is dropped.
+    """
+    Underscore survives sanitization, unlike other punctuation that is dropped.
 
     That is a harsher outcome than the allowlist applies to genuinely risky characters: `"`, `#`, `/` and `&`
     were all already kept."""

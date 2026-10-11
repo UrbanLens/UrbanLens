@@ -17,7 +17,8 @@ _SUBSCRIPTION_UID_PREFIX = "achievement_subscription_"
 
 
 def _subscription_uids() -> list[str]:
-    """dispatch_uids of the connected per-subscription receivers.
+    """
+    dispatch_uids of the connected per-subscription receivers.
 
     ``post_save.receivers`` holds ``((uid_or_id, sender_id), receiver)``.
     """
@@ -62,7 +63,8 @@ class AchievementSubscriptionUidTests(SimpleTestCase):
         )
 
     def test_a_second_subscription_naming_an_already_subscribed_model_still_gets_a_receiver(self) -> None:
-        """Directly reproduces the defect the module docstring describes.
+        """
+        Directly reproduces the defect the module docstring describes.
 
         Every model in the real ``_SUBSCRIPTIONS`` is distinct today, so the two tests above hold no matter how
         the dispatch_uid is built - nothing in the *current* list can collide."""

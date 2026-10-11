@@ -46,7 +46,8 @@ class RoundSelection:
 
 
 def pick_next_round_content(profiles: Iterable[Profile], *, exclude_wiki_ids: Iterable[int] = ()) -> RoundSelection | None:
-    """Pick the next round's wiki, field kind, and content for ``profiles``.
+    """
+    Pick the next round's wiki, field kind, and content for ``profiles``.
 
     Args:
         profiles: Every joined participant (a single profile for solo play).

@@ -1,4 +1,5 @@
-"""The photo map layer is bounded, and says so when it had to be.
+"""
+The photo map layer is bounded, and says so when it had to be.
 
 `PinGalleryJsonView` and `WikiGalleryJsonView` plotted every geotagged photo,
 built a dict per row, and resolved each uploader's visibility while doing it -
@@ -84,7 +85,8 @@ class ThePinPhotoMapLayerTests(TestCase):
         )
 
     def test_the_cap_under_test_is_the_one_the_view_reads(self) -> None:
-        """Guards the override itself. `bound_map_layer` moved into the geo
+        """
+        Guards the override itself. `bound_map_layer` moved into the geo
         service, and a patch aimed at the old module would configure a ceiling
         nothing reads - which is how a capping test comes to pass against
         uncapped code."""
@@ -104,7 +106,8 @@ class ThePinPhotoMapLayerTests(TestCase):
 
 
 class TheAlbumMapTests(TestCase):
-    """The album grid pages at 48; its map used to embed the whole album.
+    """
+    The album grid pages at 48; its map used to embed the whole album.
 
     So pagination bounded what you could see and nothing bounded what was sent -
     a 5,000-photo album shipped 48 cards and 5,000 map entries in one response.

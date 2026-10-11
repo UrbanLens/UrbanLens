@@ -17,7 +17,8 @@ from urbanlens.dashboard.tasks import escalate_overdue_checkins, send_due_checki
 
 @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class SafetySweepIsolationTests(TestCase):
-    """Each sweep takes a distributed lock through the cache, so the cache is pinned to
+    """
+    Each sweep takes a distributed lock through the cache, so the cache is pinned to
     locmem here - the default backend is Redis-backed and the suite's network guard only
     permits localhost."""
 

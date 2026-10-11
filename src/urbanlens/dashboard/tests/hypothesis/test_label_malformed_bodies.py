@@ -1,4 +1,5 @@
-"""Malformed label JSON bodies and out-of-range orders are refused or bounded, never a 500.
+"""
+Malformed label JSON bodies and out-of-range orders are refused or bounded, never a 500.
 
 ``json.loads`` accepts the bare ``Infinity`` literal (``int(float("inf"))`` raises ``OverflowError``) and
 any top-level JSON value, and ``Label.order`` is a 32-bit column that a 30-digit integer overflows on save.

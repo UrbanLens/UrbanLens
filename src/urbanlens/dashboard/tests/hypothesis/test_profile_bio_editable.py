@@ -29,7 +29,8 @@ class ProfileBioEditableRenderingTests(TestCase):
         self.assertContains(response, 'data-raw-bio="Urban explorer since 2015."')
 
     def test_about_section_shown_with_no_bio_yet(self) -> None:
-        """Unlike the plain "hide if empty" behavior for other viewers, the
+        """
+        Unlike the plain "hide if empty" behavior for other viewers, the
         owner needs the section rendered so there's something to click."""
         response = self._get_own()
         self.assertContains(response, "About")
@@ -94,7 +95,8 @@ class ProfileFieldUpdateBioTests(TestCase):
         self.assertIsNone(self.profile.bio)
 
     def test_requires_login(self) -> None:
-        """LoginRequiredMixin redirects anonymous requests before the view's
+        """
+        LoginRequiredMixin redirects anonymous requests before the view's
         own manual is_authenticated check (a 401 JSON error) ever runs."""
         self.client.logout()
         response = self._post("Anonymous edit attempt.")

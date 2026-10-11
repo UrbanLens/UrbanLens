@@ -1,4 +1,5 @@
-"""An integer past its column is refused by the database layer, not stored as its low bits.
+"""
+An integer past its column is refused by the database layer, not stored as its low bits.
 
 psycopg-binary's C dumpers for ``Int2`` and ``Int4`` - what Django sends an ``IntegerField`` as - keep only the low
 16 or 32 bits, so with server-side binding 2**31 was stored as -2**31 and 2**32 + 1 as 1, and nothing raised.

@@ -1,4 +1,5 @@
-"""Cost tracking calculations: admin-defined hardware/operating costs plus tracked API spend.
+"""
+Cost tracking calculations: admin-defined hardware/operating costs plus tracked API spend.
 Every function accepts an optional ``as_of`` so callers (and tests) can evaluate the numbers at a specific point in time instead of always "now" - useful for reconstructing historical series without needing to mock the clock."""
 
 from __future__ import annotations
@@ -56,7 +57,8 @@ def _api_cost_in_window(start: datetime.datetime, end: datetime.datetime) -> Dec
 
 
 def effective_monthly_cost(as_of: datetime.datetime | None = None) -> CostBreakdown:
-    """Return the current effective monthly cost to run the site, broken out by source.
+    """
+    Return the current effective monthly cost to run the site, broken out by source.
 
     Args:
         as_of: Point in time to evaluate "currently active" against; defaults to now.
@@ -79,7 +81,8 @@ def effective_monthly_cost(as_of: datetime.datetime | None = None) -> CostBreakd
 
 
 def total_hardware_cost() -> Decimal:
-    """Return the total (non-amortized) replacement cost of every hardware component on record.
+    """
+    Return the total (non-amortized) replacement cost of every hardware component on record.
 
     Returns:
         The all-time hardware total, in USD."""
@@ -87,7 +90,8 @@ def total_hardware_cost() -> Decimal:
 
 
 def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
-    """Return total money spent to date across every cost source.
+    """
+    Return total money spent to date across every cost source.
 
     Args:
         as_of: Point in time to total expenses up to; defaults to now.
@@ -109,7 +113,8 @@ def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
 
 
 def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal | None:
-    """Return the historical average monthly expense.
+    """
+    Return the historical average monthly expense.
 
     Args:
         as_of: Point in time to evaluate against; defaults to now.
@@ -135,7 +140,8 @@ def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal |
 
 
 def active_user_count(as_of: datetime.datetime | None = None) -> int:
-    """Return the number of "active" users, for cost-per-user calculations.
+    """
+    Return the number of "active" users, for cost-per-user calculations.
 
     Args:
         as_of: Point in time to evaluate the 30-day login window against; defaults to now.
@@ -150,7 +156,8 @@ def active_user_count(as_of: datetime.datetime | None = None) -> int:
 
 
 def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
-    """Return the current effective monthly cost divided by active users.
+    """
+    Return the current effective monthly cost divided by active users.
 
     Args:
         as_of: Point in time to evaluate against; defaults to now.
@@ -165,7 +172,8 @@ def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
 
 
 def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
-    """Return the number of distinct users currently holding a paying subscription.
+    """
+    Return the number of distinct users currently holding a paying subscription.
 
     Args:
         as_of: Point in time to evaluate against; defaults to now.
@@ -178,7 +186,8 @@ def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
 
 
 def cost_per_supporter(as_of: datetime.datetime | None = None) -> Decimal | None:
-    """Return the current effective monthly cost divided by paying supporters.
+    """
+    Return the current effective monthly cost divided by paying supporters.
     Intentionally a much larger figure than ``cost_per_user`` - most users never pay, so this highlights how much of the site's real cost each paying supporter is effectively covering.
 
     Args:
@@ -200,7 +209,8 @@ def _advance_month(cursor: datetime.datetime) -> datetime.datetime:
 
 
 def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None) -> dict[str, list]:
-    """Reconstruct the effective monthly cost for each of the last *months* calendar months.
+    """
+    Reconstruct the effective monthly cost for each of the last *months* calendar months.
 
     Args:
         months: How many trailing calendar months to include.
@@ -250,7 +260,8 @@ def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None
 
 
 def api_spend_summary_30d() -> dict[str, list | int | Decimal | None]:
-    """Return the trailing-30-day external API spend, split by pricing status.
+    """
+    Return the trailing-30-day external API spend, split by pricing status.
     ``unpriced_service_count`` keeps its original meaning - services that produced no cost at all, because they are free, not priced here yet, or priced in a way that doesn't reduce to a number per call.
 
     Returns:

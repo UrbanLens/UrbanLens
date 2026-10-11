@@ -17,7 +17,8 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet["PinList"]):
     """Custom queryset for PinList models."""
 
     def with_pin_counts(self) -> PinListQuerySet:
-        """Annotate each list's pin count so ``pin_count`` costs no rows.
+        """
+        Annotate each list's pin count so ``pin_count`` costs no rows.
 
         The alternative a caller reaches for is ``prefetch_related("items")``,
         which fetches every membership row (and with ``items__pin``, every pin)
@@ -31,7 +32,8 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet["PinList"]):
         return self.annotate(_pin_count=Count("items", distinct=True))
 
     def for_profile(self, profile: Profile | int) -> PinListQuerySet:
-        """Every list owned by ``profile`` (accepts a Profile instance or a raw pk).
+        """
+        Every list owned by ``profile`` (accepts a Profile instance or a raw pk).
 
         Args:
             profile: The owning profile.
@@ -42,7 +44,8 @@ class PinListQuerySet(abstract.PublicDashboardQuerySet["PinList"]):
         return self.filter(profile=profile)
 
     def active_smart_lists(self, profile: Profile | int) -> PinListQuerySet:
-        """The profile's smart lists that actually have matching rules configured.
+        """
+        The profile's smart lists that actually have matching rules configured.
         A smart list with neither ``smart_filter`` nor ``smart_boundary`` set has nothing to auto-match against yet, so callers syncing smart-list membership only need to consider lists with at least one of the two.
 
         Args:
@@ -65,7 +68,8 @@ class PinListItemQuerySet(abstract.DashboardQuerySet["PinListItem"]):
     """Custom queryset for PinListItem models."""
 
     def for_list(self, pin_list) -> PinListItemQuerySet:
-        """Every item on one list.
+        """
+        Every item on one list.
 
         Args:
             pin_list: The list (accepts a PinList instance or a raw pk).
@@ -76,7 +80,8 @@ class PinListItemQuerySet(abstract.DashboardQuerySet["PinListItem"]):
         return self.filter(pin_list=pin_list)
 
     def membership(self, pin_list, pin):
-        """This pin's membership row on this list, if any.
+        """
+        This pin's membership row on this list, if any.
 
         Args:
             pin_list: The list to check.
@@ -99,7 +104,8 @@ class SmartListSyncRequestQuerySet(abstract.DashboardQuerySet["SmartListSyncRequ
     """Custom queryset for SmartListSyncRequest models."""
 
     def for_profile(self, profile: Profile | int) -> SmartListSyncRequestQuerySet:
-        """Every outstanding request for one account's pins.
+        """
+        Every outstanding request for one account's pins.
 
         Args:
             profile: The owning profile (a Profile instance or a raw pk).

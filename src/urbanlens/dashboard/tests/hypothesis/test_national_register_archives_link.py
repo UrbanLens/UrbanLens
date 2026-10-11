@@ -1,4 +1,5 @@
-"""P256: a National Register listing whose REData row carries ``attributes.NARA_URL`` links the National Archives record.
+"""
+P256: a National Register listing whose REData row carries ``attributes.NARA_URL`` links the National Archives record.
 
 NPGallery renders an empty page, as a 200, for listings it does not carry (most after 2012), so the archives' own
 record of the listing is linked beside it wherever REData published one. The URL comes from a third party, so only a

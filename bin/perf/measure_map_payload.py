@@ -26,7 +26,8 @@ BATCH = 1_000
 
 
 def measure(pins: int, batch: int, labels_per_pin: int) -> dict[str, object]:
-    """Build one account's map data every way the application can, and time each.
+    """
+    Build one account's map data every way the application can, and time each.
 
     Args:
         pins: How many pins to seed.
@@ -91,7 +92,8 @@ def measure(pins: int, batch: int, labels_per_pin: int) -> dict[str, object]:
 
 
 def _measure_label_dictionary(service: object, pin_count: int) -> dict[str, object]:
-    """What the per-response label dictionary costs, once.
+    """
+    What the per-response label dictionary costs, once.
 
     Args:
         service: The payload service for the profile.
@@ -114,7 +116,8 @@ def _measure_label_dictionary(service: object, pin_count: int) -> dict[str, obje
 
 
 def _measure_denormalised(service: object, payloads: list, pin_count: int) -> dict[str, object]:
-    """What the same document would weigh with each label copied into every pin.
+    """
+    What the same document would weigh with each label copied into every pin.
 
     The shape the payload had before the labels were normalised out of it, built from the same rows in the same
     run so the two are comparable.
@@ -147,7 +150,8 @@ def _measure_denormalised(service: object, payloads: list, pin_count: int) -> di
 
 
 def _measure_filter_post(user: object, pin_count: int) -> dict[str, object]:
-    """What one press of the map's filter button sends over the wire.
+    """
+    What one press of the map's filter button sends over the wire.
 
     The filter form posts to `map.search`, which renders the whole matching set into an HTML document.
 
@@ -187,7 +191,8 @@ def _measure_filter_post(user: object, pin_count: int) -> dict[str, object]:
 
 
 def _per_thousand(rows: int, wall: float, cpu: float, *, extra: dict[str, object] | None = None) -> dict[str, object]:
-    """Normalise a timing to the per-1,000-rows figure the design argues in.
+    """
+    Normalise a timing to the per-1,000-rows figure the design argues in.
 
     Args:
         rows: How many rows the timing covers.
@@ -210,7 +215,8 @@ def _per_thousand(rows: int, wall: float, cpu: float, *, extra: dict[str, object
 
 
 def main() -> int:
-    """Parse arguments, run the measurement in a throwaway database, print JSON.
+    """
+    Parse arguments, run the measurement in a throwaway database, print JSON.
 
     Returns:
         Process exit status.

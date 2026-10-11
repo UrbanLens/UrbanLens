@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 
 def _visible_images_prefetch(profiles: list[Profile], candidates: QuerySet[Wiki]) -> Prefetch:
-    """Prefetch each wiki's images, filtered to what every participant may see.
+    """
+    Prefetch each wiki's images, filtered to what every participant may see.
     Being eligible for a wiki is only the container gate: a visited pin grants the wiki, and says nothing about whether each uploader's ``photo_upload_visibility`` admits this player to the photos on it.
 
     Args:
@@ -36,7 +37,8 @@ def _visible_images_prefetch(profiles: list[Profile], candidates: QuerySet[Wiki]
 
 
 def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) -> QuerySet[Wiki]:
-    """Wikis whose Location ``profile`` has a visited pin for.
+    """
+    Wikis whose Location ``profile`` has a visited pin for.
 
     Args:
         profile: The profile a solo round (or one participant of a competitive round) is being generated for.
@@ -55,7 +57,8 @@ def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) ->
 
 
 def eligible_wikis_for_all(profiles: Iterable[Profile], *, exclude_wiki_ids: Iterable[int] = ()) -> QuerySet[Wiki]:
-    """Wikis every profile in ``profiles`` has visited-pinned - the competitive-mode rule.
+    """
+    Wikis every profile in ``profiles`` has visited-pinned - the competitive-mode rule.
     A competitive round's content must be identical for every joined participant, so its wiki pool is the intersection of each participant's own eligible wikis, not the union.
 
     Args:

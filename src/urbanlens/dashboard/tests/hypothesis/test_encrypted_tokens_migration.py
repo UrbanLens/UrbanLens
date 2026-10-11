@@ -1,4 +1,5 @@
-"""Tests for the GoogleCalendarAccount/SiteSettings token-encryption migration.
+"""
+Tests for the GoogleCalendarAccount/SiteSettings token-encryption migration.
 
 The companion data migration re-encrypts rows written before the field change
 (raw SQL still holds plaintext - AlterField never touches stored bytes). These

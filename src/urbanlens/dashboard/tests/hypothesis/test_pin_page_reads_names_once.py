@@ -1,4 +1,5 @@
-"""The pin page asks each panel source whether it applies, and each asked for the pin's search names again.
+"""
+The pin page asks each panel source whether it applies, and each asked for the pin's search names again.
 
 On dev a pin page ran 60 queries, 22 of them the same two alias reads, once per Media gallery source.
 """
@@ -21,7 +22,8 @@ from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfigured
 
 
 class PinPageReadsNamesOnceTests(RedataConfiguredMixin, TestCase):
-    """REData configured, as CI's placeholders and a developer's `.env` both have it: without it no gallery source
+    """
+    REData configured, as CI's placeholders and a developer's `.env` both have it: without it no gallery source
     applies, so the page reads no names at all and the count says nothing."""
 
     def setUp(self) -> None:

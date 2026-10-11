@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 
 class DirectMessage(abstract.DashboardModel):
-    """One private message from one profile to another.
+    """
+    One private message from one profile to another.
     A "conversation" is not its own model - it is simply the set of messages between two profiles in either direction (see ``DirectMessageQuerySet.between`` / ``conversation_rows``).
     Whether a profile may message another is governed by the recipient's ``Profile.direct_message_visibility`` privacy setting, evaluated in ``services.messaging.direct_messages.can_direct_message`` - never bypass that check when creating rows outside of ``create_direct_message``.
     """
@@ -102,7 +103,8 @@ class DirectMessage(abstract.DashboardModel):
 
     @property
     def is_encrypted(self) -> bool:
-        """True when this message's content is end-to-end encrypted.
+        """
+        True when this message's content is end-to-end encrypted.
 
         Returns:
             True when ``ciphertext`` is set (the server cannot read the body).
@@ -116,7 +118,8 @@ class DirectMessage(abstract.DashboardModel):
 
     @property
     def is_expired_for_recipient(self) -> bool:
-        """True once this message's disappearing-message timer has elapsed.
+        """
+        True once this message's disappearing-message timer has elapsed.
         Gates the recipient's *display* of this message - the row itself is physically removed shortly after by the periodic ``tasks.hard_delete_expired_direct_messages`` sweep (see ``DirectMessageQuerySet.due_for_hard_delete``, same threshold), which deletes it for both parties.
         An unread message's timer starts at `read_at`, except that any self-destructing message times out
         ``UNREAD_SELF_DESTRUCT_TIMEOUT`` after it was sent.
@@ -137,7 +140,8 @@ class DirectMessage(abstract.DashboardModel):
         return timezone.now() >= self.read_at + delta
 
     def tombstone_text_for(self, viewer_id: int) -> str | None:
-        """Return placeholder text to show `viewer_id` instead of this message's content.
+        """
+        Return placeholder text to show `viewer_id` instead of this message's content.
         The sender always sees their own original message in full, regardless of any delete/expiry state - callers must never hide a message from its own sender (see the module docstring's consent policy).
 
         Args:
@@ -158,7 +162,8 @@ class DirectMessage(abstract.DashboardModel):
         return None
 
     def partner_for(self, profile: Profile) -> Profile:
-        """Return the other participant of this message's conversation.
+        """
+        Return the other participant of this message's conversation.
 
         Args:
             profile: One of the two participants.
@@ -169,7 +174,8 @@ class DirectMessage(abstract.DashboardModel):
         return self.sender if self.recipient_id == profile.pk else self.recipient
 
     def __str__(self) -> str:
-        """Return a human-readable description of this message.
+        """
+        Return a human-readable description of this message.
 
         Returns:
             String like "DM <sender id> -> <recipient id>: <body prefix>".

@@ -20,7 +20,8 @@ from urbanlens.dashboard.services.map_pins import document as map_document
 
 
 def _lines(response) -> list[dict]:
-    """Decode an NDJSON response, streamed or not.
+    """
+    Decode an NDJSON response, streamed or not.
 
     Args:
         response: The test client's response.
@@ -108,7 +109,8 @@ class TheDocumentAgreesWithThePagedEndpointTests(TestCase):
             )
 
     def _paged(self) -> list[dict]:
-        """Every pin, walked through `map.pins` the way the old client did.
+        """
+        Every pin, walked through `map.pins` the way the old client did.
 
         Returns:
             The payloads, ordered as the endpoint returned them.
@@ -137,7 +139,8 @@ class TheDocumentAgreesWithThePagedEndpointTests(TestCase):
 
 
 class TheLabelsTravelOncePerResponseTests(TestCase):
-    """A pin names its labels by id, so the response has to carry the dictionary.
+    """
+    A pin names its labels by id, so the response has to carry the dictionary.
 
     The alternative - each pin carrying its labels' names, colours and icons - is what made one label edit
     rewrite every payload that carried it, and what made a shared vocabulary the largest thing in the document
@@ -161,7 +164,8 @@ class TheLabelsTravelOncePerResponseTests(TestCase):
             pin.labels.set(self.labels)
 
     def _document(self) -> tuple[dict, list[dict]]:
-        """The document's head and its pin payloads.
+        """
+        The document's head and its pin payloads.
 
         Returns:
             The head line, and one payload per pin.
@@ -177,7 +181,8 @@ class TheLabelsTravelOncePerResponseTests(TestCase):
         self.assertEqual(named - set(head["labels"]), set())
 
     def test_every_page_defines_every_label_its_pins_name(self) -> None:
-        """Each page stands alone: a client may fetch them in any order, or one alone.
+        """
+        Each page stands alone: a client may fetch them in any order, or one alone.
 
         The page's dictionary covers the page rather than the account, which is
         what makes it free - the views were built serializing these very pins.
@@ -210,7 +215,8 @@ class TheLabelsTravelOncePerResponseTests(TestCase):
         self.assertEqual(pins[0]["label_ids"], [label.pk for label in self.labels])
 
     def test_a_page_does_not_cost_a_query_to_define_its_labels(self) -> None:
-        """The whole-account dictionary is one join over the through table; a page
+        """
+        The whole-account dictionary is one join over the through table; a page
         pays it per page, which is the fallback path's whole walk."""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
@@ -262,7 +268,8 @@ class TheDocumentDoesNotHoldTheAccountTests(TestCase):
             baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=float(index), longitude=3.0))
 
     def test_the_whole_document_is_not_built_before_the_first_chunk(self) -> None:
-        """A generator that had already run would make the streaming claim false.
+        """
+        A generator that had already run would make the streaming claim false.
 
         `CHUNK_BYTES` down to 1 so a chunk is as small as the format allows; at its real value one chunk carries
         the whole of a test-sized account and there is nothing left to observe."""
@@ -416,7 +423,8 @@ class TheCacheIsAnAcceleratorTests(TestCase):
         self.assertEqual(claims, [True, False, False, False, False])
 
     def test_a_new_version_within_the_window_does_not_claim_again(self) -> None:
-        """The claim bounds worker time per account, not per version.
+        """
+        The claim bounds worker time per account, not per version.
 
         Keyed on the version, one person editing their own map enqueued a build per edit - each of them a
         multi-second rebuild of the whole document on a large account, and each one discarded if another edit
@@ -472,7 +480,8 @@ class TheCacheIsAnAcceleratorTests(TestCase):
         self.assertEqual(second, 0)
 
     def _uuids(self) -> list[str]:
-        """Every pin uuid, in the order the document emits them.
+        """
+        Every pin uuid, in the order the document emits them.
 
         Returns:
             Uuid strings ordered by pin pk.

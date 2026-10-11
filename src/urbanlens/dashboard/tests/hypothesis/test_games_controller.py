@@ -47,7 +47,8 @@ class GamesOverviewViewTests(TestCase):
         self.assertEqual(response.context["nav_section"], "games")
 
     def test_nav_section_is_also_games_while_playing_spotguessr(self) -> None:
-        """The games hub's nav entry should stay highlighted while playing,
+        """
+        The games hub's nav entry should stay highlighted while playing,
         not just on the hub page itself - see _NAV_SECTION_ALIASES."""
         self.client.force_login(self.user)
         response = self.client.get(reverse("spotguessr"))
@@ -55,7 +56,8 @@ class GamesOverviewViewTests(TestCase):
 
 
 class GameFeatureGateTests(TestCase):
-    """``AlphaFeatureRequiredMixin`` must cover every game route, not just the hub.
+    """
+    ``AlphaFeatureRequiredMixin`` must cover every game route, not just the hub.
 
     Regression guard for the gap where only ``GamesOverviewView`` checked ``SiteFeature.ALPHA_FEATURES`` and
     anyone with a URL could play the games directly."""
@@ -86,7 +88,8 @@ class GameFeatureGateTests(TestCase):
                 self.assertEqual(response.status_code, 403)
 
     def test_an_anonymous_user_still_gets_the_login_redirect(self) -> None:
-        """The mixin sits after ``LoginRequiredMixin``, so anonymous visitors
+        """
+        The mixin sits after ``LoginRequiredMixin``, so anonymous visitors
         are redirected to log in rather than shown a bare 403."""
         for url_name, args in self.GATED_ROUTES:
             with self.subTest(route=url_name):

@@ -114,7 +114,8 @@ class BuildVisitSuggestionMessageTests(TestCase):
 
 
 class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
-    """With no shared Location on the suggestion, the caller's fallback place
+    """
+    With no shared Location on the suggestion, the caller's fallback place
     metadata (the origin pin's own official_name/city/state, sourced from its
     Location) is used instead."""
 
@@ -131,7 +132,8 @@ class BuildVisitSuggestionMessageOriginPinFallbackTests(TestCase):
         )
 
     def test_never_surfaces_an_unrecognised_private_label(self) -> None:
-        """The user's private pin label is not one of the fields this function
+        """
+        The user's private pin label is not one of the fields this function
         reads, so it can never leak into a suggestion message."""
         self.assertEqual(
             build_visit_suggestion_message(location=None, name="TOTALLY-SECRET-PIN-NAME"),
@@ -204,7 +206,8 @@ class GetOrCreatePinAtTests(TestCase):
 
 
 class SuggesterIdentityMaskingTests(TestCase):
-    """A visit suggestion must mask its sender like every other notification does.
+    """
+    A visit suggestion must mask its sender like every other notification does.
 
     The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found by
     `bin/report_defect_history.py`'s incomplete-fix query: the commit that fixed the calendar importer said it
@@ -347,7 +350,8 @@ class CreateVisitSuggestionTests(TestCase):
         self.assertFalse(suggestion.offers_merge)
 
     def test_uses_origin_pins_official_name_when_suggestion_has_no_location(self) -> None:
-        """When the suggestion carries no shared Location, the origin pin's own
+        """
+        When the suggestion carries no shared Location, the origin pin's own
         official_name (from its Location) is a useful fallback for the message."""
         origin_loc = baker.make(Location, latitude="41.5", longitude="-75.5", official_name="Secret Warehouse")
         origin_pin = baker.make(Pin, profile=self.suggester, location=origin_loc)

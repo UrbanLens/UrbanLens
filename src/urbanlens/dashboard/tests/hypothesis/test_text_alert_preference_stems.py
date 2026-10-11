@@ -29,7 +29,8 @@ def _stems_with_a_toggle_pair() -> set[str]:
 
 class AlertableTypeCoverageTests(TestCase):
     def test_every_type_with_a_toggle_pair_is_alertable(self) -> None:
-        """The rule the set's own docstring states, enforced.
+        """
+        The rule the set's own docstring states, enforced.
 
         A settable toggle that no code path can honour is worse than no toggle.
         """

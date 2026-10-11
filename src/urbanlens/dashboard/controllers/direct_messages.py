@@ -1,4 +1,5 @@
-"""Direct messages controllers - inbox page, conversation thread, navbar dropdown.
+"""
+Direct messages controllers - inbox page, conversation thread, navbar dropdown.
 
 Live delivery is a WebSocket to ``DirectMessageConsumer`` (see
 ``dashboard/consumers.py``); the send endpoint here is the no-JS / socket-down
@@ -74,7 +75,8 @@ SIDEBAR_CONVERSATION_MAX = 1000
 
 
 def sidebar_conversations(profile: Profile, requested: str | None = None) -> dict[str, Any]:
-    """The sidebar's conversations, newest first, cut in SQL, and the limit "Show more" asks for next.
+    """
+    The sidebar's conversations, newest first, cut in SQL, and the limit "Show more" asks for next.
 
     Args:
         profile: The viewer.
@@ -102,7 +104,8 @@ MESSAGE_SEARCH_MIN_QUERY_LENGTH = 2
 
 
 def _get_profile(request: HttpRequest) -> Profile:
-    """Return (creating if needed) the requesting user's profile.
+    """
+    Return (creating if needed) the requesting user's profile.
 
     Args:
         request: The authenticated request.
@@ -115,7 +118,8 @@ def _get_profile(request: HttpRequest) -> Profile:
 
 
 def _get_partner(profile: Profile, profile_slug: str) -> Profile:
-    """Resolve a conversation partner by slug, hiding profiles that don't exist.
+    """
+    Resolve a conversation partner by slug, hiding profiles that don't exist.
 
     Args:
         profile: The requesting profile (excluded - no self-conversations).
@@ -135,7 +139,8 @@ def _get_partner(profile: Profile, profile_slug: str) -> Profile:
 
 
 def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
-    """Attach HTMX triggers so the navbar messages label and sidebar conversation list refresh.
+    """
+    Attach HTMX triggers so the navbar messages label and sidebar conversation list refresh.
 
     Used both when opening a thread (marks it read - the sidebar's unread pill and last-message preview
     need to catch up) and on the plain-POST send fallback (the sidebar's last-message preview needs to
@@ -152,7 +157,8 @@ def _trigger_msg_label_refresh(response: HttpResponse) -> HttpResponse:
 
 
 def _visible_key_events(profile: Profile, partner: Profile, messages: list[DirectMessage]) -> list[dict]:
-    """Restrict key-change notices to the time span actually covered by `messages`.
+    """
+    Restrict key-change notices to the time span actually covered by `messages`.
 
     ``key_change_events_for`` returns every key rotation across the whole conversation's history; a
     single paginated page only wants the ones that fall between its own oldest and newest loaded
@@ -175,7 +181,8 @@ def _visible_key_events(profile: Profile, partner: Profile, messages: list[Direc
 
 
 def _thread_context(profile: Profile, partner: Profile) -> dict:
-    """Build the template context for one conversation thread.
+    """
+    Build the template context for one conversation thread.
 
     Only the most recent page of history is loaded here; older messages are fetched on demand (see
     ``ConversationOlderMessagesView``).
@@ -219,7 +226,8 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
 
 
 def _e2ee_enrolled(profile: Profile) -> bool:
-    """Return True when `profile` has a direct-message encryption key bundle.
+    """
+    Return True when `profile` has a direct-message encryption key bundle.
 
     Drives whether the composer encrypts: a message is only encrypted when both participants have
     published a key bundle.
@@ -236,7 +244,8 @@ def _e2ee_enrolled(profile: Profile) -> bool:
 
 
 def _image_permission_status(viewer: Profile, sender: Profile) -> str:
-    """Return `viewer`'s standing decision on images from `sender` ("pending" if none yet).
+    """
+    Return `viewer`'s standing decision on images from `sender` ("pending" if none yet).
 
     Args:
         viewer: The profile who would be viewing the images.
@@ -256,7 +265,8 @@ class MessagesPageView(LoginRequiredMixin, View):
     """GET /messages/ - the full messages page (conversation list, empty thread pane)."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the messages page.
+        """
+        Render the messages page.
 
         Args:
             request: The incoming request.
@@ -282,7 +292,8 @@ class ConversationView(LoginRequiredMixin, View):
     """GET /messages/<profile_slug>/ - one conversation, as a full page or an HTMX pane swap."""
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Render the conversation with ``profile_slug``.
+        """
+        Render the conversation with ``profile_slug``.
 
         HTMX requests get just the thread partial (the page swaps it into the right-hand pane); plain
         navigation gets the whole page with this conversation active.
@@ -316,14 +327,16 @@ class ConversationView(LoginRequiredMixin, View):
 
 
 class ConversationMuteToggleView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/mute/ - toggle notification muting for one conversation.
+    """
+    POST /messages/<profile_slug>/mute/ - toggle notification muting for one conversation.
 
     Only suppresses notifications (in-app + the delayed "new message" email) -
     the conversation, unread counts, and message delivery are unaffected.
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Flip the caller's mute for this conversation and return the refreshed thread.
+        """
+        Flip the caller's mute for this conversation and return the refreshed thread.
 
         ``set_conversation_muted`` names an end state instead, so the external API's PUT/DELETE pair cannot
         be turned into a toggle by a retry - see its docstring.
@@ -348,7 +361,8 @@ class ConversationSendView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/send/ - fallback send when the WebSocket is unavailable."""
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Create a message and return the refreshed thread partial.
+        """
+        Create a message and return the refreshed thread partial.
 
         Args:
             request: The incoming request.
@@ -407,7 +421,8 @@ class ConversationSendView(LoginRequiredMixin, View):
 
 
 class ConversationOlderMessagesView(LoginRequiredMixin, View):
-    """GET /messages/<profile_slug>/older/?before=<id> - one older page of a conversation.
+    """
+    GET /messages/<profile_slug>/older/?before=<id> - one older page of a conversation.
 
     Powers infinite-scroll-up in the thread pane: the oldest bubble currently loaded carries a sentinel
     that HTMX fires once it's scrolled into view (see ``_thread.html`` /
@@ -415,7 +430,8 @@ class ConversationOlderMessagesView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Return the page of messages immediately older than ``before``.
+        """
+        Return the page of messages immediately older than ``before``.
 
         Args:
             request: The incoming request.
@@ -452,7 +468,8 @@ class ConversationOlderMessagesView(LoginRequiredMixin, View):
 
 
 class DirectMessageImageUploadView(LoginRequiredMixin, View):
-    """POST /messages/upload-image/ - upload one photo attachment ahead of sending.
+    """
+    POST /messages/upload-image/ - upload one photo attachment ahead of sending.
 
     Mirrors ``vault_media.VaultMediaUploadView``: creates an unattached ``Image`` (no ``direct_message`` yet) so the
     client can upload as soon as a file is picked.
@@ -462,7 +479,8 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
-        """Create an unattached Image owned by the caller and queue metadata ingestion.
+        """
+        Create an unattached Image owned by the caller and queue metadata ingestion.
 
         Args:
             request: The HTTP request carrying an ``image`` file.
@@ -506,7 +524,8 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
 
 
 class DirectMessageMapPickerView(LoginRequiredMixin, View):
-    """GET /messages/attach-map/picker/ - list the caller's own maps to attach.
+    """
+    GET /messages/attach-map/picker/ - list the caller's own maps to attach.
 
     Despite the name/URL, this is entirely generic (just the caller's own maps, no DM-specific
     filtering) - also reused by the comment/Notes map composer's "Choose Existing" tab (see base.html's
@@ -514,7 +533,8 @@ class DirectMessageMapPickerView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the picker list of the caller's own MarkupMaps.
+        """
+        Render the picker list of the caller's own MarkupMaps.
 
         Args:
             request: The HTTP request, optionally carrying a ``q`` search term.
@@ -533,13 +553,15 @@ class DirectMessageMapPickerView(LoginRequiredMixin, View):
 
 
 class MessageReactionToggleView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/react/<message_id>/ - toggle an emoji reaction.
+    """
+    POST /messages/<profile_slug>/react/<message_id>/ - toggle an emoji reaction.
 
     Args come from the POST body (``emoji``).
     """
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
-        """Toggle the caller's reaction and return the refreshed reaction bar.
+        """
+        Toggle the caller's reaction and return the refreshed reaction bar.
 
         Args:
             request: The incoming request.
@@ -582,7 +604,8 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
 
 class MessageDeleteView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/delete/<message_id>/ - delete or hide one message.
+    """
+    POST /messages/<profile_slug>/delete/<message_id>/ - delete or hide one message.
 
     ``scope=everyone`` (only valid for the message's sender) tombstones it for the recipient - the
     sender always keeps their own copy.
@@ -591,7 +614,8 @@ class MessageDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
-        """Apply the requested delete scope and return the refreshed thread.
+        """
+        Apply the requested delete scope and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -622,7 +646,8 @@ class MessageDeleteView(LoginRequiredMixin, View):
 
 
 class MessageImagePermissionView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/image-permission/ - respond to the image-consent prompt.
+    """
+    POST /messages/<profile_slug>/image-permission/ - respond to the image-consent prompt.
 
     ``decision=allow`` and ``decision=reject`` set a standing decision for every future image from that
     sender.
@@ -631,7 +656,8 @@ class MessageImagePermissionView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Apply the recipient's image-consent decision and return the refreshed thread.
+        """
+        Apply the recipient's image-consent decision and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -663,14 +689,16 @@ class MessageImagePermissionView(LoginRequiredMixin, View):
 
 
 class ConversationReadView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/read/ - mark the partner's messages as read.
+    """
+    POST /messages/<profile_slug>/read/ - mark the partner's messages as read.
 
     Called by the messages page when a live message arrives on the thread the user is already looking
     at, so the unread label doesn't claim a message the user has plainly seen.
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Mark all messages from the partner as read.
+        """
+        Mark all messages from the partner as read.
 
         Args:
             request: The incoming request.
@@ -689,7 +717,8 @@ class ConversationReadView(LoginRequiredMixin, View):
 
 
 class ConversationSearchView(LoginRequiredMixin, View):
-    """GET /messages/<profile_slug>/search/?q=... - search within one conversation.
+    """
+    GET /messages/<profile_slug>/search/?q=... - search within one conversation.
 
     Understands the same natural-language phrasing as global search (dates,
     "photos"/"maps"/"pins" keywords, "from <person>") via
@@ -699,7 +728,8 @@ class ConversationSearchView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Return message hits within this conversation matching ``q``.
+        """
+        Return message hits within this conversation matching ``q``.
 
         Args:
             request: The incoming request.
@@ -720,14 +750,16 @@ class ConversationSearchView(LoginRequiredMixin, View):
 
 
 class MessagesSearchView(LoginRequiredMixin, View):
-    """GET /messages/search/?q=... - search across every conversation.
+    """
+    GET /messages/search/?q=... - search across every conversation.
 
     Companion to :class:`ConversationSearchView`: same query parsing and
     underlying queryset, just unscoped to a single partner.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Return message hits across all of the profile's conversations matching ``q``.
+        """
+        Return message hits across all of the profile's conversations matching ``q``.
 
         Args:
             request: The incoming request.
@@ -749,7 +781,8 @@ class ConversationListView(LoginRequiredMixin, View):
     """GET /messages/list/ - renders the conversation-list partial (HTMX pane refresh)."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the conversation list for the sidebar.
+        """
+        Render the conversation list for the sidebar.
 
         Args:
             request: The incoming request.
@@ -771,7 +804,8 @@ class ConversationListView(LoginRequiredMixin, View):
 
 
 class MessagesDropdownView(LoginRequiredMixin, View):
-    """GET /messages/dropdown/ - renders the navbar messages dropdown partial.
+    """
+    GET /messages/dropdown/ - renders the navbar messages dropdown partial.
 
     The dropdown behaves like a notification tray: it lists only conversations with unread messages.
     Once a thread is read its row disappears from here (the panel re-fetches on every open); the full
@@ -779,7 +813,8 @@ class MessagesDropdownView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the dropdown with the most recently active unread conversations.
+        """
+        Render the dropdown with the most recently active unread conversations.
 
         Args:
             request: The incoming request.
@@ -802,7 +837,8 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
     """GET /messages/unread-count/ - returns the navbar unread label partial."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the unread label.
+        """
+        Render the unread label.
 
         Args:
             request: The incoming request.
@@ -820,7 +856,8 @@ class RecipientSearchView(LoginRequiredMixin, View):
     """GET /messages/recipients/?q=... - search for profiles the user can message."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Return matching, messageable profiles for the new-message picker.
+        """
+        Return matching, messageable profiles for the new-message picker.
 
         Only profiles whose privacy settings permit a message from the requester are returned - the picker
         never offers someone who would reject the send.

@@ -1,4 +1,5 @@
-"""External-API routes for standalone tools and bulk operations.
+"""
+External-API routes for standalone tools and bulk operations.
 
 First, almost everything here is slow enough to need Celery plus a progress indicator and a
 completion toast on the client, so routes should be job-shaped - start a job, poll it, fetch its

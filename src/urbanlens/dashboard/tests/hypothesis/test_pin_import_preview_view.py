@@ -59,7 +59,8 @@ class ParseForPreviewStemTests(TestCase):
         return _read_preview(self, [upload])["lists"]
 
     def test_kmz_wrapping_doc_kml_uses_the_outer_filename(self) -> None:
-        """The exact reported bug: Google Takeout/My Maps KMZ always names its
+        """
+        The exact reported bug: Google Takeout/My Maps KMZ always names its
         single internal file "doc.kml" - the suggested stem must come from
         the .kmz the user actually uploaded, not that generic inner name."""
         lists = self._post("My Saved Places.kmz", _kmz_bytes("doc.kml"))
@@ -76,7 +77,8 @@ class ParseForPreviewStemTests(TestCase):
         self.assertEqual(lists[0]["stem"], "Urbex Sites")
 
     def test_zip_with_a_meaningfully_named_single_file_keeps_its_own_name(self) -> None:
-        """The substitution is scoped to the literal "doc" placeholder - a ZIP
+        """
+        The substitution is scoped to the literal "doc" placeholder - a ZIP
         wrapping one real, deliberately-named file must not be renamed to the
         outer archive's filename instead."""
         lists = self._post("archive.zip", _kmz_bytes("Meaningful Export.kml"))
@@ -84,7 +86,8 @@ class ParseForPreviewStemTests(TestCase):
         self.assertEqual(lists[0]["stem"], "Meaningful Export")
 
     def test_zip_with_multiple_files_keeps_each_own_name(self) -> None:
-        """The special-case only applies to a single-entry archive - multiple
+        """
+        The special-case only applies to a single-entry archive - multiple
         distinctly-named files inside a ZIP are unaffected, "doc" or not."""
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
@@ -95,7 +98,8 @@ class ParseForPreviewStemTests(TestCase):
         self.assertEqual(stems, ["Other Sites", "doc"])
 
     def test_preview_works_with_no_google_api_key_configured(self) -> None:
-        """Regression test: this endpoint used to build a `GoogleMapsGateway()`
+        """
+        Regression test: this endpoint used to build a `GoogleMapsGateway()`
         unconditionally to reach its file-parsing methods, and that gateway
         raised ValueError the instant it was constructed with no API key -
         crashing every import preview (KML/GeoJSON/GPX/shapefile/... included)
@@ -112,7 +116,8 @@ class ParseForPreviewStemTests(TestCase):
 
 
 class PreviewPinCapTests(TestCase):
-    """The preview materialises every pin at once; the import does not.
+    """
+    The preview materialises every pin at once; the import does not.
 
     The confirmed import walks its pins one at a time. The preview that runs
     *first* builds every pin dict and serialises them into a single result, and

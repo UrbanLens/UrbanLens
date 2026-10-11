@@ -75,7 +75,8 @@ class ComposerSearchHistoryScopingTests(TestCase):
 
 
 class SafetyDestinationSearchHistoryScopingTests(TestCase):
-    """The safety check-in destination search history key (_safety_map.html, safety-map.ts) -
+    """
+    The safety check-in destination search history key (_safety_map.html, safety-map.ts) -
     the most sensitive of the three, since it records exactly which places a user
     was about to explore."""
 

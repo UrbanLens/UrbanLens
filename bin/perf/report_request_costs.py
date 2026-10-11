@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Rank views by what a request to them costs, from the app's slow-request log lines.
+"""
+Rank views by what a request to them costs, from the app's slow-request log lines.
 
 Run the app with ``UL_SLOW_REQUEST_MS=1`` so every request is logged, drive it, then feed this its logs. Ranked by
 total CPU, because under concurrency that is what one endpoint takes from every other.
@@ -53,7 +54,8 @@ def percentile(values: list[float], fraction: float) -> float:
 
 
 def parse(lines: list[str]) -> dict[tuple[str, str], ViewCost]:
-    """Group slow-request lines by view and method.
+    """
+    Group slow-request lines by view and method.
 
     Args:
         lines: Log lines; anything that is not a slow-request line is skipped.
@@ -82,7 +84,8 @@ def parse(lines: list[str]) -> dict[tuple[str, str], ViewCost]:
 
 
 def render(costs: dict[tuple[str, str], ViewCost], limit: int) -> str:
-    """The ranking, as Markdown.
+    """
+    The ranking, as Markdown.
 
     Args:
         costs: From `parse`.

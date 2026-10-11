@@ -1,4 +1,5 @@
-"""EmailSendLog - privacy-preserving record of user-triggered outbound emails.
+"""
+EmailSendLog - privacy-preserving record of user-triggered outbound emails.
 Every email a user causes the site to send to a third party (join-the-site invitations, visit invites, ...) is logged here so that per-user send caps can be enforced and duplicate "join the site" emails to the same address can be suppressed.
 """
 
@@ -12,7 +13,8 @@ from urbanlens.dashboard.models import abstract
 
 
 class EmailType(abstract.TextChoices):
-    """What kind of email a user caused the site to send.
+    """
+    What kind of email a user caused the site to send.
 
     Attributes:
         JOIN_INVITE: "Join the site" invitation from the invite-a-friend flow.
@@ -33,7 +35,8 @@ JOIN_EMAIL_TYPES: tuple[str, ...] = (EmailType.JOIN_INVITE, EmailType.VISIT_INVI
 
 
 class EmailSendLog(abstract.DashboardModel):
-    """One user-triggered outbound email to a third-party address.
+    """
+    One user-triggered outbound email to a third-party address.
 
     Attributes:
         sender: The profile whose action caused the email to be sent.

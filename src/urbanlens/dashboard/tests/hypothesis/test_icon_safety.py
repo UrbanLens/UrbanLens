@@ -27,7 +27,8 @@ class CleanIconTests(SimpleTestCase):
             self.assertEqual(clean_icon(emoji), emoji)
 
     def test_every_icon_the_picker_offers_is_storable(self) -> None:
-        """The contract that was missing: what the picker offers, the field accepts.
+        """
+        The contract that was missing: what the picker offers, the field accepts.
 
         ``_is_emoji_token`` is a heuristic about what an emoji looks like, and 29 of the catalogue's own 1,249
         entries do not look like one - the 14 keycaps, whose base code point is ASCII; ``!!`` and ``!?``, which
@@ -44,14 +45,16 @@ class CleanIconTests(SimpleTestCase):
         )
 
     def test_the_catalogue_allowance_is_membership_not_a_looser_rule(self) -> None:
-        """The bare ASCII a keycap is built on must stay refused.
+        """
+        The bare ASCII a keycap is built on must stay refused.
 
         ``#`` and ``*`` are the base code points of two catalogue entries, and ``!!`` is what ``‼️`` reduces to."""
         for value in ("#", "*", "!!", "!?", "The Greek letter pi", "\u03b1\u03b2\u03b3 and some prose"):
             self.assertIsNone(clean_icon(value))
 
     def test_a_catalogue_icon_still_obeys_its_column_width(self) -> None:
-        """``Label.icon`` is 50 wide and ``SavedFilter.icon`` 64; an allowance that
+        """
+        ``Label.icon`` is 50 wide and ``SavedFilter.icon`` 64; an allowance that
         skipped the length check would turn an accepted value into a DataError."""
         self.assertIsNone(clean_icon("0\ufe0f\u20e3", max_length=1))
 
@@ -82,7 +85,8 @@ class CleanIconTests(SimpleTestCase):
 
     @given(st.text())
     def test_output_is_always_storable_and_classifiable(self, value: str) -> None:
-        """Whatever survives must fit the column and be one of the three shapes.
+        """
+        Whatever survives must fit the column and be one of the three shapes.
 
         The renderers branch on shape - Material glyph, `<img>`, or plain text - so a stored value that matches
         neither of the first two is rendered as text."""

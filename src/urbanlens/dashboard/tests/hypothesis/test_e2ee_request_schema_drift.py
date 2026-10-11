@@ -1,4 +1,5 @@
-"""Each E2EE request the published schema documents is the request its view reads (P310).
+"""
+Each E2EE request the published schema documents is the request its view reads (P310).
 
 A native client generates its E2EE calls from the schema. Rewrap and reset refuse a password-backed account without
 ``current_password``, and neither documented it; rewrap's KDF cost and reset's re-wrapped key lists were missing too,

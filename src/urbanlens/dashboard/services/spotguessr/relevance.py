@@ -1,4 +1,5 @@
-"""Recording SpotGuessr's photo-quality signal (``GamePhotoFeedback``).
+"""
+Recording SpotGuessr's photo-quality signal (``GamePhotoFeedback``).
 Photos-mode rounds are the only source of this signal (Named Place/Street View rounds have no ``round.image``)."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ EXPLICIT_KINDS = (GamePhotoFeedbackKind.THUMBS_UP, GamePhotoFeedbackKind.THUMBS_
 
 
 def record_feedback(round_: GameRound, profile: Profile, kind: str) -> GamePhotoFeedback | None:
-    """Record (or change) ``profile``'s explicit reaction to ``round_``'s photo.
+    """
+    Record (or change) ``profile``'s explicit reaction to ``round_``'s photo.
 
     Args:
         round_: The round whose photo is being reacted to.

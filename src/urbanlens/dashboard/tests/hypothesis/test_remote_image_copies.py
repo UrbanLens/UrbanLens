@@ -1,4 +1,5 @@
-"""Third-party images are shown from this site's own copy, made once and kept after the provider drops them (P165).
+"""
+Third-party images are shown from this site's own copy, made once and kept after the provider drops them (P165).
 
 Jess, 2026-09-30: download and keep forever, with a record of where each came from.
 """

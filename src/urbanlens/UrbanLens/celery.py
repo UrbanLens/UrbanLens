@@ -57,7 +57,8 @@ def log_task_retry(request=None, reason=None, einfo=None, **_extra) -> None:
 
 @task_prerun.connect
 def bind_write_source(task_id=None, task=None, **_extra) -> None:
-    """Mark writes inside a Celery task as automatic.
+    """
+    Mark writes inside a Celery task as automatic.
 
     Skipped in eager mode, which runs inline in the caller's context.
     """

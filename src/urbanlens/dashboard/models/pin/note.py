@@ -11,7 +11,8 @@ from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 
 
 class PinNote(abstract.DashboardModel):
-    """A private, timestamped note that only the pin owner can see.
+    """
+    A private, timestamped note that only the pin owner can see.
 
     Distinct from Pin.description (single editable blob). Notes are append-only
     entries - the owner can delete individual notes but not edit them in place.

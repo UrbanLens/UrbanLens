@@ -34,7 +34,8 @@ class SuppressLastNameTests(TestCase):
         self.assertEqual(user.last_name, "")
 
     def test_existing_user_last_name_is_preserved(self) -> None:
-        """A user who deliberately added their last name in settings must not
+        """
+        A user who deliberately added their last name in settings must not
         lose it on every subsequent SSO login."""
         user = baker.make(User, last_name="Kept")
         suppress_last_name_for_new_users(_backend(), user, {}, is_new=False)

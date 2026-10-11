@@ -1,4 +1,5 @@
-"""Trip ↔ Google Calendar event conversion and sync orchestration.
+"""
+Trip ↔ Google Calendar event conversion and sync orchestration.
 Pure mapping helpers (:func:`trip_to_event_body`, :func:`event_to_trip_kwargs`) are kept free of I/O so they can be property-tested; the ``import_*`` / ``export_*`` functions do the API calls and bookkeeping."""
 
 from __future__ import annotations
@@ -61,7 +62,8 @@ CALENDAR_UNAVAILABLE_MESSAGE = "Google Calendar sync is unavailable on this site
 
 
 def _passes(exc: GatewayRequestError) -> bool:
-    """Whether a calendar call failed for a reason that is not the write's own, so the write waits rather than counts.
+    """
+    Whether a calendar call failed for a reason that is not the write's own, so the write waits rather than counts.
 
     Our budget or Google's rate limit, our limiter being unreadable, the service switched off or refused in this
     environment, a token service that could not answer, Google failing or not answering, and a refusal of the site all
@@ -78,7 +80,8 @@ def _passes(exc: GatewayRequestError) -> bool:
 
 
 def _refused_for_itself(exc: GatewayRequestError) -> bool:
-    """Whether Google refused one event's write for that event alone, so the writes after it may still go through.
+    """
+    Whether Google refused one event's write for that event alone, so the writes after it may still go through.
 
     Only Google's own refusal of what was sent (``CalendarEventRefusedError``). Anything else, our limiter or a
     calendar that is gone included, would refuse the next write too, and spend the budget doing it.
@@ -97,7 +100,8 @@ class TooManyEventsError(ValueError):
 
 
 def normalize_event_ids(raw: Sequence[str]) -> list[str]:
-    """The distinct, non-blank event ids a request named, in order.
+    """
+    The distinct, non-blank event ids a request named, in order.
 
     Args:
         raw: Posted ids.
@@ -124,7 +128,8 @@ def _import_window(gateway: GoogleCalendarGateway) -> EventListing:
 
 
 def _events_by_id(gateway: GoogleCalendarGateway, event_ids: Collection[str]) -> dict[str, dict[str, Any]]:
-    """The named events, read from the same listing the dialog offered them from.
+    """
+    The named events, read from the same listing the dialog offered them from.
 
     One paged listing rather than a request per id: the ids came from that listing, and what Google returns
     is still the only event data trusted (the client submits ids, never content).
@@ -153,7 +158,8 @@ def trip_to_event_body(
     owns_event: bool = True,
     activities: Iterable[TripActivity] | None = None,
 ) -> dict[str, Any]:
-    """Convert a trip into a Google Calendar all-day event payload.
+    """
+    Convert a trip into a Google Calendar all-day event payload.
     Trips carry dates (not times), so they map to all-day events.
 
     An update is a PATCH, which keeps every field the body leaves out, so a location this export withholds is sent as
@@ -194,7 +200,8 @@ def trip_to_event_body(
 
 
 def _set_location(body: dict[str, Any], location: str | None, *, owns_event: bool) -> None:
-    """Put an event's ``location`` in *body*: the location, ``""`` to clear it, or nothing to leave the event's own.
+    """
+    Put an event's ``location`` in *body*: the location, ``""`` to clear it, or nothing to leave the event's own.
 
     Args:
         body: The event payload being built.
@@ -211,7 +218,8 @@ def _location_withheld(activity: TripActivity, hidden_activity_ids: Collection[i
 
 
 def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Collection[int] | None = None) -> str | None:
-    """Human-readable location for an activity's calendar event.
+    """
+    Human-readable location for an activity's calendar event.
 
     Args:
         activity: The TripActivity to describe.
@@ -233,7 +241,8 @@ def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Co
 
 
 def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | None = None, activities: Iterable[TripActivity] | None = None) -> str | None:
-    """Human-readable location for the trip-level calendar event.
+    """
+    Human-readable location for the trip-level calendar event.
     Uses the trip's first activity (by schedule, then manual order) that has a shareable location, so the exported all-day event points at where the trip starts.
 
     Args:
@@ -265,7 +274,8 @@ def activity_to_event_body(
     hidden_activity_ids: Collection[int] | None = None,
     owns_event: bool = True,
 ) -> dict[str, Any] | None:
-    """Convert one scheduled trip activity into a timed calendar event payload.
+    """
+    Convert one scheduled trip activity into a timed calendar event payload.
     Activities without a scheduled start cannot be placed on a calendar and yield None.
 
     A location withheld from the exporting viewer is sent as ``""``, so an update clears it (P335), and the title as
@@ -309,7 +319,8 @@ def activity_to_event_body(
 
 
 def _parse_event_date(part: dict[str, Any] | None) -> tuple[datetime.date | None, bool]:
-    """Parse the date from one side of an event's start/end structure.
+    """
+    Parse the date from one side of an event's start/end structure.
 
     Args:
         part: The event's ``start`` or ``end`` dict (``{"date": ...}`` for all-day events, ``{"dateTime": ...}`` for timed ones).
@@ -334,7 +345,8 @@ def _parse_event_date(part: dict[str, Any] | None) -> tuple[datetime.date | None
 
 
 def event_to_trip_kwargs(event: dict[str, Any]) -> dict[str, Any] | None:
-    """Convert a Google Calendar event into ``Trip.objects.create`` kwargs.
+    """
+    Convert a Google Calendar event into ``Trip.objects.create`` kwargs.
     Cancelled events and events without a parsable start are rejected.
 
     Args:
@@ -368,7 +380,8 @@ def event_to_trip_kwargs(event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _parse_event_datetime(part: dict[str, Any] | None) -> datetime.datetime | None:
-    """Parse the timestamp from one side of a *timed* event's start/end structure.
+    """
+    Parse the timestamp from one side of a *timed* event's start/end structure.
 
     Args:
         part: The event's ``start`` or ``end`` dict.
@@ -388,7 +401,8 @@ def _parse_event_datetime(part: dict[str, Any] | None) -> datetime.datetime | No
 
 
 def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list[Profile], list[str]]:
-    """Split an event's attendees into invitable friends and everyone else.
+    """
+    Split an event's attendees into invitable friends and everyone else.
     Non-friends and unknown addresses are returned only as display labels - no account information is revealed beyond what the importer's own calendar already shows.
 
     Args:
@@ -430,7 +444,8 @@ def match_event_attendees(profile: Profile, event: dict[str, Any]) -> tuple[list
 
 
 def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -> list[dict[str, Any]]:
-    """Build the review-page data for the events selected on the import dialog's first page.
+    """
+    Build the review-page data for the events selected on the import dialog's first page.
     Each event is re-fetched so only data Google actually returns is trusted.
 
     Args:
@@ -492,7 +507,8 @@ def build_import_preview(account: GoogleCalendarAccount, event_ids: list[str]) -
 
 
 def _create_activity_from_event(trip: Trip, event: dict[str, Any], profile: Profile) -> TripActivity | None:
-    """Create a trip activity carrying the calendar event's location.
+    """
+    Create a trip activity carrying the calendar event's location.
 
     Args:
         trip: The freshly imported trip.
@@ -517,7 +533,8 @@ def _create_activity_from_event(trip: Trip, event: dict[str, Any], profile: Prof
 
 
 def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], skipped: list[str]) -> int:
-    """Add confirmed friends as trip members and notify them.
+    """
+    Add confirmed friends as trip members and notify them.
     Every id is re-validated server side: only accepted friends of the importer are ever added, regardless of what the client submitted.
 
     Args:
@@ -565,7 +582,8 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
 
 
 def event_originated_from_urbanlens(event: dict[str, Any]) -> bool:
-    """Whether an event was created by an UrbanLens trip export.
+    """
+    Whether an event was created by an UrbanLens trip export.
 
     Args:
         event: Event resource dict.
@@ -578,7 +596,8 @@ def event_originated_from_urbanlens(event: dict[str, Any]) -> bool:
 
 
 def list_importable_events(account: GoogleCalendarAccount) -> tuple[list[dict[str, Any]], bool]:
-    """Fetch upcoming events from the user's calendar, annotated for the import dialog.
+    """
+    Fetch upcoming events from the user's calendar, annotated for the import dialog.
 
     Args:
         account: The user's connected calendar account.
@@ -619,7 +638,8 @@ def import_events_as_trips(
     *,
     report_progress: Callable[[int, int], None] | None = None,
 ) -> tuple[list[Trip], list[str], int]:
-    """Create trips from the given calendar events on the user's calendar.
+    """
+    Create trips from the given calendar events on the user's calendar.
     Events are read back from Google's own listing, so only data Google actually returns is trusted (the client submits ids, never event content).
 
     Args:
@@ -699,7 +719,8 @@ def import_events_as_trips(
 
 
 def import_summary(created: int, skipped: Sequence[str], invited: int) -> tuple[str, str]:
-    """The toast level and message reporting an import.
+    """
+    The toast level and message reporting an import.
 
     Args:
         created: How many trips were created.
@@ -723,7 +744,8 @@ def import_summary(created: int, skipped: Sequence[str], invited: int) -> tuple[
 
 
 def run_calendar_import(profile_id: int, selections: Sequence[dict[str, Any]], *, report_progress: Callable[[int, int], None] | None = None) -> dict[str, Any]:
-    """Import calendar events as trips for one profile, reporting the outcome rather than raising it.
+    """
+    Import calendar events as trips for one profile, reporting the outcome rather than raising it.
 
     The body of the background import: the request that started it has already answered, so every
     outcome - including a dead Google grant - becomes a result the polling dialog can show.
@@ -768,7 +790,8 @@ def _create_trip_from_event(
     create_activity: bool,
     auto_sync: bool,
 ) -> Trip:
-    """Create the trip, its membership, optional activity and calendar link(s).
+    """
+    Create the trip, its membership, optional activity and calendar link(s).
     Split out of :func:`import_events_to_trips` so the whole unit can run in one transaction and be rolled back as a whole when the event turns out to have been imported concurrently.
 
     Args:
@@ -831,7 +854,8 @@ def _trip_page_url(trip: Trip) -> str:
 
 
 def _hidden_activity_ids_for(trip: Trip, profile: Profile) -> set[int]:
-    """Ids of *trip*'s activities whose location *profile* is not permitted to see.
+    """
+    Ids of *trip*'s activities whose location *profile* is not permitted to see.
     The same gate ``services.trips.trip_visibility`` applies on the activities panel, the trip map, and AI suggestions, run here so an export cannot become the one surface that ignores it.
 
     Args:
@@ -846,7 +870,8 @@ def _hidden_activity_ids_for(trip: Trip, profile: Profile) -> set[int]:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CalendarExportResult:
-    """Where one export attempt left a trip on one calendar.
+    """
+    Where one export attempt left a trip on one calendar.
 
     Attributes:
         trip_link: The trip-level link.
@@ -873,7 +898,8 @@ class CalendarExportResult:
 
 @dataclass(slots=True)
 class WithheldEventsReport:
-    """What :meth:`_TripCalendarExport.clear_withheld` found on one calendar.
+    """
+    What :meth:`_TripCalendarExport.clear_withheld` found on one calendar.
 
     Attributes:
         stale: Events that may hold a location or title now withheld from the calendar's owner, which UrbanLens made
@@ -895,7 +921,8 @@ class WithheldEventsReport:
 
 @dataclass(frozen=True, slots=True)
 class _Plan:
-    """What one calendar's events of a trip should now hold.
+    """
+    What one calendar's events of a trip should now hold.
 
     Attributes:
         trip_link: The trip-level link, if the trip is on the calendar.
@@ -918,7 +945,8 @@ class _TripUnlinkedError(Exception):
 
 
 class _TripCalendarExport:
-    """One attempt at mirroring a trip onto one calendar.
+    """
+    One attempt at mirroring a trip onto one calendar.
 
     An event whose link's fingerprint matches its new body is skipped, so an attempt the budget cut short is resumed,
     not restarted, by the next. A link's fingerprint is cleared before its event is written and set again once Google
@@ -940,7 +968,8 @@ class _TripCalendarExport:
         self._trip_link_pk: int | None = None
 
     def run(self) -> CalendarExportResult:
-        """Write whatever on the calendar does not yet match the trip: the trip's event, then each stop's.
+        """
+        Write whatever on the calendar does not yet match the trip: the trip's event, then each stop's.
 
         A stop whose location or title is withheld from the calendar's owner is written before the others, so a budget
         that runs out partway leaves the stale events that matter least. An event Google refuses for itself is
@@ -1031,7 +1060,8 @@ class _TripCalendarExport:
 
     @staticmethod
     def _write_order(plan: _Plan) -> list[int]:
-        """Indexes of *plan*'s entries in the order to write them: the trip's event, then the stops withheld from the
+        """
+        Indexes of *plan*'s entries in the order to write them: the trip's event, then the stops withheld from the
         calendar's owner, then the rest, each group in TripActivity order."""
 
         def not_withheld(index: int) -> bool:
@@ -1041,7 +1071,8 @@ class _TripCalendarExport:
         return [0, *sorted(range(1, len(plan.entries)), key=not_withheld)]
 
     def _plan(self, *, revealed: bool = False) -> _Plan:
-        """The bodies the trip's events should now hold on this calendar, with the links that name them.
+        """
+        The bodies the trip's events should now hold on this calendar, with the links that name them.
 
         Args:
             revealed: Build the bodies as if the calendar's owner could see every stop, as when it was written before
@@ -1070,7 +1101,8 @@ class _TripCalendarExport:
         return _Plan(trip_link=trip_link, activity_links=activity_links, entries=entries, hidden=hidden_activity_ids, activities={activity.pk: activity for activity in activities})
 
     def clear_withheld(self, report: WithheldEventsReport, *, apply: bool) -> None:
-        """Rewrite the events that may hold a location or title this calendar's owner may no longer see.
+        """
+        Rewrite the events that may hold a location or title this calendar's owner may no longer see.
 
         An event is stale when the body it would now get differs from the one it would get were every stop visible to
         the owner, and its link does not vouch for the new one. That covers the trip's own event, each scheduled
@@ -1144,7 +1176,8 @@ class _TripCalendarExport:
                 break
 
     def _clear_withheld_event(self, body: dict[str, Any], link: TripCalendarLink, activity: TripActivity | None, written_by_urbanlens: dict[str, Any] | None, report: WithheldEventsReport) -> bool:
-        """Write one stale event found by :meth:`clear_withheld`.
+        """
+        Write one stale event found by :meth:`clear_withheld`.
 
         Args:
             body: What to send: the event's whole new body, or for an event an import linked only its withheld fields.
@@ -1202,7 +1235,8 @@ class _TripCalendarExport:
             link.event_fingerprint = fingerprint
 
     def _unscheduled_body(self, activity: TripActivity, hidden: set[int]) -> dict[str, Any]:
-        """What an unscheduled stop's event gets from :meth:`clear_withheld`: its location and title as the owner may
+        """
+        What an unscheduled stop's event gets from :meth:`clear_withheld`: its location and title as the owner may
         see them, and nothing else, since an unscheduled stop has no times to write."""
         location = _activity_location_string(activity, hidden_activity_ids=hidden)
         return {
@@ -1211,7 +1245,8 @@ class _TripCalendarExport:
         }
 
     def _owns_event(self, link: TripCalendarLink | None) -> bool:
-        """Whether UrbanLens made, or is about to make, the event *link* names, rather than linking one the user had.
+        """
+        Whether UrbanLens made, or is about to make, the event *link* names, rather than linking one the user had.
 
         See :func:`made_by_urbanlens`; a link with no event yet is about to get one UrbanLens makes.
         """
@@ -1224,7 +1259,8 @@ class _TripCalendarExport:
         return link is not None and bool(link.google_event_id) and link.event_fingerprint == _event_fingerprint(body, self.account)
 
     def _owe_push(self, trip_link: TripCalendarLink) -> None:
-        """Leave the rest to ``tasks.requeue_pending_calendar_pushes``: mark the trip as owing a push, keeping an older mark.
+        """
+        Leave the rest to ``tasks.requeue_pending_calendar_pushes``: mark the trip as owing a push, keeping an older mark.
 
         An attempt that wrote something resets the attempt count, so the cap counts only attempts that made no progress.
         """
@@ -1234,7 +1270,8 @@ class _TripCalendarExport:
         TripCalendarLink.objects.filter(pk=trip_link.pk).update(**updates)
 
     def _sync_event(self, body: dict[str, Any], link: TripCalendarLink | None, *, activity: TripActivity | None) -> TripCalendarLink | None:
-        """Bring one event in line with *body*, unless its link shows it already is.
+        """
+        Bring one event in line with *body*, unless its link shows it already is.
 
         Args:
             body: Event resource payload.
@@ -1265,7 +1302,8 @@ class _TripCalendarExport:
         return self._record_link(link, event_id=event["id"], fingerprint=fingerprint, activity=activity)
 
     def _claim(self, link: TripCalendarLink | None) -> bool:
-        """Clear *link*'s fingerprint before its event is written, and make sure the trip is still on this calendar.
+        """
+        Clear *link*'s fingerprint before its event is written, and make sure the trip is still on this calendar.
 
         Returns:
             False when *link* is gone but the trip's link is not: its activity was deleted during the export.
@@ -1287,7 +1325,8 @@ class _TripCalendarExport:
         return link is None
 
     def _create_event(self, body: dict[str, Any], *, activity: TripActivity | None) -> dict[str, Any]:
-        """Create the event under its deterministic id, taking over the event already holding that id.
+        """
+        Create the event under its deterministic id, taking over the event already holding that id.
 
         The id is taken when an earlier attempt's create reached Google but its answer did not, or when the event was
         deleted (Google keeps a deleted event's id). Either way it is this trip's event for this profile, so it is
@@ -1306,7 +1345,8 @@ class _TripCalendarExport:
         return event
 
     def _record_link(self, link: TripCalendarLink | None, *, event_id: str, fingerprint: str, activity: TripActivity | None) -> TripCalendarLink:
-        """Persist what was just written, onto the existing link or a new one.
+        """
+        Persist what was just written, onto the existing link or a new one.
 
         A concurrent export of the same trip can create the link between this attempt's read and its insert; the
         insert then loses to the unique constraint and the winner's row is updated instead.
@@ -1336,7 +1376,8 @@ class _TripCalendarExport:
 
 
 def trip_event_id(trip: Trip, profile: Profile, activity: TripActivity | None) -> str:
-    """The id a trip's (or one of its activities') event is created under on one profile's calendar.
+    """
+    The id a trip's (or one of its activities') event is created under on one profile's calendar.
 
     Derived from this site's URL, the trip's uuid, the profile and the activity, so every retry of the same create
     sends the same id, two profiles sharing one Google calendar get distinct events, and a copy of this database
@@ -1358,7 +1399,8 @@ def _derived_event_id(trip_uuid: object, profile_id: int, activity_id: int | Non
 
 
 def made_by_urbanlens(link: TripCalendarLink, *, trip_uuid: object) -> bool:
-    """Whether the event *link* names is one UrbanLens made, rather than one of the user's own an import linked.
+    """
+    Whether the event *link* names is one UrbanLens made, rather than one of the user's own an import linked.
 
     An import links the user's own event, and a location that event came with is not one UrbanLens can tell from one
     it wrote. An event created under :func:`trip_event_id` is UrbanLens's whichever way the link was made.
@@ -1376,7 +1418,8 @@ def made_by_urbanlens(link: TripCalendarLink, *, trip_uuid: object) -> bool:
 
 
 def clear_withheld_events(account: GoogleCalendarAccount, trip: Trip, report: WithheldEventsReport, *, apply: bool) -> None:
-    """Rewrite *trip*'s events on *account*'s calendar that may hold a location or title now withheld from its owner.
+    """
+    Rewrite *trip*'s events on *account*'s calendar that may hold a location or title now withheld from its owner.
 
     For a calendar nothing pushes to: an export without auto-sync keeps what it was given until its owner exports
     again. Used by ``manage.py clear_withheld_calendar_locations``.
@@ -1397,7 +1440,8 @@ def clear_withheld_events(account: GoogleCalendarAccount, trip: Trip, report: Wi
 
 
 def export_progress_message(result: CalendarExportResult) -> str:
-    """How far an unfinished export got, for the person who started it.
+    """
+    How far an unfinished export got, for the person who started it.
 
     Args:
         result: An export that did not complete.
@@ -1414,7 +1458,8 @@ def export_progress_message(result: CalendarExportResult) -> str:
 
 
 def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip) -> CalendarExportResult:
-    """Mirror a trip (all-day event) and its scheduled activities (timed events) to the user's calendar.
+    """
+    Mirror a trip (all-day event) and its scheduled activities (timed events) to the user's calendar.
 
     Writes only what does not already match. When the calendar budget runs out partway, the result is incomplete
     and the trip-level link owes a push, which ``tasks.requeue_pending_calendar_pushes`` delivers.
@@ -1435,7 +1480,8 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip) -> Calen
 
 
 def trip_calendar_status(trip: Trip, profile: Profile) -> dict[str, Any]:
-    """Describe one profile's calendar mirroring of one trip.
+    """
+    Describe one profile's calendar mirroring of one trip.
     It is a service rather than a view helper because three surfaces answer the same question - the trip detail bundle, the auto-sync toggle, and the export/unexport pair - and a second copy would be the one that forgets a field.
 
     Args:
@@ -1457,7 +1503,8 @@ def trip_calendar_status(trip: Trip, profile: Profile) -> dict[str, Any]:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CalendarRemoval:
-    """What taking a trip off one calendar did.
+    """
+    What taking a trip off one calendar did.
 
     Attributes:
         unlinked: Links dropped; zero when the trip was not on the calendar.
@@ -1471,7 +1518,8 @@ class CalendarRemoval:
 
 
 def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> CalendarRemoval:
-    """Take a trip off this user's calendar: delete the events UrbanLens made, and unlink the rest.
+    """
+    Take a trip off this user's calendar: delete the events UrbanLens made, and unlink the rest.
 
     An event an import linked is the user's own, so it stays on their calendar; only its link goes. See
     UrbanLens#330 ("removing an imported trip deletes the user's own event").
@@ -1502,7 +1550,8 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> Cal
 
 
 def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
-    """Stop syncing a trip to one profile's calendar when they leave or are removed.
+    """
+    Stop syncing a trip to one profile's calendar when they leave or are removed.
 
     Deletes the events UrbanLens made; an event an import linked from the member's own calendar stays theirs. A delete
     that cannot be made now is queued (:class:`~urbanlens.dashboard.models.calendar_sync.model.CalendarEventDeletion`).
@@ -1529,7 +1578,8 @@ def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
 
 
 def queue_calendar_event_deletion(link: TripCalendarLink, *, trip_uuid: object) -> None:
-    """Owe a delete of the event *link* names, and queue its delivery once the deletion commits.
+    """
+    Owe a delete of the event *link* names, and queue its delivery once the deletion commits.
 
     Only an event UrbanLens made (:func:`made_by_urbanlens`) is ever queued: an event an import linked is the user's
     own, and is left on their calendar whatever the caller asks.
@@ -1555,7 +1605,8 @@ def queue_calendar_event_deletion(link: TripCalendarLink, *, trip_uuid: object) 
 
 
 def delete_queued_calendar_events(profile_id: int) -> int:
-    """Delete from one profile's calendar the events owed a delete, through the calendar budget.
+    """
+    Delete from one profile's calendar the events owed a delete, through the calendar budget.
 
     An event Google no longer has counts as deleted. A failure that :func:`_passes` (the budget, Google's rate limit, a
     busy token service, Google failing or not answering, a refusal of the site) stops the run and leaves the rest for
@@ -1597,7 +1648,8 @@ def delete_queued_calendar_events(profile_id: int) -> int:
 
 
 def push_auto_synced_trip_changes(trip: Trip) -> int:
-    """Push a trip's current state to every calendar it is set to auto-sync with, or that an export left unfinished.
+    """
+    Push a trip's current state to every calendar it is set to auto-sync with, or that an export left unfinished.
     Only trip-level links are pushed, and only one way (UrbanLens to Google): edits made on the Google Calendar side
     are never pulled back in. A link without ``auto_sync`` is pushed only while it owes a push, which an export the
     calendar budget cut short leaves behind.
@@ -1644,7 +1696,8 @@ def push_auto_synced_trip_changes(trip: Trip) -> int:
 
 
 def _count_push_attempt(link: TripCalendarLink, *, made_progress: bool, counts: bool) -> None:
-    """Record a push that left the request owed: one that wrote resets the count, and one that wrote nothing adds to it
+    """
+    Record a push that left the request owed: one that wrote resets the count, and one that wrote nothing adds to it
     only when it *counts*, failing for a reason of its own rather than one that :func:`_passes`."""
     if made_progress:
         TripCalendarLink.objects.filter(pk=link.pk).update(push_attempts=0)

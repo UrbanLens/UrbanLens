@@ -1,4 +1,5 @@
-"""A wiki made before its location's boundary arrived becomes the property's page once the boundary does.
+"""
+A wiki made before its location's boundary arrived becomes the property's page once the boundary does.
 
 The pin's save creates the wiki at once; the parcel comes later from the provider chain. The wiki stayed placeless,
 so a second pin elsewhere on the parcel got a wiki of its own and the campus's building wikis were never given out.

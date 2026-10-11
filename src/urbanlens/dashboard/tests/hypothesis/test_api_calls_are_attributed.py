@@ -1,4 +1,5 @@
-"""Every external API call records whose behalf it was made on.
+"""
+Every external API call records whose behalf it was made on.
 
 A service budget is spent by people, but ``ApiCallLog`` recorded only *that* a
 call happened. When a shared quota ran out - the tile proxy's 500/day, say -

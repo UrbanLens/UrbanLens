@@ -38,7 +38,8 @@ class LabelWritesTellTheClientTests(TestCase):
         self.client.force_login(self.user)
 
     def _updated(self) -> object:
-        """The pin's stored `updated`, read fresh.
+        """
+        The pin's stored `updated`, read fresh.
 
         Returns:
             The timestamp the client's poll is derived from.
@@ -46,7 +47,8 @@ class LabelWritesTellTheClientTests(TestCase):
         return Pin.objects.filter(pk=self.pin.pk).values_list("updated", flat=True).first()
 
     def _api_key(self) -> str:
-        """A key scoped to write labels.
+        """
+        A key scoped to write labels.
 
         Returns:
             The raw key, for an `Authorization: Bearer` header.
@@ -58,7 +60,8 @@ class LabelWritesTellTheClientTests(TestCase):
         return raw_key
 
     def _reversed_ids(self) -> list[int]:
-        """Label ids in an order that is genuinely different from the stored one.
+        """
+        Label ids in an order that is genuinely different from the stored one.
 
         Returns:
             The label primary keys, reversed.
@@ -225,7 +228,8 @@ class TouchingOnlyReachesTheRightPinsTests(TestCase):
 
 
 class DeletingALabelTellsTheClientTests(TestCase):
-    """A deleted label leaves a chip on the map until something says otherwise.
+    """
+    A deleted label leaves a chip on the map until something says otherwise.
 
     Deleting a `Label` cascades its through rows in SQL, which fires no `m2m_changed` and writes no `auto_now`
     column - so the pins that carried it look untouched, the fingerprint the client polls does not move, and the
@@ -244,7 +248,8 @@ class DeletingALabelTellsTheClientTests(TestCase):
         self.carrying.labels.add(self.label)
 
     def _updated(self, pin: Pin) -> object:
-        """The pin's stored `updated`, read fresh.
+        """
+        The pin's stored `updated`, read fresh.
 
         Args:
             pin: Whose stamp to read.
@@ -300,7 +305,8 @@ class DeletingALabelTellsTheClientTests(TestCase):
 
 
 class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
-    """`label.pins.add(pin)` is the same write as `pin.labels.add(label)`.
+    """
+    `label.pins.add(pin)` is the same write as `pin.labels.add(label)`.
 
     In the reverse direction `m2m_changed` hands the receiver the *Label* as `instance` and the *pin* ids in
     `pk_set`."""
@@ -312,7 +318,8 @@ class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
         self.profile = self.user.profile
 
     def _updated(self, pin: Pin) -> object:
-        """The pin's stored `updated`, read fresh.
+        """
+        The pin's stored `updated`, read fresh.
 
         Args:
             pin: Whose stamp to read.
@@ -331,7 +338,8 @@ class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
         self.assertGreater(self._updated(pin), before, "the pin gained a chip the client will never fetch")
 
     def test_it_does_not_touch_the_pin_that_shares_the_labels_number(self) -> None:
-        """The sharp edge: reading `instance.pk` as a pin id in this direction.
+        """
+        The sharp edge: reading `instance.pk` as a pin id in this direction.
 
         A pin is created at exactly the label's primary key, so a receiver making
         that mistake writes to it and this sees it.
@@ -365,7 +373,8 @@ class WritingTheLabelSideOfTheRelationTellsTheClientTests(TestCase):
 
 
 class TheOtherWritesThatChangeAPinsAppearanceTests(TestCase):
-    """The same obligation, for the triggers that are not label edits.
+    """
+    The same obligation, for the triggers that are not label edits.
 
     A pin's payload carries its labels and its rating."""
 
@@ -377,7 +386,8 @@ class TheOtherWritesThatChangeAPinsAppearanceTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=1.0, longitude=1.0))
 
     def _updated(self) -> object:
-        """The pin's stored `updated`, read fresh.
+        """
+        The pin's stored `updated`, read fresh.
 
         Returns:
             The timestamp the client's poll is derived from.

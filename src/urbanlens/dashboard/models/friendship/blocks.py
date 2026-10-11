@@ -1,4 +1,5 @@
-"""What a block hides between two people who share a group chat or a trip.
+"""
+What a block hides between two people who share a group chat or a trip.
 
 A block removes neither person from a space they share. Each stops seeing the other there: the other's
 presence at once, and whatever the other posts from the moment the block was placed. What either posted
@@ -25,7 +26,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class SharedSpaceBlocks:
-    """One profile's blocks, resolved in one query, for hiding each blocked pair from each other in a shared space.
+    """
+    One profile's blocks, resolved in one query, for hiding each blocked pair from each other in a shared space.
 
     Symmetric: the blocker and the blocked are hidden from each other alike, so the same instance answers
     "may this viewer see that author's content" and "may this sender's content reach that recipient".
@@ -40,7 +42,8 @@ class SharedSpaceBlocks:
 
     @classmethod
     def for_viewer(cls, viewer: Profile | int, *, among: Iterable[int] | None = None) -> SharedSpaceBlocks:
-        """Resolve one profile's blocks.
+        """
+        Resolve one profile's blocks.
 
         Args:
             viewer: The profile, or its pk.
@@ -64,7 +67,8 @@ class SharedSpaceBlocks:
 
     @classmethod
     def for_profiles(cls, profile_ids: Iterable[int]) -> dict[int, SharedSpaceBlocks]:
-        """Resolve the blocks among a set of profiles - a group's or a trip's members - in one query.
+        """
+        Resolve the blocks among a set of profiles - a group's or a trip's members - in one query.
 
         Args:
             profile_ids: The profiles sharing the space.
@@ -86,7 +90,8 @@ class SharedSpaceBlocks:
         return frozenset(self.since)
 
     def hides_profile(self, profile_id: int | None) -> bool:
-        """Whether the viewer and *profile_id* are hidden from each other.
+        """
+        Whether the viewer and *profile_id* are hidden from each other.
 
         Args:
             profile_id: The other profile's pk.
@@ -97,7 +102,8 @@ class SharedSpaceBlocks:
         return profile_id in self.since
 
     def hides_content(self, author_id: int | None, created: datetime) -> bool:
-        """Whether something *author_id* posted at *created* is hidden from the viewer, or the viewer's from them.
+        """
+        Whether something *author_id* posted at *created* is hidden from the viewer, or the viewer's from them.
 
         Args:
             author_id: Who posted it - the other party, whichever direction the content travels.
@@ -110,7 +116,8 @@ class SharedSpaceBlocks:
         return started is not None and created >= started
 
     def hidden_from_at(self, created: datetime) -> frozenset[int]:
-        """Who something the viewer posts at *created* is hidden from.
+        """
+        Who something the viewer posts at *created* is hidden from.
 
         Args:
             created: When it was posted.
@@ -121,7 +128,8 @@ class SharedSpaceBlocks:
         return frozenset(pk for pk, started in self.since.items() if created >= started)
 
     def hidden_content_q(self, *, author_field: str, created_field: str = "created") -> Q | None:
-        """:meth:`hides_content` as a ``Q`` over rows naming their author.
+        """
+        :meth:`hides_content` as a ``Q`` over rows naming their author.
 
         Args:
             author_field: The row's author column, e.g. ``"sender_id"``.
@@ -137,7 +145,8 @@ class SharedSpaceBlocks:
         return hidden
 
     def exclude_hidden[QS: QuerySet[Any]](self, queryset: QS, *, author_field: str, created_field: str = "created") -> QS:
-        """Drop the rows :meth:`hides_content` would hide.
+        """
+        Drop the rows :meth:`hides_content` would hide.
 
         Args:
             queryset: Rows naming their author and creation time.
@@ -151,7 +160,8 @@ class SharedSpaceBlocks:
         return queryset if hidden is None else queryset.exclude(hidden)
 
     def exclude_hidden_profiles[QS: QuerySet[Any]](self, queryset: QS, *, profile_field: str) -> QS:
-        """Drop the rows naming someone the viewer is hidden from - memberships in a roster, say.
+        """
+        Drop the rows naming someone the viewer is hidden from - memberships in a roster, say.
 
         Args:
             queryset: Rows naming a profile.
@@ -164,7 +174,8 @@ class SharedSpaceBlocks:
 
 
 def _blocked_rows(pair: Q) -> list[tuple[int, int, datetime]]:
-    """The ``(from, to, blocked_at)`` of every current block matching *pair*.
+    """
+    The ``(from, to, blocked_at)`` of every current block matching *pair*.
 
     Args:
         pair: Which rows, by their two profile columns.

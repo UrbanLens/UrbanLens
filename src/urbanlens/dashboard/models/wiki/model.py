@@ -1,4 +1,5 @@
-"""Wiki model - the community-editable page for a shared place.
+"""
+Wiki model - the community-editable page for a shared place.
 The Wiki holds everything a community collectively knows and edits about a place: its canonical name, description, security indicators, dates, labels, aliases, comments, photos, child wikis (community detail markers, via the self-referential ``parent_wiki``) and edit history.
 Address and coordinate data never live here - they are read-only proxies that delegate to ``self.location``.
 """
@@ -182,7 +183,8 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     @classmethod
     def from_db(cls, db: str | None, field_names: Collection[str], values: Collection[Any], *, fetch_mode: FetchMode | None = None) -> Wiki:  # noqa: ARG003
-        """Track the persisted name so ``save()`` can detect renames.
+        """
+        Track the persisted name so ``save()`` can detect renames.
 
         Args:
             db: Database alias the row was loaded from.
@@ -199,7 +201,8 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         return instance
 
     def save(self, *args, **kwargs) -> None:
-        """Save the wiki, adopting its location's place and syncing its aliases.
+        """
+        Save the wiki, adopting its location's place and syncing its aliases.
         A wiki describes whatever its location stands on, so an unset ``place`` adopts the location's on first save.
         """
         from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
@@ -234,7 +237,8 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
     # ------------------------------------------------------------------
 
     def would_create_cycle(self, new_parent: Wiki | None) -> bool:
-        """Return True if ``new_parent`` becoming this wiki's parent would close a loop.
+        """
+        Return True if ``new_parent`` becoming this wiki's parent would close a loop.
 
         Args:
             new_parent: The wiki that would be assigned to ``self.parent_wiki``,
@@ -255,7 +259,8 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
 
     @property
     def effective_latitude(self) -> float:
-        """Wiki marker latitude, as a float - mirrors ``Pin.effective_latitude``.
+        """
+        Wiki marker latitude, as a float - mirrors ``Pin.effective_latitude``.
         Child markers (``services.pins.pin_restructure.match_marker`` and friends) are typed as ``Pin | Wiki`` and read this name off whichever one they were handed; keeping the same name and float type here is what lets that code stay marker-neutral.
         """
         return float(self.location.latitude)
@@ -266,7 +271,8 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         return float(self.location.longitude)
 
     def descendants(self):
-        """Return every wiki nested below this one (children, grandchildren, ...).
+        """
+        Return every wiki nested below this one (children, grandchildren, ...).
 
         Returns:
             A ``WikiQuerySet`` over the full subtree, excluding this wiki itself.
@@ -348,7 +354,8 @@ class Wiki(abstract.VersionedModel, abstract.PublicDashboardModel, abstract.Secu
         return parent_slug_prefix([parent_name]) if parent_name else ""
 
     def sync_slug_with_provider_name(self) -> bool:
-        """Re-mint the slug when its Location's provider name, under its parent's prefix, could no longer give it.
+        """
+        Re-mint the slug when its Location's provider name, under its parent's prefix, could no longer give it.
 
         A wiki with no provider name behind it takes its uuid.
 

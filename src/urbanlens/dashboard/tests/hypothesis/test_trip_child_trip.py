@@ -122,7 +122,8 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         self.assertFalse(any("Secret Child Stop" in label for label in labels))
 
     def test_child_activity_hidden_only_by_adders_privacy_setting_is_also_excluded(self) -> None:
-        """Ghost markers must respect trip_pin_location_visibility, not just location_hidden.
+        """
+        Ghost markers must respect trip_pin_location_visibility, not just location_hidden.
 
         Regression for build_trip_map_points checking only location_hidden for child-trip activities - the same
         viewer-aware gate the parent trip's own activities already get (via viewer_hidden_activity_ids) was
@@ -149,7 +150,8 @@ class ChildTripGhostMarkerVisibilityTests(TestCase):
         self.assertFalse(any("Privacy-Restricted Stop" in label for label in labels))
 
     def test_child_trip_activities_are_excluded_when_viewer_is_not_a_child_trip_member(self) -> None:
-        """A parent-trip viewer with no membership in the linked child trip must not see any of its ghost markers, regardless of the adder's own trip_pin_location_visibility setting.
+        """
+        A parent-trip viewer with no membership in the linked child trip must not see any of its ghost markers, regardless of the adder's own trip_pin_location_visibility setting.
 
         Regression: build_trip_map_points only ever checked viewer_hidden_activity_ids (the *adder's* privacy
         setting) for child activities - never whether this viewer belongs to the child trip at all."""

@@ -229,7 +229,8 @@ class StubbedSourceDetailTests(_PanelsApiTestCase):
 
 
 class AnAnsweredEmptyPanelTests(RedataConfiguredMixin, _PanelsApiTestCase):
-    """A panel whose fetch answered "nothing here" is answered, not pending.
+    """
+    A panel whose fetch answered "nothing here" is answered, not pending.
 
     ``redata_historic_registers`` judges its payload: a place no register lists fetches ``{"resources": []}``, which
     the web page treats as answered. The API read it as not ready, answered 202 to every poll and fetched from REData

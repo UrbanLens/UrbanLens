@@ -190,7 +190,8 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         return group
 
     def _write_routes(self) -> list[tuple[str, str]]:
-        """``(route name, url)`` for every route this sweep can build a URL for.
+        """
+        ``(route name, url)`` for every route this sweep can build a URL for.
 
         The zero-parameter ones are the larger group and were the easier to overlook precisely because they need
         no fixture - there is nothing to build, so nothing prompts you to build it."""
@@ -222,7 +223,8 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         return value if isinstance(value, list) else [value]
 
     def _crashing_routes(self, *, json_body: str | None = None, form: dict[str, str] | None = None) -> dict[str, str]:
-        """Route name → how it crashed, for every swept write route that did.
+        """
+        Route name → how it crashed, for every swept write route that did.
 
         Args:
             json_body: Sent raw as ``application/json`` to every POST, in place of the empty form.
@@ -274,7 +276,8 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         )
 
     def test_no_route_answers_a_hostile_parameter_value_with_a_server_error(self) -> None:
-        """Every parameter any view reads, all set to one hostile value at a time: a bare ``float()``, ``int()`` or a
+        """
+        Every parameter any view reads, all set to one hostile value at a time: a bare ``float()``, ``int()`` or a
         NUL written to Postgres is a 500."""
         names = _parameter_names()
         unexpected: dict[str, str] = {}
@@ -289,7 +292,8 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         )
 
     def test_no_route_answers_a_hostile_json_value_with_a_server_error(self) -> None:
-        """Every parameter any view reads, in a JSON object body: each hostile string, then each value ``json.loads``
+        """
+        Every parameter any view reads, in a JSON object body: each hostile string, then each value ``json.loads``
         hands a view that expected a string or a number."""
         names = _parameter_names()
         bodies = [json.dumps(dict.fromkeys(names, value)) for value in _HOSTILE_VALUES]
@@ -315,7 +319,8 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         self.assertTrue({"latitude", "longitude", "profile_id", "member_slugs"} <= set(names))
 
     def test_the_known_crash_is_still_crashing(self) -> None:
-        """Stops an exemption outliving the bug it describes.
+        """
+        Stops an exemption outliving the bug it describes.
 
         With ``_KNOWN_CRASHES`` empty this asserts the absence of excuses, which is the state to defend: every
         write route is swept for real."""

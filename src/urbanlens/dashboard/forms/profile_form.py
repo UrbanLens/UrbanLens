@@ -48,7 +48,8 @@ _PREFERENCE_OTHER_FIELDS = [f"{field}_other" for field in _PREFERENCE_SELECT_FIE
 
 
 class ProfileForm(forms.ModelForm):
-    """Bio, location, dates, and interaction preferences - social links are managed separately.
+    """
+    Bio, location, dates, and interaction preferences - social links are managed separately.
 
     Every field here is public presentation: what other users see on this profile's page, not a
     technical setting - see the module docstring on ``external_api.serializers.ProfileUpdateSerializer``
@@ -105,7 +106,8 @@ class DiscordHandleForm(forms.Form):
     )
 
     def clean_discord(self) -> str:
-        """Validate the Discord username against the allowed character set.
+        """
+        Validate the Discord username against the allowed character set.
 
         Returns:
             The stripped handle, or an empty string when blank.

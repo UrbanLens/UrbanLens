@@ -28,7 +28,8 @@ def _make_photo_round(location: Location, *, target_is_point: bool, image: Image
 
 class PhotoCoordinateGuessModelTests(TestCase):
     def test_the_model_has_no_way_to_identify_who_guessed(self) -> None:
-        """Structural guarantee, not just a code-review convention: there is
+        """
+        Structural guarantee, not just a code-review convention: there is
         no profile/user/session/round field at all on this model."""
         field_names = {f.name for f in PhotoCoordinateGuess._meta.get_fields()}
         self.assertNotIn("profile", field_names)
@@ -58,7 +59,8 @@ class RecordGuessTests(TestCase):
         self.assertFalse(guess.is_correct)
 
     def test_a_point_target_round_still_records_a_guess(self) -> None:
-        """The photo already had its own coordinates when this round was
+        """
+        The photo already had its own coordinates when this round was
         generated - the estimate mechanism has no use for this guess, but
         it's saved anyway (no current use, but plausibly useful later)."""
         location = _make_location()
@@ -71,7 +73,8 @@ class RecordGuessTests(TestCase):
         self.assertTrue(PhotoCoordinateGuess.objects.get(image=image).is_correct)
 
     def test_a_point_target_round_never_triggers_an_estimate_recompute(self) -> None:
-        """Recomputing an estimate for an already-placed photo would be pure
+        """
+        Recomputing an estimate for an already-placed photo would be pure
         waste - Image.effective_latitude/longitude never reads it once the
         real coordinates are set."""
         location = _make_location()

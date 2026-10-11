@@ -1,4 +1,5 @@
-"""A file the database references and the disk does not have must stop being retried.
+"""
+A file the database references and the disk does not have must stop being retried.
 
 `backfill_image_thumbnails` walks by primary key, advances its cursor past
 failures, and resets when the cursor is exhausted - so a row whose stored file
@@ -132,7 +133,8 @@ class TheSweepStopsRetryingWhatItCannotReadTests(_MediaCase):
                 self.assertNotIn(image.pk, photos_missing_analysis_thumbnails())
 
     def test_a_readable_photo_is_still_swept(self) -> None:
-        """Anti-vacuity: a sweep that returned nothing would pass every test
+        """
+        Anti-vacuity: a sweep that returned nothing would pass every test
         above while backfilling nothing, forever."""
         healthy = self._photo()
 
@@ -141,7 +143,8 @@ class TheSweepStopsRetryingWhatItCannotReadTests(_MediaCase):
 
 
 class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
-    """The failure mode a plain boolean would create: one storage outage marks
+    """
+    The failure mode a plain boolean would create: one storage outage marks
     the whole library broken, silently, with nothing that ever revisits it."""
 
     def test_an_old_mark_is_retried_again(self) -> None:
@@ -154,7 +157,8 @@ class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
             self.assertIn(image.pk, sweep(), sweep.__name__)
 
     def test_a_fresh_mark_is_not(self) -> None:
-        """Paired with the test above: together they say the window is real,
+        """
+        Paired with the test above: together they say the window is real,
         rather than that the column is ignored in one direction."""
         image = self._photo()
         Image.objects.filter(pk=image.pk).update(media_unreadable_at=timezone.now())
@@ -189,6 +193,7 @@ class TheMarkIsABackoffNotAVerdictTests(_MediaCase):
         self.assertTrue(image.analysis_thumbnail)
 
     def test_the_window_is_long_enough_to_matter(self) -> None:
-        """The whole point is fewer retries than hourly. A window under an hour
+        """
+        The whole point is fewer retries than hourly. A window under an hour
         would satisfy every other test here and fix nothing."""
         self.assertGreaterEqual(THUMBNAIL_RETRY_AFTER_UNREADABLE, timedelta(days=1))

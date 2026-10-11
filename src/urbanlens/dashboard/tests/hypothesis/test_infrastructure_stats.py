@@ -158,7 +158,8 @@ def _stub(key: str) -> InfrastructureServiceStat:
 
 
 class CollectInfrastructureServiceStatsTests(SimpleTestCase):
-    """collect_infrastructure_service_stats returns all expected services.
+    """
+    collect_infrastructure_service_stats returns all expected services.
 
     The collectors are stubbed rather than run: this function's job is aggregation, and each collector has its
     own tests above."""
@@ -184,7 +185,8 @@ class CollectInfrastructureServiceStatsTests(SimpleTestCase):
             self.assertIsInstance(stat, InfrastructureServiceStat)
 
     def test_one_collector_blowing_up_does_not_lose_the_others(self) -> None:
-        """This page exists to report which service is unhealthy - a service being
+        """
+        This page exists to report which service is unhealthy - a service being
         unhealthy in an unanticipated way must not take the whole page down."""
         with contextlib.ExitStack() as stack:
             for patcher in self._patched(dragonfly=OSError("name resolution failed")):

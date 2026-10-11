@@ -24,7 +24,8 @@ class ServiceDefaultsCostPerCallTests(SimpleTestCase):
         self.assertEqual(defaults.cost_per_call, Decimal("0.01"))
 
     def test_google_geocoding_has_a_configured_cost(self) -> None:
-        """Derived from that entry's own $200-credit/~40,000-calls note - a
+        """
+        Derived from that entry's own $200-credit/~40,000-calls note - a
         regression guard against silently losing the one seeded real value."""
         from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY
 
@@ -144,7 +145,8 @@ class SiteAdminApiUsageIncludesPluginsTests(TestCase):
 
 
 class CostsPageTests(TestCase):
-    """The public costs page.
+    """
+    The public costs page.
 
     It is gated behind ``SiteSettings.public_costs_page_enabled`` (off by default) and 404s until an admin turns
     it on - so these enable it explicitly rather than assuming the default."""
@@ -169,7 +171,8 @@ class CostsPageTests(TestCase):
 
 
 class ApiSpendSummaryTests(TestCase):
-    """``api_spend_summary_30d`` - the trailing-30-day external API spend.
+    """
+    ``api_spend_summary_30d`` - the trailing-30-day external API spend.
 
     Asserted against the service directly rather than through a page: it is shared by the site-admin cost page
     and anything else reporting spend, and these assertions are about the computation, not about rendering."""

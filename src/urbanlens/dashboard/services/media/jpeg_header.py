@@ -1,4 +1,5 @@
-"""A JPEG's pixel size, read from its frame header. Nothing here decodes an image.
+"""
+A JPEG's pixel size, read from its frame header. Nothing here decodes an image.
 
 Keywording runs on an ordinary, credentialed worker, which must never decode an upload (``docs/MEDIA_PIPELINE.md``):
 the risk there is memory corruption inside a native decoder. Reading a size needs no decoder. :func:`jpeg_dimensions`
@@ -27,7 +28,8 @@ _FRAME_HEADER_FIXED_BYTES = 8
 
 
 def jpeg_dimensions(data: bytes) -> tuple[int, int] | None:
-    """The ``(width, height)`` a JPEG's first frame header declares, without decoding the image.
+    """
+    The ``(width, height)`` a JPEG's first frame header declares, without decoding the image.
 
     Args:
         data: The file's bytes. Only the segments before the first frame header are read.

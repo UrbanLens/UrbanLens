@@ -1,4 +1,5 @@
-"""Coverage for the data-export-completeness pass: articles, ratings, security
+"""
+Coverage for the data-export-completeness pass: articles, ratings, security
 indicators, media labels, and the many previously-unexported Profile settings
 are now included in a user's data export - and, where a local object can be
 resolved, round-trip back in through the importer.
@@ -202,7 +203,8 @@ class ImportPinCompletenessTests(TestCase):
         self.assertEqual(Article.objects.get(pin=imported).content, "An old mill.")
 
     def test_reimporting_an_existing_pin_does_not_duplicate_rating_or_article(self) -> None:
-        """Idempotency: a pin that already exists for this user is skipped
+        """
+        Idempotency: a pin that already exists for this user is skipped
         entirely (matching the pre-existing label behavior), so re-running an
         import never creates a second Review or Article for the same pin."""
         from urbanlens.dashboard.services.import_export.import_data import ImportResult
@@ -278,7 +280,8 @@ class ImportCustomFieldsTests(TestCase):
         self.assertEqual(imported_value.value_text, "1234")
 
     def test_non_pin_entity_definition_imports_without_values(self) -> None:
-        """Photo/profile/map-targeted field definitions still import (useful on
+        """
+        Photo/profile/map-targeted field definitions still import (useful on
         their own); their values are skipped with a warning since this import
         pass can't resolve those entity types to a local object."""
         from urbanlens.dashboard.services.import_export.import_data import ImportResult
@@ -360,7 +363,8 @@ class RoundTripCommentsTests(TestCase):
         self.assertTrue(any("could not be matched" in w for w in result.warnings))
 
     def test_target_uuid_never_matches_another_users_pin(self) -> None:
-        """The archive is user-supplied: a uuid pointing at someone else's pin
+        """
+        The archive is user-supplied: a uuid pointing at someone else's pin
         must not attach the importer's comment to it."""
         from urbanlens.dashboard.models.comments.model import Comment
 
@@ -423,7 +427,8 @@ class RoundTripCommentsTests(TestCase):
     @given(text=nonempty_name)
     @_db_settings
     def test_arbitrary_comment_text_round_trips(self, text: str) -> None:
-        """Import strips comment text (matching _import_comments' own
+        """
+        Import strips comment text (matching _import_comments' own
         ``.strip()``) - the invariant is round-tripping to the stripped form,
         not necessarily to the original generated string verbatim."""
         from urbanlens.dashboard.models.comments.model import Comment
@@ -520,7 +525,8 @@ class RoundTripPhotosTests(TestCase):
         self.assertTrue(any("missing from the archive" in w for w in result.warnings))
 
     def test_traversal_filename_is_neutralized(self) -> None:
-        """metadata.json is untrusted archive content - a path-traversal
+        """
+        metadata.json is untrusted archive content - a path-traversal
         filename must resolve inside photos/ (and thus, absent, skip)."""
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000005", "filename": "../../../etc/passwd"}
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -601,7 +607,8 @@ class RoundTripPhotosTests(TestCase):
 
 
 class RestoreOverlayImageQuotaLockTests(TestCase):
-    """MapAnnotationsImport._restore_overlay_image re-enters storage through the same
+    """
+    MapAnnotationsImport._restore_overlay_image re-enters storage through the same
     quota check a fresh upload gets (see RoundTripPhotosTests's class docstring)."""
 
     def setUp(self) -> None:
@@ -707,7 +714,8 @@ class RoundTripTripsTests(TestCase):
         self.assertEqual(result.skipped.get("trips"), 1)
 
     def test_members_reinvited_only_when_connected(self) -> None:
-        """Only the importer's own connections are re-invited (never trust the
+        """
+        Only the importer's own connections are re-invited (never trust the
         archive's identifiers), and always as an invitation, never as joined."""
         from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
         from urbanlens.dashboard.models.friendship.model import Friendship
@@ -741,7 +749,8 @@ class RoundTripTripsTests(TestCase):
     @given(name=nonempty_name, description=short_text_or_none)
     @_db_settings
     def test_arbitrary_name_and_description_round_trip(self, name: str, description: str | None) -> None:
-        """Restore flow with generated content: _import_trips strips/truncates
+        """
+        Restore flow with generated content: _import_trips strips/truncates
         ``name`` to 255 chars, and collapses a falsy ``description`` (None or
         exported "") to None - the round-trip invariant accounts for both."""
         from urbanlens.dashboard.models.trips.model import Trip
@@ -868,7 +877,8 @@ class RoundTripDirectMessagesTests(TestCase):
     @given(body=nonempty_name)
     @_db_settings
     def test_arbitrary_sent_body_round_trips_after_deletion(self, body: str) -> None:
-        """_import_direct_messages strips the body (matching its own
+        """
+        _import_direct_messages strips the body (matching its own
         ``.strip()``) before re-creating the message - the round-trip
         invariant is against the stripped form."""
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage

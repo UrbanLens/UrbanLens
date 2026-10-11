@@ -36,7 +36,8 @@ class InterceptionTests(TestCase):
         self.assertIn("Renamed", self._names())
 
     def test_queryset_update_records_a_revision(self) -> None:
-        """The path that matters most.
+        """
+        The path that matters most.
 
         ``update()`` bypasses ``save()`` and every signal, so a model-level hook cannot see it - which is
         exactly how the existing bypasses became invisible."""
@@ -97,7 +98,8 @@ class ResolutionTests(TestCase):
         self.assertEqual(resolved["description"], "My friend wrote this")
 
     def test_a_strangers_later_write_does_not_displace_a_friends(self) -> None:
-        """Ordering is over the *qualifying* rows, not all of them.
+        """
+        Ordering is over the *qualifying* rows, not all of them.
 
         A delta-overlay design gets this wrong: it would apply the friend's
         delta over a base that already contained the stranger's.
@@ -159,7 +161,8 @@ class SourceInferenceTests(TestCase):
         self.assertEqual(revision.actor_id, self.user.profile.pk)
 
     def test_an_unattributed_write_records_no_actor(self) -> None:
-        """A shell or migration write is SYSTEM and belongs to nobody.
+        """
+        A shell or migration write is SYSTEM and belongs to nobody.
 
         Attributing it to whoever happened to be around would be worse than leaving it blank - the whole point
         of the record is that a viewer can be shown their friends' contributions and not a stranger's."""
@@ -170,7 +173,8 @@ class SourceInferenceTests(TestCase):
         self.assertIsNone(revision.actor_id)
 
     def test_an_automatic_write_records_no_actor_even_when_a_person_is_present(self) -> None:
-        """Enrichment triggered from a request is still enrichment.
+        """
+        Enrichment triggered from a request is still enrichment.
 
         The inference defaults a request to USER, so a task or service that knows better has to say so - and
         when it does, the person must not be credited with what the provider wrote."""
@@ -199,7 +203,8 @@ class DirtyFieldTests(TestCase):
         )
 
     def test_a_bare_save_records_only_the_changed_field(self) -> None:
-        """Recording all of them would re-attribute other people's work.
+        """
+        Recording all of them would re-attribute other people's work.
 
         A concealed viewer resolves by author, so if an ordinary save stamped the saver onto every versioned
         field, a friend saving the wiki for an unrelated reason would hand that viewer a stranger's
@@ -258,7 +263,8 @@ class DirtyFieldTests(TestCase):
 
 
 class ErasureTests(TestCase):
-    """Deleting your own edit must leave no copy of the value anywhere.
+    """
+    Deleting your own edit must leave no copy of the value anywhere.
 
     The wiki edit-delete view exists for "accidentally pasting private information into a public wiki field",
     and its docstring promises no copy lingers."""
@@ -304,7 +310,8 @@ class UpdateAccuracyTests(TestCase):
         WikiFieldRevision.objects.filter(target=self.wiki).delete()
 
     def test_a_compare_and_set_that_matches_nothing_records_nothing(self) -> None:
-        """The enrichment rename is a CAS, and losing it must be silent.
+        """
+        The enrichment rename is a CAS, and losing it must be silent.
 
         Recording anyway would write an AUTOMATIC row for a value that never reached the wiki - and AUTOMATIC is
         the one source shown to every viewer, so the phantom would outrank the real name for everybody."""
@@ -314,7 +321,8 @@ class UpdateAccuracyTests(TestCase):
         self.assertFalse(WikiFieldRevision.objects.filter(target=self.wiki, field_name="name").exists())
 
     def test_bulk_update_records_the_value_not_a_case_expression(self) -> None:
-        """Django ends bulk_update with an update() carrying Case expressions.
+        """
+        Django ends bulk_update with an update() carrying Case expressions.
 
         That re-enters the interception, and str()-ing a Case stores the SQL
         compiler's repr as though it were the field's value.

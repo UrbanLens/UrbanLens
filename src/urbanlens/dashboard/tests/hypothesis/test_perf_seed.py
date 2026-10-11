@@ -44,7 +44,8 @@ class TheSeedCreatesWhatItReportsTests(TestCase):
         self.assertEqual(report["created"], SEEDED)
 
     def test_every_pin_gets_its_own_location(self) -> None:
-        """The failure this guards is silent: rows merge and the count still looks right.
+        """
+        The failure this guards is silent: rows merge and the count still looks right.
 
         Asserted on distinct locations rather than on the pin count, because the
         pin count survives the defect — it is the places that collapse.
@@ -108,7 +109,8 @@ class TheSeedCreatesWhatItReportsTests(TestCase):
         )
 
     def test_it_crosses_a_batch_boundary_correctly(self) -> None:
-        """The loop is batched, so the interesting sizes are around the batch size.
+        """
+        The loop is batched, so the interesting sizes are around the batch size.
 
         Uses a size just over `BATCH_SIZE` rather than a round number, since an
         off-by-one in the final partial batch is the defect a round number hides.
@@ -148,7 +150,8 @@ class TheSeedIsIdempotentTests(TestCase):
         self.assertEqual(second["created"], SEEDED)
 
     def test_topping_up_does_not_collide_on_coordinates(self) -> None:
-        """The second run must continue the grid, not restart it.
+        """
+        The second run must continue the grid, not restart it.
 
         `Location` is unique on `(latitude, longitude)`, so a restarted grid raises rather than merging — which
         is a loud failure, but only if something runs the second seed."""
@@ -159,7 +162,8 @@ class TheSeedIsIdempotentTests(TestCase):
         self.assertEqual(len(set(coordinates)), SEEDED * 2)
 
     def test_topping_up_by_a_different_amount_does_not_collide(self) -> None:
-        """Three runs, each creating a different number of pins.
+        """
+        Three runs, each creating a different number of pins.
 
         The test above passes without exercising the defect it is named for: it creates `SEEDED` twice, so
         anything derived from "how many are being created now" comes out the same both times."""
@@ -172,7 +176,8 @@ class TheSeedIsIdempotentTests(TestCase):
         self.assertEqual(Pin.objects.filter(profile=self.profile).root_pins().count(), 40)
 
     def test_a_pin_index_always_lands_on_the_same_coordinate(self) -> None:
-        """The property the collision was a symptom of, asserted directly.
+        """
+        The property the collision was a symptom of, asserted directly.
 
         Two accounts seeded to different sizes must agree about where pin *n* goes, because that is what makes a
         top-up safe."""
@@ -205,7 +210,8 @@ class TheSeedTellsThePlannerTests(TestCase):
         self.profile: Profile = self.user.profile
 
     def test_statistics_are_refreshed_by_default(self) -> None:
-        """`reltuples` is -1 on a never-analysed table and non-negative after.
+        """
+        `reltuples` is -1 on a never-analysed table and non-negative after.
 
         Asserted against `pg_class` rather than against the report's own flag,
         since the flag is what would be wrong if this were broken.
@@ -226,7 +232,8 @@ class TheSeedTellsThePlannerTests(TestCase):
 
 
 class TheReportIsUsableByTheHarnessTests(TestCase):
-    """Every value the load harness reads out of the manifest has to be true.
+    """
+    Every value the load harness reads out of the manifest has to be true.
 
     The k6 neighbour scenario edits the shared label *by id* and filters pins by a *name prefix*, both taken
     from this report."""
@@ -253,7 +260,8 @@ class TheReportIsUsableByTheHarnessTests(TestCase):
         self.assertEqual(report["pin_name_prefix"], PIN_NAME_PREFIX)
 
     def test_the_reported_label_is_editable_by_id_after_a_rename(self) -> None:
-        """A load run renames or recolours the label; a later top-up must not fork it.
+        """
+        A load run renames or recolours the label; a later top-up must not fork it.
 
         The seeder finds its label by name, so a run that changed the name would leave the next seed creating a
         second label and the pins split between them - which reads as "the label edit got cheaper"."""
@@ -267,7 +275,8 @@ class TheReportIsUsableByTheHarnessTests(TestCase):
 
 
 class TheSeedHoldsTheMapCentreConstantTests(TestCase):
-    """The seed stores the map centre, so a load run does not measure computing it.
+    """
+    The seed stores the map centre, so a load run does not measure computing it.
 
     `Profile.compute_map_center` sits on the critical path of the map page."""
 
@@ -286,7 +295,8 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
         self.assertIsNotNone(report["map_center"])
 
     def test_the_stored_centre_is_the_answer_the_slow_path_would_give(self) -> None:
-        """Not an approximation, and this is what says so.
+        """
+        Not an approximation, and this is what says so.
 
         The seeded grid spans far less than the 1,000 km cluster radius, so every point is in one cluster and
         the densest-cluster centroid is the plain mean."""
@@ -313,7 +323,8 @@ class TheSeedHoldsTheMapCentreConstantTests(TestCase):
 
 
 class TheSeedCanCarryARealisticLabelCountTests(TestCase):
-    """One label per pin is the cheapest case for anything that scales with them.
+    """
+    One label per pin is the cheapest case for anything that scales with them.
 
     The map payload names a pin's labels by id and defines each once per response, so what that saves over
     copying every label's facts into every pin grows with how many labels a pin carries."""
@@ -332,7 +343,8 @@ class TheSeedCanCarryARealisticLabelCountTests(TestCase):
         self.assertEqual(counts, {4})
 
     def test_the_vocabulary_is_shared_rather_than_per_pin(self) -> None:
-        """A label per pin is not a realistic account and would flatter compression.
+        """
+        A label per pin is not a realistic account and would flatter compression.
 
         Counted as `(kind, name)` pairs rather than against the profile's total or by name alone: a profile
         arrives with several dozen default labels, and some of them share a name with the vocabulary under a

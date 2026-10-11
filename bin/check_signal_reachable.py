@@ -19,7 +19,8 @@ def _iter_python_files() -> list[pathlib.Path]:
 
 
 def _subscribed_models(tree: ast.AST) -> dict[str, set[str]]:
-    """Return ``{model_name: {field names its predicate mentions}}``.
+    """
+    Return ``{model_name: {field names its predicate mentions}}``.
 
     Reads both spellings this codebase uses: a declarative ``_Subscription``
     table, and a direct ``post_save.connect(..., sender=Model)``.

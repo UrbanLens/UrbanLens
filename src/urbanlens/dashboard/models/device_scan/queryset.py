@@ -29,7 +29,8 @@ class ScannedDeviceManager(_ScannedDeviceManagerBase["ScannedDevice"]):
     """Manager for ScannedDevice."""
 
     def get_or_create_for_mac(self, raw_mac_address: str) -> tuple[ScannedDevice, bool]:
-        """Get or create the device identified by *raw_mac_address*, normalizing first.
+        """
+        Get or create the device identified by *raw_mac_address*, normalizing first.
         The single entry point for resolving a device by MAC - callers never normalize (or skip normalizing) on their own, which would otherwise risk two rows for the same physical device over a casing/separator difference between uploads.
 
         Args:
@@ -48,7 +49,8 @@ class DeviceScanUploadQuerySet(abstract.FrontendDashboardQuerySet["DeviceScanUpl
     """QuerySet for DeviceScanUpload."""
 
     def stalled(self, *, pending_before: datetime, claimed_before: datetime) -> Self:
-        """Uploads nothing is working on: queued too long ago, or claimed by a worker that never finished.
+        """
+        Uploads nothing is working on: queued too long ago, or claimed by a worker that never finished.
 
         Args:
             pending_before: A pending upload created before this has lost its enqueue.

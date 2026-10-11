@@ -467,7 +467,8 @@ class QuickEditLabelRemovalTombstoneTests(TestCase):
 
 
 class ExternalLinksHelperTests(TestCase):
-    """services.locations.external_links - the shared add_pin_link/add_wiki_link/
+    """
+    services.locations.external_links - the shared add_pin_link/add_wiki_link/
     add_pin_and_wiki_link primitive used by Nominatim, EPA ECHO, and Wikipedia."""
 
     def setUp(self) -> None:

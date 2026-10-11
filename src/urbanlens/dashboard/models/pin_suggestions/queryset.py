@@ -15,7 +15,8 @@ class PinSuggestionQuerySet(abstract.DashboardQuerySet["PinSuggestion"]):
     """QuerySet for PinSuggestion records."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """Filter to suggestions belonging to a given profile.
+        """
+        Filter to suggestions belonging to a given profile.
 
         Args:
             profile: Owner profile.
@@ -26,7 +27,8 @@ class PinSuggestionQuerySet(abstract.DashboardQuerySet["PinSuggestion"]):
         return self.filter(profile=profile)
 
     def pending(self) -> Self:
-        """Filter to suggestions still awaiting a response.
+        """
+        Filter to suggestions still awaiting a response.
 
         Returns:
             Filtered queryset.

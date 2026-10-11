@@ -29,7 +29,8 @@ _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
 def csv_text_cell(value: str | None) -> str:
-    """Return user-supplied text safe to write into a CSV cell.
+    """
+    Return user-supplied text safe to write into a CSV cell.
 
     A cell starting with ``=``, ``+``, ``-``, ``@``, tab or CR is evaluated as a formula when the file is opened in a
     spreadsheet, so it gets a leading single quote, which the spreadsheet shows as plain text.

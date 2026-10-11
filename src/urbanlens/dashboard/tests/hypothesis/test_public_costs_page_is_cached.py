@@ -1,4 +1,5 @@
-"""The public costs page runs whole-table aggregates for anonymous callers.
+"""
+The public costs page runs whole-table aggregates for anonymous callers.
 
 N21 H48. `/costs/` is a `TemplateView` behind nothing but a SiteSettings flag,
 and each GET calls seven cost-tracking helpers. `active_user_count` joins every

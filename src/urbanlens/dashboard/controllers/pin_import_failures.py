@@ -1,4 +1,5 @@
-"""Memories → Locations page: review queue for PinImportFailure rows.
+"""
+Memories → Locations page: review queue for PinImportFailure rows.
 
 Failures are raised by ``tasks.resolve_deferred_pin_locations`` (via
 ``services.pins.pin_import_failures.record_pin_import_failure``) when a pin's Google Maps CID can't
@@ -40,7 +41,8 @@ _GUESS_PARTIAL = "dashboard/partials/memories/_pin_import_failure_guess.html"
 
 
 def pending_pin_import_failures(profile: Profile) -> QuerySet[PinImportFailure]:
-    """The profile's pending import failures, newest first.
+    """
+    The profile's pending import failures, newest first.
 
     Args:
         profile: Owner whose pending failures to fetch.
@@ -52,7 +54,8 @@ def pending_pin_import_failures(profile: Profile) -> QuerySet[PinImportFailure]:
 
 
 def _get_failure(request: HttpRequest, failure_id: int) -> tuple[PinImportFailure, Profile]:
-    """Fetch a failure owned by the current profile, or raise 404.
+    """
+    Fetch a failure owned by the current profile, or raise 404.
 
     Args:
         request: The current request (used to resolve the owning profile).
@@ -72,7 +75,8 @@ def _get_failure(request: HttpRequest, failure_id: int) -> tuple[PinImportFailur
 
 
 def _parse_optional_coordinate(raw: str, *, bound: float) -> float | None:
-    """Parse a POST field as a coordinate within ``±bound``, treating a blank string as unset.
+    """
+    Parse a POST field as a coordinate within ``±bound``, treating a blank string as unset.
 
     Args:
         raw: Raw field value from the request.
@@ -94,7 +98,8 @@ def _parse_optional_coordinate(raw: str, *, bound: float) -> float | None:
 
 
 class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
-    """Just the import-failure queue partial, re-fetched via the ``refreshQueue`` event.
+    """
+    Just the import-failure queue partial, re-fetched via the ``refreshQueue`` event.
 
     GET /memories/locations/import-failures/queue/
 
@@ -109,7 +114,8 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
     PAGE_PARAM = "failures_page"
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the current page of pending import failures for this profile.
+        """
+        Render the current page of pending import failures for this profile.
 
         Args:
             request: The incoming GET request.
@@ -127,7 +133,8 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
 
 
 class PinImportFailureGuessView(LoginRequiredMixin, View):
-    """Suggest a location for one import failure, from its name.
+    """
+    Suggest a location for one import failure, from its name.
 
     GET /memories/locations/import-failures/<failure_id>/guess/
 
@@ -138,7 +145,8 @@ class PinImportFailureGuessView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, failure_id: int) -> HttpResponse:
-        """Render the suggestion for this failure, if there is one.
+        """
+        Render the suggestion for this failure, if there is one.
 
         Args:
             request: The incoming GET request.
@@ -161,7 +169,8 @@ class PinImportFailureGuessView(LoginRequiredMixin, View):
 
 
 class PinImportFailureResolveView(LoginRequiredMixin, View):
-    """Manually place a pin for a single import failure.
+    """
+    Manually place a pin for a single import failure.
 
     POST /memories/locations/import-failures/<failure_id>/resolve/
 
@@ -171,7 +180,8 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
-        """Place a pin for this failure from the submitted address or coordinates.
+        """
+        Place a pin for this failure from the submitted address or coordinates.
 
         Args:
             request: The incoming POST request, carrying ``address`` and/or ``latitude``/``longitude`` form
@@ -222,13 +232,15 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
 
 
 class PinImportFailureDismissView(LoginRequiredMixin, View):
-    """Dismiss a single import failure without placing a pin for it.
+    """
+    Dismiss a single import failure without placing a pin for it.
 
     POST /memories/locations/import-failures/<failure_id>/dismiss/
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
-        """Dismiss this failure without placing a pin for it.
+        """
+        Dismiss this failure without placing a pin for it.
 
         Args:
             request: The incoming POST request.

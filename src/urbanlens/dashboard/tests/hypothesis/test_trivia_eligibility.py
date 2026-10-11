@@ -122,7 +122,8 @@ class HasEligibleQuestionsTests(TestCase):
 
 
 class SoloOwnPendingQuestionsTests(TestCase):
-    """A solo player's own not-yet-approved question - see the Trivia spec's
+    """
+    A solo player's own not-yet-approved question - see the Trivia spec's
     "no feedback loop for the submitter" requirement."""
 
     def setUp(self) -> None:

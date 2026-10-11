@@ -25,14 +25,16 @@ class NotificationQuerySet(abstract.FrontendDashboardQuerySet["NotificationLog"]
         return self.filter(profile=profile)
 
     def for_display(self) -> Self:
-        """Select every relation the notification templates actually read.
+        """
+        Select every relation the notification templates actually read.
         ``notification_item.html`` decides whether to offer Accept/Decline (a shared pin) or the three-way merge choice (a suggested visit) by reading the ``pin_share``/``visit_suggestion`` reverse OneToOnes, and names the sender via ``source_profile``.
         Without them selected, each rendered row costs two extra queries - and the miss is silent, because an absent reverse OneToOne raises ``ObjectDoesNotExist``, which Django templates swallow rather than surface.
         """
         return self.select_related("source_profile", "pin_share", "visit_suggestion")
 
     def for_inbox(self) -> Self:
-        """Exclude notifications the user has already acted on.
+        """
+        Exclude notifications the user has already acted on.
 
         Actionable rows (visit suggestions, friend requests, pin shares) are
         marked ``dismissed`` when answered, so they leave the bell dropdown but
@@ -62,7 +64,8 @@ class NotificationManager(_NotificationManagerBase["NotificationLog"]):
     """Manager for NotificationLog."""
 
     def notify(self, *, muted_recipients: MutedRecipients | None = None, **fields) -> NotificationLog | None:
-        """Create a notification unless its recipient has muted its source.
+        """
+        Create a notification unless its recipient has muted its source.
         Delivery to every other channel follows from the row: the live WebSocket toast, the WhatsApp/SMS alert and the native push all hang off ``post_save`` on ``NotificationLog`` (see ``models.notifications.signals``), so not writing it is what actually produces silence. **The sanctioned way to raise a notification.** ``create()`` still works and is what this calls, but it applies no preference at all, so anything reaching for it bypasses mute silently - ``bin/check_notification_choke_point.py`` fails the build for a production call site that does.
 
         Args:

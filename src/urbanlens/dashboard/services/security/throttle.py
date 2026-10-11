@@ -1,4 +1,5 @@
-"""A per-caller inbound rate limit for plain Django views.
+"""
+A per-caller inbound rate limit for plain Django views.
 Fixed windows rather than a sliding log: one counter per caller per window, counted by ``services.core.counters``."""
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ COUNTED_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 @dataclass(frozen=True, slots=True)
 class Rate:
-    """How many calls one caller may make in one window.
+    """
+    How many calls one caller may make in one window.
 
     Attributes:
         limit: Calls allowed per window.
@@ -62,7 +64,8 @@ def _key(scope: str, identity: str, rate: Rate) -> str:
 
 
 def allow(scope: str, identity: str, rate: Rate) -> bool:
-    """Whether *identity* may make another call in *scope* right now.
+    """
+    Whether *identity* may make another call in *scope* right now.
 
     Args:
         scope: What is being limited, so two endpoints do not share a budget.
@@ -79,7 +82,8 @@ def allow(scope: str, identity: str, rate: Rate) -> bool:
 
 
 def retry_after(scope: str, identity: str, rate: Rate) -> int:
-    """Seconds until *identity*'s window in *scope* resets.
+    """
+    Seconds until *identity*'s window in *scope* resets.
 
     Args:
         scope: What is being limited.
@@ -94,7 +98,8 @@ def retry_after(scope: str, identity: str, rate: Rate) -> int:
 
 
 def refusal(scope: str, identity: str, rate: Rate) -> HttpResponse:
-    """The response a throttled caller gets.
+    """
+    The response a throttled caller gets.
 
     Args:
         scope: What is being limited.
@@ -115,7 +120,8 @@ def _address_identity(request: HttpRequest) -> str:
 
 
 def account_or_address(request: HttpRequest) -> str:
-    """The signed-in account, falling back to the address.
+    """
+    The signed-in account, falling back to the address.
 
     Args:
         request: The incoming request.
@@ -134,7 +140,8 @@ def account_or_address(request: HttpRequest) -> str:
 
 
 def throttled(scope: str, rate: Rate, methods: frozenset[str] = COUNTED_METHODS, identify: Callable[[HttpRequest], str] | None = None) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Limit how often one caller may reach the decorated view.
+    """
+    Limit how often one caller may reach the decorated view.
 
     Args:
         scope: What is being limited.

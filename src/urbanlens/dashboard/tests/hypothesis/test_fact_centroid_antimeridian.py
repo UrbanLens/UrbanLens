@@ -44,7 +44,8 @@ class FactCentroidAntimeridianTests(SimpleTestCase):
         self.assertAlmostEqual(centroid.x, -179.5, places=6)
 
     def test_antipodal_observations_do_not_invent_a_midpoint(self) -> None:
-        """Exactly opposite longitudes cancel, so there is no meaningful middle.
+        """
+        Exactly opposite longitudes cancel, so there is no meaningful middle.
 
         The fallback returns one of the *observed* longitudes rather than a made-up one."""
         centroid, confidence = _aggregate_point([_at(0.0, 0.0), _at(180.0, 0.0)])

@@ -1,4 +1,5 @@
-"""External-API routes for third-party account connections.
+"""
+External-API routes for third-party account connections.
 
 Access tokens are held in ``EncryptedTextField`` columns whose key derives from Django's
 ``SECRET_KEY``, and nothing routed in this module may ever echo a stored secret back to the caller:

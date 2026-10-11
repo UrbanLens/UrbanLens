@@ -1,4 +1,5 @@
-"""URL routes for the external API, mounted at ``dashboard/api/external/v1/``.
+"""
+URL routes for the external API, mounted at ``dashboard/api/external/v1/``.
 
 Any new single-segment literal under a prefix that already has a generic route - ``pins/``,
 ``wikis/``, ``trips/``, ``lists/``, ``labels/``, ``messages/``, ``photos/``, ``profiles/``,
@@ -74,7 +75,8 @@ _LITERAL_BREADTH: Final[int] = 0
 
 
 def _segment_specificity(segment: str) -> tuple[int, int]:
-    """Rank a single path segment by how broadly it matches.
+    """
+    Rank a single path segment by how broadly it matches.
 
     Args:
         segment: One ``/``-delimited piece of a ``path()`` route, e.g. ``"pins"``, ``"<str:pin_slug>"``
@@ -94,7 +96,8 @@ def _segment_specificity(segment: str) -> tuple[int, int]:
 
 
 def _route_specificity(route: str) -> tuple[tuple[int, int], ...]:
-    """Build the full sort key for a route: its segments' ranks, left to right.
+    """
+    Build the full sort key for a route: its segments' ranks, left to right.
 
     Two routes that share a prefix and differ only in length compare by length, and that is harmless:
     ``path()`` patterns are anchored at both ends, so ``pins/<str:pin_slug>/`` cannot match
@@ -111,7 +114,8 @@ def _route_specificity(route: str) -> tuple[tuple[int, int], ...]:
 
 
 def order_by_specificity(patterns: Sequence[URLPattern]) -> list[URLPattern]:
-    """Re-sort a flat list of ``path()`` routes so no literal can be shadowed.
+    """
+    Re-sort a flat list of ``path()`` routes so no literal can be shadowed.
 
     Rather than asking thirteen domain modules to coordinate an ordering none of them can see, this
     recomputes it from the routes themselves - literals ahead of converters, narrow converters ahead of

@@ -274,7 +274,8 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         gateway.list_events.assert_not_called()
 
     def test_racing_import_of_one_event_still_creates_a_single_trip(self):
-        """The already_linked() read can be lost; the DB constraint decides.
+        """
+        The already_linked() read can be lost; the DB constraint decides.
 
         Simulates the double-submit by neutering the pre-check, so the second import reaches the create path
         exactly as a concurrent request would."""
@@ -302,7 +303,8 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         self.assertEqual(TripCalendarLink.objects.filter(profile=self.profile, google_event_id="evt1").count(), 1)
 
     def test_two_timed_imports_keep_their_blank_trip_level_links(self):
-        """The constraint is partial, so blank-id trip-level rows still coexist.
+        """
+        The constraint is partial, so blank-id trip-level rows still coexist.
 
         A timed import deliberately leaves the trip-level link's event id empty (the activity-level row owns the
         id)."""
@@ -771,7 +773,8 @@ class ExportTripTests(_CalendarSyncDBTestCase):
 
 
 class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
-    """disconnect_member_calendar_sync stops a departing member's auto-sync.
+    """
+    disconnect_member_calendar_sync stops a departing member's auto-sync.
 
     Regression coverage for a real gap: removing/leaving a trip only ever deleted the TripMembership row, so a
     departed member's Google Calendar kept receiving live pushes of the trip's evolving details forever via
@@ -804,7 +807,8 @@ class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
         self.assertFalse(TripCalendarLink.objects.filter(trip=trip, profile=self.profile).exists())
 
     def test_revoked_token_still_drops_the_link(self):
-        """A failed remote delete (e.g. revoked OAuth grant) must not leave
+        """
+        A failed remote delete (e.g. revoked OAuth grant) must not leave
         auto-sync active - the DB-side link is what actually re-enables
         future pushes, so it has to go regardless of the API call's outcome."""
         gateway = self._patch_gateway()
@@ -830,7 +834,8 @@ class DisconnectMemberCalendarSyncTests(_CalendarSyncDBTestCase):
         disconnect_member_calendar_sync(trip, self.profile)  # must not raise
 
     def test_departed_member_no_longer_receives_auto_sync_pushes(self):
-        """End-to-end: after disconnecting, push_auto_synced_trip_changes has
+        """
+        End-to-end: after disconnecting, push_auto_synced_trip_changes has
         nothing left to push to for this profile."""
         gateway = self._patch_gateway()
         trip, _link = self._trip_with_link(auto_sync=True)
@@ -1284,7 +1289,8 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
 
 
 class GetCalendarAccountTests(_CalendarSyncDBTestCase):
-    """GoogleCalendarAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
+    """
+    GoogleCalendarAccount.objects.get_for_profile() reads an undecryptable account as absent, without deleting it.
 
     Regression test for a production 500: rotating field_encryption_key without migrating old rows makes
     EncryptedTextField.from_db_value raise InvalidToken, which crashed every page that touched the calendar
@@ -1355,7 +1361,8 @@ class CalendarCallbackViewTests(TestCase):
         self.assertTrue(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
 
     def test_successful_connect_with_next_trips_list_redirects_there_unanchored(self):
-        """The "trips.list" next-target is a full page, not a settings
+        """
+        The "trips.list" next-target is a full page, not a settings
         subsection - it must stay a plain URL, not gain a #hash."""
         from django.core import signing
 
@@ -1392,7 +1399,8 @@ class CalendarCallbackViewTests(TestCase):
 
 
 class CalendarInviteIdentityMaskingTests(TestCase):
-    """The calendar importer's trip invite must mask like the ordinary one does.
+    """
+    The calendar importer's trip invite must mask like the ordinary one does.
 
     `trip_membership.invite_to_trip` resolves the inviter through `resolve_visible_identity` before formatting,
     with a comment explaining that a notification's message is stored as plain text and so must be masked at
@@ -1447,7 +1455,8 @@ class CalendarInviteIdentityMaskingTests(TestCase):
 
 
 class CalendarInviteRespectsNotificationPreferenceTests(TestCase):
-    """The calendar importer's invite must honor added_to_trip like the ordinary one does.
+    """
+    The calendar importer's invite must honor added_to_trip like the ordinary one does.
 
     `_invite_participants` used to build its own ADDED_TO_TRIP notification inline instead of calling
     `trip_membership.notify_added_to_trip` (the canonical implementation, which does check the recipient's

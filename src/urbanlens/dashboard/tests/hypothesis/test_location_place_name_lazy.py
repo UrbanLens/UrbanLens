@@ -1,4 +1,5 @@
-"""Location.place_name must never block a request on a live Google API call.
+"""
+Location.place_name must never block a request on a live Google API call.
 
 Covers the full lazy-loading chain: the model property is cache-only,
 tasks.resolve_location_place_name is what actually populates the cache in the
@@ -46,7 +47,8 @@ class ResolveLocationPlaceNameTaskTests(TestCase):
 
 
 class PinViewDispatchesPlaceNameResolutionTests(TestCase):
-    """PinOverviewView's background dispatch, gated on external_apis_enabled
+    """
+    PinOverviewView's background dispatch, gated on external_apis_enabled
     and only when nothing is cached yet."""
 
     def setUp(self) -> None:
@@ -98,7 +100,8 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.assertEqual(self._dispatched_location_ids(mock_enqueue), [])
 
     def test_page_render_never_calls_the_live_resolver(self) -> None:
-        """The actual reported bug: rendering the pin page must never itself make a live Google Places/Geocoding call, cached or not.
+        """
+        The actual reported bug: rendering the pin page must never itself make a live Google Places/Geocoding call, cached or not.
 
         ``safely_enqueue_task`` is stubbed so this measures the *render* path only."""
         self.profile.external_apis_enabled = True

@@ -11,7 +11,8 @@ if TYPE_CHECKING:
 
 
 class HeldUploadModel(django_models.Model):
-    """A model whose file uploads the sandbox worker publishes after the row was read (see ``services.media.held_upload``).
+    """
+    A model whose file uploads the sandbox worker publishes after the row was read (see ``services.media.held_upload``).
 
     A full ``save()`` of a row read before the publish would write back the file names it read, so a full save leaves
     those columns out unless the instance changed them.

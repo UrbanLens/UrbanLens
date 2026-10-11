@@ -1,4 +1,5 @@
-"""Health check endpoints for Docker, Kubernetes and load-balancer probes.
+"""
+Health check endpoints for Docker, Kubernetes and load-balancer probes.
 
 Cheap enough to probe every few seconds, and never fails because a dependency is unwell - a liveness
 probe that fails on a database blip gets the container killed for no reason.
@@ -44,7 +45,8 @@ CONNECTION_USAGE = ProcessMemo[dict[str, int] | None](ttl_seconds=5)
 
 
 def _limit_probe_runtime(cursor: CursorWrapper) -> None:
-    """Cap the enclosing transaction's queries at the probe's own deadline.
+    """
+    Cap the enclosing transaction's queries at the probe's own deadline.
 
     Scoped to the transaction because a session-level setting survives on a ``CONN_MAX_AGE``
     connection and would silently cap every later real query at two seconds. ``set_config`` rather
@@ -59,7 +61,8 @@ def _limit_probe_runtime(cursor: CursorWrapper) -> None:
 
 @contextmanager
 def _deadlined_cursor() -> Iterator[CursorWrapper]:
-    """A cursor in a transaction of its own, whose queries the probe's deadline caps, and nothing after them.
+    """
+    A cursor in a transaction of its own, whose queries the probe's deadline caps, and nothing after them.
 
     Inside an enclosing transaction, such as a test case's, ``atomic()`` is only a savepoint, and releasing one leaves
     a transaction-scoped setting in force for every later query of that transaction. So the previous value is put
@@ -77,7 +80,8 @@ def _deadlined_cursor() -> Iterator[CursorWrapper]:
 
 
 class HealthController(GenericViewSet):
-    """Unauthenticated probes.
+    """
+    Unauthenticated probes.
 
     They report which dependency is unwell and whether this database is a primary, which is operational
     detail rather than anything sensitive, but there is no reason to hand out more than a prober needs.
@@ -88,7 +92,8 @@ class HealthController(GenericViewSet):
     throttle_classes: list = []
 
     def check(self, request: HttpRequest) -> HttpResponse:
-        """Return a plain 200 so probes can treat any other status as failure.
+        """
+        Return a plain 200 so probes can treat any other status as failure.
 
         Args:
             request: Incoming HTTP request (unused).
@@ -99,7 +104,8 @@ class HealthController(GenericViewSet):
         return HttpResponse("Okay!", status=200)
 
     def live(self, request: HttpRequest) -> HttpResponse:
-        """Liveness probe: the process is up and serving.
+        """
+        Liveness probe: the process is up and serving.
 
         Args:
             request: Incoming HTTP request (unused).
@@ -110,7 +116,8 @@ class HealthController(GenericViewSet):
         return HttpResponse("Okay!", status=200)
 
     def ready(self, request: HttpRequest) -> JsonResponse:
-        """Readiness probe: dependencies this instance needs are reachable.
+        """
+        Readiness probe: dependencies this instance needs are reachable.
 
         Args:
             request: Incoming HTTP request (unused).
@@ -124,7 +131,8 @@ class HealthController(GenericViewSet):
         return JsonResponse(report, status=200 if healthy else 503)
 
     def primary(self, request: HttpRequest) -> JsonResponse:
-        """Writable probe: dependencies are reachable *and* this DB accepts writes.
+        """
+        Writable probe: dependencies are reachable *and* this DB accepts writes.
 
         Args:
             request: Incoming HTTP request (unused).
@@ -138,7 +146,8 @@ class HealthController(GenericViewSet):
         return JsonResponse(report, status=200 if healthy else 503)
 
     def _collect(self) -> dict[str, Any]:
-        """Probe every dependency once and describe what came back.
+        """
+        Probe every dependency once and describe what came back.
 
         Returns:
             Mapping with ``db``, ``cache``, ``role`` and ``migrations`` keys.
@@ -159,7 +168,8 @@ class HealthController(GenericViewSet):
 
     @staticmethod
     def _is_degraded(*, cache_status: str, db_status: str, connections: dict[str, int] | None) -> bool:
-        """Whether this instance is serving but should be looked at.
+        """
+        Whether this instance is serving but should be looked at.
 
         Distinct from unhealthy on purpose.
 
@@ -180,7 +190,8 @@ class HealthController(GenericViewSet):
 
     @staticmethod
     def _probe_connections() -> dict[str, int] | None:
-        """How much of the database's connection ceiling is in use.
+        """
+        How much of the database's connection ceiling is in use.
 
         Alert on the field instead.
 
@@ -204,7 +215,8 @@ class HealthController(GenericViewSet):
         return {"used": int(used), "max": int(maximum)}
 
     def _probe_database(self) -> tuple[str, str]:
-        """Check the database answers, and whether it is a writable primary.
+        """
+        Check the database answers, and whether it is a writable primary.
 
         Returns:
             ``(status, role)`` where status is ``ok`` or ``error`` and role is ``primary``, ``replica`` or
@@ -225,7 +237,8 @@ class HealthController(GenericViewSet):
         return "ok", "unknown"
 
     def _probe_cache(self) -> str:
-        """Check the cache backend accepts a write and returns it.
+        """
+        Check the cache backend accepts a write and returns it.
 
         Returns:
             ``ok`` if the round trip succeeded, ``error`` otherwise.
@@ -241,7 +254,8 @@ class HealthController(GenericViewSet):
         return "ok"
 
     def _probe_migrations(self) -> str:
-        """Report whether unapplied migrations exist.
+        """
+        Report whether unapplied migrations exist.
 
         During a rolling multi-site deploy an instance legitimately runs briefly against a schema its own
         image has not caught up to, and failing readiness here would take the last serving site out

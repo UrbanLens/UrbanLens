@@ -1,4 +1,5 @@
-"""Underground structures plugin: mapped subsurface features near a pin, via REData.
+"""
+Underground structures plugin: mapped subsurface features near a pin, via REData.
 Worldwide but volunteer-mapped: an empty answer means "nothing mapped here", never "nothing there", so the panel simply hides rather than asserting absence."""
 
 from __future__ import annotations
@@ -39,7 +40,8 @@ class UndergroundPanelSource(RedataInfoPanelSource):
         return RedataUndergroundGateway().get_underground_structures(latitude, longitude, limit=self.row_limit)
 
     def transform_rows(self, rows: list[dict]) -> list[dict]:
-        """Drop each structure's geometry before caching.
+        """
+        Drop each structure's geometry before caching.
         A future map-overlay consumer should fetch its own geometry rather than reading this cache."""
         return [{key: value for key, value in structure.items() if key != "geometry"} for structure in rows]
 

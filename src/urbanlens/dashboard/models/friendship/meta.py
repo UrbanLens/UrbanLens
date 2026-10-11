@@ -4,7 +4,8 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class FriendshipStatus(TextChoices):
-    """What kind of relationship two profiles have - and nothing else.
+    """
+    What kind of relationship two profiles have - and nothing else.
     ``MUTED`` is retained but **deprecated and never written**.
     """
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""List the URL routes that accept a write but that no test names.
+"""
+List the URL routes that accept a write but that no test names.
 
 A route accepts a write when a DRF viewset's ``actions``, a class-based view's handlers (filtered by
 ``http_method_names``) or a DRF ``APIView``'s handlers include ``post``/``put``/``patch``/``delete``. A route is
@@ -35,7 +36,8 @@ _TEST_GLOBS = ("src/**/tests/**/*.py", "tests/**/*.py")
 
 @dataclass(frozen=True)
 class Route:
-    """One named route and the methods its view answers.
+    """
+    One named route and the methods its view answers.
 
     Attributes:
         name: The namespace-joined route name, as ``reverse`` takes it.
@@ -54,7 +56,8 @@ class Route:
 
 
 def _view_methods(callback: Callable[..., Any]) -> frozenset[str] | None:
-    """The methods *callback* dispatches, read from what ``as_view`` attached to it.
+    """
+    The methods *callback* dispatches, read from what ``as_view`` attached to it.
 
     Args:
         callback: A resolved URL pattern's view.
@@ -74,7 +77,8 @@ def _view_methods(callback: Callable[..., Any]) -> frozenset[str] | None:
 
 
 def _walk(patterns: Iterable[Any], namespace: str, prefix: str) -> Iterator[Route]:
-    """Every named route under *patterns*.
+    """
+    Every named route under *patterns*.
 
     Args:
         patterns: URL patterns and resolvers, as ``urlpatterns`` holds them.
@@ -98,7 +102,8 @@ def _walk(patterns: Iterable[Any], namespace: str, prefix: str) -> Iterator[Rout
 
 
 def discover_routes() -> list[Route]:
-    """Every named project route, one per name.
+    """
+    Every named project route, one per name.
 
     Returns:
         The routes, sorted by name. A name bound twice keeps the first binding, as ``reverse`` does.
@@ -112,7 +117,8 @@ def discover_routes() -> list[Route]:
 
 
 def read_test_sources(root: pathlib.Path) -> str:
-    """The concatenated text of every test file under *root*.
+    """
+    The concatenated text of every test file under *root*.
 
     Args:
         root: The repository root.
@@ -125,7 +131,8 @@ def read_test_sources(root: pathlib.Path) -> str:
 
 
 def is_named(name: str, sources: str) -> bool:
-    """Whether *name* appears as a quoted string literal in *sources*.
+    """
+    Whether *name* appears as a quoted string literal in *sources*.
 
     Args:
         name: A namespace-joined route name.
@@ -138,7 +145,8 @@ def is_named(name: str, sources: str) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Print the unnamed write routes and the totals.
+    """
+    Print the unnamed write routes and the totals.
 
     Args:
         argv: Command-line arguments; ``sys.argv`` when omitted.

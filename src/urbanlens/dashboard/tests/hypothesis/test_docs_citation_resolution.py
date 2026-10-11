@@ -1,4 +1,5 @@
-"""One citation string can resolve from one directory and not another.
+"""
+One citation string can resolve from one directory and not another.
 
 `bin/check_docs_refs.py` tries a citation against the repository root, against
 `docs/`, and against the citing file's own directory - so `GUIDE.md` is a live
@@ -33,7 +34,8 @@ _CHECKER_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "check_doc
 
 
 def _load_checker():
-    """Import ``bin/check_docs_refs.py`` as a module.
+    """
+    Import ``bin/check_docs_refs.py`` as a module.
 
     Returns:
         The imported module.
@@ -115,7 +117,8 @@ class CitationResolutionTests(SimpleTestCase):
 
 
 class SiblingCheckoutCitationTests(SimpleTestCase):
-    """A path into a sibling repository is verified only when it is there.
+    """
+    A path into a sibling repository is verified only when it is there.
 
     Each repository here is built *inside* a workspace directory, so its parent
     is somewhere siblings can be created - which is the layout the citations
@@ -128,7 +131,8 @@ class SiblingCheckoutCitationTests(SimpleTestCase):
         cls.checker = _load_checker()
 
     def _workspace(self, files: dict[str, str]) -> tuple[pathlib.Path, pathlib.Path]:
-        """Build `<workspace>/UrbanLens` holding `files`, tracked in git.
+        """
+        Build `<workspace>/UrbanLens` holding `files`, tracked in git.
 
         Args:
             files: Repo-relative path to contents.
@@ -176,7 +180,8 @@ class SiblingCheckoutCitationTests(SimpleTestCase):
         self.assertEqual(broken_code, {})
 
     def test_a_deep_citing_file_is_judged_from_the_repository_root(self) -> None:
-        """`../REData/...` means "beside this repository", wherever it is written.
+        """
+        `../REData/...` means "beside this repository", wherever it is written.
 
         Resolved from the citing file's own directory instead, the same string
         lands back *inside* the repository - which is how a test six directories

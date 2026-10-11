@@ -1,4 +1,5 @@
-"""Backfill Location.country for rows geocoded before country parsing existed.
+"""
+Backfill Location.country for rows geocoded before country parsing existed.
 
 This command re-derives the real country for rows still missing one, using the Google Geocoding API
 (through the same GeocodedLocation cache used elsewhere).

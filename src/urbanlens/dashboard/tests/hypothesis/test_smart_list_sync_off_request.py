@@ -1,4 +1,5 @@
-"""A pin change re-evaluates its owner's smart lists on the queue, never on the request (N30, Batch 1).
+"""
+A pin change re-evaluates its owner's smart lists on the queue, never on the request (N30, Batch 1).
 
 Below ``MAX_SMART_LISTS_PER_SYNC`` the old sync ran in the request's commit hook, once per pin per signal. Measured
 on 2026-10-06 against 25 smart lists over 2,000 pins: one pin save cost 116 queries and 145-180 ms; a bulk edit of

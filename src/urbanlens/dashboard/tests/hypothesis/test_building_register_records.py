@@ -1,4 +1,5 @@
-"""P230: register details appear on the buildings the register lists, and every building child links its wiki.
+"""
+P230: register details appear on the buildings the register lists, and every building child links its wiki.
 
 Modelled on the Hudson River State Hospital campus: NPS lists one building there (the Main Building, NHL), and its
 listing's boundary holds a dozen others. CRIS's own record for each building says which one is listed.

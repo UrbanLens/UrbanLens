@@ -77,7 +77,8 @@ class ReactionExistingForTripCommentAndDirectMessageTests(TestCase):
 
 
 class ReactionExistingForGroupMessageTests(TestCase):
-    """The group-message host, added last and therefore the most likely to drift.
+    """
+    The group-message host, added last and therefore the most likely to drift.
 
     A group message is the only reaction target whose row is visible to more than two people, so the per-host
     unique constraint matters more here than anywhere else: without it, two concurrent taps from the same member
@@ -132,7 +133,8 @@ class ReactionExistingForGroupMessageTests(TestCase):
 
 
 class ReactionExistingTargetGuardTests(TestCase):
-    """``existing()`` must refuse anything but exactly one host kwarg.
+    """
+    ``existing()`` must refuse anything but exactly one host kwarg.
 
     Both malformed calls fail *silently* without the guard, which is why it exists."""
 

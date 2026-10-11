@@ -1,4 +1,5 @@
-"""A cache that gives up quickly, and behaves like an empty one, when it is down.
+"""
+A cache that gives up quickly, and behaves like an empty one, when it is down.
 
 Measured on a staging-model environment with Valkey paused (P105): every
 request 500s **after about 32 seconds**, the readiness endpoint included. The
@@ -94,7 +95,8 @@ _CAUGHT: tuple[type[BaseException], ...] = (*_DEGRADES, *_ERROR_REPLY)
 
 
 def _refused_for_memory(exc: BaseException) -> bool:
-    """Whether *exc* is a full store turning a write away, however the store worded it.
+    """
+    Whether *exc* is a full store turning a write away, however the store worded it.
 
     redis-py only raises `OutOfMemoryError` for a reply that starts with
     ``OOM``. Dragonfly words it ``Out of memory``, and inside a Lua script it
@@ -120,7 +122,8 @@ def _text(value: bytes | str) -> str:
 
 
 def next_arrival(stored_us: int, now_us: int, interval_us: int, burst: int) -> int | None:
-    """One step of a token bucket, kept as the time the bucket is next full (GCRA).
+    """
+    One step of a token bucket, kept as the time the bucket is next full (GCRA).
 
     Args:
         stored_us: The stored time, 0 when nothing is stored.
@@ -136,7 +139,8 @@ def next_arrival(stored_us: int, now_us: int, interval_us: int, burst: int) -> i
 
 
 class CacheUnavailableError(ValueError):
-    """The store could not be reached, or refused the write.
+    """
+    The store could not be reached, or refused the write.
 
     A ``ValueError`` because that is what ``incr`` raises for an absent key, so
     existing callers of ``incr`` keep degrading; anything that has to tell the
@@ -149,7 +153,8 @@ class AtomicCacheOps(Protocol):
     """Single-step operations for counters and locks, which raise rather than answer as empty."""
 
     def incr_window(self, key: str, ttl: int, *, sliding: bool = False) -> int:
-        """Increment *key*, creating it at 1 with a *ttl*-second expiry.
+        """
+        Increment *key*, creating it at 1 with a *ttl*-second expiry.
 
         Args:
             key: The counter's key.
@@ -165,7 +170,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def peek_int(self, key: str) -> int:
-        """The counter's value, 0 when absent.
+        """
+        The counter's value, 0 when absent.
 
         Raises:
             CacheUnavailableError: The store could not be read.
@@ -173,7 +179,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def decr_if_positive(self, key: str) -> None:
-        """Decrement *key* unless it is absent or already 0.
+        """
+        Decrement *key* unless it is absent or already 0.
 
         Raises:
             CacheUnavailableError: The store could not be reached.
@@ -181,7 +188,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def delete_if_value(self, key: str, value: str) -> bool:
-        """Delete *key* only while it still holds *value*.
+        """
+        Delete *key* only while it still holds *value*.
 
         Returns:
             Whether it was deleted.
@@ -192,7 +200,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def take_token(self, key: str, *, now_us: int, interval_us: int, burst: int) -> bool:
-        """Take one token from the bucket at *key*; see :func:`next_arrival`.
+        """
+        Take one token from the bucket at *key*; see :func:`next_arrival`.
 
         Returns:
             Whether a token was available.
@@ -203,7 +212,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def return_token(self, key: str, *, now_us: int, interval_us: int) -> None:
-        """Put back one token taken from the bucket at *key*, never past full.
+        """
+        Put back one token taken from the bucket at *key*, never past full.
 
         Raises:
             CacheUnavailableError: The store could not be reached.
@@ -211,7 +221,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def add_to_tally(self, key: str, increments: Mapping[str, int], ttl: int) -> None:
-        """Add each increment to its field of the tally at *key*, and restart the tally's *ttl*-second expiry.
+        """
+        Add each increment to its field of the tally at *key*, and restart the tally's *ttl*-second expiry.
 
         Raises:
             CacheUnavailableError: The store could not be reached.
@@ -219,7 +230,8 @@ class AtomicCacheOps(Protocol):
         ...
 
     def take_tally(self, key: str) -> dict[str, int]:
-        """Remove the tally at *key* and return its fields, in one step, so no increment is read twice or lost.
+        """
+        Remove the tally at *key* and return its fields, in one step, so no increment is read twice or lost.
 
         Returns:
             Field to count; empty when there is no tally.
@@ -302,7 +314,8 @@ DEFAULT_BREAKER_SECONDS = 10.0
 
 
 class ResilientRedisCache(RedisCache):
-    """``RedisCache`` that degrades to an empty cache instead of raising.
+    """
+    ``RedisCache`` that degrades to an empty cache instead of raising.
 
     The breaker is per process, held in memory: it is a statement about what
     this worker just observed, and sharing it would need the store that is
@@ -311,7 +324,8 @@ class ResilientRedisCache(RedisCache):
     """
 
     def __init__(self, server: str, params: dict[str, Any]) -> None:
-        """Build the backend.
+        """
+        Build the backend.
 
         Args:
             server: Connection URL, as Django passes it.
@@ -348,7 +362,8 @@ class ResilientRedisCache(RedisCache):
             logger.warning("Cache unreachable on %s (%s: %s); serving as empty for %.0fs", operation, type(exc).__name__, exc, self._breaker_seconds)
 
     def _guard(self, operation: str, call: Callable[[], Any], *, fallback: Any) -> Any:
-        """Run *call*, answering *fallback* when the store cannot be reached.
+        """
+        Run *call*, answering *fallback* when the store cannot be reached.
 
         Args:
             operation: Name of the cache operation, for the log line.
@@ -406,7 +421,8 @@ class ResilientRedisCache(RedisCache):
         self._guard("clear", lambda: super(ResilientRedisCache, self).clear(), fallback=None)
 
     def incr(self, key: str, delta: int = 1, version: int | None = None) -> int:
-        """Increment, raising :class:`CacheUnavailableError` when the store cannot be reached.
+        """
+        Increment, raising :class:`CacheUnavailableError` when the store cannot be reached.
 
         Raises:
             ValueError: The key is absent.
@@ -415,7 +431,8 @@ class ResilientRedisCache(RedisCache):
         return int(self._strict("incr", lambda: super(ResilientRedisCache, self).incr(key, delta, version)))
 
     def _strict(self, operation: str, call: Callable[[], Any]) -> Any:
-        """Run *call*, raising :class:`CacheUnavailableError` rather than answering as empty.
+        """
+        Run *call*, raising :class:`CacheUnavailableError` rather than answering as empty.
 
         Args:
             operation: Name of the cache operation, for the log line.
@@ -479,7 +496,8 @@ class ResilientRedisCache(RedisCache):
 
 
 class AtomicLocMemCache(LocMemCache):
-    """``LocMemCache`` with :class:`AtomicCacheOps`, each operation under the backend's own lock.
+    """
+    ``LocMemCache`` with :class:`AtomicCacheOps`, each operation under the backend's own lock.
 
     For the test suite and store-less development, so counters and locks take the
     same path there as against Dragonfly. It is never unreachable.

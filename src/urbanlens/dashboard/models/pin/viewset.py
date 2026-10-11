@@ -20,7 +20,8 @@ _TRUTHY = {"1", "true", "yes", "on"}
 
 
 def _wiki_loss_confirmed(data) -> bool:
-    """Whether the client has already acknowledged losing wiki access.
+    """
+    Whether the client has already acknowledged losing wiki access.
 
     Args:
         data: The request body.
@@ -35,7 +36,8 @@ def _wiki_loss_confirmed(data) -> bool:
 
 
 class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
-    """PATCH/DELETE only - see the "deliberately minimal" note in dashboard/urls.py.
+    """
+    PATCH/DELETE only - see the "deliberately minimal" note in dashboard/urls.py.
     Only ``mixins.DestroyModelMixin`` is mixed in, and ``update`` is never defined (only ``partial_update``), so the router never binds GET, PUT, or POST/list at all - creating a pin goes through ``MapController.post_add_pin`` instead, matching the map's own add-pin flow.
     """
 
@@ -114,7 +116,8 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
 
     @staticmethod
     def _parse_coordinates(data) -> tuple[float, float] | str:
-        """Validate client-submitted lat/lng.
+        """
+        Validate client-submitted lat/lng.
 
         Args:
             data: The request body, expected to carry ``latitude``/``longitude``.
@@ -138,7 +141,8 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         serializer.save(profile=self.request.user.profile)
 
     def destroy(self, request, *args, **kwargs):
-        """Delete a pin, asking the client what to do with its child pins first.
+        """
+        Delete a pin, asking the client what to do with its child pins first.
         A pin with descendants requires an explicit ``children`` query param: without one the request is refused with 409 and a payload describing how many child pins exist, so the UI can ask the user.
         """
         logger.info("Delete request initiated by user %s", request.user.id)

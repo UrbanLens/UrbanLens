@@ -35,7 +35,8 @@ class RateLimitDatabaseFailureTests(SimpleTestCase):
             self.assertFalse(check_rate_limit("a-service-nobody-declared"))
 
     def test_every_free_marking_is_backed_by_its_own_notes(self) -> None:
-        """`billable=False` is a claim about a provider's terms, not a guess.
+        """
+        `billable=False` is a claim about a provider's terms, not a guess.
 
         Each exemption must be justified where a reader will find it - in the service's own registry entry - so
         the next person can check it against the provider rather than take this file's word for it."""

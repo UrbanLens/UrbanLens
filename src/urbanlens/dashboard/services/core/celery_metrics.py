@@ -1,4 +1,5 @@
-"""Celery queue depth, exported on the app's ``/metrics``.
+"""
+Celery queue depth, exported on the app's ``/metrics``.
 Queue depth is the Celery number worth alerting on: it answers "are the workers keeping up", and it goes wrong in the direction that matters (a queue nothing drains grows without bound and the symptom is a feature that silently stopped working)."""
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ _BROKER_TIMEOUT_SECONDS = 2.0
 
 
 class CeleryQueueDepthCollector:
-    """Report the number of messages waiting on each queue.
+    """
+    Report the number of messages waiting on each queue.
     A ``prometheus_client`` collector rather than module-level gauges, because the value only exists at scrape time - there is no event in the web process that would update a gauge, and a stale gauge is worse than none."""
 
     #: Label values are the members of :class:`Queue`, so cardinality is fixed
@@ -33,7 +35,8 @@ class CeleryQueueDepthCollector:
     QUEUES: tuple[Queue, ...] = tuple(Queue)
 
     def collect(self) -> Iterator[GaugeMetricFamily]:
-        """Yield the queue-depth gauges for this scrape.
+        """
+        Yield the queue-depth gauges for this scrape.
 
         Yields:
             ``urbanlens_celery_queue_depth`` labelled by queue, and ``urbanlens_celery_broker_up`` so a scrape can tell "every queue is empty" apart from "the broker did not answer" - which otherwise look identical, and mean opposite things."""
@@ -56,7 +59,8 @@ class CeleryQueueDepthCollector:
         yield depth
 
     def _read_depths(self) -> dict[str, int] | None:
-        """Ask the broker how many messages are waiting on each queue.
+        """
+        Ask the broker how many messages are waiting on each queue.
 
         Returns:
             Mapping of queue name to depth, or ``None`` when the broker could not be reached or the transport cannot answer the question."""

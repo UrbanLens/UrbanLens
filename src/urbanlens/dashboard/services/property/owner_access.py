@@ -1,4 +1,5 @@
-"""Who may see property-owner identity and contact details.
+"""
+Who may see property-owner identity and contact details.
 That lookup is the product, so it is gated on :attr:`~urbanlens.dashboard.models.subscriptions.SiteFeature.PROPERTY_OWNERS`. * **User contributed** - a private ``PinOwner`` note, or a ``WikiOwner`` a community member typed in."""
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ if TYPE_CHECKING:
 
 
 def can_see_official_owners(user: AbstractBaseUser | AnonymousUser | None) -> bool:
-    """Whether this user may see automatically-sourced owner identity/contact info.
+    """
+    Whether this user may see automatically-sourced owner identity/contact info.
 
     Args:
         user: The viewing user.
@@ -28,7 +30,8 @@ def can_see_official_owners(user: AbstractBaseUser | AnonymousUser | None) -> bo
 
 
 def viewer_of(pin) -> AbstractBaseUser | None:
-    """The user whose entitlement governs what a pin's panels may show.
+    """
+    The user whose entitlement governs what a pin's panels may show.
     The Private Pin page only ever renders a pin its own owner requested (``PinController.panel_info`` looks it up by ``profile__user``), so the pin's own profile is the viewer.
 
     Args:
@@ -41,7 +44,8 @@ def viewer_of(pin) -> AbstractBaseUser | None:
 
 
 def visible_owners(owners, user: AbstractBaseUser | AnonymousUser) -> list[WikiOwner | PinOwner]:
-    """Drop officially-sourced owners this user isn't entitled to see.
+    """
+    Drop officially-sourced owners this user isn't entitled to see.
     ``PinOwner`` has no ``source`` field at all - private per-pin records are definitionally user-entered (see ``OwnerSource``'s own docstring) - so a queryset of those passes through untouched without needing a separate call site.
 
     Args:
@@ -59,7 +63,8 @@ def visible_owners(owners, user: AbstractBaseUser | AnonymousUser) -> list[WikiO
 
 
 def sale_rows(sales, user: AbstractBaseUser | AnonymousUser) -> list[dict]:
-    """Sale records with their party names filtered for this viewer.
+    """
+    Sale records with their party names filtered for this viewer.
 
     Args:
         sales: Sale records, ideally with their party relations prefetched.
@@ -89,7 +94,8 @@ def sale_rows(sales, user: AbstractBaseUser | AnonymousUser) -> list[dict]:
 
 
 def withheld_official_count(owners, user: AbstractBaseUser | AnonymousUser) -> int:
-    """How many official owner records were withheld from this user.
+    """
+    How many official owner records were withheld from this user.
 
     Args:
         owners: An iterable of ``WikiOwner``/``PinOwner`` rows.

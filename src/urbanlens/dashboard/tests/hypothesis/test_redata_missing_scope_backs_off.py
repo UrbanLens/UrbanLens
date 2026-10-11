@@ -1,4 +1,5 @@
-"""A key REData refuses for an endpoint is a configuration fault: reported once, then left alone for a long while.
+"""
+A key REData refuses for an endpoint is a configuration fault: reported once, then left alone for a long while.
 
 REData answers 403 when the key lacks the endpoint's scope. Treated as an outage, every pin's panel asked again
 every five minutes and logged a warning each time, for as long as the key stayed unchanged.

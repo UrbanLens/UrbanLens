@@ -44,7 +44,8 @@ class AutocompleteResult:
 
 
 def search_local(query: str, profile) -> list[AutocompleteResult]:
-    """Search the local DB for pins, locations, and their aliases matching *query*.
+    """
+    Search the local DB for pins, locations, and their aliases matching *query*.
 
     Args:
         query: Raw search string (may be a partial word).
@@ -265,7 +266,8 @@ def _normalised_query(query: str) -> str:
 
 
 def search_google_places(query: str, api_key: str, *, caller: str | None = None) -> UpstreamResult[list[AutocompleteResult]]:
-    """Place predictions for the search bar, from cache or REData/Google (the API key stays server-side).
+    """
+    Place predictions for the search bar, from cache or REData/Google (the API key stays server-side).
     Coordinates are omitted here; `resolve_google_place` fetches them only for the suggestion the user picks.
 
     Args:
@@ -294,7 +296,8 @@ def search_google_places(query: str, api_key: str, *, caller: str | None = None)
 
 
 def empty_suggestions(profile) -> list[AutocompleteResult]:
-    """Return suggestions for an empty search input: top cities by pin count.
+    """
+    Return suggestions for an empty search input: top cities by pin count.
 
     Args:
         profile: The requesting user's Profile instance.
@@ -353,7 +356,8 @@ def empty_suggestions(profile) -> list[AutocompleteResult]:
 
 
 def resolve_google_place(place_id: str, api_key: str, *, caller: str | None = None) -> UpstreamResult[tuple[float | None, float | None, str | None]]:
-    """Coordinates for a place_id the user selected, from cache or REData/Google.
+    """
+    Coordinates for a place_id the user selected, from cache or REData/Google.
 
     Args:
         place_id: Places ``place_id`` from an autocomplete prediction.

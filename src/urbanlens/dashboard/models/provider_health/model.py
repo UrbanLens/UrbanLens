@@ -11,7 +11,8 @@ from urbanlens.dashboard.models.provider_health.queryset import ProviderHealthMa
 
 
 class ProviderHealth(abstract.DashboardModel):
-    """What ``services.core.provider_health`` last concluded about one provider.
+    """
+    What ``services.core.provider_health`` last concluded about one provider.
 
     Written only by that module's evaluator, every five minutes, from ``ApiCallLog``. The call log is the record;
     this row is the verdict, the backoff in force and what a person has been told, kept in the database rather than

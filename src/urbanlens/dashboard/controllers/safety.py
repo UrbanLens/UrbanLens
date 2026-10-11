@@ -94,7 +94,8 @@ _MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · Leaflet"
 
 
 def _resolve_checkin_trip(profile: Profile, trip_slug: str | None) -> Trip | None:
-    """Resolve a check-in's trip scope from a slug, requiring the viewer to have joined it.
+    """
+    Resolve a check-in's trip scope from a slug, requiring the viewer to have joined it.
 
     Args:
         profile: The viewer creating (or looking up) the check-in.
@@ -115,7 +116,8 @@ def _resolve_checkin_trip(profile: Profile, trip_slug: str | None) -> Trip | Non
 
 
 def _trip_checkin_prefill(trip: Trip) -> tuple[str, str]:
-    """Return (title, plan_details) defaults for a check-in started from a trip.
+    """
+    Return (title, plan_details) defaults for a check-in started from a trip.
 
     Args:
         trip: The trip the check-in is scoped to.
@@ -135,7 +137,8 @@ def _trip_checkin_prefill(trip: Trip) -> tuple[str, str]:
 
 
 def _markup_style_context(profile: Profile) -> dict:
-    """Return the profile's markup color/opacity defaults for the markup panel.
+    """
+    Return the profile's markup color/opacity defaults for the markup panel.
 
     Shared with the pin detail and location wiki pages' map context, so a check-in's route/plan markup
     starts from the same fill/border defaults the user already has configured elsewhere.
@@ -155,7 +158,8 @@ def _markup_style_context(profile: Profile) -> dict:
 
 
 def _ensure_markup_map(checkin: SafetyCheckin, profile: Profile) -> MarkupMap:
-    """Return the check-in's route MarkupMap, creating and linking one if missing.
+    """
+    Return the check-in's route MarkupMap, creating and linking one if missing.
 
     The map is seeded with the destination as its centre so the route-drawing toolbar opens on the right
     spot.
@@ -182,7 +186,8 @@ def _ensure_markup_map(checkin: SafetyCheckin, profile: Profile) -> MarkupMap:
 
 
 def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[ContactInput]:
-    """Parse a submitted contact list (friend chips + email chips) into ContactInput tuples.
+    """
+    Parse a submitted contact list (friend chips + email chips) into ContactInput tuples.
 
     Args:
         request: Incoming HTTP request.
@@ -215,7 +220,8 @@ def _parse_contacts_from_post(request: HttpRequest, profile: Profile) -> list[Co
 
 
 def _get_checkin_by_slug(profile: Profile, checkin_slug: str) -> SafetyCheckin:
-    """Look up an owner's check-in by slug, falling back to UUID.
+    """
+    Look up an owner's check-in by slug, falling back to UUID.
 
     Mirrors the Pin controller's slug-then-uuid lookup: the URL kwarg is usually a real slug, but
     older/direct-linked check-ins may still be identified by their raw UUID.
@@ -240,7 +246,8 @@ def _get_checkin_by_slug(profile: Profile, checkin_slug: str) -> SafetyCheckin:
 
 
 def _get_checkin_as_partner(profile: Profile, checkin_slug: str) -> SafetyCheckin | None:
-    """Look up a check-in ``profile`` is an accepted partner on, by slug or UUID.
+    """
+    Look up a check-in ``profile`` is an accepted partner on, by slug or UUID.
 
     A partner has no slug access of their own - the URL value reaching here is always the check-in's
     UUID (see ``services.visits.safety._notify_checkin_partner_invite``) - but resolving the same way
@@ -270,7 +277,8 @@ def _get_checkin_as_partner(profile: Profile, checkin_slug: str) -> SafetyChecki
 
 
 def _contact_display_label(contact_profile: Profile | None, email: str | None, label: str) -> str:
-    """Return the best display label for a saved contact, for the defaults summary.
+    """
+    Return the best display label for a saved contact, for the defaults summary.
 
     Args:
         contact_profile: The linked connection, if the contact is a friend.
@@ -286,7 +294,8 @@ def _contact_display_label(contact_profile: Profile | None, email: str | None, l
 
 
 def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckinContact]) -> dict[int | str, dict[str, str]]:
-    """Build a {contact identity -> {"label", "class"}} map for the contact-picker's status labels.
+    """
+    Build a {contact identity -> {"label", "class"}} map for the contact-picker's status labels.
 
     Args:
         checkin: The check-in these contacts belong to (used to resolve opt-out scopes).
@@ -315,7 +324,8 @@ def _contact_status_map(checkin: SafetyCheckin, contacts: Iterable[SafetyCheckin
 
 
 def _overview_stats(checkins: Iterable[SafetyCheckin]) -> dict[str, int]:
-    """Compute the safety overview page's stat-tile counts.
+    """
+    Compute the safety overview page's stat-tile counts.
 
     Evaluates ``checkins`` into a list (populating its queryset result cache, if it came from one) so
     the overview page's own iteration over the same checkins for the check-in list doesn't re-query.
@@ -346,7 +356,8 @@ class InvalidDestinationError(ValueError):
 
 
 def _parse_destination(data: QueryDict) -> tuple[float, float] | tuple[None, None]:
-    """Parse the destination pair the check-in map writes into its two hidden inputs.
+    """
+    Parse the destination pair the check-in map writes into its two hidden inputs.
 
     Args:
         data: ``request.POST`` or ``request.GET``.
@@ -369,7 +380,8 @@ def _parse_destination(data: QueryDict) -> tuple[float, float] | tuple[None, Non
 
 
 def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
-    """Parse the submitted grace period, in hours, into a timedelta.
+    """
+    Parse the submitted grace period, in hours, into a timedelta.
 
     Args:
         request: Incoming HTTP request.
@@ -387,7 +399,8 @@ def _parse_grace_period(request: HttpRequest) -> datetime.timedelta:
 
 
 def _parse_auto_delete_days(request: HttpRequest) -> int | None:
-    """Parse the submitted auto-delete window, in days.
+    """
+    Parse the submitted auto-delete window, in days.
 
     Args:
         request: Incoming HTTP request.
@@ -406,7 +419,8 @@ def _parse_auto_delete_days(request: HttpRequest) -> int | None:
 
 
 class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
-    """Navbar banner for the profile's currently active (unresolved) check-ins, if any.
+    """
+    Navbar banner for the profile's currently active (unresolved) check-ins, if any.
 
     GET /safety/nav-banner/
 
@@ -415,7 +429,8 @@ class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the active check-in banner partial.
+        """
+        Render the active check-in banner partial.
 
         Args:
             request: Incoming HTTP request.
@@ -428,13 +443,15 @@ class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
 
 
 class SafetyHomeView(LoginRequiredMixin, View):
-    """Safety overview: stats, the profile's check-ins, and check-ins shared with them.
+    """
+    Safety overview: stats, the profile's check-ins, and check-ins shared with them.
 
     GET /safety/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the safety overview page.
+        """
+        Render the safety overview page.
 
         Args:
             request: Incoming HTTP request.
@@ -462,14 +479,16 @@ class SafetyHomeView(LoginRequiredMixin, View):
 
 
 class SafetySettingsView(LoginRequiredMixin, View):
-    """Safety defaults: default contacts, message, grace period, and auto-delete window.
+    """
+    Safety defaults: default contacts, message, grace period, and auto-delete window.
 
     GET  /safety/settings/
     POST /safety/settings/ - update default emergency contacts and message/grace period.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the safety settings page with the profile's defaults.
+        """
+        Render the safety settings page with the profile's defaults.
 
         Args:
             request: Incoming HTTP request.
@@ -491,7 +510,8 @@ class SafetySettingsView(LoginRequiredMixin, View):
         )
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Update the profile's safety defaults.
+        """
+        Update the profile's safety defaults.
 
         Called both as a plain form submit and, from the defaults form's autosave behavior, as an XHR
         request - distinguished by the ``X-Requested-With`` header set by the autosave JS.
@@ -527,14 +547,16 @@ class SafetySettingsView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinCreateView(LoginRequiredMixin, View):
-    """Create a new safety check-in, prefilled from the profile's defaults.
+    """
+    Create a new safety check-in, prefilled from the profile's defaults.
 
     GET  /safety/new/
     POST /safety/new/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the check-in creation form, prefilled from defaults.
+        """
+        Render the check-in creation form, prefilled from defaults.
 
         Args:
             request: Incoming HTTP request.
@@ -569,7 +591,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         )
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Create the check-in and redirect to its detail page.
+        """
+        Create the check-in and redirect to its detail page.
 
         Args:
             request: Incoming HTTP request.
@@ -634,7 +657,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
     def _link_markup_map(self, request: HttpRequest, profile: Profile, checkin: SafetyCheckin) -> None:
-        """Attach the draft MarkupMap drawn on the creation page, if any.
+        """
+        Attach the draft MarkupMap drawn on the creation page, if any.
 
         Only the caller's own unattached maps qualify - a stale/foreign uuid is ignored rather than failing
         the check-in.
@@ -648,14 +672,16 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinDetailView(LoginRequiredMixin, View):
-    """View and manage a single safety check-in (owner-only).
+    """
+    View and manage a single safety check-in (owner-only).
 
     GET  /safety/<slug:checkin_slug>/
     POST /safety/<slug:checkin_slug>/ - update plan/contacts, or cancel.
     """
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the check-in detail/monitor page, or a fallback view for non-owners.
+        """
+        Render the check-in detail/monitor page, or a fallback view for non-owners.
 
         Two non-owner fallbacks exist, tried in order:
 
@@ -682,7 +708,8 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         return self._render_full_detail(request, checkin, profile, viewer_is_partner=False)
 
     def _render_full_detail(self, request: HttpRequest, checkin: SafetyCheckin, viewer: Profile, *, viewer_is_partner: bool) -> HttpResponse:
-        """Render the full check-in detail page, for the owner or an accepted partner.
+        """
+        Render the full check-in detail page, for the owner or an accepted partner.
 
         Args:
             request: Incoming HTTP request.
@@ -750,7 +777,8 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         )
 
     def _render_community_view(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the read-only shared status page for a check-in the requester doesn't own.
+        """
+        Render the read-only shared status page for a check-in the requester doesn't own.
 
         Reachable two ways, only by UUID - slugs are unique per-profile, not globally, so a slug can't
         safely identify another user's check-in:
@@ -798,7 +826,8 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         )
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Autosave an edit, or cancel the check-in.
+        """
+        Autosave an edit, or cancel the check-in.
 
         Title, message, and the contact list are only applied while unlocked; the frontend never submits
         them once locked (their inputs are disabled), but they're re-checked here too in case a request
@@ -879,13 +908,15 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinCancelView(LoginRequiredMixin, View):
-    """Cancel a safety check-in (owner-only).
+    """
+    Cancel a safety check-in (owner-only).
 
     POST /safety/<uuid:checkin_uuid>/cancel/
     """
 
     def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
-        """Cancel the check-in and redirect to the safety home page.
+        """
+        Cancel the check-in and redirect to the safety home page.
 
         Args:
             request: Incoming HTTP request.
@@ -903,7 +934,8 @@ class SafetyCheckinCancelView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinDeleteView(LoginRequiredMixin, View):
-    """Permanently delete a safety check-in (owner-only).
+    """
+    Permanently delete a safety check-in (owner-only).
 
     POST /safety/<slug:checkin_slug>/delete/
 
@@ -914,7 +946,8 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Resolve (if needed) and delete the check-in, then redirect home.
+        """
+        Resolve (if needed) and delete the check-in, then redirect home.
 
         Args:
             request: Incoming HTTP request.
@@ -931,14 +964,16 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinCheckInView(LoginRequiredMixin, View):
-    """Self check-in link target, from the reminder email/notification.
+    """
+    Self check-in link target, from the reminder email/notification.
 
     GET  /safety/<slug:checkin_slug>/checkin/ - confirmation page.
     POST /safety/<slug:checkin_slug>/checkin/ - actually check in.
     """
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render a confirmation page for checking in.
+        """
+        Render a confirmation page for checking in.
 
         Args:
             request: Incoming HTTP request.
@@ -952,7 +987,8 @@ class SafetyCheckinCheckInView(LoginRequiredMixin, View):
         return render(request, "dashboard/pages/safety/checkin_confirm.html", {"checkin": checkin})
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Check in and redirect to the check-in detail page.
+        """
+        Check in and redirect to the check-in detail page.
 
         Args:
             request: Incoming HTTP request.
@@ -969,7 +1005,8 @@ class SafetyCheckinCheckInView(LoginRequiredMixin, View):
 
 
 def _render_partner_picker(request: HttpRequest, checkin: SafetyCheckin, *, error: str | None = None) -> HttpResponse:
-    """Render the partner list/invite partial for a check-in's owner.
+    """
+    Render the partner list/invite partial for a check-in's owner.
 
     Args:
         request: Incoming HTTP request (needed for template context processors).
@@ -991,14 +1028,16 @@ def _render_partner_picker(request: HttpRequest, checkin: SafetyCheckin, *, erro
 
 
 class SafetyCheckinPartnersView(LoginRequiredMixin, View):
-    """List and invite safety check-in partners (owner-only).
+    """
+    List and invite safety check-in partners (owner-only).
 
     GET  /safety/<slug:checkin_slug>/partners/
     POST /safety/<slug:checkin_slug>/partners/ - invite by username.
     """
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the partner list/invite partial.
+        """
+        Render the partner list/invite partial.
 
         Args:
             request: Incoming HTTP request.
@@ -1012,7 +1051,8 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
         return _render_partner_picker(request, checkin)
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Invite a partner by username and return the refreshed partial.
+        """
+        Invite a partner by username and return the refreshed partial.
 
         Args:
             request: Incoming HTTP request.
@@ -1049,13 +1089,15 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinPartnerRemoveView(LoginRequiredMixin, View):
-    """Remove a partner from a check-in (owner-only).
+    """
+    Remove a partner from a check-in (owner-only).
 
     POST /safety/<slug:checkin_slug>/partners/<int:partner_id>/remove/
     """
 
     def post(self, request: HttpRequest, checkin_slug: str, partner_id: int) -> HttpResponse:
-        """Remove the partner and return the refreshed partial.
+        """
+        Remove the partner and return the refreshed partial.
 
         Args:
             request: Incoming HTTP request.
@@ -1073,13 +1115,15 @@ class SafetyCheckinPartnerRemoveView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinPartnerInviteAcceptView(LoginRequiredMixin, View):
-    """Accept a pending safety check-in partner invite.
+    """
+    Accept a pending safety check-in partner invite.
 
     POST /safety/<uuid:checkin_uuid>/partners/accept/
     """
 
     def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
-        """Accept the invite and redirect to the check-in's detail page.
+        """
+        Accept the invite and redirect to the check-in's detail page.
 
         Args:
             request: Incoming HTTP request.
@@ -1103,13 +1147,15 @@ class SafetyCheckinPartnerInviteAcceptView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinPartnerInviteDeclineView(LoginRequiredMixin, View):
-    """Decline a pending safety check-in partner invite.
+    """
+    Decline a pending safety check-in partner invite.
 
     POST /safety/<uuid:checkin_uuid>/partners/decline/
     """
 
     def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
-        """Decline the invite and redirect to the safety overview page.
+        """
+        Decline the invite and redirect to the safety overview page.
 
         Args:
             request: Incoming HTTP request.
@@ -1130,13 +1176,15 @@ class SafetyCheckinPartnerInviteDeclineView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinPartnerMarkSafeView(LoginRequiredMixin, View):
-    """Mark the check-in owner as safe, as an accepted partner.
+    """
+    Mark the check-in owner as safe, as an accepted partner.
 
     POST /safety/<uuid:checkin_uuid>/partners/mark-safe/
     """
 
     def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
-        """Mark the owner safe and redirect to the check-in's detail page.
+        """
+        Mark the owner safe and redirect to the check-in's detail page.
 
         Args:
             request: Incoming HTTP request.
@@ -1160,13 +1208,15 @@ class SafetyCheckinPartnerMarkSafeView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinLocationSharingToggleView(LoginRequiredMixin, View):
-    """Turn live location sharing on or off for a check-in (owner-only).
+    """
+    Turn live location sharing on or off for a check-in (owner-only).
 
     POST /safety/<slug:checkin_slug>/location/toggle/
     """
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Toggle sharing and return the refreshed toggle state.
+        """
+        Toggle sharing and return the refreshed toggle state.
 
         Args:
             request: Incoming HTTP request.
@@ -1183,7 +1233,8 @@ class SafetyCheckinLocationSharingToggleView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
-    """Record the owner's current position while live location sharing is enabled (owner-only).
+    """
+    Record the owner's current position while live location sharing is enabled (owner-only).
 
     POST /safety/<slug:checkin_slug>/location/
     """
@@ -1194,7 +1245,8 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
     _MIN_UPDATE_INTERVAL_SECONDS = 10
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Update the check-in's live position.
+        """
+        Update the check-in's live position.
 
         Args:
             request: Incoming HTTP request.
@@ -1228,7 +1280,8 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
-    """HTMX fragment: the "also notify the community wiki" toggle for a destination point.
+    """
+    HTMX fragment: the "also notify the community wiki" toggle for a destination point.
 
     GET /safety/wiki-option/?destination_latitude=..&destination_longitude=..
 
@@ -1237,7 +1290,8 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the toggle partial - empty when no wiki covers the destination.
+        """
+        Render the toggle partial - empty when no wiki covers the destination.
 
         Args:
             request: Incoming HTTP request.
@@ -1268,7 +1322,8 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
 
 
 def _get_checkin_for_viewer(profile: Profile, checkin_slug: str) -> SafetyCheckin:
-    """Look up a check-in by slug/UUID for read-only access: owner or accepted partner.
+    """
+    Look up a check-in by slug/UUID for read-only access: owner or accepted partner.
 
     Used by sub-resource endpoints (e.g. the photo gallery panel) that the full detail page loads via
     HTMX after the initial render already decided the viewer is authorized - those endpoints only ever
@@ -1295,7 +1350,8 @@ def _get_checkin_for_viewer(profile: Profile, checkin_slug: str) -> SafetyChecki
 
 
 def _render_attached_maps(request: HttpRequest, checkin: SafetyCheckin) -> str:
-    """Render the "attached maps" list partial for a check-in.
+    """
+    Render the "attached maps" list partial for a check-in.
 
     Args:
         request: Incoming HTTP request (needed for template context processors).
@@ -1312,7 +1368,8 @@ def _render_attached_maps(request: HttpRequest, checkin: SafetyCheckin) -> str:
 
 
 class SafetyCheckinMapPickerView(LoginRequiredMixin, View):
-    """HTMX dialog fragment: browse the profile's own maps to attach to a check-in.
+    """
+    HTMX dialog fragment: browse the profile's own maps to attach to a check-in.
 
     GET /safety/<slug:checkin_slug>/maps/picker/?q=<title filter>
 
@@ -1321,7 +1378,8 @@ class SafetyCheckinMapPickerView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the picker dialog fragment.
+        """
+        Render the picker dialog fragment.
 
         Args:
             request: Incoming HTTP request.
@@ -1347,13 +1405,15 @@ class SafetyCheckinMapPickerView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
-    """Attach one of the profile's own existing maps to a check-in as a reference map.
+    """
+    Attach one of the profile's own existing maps to a check-in as a reference map.
 
     POST /safety/<slug:checkin_slug>/maps/attach/
     """
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Attach the given map and return the refreshed attached-maps list.
+        """
+        Attach the given map and return the refreshed attached-maps list.
 
         Args:
             request: Incoming HTTP request.
@@ -1381,13 +1441,15 @@ class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
 
 
 class SafetyCheckinMapDetachView(LoginRequiredMixin, View):
-    """Detach a reference map from a check-in without deleting the map itself.
+    """
+    Detach a reference map from a check-in without deleting the map itself.
 
     POST /safety/<slug:checkin_slug>/maps/<uuid:map_uuid>/detach/
     """
 
     def post(self, request: HttpRequest, checkin_slug: str, map_uuid: str) -> HttpResponse:
-        """Remove the map from the check-in's ``markup_maps`` and return the refreshed list.
+        """
+        Remove the map from the check-in's ``markup_maps`` and return the refreshed list.
 
         Args:
             request: Incoming HTTP request.
@@ -1404,7 +1466,8 @@ class SafetyCheckinMapDetachView(LoginRequiredMixin, View):
 
 
 class SafetyGalleryView(LoginRequiredMixin, View):
-    """Photo gallery panel for the safety check-in detail page (owner-only).
+    """
+    Photo gallery panel for the safety check-in detail page (owner-only).
 
     GET /safety/<slug:checkin_slug>/gallery/ - HTML gallery partial.
     POST /safety/<slug:checkin_slug>/gallery/ - upload a photo.
@@ -1428,7 +1491,8 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         }
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the gallery partial.
+        """
+        Render the gallery partial.
 
         Args:
             request: Incoming HTTP request.
@@ -1440,7 +1504,8 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/pins/_photo_gallery.html", self._get_context(request, checkin_slug))
 
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Attach an uploaded photo to the check-in.
+        """
+        Attach an uploaded photo to the check-in.
 
         Args:
             request: Incoming HTTP request.
@@ -1499,7 +1564,8 @@ class SafetyGalleryView(LoginRequiredMixin, View):
 
 
 class SafetyImageView(LoginRequiredMixin, View):
-    """Reposition or delete a single photo on a safety check-in (owner-only).
+    """
+    Reposition or delete a single photo on a safety check-in (owner-only).
 
     POST   /safety/<slug:checkin_slug>/gallery/<int:image_id>/ - update lat/lng.
     DELETE /safety/<slug:checkin_slug>/gallery/<int:image_id>/
@@ -1511,7 +1577,8 @@ class SafetyImageView(LoginRequiredMixin, View):
         return get_object_or_404(Image, pk=image_id, safety_checkin=checkin, profile=profile)
 
     def post(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:
-        """Update lat/lng when the user drags the photo marker on the map.
+        """
+        Update lat/lng when the user drags the photo marker on the map.
 
         Args:
             request: Incoming HTTP request with a JSON body (``latitude``/``longitude``).
@@ -1531,7 +1598,8 @@ class SafetyImageView(LoginRequiredMixin, View):
         return JsonResponse({"latitude": float(img.latitude), "longitude": float(img.longitude)})
 
     def delete(self, request: HttpRequest, checkin_slug: str, image_id: int) -> HttpResponse:
-        """Delete a photo from the check-in.
+        """
+        Delete a photo from the check-in.
 
         Args:
             request: Incoming HTTP request.
@@ -1548,13 +1616,15 @@ class SafetyImageView(LoginRequiredMixin, View):
 
 
 class SafetyContactPortalView(View):
-    """Public, token-gated view of a check-in for an emergency contact.
+    """
+    Public, token-gated view of a check-in for an emergency contact.
 
     GET /safety/contact/<uuid:token>/
     """
 
     def get(self, request: HttpRequest, token: str) -> HttpResponse:
-        """Render the contact portal for a single emergency contact.
+        """
+        Render the contact portal for a single emergency contact.
 
         Args:
             request: Incoming HTTP request.
@@ -1588,7 +1658,8 @@ class SafetyContactPortalView(View):
 
 
 class SafetyContactPhotoView(View):
-    """Serve one check-in photo to an emergency contact, by magic-link token.
+    """
+    Serve one check-in photo to an emergency contact, by magic-link token.
 
     GET /safety/contact/<uuid:token>/photo/<int:image_id>/
 
@@ -1600,7 +1671,8 @@ class SafetyContactPhotoView(View):
     """
 
     def get(self, request: HttpRequest, token: str, image_id: int) -> HttpResponseBase:
-        """Stream one photo belonging to the token's own check-in.
+        """
+        Stream one photo belonging to the token's own check-in.
 
         Args:
             request: Incoming HTTP request.
@@ -1625,13 +1697,15 @@ class SafetyContactPhotoView(View):
 
 
 class SafetyContactMarkSafeView(View):
-    """Mark the checked-in profile as found/safe (token-gated, no login required).
+    """
+    Mark the checked-in profile as found/safe (token-gated, no login required).
 
     POST /safety/contact/<uuid:token>/mark-safe/
     """
 
     def post(self, request: HttpRequest, token: str) -> HttpResponse:
-        """Mark the profile safe and redirect back to the contact portal.
+        """
+        Mark the profile safe and redirect back to the contact portal.
 
         Args:
             request: Incoming HTTP request.
@@ -1646,7 +1720,8 @@ class SafetyContactMarkSafeView(View):
 
 
 class SafetyContactOptOutView(View):
-    """Let a contact stop receiving certain safety check-in notifications (token-gated, no login).
+    """
+    Let a contact stop receiving certain safety check-in notifications (token-gated, no login).
 
     GET /safety/contact/<uuid:token>/opt-out/<str:scope>/
     POST /safety/contact/<uuid:token>/opt-out/<str:scope>/
@@ -1659,7 +1734,8 @@ class SafetyContactOptOutView(View):
     """
 
     def get(self, request: HttpRequest, token: str, scope: str) -> HttpResponse:
-        """Render the opt-out confirmation page.
+        """
+        Render the opt-out confirmation page.
 
         Args:
             request: Incoming HTTP request.
@@ -1684,7 +1760,8 @@ class SafetyContactOptOutView(View):
         )
 
     def post(self, request: HttpRequest, token: str, scope: str) -> HttpResponse:
-        """Record the opt-out and redirect back to the contact portal.
+        """
+        Record the opt-out and redirect back to the contact portal.
 
         Args:
             request: Incoming HTTP request.
@@ -1708,7 +1785,8 @@ class SafetyContactOptOutView(View):
 
 
 class SafetyCheckinMessageView(View):
-    """No-JS fallback for check-in chat, usable by the owner (session auth) or a contact (token auth).
+    """
+    No-JS fallback for check-in chat, usable by the owner (session auth) or a contact (token auth).
 
     POST /safety/<uuid:checkin_uuid>/messages/ - owner sends a message.
     POST /safety/contact/<uuid:token>/messages/ - contact sends a message.
@@ -1719,7 +1797,8 @@ class SafetyCheckinMessageView(View):
     """
 
     def post(self, request: HttpRequest, checkin_uuid: str | None = None, token: str | None = None) -> HttpResponse:
-        """Post a new chat message and return the refreshed message list partial.
+        """
+        Post a new chat message and return the refreshed message list partial.
 
         Args:
             request: Incoming HTTP request.
@@ -1763,7 +1842,8 @@ class SafetyCheckinMessageView(View):
         )
 
     def _resolve(self, request: HttpRequest, checkin_uuid: str | None, token: str | None) -> tuple[SafetyCheckin, SafetyCheckinContact | None]:
-        """Resolve the check-in and, for the contact route, the authorizing contact.
+        """
+        Resolve the check-in and, for the contact route, the authorizing contact.
 
         Args:
             request: Incoming HTTP request.

@@ -30,7 +30,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
     """
 
     def after_bulk_write(self) -> None:
-        """Called once after a bulk write that changed rows. Does nothing unless a subclass says so.
+        """
+        Called once after a bulk write that changed rows. Does nothing unless a subclass says so.
 
         ``update()`` sends no ``post_save``, and ``bulk_update`` is implemented as one, so anything
         derived from these rows and invalidated by a signal never hears about either. A subclass
@@ -38,7 +39,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         """
 
     def update(self, **kwargs: Any) -> int:
-        """Apply the update, then tell the subclass if it changed anything.
+        """
+        Apply the update, then tell the subclass if it changed anything.
 
         Args:
             **kwargs: The fields to write, as ``QuerySet.update`` takes them.
@@ -52,7 +54,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         return updated
 
     def number_in_order(self, ids: Sequence[Any], field: str = "order") -> int:
-        """Set *field* on each of *ids* to its index in *ids*, in one statement. Rows outside this queryset are left alone.
+        """
+        Set *field* on each of *ids* to its index in *ids*, in one statement. Rows outside this queryset are left alone.
 
         Joins against the ids as an array. ``bulk_update`` and a ``Case``/``When`` would instead write a branch per
         row, which Postgres tests every row against: 267 ms against 26 at 5,000 rows.
@@ -93,7 +96,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         return numbered
 
     def match_ids(self, limit: int | None = None) -> list[Any]:
-        """The primary keys this queryset matches, read without any of the joins that hydrate a row.
+        """
+        The primary keys this queryset matches, read without any of the joins that hydrate a row.
 
         The first half of match-then-fetch: run the predicate against ids alone, then fetch those
         rows by primary key with whatever ``select_related``/``prefetch_related`` the caller wants.
@@ -111,7 +115,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         return list(ids[:limit] if limit is not None else ids)
 
     def by_ids(self, ids: Iterable[Any]) -> Self:
-        """The second half of match-then-fetch: these rows, by primary key.
+        """
+        The second half of match-then-fetch: these rows, by primary key.
 
         Args:
             ids: Primary keys, typically from :meth:`match_ids`.
@@ -121,7 +126,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         return self.filter(pk__anyof=list(ids))
 
     def bounded_by(self, path: str, queryset: DashboardQuerySet[Any]) -> Self:
-        """This queryset restricted to rows whose *path* points at one of *queryset*'s rows.
+        """
+        This queryset restricted to rows whose *path* points at one of *queryset*'s rows.
 
         The difference from ``filter(path__in=queryset)`` is that the bound is resolved to a
         concrete list first, so the planner cannot decide to drive the query from the far side of
@@ -138,7 +144,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         return self.filter(**{f"{path}__pk__anyof": queryset.match_ids()})
 
     def own_pks(self) -> list[Any]:
-        """The primary keys this queryset selects, fetched once per enclosing probe scope.
+        """
+        The primary keys this queryset selects, fetched once per enclosing probe scope.
 
         Args:
             None.
@@ -151,7 +158,8 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         return scope.pks_of(self)
 
     def semijoin(self, path: str, condition: Q) -> Q:
-        """*condition* as a semi-join, when *path* crosses a to-many relation.
+        """
+        *condition* as a semi-join, when *path* crosses a to-many relation.
 
         A row matching through several related rows stays one row without ``DISTINCT``, and the
         statement never joins the relation: planning a join across several of them cost more than
@@ -207,7 +215,8 @@ class FrontendDashboardManager(_FrontendDashboardManagerBase):
 
 
 def slug_or_uuid_q(value: str) -> Q:
-    """The condition :meth:`PublicDashboardQuerySet.slug_or_uuid` filters on, for combining with others in one filter.
+    """
+    The condition :meth:`PublicDashboardQuerySet.slug_or_uuid` filters on, for combining with others in one filter.
 
     Args:
         value: The slug or uuid string taken from a URL path segment.
@@ -229,7 +238,8 @@ class PublicDashboardQuerySet(FrontendDashboardQuerySet[_ModelT]):
     """
 
     def slug_or_uuid(self, value: str) -> Self:
-        """Return the row matching this slug, or this uuid if it was sent instead.
+        """
+        Return the row matching this slug, or this uuid if it was sent instead.
         Every public URL for one of these models builds its identifier as ``obj.slug or str(obj.uuid)`` - the uuid fallback fires whenever a row's slug hasn't been minted (e.g. a legacy row predating auto-slug generation, or one saved via a path that bypassed it).
 
         Args:

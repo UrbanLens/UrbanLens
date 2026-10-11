@@ -20,7 +20,8 @@ class RedataCulturalResourcesGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_cultural_resources"
 
     def near_resources(self, latitude: float, longitude: float, *, provider: str | list[str], radius_meters: float | None = None) -> LocationContextEnvelope:
-        """Return historic-register records near a coordinate, with the envelope intact.
+        """
+        Return historic-register records near a coordinate, with the envelope intact.
 
         Args:
             latitude: WGS-84 latitude.
@@ -42,7 +43,8 @@ class RedataCulturalResourcesGateway(RedataLocationContextGateway):
 
 
 def applicable_provider_tags(latitude: float, longitude: float) -> list[str]:
-    """Which historic-register providers cover a coordinate, per REData.
+    """
+    Which historic-register providers cover a coordinate, per REData.
 
     Args:
         latitude: WGS-84 latitude.

@@ -45,7 +45,8 @@ class PinShareDialogView(LoginRequiredMixin, View):
 
 
 class PinShareMapGridView(LoginRequiredMixin, View):
-    """Just the pin-share dialog's map-picker tiles (see ``_pin_share_map_grid.html``).
+    """
+    Just the pin-share dialog's map-picker tiles (see ``_pin_share_map_grid.html``).
 
     GET /map/pin/<slug:pin_slug>/share/maps/
 

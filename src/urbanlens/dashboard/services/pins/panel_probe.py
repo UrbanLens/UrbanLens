@@ -1,4 +1,5 @@
-"""Which of a pin's enrichment panels are already known to have nothing to show, decided from what is stored.
+"""
+Which of a pin's enrichment panels are already known to have nothing to show, decided from what is stored.
 
 The Private Pin page renders a placeholder only for the panels that may have something, so a panel that would answer
 204 costs no request (P53). Each decision is the panel's own - its gate, :func:`~external_data.fetch_blocked`, and
@@ -34,7 +35,8 @@ _NEEDS_THE_NETWORK = (BoundaryNotLoadedError, ExternalCallForbiddenError)
 
 @dataclass(frozen=True, slots=True)
 class PanelProbe:
-    """What one probe found.
+    """
+    What one probe found.
 
     Attributes:
         empty_cards: Keys of the cards known to answer 204.
@@ -94,7 +96,8 @@ def _guarded(key: str, pin: Pin, decide: Callable[[], bool]) -> bool:
 
 
 def probe_panels(pin: Pin, *, cards: Mapping[str, Sequence[LocationCachePanelSource]], galleries: Sequence[GalleryMediaSource]) -> PanelProbe:
-    """Find which of ``pin``'s cards and gallery providers are known to have nothing, in one cache query.
+    """
+    Find which of ``pin``'s cards and gallery providers are known to have nothing, in one cache query.
 
     Args:
         pin: The pin being viewed, by its owner.

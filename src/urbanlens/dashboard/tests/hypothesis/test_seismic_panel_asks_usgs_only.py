@@ -1,4 +1,5 @@
-"""The Seismic panel asks REData's hazards registry for earthquakes only.
+"""
+The Seismic panel asks REData's hazards registry for earthquakes only.
 
 Asked unfiltered, REData also ran its wildfire and FEMA providers for every US pin, applied ``min_magnitude`` to
 burned acres, and an outage of either left the panel's earthquake answer incomplete, so it was never cached.

@@ -1,4 +1,5 @@
-"""Backend support for the beta pin/wiki "time slider": OpenHistoricalMap coverage plus per-year features.
+"""
+Backend support for the beta pin/wiki "time slider": OpenHistoricalMap coverage plus per-year features.
 
 With REData configured, both come from its ``historical-features/`` (OpenHistoricalMap's dated features, cached by
 REData): one answer per point, shared with the Historical Features panel, filtered to a year here rather than asked for
@@ -35,7 +36,8 @@ REDATA_FEATURES_CACHE_SOURCE = "redata_temporal_features"
 
 
 def _redata_feature(row: dict[str, Any]) -> dict[str, Any] | None:
-    """One REData ``HistoricalFeatureSerializer`` row as a GeoJSON Feature, or None when it has no dated bound or no shape.
+    """
+    One REData ``HistoricalFeatureSerializer`` row as a GeoJSON Feature, or None when it has no dated bound or no shape.
 
     An undated feature would show in every year the slider offers, which says nothing about when it stood.
     """
@@ -53,7 +55,8 @@ def _year(value: Any) -> int | None:
 
 
 def fetch_redata_temporal_features(location: Location, latitude: float, longitude: float) -> list[dict[str, Any]] | None:
-    """Cache REData's dated features near a point, and the years they start and end in, for the slider.
+    """
+    Cache REData's dated features near a point, and the years they start and end in, for the slider.
 
     Args:
         location: The Location the rows belong to.
@@ -88,7 +91,8 @@ def _standing_in(feature: dict[str, Any], year: int) -> bool:
 
 
 class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
-    """Whether OpenHistoricalMap has dated coverage near a pin's location, and for which years.
+    """
+    Whether OpenHistoricalMap has dated coverage near a pin's location, and for which years.
     Purely a background data source - it has no tab/template of its own (it is not an :class:`~urbanlens.dashboard.services.pins.external_data.InfoPanelSource`), so it never appears in the pin detail tab strip."""
 
     key = "ohm_temporal_coverage"
@@ -120,7 +124,8 @@ class OhmTemporalCoveragePanelSource(LocationCachePanelSource):
 
 
 def temporal_slider_years(location: Location | None, user: AbstractBaseUser | AnonymousUser) -> list[int]:
-    """Years the beta time slider should offer for ``location``, or ``[]`` to hide it entirely.
+    """
+    Years the beta time slider should offer for ``location``, or ``[]`` to hide it entirely.
 
     Args:
         location: The location being viewed, or None (e.g. a pin with no Location).
@@ -141,7 +146,8 @@ def temporal_slider_years(location: Location | None, user: AbstractBaseUser | An
 
 
 def get_temporal_features(location: Location, year: int) -> dict[str, Any]:
-    """A GeoJSON FeatureCollection of OHM features near ``location`` as of ``year``.
+    """
+    A GeoJSON FeatureCollection of OHM features near ``location`` as of ``year``.
 
     Args:
         location: The location to query around.
@@ -179,7 +185,8 @@ def get_temporal_features(location: Location, year: int) -> dict[str, Any]:
 
 
 def _redata_features_in(location: Location, year: int) -> dict[str, Any]:
-    """REData's cached dated features near ``location`` that stood in ``year``, fetching them once when none are cached.
+    """
+    REData's cached dated features near ``location`` that stood in ``year``, fetching them once when none are cached.
 
     Args:
         location: The location to read around.

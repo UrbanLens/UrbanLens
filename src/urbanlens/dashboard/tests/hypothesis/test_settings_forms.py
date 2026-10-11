@@ -286,7 +286,8 @@ class MapCenterFormSaveTests(TestCase):
 
 
 class StyleSettingsFormTests(TestCase):
-    """StyleSettingsForm persists theme_mode to the Profile.
+    """
+    StyleSettingsForm persists theme_mode to the Profile.
 
     See test_theme_mode.py for extended property-based coverage.
     """

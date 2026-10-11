@@ -49,7 +49,8 @@ class ContractConfigurationError(RuntimeError):
 
 
 def live_base_url() -> str | None:
-    """The deployment to test, or ``None`` for in-process mode.
+    """
+    The deployment to test, or ``None`` for in-process mode.
 
     Returns:
         The base URL with any trailing slashes removed, or ``None``.
@@ -59,7 +60,8 @@ def live_base_url() -> str | None:
 
 
 def selected_methods() -> tuple[str, ...] | None:
-    """Which HTTP methods to generate requests for.
+    """
+    Which HTTP methods to generate requests for.
 
     ``safe`` restricts generation to :data:`SAFE_METHODS`.
 
@@ -77,7 +79,8 @@ def selected_methods() -> tuple[str, ...] | None:
 
 
 def max_examples() -> int:
-    """Examples Hypothesis generates per operation.
+    """
+    Examples Hypothesis generates per operation.
 
     Returns:
         A positive example count.
@@ -97,7 +100,8 @@ def max_examples() -> int:
 
 
 def generate_schema_document() -> dict[str, Any]:
-    """Build the published OpenAPI document without issuing a request.
+    """
+    Build the published OpenAPI document without issuing a request.
 
     Returns:
         The same document ``external_api:schema`` serves, as a dict.
@@ -121,7 +125,8 @@ def strict_enabled() -> bool:
 
 
 def not_an_undeclared_server_error(ctx, response, case) -> bool | None:
-    """Schemathesis's ``not_a_server_error``, except for a 5xx other than 500 that the operation declares.
+    """
+    Schemathesis's ``not_a_server_error``, except for a 5xx other than 500 that the operation declares.
 
     A declared 503 is a refusal the API documents, such as the assistant's while AI is turned off for the account,
     rather than a crash.
@@ -143,7 +148,8 @@ def not_an_undeclared_server_error(ctx, response, case) -> bool | None:
 
 
 def response_checks() -> list:
-    """The checks each response is held to.
+    """
+    The checks each response is held to.
 
     The default pair is the part that is about *this* application's behaviour: it must not crash, and a body it
     returns must validate against the schema it published for that response.
@@ -163,7 +169,8 @@ def response_checks() -> list:
 
 
 def _build_config():
-    """Configuration shared by both modes.
+    """
+    Configuration shared by both modes.
 
     Two deliberate restrictions, both because of what this suite is *for*."""
     from schemathesis import Config, GenerationMode
@@ -194,7 +201,8 @@ def _live_schema(base_url: str) -> BaseSchema:
 
 
 def load_schema() -> BaseSchema:
-    """The schema the conformance tests are parametrised over.
+    """
+    The schema the conformance tests are parametrised over.
 
     Returns:
         A schemathesis schema, filtered to :func:`selected_methods`.
@@ -209,7 +217,8 @@ def load_schema() -> BaseSchema:
 
 
 def manifest_api_key() -> str | None:
-    """The primary account's API key, from the shared accounts manifest.
+    """
+    The primary account's API key, from the shared accounts manifest.
 
     Returns:
         A raw ``ulk_`` key, or ``None`` when no manifest is configured or the manifest holds no key.

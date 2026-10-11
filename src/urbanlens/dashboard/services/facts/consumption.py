@@ -25,7 +25,8 @@ def get_trusted_facts(
     location: Location | None = None,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
 ) -> list[Fact]:
-    """Facts a consumer (e.g. an AI writing agent) should treat as trustworthy for this subject.
+    """
+    Facts a consumer (e.g. an AI writing agent) should treat as trustworthy for this subject.
 
     Args:
         wiki: Restrict to this wiki's facts.
@@ -47,7 +48,8 @@ def get_facts_needing_confirmation(
     subject_type: str | None = None,
     limit: int = DEFAULT_CONFIRMATION_LIMIT,
 ) -> list[Fact]:
-    """Facts worth asking a player (or reviewer) to help confirm - contested first, then least confident.
+    """
+    Facts worth asking a player (or reviewer) to help confirm - contested first, then least confident.
 
     Args:
         subject_type: Restrict to one ``FactSubjectType``, or None for any.

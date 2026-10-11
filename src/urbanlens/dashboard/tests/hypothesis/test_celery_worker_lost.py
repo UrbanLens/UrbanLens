@@ -39,7 +39,8 @@ def worker_lost_probe() -> None:
 
 
 def _exception_info(exc: BaseException) -> ExceptionInfo:
-    """Capture a real traceback for an exception, as the worker would.
+    """
+    Capture a real traceback for an exception, as the worker would.
 
     Args:
         exc: The exception to raise and capture.
@@ -53,7 +54,8 @@ def _exception_info(exc: BaseException) -> ExceptionInfo:
 
 
 def _build_request(*, redelivered: bool = False) -> tuple[Request, Mock, Mock, Mock]:
-    """Build a real Request for the probe task with observable callbacks.
+    """
+    Build a real Request for the probe task with observable callbacks.
 
     Args:
         redelivered: Whether the broker has already redelivered this message.
@@ -79,7 +81,8 @@ def _build_request(*, redelivered: bool = False) -> tuple[Request, Mock, Mock, M
 
 
 def _use_recording_backend(test: SimpleTestCase) -> Mock:
-    """Swap the probe task's result backend for one that records calls.
+    """
+    Swap the probe task's result backend for one that records calls.
 
     Assigned through ``Task.backend``'s own setter rather than ``patch.object``: the attribute is a property, so
     a patch would restore itself with a ``delattr`` the property cannot service.
@@ -96,7 +99,8 @@ def _use_recording_backend(test: SimpleTestCase) -> Mock:
 
 
 def _event_types(eventer: Mock) -> list[str]:
-    """Extract the event names an eventer was asked to send.
+    """
+    Extract the event names an eventer was asked to send.
 
     Args:
         eventer: The mock event dispatcher.
@@ -209,7 +213,8 @@ class RedeliveryIsImmediateTests(SimpleTestCase):
 
 
 class CeleryConfigurationReachesTasksTests(SimpleTestCase):
-    """The Django settings have to actually bind onto the task classes.
+    """
+    The Django settings have to actually bind onto the task classes.
 
     Celery copies ``task_*`` conf onto each task class once, at bind time, and only where the task has not set
     the attribute itself."""
@@ -221,7 +226,8 @@ class CeleryConfigurationReachesTasksTests(SimpleTestCase):
         current_app.loader.import_default_modules()
 
     def _app_tasks(self) -> dict[str, Any]:
-        """Every registered task except Celery's own built-ins.
+        """
+        Every registered task except Celery's own built-ins.
 
         Returns:
             Mapping of task name to task instance.
@@ -247,7 +253,8 @@ class CeleryConfigurationReachesTasksTests(SimpleTestCase):
         self.assertEqual(offenders, [], f"these tasks requeue forever on a time limit: {offenders}")
 
     def test_acks_late_is_off_only_where_that_is_deliberate(self) -> None:
-        """The fix must not have been achieved by giving up at-least-once delivery.
+        """
+        The fix must not have been achieved by giving up at-least-once delivery.
 
         Dropping ``acks_late`` would also end the loop - by acknowledging every message before running it, so
         any lost worker loses the task outright."""
@@ -263,7 +270,8 @@ class RequeueSystemCheckTests(SimpleTestCase):
     """``dashboard.E007`` / ``dashboard.E008`` guard the settings."""
 
     def _ids(self, errors: list[Error]) -> list[str]:
-        """Extract check ids.
+        """
+        Extract check ids.
 
         Args:
             errors: Messages returned by the check.

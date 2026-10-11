@@ -1,4 +1,5 @@
-"""Registration constants for the first-party native app's OAuth2 client.
+"""
+Registration constants for the first-party native app's OAuth2 client.
 
 Deliberately model-free and import-free so a data migration can import it directly: migration
 modules must not reach into ``django.conf.settings`` for values that shape rows, and must not import

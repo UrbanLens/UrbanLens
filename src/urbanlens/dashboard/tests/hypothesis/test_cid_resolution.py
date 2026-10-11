@@ -155,7 +155,8 @@ class ResolveViaRedataTests(SimpleTestCase):
         self.assertEqual(result.pending, [])
 
     def test_urls_by_cid_is_forwarded_as_cid_lookup_entries(self) -> None:
-        """A cid with a known source Google Maps URL resolves faster/more reliably at
+        """
+        A cid with a known source Google Maps URL resolves faster/more reliably at
         REData when the URL is sent alongside it - see RedataCidGateway/CidLookupEntry."""
         with mock.patch(
             "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",

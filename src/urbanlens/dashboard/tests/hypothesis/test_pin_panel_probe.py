@@ -1,4 +1,5 @@
-"""The Private Pin page asks once which enrichment panels have anything, and requests only those (P53).
+"""
+The Private Pin page asks once which enrichment panels have anything, and requests only those (P53).
 
 A panel already known to answer 204 - its gate refuses the pin, its fetch is blocked, or the payload that landed has
 nothing to show - gets no placeholder, so the page never requests it. A panel whose answer is not stored yet still

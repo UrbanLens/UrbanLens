@@ -60,7 +60,8 @@ _TIMESTAMP_FORMAT = "%b %d, %Y, %I:%M:%S %p"
 
 
 def looks_like_my_activity(text: str) -> bool:
-    """Cheap sniff for a Google Takeout My Activity HTML export.
+    """
+    Cheap sniff for a Google Takeout My Activity HTML export.
 
     Args:
         text: A prefix of the decoded file text - a few KB is enough, the marker classes appear near the top of every My Activity export.
@@ -99,7 +100,8 @@ def _extract_coordinates(href: str, tail: str) -> tuple[float, float] | None:
 
 
 def _parse_timestamp(text: str) -> datetime | None:
-    """Parse a Google Takeout activity timestamp, e.g. "Jul 3, 2026, 1:18:25 PM EDT".
+    """
+    Parse a Google Takeout activity timestamp, e.g. "Jul 3, 2026, 1:18:25 PM EDT".
 
     Args:
         text: Timestamp text, tags already stripped.
@@ -141,7 +143,8 @@ def _extract_timestamp(tail: str) -> datetime | None:
 
 
 def parse_my_activity_entries(html_bytes: bytes | IO[bytes]) -> Generator[dict[str, Any], None, None]:
-    """Yield one dict per qualifying "Directions to" Maps entry in a My Activity export, reading one entry at a time.
+    """
+    Yield one dict per qualifying "Directions to" Maps entry in a My Activity export, reading one entry at a time.
 
     Args:
         html_bytes: The ``MyActivity.html`` file, as bytes or a seekable binary file positioned at its start.
@@ -211,7 +214,8 @@ def iter_my_activity_events(
     profile: Profile,
     radius_m: int = MY_ACTIVITY_MATCH_RADIUS_M,
 ) -> Iterator[dict[str, Any]]:
-    """Log each "Directions to" entry as a history visit to the nearest pin, or suggest the place when none matches.
+    """
+    Log each "Directions to" entry as a history visit to the nearest pin, or suggest the place when none matches.
 
     An unmatched entry becomes a self-directed VisitSuggestion rather than a pin - see
     ``services.visits.visits.create_visit_suggestion``.

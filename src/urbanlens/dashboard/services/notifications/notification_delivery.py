@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def delivery_preference(profile: Profile, field: str, *, default: DeliveryPreference = DeliveryPreference.SITE) -> DeliveryPreference:
-    """Read one ``NotificationPreference`` delivery choice for *profile*.
+    """
+    Read one ``NotificationPreference`` delivery choice for *profile*.
 
     Args:
         profile: The profile about to be notified.
@@ -57,7 +58,8 @@ def deliver_notification(
     email_url: str | None = None,
     **log_fields: Any,
 ) -> NotificationLog | None:
-    """Deliver one notification through the channels *preference* picks.
+    """
+    Deliver one notification through the channels *preference* picks.
 
     Resolve *preference* with :func:`delivery_preference` first, so a caller can return before building the text
     when it is ``NONE``. A recipient who muted the source gets neither the row nor the email. The in-app row goes
@@ -92,7 +94,8 @@ def deliver_notification(
 
 
 def send_notification_email(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
-    """Queue a generic notification email to *recipient*, sent by a worker once the current transaction commits.
+    """
+    Queue a generic notification email to *recipient*, sent by a worker once the current transaction commits.
 
     Args:
         recipient: Who to email; the address is read when the worker runs.
@@ -108,7 +111,8 @@ def send_notification_email(recipient: Profile, *, title: str, body_text: str, u
 
 
 def queue_email(*, to: str, subject: str, text_body: str, html_body: str = "") -> None:
-    """Send an already-rendered email from a worker once the current transaction commits.
+    """
+    Send an already-rendered email from a worker once the current transaction commits.
 
     For a message whose content is fixed when it is written; :func:`send_notification_email` is for one addressed to a
     profile, whose address is read when it sends.
@@ -127,7 +131,8 @@ def queue_email(*, to: str, subject: str, text_body: str, html_body: str = "") -
 
 
 def send_email_now(*, to: str, subject: str, text_body: str, html_body: str = "") -> None:
-    """Send an already-rendered email, logging rather than raising a delivery failure; for a worker.
+    """
+    Send an already-rendered email, logging rather than raising a delivery failure; for a worker.
 
     Args:
         to: Recipient address.
@@ -144,7 +149,8 @@ def send_email_now(*, to: str, subject: str, text_body: str, html_body: str = ""
 
 
 def send_notification_email_now(recipient: Profile, *, title: str, body_text: str, url: str | None = None, action_label: str = "View on UrbanLens") -> None:
-    """Email *recipient* a generic notification now; for code already running in a worker.
+    """
+    Email *recipient* a generic notification now; for code already running in a worker.
 
     Args:
         recipient: Who to email - uses ``recipient.user.email``.
@@ -176,7 +182,8 @@ def send_notification_email_now(recipient: Profile, *, title: str, body_text: st
 
 
 def send_whatsapp(profile: Profile, body: str) -> None:
-    """Send a WhatsApp notification to a profile's configured number, if any.
+    """
+    Send a WhatsApp notification to a profile's configured number, if any.
 
     Args:
         profile: Recipient whose ``whatsapp_number`` (if set) is the destination.
@@ -193,7 +200,8 @@ def send_whatsapp(profile: Profile, body: str) -> None:
 
 
 def send_sms(profile: Profile, body: str) -> None:
-    """Send an SMS notification to a profile's configured phone number, if any.
+    """
+    Send an SMS notification to a profile's configured phone number, if any.
 
     Args:
         profile: Recipient whose ``phone_number`` (if set) is the destination.

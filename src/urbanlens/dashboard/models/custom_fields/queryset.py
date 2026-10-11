@@ -18,7 +18,8 @@ class CustomFieldQuerySet(abstract.FrontendDashboardQuerySet["CustomField"]):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomField`."""
 
     def owned_by(self, profile: Profile) -> Self:
-        """Fields belonging to the given profile.
+        """
+        Fields belonging to the given profile.
 
         Args:
             profile: The owning profile.
@@ -29,7 +30,8 @@ class CustomFieldQuerySet(abstract.FrontendDashboardQuerySet["CustomField"]):
         return self.filter(profile=profile)
 
     def for_entity(self, profile: Profile, entity_type: str) -> Self:
-        """The given profile's fields for one entity type, in display order.
+        """
+        The given profile's fields for one entity type, in display order.
 
         Args:
             profile: The owning profile.
@@ -52,7 +54,8 @@ class CustomFieldValueQuerySet(abstract.DashboardQuerySet["CustomFieldValue"]):
     """Query helpers for :class:`~urbanlens.dashboard.models.custom_fields.model.CustomFieldValue`."""
 
     def for_target(self, target: Any) -> Self:
-        """Values attached to the given target object.
+        """
+        Values attached to the given target object.
 
         Args:
             target: A Pin, Image, Profile, or MarkupMap instance.

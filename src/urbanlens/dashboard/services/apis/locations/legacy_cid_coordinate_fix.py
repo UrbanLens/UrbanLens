@@ -51,7 +51,8 @@ _WHOLE_STRING_DECIMAL_PAIR_RE = re.compile(r"^\(?\s*(-?\d{1,2}\.\d+)\s*(?:,\s*|\
 
 
 def is_legacy_location(location: Location) -> bool:
-    """Whether this Location predates the CID coordinate fix.
+    """
+    Whether this Location predates the CID coordinate fix.
     A Location created before the cutoff may have been created from an S2-decoded guess, so its coordinates can't be trusted to place a pin during a re-import - the CID should be resolved again instead.
 
     Args:
@@ -64,7 +65,8 @@ def is_legacy_location(location: Location) -> bool:
 
 
 def parse_coordinate_name(name: str | None) -> tuple[float, float] | None:
-    """Parse a pin name that is *entirely* a coordinate, in any supported format.
+    """
+    Parse a pin name that is *entirely* a coordinate, in any supported format.
 
     Args:
         name: The pin name to parse.
@@ -96,7 +98,8 @@ def repair_legacy_pin_coordinates(
     latitude: float | Decimal | None,
     longitude: float | Decimal | None,
 ) -> Pin | None:
-    """Move the user's matching pre-cutoff pin onto its corrected coordinates.
+    """
+    Move the user's matching pre-cutoff pin onto its corrected coordinates.
 
     Args:
         profile: The importing profile - only its own pins are ever considered.
@@ -164,7 +167,8 @@ def repair_legacy_pin_coordinates(
 
 
 def preview_needs_legacy_repair(profile: Profile, *, cid: int | None, name: str) -> bool:
-    """Whether a previewed import record would repair one of the profile's own legacy pins.
+    """
+    Whether a previewed import record would repair one of the profile's own legacy pins.
     Runs the same matching :func:`repair_legacy_pin_coordinates` uses (CID, then coordinate-shaped name) without needing the corrected coordinates - the import preview only needs to know a legacy pin is sitting there, not yet where it belongs.
 
     Args:
@@ -178,7 +182,8 @@ def preview_needs_legacy_repair(profile: Profile, *, cid: int | None, name: str)
 
 
 def repoint_cid_to_corrected_location(legacy_location: Location, correct_location: Location, cid: int | Decimal) -> None:
-    """Move a Google Maps CID off the wrongly-placed legacy Location and onto the corrected one.
+    """
+    Move a Google Maps CID off the wrongly-placed legacy Location and onto the corrected one.
 
     ``GooglePlace.cid`` is unique, so the corrected Location can't claim this CID while the legacy
     Location's GooglePlace row still holds it. Clearing that row first, in one transaction, is what
@@ -226,7 +231,8 @@ def _legacy_pins(profile: Profile):
 
 
 def _match_by_cid(profile: Profile, cid: int | None) -> Pin | None:
-    """Find the profile's legacy pin sitting on the Location this CID resolves to.
+    """
+    Find the profile's legacy pin sitting on the Location this CID resolves to.
 
     Args:
         profile: The importing profile.
@@ -244,7 +250,8 @@ def _match_by_cid(profile: Profile, cid: int | None) -> Pin | None:
 
 
 def _match_by_coordinate_name(profile: Profile, name: str) -> Pin | None:
-    """Find the profile's legacy pin whose name (or an alias) is this coordinate.
+    """
+    Find the profile's legacy pin whose name (or an alias) is this coordinate.
     Only applies when the imported name is itself wholly a coordinate - matching ordinary place names by text would be far too loose to move a pin on.
 
     Args:

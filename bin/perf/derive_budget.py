@@ -32,7 +32,8 @@ _FALLBACK_METRIC = "http_req_duration"
 
 
 def baseline_p95(summary: dict) -> float:
-    """The neighbour's p95 in the baseline pass, in milliseconds.
+    """
+    The neighbour's p95 in the baseline pass, in milliseconds.
 
     Args:
         summary: A parsed k6 ``handleSummary`` document.
@@ -58,7 +59,8 @@ def baseline_p95(summary: dict) -> float:
 
 
 def derive(p95: float) -> int:
-    """The budget for the measured pass, in whole milliseconds.
+    """
+    The budget for the measured pass, in whole milliseconds.
 
     Args:
         p95: The baseline p95 in milliseconds.
@@ -69,7 +71,8 @@ def derive(p95: float) -> int:
 
 
 def ceiling_dominates(p95: float) -> bool:
-    """Whether the absolute ceiling, not the slack, is what set the budget.
+    """
+    Whether the absolute ceiling, not the slack, is what set the budget.
 
     Worth saying out loud rather than leaving in the arithmetic.
 
@@ -82,7 +85,8 @@ def ceiling_dominates(p95: float) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Read a baseline summary and print the derived budget.
+    """
+    Read a baseline summary and print the derived budget.
 
     Args:
         argv: Command-line arguments, for testing.

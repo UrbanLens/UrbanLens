@@ -1,4 +1,5 @@
-"""The login-gated thumbnail proxies never hand a browser a document on the app origin.
+"""
+The login-gated thumbnail proxies never hand a browser a document on the app origin.
 
 The attack: an Immich server (the user's own, or one they were pointed at), Google Photos' declared
 ``mimeType``, or a Places photo source labels a body ``text/html`` or ``image/svg+xml``. Served verbatim,

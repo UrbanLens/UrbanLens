@@ -1,4 +1,5 @@
-"""Only crime counts as crime on the incident panels.
+"""
+Only crime counts as crime on the incident panels.
 
 REData's ``/incidents/`` vocabulary carries fire and EMS responses (``fire``, ``medical``) beside police categories.
 Counted, a block next to a fire station read as the most dangerous in town.

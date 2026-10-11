@@ -40,7 +40,8 @@ URBEX_TERMS: tuple[str, ...] = ("abandoned", "urbex", "urban exploration")
 
 
 def _quoted_or_group(terms: list[str]) -> str:
-    """Build a parenthesized, quoted OR clause from ``terms`` (deduped, order preserved).
+    """
+    Build a parenthesized, quoted OR clause from ``terms`` (deduped, order preserved).
 
     Args:
         terms: Candidate phrases; blank entries are skipped and duplicates (case-insensitive) are collapsed to their first occurrence.
@@ -74,7 +75,8 @@ class _QueryComponents:
 
 
 def _search_components(pin: Pin, scope: SearchScope) -> _QueryComponents | None:
-    """Gather one search's names, ancestor names, and the pin's state, shared by both query renderers.
+    """
+    Gather one search's names, ancestor names, and the pin's state, shared by both query renderers.
 
     Args:
         pin: The pin to gather query components for.
@@ -100,7 +102,8 @@ def _search_components(pin: Pin, scope: SearchScope) -> _QueryComponents | None:
 
 
 def build_search_query(pin: Pin, scope: SearchScope) -> str | None:
-    """Build the required-operator Flickr full-text search query for a pin.
+    """
+    Build the required-operator Flickr full-text search query for a pin.
     The name group and the state are both required - a pin with neither is skipped rather than searched with a weaker query, since a Flickr full-text search without them returns mostly off-topic noise.
 
     Args:
@@ -126,7 +129,8 @@ def build_search_query(pin: Pin, scope: SearchScope) -> str | None:
 
 
 def build_feed_tag_queries(pin: Pin, scope: SearchScope) -> list[str]:
-    """Decompose a pin's required-operator query into public-feed tag-AND queries.
+    """
+    Decompose a pin's required-operator query into public-feed tag-AND queries.
 
     Args:
         pin: The pin to build tag queries for.
@@ -178,7 +182,8 @@ class FlickrSearchGateway(MediaProvider):
     paid_service: ClassVar[bool] = False
 
     def _search(self, text: str) -> list[dict[str, Any]]:
-        """Run one ``flickr.photos.search`` call and return raw photo dicts.
+        """
+        Run one ``flickr.photos.search`` call and return raw photo dicts.
 
         Args:
             text: The full boolean query text, from :func:`build_search_query`.
@@ -246,7 +251,8 @@ class FlickrSearchGateway(MediaProvider):
 
 @dataclass(slots=True, kw_only=True)
 class FlickrFeedSearchGateway(MediaProvider):
-    """Keyless fallback: Flickr's public tags syndication feed.
+    """
+    Keyless fallback: Flickr's public tags syndication feed.
     Used automatically in place of :class:`FlickrSearchGateway` when the site has no Flickr API key configured (see ``FlickrPlugin.get_panel_sources``) - Flickr's public feeds have never required a key."""
 
     service_key: ClassVar[str] = "flickr"
@@ -254,7 +260,8 @@ class FlickrFeedSearchGateway(MediaProvider):
     paid_service: ClassVar[bool] = False
 
     def _fetch_tagged(self, tags_csv: str) -> list[dict[str, Any]]:
-        """Run one public-feed request for a comma-joined, ANDed tag set.
+        """
+        Run one public-feed request for a comma-joined, ANDed tag set.
 
         Args:
             tags_csv: A ``"tag1,tag2,tag3"`` string from
@@ -333,7 +340,8 @@ class FlickrMediaPanelSource(MediaPanelSource):
 
     @staticmethod
     def search_terms(pin: Pin, gateway: MediaProvider, scope: SearchScope) -> list[str]:
-        """One of this pin's Flickr searches, shaped for whichever gateway is active.
+        """
+        One of this pin's Flickr searches, shaped for whichever gateway is active.
 
         Args:
             pin: The pin to build search queries for.

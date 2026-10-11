@@ -1,4 +1,5 @@
-"""List ``Image`` rows whose file columns name a file that is not in storage, and optionally regenerate derived copies.
+"""
+List ``Image`` rows whose file columns name a file that is not in storage, and optionally regenerate derived copies.
 
 The reverse of P14, which is files no row names. A row naming a missing file is served as a broken image for as long
 as it exists. ``--repair`` clears a photo's missing thumbnail, marker or analysis copy and queues its regeneration from
@@ -60,7 +61,8 @@ class Command(BaseCommand):
             self._repair(missing, repairable)
 
     def _repair(self, missing: dict[str, list[int]], repairable: set[int]) -> None:
-        """Clear each repairable row's missing derived columns and queue the task that writes them.
+        """
+        Clear each repairable row's missing derived columns and queue the task that writes them.
 
         Args:
             missing: Row pks per column whose file is missing.

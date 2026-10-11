@@ -1,4 +1,5 @@
-"""X26: a capacity run given a ready-made manifest seeded no tiles and measured 503s.
+"""
+X26: a capacity run given a ready-made manifest seeded no tiles and measured 503s.
 
 ``run_capacity_tests.sh`` seeded the basemap tile cache inside its ``--provision-container``
 branch, so the cheap way to re-measure - reuse the 1,000-account population already in the
@@ -64,7 +65,8 @@ class CapacityRunnerSeedsTilesTests(SimpleTestCase):
     """The tile cache is seeded for whichever population the run is about to measure."""
 
     def drive(self, *args: str) -> Run:
-        """Run the capacity runner with stubbed `docker` and `bun`.
+        """
+        Run the capacity runner with stubbed `docker` and `bun`.
 
         Args:
             *args: Arguments after the fixed `--url` and `--out`. :data:`_MANIFEST` is replaced

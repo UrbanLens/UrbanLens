@@ -18,7 +18,8 @@ if TYPE_CHECKING:
 
 @contextmanager
 def restore_capacity(capacity: Capacity, payload: Sequence[dict[str, Any]]) -> Iterator[None]:
-    """Reserve room for a restore's rows under each owning profile, refusing the undo when there is none.
+    """
+    Reserve room for a restore's rows under each owning profile, refusing the undo when there is none.
 
     Args:
         capacity: The limit the restored rows count against.
@@ -41,7 +42,8 @@ def restore_capacity(capacity: Capacity, payload: Sequence[dict[str, Any]]) -> I
 
 
 class UndoHandler(abc.ABC):
-    """Serializes/restores instances of one model for the undo framework.
+    """
+    Serializes/restores instances of one model for the undo framework.
     Mutation handlers (``MutationUndoHandler``) record a reversible change instead."""
 
     model_label: ClassVar[str]
@@ -67,7 +69,8 @@ class UndoHandler(abc.ABC):
 
     @classmethod
     def redo_delete(cls, payload: dict[str, Any]) -> None:
-        """Re-delete rows that ``restore`` just recreated (the redo of a delete-undo).
+        """
+        Re-delete rows that ``restore`` just recreated (the redo of a delete-undo).
 
         Args:
             payload: Wrapped stash of the form ``{"entries": ..., "restored_pks": [...]}``.
@@ -83,7 +86,8 @@ class UndoHandler(abc.ABC):
 
     @classmethod
     def undo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:  # noqa: ARG003 - interface; overrides use both
-        """Apply the inverse of a stashed mutation, as ``profile``.
+        """
+        Apply the inverse of a stashed mutation, as ``profile``.
 
         Args:
             payload: The dict previously given to ``stash_mutation``.
@@ -94,7 +98,8 @@ class UndoHandler(abc.ABC):
 
     @classmethod
     def redo_mutation(cls, payload: dict[str, Any], profile: Profile) -> None:  # noqa: ARG003 - interface; overrides use both
-        """Re-apply a stashed mutation after it was undone, as ``profile``.
+        """
+        Re-apply a stashed mutation after it was undone, as ``profile``.
 
         Args:
             payload: The dict previously given to ``stash_mutation``.
@@ -131,7 +136,8 @@ def register(handler: type[UndoHandler]) -> type[UndoHandler]:
 
 
 def get_handler(model_label: str) -> type[UndoHandler]:
-    """Look up a registered handler by its ``model_label``.
+    """
+    Look up a registered handler by its ``model_label``.
 
     Raises:
         ValueError: If no handler is registered under that label.
@@ -143,7 +149,8 @@ def get_handler(model_label: str) -> type[UndoHandler]:
 
 
 def describe_batch(singular_label: str, plural_label: str, names: list[str], max_shown: int = 3) -> str:
-    """Build a ``describe()`` string that names names instead of just a bare count.
+    """
+    Build a ``describe()`` string that names names instead of just a bare count.
 
     Args:
         singular_label: Label for a single instance, e.g. ``"Pin"``.

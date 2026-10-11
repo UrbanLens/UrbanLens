@@ -70,7 +70,8 @@ def _open_dms(*profiles: Profile) -> None:
 
 
 def _befriend(a: Profile, b: Profile) -> None:
-    """Connect two profiles.
+    """
+    Connect two profiles.
 
     Exactly one row, never one per direction: ``Friendship.objects.between()`` resolves the pair with
     ``.get()``, so a second reciprocal row makes every connection check raise ``MultipleObjectsReturned``."""
@@ -105,7 +106,8 @@ class MessagingBaseTestCase(TestCase):
 
 
 class ReactionEmojiLengthTests(MessagingBaseTestCase):
-    """A long emoji must be refused, not 500.
+    """
+    A long emoji must be refused, not 500.
 
     ``is_safe_reaction_emoji``'s docstring states the contract: the value is "already length-capped by the
     caller"."""
@@ -302,7 +304,8 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
         self.pin = baker.make(Pin, profile=self.sender, location=self.location)
 
     def test_sharing_a_pin_records_a_location_exposure(self) -> None:
-        """The single most important assertion in this module.
+        """
+        The single most important assertion in this module.
 
         A share built directly in the view would produce a working-looking
         card and no exposure row at all.
@@ -323,7 +326,8 @@ class PinShareProvenanceTests(MessagingBaseTestCase):
         )
 
     def test_cannot_share_someone_elses_pin(self) -> None:
-        """Pin resolution is scoped to the sender's own pins.
+        """
+        Pin resolution is scoped to the sender's own pins.
 
         Addressed by uuid rather than slug on purpose: pin slugs are unique only *per profile*
         (``db_pin_unique_slug_per_profile``), so a slug is not a global identifier and resolving one already

@@ -34,7 +34,8 @@ class UserSubscriptionNotRevokedTests(TestCase):
         self.assertEqual(list(UserSubscription.objects.not_revoked()), [active])
 
     def test_includes_an_expired_but_not_revoked_subscription(self) -> None:
-        """not_revoked() deliberately ignores expiry - unlike active() below - since the
+        """
+        not_revoked() deliberately ignores expiry - unlike active() below - since the
         site-admin "grants I've issued" list wants to keep showing an admin's past grants
         even once they lapse, not just the currently-usable ones."""
         expired = baker.make(

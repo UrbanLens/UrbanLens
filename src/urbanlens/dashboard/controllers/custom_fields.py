@@ -1,4 +1,5 @@
-"""Custom field views - define per-user fields and edit their values on targets.
+"""
+Custom field views - define per-user fields and edit their values on targets.
 
 Field definitions are managed from Settings > Customize (and inline from the pin detail panel).
 """
@@ -55,7 +56,8 @@ logger = logging.getLogger(__name__)
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
-    """Attach a showToast HX-Trigger to a response.
+    """
+    Attach a showToast HX-Trigger to a response.
 
     Args:
         response: The response to annotate.
@@ -78,7 +80,8 @@ def _profile_for(request: HttpRequest) -> Profile:
 
 
 def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dict[str, Any]]:
-    """Build display rows pairing each of the profile's fields with its value on a target.
+    """
+    Build display rows pairing each of the profile's fields with its value on a target.
 
     Args:
         profile: The field owner (the requesting user).
@@ -106,7 +109,8 @@ def rows_for_target(profile: Profile, entity_type: str, target: Any) -> list[dic
 
 
 def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldValue | None, str | None]:
-    """Create, update, or clear the value of ``field`` on ``target``.
+    """
+    Create, update, or clear the value of ``field`` on ``target``.
 
     An empty ``raw`` deletes the stored value (the field simply has no value on that target anymore).
 
@@ -176,7 +180,8 @@ _MAX_SELECT_OPTIONS = 100
 
 
 def _parse_options(raw: str) -> tuple[list[str], str | None]:
-    """Parse a select field's options from newline/comma-separated text.
+    """
+    Parse a select field's options from newline/comma-separated text.
 
     Args:
         raw: The raw ``options`` POST value.
@@ -200,7 +205,8 @@ def _parse_options(raw: str) -> tuple[list[str], str | None]:
 
 
 def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]:
-    """Extract and validate a field definition from a create/update POST.
+    """
+    Extract and validate a field definition from a create/update POST.
 
     Reads ``name``, ``field_type``, ``style``, ``options`` (select fields), and
     ``slider_min``/``slider_max`` (slider style), validating each against the chosen type.
@@ -258,7 +264,8 @@ def _parse_definition(request: HttpRequest) -> tuple[dict[str, Any], str | None]
 
 
 def create_field(profile: Profile, entity_type: str, request: HttpRequest) -> str | None:
-    """Create a custom field from POST data, returning an error message on failure.
+    """
+    Create a custom field from POST data, returning an error message on failure.
 
     Args:
         profile: The owning profile.
@@ -396,7 +403,8 @@ _FIXED_DEFAULT_STEP = 11.0
 
 
 def _render_pin_panel(request: HttpRequest, profile: Profile, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the Private Pin page's custom-fields area.
+    """
+    Render the Private Pin page's custom-fields area.
 
     The response is one wrapper (``#pin-custom-fields-panel``) holding the Custom Fields card
     (display=default rows), one standalone card per display=section field, and one draggable overlay per
@@ -461,7 +469,8 @@ class PinCustomFieldValueView(LoginRequiredMixin, View):
 
 
 class CustomFieldPositionView(LoginRequiredMixin, View):
-    """POST: remember where the user dragged a fixed-display field.
+    """
+    POST: remember where the user dragged a fixed-display field.
 
     The position is per-field (fields are already per-user) and applies to every Private Pin page, per
     the feature request.
@@ -518,7 +527,8 @@ class ProfileCustomFieldValueView(LoginRequiredMixin, View):
 
 
 def _render_strip(request: HttpRequest, profile: Profile, entity_type: str, target: Any, url_name: str, target_arg: Any, *, error: str | None = None) -> HttpResponse:
-    """Render the compact custom-fields strip shown under lightboxes.
+    """
+    Render the compact custom-fields strip shown under lightboxes.
 
     Returns 204 (so the strip stays hidden) when the user has no fields for
     this entity type.

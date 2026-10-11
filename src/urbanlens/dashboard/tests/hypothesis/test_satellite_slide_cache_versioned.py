@@ -1,4 +1,5 @@
-"""A provider whose slide URLs change shape stops serving the old ones on deploy, not a day later.
+"""
+A provider whose slide URLs change shape stops serving the old ones on deploy, not a day later.
 
 Esri's Wayback slides moved from an export endpoint Esri does not serve to release tiles; the
 coordinate-keyed cache kept handing out the broken URLs for its full lifetime."""

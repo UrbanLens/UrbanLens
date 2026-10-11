@@ -1,4 +1,5 @@
-"""Each AI feature degrades to "not available in this environment" where hosted AI is not called (D26).
+"""
+Each AI feature degrades to "not available in this environment" where hosted AI is not called (D26).
 
 In development and local nothing reaches Cloudflare, OpenAI or Anthropic. These cover what every feature does
 instead: it says so, makes no call, writes no ledger row, caches nothing, and marks no work as tried, so the same
@@ -700,7 +701,8 @@ class _TransportRefuses(_Gateway):
 
 
 class ARefusalTheSlotDidNotSeeTests(_AiTestCase):
-    """Let start by an OpenAI override, the provider the site picked (Cloudflare) is refused inside the slot, and several callers
+    """
+    Let start by an OpenAI override, the provider the site picked (Cloudflare) is refused inside the slot, and several callers
     wrap the call in ``except Exception``. It is still "not available here", not an error, and still no row."""
 
     def test_a_refusal_outside_any_slot_writes_no_row(self) -> None:

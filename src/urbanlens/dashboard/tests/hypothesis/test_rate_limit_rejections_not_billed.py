@@ -63,7 +63,8 @@ class RejectionsAreNotBilledTests(TestCase):
         )
 
     def test_the_limiter_agrees_once_the_minute_window_is_irrelevant(self) -> None:
-        """A day's budget must not be exhausted by a burst of refusals.
+        """
+        A day's budget must not be exhausted by a burst of refusals.
 
         With the per-minute limit removed, only the daily limit applies."""
         for _ in range(12):
@@ -93,7 +94,8 @@ class RejectionsAreNotBilledTests(TestCase):
         self.assertFalse(check_rate_limit(_SERVICE), "attempted-but-failed calls must still count")
 
     def test_the_enrichment_budget_is_computed_the_same_way(self) -> None:
-        """`compute_service_budget` had the identical count, and the same flaw.
+        """
+        `compute_service_budget` had the identical count, and the same flaw.
 
         It decides how many enrichment calls a sweep may still make."""
         from urbanlens.dashboard.services.locations.enrichment import compute_service_budget

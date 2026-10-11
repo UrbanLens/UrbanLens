@@ -1,4 +1,5 @@
-"""A stand-in for the raster vendor's side of the wire, for tests that go through the rate-limited session.
+"""
+A stand-in for the raster vendor's side of the wire, for tests that go through the rate-limited session.
 
 Patching ``download_tile`` skips the session, and with it the limiter this is all about; this patches the request
 underneath it instead, so every query and counter the real path makes is still made.
@@ -19,7 +20,8 @@ import urllib3
 def vendor_answer(
     status: int = 200, body: bytes = b"\x89PNG tile", content_type: str = "image/png"
 ) -> requests.Response:
-    """One streamed response, as ``requests`` hands it over with ``stream=True``.
+    """
+    One streamed response, as ``requests`` hands it over with ``stream=True``.
 
     Args:
         status: HTTP status.
@@ -39,7 +41,8 @@ def vendor_answer(
 
 @contextlib.contextmanager
 def vendor_wire(answer: Callable[..., requests.Response] | None = None) -> Iterator[mock.MagicMock]:
-    """Answer every outbound request with *answer*'s response, or a tile.
+    """
+    Answer every outbound request with *answer*'s response, or a tile.
 
     Args:
         answer: Called with the request's ``(session, method, url, **kwargs)``; may raise to stand for a failure.

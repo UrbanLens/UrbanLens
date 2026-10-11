@@ -1,4 +1,5 @@
-"""Every way an overlay is created obeys the same rules as the live form (N29 G3-1, G3-11, G6-22).
+"""
+Every way an overlay is created obeys the same rules as the live form (N29 G3-1, G3-11, G6-22).
 
 The archive importer kept a pasted ``image_url`` and handed it to every viewer's browser, and never looked at the
 per-map cap, while the form downloads the image and refuses a thirteenth overlay.

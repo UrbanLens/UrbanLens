@@ -22,7 +22,8 @@ def get_page(
     default_last: bool = False,
     param: str = "page",
 ) -> Page:
-    """Slice ``items`` into a Django ``Page`` for the requested page number.
+    """
+    Slice ``items`` into a Django ``Page`` for the requested page number.
     Invalid or out-of-range page numbers are clamped to the nearest valid page rather than raising, so a stale pagination link can never produce an error page.
 
     Args:
@@ -42,7 +43,8 @@ def get_page(
 
 
 def offset_window(query: Mapping[str, Any], *, default_limit: int, max_limit: int) -> tuple[int, int]:
-    """The ``offset`` and ``limit`` a grid's next-page request asks for, each one a query can be given.
+    """
+    The ``offset`` and ``limit`` a grid's next-page request asks for, each one a query can be given.
 
     Args:
         query: The request's query parameters.

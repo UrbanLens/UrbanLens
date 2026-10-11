@@ -88,7 +88,8 @@ class SwitchCandidateTests(TestCase):
         self.assertEqual(competing_wiki_locations(pin, self.profile), [])
 
     def test_only_one_location_is_offered_per_competing_place(self) -> None:
-        """One row per rival place, not one per Location that resolves onto it.
+        """
+        One row per rival place, not one per Location that resolves onto it.
 
         Guards against the 124-Locations/one-parcel explosion the Place model was built to end (see the module
         docstring in ``ambiguity.py``) - two Locations here independently carry their own wiki while resolving

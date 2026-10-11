@@ -1,4 +1,5 @@
-"""Which external calls a deployment may make, by kind of service and by environment (D26).
+"""
+Which external calls a deployment may make, by kind of service and by environment (D26).
 
 Every UrbanLens host shares one residential address with production REData. A keyless public API's
 per-address tolerance, and a billed API's free tier, are therefore one budget for all of them, and
@@ -91,7 +92,8 @@ _FULL_EGRESS_ENVIRONMENTS = frozenset({EnvironmentTypes.PRODUCTION, EnvironmentT
 
 
 def policy_environment(environment_name: str | None, *, testing: bool) -> str:
-    """The environment the egress policy applies.
+    """
+    The environment the egress policy applies.
 
     Args:
         environment_name: ``settings.ENVIRONMENT_NAME``, from ``UL_ENVIRONMENT``.
@@ -106,7 +108,8 @@ def policy_environment(environment_name: str | None, *, testing: bool) -> str:
 
 
 def full_egress(environment: str) -> bool:
-    """Whether ``environment`` calls every category (production, and the test suite).
+    """
+    Whether ``environment`` calls every category (production, and the test suite).
 
     Args:
         environment: A :func:`policy_environment` value.
@@ -118,7 +121,8 @@ def full_egress(environment: str) -> bool:
 
 
 def hosted_ai_permitted(environment: str) -> bool:
-    """Whether ``environment`` may call a hosted AI provider when nothing overrides it.
+    """
+    Whether ``environment`` may call a hosted AI provider when nothing overrides it.
 
     Args:
         environment: A :func:`policy_environment` value.
@@ -130,7 +134,8 @@ def hosted_ai_permitted(environment: str) -> bool:
 
 
 def default_environment_share(environment: str) -> float:
-    """The share of every shared budget ``environment`` holds when ``UL_ENVIRONMENT_SHARE`` is unset.
+    """
+    The share of every shared budget ``environment`` holds when ``UL_ENVIRONMENT_SHARE`` is unset.
 
     Args:
         environment: A :func:`policy_environment` value.
@@ -152,7 +157,8 @@ def _share(value: Any, *, what: str) -> float:
 
 
 def parse_share_overrides(raw: str | Mapping[str, Any] | None) -> dict[str, float]:
-    """Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES``.
+    """
+    Parse ``UL_ENVIRONMENT_SHARE_OVERRIDES``.
 
     Args:
         raw: ``"nominatim=0.02, sms=1"``, an already-parsed mapping, or nothing.
@@ -188,7 +194,8 @@ def parse_share_overrides(raw: str | Mapping[str, Any] | None) -> dict[str, floa
 
 @dataclass(frozen=True, slots=True)
 class EgressDecision:
-    """Whether one service may be called here, and on what share of its budget.
+    """
+    Whether one service may be called here, and on what share of its budget.
 
     Attributes:
         service: The rate-limiter service key.
@@ -211,7 +218,8 @@ class EgressDecision:
 
 
 def decide(service: str, category: EgressCategory, environment: str, *, environment_share: float, overrides: Mapping[str, float]) -> EgressDecision:
-    """Decide one service's terms in one environment.
+    """
+    Decide one service's terms in one environment.
 
     Args:
         service: The rate-limiter service key.
@@ -237,7 +245,8 @@ def decide(service: str, category: EgressCategory, environment: str, *, environm
 
 
 def scaled_limit(limit: int | None, share: float) -> int | None:
-    """One budget window's limit at ``share`` of it.
+    """
+    One budget window's limit at ``share`` of it.
 
     Args:
         limit: The configured limit; None is unlimited.
@@ -264,7 +273,8 @@ PROTOMAPS_API_ORIGIN = "https://api.protomaps.com"
 
 
 def hosted_basemap_permitted(environment: str) -> bool:
-    """Whether ``environment``'s browsers fetch the street and dark tiles from Protomaps' hosted API.
+    """
+    Whether ``environment``'s browsers fetch the street and dark tiles from Protomaps' hosted API.
 
     Args:
         environment: A :func:`policy_environment` value.
@@ -276,7 +286,8 @@ def hosted_basemap_permitted(environment: str) -> bool:
 
 
 def hosted_basemap_key(environment: str, protomaps_api_key: str) -> str:
-    """The Protomaps key this deployment hands its browsers for the hosted basemap tiles, or nothing.
+    """
+    The Protomaps key this deployment hands its browsers for the hosted basemap tiles, or nothing.
 
     Handed out on production and staging only: everywhere else draws the street and dark layers from the
     self-hosted mirror whatever ``UL_PROTOMAPS_API_KEY`` says.
@@ -296,7 +307,8 @@ CONSOLE_EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 
 def email_delivery_backend(environment: str, *, configured: str | None, send_outside_production: bool) -> str:
-    """The Django backend that delivers this deployment's mail.
+    """
+    The Django backend that delivers this deployment's mail.
 
     Off production, mail is printed to the log by default: a staging clone of production holds real
     addresses, and development's mail relay bills per message. ``UL_EMAIL_SEND_OUTSIDE_PRODUCTION``
@@ -390,7 +402,8 @@ BEAT_EGRESS: Mapping[str, BeatEgress] = {
 
 
 def background_egress_permitted(entry: str, environment: str, allowlist: Iterable[str]) -> bool:
-    """Whether a background task that reaches outside may run here.
+    """
+    Whether a background task that reaches outside may run here.
 
     Args:
         entry: The task's ``CELERY_BEAT_SCHEDULE`` entry name.
@@ -404,7 +417,8 @@ def background_egress_permitted(entry: str, environment: str, allowlist: Iterabl
 
 
 def scheduled_beat_entries(schedule: Mapping[str, Any], environment: str, allowlist: Iterable[str]) -> dict[str, Any]:
-    """The beat entries this environment runs.
+    """
+    The beat entries this environment runs.
 
     Args:
         schedule: The whole ``CELERY_BEAT_SCHEDULE``.

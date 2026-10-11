@@ -1,4 +1,5 @@
-"""A participant who left or was removed from a game session loses every route into it.
+"""
+A participant who left or was removed from a game session loses every route into it.
 
 Covers the HTTP views, the join handshake, the WebSocket connect, a chat frame sent on a socket that outlived the
 removal, and the shared chat service itself.

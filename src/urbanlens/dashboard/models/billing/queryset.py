@@ -32,7 +32,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
     """Filters for paid, Stripe-backed role subscriptions."""
 
     def granting_access_for(self, user: User) -> Self:
-        """Subscriptions currently entitling *user* to their role's features.
+        """
+        Subscriptions currently entitling *user* to their role's features.
         Either an active/trialing Stripe status with a cleared pay-what-you-want threshold, or unexpired banked usage-ledger coverage - the latter can apply to a row in ANY status (canceled, past_due, etc.), since banked access is meant to survive exactly the "stopped paying" case (see services.billing.banking).
 
         Args:
@@ -44,7 +45,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(user=user).currently_granting()
 
     def currently_granting(self, as_of: datetime.datetime | None = None) -> Self:
-        """Rows currently entitling whichever user they belong to, without a per-user filter.
+        """
+        Rows currently entitling whichever user they belong to, without a per-user filter.
         Same criteria as ``granting_access_for``, minus the ``user=`` filter - meant for sitewide aggregates (e.g. counting distinct paying supporters) rather than looking up one user's own access.
 
         Args:
@@ -61,7 +63,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of))
 
     def visible_for(self, user: User) -> Self:
-        """Rows worth surfacing in Settings > Billing: anything Stripe has not ended, plus an ended row that's still granting access via unexpired banked usage-ledger coverage (so a user can see how much paid-ahead runway remains after canceling).
+        """
+        Rows worth surfacing in Settings > Billing: anything Stripe has not ended, plus an ended row that's still granting access via unexpired banked usage-ledger coverage (so a user can see how much paid-ahead runway remains after canceling).
 
         Args:
             user: The user to look up.
@@ -82,7 +85,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.exclude(status__in=TERMINAL_SUBSCRIPTION_STATUSES)
 
     def locked(self, pk: int) -> RoleSubscription:
-        """Re-read one row under a row lock, with its role joined but not locked.
+        """
+        Re-read one row under a row lock, with its role joined but not locked.
 
         Call inside ``transaction.atomic``.
 
@@ -95,7 +99,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.select_for_update(of=("self",)).select_related("role").get(pk=pk)
 
     def unsynced_since(self, since: datetime.datetime) -> Self:
-        """Live rows no Stripe state newer than *since* has reached.
+        """
+        Live rows no Stripe state newer than *since* has reached.
 
         Args:
             since: When the sweep that should have reached them started.
@@ -106,7 +111,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.not_terminal().filter(Q(stripe_state_at__isnull=True) | Q(stripe_state_at__lt=since))
 
     def ledger_advance_due(self, as_of: datetime.datetime | None = None) -> Self:
-        """Pay-what-you-want rows whose usage ledger ``banking.advance_usage_ledger`` could move as of *as_of*.
+        """
+        Pay-what-you-want rows whose usage ledger ``banking.advance_usage_ledger`` could move as of *as_of*.
 
         Excludes rows already covered past *as_of*, and fixed-threshold rows whose unspent balance cannot buy another
         period. A dynamic or zero threshold can't be priced in SQL, so those rows stay in.
@@ -125,7 +131,8 @@ class RoleSubscriptionQuerySet(AccessBearingQuerySet, abstract.DashboardQuerySet
         return self.filter(role__pay_what_you_want=True).filter(Q(usage_covered_until__isnull=True) | Q(usage_covered_until__lte=as_of)).filter(~fixed_threshold | affordable)
 
     def for_stripe_subscription(self, stripe_subscription_id: str) -> RoleSubscription | None:
-        """Return the row for a given Stripe subscription id, or None.
+        """
+        Return the row for a given Stripe subscription id, or None.
 
         Args:
             stripe_subscription_id: The Stripe ``Subscription`` id (``sub_...``).

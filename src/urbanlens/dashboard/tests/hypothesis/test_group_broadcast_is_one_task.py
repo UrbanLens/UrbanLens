@@ -1,4 +1,5 @@
-"""A group message must not become one Celery task per member.
+"""
+A group message must not become one Celery task per member.
 
 `send_group_message` routes every channel-layer send through a Celery task,
 deliberately: calling `async_to_sync` inline under gevent can poison an

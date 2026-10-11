@@ -1,4 +1,5 @@
-"""Tests for TriviaSessionConsumer - real-time sync for multiplayer Trivia sessions.
+"""
+Tests for TriviaSessionConsumer - real-time sync for multiplayer Trivia sessions.
 
 Mirrors test_spotguessr_consumer.py exactly - see that file's module
 docstring for why TransactionTestCase + the in-memory channel layer are used.
@@ -101,7 +102,8 @@ class TriviaSessionConsumerTests(TransactionTestCase):
         _run(self._a_kicked_participant_stops_receiving_session_events())
 
     async def _a_kicked_participant_stops_receiving_session_events(self) -> None:
-        """Participation is checked at connect() and never again.
+        """
+        Participation is checked at connect() and never again.
 
         The kicked player's socket stays subscribed to the session's channel group, so every later broadcast -
         other players' answers, the chat - keeps arriving."""

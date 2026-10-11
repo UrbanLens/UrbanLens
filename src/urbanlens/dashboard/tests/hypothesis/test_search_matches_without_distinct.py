@@ -1,4 +1,5 @@
-"""A search row matched through several of its aliases, notes, labels or members is one result, found without DISTINCT.
+"""
+A search row matched through several of its aliases, notes, labels or members is one result, found without DISTINCT.
 
 Joining a pin to its aliases, labels, notes and wiki aliases at once and de-duplicating afterwards cost Postgres 73 ms
 to plan for an account with ten pins and 134 ms for one with 17,720 - longer than running it. Each to-many match is a

@@ -165,7 +165,8 @@ class AbsoluteMediaUrlTests(SimpleTestCase):
 
 
 class GetArticleMediaTests(SimpleTestCase):
-    """WikipediaGateway.get_article_media() - reads the article's own curated media list.
+    """
+    WikipediaGateway.get_article_media() - reads the article's own curated media list.
 
     This exists specifically because a Wikimedia Commons text search (see WikimediaGateway) can miss images that
     are only reachable through an in-body gallery and aren't independently discoverable by name - "Wikipedia
@@ -240,7 +241,8 @@ class GetArticleMediaTests(SimpleTestCase):
 
 
 class WikipediaCampusFallbackTests(TestCase):
-    """UL-354: a building whose own coordinates find no article retries from the places it stands in (campus-aware search).
+    """
+    UL-354: a building whose own coordinates find no article retries from the places it stands in (campus-aware search).
 
     A large campus has one article geotagged at a single point (usually the main building); an outbuilding
     can sit outside the geosearch radius, so its own search legitimately finds nothing - the campus's point and
@@ -376,7 +378,8 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
 
 
 class FetchInfoboxTests(SimpleTestCase):
-    """WikipediaGateway._fetch_infobox() - regression coverage for the "started from Wikipedia" seed missing the infobox.
+    """
+    WikipediaGateway._fetch_infobox() - regression coverage for the "started from Wikipedia" seed missing the infobox.
 
     _fetch_summary/_fetch_extended_extract are both backed by the TextExtracts extension, which strips infoboxes
     before returning "extract" text - _fetch_infobox instead parses action=parse's real rendered HTML, which is
@@ -447,7 +450,8 @@ class FetchInfoboxTests(SimpleTestCase):
 
 
 class CleanAndTrimExtractTests(SimpleTestCase):
-    """_clean_and_trim_extract() - article.extract is rendered with |safe (pin_wikipedia.html),
+    """
+    _clean_and_trim_extract() - article.extract is rendered with |safe (pin_wikipedia.html),
     so this sanitization is the only thing standing between a hostile/compromised Wikipedia
     response and script execution in the viewer's browser.
     """

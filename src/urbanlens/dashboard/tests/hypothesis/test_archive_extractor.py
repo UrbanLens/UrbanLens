@@ -196,7 +196,8 @@ class ValidateContentTypeTests(SimpleTestCase):
         self.assertEqual(validate_content_type("export.csv", data), "csv")
 
     def test_csv_with_utf8_bom_and_only_latitude_longitude_columns(self):
-        """Excel's UTF-8 CSV export prefixes a BOM on the first header cell.
+        """
+        Excel's UTF-8 CSV export prefixes a BOM on the first header cell.
 
         Wider CSVs that put ``name`` (or anything else) before the coordinate columns still worked, which made
         the failure look like "lat/lng-only CSVs aren't supported"."""
@@ -518,7 +519,8 @@ class ExtractArchiveDispatchTests(SimpleTestCase):
 
 
 class SharedExtractionBudgetTests(SimpleTestCase):
-    """One upload gets one allowance, however many archives it nests.
+    """
+    One upload gets one allowance, however many archives it nests.
 
     `_MAX_UNCOMPRESSED_BYTES` / `_MAX_FILE_COUNT` are per *archive*, and the upload-preview controller calls
     `extract_archive` again for every nested archive it finds."""
@@ -539,7 +541,8 @@ class SharedExtractionBudgetTests(SimpleTestCase):
             extract_archive(archive, budget)
 
     def test_each_call_gets_its_own_allowance_when_none_is_shared(self) -> None:
-        """Anti-vacuity: without a shared budget the second call succeeds.
+        """
+        Anti-vacuity: without a shared budget the second call succeeds.
 
         This is the behaviour the fix removes from the nesting path - asserted
         so the test above cannot pass for the wrong reason.
@@ -577,7 +580,8 @@ class SharedExtractionBudgetTests(SimpleTestCase):
 
 
 class DeclaredSizeIsNotAnAttackVectorTests(SimpleTestCase):
-    """Checked, and false: an understated `file_size` truncates, it does not overrun.
+    """
+    Checked, and false: an understated `file_size` truncates, it does not overrun.
 
     Charging the cumulative budget against the *declared* size looks like it should be forgeable - the
     declaration is attacker-supplied."""

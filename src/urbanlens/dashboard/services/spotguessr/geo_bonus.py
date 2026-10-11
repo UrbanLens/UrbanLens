@@ -42,7 +42,8 @@ _CACHE_MISS = object()
 
 
 def _reverse_geocode_admin_cached(latitude: float, longitude: float) -> dict[str, str] | None:
-    """Reverse-geocode admin lookup for a guess point, cached by rounded coordinates.
+    """
+    Reverse-geocode admin lookup for a guess point, cached by rounded coordinates.
 
     Args:
         latitude: WGS-84 latitude of the guess point.
@@ -121,7 +122,8 @@ def _same(guessed: str, actual: str) -> bool:
 
 
 def bonus_points_for_guess(guess_point: Point, location: Location, scope: BonusScope) -> BonusResult:
-    """Country/state/city bonus points for a guess, honoring ``scope``.
+    """
+    Country/state/city bonus points for a guess, honoring ``scope``.
     Tiers stack: nailing the city also means the country and state matched, so a spot-on guess earns all three."""
     if not (scope.country or scope.state or scope.city):
         return BonusResult(total=0)

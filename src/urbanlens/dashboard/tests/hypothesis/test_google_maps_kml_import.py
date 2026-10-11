@@ -1,4 +1,5 @@
-"""Tests for GoogleMapsGateway.takeout_kml_to_dict() - KML/KMZ pin extraction.
+"""
+Tests for GoogleMapsGateway.takeout_kml_to_dict() - KML/KMZ pin extraction.
 
 Regression coverage for two bugs that silently produced zero pins for every
 real-world KML/KMZ import (Google Takeout always emits an XML encoding

@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class SavedFilter(abstract.FrontendDashboardModel):
-    """A profile's saved main-map filter combination.
+    """
+    A profile's saved main-map filter combination.
     ``criteria`` stores a JSON-safe, normalized form of the fields ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field criteria) would produce - see ``dashboard.services.search.filter_criteria`` for the (de)serialization helpers that build and replay this shape against ``Pin.objects.filter_by_criteria()``.
 
     Attributes:
@@ -40,7 +41,8 @@ class SavedFilter(abstract.FrontendDashboardModel):
     order = IntegerField(default=0)
 
     def coerce_colors(self) -> None:
-        """Drop `color` to its unset value unless it is a colour we can store.
+        """
+        Drop `color` to its unset value unless it is a colour we can store.
         The column declares `choices`, which Django enforces in a form and not in the database - and the archive importer writes this straight from an uploaded file.
         """
         self.color = clean_color(self.color, default="")
@@ -58,7 +60,8 @@ class SavedFilter(abstract.FrontendDashboardModel):
         return self.name
 
     def matching_pins(self) -> PinQuerySet:
-        """The owner's root pins that satisfy this filter, as an unevaluated queryset.
+        """
+        The owner's root pins that satisfy this filter, as an unevaluated queryset.
 
         Returns:
             A queryset callers compose as a subquery (``pk__in=...values("pk")``) rather than evaluate.
@@ -70,7 +73,8 @@ class SavedFilter(abstract.FrontendDashboardModel):
 
     @property
     def criteria_json(self) -> str:
-        """``criteria`` as a JSON string for embedding in a ``data-*`` HTML attribute.
+        """
+        ``criteria`` as a JSON string for embedding in a ``data-*`` HTML attribute.
 
         Relies on Django's default template autoescaping to make the quotes
         and angle brackets this can contain attribute-safe - do not render

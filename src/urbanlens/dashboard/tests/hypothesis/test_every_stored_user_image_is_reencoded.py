@@ -1,4 +1,5 @@
-"""Every stored user image, not only library photos, is re-encoded from its pixels (P119).
+"""
+Every stored user image, not only library photos, is re-encoded from its pixels (P119).
 
 Comment and trip comment images, custom icons and avatars were stored as they came, so whatever metadata the file
 carried was served with it. The fixtures and the detector are the photo matrix's: each fixture plants a marker in one
@@ -305,7 +306,8 @@ class AFileThatCannotBeReadRightNowTests(_Case):
 
 
 class AFileThatCannotBeDeletedRightNowTests(_Case):
-    """The row already names the file that won, so failing to delete the one that lost neither fails nor undoes that.
+    """
+    The row already names the file that won, so failing to delete the one that lost neither fails nor undoes that.
 
     The media gate serves any icon or avatar path to every member, so the sweep deletes the file that lost instead.
     """
@@ -435,7 +437,8 @@ class TheProfileFormTests(_Case):
         self.profile.refresh_from_db()
 
     def test_the_form_does_not_store_an_avatar(self) -> None:
-        """An avatar goes through set_profile_avatar's checks and re-encode; the form decoded it in the request and
+        """
+        An avatar goes through set_profile_avatar's checks and re-encode; the form decoded it in the request and
         stored it as sent."""
         with mock.patch(_ENQUEUE):
             self._save_form(avatar=_upload(*_fixtures()["jpeg-exif-gps"]))

@@ -39,7 +39,8 @@ def _plain_profile():
 
 
 class _StubGateway:
-    """Feeds a scripted sequence of native-tool-calling responses to the loop.
+    """
+    Feeds a scripted sequence of native-tool-calling responses to the loop.
 
     Each step is either ``{"reply": "..."}`` (a plain end-of-turn text response) or ``{"tool": name, "args":
     {...}}``/``{"tools": [...]}`` (one or several parallel ``ToolUseBlock``s in a single round - the latter is
@@ -658,7 +659,8 @@ class GlobalAssistantSurfaceTests(TestCase):
         self.assertNotContains(response, 'id="ul-assistant-fab"')
 
     def test_body_carries_page_context_data_attrs(self) -> None:
-        """page_context.py (plan §9) resolves a client-sent path server-side - these are what a future
+        """
+        page_context.py (plan §9) resolves a client-sent path server-side - these are what a future
         client-side page-help panel (batch 4) would read without a round trip."""
         with patch("urbanlens.dashboard.services.ai.access.assistant_available", return_value=True):
             response = self.client.get(reverse("map.view"))
@@ -716,7 +718,8 @@ class AssistantProposalConfirmViewTests(TestCase):
         self.assertEqual(Trip.objects.filter(name="Confirmed Trip").count(), 1)
 
     def test_confirm_racing_a_still_executing_claim_does_not_500(self) -> None:
-        """A loser arriving between another request's claim and its session write-back gets a safe reply, not a crash.
+        """
+        A loser arriving between another request's claim and its session write-back gets a safe reply, not a crash.
 
         Simulated by claiming the proposal directly (as the winner would) without ever calling
         ``_update_session_proposal`` - the session's copy is left at ``status: "pending"``, exactly the window

@@ -38,7 +38,8 @@ class SlugOrUuidQuerySetTests(TestCase):
 
 
 class PinRelinkViewTests(TestCase):
-    """PinRelinkView's merge-vs-relink behaviour.
+    """
+    PinRelinkView's merge-vs-relink behaviour.
 
     Every ``target`` here sits within ~50 m of ``self.origin`` on purpose."""
 
@@ -114,7 +115,8 @@ class PinRelinkViewTests(TestCase):
 
 
 class ConflictingLocationsPayloadTests(TestCase):
-    """MapController.post_add_pin's conflicting_locations payload.
+    """
+    MapController.post_add_pin's conflicting_locations payload.
 
     Two *unrelated* parcels whose recorded outlines overlap - the only case that still produces a choice now
     that everything inside one property resolves to one place."""

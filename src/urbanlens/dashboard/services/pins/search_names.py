@@ -1,4 +1,5 @@
-"""Which names a pin's outbound searches may use, and which cached results each viewer may read.
+"""
+Which names a pin's outbound searches may use, and which cached results each viewer may read.
 
 A Location's *shared* names are the ones anyone who can see the place knows it by: its official name, and its wiki's
 name and non-nickname aliases. A pin's *custom* names are its owner's: the pin's name and non-nickname aliases, less
@@ -27,7 +28,8 @@ SHARED_AUDIENCE = ""
 
 
 def normalize_search_name(name: str) -> str:
-    """The form two names are compared in: casefolded, with whitespace collapsed and trimmed.
+    """
+    The form two names are compared in: casefolded, with whitespace collapsed and trimmed.
 
     Args:
         name: A place name.
@@ -63,7 +65,8 @@ def _canonical(names: Iterable[str]) -> tuple[str, ...]:
 
 @dataclass(frozen=True, slots=True)
 class SearchScope:
-    """One cached search: who may read it, and the names it is built from.
+    """
+    One cached search: who may read it, and the names it is built from.
 
     Attributes:
         audience: The ``LocationCache.audience`` its results are cached under; ``""`` for the shared search.
@@ -91,7 +94,8 @@ SHARED_SCOPE = SearchScope(SHARED_AUDIENCE, ())
 
 @dataclass(frozen=True, slots=True)
 class SearchNames:
-    """A pin's names, split by who may see what a search for them finds.
+    """
+    A pin's names, split by who may see what a search for them finds.
 
     Attributes:
         shared: The Location's public names, official name first.
@@ -110,7 +114,8 @@ class SearchNames:
 
     @property
     def own(self) -> SearchScope | None:
-        """The search for the owner's own names, or None when they have none worth a search of their own.
+        """
+        The search for the owner's own names, or None when they have none worth a search of their own.
 
         Keyed by the names it searches, so a nested pin searching the shared names reads a new row when they change.
         """
@@ -136,7 +141,8 @@ class SearchNames:
 
 
 def shared_names(location: Location | None) -> tuple[str, ...]:
-    """The names anyone who can see ``location`` knows it by.
+    """
+    The names anyone who can see ``location`` knows it by.
 
     Args:
         location: The shared Location, or None.
@@ -158,7 +164,8 @@ def shared_names(location: Location | None) -> tuple[str, ...]:
 
 
 def owner_label_scope(pin: Pin) -> SearchScope:
-    """The names to label ``pin`` with for its owner, who may see all of them; never a search to cache.
+    """
+    The names to label ``pin`` with for its owner, who may see all of them; never a search to cache.
 
     Args:
         pin: The owner's pin.
@@ -183,7 +190,8 @@ def names_remembered() -> Iterator[None]:
 
 
 def search_names(pin: Pin, *, shared: tuple[str, ...] | None = None) -> SearchNames:
-    """Split ``pin``'s names into shared and custom.
+    """
+    Split ``pin``'s names into shared and custom.
 
     Args:
         pin: The pin whose searches are being built.

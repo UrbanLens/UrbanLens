@@ -1,4 +1,5 @@
-"""Signal wiring that keeps achievements up to date as users contribute.
+"""
+Signal wiring that keeps achievements up to date as users contribute.
 Every handler does the same two things - work out whose totals changed, and hand off to Celery - so they are generated from :data:`_SUBSCRIPTIONS` rather than written out one by one.
 """
 
@@ -28,7 +29,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class _Subscription:
-    """How one source model feeds the achievement system.
+    """
+    How one source model feeds the achievement system.
 
     Attributes:
         model_path: ``module:ClassName`` of the sender, resolved lazily so this
@@ -64,7 +66,8 @@ def _attr_ids(*attrs: str) -> Callable[[Any], list[int]]:
 
 
 def _is_genuine_upload(instance: Any) -> bool:
-    """True when an Image row is the user's own photo, not somebody else's.
+    """
+    True when an Image row is the user's own photo, not somebody else's.
     Attaching a Yelp or Wikimedia photo creates an ``Image`` too, and that must not extend a photo-upload streak.
     """
     return instance.is_own_contribution
@@ -160,7 +163,8 @@ _SUBSCRIPTIONS: tuple[_Subscription, ...] = (
 
 
 def _record_streak_days(profile_ids: list[int], activity_kind: str) -> bool:
-    """Record today's activity day for each profile, synchronously.
+    """
+    Record today's activity day for each profile, synchronously.
     Streaks are the only metric with no source of truth outside our own tables, so the day has to be written even when no streak award exists yet - otherwise an award added next month would have no history to reward.
 
     Args:
@@ -179,7 +183,8 @@ def _record_streak_days(profile_ids: list[int], activity_kind: str) -> bool:
 
 
 def _schedule(profile_ids: list[int], metric_keys: list[str], activity_kind: str | None) -> None:
-    """Record any streak day, then queue evaluation if an award depends on it.
+    """
+    Record any streak day, then queue evaluation if an award depends on it.
     The enqueue is gated on :func:`active_metric_keys` so a site that has not defined an award against a metric pays nothing when that metric changes - no broker message, no worker time.
     """
     from urbanlens.dashboard.services.achievements.evaluate import active_metric_keys
@@ -247,7 +252,8 @@ def on_user_logged_in(sender: object, user: Any, **kwargs: Any) -> None:
 
 
 def on_achievement_saved(sender: type[Model], instance: Any, created: bool, raw: bool = False, **kwargs: Any) -> None:
-    """Backfill a newly defined, re-activated, or re-scoped award across every profile.
+    """
+    Backfill a newly defined, re-activated, or re-scoped award across every profile.
     This is what lets an admin add an award at any time and have users who already qualify receive it, rather than only rewarding future activity.
     """
     if raw or not instance.is_active:

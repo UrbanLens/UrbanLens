@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def form_action_source(redirect_uri: str) -> str | None:
-    """The CSP source matching a client's redirect URI.
+    """
+    The CSP source matching a client's redirect URI.
 
     Args:
         redirect_uri: A redirect URI the toolkit has already validated against the client.
@@ -30,7 +31,8 @@ def form_action_source(redirect_uri: str) -> str | None:
 
 
 class ConsentAuthorizationView(AuthorizationView):
-    """``oauth2_provider``'s authorize view, admitting the client's redirect to ``form-action``.
+    """
+    ``oauth2_provider``'s authorize view, admitting the client's redirect to ``form-action``.
 
     Approving answers the form POST with a redirect to the client, and browsers hold that redirect
     to the page's ``form-action``, so the site's ``'self'``-only policy would strand the code.

@@ -1,4 +1,5 @@
-"""nginx must find the visitor's address whichever Docker network its front door arrives from.
+"""
+nginx must find the visitor's address whichever Docker network its front door arrives from.
 
 When the hop in front of nginx is not trusted, `X-Forwarded-For` is ignored and every visitor has the front door's
 address. Every per-address limit then becomes a site-wide one: `limit_conn ws_conn 60` stops the sixty-first

@@ -1,4 +1,5 @@
-"""Whether a profile may use AI at all, and whether it may use the interactive assistant.
+"""
+Whether a profile may use AI at all, and whether it may use the interactive assistant.
 Callers that need a cheap, side-effect-free yes/no before they spend anything get :func:`ai_features_enabled` instead."""
 
 from __future__ import annotations
@@ -14,7 +15,8 @@ ASSISTANT_UNAVAILABLE_HERE_REPLY = "The assistant is not available in this envir
 
 
 def ai_refused_here(feature: str) -> bool:
-    """Whether this environment makes no hosted AI call for ``feature`` (D26).
+    """
+    Whether this environment makes no hosted AI call for ``feature`` (D26).
 
     Development and local refuse every hosted AI provider unless ``UL_ENVIRONMENT_SHARE_OVERRIDES`` names the feature
     or a provider. Callers say "not available in this environment" rather than "turned off": no setting of the
@@ -32,7 +34,8 @@ def ai_refused_here(feature: str) -> bool:
 
 
 def ai_features_enabled(profile: Profile) -> bool:
-    """Return whether ``profile`` may use any AI-backed feature.
+    """
+    Return whether ``profile`` may use any AI-backed feature.
 
     Args:
         profile: The profile the AI call would be made on behalf of.
@@ -50,7 +53,8 @@ def ai_features_enabled(profile: Profile) -> bool:
 
 
 def assistant_available(profile: Profile) -> bool:
-    """Return whether ``profile`` may open and use the interactive AI assistant.
+    """
+    Return whether ``profile`` may open and use the interactive AI assistant.
 
     Args:
         profile: The profile asking for the assistant.

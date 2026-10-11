@@ -1,4 +1,5 @@
-"""What a viewer is allowed to see, answered once per account rather than once per page.
+"""
+What a viewer is allowed to see, answered once per account rather than once per page.
 
 Two of the navbar's values - the feature set and the dev-toolbar verdict - come from the same
 question, "is this account a site admin, and what does its subscription grant". Both are read on
@@ -42,7 +43,8 @@ _cache = VersionedCache("access-state", seconds=_SECONDS)
 
 @dataclass(frozen=True)
 class AccessState:
-    """One account's standing.
+    """
+    One account's standing.
 
     Attributes:
         admin: Whether the account holds :data:`SITE_ADMIN_PERMISSION`, which grants everything.
@@ -66,7 +68,8 @@ def compute_access_state(user: User) -> AccessState:
 
 
 def access_state(user: AbstractBaseUser | AnonymousUser) -> AccessState:
-    """The account's standing, from the shared cache when it is there.
+    """
+    The account's standing, from the shared cache when it is there.
 
     Args:
         user: The account to look up. Anonymous and unauthenticated users hold nothing.
@@ -103,7 +106,8 @@ def access_state(user: AbstractBaseUser | AnonymousUser) -> AccessState:
 
 
 def forget(**_kwargs: object) -> None:
-    """Retire every account's cached standing.
+    """
+    Retire every account's cached standing.
 
     One counter covers every account because the acts that change access are administrative and
     rare, and because most of them - a site default changing, a role's features changing - alter
@@ -133,7 +137,8 @@ def forget(**_kwargs: object) -> None:
 
 
 class AccessBearingQuerySet:
-    """Mixed in ahead of the concrete queryset for rows that decide what an account may see.
+    """
+    Mixed in ahead of the concrete queryset for rows that decide what an account may see.
 
     The receivers in :func:`connect_invalidation` only hear about saves and deletes, and the site
     admin's own actions are neither - revoking a subscription and editing a role's features both go
@@ -157,7 +162,8 @@ _ACCESS_FIELDS = frozenset({"is_active", "is_superuser"})
 
 
 def forget_for_user(update_fields: frozenset[str] | None = None, **_kwargs: object) -> None:
-    """Retire cached standing when a ``User`` save could have changed one.
+    """
+    Retire cached standing when a ``User`` save could have changed one.
 
     Args:
         update_fields: The fields the save named, or None when it wrote the whole row.
@@ -169,7 +175,8 @@ def forget_for_user(update_fields: frozenset[str] | None = None, **_kwargs: obje
 
 
 def connect_invalidation() -> None:
-    """Connect the receivers to every act that can change what an account may see.
+    """
+    Connect the receivers to every act that can change what an account may see.
 
     An act missing from here is an account that keeps an answer it should have lost, so the list
     is deliberately wider than the paths the product uses today: the permission and group senders

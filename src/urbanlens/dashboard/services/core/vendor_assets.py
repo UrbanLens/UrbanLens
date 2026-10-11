@@ -1,4 +1,5 @@
-"""One table of every third-party asset the site loads, and where to load it from.
+"""
+One table of every third-party asset the site loads, and where to load it from.
 A table makes a version a property of the asset rather than of each of the twenty-seven templates that mention it."""
 
 from __future__ import annotations
@@ -15,7 +16,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class VendorAsset:
-    """A third-party file the site loads.
+    """
+    A third-party file the site loads.
 
     Attributes:
         kind: What tag renders it.
@@ -157,7 +159,8 @@ def _mirror_root() -> str:
 
 
 def vendor_asset_url(key: str) -> str:
-    """Where a named asset should be loaded from.
+    """
+    Where a named asset should be loaded from.
 
     Args:
         key: A key of :data:`VENDOR_ASSETS`.
@@ -175,7 +178,8 @@ def vendor_asset_url(key: str) -> str:
 
 
 def vendor_asset_source(key: str) -> dict[str, str]:
-    """Where a script loaded on demand comes from, for code that adds its ``<script>`` itself.
+    """
+    Where a script loaded on demand comes from, for code that adds its ``<script>`` itself.
 
     Args:
         key: A key of :data:`VENDOR_ASSETS`.
@@ -191,7 +195,8 @@ def vendor_asset_source(key: str) -> dict[str, str]:
 
 
 def vendor_asset_tag(key: str) -> SafeString:
-    """The ``<script>`` or ``<link>`` for a named asset.
+    """
+    The ``<script>`` or ``<link>`` for a named asset.
 
     Args:
         key: A key of :data:`VENDOR_ASSETS`.
@@ -223,7 +228,8 @@ LEAFLET_MARKER_ARTWORK: dict[str, str] = {
 
 
 def leaflet_marker_artwork() -> dict[str, str]:
-    """Where each of Leaflet's marker images is served.
+    """
+    Where each of Leaflet's marker images is served.
 
     Returns:
         The URL of each image, by the ``L.Icon.Default`` option it fills.

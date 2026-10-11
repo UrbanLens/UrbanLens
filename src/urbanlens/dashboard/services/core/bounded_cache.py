@@ -1,4 +1,5 @@
-"""Keep the cache from being the reason a request fails, or the reason it costs everyone.
+"""
+Keep the cache from being the reason a request fails, or the reason it costs everyone.
 
 Four views proxy bytes from somewhere else and cache them so the next request
 does not re-fetch: Google Photos previews, Immich thumbnails, and the two map
@@ -36,7 +37,8 @@ logger = logging.getLogger(__name__)
 
 
 def _store(alias: str | None = None) -> BaseCache:
-    """The cache these bytes belong in, unless the caller names another.
+    """
+    The cache these bytes belong in, unless the caller names another.
 
     Resolved per call rather than at import: ``caches`` is keyed off settings, and a test that
     overrides them has to be able to change where this writes.
@@ -59,7 +61,8 @@ MAX_CACHED_BODY_BYTES = 512 * 1024
 
 
 def get_or_none(key: str, *, label: str, alias: str | None = None) -> Any | None:
-    """Read *key*, treating a cache that cannot answer as a miss.
+    """
+    Read *key*, treating a cache that cannot answer as a miss.
 
     Args:
         key: Cache key.
@@ -77,7 +80,8 @@ def get_or_none(key: str, *, label: str, alias: str | None = None) -> Any | None
 
 
 def get_many_or_empty(keys: list[str], *, label: str) -> dict[str, Any]:
-    """Read several keys at once, treating a cache that cannot answer as all-missing.
+    """
+    Read several keys at once, treating a cache that cannot answer as all-missing.
 
     Args:
         keys: Cache keys.
@@ -94,7 +98,8 @@ def get_many_or_empty(keys: list[str], *, label: str) -> dict[str, Any]:
 
 
 def set_or_skip(key: str, value: Any, timeout: int, *, label: str, alias: str | None = None) -> bool:
-    """Store *value* under *key*, treating a cache that cannot accept it as a skip.
+    """
+    Store *value* under *key*, treating a cache that cannot accept it as a skip.
 
     Args:
         key: Cache key.
@@ -115,7 +120,8 @@ def set_or_skip(key: str, value: Any, timeout: int, *, label: str, alias: str | 
 
 
 def delete_quietly(key: str, *, label: str, alias: str | None = None) -> None:
-    """Drop *key*, tolerating a cache that cannot be reached.
+    """
+    Drop *key*, tolerating a cache that cannot be reached.
 
     Args:
         key: Cache key.
@@ -129,7 +135,8 @@ def delete_quietly(key: str, *, label: str, alias: str | None = None) -> None:
 
 
 def set_if_small(key: str, content: bytes, content_type: str, timeout: int, *, label: str, max_bytes: int | None = None) -> bool:
-    """Store ``(content, content_type)`` under *key* unless it is too large.
+    """
+    Store ``(content, content_type)`` under *key* unless it is too large.
 
     Args:
         key: Cache key.

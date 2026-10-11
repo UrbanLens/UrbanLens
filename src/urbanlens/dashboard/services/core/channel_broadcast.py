@@ -10,7 +10,8 @@ from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
 
 def send_group_message(group: str, message: dict[str, Any]) -> None:
-    """Best-effort delivery of ``message`` to every channel in ``group``.
+    """
+    Best-effort delivery of ``message`` to every channel in ``group``.
     Never raises - a broker or channel-layer failure is logged by the task/enqueue helper, not surfaced here, matching every caller's existing "already durably saved, live delivery is a bonus" contract.
 
     Args:
@@ -25,7 +26,8 @@ def send_group_message(group: str, message: dict[str, Any]) -> None:
 
 
 def send_group_messages(deliveries: list[tuple[str, dict[str, Any]]]) -> None:
-    """Best-effort delivery of many ``(group, message)`` pairs in one task.
+    """
+    Best-effort delivery of many ``(group, message)`` pairs in one task.
 
     One message to a fifty-person group used to be fifty calls to
     :func:`send_group_message`, and so fifty Celery tasks - each building its own

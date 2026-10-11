@@ -1,4 +1,5 @@
-"""Auto-sync push for trips linked to a user's Google Calendar.
+"""
+Auto-sync push for trips linked to a user's Google Calendar.
 When a trip is imported from a Google Calendar event with "keep in sync" checked (:attr:`~urbanlens.dashboard.models.calendar_sync.model.TripCalendarLink.auto_sync`), any later change to the trip or one of its activities should be reflected on the linked calendar event.
 This is one-way only - edits made on Google Calendar are never pulled back into UrbanLens.
 """
@@ -20,7 +21,8 @@ if TYPE_CHECKING:
 
 
 def queue_calendar_push(trip_id: int | None) -> None:
-    """Mark a trip's auto-sync links as owing a push, and enqueue it once the change commits.
+    """
+    Mark a trip's auto-sync links as owing a push, and enqueue it once the change commits.
 
     The mark is written in the saving transaction and cleared only by a push that delivered it, so a lost
     enqueue or a failed calendar write is retried by ``tasks.requeue_pending_calendar_pushes``. The update
@@ -44,7 +46,8 @@ def queue_calendar_push(trip_id: int | None) -> None:
 
 
 def queue_calendar_pushes_where(links: Q) -> None:
-    """:func:`queue_calendar_push` for every trip with an auto-sync trip-level link matching *links*.
+    """
+    :func:`queue_calendar_push` for every trip with an auto-sync trip-level link matching *links*.
 
     For a change that is not a save of the trip or its activities but changes what a member may see of them.
 
@@ -58,7 +61,8 @@ def queue_calendar_pushes_where(links: Q) -> None:
 
 @receiver(post_save, sender=Trip, dispatch_uid="trip_calendar_auto_sync_on_trip_save")
 def sync_trip_on_save(sender: type[Trip], instance: Trip, **kwargs: Any) -> None:
-    """Push a saved trip to its auto-synced calendar event, if any.
+    """
+    Push a saved trip to its auto-synced calendar event, if any.
 
     Args:
         sender: The Trip model class.
@@ -70,7 +74,8 @@ def sync_trip_on_save(sender: type[Trip], instance: Trip, **kwargs: Any) -> None
 
 @receiver(post_save, sender=TripActivity, dispatch_uid="trip_calendar_auto_sync_on_activity_save")
 def sync_trip_on_activity_save(sender: type[TripActivity], instance: TripActivity, **kwargs: Any) -> None:
-    """Push a saved activity's trip to its auto-synced calendar event, if any.
+    """
+    Push a saved activity's trip to its auto-synced calendar event, if any.
 
     Args:
         sender: The TripActivity model class.
@@ -82,7 +87,8 @@ def sync_trip_on_activity_save(sender: type[TripActivity], instance: TripActivit
 
 @receiver(post_delete, sender=TripActivity, dispatch_uid="trip_calendar_auto_sync_on_activity_delete")
 def sync_trip_on_activity_delete(sender: type[TripActivity], instance: TripActivity, **kwargs: Any) -> None:
-    """Push a deleted activity's trip, whose all-day event may carry the activity's location.
+    """
+    Push a deleted activity's trip, whose all-day event may carry the activity's location.
 
     Args:
         sender: The TripActivity model class.
@@ -97,7 +103,8 @@ def sync_trip_on_activity_delete(sender: type[TripActivity], instance: TripActiv
 
 @receiver(pre_delete, sender=TripComment, dispatch_uid="trip_comment_flag_parent_deleted_on_delete")
 def flag_replies_on_parent_delete(sender: type[TripComment], instance: TripComment, **kwargs: Any) -> None:
-    """Mark every reply of a trip comment about to be deleted as parent-deleted.
+    """
+    Mark every reply of a trip comment about to be deleted as parent-deleted.
     Mirrors ``models.comments.signals.flag_replies_on_parent_delete`` (UL-219) for ``TripComment``, which has the identical ``parent = ForeignKey("self", on_delete=SET_NULL)`` shape.
     Runs pre-delete so the affected replies are flagged before Django's collector nulls their ``parent`` FK - by post-delete time there is no reliable way to find them again.
 

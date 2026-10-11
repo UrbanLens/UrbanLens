@@ -1,4 +1,5 @@
-"""Every write of Stripe-owned state onto a RoleSubscription row.
+"""
+Every write of Stripe-owned state onto a RoleSubscription row.
 
 Stripe guarantees neither ordering nor single delivery, and webhooks, checkout completion and the nightly sweep can
 all touch one row at once. Each transition here re-reads the row under a lock and applies only if it is not older than
@@ -42,7 +43,8 @@ def stripe_time(unix_timestamp: int | None) -> datetime | None:
 
 
 def retrieve_subscription(subscription_id: str) -> tuple[dict, datetime]:
-    """Fetch a live Subscription, with the time the request was sent.
+    """
+    Fetch a live Subscription, with the time the request was sent.
 
     The send time is a lower bound on how fresh the result is, so it orders the result against webhook events.
 
@@ -66,7 +68,8 @@ def _stamp(row: RoleSubscription, as_of: datetime | None) -> None:
 
 
 def _transition(role_subscription: RoleSubscription, apply: Callable[[RoleSubscription], bool]) -> bool:
-    """Run *apply* against the locked row, save what it changed, and refresh the caller's copy.
+    """
+    Run *apply* against the locked row, save what it changed, and refresh the caller's copy.
 
     Args:
         role_subscription: The caller's instance of the row.
@@ -86,7 +89,8 @@ def _transition(role_subscription: RoleSubscription, apply: Callable[[RoleSubscr
 
 
 def apply_subscription(role_subscription: RoleSubscription, stripe_subscription: dict, as_of: datetime | None) -> bool:
-    """Copy status, price and period from a Stripe Subscription snapshot onto the row.
+    """
+    Copy status, price and period from a Stripe Subscription snapshot onto the row.
 
     Writes only the fields Stripe owns, so a pay-what-you-want ledger updated meanwhile is never written back.
 
@@ -124,7 +128,8 @@ def apply_subscription(role_subscription: RoleSubscription, stripe_subscription:
 
 
 def mark_canceled(role_subscription: RoleSubscription, canceled_at: datetime | None, as_of: datetime | None) -> None:
-    """Record that Stripe canceled the subscription. Cancellation is final, so it applies whatever its timestamp.
+    """
+    Record that Stripe canceled the subscription. Cancellation is final, so it applies whatever its timestamp.
 
     Args:
         role_subscription: The row to cancel.
@@ -142,7 +147,8 @@ def mark_canceled(role_subscription: RoleSubscription, canceled_at: datetime | N
 
 
 def mark_past_due(role_subscription: RoleSubscription, as_of: datetime | None) -> bool:
-    """Record a failed renewal payment, unless newer state or a terminal status supersedes it.
+    """
+    Record a failed renewal payment, unless newer state or a terminal status supersedes it.
 
     Args:
         role_subscription: The row to update.

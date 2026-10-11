@@ -82,7 +82,8 @@ class EffectiveRelevanceTests(TestCase):
         self.assertEqual(effective_relevance(image), 0.5)
 
     def test_game_thumbs_down_counts_at_only_a_token_weight(self) -> None:
-        """Deliberate: 'wrong photo for this game' must not meaningfully tank the wiki's
+        """
+        Deliberate: 'wrong photo for this game' must not meaningfully tank the wiki's
         own relevance signal - it's real, but tiny (only useful for ordering among
         already-relevant photos later, not for the eligibility filter)."""
         image = _make_external_image(_make_location(), "c" * 40)
@@ -114,7 +115,8 @@ class EffectiveRelevanceTests(TestCase):
         self.assertAlmostEqual(effective_relevance(image), -0.5, places=3)
 
     def test_a_long_ago_report_stops_excluding_the_photo(self) -> None:
-        """The ratchet fix: an excluded photo must be able to return to the pool.
+        """
+        The ratchet fix: an excluded photo must be able to return to the pool.
 
         A reported photo scores below the >= 0 eligibility floor SpotGuessr applies, so it stops being shown -
         and therefore can never earn the "shown, no reaction" impressions that would otherwise rehabilitate it."""
@@ -155,7 +157,8 @@ class EffectiveRelevanceTests(TestCase):
         self.assertAlmostEqual(effective_relevance(image), 1.0 + 0.5 - 1.0)
 
     def test_repeated_no_reaction_impressions_accumulate(self) -> None:
-        """Multiple separate rounds showing the same image to the same profile
+        """
+        Multiple separate rounds showing the same image to the same profile
         must each contribute - this is what lets the very weak per-impression
         weight add up to something meaningful over many plays."""
         image = _make_external_image(_make_location(), "0" * 40)

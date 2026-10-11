@@ -1,4 +1,5 @@
-"""Which floorplan a building shows: the user's own first, REData's as backfill.
+"""
+Which floorplan a building shows: the user's own first, REData's as backfill.
 When only REData answers, its document is returned read-only (``"origin": "redata"``) rather than silently copied into rows, so a future better upstream version is never shadowed by a stale mirror."""
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def resolve_document(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> dict[str, Any] | None:
-    """The floorplan document for a building, resolved by date.
+    """
+    The floorplan document for a building, resolved by date.
     So local lookup is profile-scoped, and REData's aggregated plans - external, non-personal by construction - are what a user without their own plan sees.
 
     Args:
@@ -42,7 +44,8 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
 
 
 def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> Floorplan | None:
-    """The floorplan *row* (not a serialized document) a building shows, resolved by date.
+    """
+    The floorplan *row* (not a serialized document) a building shows, resolved by date.
     Same local-then-community fallback as :func:`resolve_document`, for a caller that needs the actual row to query its geometry - the GeoJSON features endpoint - rather than the pre-serialized document dict.
 
     Args:
@@ -63,7 +66,8 @@ def resolve_floorplan_row(place: Place, *, profile: Profile | None = None, on_da
 
 
 def _community_plan(place: Place, profile: Profile | None, on_date: datetime.date | None):
-    """The published plan for this building, when the user can see its wiki.
+    """
+    The published plan for this building, when the user can see its wiki.
     Community plans follow the wiki's own visibility rule rather than inventing a second one: a user sees the wiki (and so its floorplan) once they have discovered the place - see ``services.wiki.wiki_access``."""
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
@@ -74,7 +78,8 @@ def _community_plan(place: Place, profile: Profile | None, on_date: datetime.dat
 
 
 def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, Any] | None:
-    """REData's plan for this building, or None for any form of absence.
+    """
+    REData's plan for this building, or None for any form of absence.
     The parcel uuid comes from the building place's parent parcel when that was provisioned from REData; without one there is nothing to ask."""
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
     from urbanlens.UrbanLens.settings.app import settings
@@ -103,7 +108,8 @@ def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, A
 
 
 def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
-    """Copy a personal plan onto the place's community wiki.
+    """
+    Copy a personal plan onto the place's community wiki.
     A copy rather than a hand-over: the author keeps their own version, and the community one is a separate row anyone who can see the wiki may edit from then on.
 
     Args:
@@ -152,7 +158,8 @@ def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
 
 
 def can_edit_community(floorplan: Floorplan, profile: Profile) -> bool:
-    """Whether this profile may edit a published plan.
+    """
+    Whether this profile may edit a published plan.
 
     Args:
         floorplan: A community (wiki-owned) plan.
@@ -176,7 +183,8 @@ def floorplan_for_editing(
     on_date: datetime.date | None = None,
     allow_community: bool = False,
 ):
-    """The local floorplan version a save should write into.
+    """
+    The local floorplan version a save should write into.
     Writing is deliberately narrow, because a floorplan is expensive hand work and a save must never destroy someone else's:
 
     Args:

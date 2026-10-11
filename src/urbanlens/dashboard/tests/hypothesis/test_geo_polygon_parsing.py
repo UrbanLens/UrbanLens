@@ -49,7 +49,8 @@ class MalformedGeoJSONTests(SimpleTestCase):
                 parse_multipolygon_geojson(payload)
 
     def test_each_malformed_shape_raises_its_specific_subclass(self) -> None:
-        """Catch sites dispatch on exception type now, not message text - so the
+        """
+        Catch sites dispatch on exception type now, not message text - so the
         type raised for each failure mode must be exactly right, not just "some
         InvalidPolygonGeoJSONError".
         """

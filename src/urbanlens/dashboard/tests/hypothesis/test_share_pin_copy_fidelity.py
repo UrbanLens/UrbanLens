@@ -66,7 +66,8 @@ class SharedPinCopyFidelityTests(TestCase):
         self.assertFalse(copied.pin_type_is_user_provided)
 
     def test_a_custom_uploaded_icon_does_not_survive_the_share(self):
-        """An icon is how one person marked a place for themselves.
+        """
+        An icon is how one person marked a place for themselves.
 
         It does, and that is the intent: the recipient gets the place, not the sender's presentation of it."""
         pin = Pin.objects.create(
@@ -146,7 +147,8 @@ class SharedPinCopyFidelityTests(TestCase):
 
 
 def _copied_field_names() -> set[str]:
-    """Field names ``create_pin_from_share`` passes to its main ``Pin.objects.create``.
+    """
+    Field names ``create_pin_from_share`` passes to its main ``Pin.objects.create``.
 
     Read from the source rather than by running the copy, so the check does not depend
     on a fixture happening to exercise every branch.
@@ -173,7 +175,8 @@ def _copied_field_names() -> set[str]:
 
 
 class SharedPinCopyCoversEveryFieldTests(TestCase):
-    """Adding a field to ``Pin`` must not silently skip the share copy.
+    """
+    Adding a field to ``Pin`` must not silently skip the share copy.
 
     Every bug in the class above came from the same place: the copy names its fields by hand, so a field added
     later is simply absent and takes the model default."""
@@ -239,7 +242,8 @@ class SharedPinCopyCoversEveryFieldTests(TestCase):
         self.assertEqual(stale, [], f"NOT_COPIED names fields Pin no longer has; delete them: {stale}")
 
     def test_the_skip_list_does_not_claim_fields_that_are_actually_copied(self):
-        """An entry saying a field is skipped when it is not is a false statement in
+        """
+        An entry saying a field is skipped when it is not is a false statement in
         the one place someone would go to check."""
         passed = _copied_field_names()
         contradicted = sorted(set(self.NOT_COPIED) & passed)

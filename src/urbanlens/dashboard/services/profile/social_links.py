@@ -98,7 +98,8 @@ def _clean_handle(s: str | None) -> str | None:
 
 
 def validate_handle(platform: str, handle: str) -> str | None:
-    """Return an error message if *handle* violates the per-platform rules, else None.
+    """
+    Return an error message if *handle* violates the per-platform rules, else None.
 
     Args:
         platform: A key from :data:`_PLATFORM_HANDLE_RULES`.
@@ -118,7 +119,8 @@ def validate_handle(platform: str, handle: str) -> str | None:
 
 
 def parse_social_link(raw: str) -> tuple[str, str] | None:
-    """Parse a social URL into ``(platform_key, handle)``.
+    """
+    Parse a social URL into ``(platform_key, handle)``.
 
     Args:
         raw: A full profile URL, e.g. ``https://instagram.com/johndoe``.

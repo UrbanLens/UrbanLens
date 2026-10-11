@@ -69,7 +69,8 @@ class LocationHistoryImportTests(TestCase):
         self.assertEqual(events[-1]["skipped"], 1)
 
     def test_reimporting_the_same_export_creates_nothing_new(self) -> None:
-        """The duplicate check moved from a per-entry query to a prefetched set;
+        """
+        The duplicate check moved from a per-entry query to a prefetched set;
         idempotency across runs is the property that must survive that."""
         entries = [(LAT, LNG, "2026-01-01T10:00:00+00:00")]
         self._run(entries)
@@ -85,7 +86,8 @@ class LocationHistoryImportTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin, source=VisitSource.HISTORY).count(), 1)
 
     def test_distinct_timestamps_at_one_place_are_all_imported(self) -> None:
-        """Guards the dedup above from over-matching: the memo is keyed on
+        """
+        Guards the dedup above from over-matching: the memo is keyed on
         coordinates, so repeated coordinates must not collapse distinct visits."""
         self._run([(LAT, LNG, "2026-01-01T10:00:00+00:00"), (LAT, LNG, "2026-01-02T10:00:00+00:00")])
 
@@ -107,7 +109,8 @@ class LocationHistoryImportTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=self.pin, source=VisitSource.HISTORY).count(), 20)
 
     def test_progress_frames_are_throttled(self) -> None:
-        """A bar can render 100 states; a large export used to push one frame per entry, making the stream itself a bottleneck.
+        """
+        A bar can render 100 states; a large export used to push one frame per entry, making the stream itself a bottleneck.
 
         Needs well over 100 entries to show anything - below that every entry advances the whole-percent
         counter, so throttling is a no-op by definition."""

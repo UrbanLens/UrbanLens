@@ -1,4 +1,5 @@
-"""The library sweep built one hit per photo, for a fix that already existed.
+"""
+The library sweep built one hit per photo, for a fix that already existed.
 
 H01's last piece. `sweep_immich_library_locations` appends a `LocationHit` for
 every geotagged asset in the library and holds them all until the sweep ends, so

@@ -15,7 +15,8 @@ class PinImportFailureQuerySet(abstract.DashboardQuerySet["PinImportFailure"]):
     """QuerySet for PinImportFailure records."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """Filter to failures belonging to a given profile.
+        """
+        Filter to failures belonging to a given profile.
 
         Args:
             profile: Owner profile.
@@ -26,7 +27,8 @@ class PinImportFailureQuerySet(abstract.DashboardQuerySet["PinImportFailure"]):
         return self.filter(profile=profile)
 
     def pending(self) -> Self:
-        """Filter to failures still awaiting a response.
+        """
+        Filter to failures still awaiting a response.
 
         Returns:
             Filtered queryset.

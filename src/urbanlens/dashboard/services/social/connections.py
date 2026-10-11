@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 
 
 def get_connections(profile: Profile) -> list[Profile]:
-    """Return the profiles this profile has an accepted (mutual) friendship with.
+    """
+    Return the profiles this profile has an accepted (mutual) friendship with.
 
     Args:
         profile: Profile whose connections should be listed.
@@ -26,7 +27,8 @@ def get_connections(profile: Profile) -> list[Profile]:
 
 
 def are_connections(a: Profile, b: Profile) -> bool:
-    """Return whether two profiles have an accepted (mutual) friendship.
+    """
+    Return whether two profiles have an accepted (mutual) friendship.
 
     Args:
         a: First profile.
@@ -40,7 +42,8 @@ def are_connections(a: Profile, b: Profile) -> bool:
 
 
 def recommendable_strangers(new_member: Profile, others: Sequence[Profile]) -> list[Profile]:
-    """Return which of ``others`` are eligible for a mutual "you might want to connect" suggestion with ``new_member``.
+    """
+    Return which of ``others`` are eligible for a mutual "you might want to connect" suggestion with ``new_member``.
 
     Args:
         new_member: The profile that was just added.
@@ -56,7 +59,8 @@ def recommendable_strangers(new_member: Profile, others: Sequence[Profile]) -> l
 
 
 def suggest_mutual_connection(a: Profile, b: Profile) -> None:
-    """Softly introduce two unconnected profiles who now share a trip/group.
+    """
+    Softly introduce two unconnected profiles who now share a trip/group.
     Automatically doing the same here, just because two strangers now share a trip/group, would let merely being added to a shared space silently bypass a subject's own ``profile_visibility`` (e.g.
 
     Args:

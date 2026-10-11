@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 
 def is_production() -> bool:
-    """Whether this process is the real production deployment.
+    """
+    Whether this process is the real production deployment.
     Fail-closed twice over: that classifier only recognises an explicit allow-list of names, and the ``getattr`` default here means a settings module that somehow never defined the flag reads as non-production rather than raising or defaulting true.
 
     Returns:
@@ -19,7 +20,8 @@ def is_production() -> bool:
 
 
 def skip_upstream_contribution(surface: str, *, detail: str = "") -> bool:
-    """Whether to skip sending UrbanLens's own data to ``surface`` for storage/training.
+    """
+    Whether to skip sending UrbanLens's own data to ``surface`` for storage/training.
 
     Args:
         surface: Human-readable name of what would have been written, e.g. ``"REData photo observations (POST /photos/)"``.

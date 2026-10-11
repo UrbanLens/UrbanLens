@@ -1,4 +1,5 @@
-"""Session orchestration: solo/multiplayer lifecycle, round generation, scoring guesses.
+"""
+Session orchestration: solo/multiplayer lifecycle, round generation, scoring guesses.
 
 The one place ``controllers.spotguessr``/``consumers.GameSessionConsumer`` call
 into - the only layer that knows how eligibility, mode-specific selection,
@@ -63,7 +64,8 @@ STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
 class SpotGuessrError(Exception):
-    """Raised for invalid session/round/guess/lobby operations.
+    """
+    Raised for invalid session/round/guess/lobby operations.
 
     The message is for logs, not the response: HTTP-facing callers must
     catch a specific subclass and author their own user-facing text, so a
@@ -100,7 +102,8 @@ class SessionAlreadyStartedError(SpotGuessrError):
 
 
 class RoundGenerationUnavailableError(SpotGuessrError):
-    """No round-generation strategy is registered for the session's mode.
+    """
+    No round-generation strategy is registered for the session's mode.
 
     A configuration/programming bug (an enabled ``SpotGuessrMode`` with no
     matching entry in ``modes``), not a condition a player caused.
@@ -145,7 +148,8 @@ class KickTargetNotAParticipantError(SpotGuessrError):
 
 @dataclass(frozen=True)
 class GameConfig:
-    """A validated, session-ready snapshot of SpotGuessr settings.
+    """
+    A validated, session-ready snapshot of SpotGuessr settings.
 
     Mirrors what's stored on ``GameSession.config``.
     """
@@ -174,7 +178,8 @@ class GameConfig:
 
     @property
     def geo_bounds(self) -> GEOSGeometry | None:
-        """The configured geographic restriction as a GEOS geometry, or None.
+        """
+        The configured geographic restriction as a GEOS geometry, or None.
 
         Split at the antimeridian here, not per query: callers run planar
         ``__within`` lookups, so an area drawn across the date line would
@@ -197,7 +202,8 @@ def config_from_session(session: GameSession) -> GameConfig:
 
 
 def clamp_rounds(total_rounds: int) -> int:
-    """Coerce a requested round count into the range a session may actually play.
+    """
+    Coerce a requested round count into the range a session may actually play.
 
     Public so every caller with a client-supplied round count shares one
     clamp - a second copy of ``max(MIN, min(MAX, n))`` is how the bounds
@@ -228,7 +234,8 @@ def start_solo_session(profile: Profile, mode: str, config: GameConfig, *, total
 
 @dataclass(frozen=True)
 class SoloStartResult:
-    """The outcome of :func:`start_solo_playthrough`.
+    """
+    The outcome of :func:`start_solo_playthrough`.
 
     Attributes:
         session: The created session, or None when nothing was created.
@@ -245,7 +252,8 @@ class SoloStartResult:
 
 
 def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, total_rounds: int = DEFAULT_ROUNDS_PER_SESSION) -> SoloStartResult:
-    """Start a solo session and generate its first round, in one call.
+    """
+    Start a solo session and generate its first round, in one call.
 
     One shared "create, check it can play, clean up if it can't" sequence:
     getting it subtly wrong strands an ACTIVE session that can never
@@ -296,7 +304,8 @@ def start_multiplayer_session(
     *,
     total_rounds: int = DEFAULT_ROUNDS_PER_SESSION,
 ) -> GameSession:
-    """Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
+    """
+    Create a LOBBY session hosted by ``host`` and invite the given (friend) profiles.
 
     The host joins immediately; each invitee gets an INVITED row plus a
     notification. See "Multiplayer sessions" in the design doc for the
@@ -320,7 +329,8 @@ def start_multiplayer_session(
 
 
 def invite_to_session(session: GameSession, host: Profile, invitee: Profile) -> GameSessionParticipant:
-    """Invite one friend to a lobby session, notifying them.
+    """
+    Invite one friend to a lobby session, notifying them.
 
     Host-only, friends-only (matching the trip-invite precedent) - inviting
     a non-friend is rejected server-side, not just hidden in a picker UI.
@@ -375,7 +385,8 @@ def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> Non
 
 
 def join_session(session: GameSession, profile: Profile) -> GameSessionParticipant:
-    """Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
+    """
+    Accept an invitation - flips INVITED to JOINED and broadcasts to the lobby.
 
     Idempotent for an already-JOINED profile. Only actually-new joins are
     rejected once the roster is locked. A profile that left or was removed
@@ -413,7 +424,8 @@ def join_session(session: GameSession, profile: Profile) -> GameSessionParticipa
 
 
 def begin_session(session: GameSession, host: Profile) -> GameRound | None:
-    """Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
+    """
+    Host starts the game: locks the roster, transitions LOBBY to ACTIVE, creates round 1.
 
     No one can join after this point (see "Multiplayer sessions" in the
     design doc).
@@ -438,7 +450,8 @@ def begin_session(session: GameSession, host: Profile) -> GameRound | None:
 
 
 def get_or_create_round(session: GameSession) -> GameRound | None:
-    """Return the session's current round, creating the next one once the prior round is fully guessed.
+    """
+    Return the session's current round, creating the next one once the prior round is fully guessed.
 
     Only JOINED participants count - an invitee who never accepted is not
     a player and must not gate eligibility or "has everyone guessed."
@@ -525,7 +538,8 @@ def _consume_prewarmed_pick(
     sequence_index: int,
     excluded_ids: list[int],
 ) -> tuple[Location, RoundContent] | None:
-    """Redeem a background-prewarmed round for this exact round, if one is cached and still valid.
+    """
+    Redeem a background-prewarmed round for this exact round, if one is cached and still valid.
 
     Tries the session-scoped prewarm first, then (solo first rounds only)
     the speculative one queued from the overview page. A stale pick is a
@@ -554,7 +568,8 @@ def generate_round_content(
     excluded_location_ids: list[int],
     previous_location: Location | None,
 ) -> tuple[Location, RoundContent] | None:
-    """Pick a location and build this mode's round content for it, retrying past unusable candidates.
+    """
+    Pick a location and build this mode's round content for it, retrying past unusable candidates.
 
     Shared with the background prewarm tasks, which must select by identical
     rules to the request path. Read-only: creating the ``GameRound`` row is
@@ -623,7 +638,8 @@ def generate_round_content(
 
 
 def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guessed_date: date | None = None) -> tuple[Guess, list[str], RatingChange | None]:
-    """Score and record ``profile``'s guess for ``round_``.
+    """
+    Score and record ``profile``'s guess for ``round_``.
 
     Triggers the Glicko-2 rating update (``apply_round_ratings``) once
     every JOINED participant has guessed, and - for multiplayer sessions -
@@ -728,7 +744,8 @@ def _every_joined_participant_has_guessed(round_: GameRound) -> bool:
 
 
 def _finish_round(round_: GameRound, completed_guesses: list[Guess]) -> dict[int, RatingChange]:
-    """Rate, backfill photo-feedback signal, and broadcast the reveal for a just-completed round.
+    """
+    Rate, backfill photo-feedback signal, and broadcast the reveal for a just-completed round.
 
     Shared by the guess/timer/stall-sweep/host-end paths, so
     ``completed_guesses`` may be a strict subset of the roster or empty. A
@@ -760,7 +777,8 @@ def _advance_or_complete(session: GameSession) -> None:
 
 
 def force_reveal_round(round_: GameRound) -> None:
-    """Force a stalled round to completion without waiting for every participant to guess.
+    """
+    Force a stalled round to completion without waiting for every participant to guess.
 
     Called by the stall-sweep Celery task for a round open too long - the
     safety net for a participant who closed their tab, which the "everyone
@@ -794,7 +812,8 @@ def force_reveal_round(round_: GameRound) -> None:
 
 
 def expire_round_timer(round_: GameRound) -> None:
-    """Reveal a round because its configured round-timer ran out - "time's up," not a stall.
+    """
+    Reveal a round because its configured round-timer ran out - "time's up," not a stall.
 
     Gentler than ``force_reveal_round``: an expired timer is a normal
     gameplay outcome, so this never marks the session ``ABANDONED`` (a
@@ -816,7 +835,8 @@ def expire_round_timer(round_: GameRound) -> None:
 
 
 def end_session_now(session: GameSession, host: Profile) -> GameSession:
-    """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
+    """
+    Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
 
     Ends the whole session on request, from LOBBY or ACTIVE - the host never
     waits out a stalled player. An open round is revealed first from existing
@@ -850,7 +870,8 @@ def end_session_now(session: GameSession, host: Profile) -> GameSession:
 
 
 def _remove_participant(session: GameSession, participant: GameSessionParticipant, *, reason: str, removed_by: Profile | None = None) -> None:
-    """Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
+    """
+    Mark ``participant`` LEFT, hand the host role on or abandon the session, and reveal a round only they held up.
 
     Shared by ``leave_session`` and ``kick_participant``, which differ only in who may call them and ``reason``.
     Locks the session, then the open round, then the participant: ``submit_guess`` takes the round before a
@@ -915,7 +936,8 @@ def _remove_participant(session: GameSession, participant: GameSessionParticipan
 
 
 def leave_session(session: GameSession, profile: Profile) -> None:
-    """``profile`` leaves the session - or declines an invitation to it.
+    """
+    ``profile`` leaves the session - or declines an invitation to it.
 
     A no-op for a profile that already left. See ``_remove_participant`` for host hand-over, abandonment and
     round completion.
@@ -936,7 +958,8 @@ def leave_session(session: GameSession, profile: Profile) -> None:
 
 
 def kick_participant(session: GameSession, host: Profile, target_profile: Profile) -> None:
-    """Host-only: remove another participant, joined or still invited.
+    """
+    Host-only: remove another participant, joined or still invited.
 
     A no-op for a target that already left.
 
@@ -962,7 +985,8 @@ def kick_participant(session: GameSession, host: Profile, target_profile: Profil
 
 
 def rounds_played(session: GameSession) -> int:
-    """How many rounds this session has ever created.
+    """
+    How many rounds this session has ever created.
 
     Lets callers tell "finished after playing" apart from "never played a
     single round" when ``get_or_create_round`` returns None.
@@ -980,7 +1004,8 @@ def complete_session(session: GameSession) -> GameSession:
 
 
 def session_summary(session: GameSession) -> dict:
-    """A JSON-ready summary: rounds played, and each player's totals, net rating change and best round this session.
+    """
+    A JSON-ready summary: rounds played, and each player's totals, net rating change and best round this session.
 
     A player who left or was removed mid-game is listed with their ``departure``, after everyone who finished.
     """

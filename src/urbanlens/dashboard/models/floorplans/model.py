@@ -1,4 +1,5 @@
-"""Interior floorplans: walls are the geometry, everything else hangs off them.
+"""
+Interior floorplans: walls are the geometry, everything else hangs off them.
 Floorplans are absent by default and never load with a building - most buildings will never have one, and the common case pays nothing. **Walls are the only stored shape.** A room is not a polygon - it is a named point that binds, at render time, to whichever enclosed region of the wall graph contains it (see ``frontend/ts/shared/floorplan/planar.ts``).
 """
 
@@ -34,7 +35,8 @@ from .queryset import FloorplanManager
 
 
 class FloorplanWallKind(TextChoices):
-    """What a wall segment represents.
+    """
+    What a wall segment represents.
     ``VIRTUAL`` is load-bearing for messy real buildings: it draws as a dashed hint and renders as nothing, but participates fully in enclosing a region.
     Without it a courtyard, a loading bay, a collapsed side or an unexplored boundary can only be recorded by drawing a wall that is not there.
     """
@@ -47,7 +49,8 @@ class FloorplanWallKind(TextChoices):
 
 
 class FloorplanWallThickness(TextChoices):
-    """Wall thickness, as presets rather than a measurement.
+    """
+    Wall thickness, as presets rather than a measurement.
 
     Nobody documenting a derelict building from memory and photographs knows a
     wall is 340 mm. Three presets carry every distinction a drawing at this
@@ -79,7 +82,8 @@ class FloorplanOpeningSwing(TextChoices):
 
 
 class FloorplanLockState(TextChoices):
-    """Whether a lock is presently securing its opening.
+    """
+    Whether a lock is presently securing its opening.
     Physical integrity - broken, seized, missing - is what every floorplan item's ``condition`` already records, so folding it in here would give a producer two places to write one fact and a reader no rule for which wins.
     """
 
@@ -89,7 +93,8 @@ class FloorplanLockState(TextChoices):
 
 
 class FloorplanMarkerKind(TextChoices):
-    """What a point marker on a floor denotes.
+    """
+    What a point marker on a floor denotes.
     One table with a kind, rather than a tool and a table per concept: these differ in icon and meaning, not in schema.
     """
 
@@ -110,7 +115,8 @@ class FloorplanReferenceKind(TextChoices):
 
 
 class FloorplanItem(abstract.FrontendDashboardModel):
-    """Fields shared by every floorplan row - the document's "item" surface.
+    """
+    Fields shared by every floorplan row - the document's "item" surface.
 
     Attributes:
         description: Free text about this item.
@@ -143,7 +149,8 @@ class FloorplanItem(abstract.FrontendDashboardModel):
 
 
 class Floorplan(FloorplanItem):
-    """One dated version of one building's floorplan.
+    """
+    One dated version of one building's floorplan.
 
     Attributes:
         place: The building this plan describes. Null for a plan not tied to
@@ -211,7 +218,8 @@ class Floorplan(FloorplanItem):
 
 
 class FloorplanSource(abstract.FrontendDashboardModel):
-    """One provenance record in a plan's source pool.
+    """
+    One provenance record in a plan's source pool.
     Any combination of a URL, a stored file, a note and an author - as thin as "measured on site, 2019 visit" or as concrete as a scanned HABS sheet.
 
     Attributes:
@@ -247,7 +255,8 @@ class FloorplanSource(abstract.FrontendDashboardModel):
 
 
 class FloorplanReference(abstract.FrontendDashboardModel):
-    """A photo, PDF, video, document or model in a plan's reference pool.
+    """
+    A photo, PDF, video, document or model in a plan's reference pool.
 
     Attributes:
         floorplan: The plan whose pool this row belongs to.
@@ -282,7 +291,8 @@ class FloorplanReference(abstract.FrontendDashboardModel):
 
 
 class FloorplanFloor(FloorplanItem):
-    """One storey of the plan.
+    """
+    One storey of the plan.
     Carries no outline of its own: the storey's shape is whatever its walls enclose, so an outline stored here would be a second, divergent answer to the same question.
 
     Attributes:
@@ -320,7 +330,8 @@ class FloorplanFloor(FloorplanItem):
 
 
 class FloorplanWall(FloorplanItem):
-    """One straight wall segment, in plan-local metres.
+    """
+    One straight wall segment, in plan-local metres.
     Always a single segment.
     A drawn polyline is stored as consecutive walls sharing an endpoint, which is what lets one span of a chain be re-typed, deleted or given a door without splitting anything first.
 
@@ -361,7 +372,8 @@ class FloorplanWall(FloorplanItem):
 
 
 class FloorplanOpening(FloorplanItem):
-    """A door or window, as an interval along one wall.
+    """
+    A door or window, as an interval along one wall.
     Stored as two parameters along the wall rather than its own coordinates: an opening then cannot outlive its wall, cannot fail to move with it, and cannot drift off it.
 
     Attributes:
@@ -401,7 +413,8 @@ class FloorplanOpening(FloorplanItem):
 
 
 class FloorplanLock(FloorplanItem):
-    """One lock on an opening; a door may carry several, or none.
+    """
+    One lock on an opening; a door may carry several, or none.
     Hangs off the opening rather than the wall, because that is the thing a lock actually secures: it cannot then outlive the door it is fitted to, and a wall's locks would have nothing to say about which of its three doors each one belongs to.
 
     Attributes:
@@ -428,7 +441,8 @@ class FloorplanLock(FloorplanItem):
 
 
 class FloorplanRoomSeed(FloorplanItem):
-    """A named room, stored as the point that identifies it.
+    """
+    A named room, stored as the point that identifies it.
     Not a polygon.
     The room's shape is whichever enclosed region of the wall graph contains this point, resolved at render time - so the walls and the room can never disagree about where the room is, and editing walls can never delete a room's name, photos or labels.
 
@@ -458,7 +472,8 @@ class FloorplanRoomSeed(FloorplanItem):
 
 
 class FloorplanMarker(FloorplanItem):
-    """A point of interest on a storey: photo, hazard, entrance, stair, note.
+    """
+    A point of interest on a storey: photo, hazard, entrance, stair, note.
 
     Attributes:
         floor: The storey this marker is on.

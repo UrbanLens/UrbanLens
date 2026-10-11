@@ -151,7 +151,8 @@ class BillingCancelView(LoginRequiredMixin, View):
 
 
 class BillingCheckoutSuccessView(LoginRequiredMixin, View):
-    """GET /settings/billing/success/ - Stripe Checkout success redirect landing page.
+    """
+    GET /settings/billing/success/ - Stripe Checkout success redirect landing page.
 
     Real state comes from the webhook, not this redirect - Stripe can complete
     checkout.session.completed processing slightly after the browser lands here.

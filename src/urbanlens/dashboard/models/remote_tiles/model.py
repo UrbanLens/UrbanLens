@@ -10,7 +10,8 @@ from urbanlens.dashboard.services.media.access import declares_media_family
 
 
 class RemoteTileSource(abstract.DashboardModel):
-    """One foreign XYZ tile template an overlay draws through this site.
+    """
+    One foreign XYZ tile template an overlay draws through this site.
 
     A row exists once an overlay was given the template; that is what lets the tile endpoint fetch from it, so the
     endpoint cannot be pointed at an arbitrary host.

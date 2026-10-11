@@ -83,7 +83,8 @@ class NormalizeLongitudeTests(SimpleTestCase):
         self.assertEqual(normalize_longitude(-180.0), -180.0)
 
     def test_the_same_meridian_normalises_the_same_way_however_it_was_wrapped(self) -> None:
-        """180 and 540 are one meridian. Special-casing the literal 180 made them
+        """
+        180 and 540 are one meridian. Special-casing the literal 180 made them
         fold to +180 and -180 respectively, so equality checks on normalised
         values disagreed about a single line on the globe."""
         self.assertEqual(normalize_longitude(540.0), normalize_longitude(180.0))

@@ -174,7 +174,8 @@ class PinEditDateFieldsTests(TestCase):
             return PinEditView.as_view()(req, pin_slug=self.pin.slug)
 
     def _assert_no_naive_datetime_warning(self, body: dict) -> None:
-        """Post `body` and fail if Django had to guess a zone for last_visited.
+        """
+        Post `body` and fail if Django had to guess a zone for last_visited.
 
         A round-trip through the database always comes back aware, so asserting on the stored value proves
         nothing."""
@@ -222,7 +223,8 @@ class PinEditDateFieldsTests(TestCase):
 
 
 class PinOverviewAddressBackfillDispatchTests(TestCase):
-    """A route-less location's address backfill is dispatched to Celery, never geocoded inline.
+    """
+    A route-less location's address backfill is dispatched to Celery, never geocoded inline.
 
     It now enqueues tasks.backfill_location_address instead, mirroring the place-name lazy dispatch - so a
     rate-limited/slow/down geocoding API can no longer affect this page's render at all."""
@@ -271,7 +273,8 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         self.assertEqual(self._address_dispatches(mock_enqueue), [])
 
     def test_render_never_geocodes_inline(self) -> None:
-        """The actual guarantee: no live geocoding call can run (and therefore
+        """
+        The actual guarantee: no live geocoding call can run (and therefore
         neither block nor 500 this render), regardless of API state."""
         req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
         req.user = self.user
@@ -291,7 +294,8 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
 
 
 class PinOverviewEditableDescriptionTests(TestCase):
-    """The pin description renders as a click-to-edit-in-place element.
+    """
+    The pin description renders as a click-to-edit-in-place element.
 
     Only the markup (data-raw-description, the editable marker class) lives in pin_overview_partial.html; the
     editing is entries/pin-detail.ts."""
@@ -365,7 +369,8 @@ class PinDescriptionEditableTests(TestCase):
 
 
 class PinEditRatingClearTests(TestCase):
-    """Rating lives on Review, not Pin - regression coverage for the "clear rating" (x) button, which submits rating=0.
+    """
+    Rating lives on Review, not Pin - regression coverage for the "clear rating" (x) button, which submits rating=0.
 
     A prior reassignment (rating=0 -> rating=None) meant the downstream `elif rating == 0` delete branch could
     never actually match, so clicking "clear" silently left the underlying Review row (and thus the displayed
@@ -409,7 +414,8 @@ class PinEditRatingClearTests(TestCase):
         self.assertEqual(self.pin.rating, 0)
 
     def test_editing_an_unrelated_field_does_not_touch_a_nonexistent_review(self) -> None:
-        """rating defaults to 0 (Pin.rating property) when no Review exists -
+        """
+        rating defaults to 0 (Pin.rating property) when no Review exists -
         an unrelated field edit must not misinterpret that default as an
         explicit clear request and issue a pointless delete every time."""
         from urbanlens.dashboard.models.reviews.queryset import QuerySet as ReviewQuerySet

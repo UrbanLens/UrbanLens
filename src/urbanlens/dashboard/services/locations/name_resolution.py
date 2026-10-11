@@ -1,4 +1,5 @@
-"""Plugin-driven place-name candidates and the resolver that picks a winner.
+"""
+Plugin-driven place-name candidates and the resolver that picks a winner.
 The resolver is a strategy interface: :class:`RuleBasedNameResolver` is the default (source agreement first, then admin-configured priority), and a future AI-backed arbiter can slot in behind :func:`default_name_resolver` without any caller changing."""
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class NameCandidate:
-    """One cleaned place-name candidate from one source.
+    """
+    One cleaned place-name candidate from one source.
 
     Attributes:
         name: The cleaned surface form of the candidate name.
@@ -38,7 +40,8 @@ class NameProvider:
     """One source of place-name candidates, contributed by a plugin."""
 
     def __init__(self, *, source: str, verbose_name: str = "") -> None:
-        """Initialize the provider.
+        """
+        Initialize the provider.
 
         Args:
             source: Stable slug identifying this source (e.g. ``"wikipedia"``).
@@ -48,7 +51,8 @@ class NameProvider:
         self.verbose_name = verbose_name or source
 
     def candidates(self, location: Location) -> list[str | None]:
-        """Return raw name candidates for a location.
+        """
+        Return raw name candidates for a location.
         Values are cleaned and quality-gated by the caller, so returning ``None`` or junk entries is acceptable.
 
         Args:
@@ -64,7 +68,8 @@ class LocationCacheNameProvider(NameProvider):
     """Declarative provider reading top-level keys from a fresh LocationCache row."""
 
     def __init__(self, *, source: str, cache_source: str, keys: tuple[str, ...], verbose_name: str = "") -> None:
-        """Initialize the provider.
+        """
+        Initialize the provider.
 
         Args:
             source: Stable slug identifying this source.
@@ -78,7 +83,8 @@ class LocationCacheNameProvider(NameProvider):
         self.keys = keys
 
     def candidates(self, location: Location) -> list[str | None]:
-        """Read the configured keys from the location's fresh cache row.
+        """
+        Read the configured keys from the location's fresh cache row.
 
         Args:
             location: The location to name.
@@ -100,7 +106,8 @@ class NameResolver(ABC):
 
     @abstractmethod
     def resolve(self, candidates: Sequence[NameCandidate], location: Location) -> NameCandidate | None:
-        """Pick the best candidate for a location.
+        """
+        Pick the best candidate for a location.
 
         Args:
             candidates: Cleaned, quality-gated candidates in source-priority
@@ -114,11 +121,13 @@ class NameResolver(ABC):
 
 
 class RuleBasedNameResolver(NameResolver):
-    """Default resolver: the better tier wins, then source agreement, then priority, then arrival order.
+    """
+    Default resolver: the better tier wins, then source agreement, then priority, then arrival order.
     Candidates are grouped by :func:`~urbanlens.dashboard.services.locations.naming.normalize_name_for_comparison` so trivially different spellings of the same name count as agreement."""
 
     def __init__(self, priority: Sequence[str] = (), *, override_sources: Sequence[str] = (), scope: NamingScope = NamingScope.PARCEL) -> None:
-        """Initialize the resolver.
+        """
+        Initialize the resolver.
 
         Args:
             priority: Source slugs in descending priority. Unknown slugs are
@@ -139,7 +148,8 @@ class RuleBasedNameResolver(NameResolver):
         return (0, rank)
 
     def resolve(self, candidates: Sequence[NameCandidate], location: Location | None) -> NameCandidate | None:
-        """Pick the best candidate per the tier-then-agreement-then-priority rules.
+        """
+        Pick the best candidate per the tier-then-agreement-then-priority rules.
 
         Args:
             candidates: Cleaned, quality-gated candidates in arrival order.
@@ -187,7 +197,8 @@ _CHILD_PIN_PREFERRED_SOURCES = ("cris", "redata_building")
 
 
 def default_name_resolver(profile: Profile | None = None, *, location: Location | None = None) -> NameResolver:
-    """Return the resolver used for official-name selection.
+    """
+    Return the resolver used for official-name selection.
 
     Args:
         profile: The profile whose action triggered this resolution, if any.

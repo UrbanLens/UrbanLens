@@ -1,4 +1,5 @@
-"""Third-party images served from this site instead of their provider's, and kept after the provider drops them.
+"""
+Third-party images served from this site instead of their provider's, and kept after the provider drops them.
 
 A page that would show a provider's image links to :func:`copy_url` instead. The first request for it downloads the
 source, the sandbox worker re-encodes it (``render_remote_image_copy``), and every later request is served from the
@@ -63,7 +64,8 @@ DOWNLOAD_SLOT_WAIT_LIMIT_SECONDS = 600
 
 @dataclass(frozen=True, slots=True)
 class RemoteImage:
-    """One remote image a page is about to show.
+    """
+    One remote image a page is about to show.
 
     Attributes:
         url: Its address at the provider.
@@ -85,7 +87,8 @@ def url_digest(url: str, edition: str = "") -> str:
 
 
 def take_download_slot(holder: str) -> str | None:
-    """Claim one of the site-wide :data:`DOWNLOAD_SLOTS` for a copy's first download.
+    """
+    Claim one of the site-wide :data:`DOWNLOAD_SLOTS` for a copy's first download.
 
     Args:
         holder: What the slot is held for (the copy's id), so only that download frees it.
@@ -103,7 +106,8 @@ def take_download_slot(holder: str) -> str | None:
 
 
 def release_download_slot(key: str, holder: str) -> None:
-    """Give back a slot :func:`take_download_slot` returned, unless it already expired and went to another copy.
+    """
+    Give back a slot :func:`take_download_slot` returned, unless it already expired and went to another copy.
 
     Args:
         key: The slot's key.
@@ -116,7 +120,8 @@ def release_download_slot(key: str, holder: str) -> None:
 
 
 def wait_for_download_slot(copy: RemoteImageCopy, waited: int) -> bool:
-    """Queue *copy*'s download again for when a slot may have freed, keeping it pending meanwhile.
+    """
+    Queue *copy*'s download again for when a slot may have freed, keeping it pending meanwhile.
 
     Args:
         copy: The copy that found every slot busy.
@@ -142,7 +147,8 @@ def wait_for_download_slot(copy: RemoteImageCopy, waited: int) -> bool:
 
 
 def forgive_timeout(copy: RemoteImageCopy) -> bool:
-    """Whether a timed-out download may go uncounted: the first in :data:`FIRST_RETRY_DELAY` does.
+    """
+    Whether a timed-out download may go uncounted: the first in :data:`FIRST_RETRY_DELAY` does.
 
     A provider that usually answers in seconds sometimes takes longer than the timeout (P184), and counting that
     like a refusal would show an icon for the next hour.
@@ -164,7 +170,8 @@ def pending_marker(digest: str) -> str:
 
 
 def absolute_remote_url(url: str) -> str | None:
-    """The http(s) address *url* names on another host, or None when it names none.
+    """
+    The http(s) address *url* names on another host, or None when it names none.
 
     A protocol-relative ``//host/path`` (SearXNG returns them) is another host's image, fetched over https.
 
@@ -182,7 +189,8 @@ def absolute_remote_url(url: str) -> str | None:
 
 
 def copy_urls(images: Iterable[RemoteImage]) -> dict[str, str]:
-    """This site's address for each remote image, recording any not seen before.
+    """
+    This site's address for each remote image, recording any not seen before.
 
     Args:
         images: The images a page is about to show.
@@ -211,7 +219,8 @@ def copy_urls(images: Iterable[RemoteImage]) -> dict[str, str]:
 
 
 def copy_url(url: str, *, provider: str, page_url: str = "", edition: str = "") -> str:
-    """:func:`copy_urls` for one image, returning *url* unchanged when it is not a remote address.
+    """
+    :func:`copy_urls` for one image, returning *url* unchanged when it is not a remote address.
 
     Args:
         url: The image's address.
@@ -239,7 +248,8 @@ def wants_tile_copy(content: bytes) -> bool:
 
 
 def retry_is_due(copy: RemoteImageCopy) -> bool:
-    """Whether a copy whose downloads failed may be tried again yet.
+    """
+    Whether a copy whose downloads failed may be tried again yet.
 
     Args:
         copy: The copy.
@@ -254,7 +264,8 @@ def retry_is_due(copy: RemoteImageCopy) -> bool:
 
 
 def record_failure(copy: RemoteImageCopy) -> None:
-    """Count one failed download or render of *copy*.
+    """
+    Count one failed download or render of *copy*.
 
     Args:
         copy: The copy.
@@ -269,7 +280,8 @@ def _extension(content_type: str) -> str:
 
 
 def store(copy: RemoteImageCopy, content: bytes, content_type: str, tile: tuple[bytes, str] | None = None) -> None:
-    """Keep a rendered copy.
+    """
+    Keep a rendered copy.
 
     Args:
         copy: The copy.

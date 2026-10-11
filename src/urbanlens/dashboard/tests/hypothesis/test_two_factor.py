@@ -146,7 +146,8 @@ class VerifyTotpCodeTests(TestCase):
         self.assertTrue(two_factor.verify_totp_code(self.user, spaced))
 
     def test_undecryptable_secret_fails_instead_of_raising(self) -> None:
-        """Regression test: a field_encryption_key rotation must not crash login.
+        """
+        Regression test: a field_encryption_key rotation must not crash login.
 
         Before this fix, an ``InvalidToken`` raised while fetching the device (see
         ``models.fields.EncryptedTextField``) propagated straight out of this function uncaught - and since
@@ -407,7 +408,8 @@ class LoginTwoFactorCodeViewTests(TestCase):
 
 
 class LoginIpThrottleTests(TestCase):
-    """The per-IP failed-login throttle that backs the per-identifier lockout.
+    """
+    The per-IP failed-login throttle that backs the per-identifier lockout.
 
     The identifier lockout alone lets a single address spray attempts across many identifiers (and doubles as a
     targeted DoS on any one of them), so ``CustomLoginView`` also counts failures per client IP."""
@@ -479,7 +481,8 @@ class LoginIpThrottleTests(TestCase):
         self.assertIn("_auth_user_id", self.client.session)
 
     def test_a_forged_forwarded_for_prefix_cannot_mint_fresh_counters(self) -> None:
-        """The throttle must key on what our proxy appended, not what the client sent.
+        """
+        The throttle must key on what our proxy appended, not what the client sent.
 
         config/nginx appends its real_ip-resolved client address to whatever X-Forwarded-For arrived, so a
         client that sends its own header ends up leftmost in the chain."""
@@ -562,7 +565,8 @@ class LoginIpThrottleTests(TestCase):
         self.assertIn("_auth_user_id", self.client.session)
 
     def test_a_throttled_ip_cannot_lock_someone_elses_account(self) -> None:
-        """The reverse direction, which is the targeted half.
+        """
+        The reverse direction, which is the targeted half.
 
         Once an address is throttled, every further attempt short-circuits at the gate - before any credential
         is checked."""

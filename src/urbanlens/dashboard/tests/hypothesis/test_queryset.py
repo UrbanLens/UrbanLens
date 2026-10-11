@@ -189,7 +189,8 @@ class FilterByCriteriaDateTests(TestCase):
 
 
 class FilterByCriteriaRatingTests(TestCase):
-    """min_rating / max_rating criteria filter by review score.
+    """
+    min_rating / max_rating criteria filter by review score.
 
     There is also no Review row with rating=0 in real data - pin_edit.py deletes the review instead of ever
     writing one - so 0 has to be special-cased as "unrated", not filtered via a literal
@@ -258,7 +259,8 @@ class FilterByCriteriaRatingTests(TestCase):
             self.assertNotIn(pin.pk, result_ids, f"Rated pin ({rating} stars) must be excluded from max_rating=0")
 
     def test_min_rating_one_excludes_the_unrated_pin(self) -> None:
-        """Sanity check distinguishing "0" (no-op/unrated) from "1" (a real
+        """
+        Sanity check distinguishing "0" (no-op/unrated) from "1" (a real
         floor) - the unrated pin must never satisfy a real minimum."""
         result_ids = set(self._base_qs().filter_by_criteria({"min_rating": 1}).values_list("pk", flat=True))
         self.assertNotIn(self.unrated_pin.pk, result_ids)

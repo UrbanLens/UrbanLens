@@ -109,7 +109,8 @@ class WikiShareServiceTests(TestCase):
         self.assertEqual(image.pin_id, self.pin.pk)
 
     def test_unprocessed_photo_is_enqueued_for_processing_and_skipped_from_this_share(self) -> None:
-        """An unprocessed photo is never attached to the wiki from this request.
+        """
+        An unprocessed photo is never attached to the wiki from this request.
 
         ``process_image_upload`` is decorated ``@untrusted_parse`` and may only run in the sandbox worker
         (``queue=SANDBOX_QUEUE``), never inline here - so the guarantee is structural: the service hands it to
@@ -128,7 +129,8 @@ class WikiShareServiceTests(TestCase):
         mock_enqueue.assert_called_once_with(process_image_upload, image.pk)
 
     def test_sharing_to_an_existing_wiki_contributes_without_renaming_it(self) -> None:
-        """The case that used to be impossible.
+        """
+        The case that used to be impossible.
 
         Seeding only ran when the click created the page, so sharing to a page that already existed did nothing
         at all."""
@@ -194,7 +196,8 @@ class SeedableAliasesAndPhotosTests(TestCase):
         self.assertEqual(seedable_photos(self.pin), [])
 
     def test_seedable_photos_is_capped(self) -> None:
-        """A pin with years of photos must not render every one into the dialog.
+        """
+        A pin with years of photos must not render every one into the dialog.
 
         The wiki's own Media gallery and the visit dialog's picker both already
         cap at the same number; this picker was the one that did not.
@@ -204,7 +207,8 @@ class SeedableAliasesAndPhotosTests(TestCase):
         self.assertEqual(len(seedable_photos(self.pin)), SEEDABLE_PHOTO_LIMIT)
 
     def test_seedable_photos_offers_the_newest_first(self) -> None:
-        """The cap has to drop the oldest photos, and drop the same ones every time.
+        """
+        The cap has to drop the oldest photos, and drop the same ones every time.
 
         A LIMIT over an unordered queryset is free to return a different slice per call, so which photos are
         offerable would depend on the plan Postgres happened to pick."""

@@ -1,4 +1,5 @@
-"""Location eligibility for a SpotGuessr session.
+"""
+Location eligibility for a SpotGuessr session.
 The one rule repeated for every mode: only locations pinned by *every* participant are ever offered, including a solo session's one player."""
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ def eligible_locations(
     exclude_location_ids: Iterable[int] = (),
     label_id: int | None = None,
 ) -> QuerySet[Location]:
-    """Locations every profile in ``profiles`` has pinned (and optionally visited).
+    """
+    Locations every profile in ``profiles`` has pinned (and optionally visited).
 
     Args:
         profiles: Every participant in the session.
@@ -68,7 +70,8 @@ def has_eligible_locations(
     geo_bounds: GEOSGeometry | None = None,
     label_id: int | None = None,
 ) -> bool:
-    """Whether ``eligible_locations`` would return anything at all, without materializing it.
+    """
+    Whether ``eligible_locations`` would return anything at all, without materializing it.
 
     Args:
         profiles: Every participant in the session.

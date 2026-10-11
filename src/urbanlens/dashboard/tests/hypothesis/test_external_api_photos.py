@@ -194,7 +194,8 @@ class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
         self.assertTrue(Image.objects.filter(pk=image.pk, wiki=self.wiki, pin__isnull=True).exists())
 
     def test_asking_withdraws_a_dual_owned_photo_entirely(self) -> None:
-        """?from_wiki=true must win even when a pin is still attached - the
+        """
+        ?from_wiki=true must win even when a pin is still attached - the
         pin-preserving unlink the default case does above must not silently
         swallow an explicit request to withdraw from the wiki too."""
         image = _make_image(
@@ -209,7 +210,8 @@ class PhotoDeleteDualOwnershipTests(_PhotoApiTestCase):
 
 
 class PhotoDeleteAndTheWikiTests(_PhotoApiTestCase):
-    """Deleting over the API withdraws a wiki contribution only if asked.
+    """
+    Deleting over the API withdraws a wiki contribution only if asked.
 
     The same rule the pin gallery follows: contributing a photo to a community wiki is a deliberate act, so
     undoing it is another one, and a caller that says nothing gets the answer that needs no action."""
@@ -311,7 +313,8 @@ class JournalContractTests(SimpleTestCase):
 
 
 class JournalResponseShapeTests(TestCase):
-    """The journal answers with the external API's standard paginated envelope.
+    """
+    The journal answers with the external API's standard paginated envelope.
 
     Regression coverage for the bare ``{entries,total,omitted_sources}`` shape this endpoint used to answer with
     - it could never gain a field later without breaking clients, so it was normalized onto
@@ -326,7 +329,8 @@ class JournalResponseShapeTests(TestCase):
         return baker.make("dashboard.Pin", profile=self.profile, location=location, name=name)
 
     def test_envelope_has_standard_keys_plus_omitted_sources(self) -> None:
-        """A partially-scoped credential gets the standard envelope, with
+        """
+        A partially-scoped credential gets the standard envelope, with
         omitted_sources naming the journal sources it can't see."""
         pin = self._make_pin("Old Factory", 40.0, -73.0)
         baker.make("dashboard.Review", profile=self.profile, pin=pin, rating=4)

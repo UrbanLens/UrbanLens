@@ -1,4 +1,5 @@
-"""Creating a pin share, and answering one you received.
+"""
+Creating a pin share, and answering one you received.
 Exposure fires once at creation; acceptance records lineage via ``source_share``, never a second ``LocationExposure`` row."""
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ if TYPE_CHECKING:
 
 
 def require_pin_owner(sender: Profile, pin: Pin) -> None:
-    """Refuse a share of a pin ``sender`` does not own.
+    """
+    Refuse a share of a pin ``sender`` does not own.
 
     Raises:
         PinSharePermissionError: ``pin`` belongs to someone else.
@@ -41,7 +43,8 @@ def require_pin_owner(sender: Profile, pin: Pin) -> None:
 
 
 def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
-    """Return the recipient's own top-level pin at (or near) `source`'s place, if any.
+    """
+    Return the recipient's own top-level pin at (or near) `source`'s place, if any.
 
     Args:
         profile: The prospective recipient.
@@ -56,7 +59,8 @@ def recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
 
 
 def _bundle_children(sender: Profile, recipient: Profile, root_share: PinShare, children: list[Pin]) -> int:
-    """Create one bundled child share per pin in ``children``, tied to ``root_share``, skipping any already pending.
+    """
+    Create one bundled child share per pin in ``children``, tied to ``root_share``, skipping any already pending.
 
     Returns:
         How many bundled shares were created.
@@ -91,7 +95,8 @@ def create_pin_share(
     markup_map: MarkupMap | None = None,
     children: Iterable[Pin] = (),
 ) -> PinShare:
-    """Create a PinShare, its bundled child shares, and its notification.
+    """
+    Create a PinShare, its bundled child shares, and its notification.
 
     Every rule about what may be offered is checked here rather than trusted from the caller: the pin must be the
     sender's, only the pin's own photos and descendants travel with it, and an attached map must be the sender's.
@@ -173,7 +178,8 @@ def create_pin_share(
 
 
 def _official_name_for(location) -> str | None:
-    """A name for a shared pin that does not come from the person sharing it.
+    """
+    A name for a shared pin that does not come from the person sharing it.
 
     Args:
         location: The location the shared pin sits at, or None.
@@ -192,7 +198,8 @@ def _official_name_for(location) -> str | None:
 
 
 def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin:
-    """Materialise a recipient-side Pin from an accepted share.
+    """
+    Materialise a recipient-side Pin from an accepted share.
 
     Args:
         share: The accepted share to copy the pin from.
@@ -280,7 +287,8 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
 
 
 def _carry_cover_photo(source: Pin, new_pin: Pin, shared_images: list[Image], copied_images: list[Image]) -> None:
-    """Point the new pin's cover photo at the recipient's copy of that photo.
+    """
+    Point the new pin's cover photo at the recipient's copy of that photo.
     The cover must never reference the sender's row, and a sender who shared only part of their gallery may not have shared the cover at all - in which case the copy correctly has none.
 
     Args:
@@ -298,7 +306,8 @@ def _carry_cover_photo(source: Pin, new_pin: Pin, shared_images: list[Image], co
 
 
 def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
-    """Materialise every pending bundled child share under the accepted root.
+    """
+    Materialise every pending bundled child share under the accepted root.
 
     Args:
         root_share: The accepted root share of the bundle.
@@ -316,7 +325,8 @@ def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
     visiting: set[int] = set()
 
     def materialise(child_share: PinShare) -> Pin:
-        """Create (or reuse) the recipient-side pin for one bundled child share.
+        """
+        Create (or reuse) the recipient-side pin for one bundled child share.
 
         Args:
             child_share: The bundled share to materialise.
@@ -364,7 +374,8 @@ def _already_answered(share: PinShare) -> tuple[Pin | None, str]:
 
 
 def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, str]:
-    """Apply an accept/reject decision to a pending ``share`` and return a status message.
+    """
+    Apply an accept/reject decision to a pending ``share`` and return a status message.
 
     Both answers are one guarded transition out of PENDING, so an accept and a reject racing
     each other settle on whichever committed first, and the other reports that outcome.

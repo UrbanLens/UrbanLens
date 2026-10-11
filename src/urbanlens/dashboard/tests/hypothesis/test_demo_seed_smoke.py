@@ -31,7 +31,8 @@ class DemoSeedSmokeTests(TestCase):
         self.assertEqual(demo_users.count(), 5, "one login account plus four personas")
 
     def test_an_empty_pool_seeds_no_pins_rather_than_inventing_any(self) -> None:
-        """No manifest is the state of a demo instance before anything is imported.
+        """
+        No manifest is the state of a demo instance before anything is imported.
 
         A pin at an invented coordinate has no real place behind it, so its detail page resolves no boundary, no
         parcel and no wiki - the product looking broken."""
@@ -45,7 +46,8 @@ class DemoSeedSmokeTests(TestCase):
         self.assertNotEqual(first.username, second.username)
 
     def test_a_demo_account_never_becomes_site_admin(self) -> None:
-        """On a fresh demo database the first visitor is the first user.
+        """
+        On a fresh demo database the first visitor is the first user.
 
         The bootstrap-admin slot is single-claim and permanent, so letting a throwaway account take it hands it
         the admin panel and leaves the real operator unable to ever be promoted."""
@@ -61,7 +63,8 @@ class DemoSeedSmokeTests(TestCase):
 
 
 class SeedingCommitOrderingTests(django_test.TransactionTestCase):
-    """The Celery patch has to survive past the actual transaction commit.
+    """
+    The Celery patch has to survive past the actual transaction commit.
 
     `TransactionTestCase`, not `TestCase`, and deliberately: `TestCase` wraps every test in a savepoint that is
     rolled back, so Django's real commit machinery (`connection.run_and_clear_commit_hooks`) never runs and

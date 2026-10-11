@@ -1,4 +1,5 @@
-"""The confirm step refuses an oversized selection, and never imports on the request.
+"""
+The confirm step refuses an oversized selection, and never imports on the request.
 
 `GoogleMapsGateway.MAX_PREVIEW_PINS` bounds the preview, but the confirm step gets
 the selection back from the client, so nothing requires it to be one the server
@@ -34,7 +35,8 @@ TEST_CAP = 5
 
 
 def _pin_payload(index: int) -> dict[str, Any]:
-    """One confirmed pin, in the shape the preview step hands the client.
+    """
+    One confirmed pin, in the shape the preview step hands the client.
 
     Keys are `iter_confirmed_import_events`'s documented contract (`name`, `lat`,
     `lng`, `description`, `cid`, `maps_url`, `label_ids`), and getting them
@@ -145,7 +147,8 @@ class ImportConfirmedDoesTheWorkOffTheRequestTests(TestCase):
         self.url = reverse("pin.import.confirmed")
 
     def test_an_accepted_import_creates_no_pins_inside_the_request(self) -> None:
-        """The request should hand the work to a task and return.
+        """
+        The request should hand the work to a task and return.
 
         Asserted on the row count rather than on which function was called, so it stays true whichever task ends
         up doing the work - the claim is about where the CPU is spent."""

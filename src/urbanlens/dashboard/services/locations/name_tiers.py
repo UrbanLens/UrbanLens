@@ -1,4 +1,5 @@
-"""The ranked metric that chooses a place's automatic name, and which candidates may name or alias it.
+"""
+The ranked metric that chooses a place's automatic name, and which candidates may name or alias it.
 
 Every rule the naming pipeline applies to *which kind* of name wins lives here, so it can be read and
 tested in one place. The decision and its reasoning: ``docs/adr/0020-place-name-tiers.md``.
@@ -92,7 +93,8 @@ _SITE_CLASSES: frozenset[str] = frozenset({"amenity", "landuse", "leisure", "his
 
 
 def nominatim_tier(data: dict[str, Any]) -> NameTier:
-    """The tier of the name Nominatim's reverse geocode gave, from the OSM object it named.
+    """
+    The tier of the name Nominatim's reverse geocode gave, from the OSM object it named.
 
     Nominatim answers with the smallest object under the point, so a courtyard's answer is often the
     service road through it.
@@ -118,7 +120,8 @@ def nominatim_tier(data: dict[str, Any]) -> NameTier:
 
 
 def tier_for(source: str, location: Location | None) -> NameTier:
-    """The tier of a name from ``source`` at this location.
+    """
+    The tier of a name from ``source`` at this location.
 
     Args:
         source: The name provider's source slug.
@@ -137,7 +140,8 @@ def tier_for(source: str, location: Location | None) -> NameTier:
 
 
 def rank_key(tier: NameTier, scope: NamingScope) -> tuple[int, int]:
-    """Sort key for a tier: lower sorts first. A building's own page ranks its building name first.
+    """
+    Sort key for a tier: lower sorts first. A building's own page ranks its building name first.
 
     Args:
         tier: The candidate's tier.
@@ -152,7 +156,8 @@ def rank_key(tier: NameTier, scope: NamingScope) -> tuple[int, int]:
 
 
 def naming_scope(location: Location | None) -> NamingScope:
-    """Whether this location's names describe a building rather than a property.
+    """
+    Whether this location's names describe a building rather than a property.
 
     A location whose own wiki describes a building (:func:`wiki_scope`) is a building's, whatever pins it holds.
     Otherwise one holding only child (building) pins, or a child wiki's own location, is a building's.
@@ -179,7 +184,8 @@ def naming_scope(location: Location | None) -> NamingScope:
 
 
 def wiki_scope(wiki: Wiki) -> NamingScope:
-    """Whether a wiki describes one building of several, or something on one, rather than a property.
+    """
+    Whether a wiki describes one building of several, or something on one, rather than a property.
 
     A wiki nested under another describes part of it when it holds no place of its own, or holds one of a
     multi-building parcel's buildings (``scope.pin_type_for_place``). One holding a property's place - a parcel under
@@ -208,7 +214,8 @@ def _parcel(location: Location) -> Place | None:
 
 
 def describes_scope(tier: NameTier, scope: NamingScope) -> bool:
-    """Whether a name of this tier can name a location of this scope.
+    """
+    Whether a name of this tier can name a location of this scope.
 
     An article found at a building's point is the campus's or a neighbour's: the match confirms it by the town its
     text mentions, or the Wikipedia panel takes the campus's article for a child pin.
@@ -224,7 +231,8 @@ def describes_scope(tier: NameTier, scope: NamingScope) -> bool:
 
 
 def building_name_admissible(source: str, location: Location, scope: NamingScope | None = None) -> bool:
-    """Whether a building's name may name, or alias, this location.
+    """
+    Whether a building's name may name, or alias, this location.
 
     On a building's own page, when the name is the building's own: a CRIS record must stand on it. On a property's,
     only when the property is known to hold exactly one building and the named building is on it: without a parcel
@@ -274,7 +282,8 @@ def _building_on_parcel(source: str, location: Location, parcel: Place) -> bool:
 
 
 def aliasable(tier: NameTier) -> bool:
-    """Whether a name of this tier is kept as an alias. A road passing through a place is not another name for it.
+    """
+    Whether a name of this tier is kept as an alias. A road passing through a place is not another name for it.
 
     Args:
         tier: The candidate's tier.

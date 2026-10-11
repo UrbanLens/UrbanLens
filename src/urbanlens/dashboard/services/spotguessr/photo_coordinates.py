@@ -1,4 +1,5 @@
-"""Recording anonymized coordinate guesses toward a photo's own position.
+"""
+Recording anonymized coordinate guesses toward a photo's own position.
 See ``services.photos.photo_coordinates`` for how these accumulate into an estimate; this module is only the SpotGuessr-side hook that records every Photos-mode guess and decides whether it's also worth feeding into that estimate."""
 
 from __future__ import annotations
@@ -15,7 +16,8 @@ if TYPE_CHECKING:
 
 
 def record_guess(round_: GameRound, guess_point: Point, distance: float) -> None:
-    """Anonymously record one guess toward ``round_``'s photo's own coordinates.
+    """
+    Anonymously record one guess toward ``round_``'s photo's own coordinates.
 
     Args:
         round_: The round the guess was submitted for.

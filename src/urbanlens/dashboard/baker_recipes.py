@@ -1,4 +1,5 @@
-"""Model Bakery recipes for UrbanLens test data.
+"""
+Model Bakery recipes for UrbanLens test data.
 
 Usage::
 

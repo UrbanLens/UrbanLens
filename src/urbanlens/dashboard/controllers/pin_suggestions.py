@@ -1,4 +1,5 @@
-"""Memories → Locations page: review queue for batch-scan pin suggestions.
+"""
+Memories → Locations page: review queue for batch-scan pin suggestions.
 
 Suggestions are produced in bulk by ``services.pins.pin_suggestions.ingest_location_hits``
 (called from the Immich full-library sweep and the Tools-page local folder scanner) -
@@ -60,7 +61,8 @@ _BULK_ACTIONS = [
 
 
 def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
-    """Return the profile's pending, settings-visible suggestions, newest first.
+    """
+    Return the profile's pending, settings-visible suggestions, newest first.
 
     Suggestions from a source the profile has turned off (or all of them, if ``pin_suggestions_enabled``
     is off) are hidden, not deleted - see
@@ -70,7 +72,8 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
 
 
 class PinSuggestionQueueView(LoginRequiredMixin, View):
-    """The Locations subpage of Memories - the batch-scan suggestion review queue.
+    """
+    The Locations subpage of Memories - the batch-scan suggestion review queue.
 
     GET /memories/locations/
     """
@@ -123,7 +126,8 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
 
 
 class PinSuggestionQueuePartialView(LoginRequiredMixin, View):
-    """Just the suggestion queue partial, re-fetched via the ``refreshQueue`` event.
+    """
+    Just the suggestion queue partial, re-fetched via the ``refreshQueue`` event.
 
     GET /memories/locations/queue/
     """
@@ -135,7 +139,8 @@ class PinSuggestionQueuePartialView(LoginRequiredMixin, View):
 
 
 class PinSuggestionMapDataView(LoginRequiredMixin, View):
-    """Lightweight JSON of every pending suggestion, for the review-queue map.
+    """
+    Lightweight JSON of every pending suggestion, for the review-queue map.
 
     GET /memories/locations/map-data/
 
@@ -161,7 +166,8 @@ class PinSuggestionMapDataView(LoginRequiredMixin, View):
 
 
 class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
-    """GET /memories/locations/<suggestion_id>/immich/thumbnail/<asset_id>/ - proxies one thumbnail.
+    """
+    GET /memories/locations/<suggestion_id>/immich/thumbnail/<asset_id>/ - proxies one thumbnail.
 
     Served by the same ``controllers.immich.immich_thumbnail_response`` as the pin picker, but authorised
     by suggestion instead of pin - a new-pin suggestion has no ``Pin`` yet to key off of.
@@ -185,7 +191,8 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
 
 
 def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, resolve_names_async: bool) -> None:
-    """Accept one suggestion of a bulk batch without any inline external API call.
+    """
+    Accept one suggestion of a bulk batch without any inline external API call.
 
     Passes ``fetch_if_missing=False`` down the accept chain so a brand-new Location is created unnamed
     instead of blocking the request on a live Google lookup per suggestion (a batch may hold up to
@@ -212,7 +219,8 @@ def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, reso
 
 
 class PinSuggestionBulkActionView(LoginRequiredMixin, View):
-    """Accept or reject many pin suggestions at once.
+    """
+    Accept or reject many pin suggestions at once.
 
     POST /memories/locations/bulk/<action>/, JSON body ``{"suggestion_ids": [...]}``.
 
@@ -256,7 +264,8 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
 
 
 class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
-    """Accept every one of the profile's pending, settings-visible suggestions.
+    """
+    Accept every one of the profile's pending, settings-visible suggestions.
 
     POST /memories/locations/accept-all/
 
@@ -281,7 +290,8 @@ class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
 
 
 class PinSuggestionActionView(LoginRequiredMixin, View):
-    """Accept or reject a single pin suggestion.
+    """
+    Accept or reject a single pin suggestion.
 
     POST /memories/locations/<suggestion_id>/<action>/ where action is "accept" or "reject".
     """

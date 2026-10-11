@@ -1,4 +1,5 @@
-"""Adding a pin must not make the next page load re-read the whole account.
+"""
+Adding a pin must not make the next page load re-read the whole account.
 
 Creating a pin clears the cached centroid, and the next view of any page that renders a map centre recomputes it
 by reading every pin the account owns and clustering them in Python. Measured on the performance population that
@@ -30,7 +31,8 @@ _WARM_LNG = decimal.Decimal("-73.750000")
 
 
 def _pin_at(profile: Profile, lat: float, lng: float) -> Pin:
-    """Create a pin whose linked location sits at the given coordinates.
+    """
+    Create a pin whose linked location sits at the given coordinates.
 
     Args:
         profile: The owning account.
@@ -43,7 +45,8 @@ def _pin_at(profile: Profile, lat: float, lng: float) -> Pin:
 
 
 def _warm_the_centre(profile: Profile) -> None:
-    """Put a centre on record, as a recompute would have.
+    """
+    Put a centre on record, as a recompute would have.
 
     Args:
         profile: The account to give a cached centre."""
@@ -84,7 +87,8 @@ class ANewPinDoesNotCostTheNextVisitorTests(TestCase):
 
 
 class TheInlineComputeStillHappensWhenThereIsNothingToServeTests(TestCase):
-    """Guard.
+    """
+    Guard.
 
     The fix is "serve what we already have", so it must not turn into "serve nothing". An account with no centre
     on record has to compute one, and at that size it is cheap - this is the first-pin path."""

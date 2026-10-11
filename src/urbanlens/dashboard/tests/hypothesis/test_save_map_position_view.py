@@ -34,7 +34,8 @@ class SaveMapPositionViewTests(TestCase):
         self.assertEqual(self.profile.remembered_map_zoom, 12)
 
     def test_ignores_request_when_not_in_remember_mode(self) -> None:
-        """The view's own docstring: "ignores the request silently otherwise
+        """
+        The view's own docstring: "ignores the request silently otherwise
         so stale JS calls are harmless" - confirms that contract."""
         Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=MapCenterMode.GPS)
 
@@ -66,7 +67,8 @@ class SaveMapPositionViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_repeated_saves_overwrite_the_previous_position(self) -> None:
-        """Confirms this is a live "last known position", not append-only -
+        """
+        Confirms this is a live "last known position", not append-only -
         the mechanism the page's debounced JS relies on."""
         Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=MapCenterMode.REMEMBER)
         self._post(lat="10", lng="20", zoom="5")
@@ -78,7 +80,8 @@ class SaveMapPositionViewTests(TestCase):
         self.assertEqual(self.profile.remembered_map_zoom, 8)
 
     def test_saved_position_is_reflected_on_the_next_map_load(self) -> None:
-        """End-to-end within what the server controls: a saved position feeds
+        """
+        End-to-end within what the server controls: a saved position feeds
         straight back into view_map's rendered context on the next request -
         the piece that's demonstrably NOT broken server-side."""
         Profile.objects.filter(pk=self.profile.pk).update(map_center_mode=MapCenterMode.REMEMBER)

@@ -1,4 +1,5 @@
-"""External API community wiki writes: alias nickname toggle, comment reactions, history revert (P29).
+"""
+External API community wiki writes: alias nickname toggle, comment reactions, history revert (P29).
 
 Each asserts what a viewer of the wiki may do, that a caller who cannot see the wiki or the row is refused with the
 same 404 and nothing changed, that anonymous and a read-only key are refused, and that a malformed request is a 4xx.

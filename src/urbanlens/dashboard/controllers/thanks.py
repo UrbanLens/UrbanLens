@@ -19,7 +19,8 @@ class ThanksView(TemplateView):
     template_name = "dashboard/pages/thanks/index.html"
 
     def get_context_data(self, **kwargs):
-        """Add GitHub contributor metadata to the template context.
+        """
+        Add GitHub contributor metadata to the template context.
 
         Args:
             **kwargs: Standard ``TemplateView`` keyword arguments.

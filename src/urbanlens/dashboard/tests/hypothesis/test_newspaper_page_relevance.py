@@ -1,4 +1,5 @@
-"""A newspaper page is judged by its own text, not by the dateline of the paper that printed it (P216).
+"""
+A newspaper page is judged by its own text, not by the dateline of the paper that printed it (P216).
 
 The Library of Congress titles a Chronicling America page with its paper's dateline: "Image 2 of Western Kansas world
 (WaKeeney, Kan.), August 8, 1908". That says where the paper was printed, not where a story on the page happened. In 1908
@@ -227,7 +228,8 @@ class OnlyTheLibraryOfCongressHasDatelinesTests(SimpleTestCase):
 
 
 class DistinctiveNameAloneTests(_JudgedCase):
-    """The trade P216 makes, pinned so it is not undone by accident.
+    """
+    The trade P216 makes, pinned so it is not undone by accident.
 
     A page naming the place by a distinctive name, with no geography of its own, is kept from any paper: that is how
     the Kansas and Michigan printings of the HRSH article pass, since their OCR mangles "Poughkeepsie" and "New York".

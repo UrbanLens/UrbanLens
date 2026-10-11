@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 @untrusted_parse("geo.gpx")
 def gpx_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
-    """Convert a GPX file's waypoints into pin dicts.
+    """
+    Convert a GPX file's waypoints into pin dicts.
 
     Args:
         file_contents: The GPX file, as bytes or a seekable binary file positioned at its start.

@@ -26,7 +26,8 @@ from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_tr
 
 
 class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
-    """A label's order decides what its pins draw, and reordering is a ``bulk_update``.
+    """
+    A label's order decides what its pins draw, and reordering is a ``bulk_update``.
 
     ``Pin.icon_source_label`` sorts by ``-label.order``, so reordering labels changes which one supplies a pin's
     icon and colour."""
@@ -42,7 +43,8 @@ class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
         self.pin.labels.add(self.label_a, self.label_b)
 
     def _updated(self, pin: Pin):
-        """The stored ``updated`` stamp, read fresh.
+        """
+        The stored ``updated`` stamp, read fresh.
 
         Args:
             pin: Whose stamp to read.
@@ -108,7 +110,8 @@ class LabelBulkUpdateTouchesCarryingPinsTests(TestCase):
 
 
 class TripActivityBulkCreateQueuesCalendarPushTests(TestCase):
-    """Copying a pin list into a trip must reach an auto-synced calendar.
+    """
+    Copying a pin list into a trip must reach an auto-synced calendar.
 
     ``sync_trip_on_activity_save`` pushes the trip whenever an activity is saved, but ``copy_list_pins_to_trip``
     uses ``bulk_create`` - so a list copied into an auto-synced trip never reached the user's calendar."""

@@ -38,7 +38,8 @@ class _CheckinTestCase(TestCase):
         )
 
     def _escalate(self) -> None:
-        """Mark the check-in escalated directly in the DB, without touching the instance.
+        """
+        Mark the check-in escalated directly in the DB, without touching the instance.
 
         Deliberately a queryset ``update``: it mimics what the escalation beat task does from another process,
         and leaves ``self.checkin`` holding the pre-escalation values - which is exactly the stale state the
@@ -128,7 +129,8 @@ class CheckinEditNotifiesContactsTests(_CheckinTestCase):
     """A plan change after escalation re-notifies contacts - and only then."""
 
     def test_plan_change_after_escalation_notifies(self) -> None:
-        """The notification is an ``on_commit`` hook, so the commit has to be simulated.
+        """
+        The notification is an ``on_commit`` hook, so the commit has to be simulated.
 
         A plain ``TestCase`` wraps each test in a transaction that is rolled back rather than committed, so
         ``on_commit`` callbacks never run on their own - ``captureOnCommitCallbacks(execute=True)`` is what
@@ -160,7 +162,8 @@ class CheckinEditNotifiesContactsTests(_CheckinTestCase):
         notify.assert_not_called()
 
     def test_notification_is_deferred_until_commit(self) -> None:
-        """A rolled-back edit must never email real emergency contacts.
+        """
+        A rolled-back edit must never email real emergency contacts.
 
         ``captureOnCommitCallbacks`` leaves ``on_commit`` hooks unexecuted unless explicitly run, so a
         notification that fires without it would prove the side effect is still inline with the write."""
@@ -174,7 +177,8 @@ class CheckinEditNotifiesContactsTests(_CheckinTestCase):
 
 
 class CheckinEditArchivedTests(_CheckinTestCase):
-    """Defect #1: an edit after archival re-persisted scrubbed plaintext PII.
+    """
+    Defect #1: an edit after archival re-persisted scrubbed plaintext PII.
 
     ``_scrub_checkin_pii`` blanks the title, plan, message, and destination once the encrypted
     ``SafetyCheckinArchive`` exists."""
@@ -211,7 +215,8 @@ class CheckinEditArchivedTests(_CheckinTestCase):
 
 
 class CheckinEditLockRaceTests(_CheckinTestCase):
-    """Defect #2: lock flags were read off a stale instance and written back unlocked.
+    """
+    Defect #2: lock flags were read off a stale instance and written back unlocked.
 
     An escalation committing in that window (the beat tasks hold no lock of their own)
     left the edit free to rewrite the very fields contacts had just been emailed about."""

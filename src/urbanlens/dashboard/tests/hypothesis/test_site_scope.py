@@ -40,7 +40,8 @@ def _make_location(**kwargs) -> Location:
 
 
 def _footprint_around(latitude: float, longitude: float) -> str:
-    """A closed square (~100 m a side) centred on a coordinate, as WKT.
+    """
+    A closed square (~100 m a side) centred on a coordinate, as WKT.
 
     Stands in for a real building footprint landed by the boundary provider
     chain - what ``looks_like_a_building`` treats as proof of a building.

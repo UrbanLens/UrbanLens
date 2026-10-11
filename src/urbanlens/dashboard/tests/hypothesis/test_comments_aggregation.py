@@ -69,7 +69,8 @@ class PinCommentsAggregationTests(TestCase):
         self.assertContains(response, reverse("pin.details", kwargs={"pin_slug": self.child.slug}))
 
     def test_the_parents_own_note_is_never_labelled(self) -> None:
-        """Only aggregated child notes get the 'written on the child pin' chip - one chip
+        """
+        Only aggregated child notes get the 'written on the child pin' chip - one chip
         total, for the one child note, never for the parent's own."""
         response = self.client.get(reverse("pin.comments", kwargs={"pin_slug": self.parent.slug}), {"children": "1"})
         self.assertEqual(response.content.decode().count('class="child-chip"'), 1)
@@ -90,7 +91,8 @@ class PinCommentsAggregationTests(TestCase):
         self.assertEqual(new_comment.pin_id, self.parent.pk)
 
     def test_deleting_a_child_notes_comment_via_the_parent_url_works(self) -> None:
-        """The delete button always posts back to the parent pin's URL (see
+        """
+        The delete button always posts back to the parent pin's URL (see
         _comment_body.html), even for a note that lives on a child pin."""
         response = self.client.delete(
             reverse("pin.comment.delete", kwargs={"pin_slug": self.parent.slug, "comment_id": self.child_note.pk})

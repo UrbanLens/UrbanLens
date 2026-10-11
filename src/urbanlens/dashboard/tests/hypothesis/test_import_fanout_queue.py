@@ -1,4 +1,5 @@
-"""Work a model signal queues from inside a batch job goes to the bulk queue (P109).
+"""
+Work a model signal queues from inside a batch job goes to the bulk queue (P109).
 
 Importing 1,000 pins left about 2,600 tasks behind it - wiki creation, enrichment, category suggestion and
 reputation scoring, a set per pin. D13 classes those interactive, because a person creating one pin is

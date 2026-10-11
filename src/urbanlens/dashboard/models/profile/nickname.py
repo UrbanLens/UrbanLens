@@ -11,7 +11,8 @@ from urbanlens.dashboard.models.profile.queryset import ProfileNicknameManager
 
 
 class ProfileNickname(abstract.DashboardModel):
-    """A private nickname one user assigns to another user's profile.
+    """
+    A private nickname one user assigns to another user's profile.
     Only the *author* can see the nickname they assigned; the *subject* profile owner cannot.
     """
 

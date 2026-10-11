@@ -1,4 +1,5 @@
-"""A building pin nested under a site reuses the site's answer for panels that describe the site.
+"""
+A building pin nested under a site reuses the site's answer for panels that describe the site.
 
 Every HRSH building child has its own Location, so opening one ran every panel again at a point 50-300 m from its
 parent: the nearest park unit within 100 km, earthquakes within 100 km, the parcel the building stands on. The

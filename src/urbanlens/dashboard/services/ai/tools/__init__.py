@@ -1,4 +1,5 @@
-"""The assistant's typed tool registry.
+"""
+The assistant's typed tool registry.
 A module not imported here is a tool that silently doesn't exist - there is no other discovery mechanism, so a new tool module belongs in this list."""
 
 from __future__ import annotations

@@ -73,7 +73,8 @@ class NotificationsMutedTests(TestCase):
         self.assertTrue(notifications_muted(self.muter.pk, self.other.pk))
 
     def test_mute_survives_the_relationship_being_removed(self) -> None:
-        """``remove()`` keeps the row, so the preference outlives the friendship.
+        """
+        ``remove()`` keeps the row, so the preference outlives the friendship.
 
         Worth stating rather than discovering: someone who muted a person and then un-friended them stays
         un-notified if the pair reconnect, because ``request()`` reuses the row."""
@@ -84,7 +85,8 @@ class NotificationsMutedTests(TestCase):
 
 
 class ProfilesMutingTests(TestCase):
-    """The batch form, which has to reach the same answer as the per-row one.
+    """
+    The batch form, which has to reach the same answer as the per-row one.
 
     It exists for ``_notify_group_message``, which resolves every per-member fact up front so a 50-member group
     does not pay a lookup per member on the synchronous send path."""
@@ -178,7 +180,8 @@ class NotifyChokePointTests(TestCase):
         self.assertEqual(NotificationLog.objects.for_profile(self.muter).count(), 1)
 
     def test_a_muted_source_writes_no_row_at_all(self) -> None:
-        """Not "writes it read" - the row is what every delivery channel hangs off.
+        """
+        Not "writes it read" - the row is what every delivery channel hangs off.
 
         The live WebSocket toast, the WhatsApp/SMS alert and the native push are all ``post_save`` receivers on
         ``NotificationLog``, so declining to write is what produces actual silence rather than a quieter bell."""
@@ -218,7 +221,8 @@ class NotifyChokePointTests(TestCase):
 
 
 class ReciprocalRowsTests(TestCase):
-    """Two rows can join one pair, and neither mute path may fall over on it.
+    """
+    Two rows can join one pair, and neither mute path may fall over on it.
 
     This still matters because a database that predates that migration can hold the pair, and the code that
     copes with it is still live - ``between()`` returning the oldest row rather than raising
@@ -261,7 +265,8 @@ class ReciprocalRowsTests(TestCase):
 
 
 class MuteSurvivesOtherWritesTests(TestCase):
-    """A mute is a preference somebody set; nothing else may quietly undo it.
+    """
+    A mute is a preference somebody set; nothing else may quietly undo it.
 
     The mute columns are written by a targeted ``UPDATE`` that leaves the in-memory instance untouched, so any
     other write of the *whole* row from a stale instance overwrites them - and nothing would report it."""
@@ -302,7 +307,8 @@ class MuteSurvivesOtherWritesTests(TestCase):
                 self.assertTrue(self.friendship.is_muted_by(self.other))
 
     def test_a_request_does_not_clobber_a_mute(self) -> None:
-        """Re-requesting after a removal is the ordinary way back to a friendship.
+        """
+        Re-requesting after a removal is the ordinary way back to a friendship.
 
         Passes even against the bare-``save()`` version, because ``request`` loads the row itself and so is
         never stale - kept because the property is worth holding, not because it catches that bug."""
@@ -316,7 +322,8 @@ class MuteSurvivesOtherWritesTests(TestCase):
         self.assertTrue(self.friendship.is_muted_by(self.other))
 
     def test_accept_still_reaches_the_achievement_signal(self) -> None:
-        """Why this is `update_fields` and not `queryset.update()`.
+        """
+        Why this is `update_fields` and not `queryset.update()`.
 
         `queryset.update()` would sidestep the lost update outright, and also skip `post_save` - which the
         achievements system subscribes to for this model precisely to see a friendship *reach* ACCEPTED."""
@@ -343,7 +350,8 @@ class MuteSurvivesOtherWritesTests(TestCase):
         self.assertIn("status", update_fields or ())
 
     def test_blocking_swaps_the_mute_columns_with_the_row_ends(self) -> None:
-        """`block_profile` re-points the row so the blocker owns `from_profile`.
+        """
+        `block_profile` re-points the row so the blocker owns `from_profile`.
 
         The columns are named for the row's *ends*, so swapping the ends
         without swapping them hands each person the other's preference.
@@ -374,7 +382,8 @@ class MuteSurvivesOtherWritesTests(TestCase):
 
 
 class BatchedMuteIsCheckedAgainstItsOwnSourceTests(TestCase):
-    """A batch resolved for one sender must not be applied to another.
+    """
+    A batch resolved for one sender must not be applied to another.
 
     The optimisation hands ``notify`` an answer it cannot re-derive, so the answer says who it is about."""
 
@@ -416,7 +425,8 @@ class BatchedMuteIsCheckedAgainstItsOwnSourceTests(TestCase):
 
 
 class NotifyFieldSpellingTests(TestCase):
-    """``profile_id=`` must reach the same preference as ``profile=``.
+    """
+    ``profile_id=`` must reach the same preference as ``profile=``.
 
     Both are legitimate ways to write the row, and a check that read only the instance form would make the
     preference depend on how a producer happened to hold its profiles - a hole no reviewer would see, because

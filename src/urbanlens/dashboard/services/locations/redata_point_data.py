@@ -1,4 +1,5 @@
-"""REData's near-point domains, each read once per point and shared by every panel that shows it.
+"""
+REData's near-point domains, each read once per point and shared by every panel that shows it.
 
 Several panels of one page read the same REData domain, each from its own task as the page opens: the street
 carousel's three networks and the Street-level gallery, the Historical Features panel and the time slider, the Aerial
@@ -52,7 +53,8 @@ MIRROR_GONE = "mirror_gone"
 
 
 def mirror_gone(row: object) -> bool:
-    """Whether REData marked a media row or street-view capture as having no image left at its source.
+    """
+    Whether REData marked a media row or street-view capture as having no image left at its source.
 
     REData sets ``attributes.mirror_gone`` (``{"status", "reason", "at"}``) once every image URL the source published for
     the row answered that the image does not exist (``reason: "missing"``), or KartaView's storage said it is archived
@@ -77,7 +79,8 @@ def point_key(latitude: float, longitude: float) -> str:
 
 
 def settled_domain(latitude: float, longitude: float, domain: str) -> LocationContextEnvelope | None:
-    """A domain's answer from REData's cache, when every provider covering the point has one.
+    """
+    A domain's answer from REData's cache, when every provider covering the point has one.
 
     Args:
         latitude: WGS-84 latitude.
@@ -106,7 +109,8 @@ def _settled_domains(latitude: float, longitude: float) -> dict[str, LocationCon
 
 
 def media_key(latitude: float, longitude: float, providers: Collection[str] | None) -> str:
-    """The shared-answer key for a point's media, which names the provider set the answer was asked of.
+    """
+    The shared-answer key for a point's media, which names the provider set the answer was asked of.
 
     Args:
         latitude: WGS-84 latitude.
@@ -128,7 +132,8 @@ def _rejected_providers(error: LocationContextUnavailableError, asked: Collectio
 
 
 def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
-    """The media items REData has near a point that the Nearby Media and Aerial tabs can show (``MediaItemSerializer`` rows).
+    """
+    The media items REData has near a point that the Nearby Media and Aerial tabs can show (``MediaItemSerializer`` rows).
 
     The street-level networks are not asked for: their captures are the Street-level tab's, read by date through
     :func:`street_view_dates`, and a row from them here would be dropped unseen after costing REData a search of the
@@ -179,7 +184,8 @@ def media_near(latitude: float, longitude: float) -> LocationContextEnvelope:
 
 
 def without_gone_media(envelope: LocationContextEnvelope) -> LocationContextEnvelope:
-    """``envelope`` less the rows REData marked :func:`mirror_gone`, with ``count`` lowered to match.
+    """
+    ``envelope`` less the rows REData marked :func:`mirror_gone`, with ``count`` lowered to match.
 
     A new envelope rather than an edit: the context read's envelope is shared with every reader of the point.
     ``providers[].count`` stays as each source reported it - it is what the source answered, and is read only for whether
@@ -200,7 +206,8 @@ def without_gone_media(envelope: LocationContextEnvelope) -> LocationContextEnve
 
 @dataclass(frozen=True, slots=True)
 class StreetViewDates:
-    """The dates a point was photographed from the street, across every network.
+    """
+    The dates a point was photographed from the street, across every network.
 
     Attributes:
         dates: ``{captured_on, provider, count, is_panoramic, representative}`` per network and date, newest first;
@@ -214,7 +221,8 @@ class StreetViewDates:
 
 
 def street_view_dates(latitude: float, longitude: float) -> StreetViewDates:
-    """Street-level capture dates near a point, every network in one answer.
+    """
+    Street-level capture dates near a point, every network in one answer.
 
     Args:
         latitude: WGS-84 latitude.
@@ -245,7 +253,8 @@ def _captured_on(entry: dict[str, Any]) -> str:
 
 
 def _nearest(members: list[dict[str, Any]], latitude: float, longitude: float) -> dict[str, Any]:
-    """The frame nearest the point, a panorama winning a tie: an arbitrary frame from a passing vehicle points down the
+    """
+    The frame nearest the point, a panorama winning a tie: an arbitrary frame from a passing vehicle points down the
     street about half the time."""
     from urbanlens.dashboard.services.geo.distance import haversine_meters
 
@@ -259,7 +268,8 @@ def _nearest(members: list[dict[str, Any]], latitude: float, longitude: float) -
 
 
 def dates_from_captures(captures: list[dict[str, Any]], latitude: float, longitude: float) -> list[dict[str, Any]]:
-    """Group capture rows into the timeline's per-network, per-date entries, as REData's own timeline does.
+    """
+    Group capture rows into the timeline's per-network, per-date entries, as REData's own timeline does.
 
     Each date's representative is the frame nearest the point, a panorama winning a tie. A frame whose image is gone
     (:func:`mirror_gone`) is left out before grouping, so it is never a date's picture or counted in it.
@@ -293,7 +303,8 @@ def dates_from_captures(captures: list[dict[str, Any]], latitude: float, longitu
 
 
 def live_timeline_date(entry: dict[str, Any], latitude: float, longitude: float) -> dict[str, Any] | None:
-    """One ``/street-view/timeline/`` date without the frames REData marked :func:`mirror_gone`.
+    """
+    One ``/street-view/timeline/`` date without the frames REData marked :func:`mirror_gone`.
 
     From REData 0.3.6 a date's representative is the nearest frame still there, and is gone only when every frame of
     the date is; before it, the nearest frame, gone or not. When the date names its frames (``captures``, sent only for
@@ -329,7 +340,8 @@ def live_timeline_date(entry: dict[str, Any], latitude: float, longitude: float)
 
 
 def reference_documents_near(latitude: float, longitude: float) -> LocationContextEnvelope:
-    """The Wikipedia articles and Wikidata entities REData places near a point.
+    """
+    The Wikipedia articles and Wikidata entities REData places near a point.
 
     Args:
         latitude: WGS-84 latitude.
@@ -354,7 +366,8 @@ def reference_documents_near(latitude: float, longitude: float) -> LocationConte
 
 
 def historical_features_near(latitude: float, longitude: float) -> LocationContextEnvelope:
-    """Every mapped historical feature REData has near a point, with its geometry and validity years.
+    """
+    Every mapped historical feature REData has near a point, with its geometry and validity years.
 
     Args:
         latitude: WGS-84 latitude.

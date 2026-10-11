@@ -1,4 +1,5 @@
-"""Great-circle distance, in one place.
+"""
+Great-circle distance, in one place.
 They were verified to agree exactly (0.00m spread over short, long, and antimeridian-crossing pairs) before being pointed here, so this is a consolidation and not a behaviour change."""
 
 from __future__ import annotations
@@ -10,7 +11,8 @@ EARTH_RADIUS_METERS = 6_371_000.0
 
 
 def haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Great-circle distance between two WGS-84 points, in metres.
+    """
+    Great-circle distance between two WGS-84 points, in metres.
     Handles the antimeridian without special-casing: the formula works on the *difference* between longitudes through a trig function, so 179.99 and -179.99 come out 2.2km apart rather than most of the way round the planet.
 
     Args:
@@ -29,7 +31,8 @@ def haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> floa
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Great-circle distance in kilometres.
+    """
+    Great-circle distance in kilometres.
 
     Args:
         lat1: First point's latitude in degrees.

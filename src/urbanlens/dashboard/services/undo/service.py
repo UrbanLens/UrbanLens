@@ -1,4 +1,5 @@
-"""Stash/restore for the generic undo framework.
+"""
+Stash/restore for the generic undo framework.
 Mutations (a pin move, a label add, an album membership change) stash a before/after payload instead of a deleted-row snapshot."""
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ class UndoExpiredError(Exception):
 
 
 class UndoAlreadyRestoredError(UndoExpiredError):
-    """Raised when an UndoAction was already restored by another request.
+    """
+    Raised when an UndoAction was already restored by another request.
     Subclasses :class:`UndoExpiredError` so the existing callers - which all answer "this undo is no longer available" - keep working unchanged, while a caller that wants to tell the two apart still can."""
 
 
@@ -65,7 +67,8 @@ def _truncate_repr(text: str) -> str:
 
 
 def discard_redo_stack(profile: Profile) -> int:
-    """Drop every undone entry for ``profile`` (the history has forked).
+    """
+    Drop every undone entry for ``profile`` (the history has forked).
 
     Args:
         profile: The profile whose redo stack should be cleared.
@@ -80,7 +83,8 @@ def discard_redo_stack(profile: Profile) -> int:
 
 
 def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profile) -> UndoAction | None:
-    """Serialize ``instances`` and index them for a profile's undo history.
+    """
+    Serialize ``instances`` and index them for a profile's undo history.
 
     Args:
         model_label: Registry key of the handler to use (e.g. ``"pin"``).
@@ -106,7 +110,8 @@ def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profil
 
 
 def stash_mutation(model_label: str, profile: Profile, *, payload: dict[str, Any], description: str) -> UndoAction | None:
-    """Record a reversible change for a profile's undo history.
+    """
+    Record a reversible change for a profile's undo history.
 
     Args:
         model_label: Registry key of the mutation handler to use.
@@ -130,7 +135,8 @@ def stash_mutation(model_label: str, profile: Profile, *, payload: dict[str, Any
 
 
 def _lock(undo_action: UndoAction) -> UndoAction:
-    """Lock ``undo_action``'s row for the duration of the current transaction.
+    """
+    Lock ``undo_action``'s row for the duration of the current transaction.
 
     Returns:
         The locked row.
@@ -145,7 +151,8 @@ def _lock(undo_action: UndoAction) -> UndoAction:
 
 
 def restore_undo_action(undo_action: UndoAction) -> list[Any]:
-    """Undo ``undo_action``: recreate a delete, or invert a mutation.
+    """
+    Undo ``undo_action``: recreate a delete, or invert a mutation.
     The entry is stamped with ``undone_at`` rather than deleted, so it can be redone.
 
     Args:
@@ -183,7 +190,8 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
 
 
 def redo_undo_action(undo_action: UndoAction) -> None:
-    """Re-apply an entry that was previously undone.
+    """
+    Re-apply an entry that was previously undone.
 
     Args:
         undo_action: The entry to redo.
@@ -224,7 +232,8 @@ def peek_redo(profile: Profile) -> UndoAction | None:
 
 
 def stack_state(profile: Profile) -> dict[str, Any]:
-    """JSON-safe snapshot of whether undo/redo are currently possible.
+    """
+    JSON-safe snapshot of whether undo/redo are currently possible.
 
     Args:
         profile: The profile whose stacks to inspect.
@@ -245,7 +254,8 @@ def stack_state(profile: Profile) -> dict[str, Any]:
 
 
 def undo_latest(profile: Profile) -> list[Any]:
-    """Undo the newest entry on ``profile``'s stack.
+    """
+    Undo the newest entry on ``profile``'s stack.
 
     Raises:
         NothingToUndoError: The undo stack is empty.
@@ -258,7 +268,8 @@ def undo_latest(profile: Profile) -> list[Any]:
 
 
 def redo_latest(profile: Profile) -> None:
-    """Redo the most recently undone entry on ``profile``'s stack.
+    """
+    Redo the most recently undone entry on ``profile``'s stack.
 
     Raises:
         NothingToUndoError: The redo stack is empty.
@@ -271,7 +282,8 @@ def redo_latest(profile: Profile) -> None:
 
 
 def clear_undo_history(profile: Profile) -> int:
-    """Delete every undo entry for ``profile``.
+    """
+    Delete every undo entry for ``profile``.
 
     Args:
         profile: The profile whose undo history should be cleared.

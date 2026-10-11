@@ -347,7 +347,8 @@ class CustomLayerShareToWikiTests(TestCase):
         self.assertEqual(trigger["showToast"]["level"], "success")
 
     def test_share_toast_is_identical_whether_or_not_the_name_already_existed(self) -> None:
-        """The toast must not let a caller learn, from its wording alone,
+        """
+        The toast must not let a caller learn, from its wording alone,
         whether a same-named layer was already on the wiki - that would be a
         name-existence oracle once viewer concealment is live."""
         layer = CustomLayer.objects.create(name="Tunnels", parent_pin=self.pin, profile=self.profile)

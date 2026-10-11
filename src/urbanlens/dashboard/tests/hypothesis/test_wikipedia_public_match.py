@@ -38,7 +38,8 @@ def _no_address_lookup():
 
 
 class PrivatePinNameNeverDrivesTheSharedLookupTests(TestCase):
-    """Exploit: a pin's private name steering a Location-wide lookup leaks it to everyone at the place.
+    """
+    Exploit: a pin's private name steering a Location-wide lookup leaks it to everyone at the place.
 
     A nearby article titled like the private name would be matched on that name alone, cached for the
     whole Location, and surface as the community wiki's name; the name itself would sit in the shared

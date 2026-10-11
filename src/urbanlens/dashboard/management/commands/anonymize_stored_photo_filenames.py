@@ -1,4 +1,5 @@
-"""One-off backfill: rename already-stored Image files to opaque names.
+"""
+One-off backfill: rename already-stored Image files to opaque names.
 
 Uploads stop leaking their filename into the served URL from the commit that added
 ``Image.original_filename``/``anonymized_media_stem`` (new uploads are named ``<year>-<random
@@ -30,7 +31,8 @@ if TYPE_CHECKING:
 
 
 def _copy_stored_file(storage: Storage, old_name: str, new_name: str) -> str:
-    """Copy one stored file to *new_name* within the same storage backend, leaving the original in place.
+    """
+    Copy one stored file to *new_name* within the same storage backend, leaving the original in place.
 
     A real filesystem copy when the backend exposes local paths (true for this project's ``FileSystemStorage``),
     falling back to a streamed save for any backend that doesn't. The caller repoints the rows and only then removes
@@ -78,7 +80,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Done. {verb} {renamed_originals} original file(s), {renamed_thumbs} thumbnail(s).")
 
     def _rename_originals(self, *, dry_run: bool, limit: int | None) -> int:
-        """Anonymize every distinct, not-yet-processed ``Image.image`` name.
+        """
+        Anonymize every distinct, not-yet-processed ``Image.image`` name.
 
         ``original_filename=""`` is the idempotency gate: every row starts there (the field is new), and
         this is the only writer of it, so a second run of this command only touches whatever a first run
@@ -120,7 +123,8 @@ class Command(BaseCommand):
             return None
 
     def _rename(self, storage: Storage, field_name: str, old_name: str, new_name: str, **extra: Any) -> bool:
-        """Rename one stored file and repoint every row naming it, without a moment where a row names a missing file.
+        """
+        Rename one stored file and repoint every row naming it, without a moment where a row names a missing file.
 
         Copies first, repoints the rows in one transaction, and only then removes the original: a failure before the
         commit leaves the rows on the original file, one after it leaves them on the copy, and either way the worst
@@ -165,7 +169,8 @@ class Command(BaseCommand):
         return True
 
     def _rename_derived(self, field_name: str, suffix: str, *, dry_run: bool, limit: int | None) -> int:
-        """Anonymize every distinct derived-file name (currently just ``thumbnail``).
+        """
+        Anonymize every distinct derived-file name (currently just ``thumbnail``).
 
         Requires :meth:`_rename_originals` to have run first: a row whose ``image`` is still unanonymized is
         skipped rather than paired to a name this command is about to replace anyway.

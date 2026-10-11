@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 
 def find_conflicting_label(*, profile: Profile, name: str, kind: str, exclude_pk: int | None = None) -> Label | None:
-    """Return the label *name* would collide with, or None.
+    """
+    Return the label *name* would collide with, or None.
 
     Args:
         profile: The owner the new/edited label belongs to.
@@ -33,7 +34,8 @@ def find_conflicting_label(*, profile: Profile, name: str, kind: str, exclude_pk
 
 
 def label_conflict_message(conflict: Label, *, singular_title: str) -> str:
-    """Phrase a collision for the user, distinguishing the two cases.
+    """
+    Phrase a collision for the user, distinguishing the two cases.
 
     Args:
         conflict: The label returned by :func:`find_conflicting_label`.

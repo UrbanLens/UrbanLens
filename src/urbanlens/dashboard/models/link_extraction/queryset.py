@@ -17,7 +17,8 @@ class LinkExtractionQuerySet(abstract.DashboardQuerySet["LinkExtraction"]):
     """Query helpers for :class:`~urbanlens.dashboard.models.link_extraction.model.LinkExtraction`."""
 
     def for_profile(self, profile: Profile) -> Self:
-        """The given profile's extraction runs, newest first, ready for the review page.
+        """
+        The given profile's extraction runs, newest first, ready for the review page.
 
         Args:
             profile: The requesting user.
@@ -28,7 +29,8 @@ class LinkExtractionQuerySet(abstract.DashboardQuerySet["LinkExtraction"]):
         return self.filter(profile=profile).select_related("pin", "pin__location").order_by("-created")
 
     def started_today(self, profile: Profile) -> Self:
-        """Runs the profile started since local midnight - the daily-limit window.
+        """
+        Runs the profile started since local midnight - the daily-limit window.
 
         Args:
             profile: The requesting user.

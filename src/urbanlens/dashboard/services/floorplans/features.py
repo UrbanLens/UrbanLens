@@ -43,7 +43,8 @@ class PlanProjection:
         ]
 
     def local_bounds(self, bbox: tuple[float, float, float, float]) -> LocalBounds:
-        """A WGS-84 viewport as the plan-local rectangle it covers.
+        """
+        A WGS-84 viewport as the plan-local rectangle it covers.
 
         The projection is linear in each axis, so the rectangle is exact, and an item overlaps the viewport
         exactly when its local bounds overlap this.
@@ -91,7 +92,8 @@ def _segment_extent(walls: QuerySet) -> QuerySet:
 
 
 def ground_level(floorplan: Floorplan) -> int | None:
-    """The storey a caller that names none is shown: level 0, else the one nearest it.
+    """
+    The storey a caller that names none is shown: level 0, else the one nearest it.
 
     Args:
         floorplan: The plan version.
@@ -112,7 +114,8 @@ def _projection(floorplan: Floorplan) -> PlanProjection | None:
 
 
 def _opening_state(opening: FloorplanOpening) -> str:
-    """Whether this opening is presently secured, as one word.
+    """
+    Whether this opening is presently secured, as one word.
     A door may carry several locks, and the useful answer is about the door rather than about any one of them: a padlock on and a deadbolt off still means the door does not open.
 
     Args:
@@ -137,7 +140,8 @@ def feature_collection(
     item_types: tuple[str, ...] = ITEM_TYPES,
     limit: int = MAX_FEATURES,
 ) -> dict[str, Any]:
-    """Assemble one plan's drawable items as a GeoJSON FeatureCollection.
+    """
+    Assemble one plan's drawable items as a GeoJSON FeatureCollection.
 
     Args:
         floorplan: The plan version to read.
@@ -285,7 +289,8 @@ def feature_collection(
 
 
 def bounds_of(floorplan: Floorplan) -> list[float] | None:
-    """The plan's overall extent, so a client can decide whether to draw it at all.
+    """
+    The plan's overall extent, so a client can decide whether to draw it at all.
 
     Args:
         floorplan: The plan version.

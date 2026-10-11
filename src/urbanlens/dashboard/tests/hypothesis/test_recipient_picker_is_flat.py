@@ -1,4 +1,5 @@
-"""The recipient picker must cost the same whoever the search turns up.
+"""
+The recipient picker must cost the same whoever the search turns up.
 
 ``RecipientSearchView`` asked ``can_direct_message`` and ``can_view_profile``
 once per candidate, for up to ``RECIPIENT_SEARCH_LIMIT * 4`` candidates, on
@@ -164,7 +165,8 @@ class MessageablePksAgreementTests(TestCase):
 
 
 class PickerQueryScalingMixin:
-    """The pickers' cost must not track how many people match the substring.
+    """
+    The pickers' cost must not track how many people match the substring.
 
     Both pickers run the identical comprehension over the identical queryset -
     the group one says so in its own comment - so a fix to one and not the
@@ -188,7 +190,8 @@ class PickerQueryScalingMixin:
             baker.make(Pin, profile=self.me, location=location)
 
     def _seed(self, count: int, *, offset: int) -> None:
-        """Candidates whose settings force the expensive branch of both gates.
+        """
+        Candidates whose settings force the expensive branch of both gates.
 
         Each shares a place with the viewer, so both gates *pass* - a candidate
         the picker refuses renders nothing, and a body that does not grow means

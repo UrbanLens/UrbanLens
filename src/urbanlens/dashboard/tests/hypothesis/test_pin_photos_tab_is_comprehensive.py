@@ -1,4 +1,5 @@
-"""The Private Pin page's Photos tab lists every photo the pin has: the user's own, filed in an album or not,
+"""
+The Private Pin page's Photos tab lists every photo the pin has: the user's own, filed in an album or not,
 and the public-source photos the Media panel shows."""
 
 from __future__ import annotations

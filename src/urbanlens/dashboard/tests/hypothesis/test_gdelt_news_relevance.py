@@ -1,4 +1,5 @@
-"""The News panel asks GDELT about the place by its real names and shows only articles about it.
+"""
+The News panel asks GDELT about the place by its real names and shows only articles about it.
 
 Reproduces the staging report on the Hudson River State Hospital pin: the location's official name was
 the service road it stands on ("Courtyard Drive"), the query was that street name alone, and GDELT's

@@ -1,4 +1,5 @@
-"""Tests for the site admin statistics page.
+"""
+Tests for the site admin statistics page.
 
 Covers:
 - _monthly_series() label count, ordering, and accuracy
@@ -297,7 +298,8 @@ class SiteAdminStatsViewContextTests(TestCase):
 
 
 class SiteAdminHomeViewTests(TestCase):
-    """The admin homepage renders without waiting on infra/git I/O.
+    """
+    The admin homepage renders without waiting on infra/git I/O.
 
     Service health (Postgres/Dragonfly/Celery/nginx pings) and the git update check (a git fetch) are real I/O -
     SiteAdminHomeStatusPartialView fetches them lazily via HTMX instead of SiteAdminHomeView blocking on them."""

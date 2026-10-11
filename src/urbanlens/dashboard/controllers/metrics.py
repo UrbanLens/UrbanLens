@@ -1,4 +1,5 @@
-"""The Prometheus scrape endpoint.
+"""
+The Prometheus scrape endpoint.
 
 Reached only when ``UL_METRICS_ENABLED`` is set: the route is registered conditionally in the
 project urlconf, so a deployment that has not opted in has no ``/metrics`` to find rather than a
@@ -38,7 +39,8 @@ _DEFAULT_REGISTRY_EXTRAS: list[bool] = []
 
 
 def _build_registry() -> prometheus_client.CollectorRegistry:
-    """Return the registry to serialize for this scrape.
+    """
+    Return the registry to serialize for this scrape.
 
     ``prometheus_client``'s default registry lives in process memory, so serving that registry would
     report one worker's counters as though they were the service's - an endpoint that answers, returns
@@ -67,7 +69,8 @@ def _build_registry() -> prometheus_client.CollectorRegistry:
 
 
 def _register_scrape_time_collectors(registry: prometheus_client.CollectorRegistry) -> None:
-    """Attach collectors that compute their values during the scrape.
+    """
+    Attach collectors that compute their values during the scrape.
 
     Args:
         registry: The registry this scrape will serialize.
@@ -78,7 +81,8 @@ def _register_scrape_time_collectors(registry: prometheus_client.CollectorRegist
 
 
 class MetricsController(View):
-    """Serve the Prometheus text exposition format to an authorized scraper.
+    """
+    Serve the Prometheus text exposition format to an authorized scraper.
 
     A plain ``View`` rather than a DRF viewset: this response has no negotiation, no serializer and no
     session, and DRF's authentication would only add a code path that could grant access some way other
@@ -89,7 +93,8 @@ class MetricsController(View):
     http_method_names = ["get", "head"]
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Return the current metrics, or refuse.
+        """
+        Return the current metrics, or refuse.
 
         Args:
             request: The incoming scrape request.
@@ -116,7 +121,8 @@ class MetricsController(View):
 
     @staticmethod
     def _network_allowed(request: HttpRequest) -> bool:
-        """Check the request's source address against the configured CIDRs.
+        """
+        Check the request's source address against the configured CIDRs.
 
         Args:
             request: The incoming scrape request.
@@ -129,7 +135,8 @@ class MetricsController(View):
 
     @staticmethod
     def _token_valid(request: HttpRequest) -> bool:
-        """Check the request's bearer token against the configured one.
+        """
+        Check the request's bearer token against the configured one.
 
         Args:
             request: The incoming scrape request.

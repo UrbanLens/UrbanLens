@@ -22,7 +22,8 @@ if TYPE_CHECKING:
 
 
 def get_preference(profile: Profile) -> SpotGuessrPreference:
-    """The profile's SpotGuessr preferences, creating the row on first access.
+    """
+    The profile's SpotGuessr preferences, creating the row on first access.
 
     Args:
         profile: The player.
@@ -35,7 +36,8 @@ def get_preference(profile: Profile) -> SpotGuessrPreference:
 
 
 def remember_last_config(profile: Profile, config: GameConfig) -> SpotGuessrPreference:
-    """Snapshot the settings a player just started a game with, as their new defaults.
+    """
+    Snapshot the settings a player just started a game with, as their new defaults.
     Called on every start, from every client, so returning to the game doesn't reset the difficulty slider and toggles every time.
 
     Args:
@@ -51,7 +53,8 @@ def remember_last_config(profile: Profile, config: GameConfig) -> SpotGuessrPref
 
 
 def most_recent_rating(profile: Profile) -> PlayerModeRating | None:
-    """The rating for whichever mode this player last played, or None if they never have.
+    """
+    The rating for whichever mode this player last played, or None if they never have.
 
     Args:
         profile: The player.
@@ -62,7 +65,8 @@ def most_recent_rating(profile: Profile) -> PlayerModeRating | None:
 
 
 def participated_sessions(profile: Profile, *, status: str | None = None) -> QuerySet[GameSession]:
-    """``profile``'s session history, annotated for list/detail display.
+    """
+    ``profile``'s session history, annotated for list/detail display.
 
     Every session they still take part in, and every one they left or were removed from once it was under way;
     ``viewer_departure`` says which of those (blank while they take part).
@@ -85,7 +89,8 @@ def participated_sessions(profile: Profile, *, status: str | None = None) -> Que
 
 
 def active_solo_session_id(profile: Profile) -> int | None:
-    """The id of the profile's most recent still-playable *solo* session, if any.
+    """
+    The id of the profile's most recent still-playable *solo* session, if any.
 
     Args:
         profile: The player.

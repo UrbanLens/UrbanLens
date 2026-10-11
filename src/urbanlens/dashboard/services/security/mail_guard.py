@@ -36,7 +36,8 @@ _REFUSED = (550, b"5.1.1 Refused before the relay: no mailbox can exist at this 
 
 
 def is_undeliverable_address(address: str) -> bool:
-    """Whether no one can receive mail at ``address``, so handing it to the relay can only bounce.
+    """
+    Whether no one can receive mail at ``address``, so handing it to the relay can only bounce.
 
     True for a reserved domain, and for a Gmail address whose mailbox name holds a character Gmail never
     issues (anything but letters, digits and dots, e.g. ``someone-else@gmail.com``). The integration suite
@@ -67,7 +68,8 @@ def is_impossible_gmail_address(address: str) -> bool:
 
 
 class RecipientGuardEmailBackend(BaseEmailBackend):
-    """Drops undeliverable recipients from every message, then delivers the rest through ``EMAIL_DELIVERY_BACKEND``.
+    """
+    Drops undeliverable recipients from every message, then delivers the rest through ``EMAIL_DELIVERY_BACKEND``.
 
     A message left with no recipient is not sent. Like an SMTP relay refusing every recipient, that raises
     ``SMTPRecipientsRefused`` unless ``fail_silently``, so callers that already handle a refused address
@@ -88,7 +90,8 @@ class RecipientGuardEmailBackend(BaseEmailBackend):
         self.delivery.close()
 
     def send_messages(self, email_messages: Sequence[EmailMessage]) -> int:
-        """Send what can be delivered.
+        """
+        Send what can be delivered.
 
         Args:
             email_messages: The messages; undeliverable recipients are removed from each in place.

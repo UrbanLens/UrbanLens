@@ -21,7 +21,8 @@ DEFAULT_LONGITUDE_KEYS: tuple[str, ...] = ("longitude", "lng", "lon", "long")
 
 
 def normalize_header_key(key: Any) -> str:
-    r"""Normalize a CSV/attribute header for case-insensitive lookup.
+    r"""
+    Normalize a CSV/attribute header for case-insensitive lookup.
     Excel's "CSV UTF-8" export prefixes a BOM that ``csv.DictReader`` leaves glued to the first column name - without stripping it, a file whose first header is ``latitude`` is seen as ``\\ufefflatitude`` and fails coordinate matching.
 
     Args:
@@ -39,7 +40,8 @@ def pick_name_and_description(
     desc_keys: tuple[str, ...] = DEFAULT_DESC_KEYS,
     fallback_name: str = "Unnamed",
 ) -> tuple[str, str]:
-    """Guess a pin name and description from an arbitrary attribute mapping.
+    """
+    Guess a pin name and description from an arbitrary attribute mapping.
 
     Args:
         properties: Attribute bag to inspect (GeoJSON properties, a Shapefile attribute row, or flattened OSM tags).
@@ -72,7 +74,8 @@ def pick_latlon(
     lat_keys: tuple[str, ...] = DEFAULT_LATITUDE_KEYS,
     lng_keys: tuple[str, ...] = DEFAULT_LONGITUDE_KEYS,
 ) -> tuple[float, float] | None:
-    """Guess a (latitude, longitude) pair from an arbitrary attribute mapping.
+    """
+    Guess a (latitude, longitude) pair from an arbitrary attribute mapping.
 
     Args:
         row: Attribute bag to inspect, e.g. a CSV ``DictReader`` row.

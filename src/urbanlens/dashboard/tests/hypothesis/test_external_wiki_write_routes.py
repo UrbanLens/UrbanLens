@@ -1,4 +1,5 @@
-"""External API community wiki writes: fields, names, links, article, comments and stat votes (P29).
+"""
+External API community wiki writes: fields, names, links, article, comments and stat votes (P29).
 
 The owner fixture has pinned the place, so it may see and edit its wiki; the stranger has not, and is answered the
 same 404 as for a place with no wiki. Each asserts the viewer's write lands, the stranger changes nothing, anonymous

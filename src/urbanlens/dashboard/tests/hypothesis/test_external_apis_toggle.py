@@ -53,7 +53,8 @@ def test_get_gateway_allows_when_profile_fully_enabled() -> None:
 
 @pytest.mark.django_db
 def test_get_gateway_returns_none_when_profile_lacks_ai_feature() -> None:
-    """A profile with both preferences on, but no ``SiteFeature.AI`` grant (the default for a fresh account with no subscription), gets no gateway.
+    """
+    A profile with both preferences on, but no ``SiteFeature.AI`` grant (the default for a fresh account with no subscription), gets no gateway.
 
     A throwaway user is created first to absorb the "first user in a fresh test database becomes bootstrap site
     admin" promotion (which would otherwise grant every ``SiteFeature`` to the profile under test)."""
@@ -108,7 +109,8 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
 
 @pytest.mark.django_db
 def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
-    """Most panels (pure HTTP + JSON, no CPU-heavy parsing) default to the
+    """
+    Most panels (pure HTTP + JSON, no CPU-heavy parsing) default to the
     high-concurrency thread-pool queue - see PanelSource.queue and
     docker-compose.yml's celery-worker-panels service."""
     from model_bakery import baker
@@ -123,7 +125,8 @@ def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
 
 @pytest.mark.django_db
 def test_schedule_panel_fetch_degrades_quietly_when_broker_unreachable() -> None:
-    """A dead Celery broker must not 500 the panel endpoint - schedule_panel_fetch
+    """
+    A dead Celery broker must not 500 the panel endpoint - schedule_panel_fetch
     reports "give up quietly" (False -> 204) instead of letting the enqueue
     error propagate into the request."""
     from model_bakery import baker
@@ -139,7 +142,8 @@ def test_schedule_panel_fetch_degrades_quietly_when_broker_unreachable() -> None
 
 @pytest.mark.django_db
 def test_schedule_panel_fetch_releases_flight_marker_on_broker_failure() -> None:
-    """A failed enqueue must release the single-flight marker so the next poll
+    """
+    A failed enqueue must release the single-flight marker so the next poll
     retries the dispatch immediately, rather than waiting out FLIGHT_TTL_SECONDS
     behind a task that was never queued."""
     from model_bakery import baker
@@ -158,7 +162,8 @@ def test_schedule_panel_fetch_releases_flight_marker_on_broker_failure() -> None
 
 @pytest.mark.django_db
 def test_cpu_heavy_panels_stay_on_the_prefork_queue() -> None:
-    """BoundaryPanelSource and OvertureBuildingAttributesPanelSource do real CPU-bound
+    """
+    BoundaryPanelSource and OvertureBuildingAttributesPanelSource do real CPU-bound
     work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running
     concurrently on the thread-pool queue would cause enough GIL contention to slow
     down every other panel sharing it, so they opt out via PanelSource.queue.
@@ -194,7 +199,8 @@ def test_weather_forecast_blocked_when_external_apis_disabled() -> None:
 
 @pytest.mark.django_db
 def test_streetview_check_blocked_when_external_apis_disabled() -> None:
-    """Regression: the map's right-click Street View probe called Google (with
+    """
+    Regression: the map's right-click Street View probe called Google (with
     the clicked coordinates) even for profiles that opted out of external
     lookups - it must short-circuit before ever building the API request."""
     import json
@@ -214,7 +220,8 @@ def test_streetview_check_blocked_when_external_apis_disabled() -> None:
 
 @pytest.mark.django_db
 def test_resolve_place_blocked_when_external_apis_disabled() -> None:
-    """Regression: selecting a Google Places autocomplete suggestion still hit
+    """
+    Regression: selecting a Google Places autocomplete suggestion still hit
     the billable Places Details API for a profile that opted out of external
     lookups, even though the sibling autocomplete_places endpoint already
     honors the toggle."""

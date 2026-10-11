@@ -33,7 +33,8 @@ WIKI_DATE_FIELDS = frozenset({"date_abandoned", "date_last_active"})
 
 
 class WikiEditValidationError(ValueError):
-    """A submitted wiki edit was rejected.
+    """
+    A submitted wiki edit was rejected.
 
     Attributes:
         message: Human-readable explanation, safe to return to the caller.
@@ -48,7 +49,8 @@ class WikiEditValidationError(ValueError):
 
 
 class WikiEditConflictError(ValueError):
-    """A field the edit would change was written by someone else after the editor loaded it.
+    """
+    A field the edit would change was written by someone else after the editor loaded it.
 
     Attributes:
         fields: The conflicting field names.
@@ -60,7 +62,8 @@ class WikiEditConflictError(ValueError):
 
 
 def wiki_revision_marker(wiki: Wiki) -> int:
-    """The newest field revision on *wiki*, for an editor to hand back as ``base_revision_id``.
+    """
+    The newest field revision on *wiki*, for an editor to hand back as ``base_revision_id``.
 
     Args:
         wiki: The wiki being edited.
@@ -74,7 +77,8 @@ def wiki_revision_marker(wiki: Wiki) -> int:
 
 
 def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
-    """Persist only the wiki columns named in *changed_fields*.
+    """
+    Persist only the wiki columns named in *changed_fields*.
 
     Args:
         wiki: The wiki to save.
@@ -84,7 +88,8 @@ def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
 
 
 def _is_unchanged(new_val: object, shown_val: object) -> bool:
-    """Whether a normalised value is what the submitter was already looking at.
+    """
+    Whether a normalised value is what the submitter was already looking at.
 
     Args:
         new_val: The value about to be written.
@@ -96,7 +101,8 @@ def _is_unchanged(new_val: object, shown_val: object) -> bool:
 
 
 def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, baseline: Wiki | None = None, base_revision_id: int | None = None) -> WikiEdit | None:
-    """Apply a community edit to *wiki* and record it in the audit trail.
+    """
+    Apply a community edit to *wiki* and record it in the audit trail.
     Only keys in :data:`WIKI_EDITABLE_FIELDS` are considered; anything else in *changes* is ignored.
 
     The row is locked for the write, and the edit is refused rather than applied over a newer value:
@@ -204,7 +210,8 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
 
 
 def revert_edit_fields(wiki: Wiki, target_edit: WikiEdit) -> tuple[dict[str, dict], list[str]]:
-    """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
+    """
+    Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
 
     Args:
         wiki: The wiki being reverted.
@@ -242,7 +249,8 @@ def revert_edit_fields(wiki: Wiki, target_edit: WikiEdit) -> tuple[dict[str, dic
 
 
 def revert_wiki_edit(wiki: Wiki, profile: Profile, target_edit: WikiEdit) -> tuple[WikiEdit | None, list[str]]:
-    """Undo *target_edit*, recording the reversal as a new :class:`WikiEdit`.
+    """
+    Undo *target_edit*, recording the reversal as a new :class:`WikiEdit`.
 
     Args:
         wiki: The wiki being reverted.
@@ -291,7 +299,8 @@ def revert_wiki_edit(wiki: Wiki, profile: Profile, target_edit: WikiEdit) -> tup
 
 
 def _restore_reputation_for(edit_ids: list[int]) -> None:
-    """Undo whichever reputation adjustment a now-undone revert had applied.
+    """
+    Undo whichever reputation adjustment a now-undone revert had applied.
     Called here rather than left to the reputation signal, because the line above is a queryset ``update()`` and emits no ``post_save`` - so the handler watching for the flag to clear never sees it.
 
     Args:

@@ -1,4 +1,5 @@
-"""The external label bulk edit caps the labels but not the parents.
+"""
+The external label bulk edit caps the labels but not the parents.
 
 N21 H33, and the external twin of H26 - which was capped at the internal door
 in an earlier batch, leaving this one open. `LabelBulkEditSerializer` gives
@@ -67,7 +68,8 @@ class TheSettingExistsTests(_BulkEditCase):
 
 @override_settings(**{CEILING_SETTING: 3})
 class TheParentListsAreBoundedTests(_BulkEditCase):
-    """The uncapped half of a product whose other half was already capped.
+    """
+    The uncapped half of a product whose other half was already capped.
 
     Every list here names **real, resolvable** labels. The view already refuses
     a uuid it cannot resolve, so a list of invented uuids would be refused for
@@ -129,7 +131,8 @@ class OrdinaryEditsStillWorkTests(_BulkEditCase):
 
 @override_settings(**{CEILING_SETTING: 3})
 class EverySharedCeilingMovesTogetherTests(_BulkEditCase):
-    """Raising the ceiling must not apply to one of three endpoints.
+    """
+    Raising the ceiling must not apply to one of three endpoints.
 
     Bulk delete and bulk convert carried the same literal 500 that bulk edit
     did, so with the rule moved into settings they would have kept a ceiling

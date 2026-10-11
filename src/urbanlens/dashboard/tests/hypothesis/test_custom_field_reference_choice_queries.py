@@ -1,4 +1,5 @@
-"""A pin reference field's choices cost the same queries for 3 pins as for 12.
+"""
+A pin reference field's choices cost the same queries for 3 pins as for 12.
 
 An unnamed pin is labelled by its location's wiki, read once per pin: on dev, a pin's Custom Fields card with a pin
 reference field ran 318 queries, 310 of them that read.

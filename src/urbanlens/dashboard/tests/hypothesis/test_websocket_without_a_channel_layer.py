@@ -1,4 +1,5 @@
-"""What a socket does on a deployment that has no channel layer at all.
+"""
+What a socket does on a deployment that has no channel layer at all.
 
 ``settings/base.py`` only defines ``CHANNEL_LAYERS`` when a Dragonfly/Redis URL is configured, so an
 install without one - a self-hoster following the smallest path, or an environment whose
@@ -46,7 +47,8 @@ class SocketsWithoutAChannelLayerTests(TransactionTestCase):
         )
 
     def _attempt(self) -> tuple[bool, int | None]:
-        """Try one handshake, start to finish.
+        """
+        Try one handshake, start to finish.
 
         Connect and disconnect share one event loop: each ``async_to_sync`` call makes its own, and
         cancelling an application from a loop that did not start it raises rather than tears down.

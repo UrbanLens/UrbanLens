@@ -1,4 +1,5 @@
-"""External-API access to a pin's own long-form article and its revision history.
+"""
+External-API access to a pin's own long-form article and its revision history.
 
 A pin can carry an article exactly as a community wiki can - same ``Article`` row, same Markdown
 pipeline, same append-only ``ArticleRevision`` history - but the two are completely different kinds
@@ -48,7 +49,8 @@ if TYPE_CHECKING:
 
 
 class OwnedPinRequiredMixin(OwnedPinMixin):
-    """``OwnedPinMixin`` with the "...or 404" step folded in.
+    """
+    ``OwnedPinMixin`` with the "...or 404" step folded in.
 
     It lives here because that module was not in this change's scope.
 
@@ -57,7 +59,8 @@ class OwnedPinRequiredMixin(OwnedPinMixin):
     """
 
     def get_owned_pin_or_404(self, request: Request, pin_slug: str) -> Pin:
-        """Resolve one of the caller's own pins, or raise the uniform 404.
+        """
+        Resolve one of the caller's own pins, or raise the uniform 404.
 
         Args:
             request: The authenticated request.
@@ -77,7 +80,8 @@ class OwnedPinRequiredMixin(OwnedPinMixin):
 
 
 class PinArticleApiView(OwnedPinRequiredMixin, ExternalApiView):
-    """Base for the pin-article endpoints: own-pin resolution plus article lookup.
+    """
+    Base for the pin-article endpoints: own-pin resolution plus article lookup.
 
     :meth:`pin_article` is the module's whole authorization story, and it is deliberately shaped as a
     *lookup* rather than a check that could answer 403
@@ -86,7 +90,8 @@ class PinArticleApiView(OwnedPinRequiredMixin, ExternalApiView):
     """
 
     def pin_article(self, request: Request, pin_slug: str) -> tuple[Pin, Article]:
-        """Resolve the caller's pin and the article on it, or 404.
+        """
+        Resolve the caller's pin and the article on it, or 404.
 
         Args:
             request: The authenticated request.
@@ -115,7 +120,8 @@ class PinArticleView(PinArticleApiView):
 
     @extend_schema(responses={200: ArticleDetailSerializer, 404: ErrorSerializer})
     def get(self, request: Request, pin_slug: str) -> Response:
-        """Return the pin's article, body included.
+        """
+        Return the pin's article, body included.
 
         Args:
             request: The authenticated request.
@@ -129,7 +135,8 @@ class PinArticleView(PinArticleApiView):
 
     @extend_schema(request=ArticleSaveSerializer, responses={200: ArticleDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def put(self, request: Request, pin_slug: str) -> Response:
-        """Save a new version of the pin's article, refusing to clobber a concurrent edit.
+        """
+        Save a new version of the pin's article, refusing to clobber a concurrent edit.
 
         Creates the article on first save - which is why this resolves the pin rather than the article, and
         is the escape hatch for the 404 GET returns on a pin that has never been written to.
@@ -178,7 +185,8 @@ class PinArticleRevisionsView(PaginatedListMixin, PinArticleApiView):
 
     @extend_schema(responses={200: ArticleRevisionSerializer(many=True), 404: ErrorSerializer})
     def get(self, request: Request, pin_slug: str) -> Response:
-        """Return one page of the article's revisions.
+        """
+        Return one page of the article's revisions.
 
         Args:
             request: The authenticated request.
@@ -205,7 +213,8 @@ class PinArticleRevisionDetailView(PinArticleApiView):
 
     @extend_schema(responses={200: ArticleRevisionDetailSerializer, 404: ErrorSerializer})
     def get(self, request: Request, pin_slug: str, revision_id: int) -> Response:
-        """Return one revision's content plus a diff against its predecessor.
+        """
+        Return one revision's content plus a diff against its predecessor.
 
         Args:
             request: The authenticated request.
@@ -248,7 +257,8 @@ class PinArticleRevisionRestoreView(PinArticleApiView):
 
     @extend_schema(request=None, responses={200: ArticleDetailSerializer, 404: ErrorSerializer})
     def post(self, request: Request, pin_slug: str, revision_id: int) -> Response:
-        """Restore one revision's content, appending it as a new revision.
+        """
+        Restore one revision's content, appending it as a new revision.
 
         History is append-only: nothing is deleted, the old content is written forward and tagged
         ``restored_from`` so the lineage stays visible.

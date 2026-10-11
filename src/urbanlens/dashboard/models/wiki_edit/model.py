@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class WikiEdit(abstract.DashboardModel):
-    """A single community edit applied to a Wiki's editable fields.
+    """
+    A single community edit applied to a Wiki's editable fields.
     Each edit stores the set of field changes as a JSON diff: {"name": {"from": "Old Name", "to": "New Name"}, ...} Reverts are implemented as new WikiEdit rows (so they appear in history) that carry the inverted diff, with ``reverted_by`` pointing at the edit being undone.
     """
 
@@ -82,7 +83,8 @@ class WikiEdit(abstract.DashboardModel):
         ]
 
     def display_changes(self) -> list[tuple[str, object, object]]:
-        """``(field, before, after)`` rows for the history list, with a boundary's revision ids shown as words.
+        """
+        ``(field, before, after)`` rows for the history list, with a boundary's revision ids shown as words.
 
         Returns:
             One row per changed field, in stored order.

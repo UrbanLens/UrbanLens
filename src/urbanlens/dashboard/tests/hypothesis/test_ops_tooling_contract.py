@@ -10,7 +10,8 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 
 
 def _infra_opslib_dir() -> Path | None:
-    """Locate the sibling ``infrastructure`` checkout's ``bin/opslib``.
+    """
+    Locate the sibling ``infrastructure`` checkout's ``bin/opslib``.
 
     Defaults to a directory named ``infrastructure`` next to this checkout's root (this host's actual layout:
     ``/projects/UrbanLens/{UrbanLens, infrastructure}``), overridable via ``UL_INFRA_DIR`` for any other.

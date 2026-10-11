@@ -28,7 +28,8 @@ if TYPE_CHECKING:
 
 
 class SiteSettings(abstract.FrontendDashboardModel):
-    """Singleton model for site-wide configurable settings.
+    """
+    Singleton model for site-wide configurable settings.
 
     Always access via ``SiteSettings.get_current()``; never instantiate directly.
     """
@@ -647,7 +648,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
 
     @property
     def name_source_priority_list(self) -> list[str]:
-        """The configured name-source priority as an ordered slug list.
+        """
+        The configured name-source priority as an ordered slug list.
 
         Returns:
             Provider slugs in descending priority; empty when unconfigured.
@@ -655,7 +657,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         return [slug for raw in self.default_name_source_priority.split(",") if (slug := raw.strip())]
 
     def get_effective_environment_type(self) -> EnvironmentTypes:
-        """Return the active environment type, honoring admin override when set.
+        """
+        Return the active environment type, honoring admin override when set.
         When ``environment_override`` is ``default``, the value comes from ``UL_ENVIRONMENT``, which startup has already required.
 
         Returns:
@@ -668,7 +671,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         return select_environment(None).env_type
 
     def get_effective_environment_label(self) -> str:
-        """Return a human-readable label for the active environment.
+        """
+        Return a human-readable label for the active environment.
 
         Returns:
             Display label such as ``Development`` or ``Production``.
@@ -679,7 +683,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         return env.name.replace("_", " ").title()
 
     def is_development_environment(self) -> bool:
-        """Return whether the site is running in development mode.
+        """
+        Return whether the site is running in development mode.
 
         Returns:
             True when the effective environment type is ``development`` or ``local``.
@@ -688,7 +693,8 @@ class SiteSettings(abstract.FrontendDashboardModel):
         return self.get_effective_environment_type() in {EnvironmentTypes.DEVELOPMENT, EnvironmentTypes.LOCAL}
 
     def show_dev_admin_features(self, user) -> bool:
-        """Return whether dev-only admin UI (e.g. the developer toolbar) should be visible to ``user``.
+        """
+        Return whether dev-only admin UI (e.g. the developer toolbar) should be visible to ``user``.
         Site admins see it whenever the effective environment is development or local.
 
         Args:

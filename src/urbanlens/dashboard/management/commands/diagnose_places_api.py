@@ -49,7 +49,8 @@ class Command(BaseCommand):
         )
 
     def _print_result(self, label: str, response: requests.Response) -> dict:
-        """Report a single API call's outcome via ``self.stdout``.
+        """
+        Report a single API call's outcome via ``self.stdout``.
 
         Args:
             label: Human-readable name of the test being reported.

@@ -1,4 +1,5 @@
-"""Tests for profile-related form validators and forms.
+"""
+Tests for profile-related form validators and forms.
 
 Pure-function tests use unittest.TestCase (no DB).
 ModelForm tests use HypothesisTestCase / django.test.TestCase (DB).

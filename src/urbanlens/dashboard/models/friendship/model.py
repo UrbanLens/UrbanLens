@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class Friendship(DashboardModel):
-    """One directional relationship row between two profiles.
+    """
+    One directional relationship row between two profiles.
 
     ``status`` is the relationship; mute columns are per-side notification
     preference and must stay separate from it. ``blocked_at`` is when the current
@@ -62,7 +63,8 @@ class Friendship(DashboardModel):
     objects = Manager()
 
     def save(self, *args, **kwargs) -> None:
-        """Save, keeping ``blocked_at`` in step with ``status``.
+        """
+        Save, keeping ``blocked_at`` in step with ``status``.
 
         A block that is already in place keeps its original time, so blocking back never moves the cutoff later.
         Whenever ``status`` is written, ``blocked_at`` is written with it, so a copy loaded before someone else's
@@ -85,7 +87,8 @@ class Friendship(DashboardModel):
         relationship_type: str = FriendshipType.FRIEND,
         message: str | None = None,
     ) -> Friendship | None:
-        """Create a friendship request.
+        """
+        Create a friendship request.
 
         Args:
             from_profile: Profile sending the request.
@@ -173,7 +176,8 @@ class Friendship(DashboardModel):
 
     @staticmethod
     def profile_at_max_friends(profile: Profile) -> bool:
-        """Whether ``profile`` already reached its max-friends limit.
+        """
+        Whether ``profile`` already reached its max-friends limit.
 
         Args:
             profile: Profile to check.
@@ -190,7 +194,8 @@ class Friendship(DashboardModel):
         return Friendship.objects.profile(profile).is_friend().count() >= max_friends
 
     def accept(self) -> bool:
-        """Accept the request; no-op when it is no longer pending, Community is off, or friends are maxed.
+        """
+        Accept the request; no-op when it is no longer pending, Community is off, or friends are maxed.
 
         Both profiles are locked, in primary-key order so two accepts sharing a profile cannot
         deadlock, and the request's status is re-read under the lock: the friend cap is a count
@@ -225,7 +230,8 @@ class Friendship(DashboardModel):
             return True
 
     def _set_status(self, status: str) -> None:
-        """Write one status transition; keeps mute columns and signals intact.
+        """
+        Write one status transition; keeps mute columns and signals intact.
 
         Args:
             status: The ``FriendshipStatus`` to move to.
@@ -248,7 +254,8 @@ class Friendship(DashboardModel):
         self._set_status(FriendshipStatus.REMOVED)
 
     def _mute_field_for(self, viewer: Profile | int) -> str:
-        """Mute column belonging to ``viewer``.
+        """
+        Mute column belonging to ``viewer``.
 
         Args:
             viewer: The profile whose own preference is being read or written,
@@ -270,7 +277,8 @@ class Friendship(DashboardModel):
         raise ValueError(f"Profile {viewer_id} is not part of friendship {self.pk}")
 
     def is_muted_by(self, viewer: Profile | int) -> bool:
-        """Whether ``viewer`` silenced notifications from the other side.
+        """
+        Whether ``viewer`` silenced notifications from the other side.
 
         Args:
             viewer: The profile whose own preference to read, or its pk.
@@ -284,7 +292,8 @@ class Friendship(DashboardModel):
         return bool(getattr(self, self._mute_field_for(viewer)))
 
     def mute(self, viewer: Profile | int) -> None:
-        """Silence notifications ``viewer`` would receive from the other side.
+        """
+        Silence notifications ``viewer`` would receive from the other side.
 
         Args:
             viewer: The profile doing the muting, or its pk.
@@ -295,7 +304,8 @@ class Friendship(DashboardModel):
         self._set_muted(viewer, muted=True)
 
     def unmute(self, viewer: Profile | int) -> None:
-        """Restore notifications ``viewer`` had silenced.
+        """
+        Restore notifications ``viewer`` had silenced.
 
         Args:
             viewer: The profile doing the unmuting, or its pk.

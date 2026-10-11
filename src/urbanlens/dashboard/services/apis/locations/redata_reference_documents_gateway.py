@@ -40,7 +40,8 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
         provider: str | list[str] | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Search archival/reference material by name.
+        """
+        Search archival/reference material by name.
 
         Args:
             query: Free-text search string - a clean name (optionally with a
@@ -77,7 +78,8 @@ class RedataReferenceDocumentsGateway(RedataLocationContextGateway):
         return self._get_envelope(_SEARCH_PATH, params)
 
     def near(self, latitude: float, longitude: float, *, radius_meters: float | None = None) -> LocationContextEnvelope:
-        """Encyclopaedic material placed near a coordinate - the sources with a real geosearch index (Wikipedia, Wikidata).
+        """
+        Encyclopaedic material placed near a coordinate - the sources with a real geosearch index (Wikipedia, Wikidata).
 
         Args:
             latitude: WGS-84 latitude.
@@ -106,7 +108,8 @@ class _RedataReferenceDocumentProvider(MediaProvider):
         return redata_configured()
 
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
-        """Yield this archive's matches for ``search_term``, via REData.
+        """
+        Yield this archive's matches for ``search_term``, via REData.
 
         Args:
             search_term: A clean, unquoted query built by
@@ -203,7 +206,8 @@ class LibraryOfCongressMediaProvider(_RedataReferenceDocumentProvider):
 
 @dataclass(slots=True, kw_only=True)
 class DigitalCommonwealthMediaProvider(_RedataReferenceDocumentProvider):
-    """Digital Commonwealth (Massachusetts statewide archives), via REData.
+    """
+    Digital Commonwealth (Massachusetts statewide archives), via REData.
     Unlike its three siblings, this provider never had a direct UrbanLens gateway in production - a raw ``DigitalCommonwealthGateway`` existed but nothing ever called it, so Massachusetts pins simply lacked the archive."""
 
     service_key: ClassVar[str] = "digital_commonwealth"
@@ -246,7 +250,8 @@ class InternetArchiveMediaProvider(_RedataReferenceDocumentProvider):
 
 @dataclass(slots=True, kw_only=True)
 class ChroniclingAmericaMediaProvider(_RedataReferenceDocumentProvider):
-    """Chronicling America historic newspapers (1794-1963), via REData.
+    """
+    Chronicling America historic newspapers (1794-1963), via REData.
     The Library of Congress's digitised-newspaper corpus, published separately from the general ``library_of_congress`` search so dated press coverage can be requested without photographs and maps drowning it out."""
 
     service_key: ClassVar[str] = "chronicling_america"

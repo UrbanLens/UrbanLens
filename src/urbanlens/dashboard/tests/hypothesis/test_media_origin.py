@@ -287,7 +287,8 @@ class MediaUrlTests(SimpleTestCase):
 
 
 class SettingsNamesAreRealTests(SimpleTestCase):
-    """The settings this module reads have to be ones that actually exist.
+    """
+    The settings this module reads have to be ones that actually exist.
 
     ``override_settings`` will happily *invent* a setting that production does not define, so a suite built
     entirely on overrides can pass while the real code path reads ``""`` forever."""
@@ -328,7 +329,8 @@ class SettingsNamesAreRealTests(SimpleTestCase):
 
 
 class MediaOriginStartupCheckTests(SimpleTestCase):
-    """``checks.check_media_origin_cookie_domain`` fails loudly on a dead config.
+    """
+    ``checks.check_media_origin_cookie_domain`` fails loudly on a dead config.
 
     A media origin that cannot issue its cookie is a total, silent media outage
     - the failure this check exists to convert into a startup error.

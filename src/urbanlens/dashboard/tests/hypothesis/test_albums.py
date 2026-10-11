@@ -1,4 +1,5 @@
-"""Tests for photo Albums: model scoping, membership/ordering services, and the
+"""
+Tests for photo Albums: model scoping, membership/ordering services, and the
 external-media add path's implied relevance vote."""
 
 from __future__ import annotations
@@ -268,7 +269,8 @@ class AlbumCoverTests(TestCase):
 
 
 class AlbumVisibilityTests(TestCase):
-    """Every read here must chain ``Image.visible_to`` - an album can't widen who sees a photo.
+    """
+    Every read here must chain ``Image.visible_to`` - an album can't widen who sees a photo.
 
     A stranger profile shares no friendship, trip, or wiki with the pin's owner, so ``visible_to`` denies them
     regardless of the default visibility settings (see ``ImageQuerySet._shared_within_reach_of``: filing a photo

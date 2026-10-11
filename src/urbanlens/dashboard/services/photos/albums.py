@@ -1,4 +1,5 @@
-"""Album membership and ordering for a pin's, wiki's, or Vault's photos.
+"""
+Album membership and ordering for a pin's, wiki's, or Vault's photos.
 Albums group photos that already belong to their owner - a place (pin/wiki) or a profile's own Vault; they never widen who can see a photo."""
 
 from __future__ import annotations
@@ -45,7 +46,8 @@ class AlbumListEntry:
 
 
 def owner_kwargs(owner: Pin | Wiki | Profile) -> dict:
-    """Return the Album FK kwargs (``parent_pin``/``parent_wiki``/``parent_profile``) for *owner*.
+    """
+    Return the Album FK kwargs (``parent_pin``/``parent_wiki``/``parent_profile``) for *owner*.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) that owns the album.
@@ -61,7 +63,8 @@ def owner_kwargs(owner: Pin | Wiki | Profile) -> dict:
 
 
 def owner_kwargs_to_image_scope(owner: Pin | Wiki | Profile) -> dict:
-    """Return the ``Image`` filter kwargs (``pin``/``wiki``/``profile``) scoping *owner*'s photos.
+    """
+    Return the ``Image`` filter kwargs (``pin``/``wiki``/``profile``) scoping *owner*'s photos.
 
     Args:
         owner: The Pin, Wiki, or Profile (Vault) whose photos to scope to.
@@ -76,7 +79,8 @@ def owner_kwargs_to_image_scope(owner: Pin | Wiki | Profile) -> dict:
 
 
 def album_owner(album: Album) -> Pin | Wiki | Profile:
-    """Return whichever parent owns *album*.
+    """
+    Return whichever parent owns *album*.
 
     Args:
         album: The album to resolve.
@@ -93,7 +97,8 @@ def album_owner(album: Album) -> Pin | Wiki | Profile:
 
 
 def albums_for_owner(owner: Pin | Wiki | Profile) -> QuerySet[Album]:
-    """Every album belonging to *owner*.
+    """
+    Every album belonging to *owner*.
 
     Args:
         owner: The Pin, Wiki, or Profile whose albums to list.
@@ -105,7 +110,8 @@ def albums_for_owner(owner: Pin | Wiki | Profile) -> QuerySet[Album]:
 
 
 def albums_for_owners(owners: Sequence[Pin | Wiki | Profile]) -> QuerySet[Album]:
-    """Every album belonging to any of *owners*.
+    """
+    Every album belonging to any of *owners*.
 
     Args:
         owners: Pins, wikis, and/or profiles whose albums to list.
@@ -125,7 +131,8 @@ def albums_for_owners(owners: Sequence[Pin | Wiki | Profile]) -> QuerySet[Album]
 
 
 def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
-    """Whether *viewer* sees the concealed form of *owner*'s wiki.
+    """
+    Whether *viewer* sees the concealed form of *owner*'s wiki.
     Always False for a Pin or a Vault (Profile-owned) album - concealment is a wiki-only concept.
 
     Args:
@@ -142,7 +149,8 @@ def _owner_conceal(owner: Pin | Wiki | Profile, viewer: Profile | None) -> bool:
 
 
 def _visible_items(items: AlbumItemQuerySet, viewer: Profile | None, *, conceal: bool = False) -> AlbumItemQuerySet:
-    """Narrow membership rows to the photos *viewer* may see, as SQL.
+    """
+    Narrow membership rows to the photos *viewer* may see, as SQL.
 
     The image set is scoped to *items*' own photos before ``visible_to`` runs, because ``visible_to`` resolves
     its allowed-uploader set from whatever queryset it is handed; unscoped, that would be every uploader on
@@ -167,7 +175,8 @@ def _visible_items(items: AlbumItemQuerySet, viewer: Profile | None, *, conceal:
 
 
 def visible_album_items(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profile | None = None) -> AlbumItemQuerySet:
-    """*album*'s membership rows whose photo *viewer* may see, unordered and unevaluated.
+    """
+    *album*'s membership rows whose photo *viewer* may see, unordered and unevaluated.
 
     Args:
         album: The album to read.
@@ -187,7 +196,8 @@ def _concealed_wikis(owners: Sequence[Pin | Wiki | Profile], viewer: Profile | N
 
 
 def _conceal_by_wiki[QuerySetT: QuerySet[Any]](queryset: QuerySetT, wiki_field: str, concealed: Sequence[Wiki], owner_count: int, viewer: Profile | None) -> QuerySetT:
-    """Narrow the rows of *queryset* that belong to a *concealed* wiki, leaving every other owner's rows alone.
+    """
+    Narrow the rows of *queryset* that belong to a *concealed* wiki, leaving every other owner's rows alone.
 
     Args:
         queryset: Rows of several owners.
@@ -228,7 +238,8 @@ def _describe_listed(albums: list[Album], viewer: Profile | None, concealed_wiki
 
 
 def albums_listing(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> list[AlbumListEntry]:
-    """Every album of *owner* with cover, count, and date range.
+    """
+    Every album of *owner* with cover, count, and date range.
 
     Unbounded; a page that renders albums uses :func:`albums_listing_page`.
 
@@ -251,7 +262,8 @@ def albums_listing_page(
     name_contains: str = "",
     exclude: Album | None = None,
 ) -> tuple[list[AlbumListEntry], int]:
-    """One page of :func:`albums_listing`, plus the un-paged total.
+    """
+    One page of :func:`albums_listing`, plus the un-paged total.
 
     Args:
         owner: The Pin, Wiki, or Profile whose albums to list, or several of them.
@@ -272,7 +284,8 @@ def albums_listing_page(
 
 
 def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal: bool = False) -> list[AlbumListEntry]:
-    """Cover, photo count and date range for each of *albums*, computed in SQL.
+    """
+    Cover, photo count and date range for each of *albums*, computed in SQL.
 
     Costs the visibility gate plus two queries however many albums and photos there are: one annotated
     album query and one for the cover rows. No membership row is loaded.
@@ -339,7 +352,8 @@ def describe_albums(albums: Sequence[Album], viewer: Profile | None, *, conceal:
 
 
 def eligible_images_for(owner: Pin | Wiki | Profile, viewer: Profile | None) -> QuerySet[Image]:
-    """Photos that may be placed in one of *owner*'s albums.
+    """
+    Photos that may be placed in one of *owner*'s albums.
     An album is strictly scoped to its owner: a pin album may only hold that pin's photos, a wiki album only that wiki's, and a vault album only its owning profile's own uploads.
 
     Args:
@@ -369,7 +383,8 @@ def _hydrate(items: AlbumItemQuerySet) -> list[Image]:
 
 
 def album_images(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profile | None = None) -> list[Image]:
-    """Every photo in *album* the viewer may see, in the album's current sort.
+    """
+    Every photo in *album* the viewer may see, in the album's current sort.
 
     Unbounded; a page that renders an album uses :func:`album_images_page`.
 
@@ -391,7 +406,8 @@ def album_images_page(
     offset: int = 0,
     limit: int = ALBUM_GRID_PAGE_SIZE,
 ) -> tuple[list[Image], int]:
-    """One page of *album*'s photos, plus the un-paged total.
+    """
+    One page of *album*'s photos, plus the un-paged total.
 
     Args:
         album: The album to read.
@@ -407,7 +423,8 @@ def album_images_page(
 
 
 def owner_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
-    """*owner*'s photos, filed in an album or not.
+    """
+    *owner*'s photos, filed in an album or not.
 
     Args:
         owner: The Pin, Wiki, or Profile whose photos to list, or several of them.
@@ -426,7 +443,8 @@ def owner_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile
 
 
 def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile], viewer: Profile | None) -> QuerySet[Image]:
-    """*owner*'s photos that aren't in any of its albums yet.
+    """
+    *owner*'s photos that aren't in any of its albums yet.
 
     Args:
         owner: The Pin, Wiki, or Profile whose photos to list, or several of them.
@@ -441,7 +459,8 @@ def loose_images_for(owner: Pin | Wiki | Profile | Sequence[Pin | Wiki | Profile
 
 
 def filed_image_ids(owners: Sequence[Pin | Wiki | Profile], image_ids: Collection[int]) -> set[int]:
-    """Which of *image_ids* sit in at least one of *owners*' albums.
+    """
+    Which of *image_ids* sit in at least one of *owners*' albums.
 
     Args:
         owners: The pins, wikis and/or profiles whose albums count.
@@ -456,7 +475,8 @@ def filed_image_ids(owners: Sequence[Pin | Wiki | Profile], image_ids: Collectio
 
 
 def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile | None) -> int:
-    """Add photos to *album*, skipping any already in it.
+    """
+    Add photos to *album*, skipping any already in it.
 
     Args:
         album: The album to add to.
@@ -493,7 +513,8 @@ def _insert_album_items(album: Album, to_add: Sequence[Image], added_by: Profile
 
 
 def remove_images_from_album(album: Album, image_ids: Sequence[int]) -> int:
-    """Remove photos from *album*.
+    """
+    Remove photos from *album*.
 
     Args:
         album: The album to remove from.
@@ -508,7 +529,8 @@ def remove_images_from_album(album: Album, image_ids: Sequence[int]) -> int:
 
 
 def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
-    """Freeze *album* into custom order following *item_ids*.
+    """
+    Freeze *album* into custom order following *item_ids*.
     The first drag (or any later one) numbers every current membership row so later uploads can stay null and sort after the arranged photos.
 
     Args:
@@ -538,7 +560,8 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
 
 
 def describe_album(album: Album, viewer: Profile | None, owner: Pin | Wiki | Profile | None = None) -> AlbumListEntry:
-    """Cover, visible photo count and date range for one album.
+    """
+    Cover, visible photo count and date range for one album.
 
     Args:
         album: The album to describe.
@@ -554,7 +577,8 @@ def describe_album(album: Album, viewer: Profile | None, owner: Pin | Wiki | Pro
 
 
 def album_cover(album: Album, viewer: Profile | None) -> Image | None:
-    """The photo to show as *album*'s cover: the chosen one when the viewer can see it, else the first in display order.
+    """
+    The photo to show as *album*'s cover: the chosen one when the viewer can see it, else the first in display order.
 
     Args:
         album: The album to pick a cover for.
@@ -567,7 +591,8 @@ def album_cover(album: Album, viewer: Profile | None) -> Image | None:
 
 
 def pin_tree(pin: Pin) -> list[Pin]:
-    """The root pin and every descendant in *pin*'s hierarchy.
+    """
+    The root pin and every descendant in *pin*'s hierarchy.
 
     Args:
         pin: Any pin in the tree.
@@ -580,7 +605,8 @@ def pin_tree(pin: Pin) -> list[Pin]:
 
 
 def move_album_targets(album: Album) -> list[Pin]:
-    """Pins this album can move to: the rest of its parent's tree.
+    """
+    Pins this album can move to: the rest of its parent's tree.
 
     Args:
         album: The album to consider moving.
@@ -594,7 +620,8 @@ def move_album_targets(album: Album) -> list[Pin]:
 
 
 def move_album_to_pin(album: Album, target: Pin) -> Album:
-    """Move *album* onto *target*, re-slug on collision, and take its photos.
+    """
+    Move *album* onto *target*, re-slug on collision, and take its photos.
     Photos currently attached to the source pin that are in this album are re-pointed at *target* so the grouping and the files travel together.
 
     Args:

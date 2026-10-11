@@ -43,7 +43,8 @@ class ExternalApiRouteCase(TestCase):
 
     @staticmethod
     def key(user: User, scopes: tuple[ApiKeyScope, ...]) -> dict[str, str]:
-        """Issue a key for *user* carrying exactly *scopes*.
+        """
+        Issue a key for *user* carrying exactly *scopes*.
 
         Args:
             user: The key's owner.
@@ -57,7 +58,8 @@ class ExternalApiRouteCase(TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {raw}"}
 
     def send(self, method: str, url: str, body: object = None, *, auth: dict[str, str] | None = None) -> HttpResponse:
-        """Send *body* as JSON with *auth*, or anonymously when *auth* is empty.
+        """
+        Send *body* as JSON with *auth*, or anonymously when *auth* is empty.
 
         Args:
             method: ``post``, ``put``, ``patch`` or ``delete``.

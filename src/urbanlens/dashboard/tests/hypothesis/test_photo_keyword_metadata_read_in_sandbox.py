@@ -1,4 +1,5 @@
-"""Embedded photo keywords must be read in the sandbox, before the upload is rewritten.
+"""
+Embedded photo keywords must be read in the sandbox, before the upload is rewritten.
 
 ``MetadataKeywordProvider.generate`` opened the stored file with Pillow in ``generate_image_keywords``, on the
 interactive worker that holds REData and OAuth credentials and has full egress (P116). It also ran after

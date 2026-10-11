@@ -25,7 +25,8 @@ class AddPinDialogUsesSharedCloseHandlerTests(TestCase):
         self.assertIn('data-closefn="closeAddPinDialog"', body)
 
     def test_the_duplicate_per_dialog_drag_guard_is_gone(self) -> None:
-        """Regression guard against re-introducing the removed duplicate -
+        """
+        Regression guard against re-introducing the removed duplicate -
         the variable names below were unique to that dead copy."""
         body = self.client.get(reverse("map.view")).content.decode()
         self.assertNotIn("apIsBackdrop", body)

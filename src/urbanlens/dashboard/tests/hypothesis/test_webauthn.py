@@ -416,7 +416,8 @@ class PasskeyOwnershipTests(TestCase):
 
 
 class PasskeyRegistrationEndpointTests(TestCase):
-    """The JSON endpoints driving the browser registration ceremony.
+    """
+    The JSON endpoints driving the browser registration ceremony.
 
     The service functions behind them are covered above; these lock in the HTTP contract (status codes, error
     shape, auth requirement) that webauthn-client.ts depends on."""

@@ -1,4 +1,5 @@
-"""Tests for the filters expansion: date-range/security/has-links/detail-pin-count
+"""
+Tests for the filters expansion: date-range/security/has-links/detail-pin-count
 criteria on PinQuerySet.filter_by_criteria, Pin.last_viewed_at + mark_viewed(),
 the new smart-list/saved-filter-cache resync signals, and criteria (de)serialization.
 """
@@ -191,7 +192,8 @@ class DetailPinCountFilterTests(TestCase):
         self.assertIn(parent_with_none.pk, ids)
 
     def test_count_is_not_inflated_by_an_unrelated_join(self) -> None:
-        """Combining a detail-pin-count filter with a label filter must not
+        """
+        Combining a detail-pin-count filter with a label filter must not
         multiply the Count() via the label m2m join (Count(distinct=True) guards this)."""
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
         from urbanlens.dashboard.models.labels.model import Label
@@ -236,7 +238,8 @@ class MarkViewedTests(TestCase):
         self.assertGreater(self.pin.last_viewed_at, old_ts)
 
     def test_view_updates_last_viewed_smart_list(self) -> None:
-        """Viewing a pin resyncs smart lists filtering on last_viewed_after (uses
+        """
+        Viewing a pin resyncs smart lists filtering on last_viewed_after (uses
         save(), so the existing generic post_save resync signal fires for free)."""
         pin_list = baker.make(
             PinList, profile=self.profile, is_smart=True, smart_filter={"last_viewed_after": date.today().isoformat()}
@@ -263,7 +266,8 @@ class PinViewMarksViewedTests(TestCase):
 
 
 class PinLinkResyncSignalTests(TestCase):
-    """Adding/removing a PinLink must resync smart lists and bump the pin's
+    """
+    Adding/removing a PinLink must resync smart lists and bump the pin's
     updated timestamp (PinLink writes never call Pin.save() themselves)."""
 
     def setUp(self) -> None:
@@ -289,7 +293,8 @@ class PinLinkResyncSignalTests(TestCase):
         self.assertFalse(PinListItem.objects.filter(pin_list=self.pin_list, pin=self.pin).exists())
 
     def test_adding_a_link_bumps_the_pins_updated_timestamp(self) -> None:
-        """Confirms the saved-filter-cache staleness gap is closed too (its cache
+        """
+        Confirms the saved-filter-cache staleness gap is closed too (its cache
         key fingerprints on Max(Pin.updated))."""
         original_updated = self.pin.updated
         with self.captureOnCommitCallbacks(execute=True):
@@ -299,7 +304,8 @@ class PinLinkResyncSignalTests(TestCase):
 
 
 class DetailPinResyncSignalTests(TestCase):
-    """Creating/deleting a detail pin must resync the PARENT's smart lists and
+    """
+    Creating/deleting a detail pin must resync the PARENT's smart lists and
     bump the parent's updated timestamp (only the child's own post_save/delete
     fires by default - the parent's detail-pin-count criterion needs its own signal)."""
 

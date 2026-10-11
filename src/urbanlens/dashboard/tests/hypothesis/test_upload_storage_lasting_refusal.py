@@ -1,4 +1,5 @@
-"""Storage refusing for a reason that needs an operator is not "briefly unavailable", and the admins hear of it (P241).
+"""
+Storage refusing for a reason that needs an operator is not "briefly unavailable", and the admins hear of it (P241).
 
 A rotated key the app never picked up, or a bucket policy that denies writes, answers every request with a 4xx. That is
 a refusal no amount of waiting fixes, so a client is not told to retry in thirty seconds, and the admins are told

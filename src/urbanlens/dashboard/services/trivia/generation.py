@@ -53,7 +53,8 @@ If the article doesn't contain enough concrete facts to write a good question, r
 
 
 def generate_questions_for_wiki(wiki: Wiki, *, gateway: LLMGateway | None = None, raise_refusal: bool = False) -> list[TriviaQuestion]:
-    """Generate, classify, and persist approved AI trivia questions from one wiki's article.
+    """
+    Generate, classify, and persist approved AI trivia questions from one wiki's article.
     Idempotent per location: a location that already has at least one AI_GENERATED question is skipped entirely, so this is safe to call repeatedly (e.g. from a periodic sweep) without regenerating or re-spending tokens on the same wiki.
 
     Args:
@@ -128,7 +129,8 @@ def _gateway() -> LLMGateway | None:
 
 
 def sweep_wikis_for_generation(*, batch_size: int = DEFAULT_SWEEP_BATCH_SIZE) -> dict[str, int]:
-    """Generate AI trivia questions for a bounded batch of wikis, those never or least recently mined first.
+    """
+    Generate AI trivia questions for a bounded batch of wikis, those never or least recently mined first.
 
     Each wiki mined is recorded whether or not a question survived, and is not mined again for
     ``RETRY_AFTER``, so wikis that yield nothing cannot hold the batch and re-spend tokens every run. Nothing

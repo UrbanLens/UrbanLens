@@ -27,7 +27,8 @@ def _is_none(node: ast.expr) -> bool:
 
 
 def _offending_keys(keys: list[str | None], values: list[ast.expr]) -> bool:
-    """Whether this construction names a pin and *derives* a wiki on the spot.
+    """
+    Whether this construction names a pin and *derives* a wiki on the spot.
 
     Passing both along is not the bug - ``upload_photo(..., pin=pin, wiki=wiki)`` is a signature whose callers
     supply what they mean, and usually one of them is None."""
@@ -69,7 +70,8 @@ class _Visitor(ast.NodeVisitor):
 
 
 def main() -> int:
-    """Scan production code and report constructions that publish a pin row to a wiki.
+    """
+    Scan production code and report constructions that publish a pin row to a wiki.
 
     Returns:
         0 when clean, 1 when something pairs them without a marker.

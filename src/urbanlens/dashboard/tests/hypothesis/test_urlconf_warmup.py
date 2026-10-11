@@ -1,4 +1,5 @@
-"""Warming the URLconf means both halves of it, not just the import.
+"""
+Warming the URLconf means both halves of it, not just the import.
 
 `_warm_urlconf` read `resolver.url_patterns`, which imports the URLconf module
 and nothing else. Django builds the *reverse* table separately and lazily, on
@@ -79,7 +80,8 @@ class TheWarmUpCoversBothHalvesTests(SimpleTestCase):
         self.assertEqual(len(warm_urlconf()), 2, "warm_urlconf should report what it warmed, so a caller can log proof")
 
     def test_a_bare_setup_has_neither(self) -> None:
-        """Anti-vacuity: without this, "imported=True reversible=True" could
+        """
+        Anti-vacuity: without this, "imported=True reversible=True" could
         just be what `django.setup()` leaves behind."""
         self.assertEqual(_run(""), "imported=False reversible=False")
 

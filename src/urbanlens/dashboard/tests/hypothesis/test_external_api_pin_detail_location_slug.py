@@ -47,7 +47,8 @@ class PinDetailLocationSlugTests(TestCase):
         self.assertEqual(response.json()["location_slug"], self.pin.location.ensure_slug())
 
     def test_location_slug_resolves_the_wiki_but_wiki_slug_does_not(self) -> None:
-        """The documented defect: only ``location_slug`` routes to the wiki.
+        """
+        The documented defect: only ``location_slug`` routes to the wiki.
 
         ``Wiki.slug`` is set deliberately different from the Location's here to make the independence explicit -
         that is exactly the shipped state that made ``wiki_slug`` unusable for navigation."""

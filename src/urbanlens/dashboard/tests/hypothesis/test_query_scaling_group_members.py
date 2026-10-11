@@ -63,7 +63,8 @@ class GroupMemberListQueryScalingTests(TestCase):
         )
 
     def test_members_are_still_named_or_masked_correctly(self) -> None:
-        """The complement: batching must not change who is identifiable.
+        """
+        The complement: batching must not change who is identifiable.
 
         A member with no relationship to the viewer and a friends-only profile
         must still come back masked, and a public one must still be named.

@@ -85,7 +85,8 @@ class WikiAliasUseTests(_WikiAliasUseTestCase):
         self.assertIn("stats", body)
 
     def test_the_rename_lands_in_the_wiki_edit_history(self) -> None:
-        """It is an audited community edit, indistinguishable from one typed in the form.
+        """
+        It is an audited community edit, indistinguishable from one typed in the form.
 
         This is the whole reason the operation goes through ``apply_wiki_edit`` instead of assigning
         ``wiki.name``: a rename nobody can see in history is a rename nobody can revert."""
@@ -127,7 +128,8 @@ class WikiAliasUseTests(_WikiAliasUseTestCase):
         self.assertEqual(self.wiki.name, "Old Mill")
 
     def test_promoting_an_alias_that_differs_only_in_case_is_a_real_rename(self) -> None:
-        """The one case where ``is_current`` and the no-op rule deliberately disagree.
+        """
+        The one case where ``is_current`` and the no-op rule deliberately disagree.
 
         ``is_current`` compares loosely, because it has to agree with the case-insensitive alias uniqueness
         constraint - two aliases differing only in case cannot both exist."""
@@ -178,7 +180,8 @@ class WikiAliasUseSanitizationTests(_WikiAliasUseTestCase):
     """The response must report the name the database actually holds."""
 
     def test_the_payload_matches_the_stored_name_not_the_submitted_one(self) -> None:
-        """Regression guard for serializing before the save.
+        """
+        Regression guard for serializing before the save.
 
         ``_AliasBase.save()`` normally sanitizes alias names on the way in, so this writes the unsanitized value
         with ``update()`` to reproduce the row an older write path (or a data import) could have left behind."""
@@ -228,7 +231,8 @@ class WikiAliasIsCurrentFlagTests(_WikiAliasUseTestCase):
         st.text(alphabet=st.characters(whitelist_categories=("Lu", "Ll"), max_codepoint=127), min_size=3, max_size=20)
     )
     def test_promoting_any_alias_leaves_exactly_one_current(self, name: str) -> None:
-        """The invariant a client's list rendering depends on, over arbitrary names.
+        """
+        The invariant a client's list rendering depends on, over arbitrary names.
 
         The alphabet is letters so the generated name survives ``sanitize_name`` intact - the property under
         test is "exactly one", not "the sanitizer is a no-op"."""
@@ -285,7 +289,8 @@ class WikiAliasUseNotFoundTests(_WikiAliasUseTestCase):
         self.foreign_alias = baker.make(WikiAlias, wiki=self.unpinned_wiki, name="Their Other Name")
 
     def test_an_alias_from_a_wiki_the_caller_cannot_see_is_not_found(self) -> None:
-        """The id is real; the answer must still be the uniform 404.
+        """
+        The id is real; the answer must still be the uniform 404.
 
         A 403 - or any distinguishable body - would confirm that an alias with that id exists somewhere, which
         is enough to walk the table and harvest the names of places other people have pinned."""

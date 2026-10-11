@@ -1,4 +1,5 @@
-"""Game lobby and round routes: start, invite, join, begin, end, leave, settings, and Consensus answers and skips (P29).
+"""
+Game lobby and round routes: start, invite, join, begin, end, leave, settings, and Consensus answers and skips (P29).
 
 Each asserts what the host or a joined player may do, that a participant without the role and a stranger are refused
 with nothing changed, that anonymous is sent to log in, and that a malformed body is a 4xx.

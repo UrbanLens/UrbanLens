@@ -1,4 +1,5 @@
-"""Image processing utilities - EXIF extraction, downscaling, and metadata helpers.
+"""
+Image processing utilities - EXIF extraction, downscaling, and metadata helpers.
 Everything here that opens a file with Pillow is marked :func:`~urbanlens.dashboard.services.sandbox.guard.untrusted_parse` and runs only in the sandbox worker."""
 
 from __future__ import annotations
@@ -69,7 +70,8 @@ _EXIF_BYTES_HEX_LIMIT = 4096
 
 
 def coerce_coordinates(data: Any) -> tuple[Decimal, Decimal]:
-    """Validate and convert a mapping's ``latitude``/``longitude`` entries into Decimals.
+    """
+    Validate and convert a mapping's ``latitude``/``longitude`` entries into Decimals.
     Centralized because ``Decimal("abc")`` raises ``decimal.InvalidOperation`` (an ``ArithmeticError``, not a ``ValueError``), and ``Decimal("nan")`` parses fine and Postgres ``numeric`` happily stores NaN, so neither is safe to skip validating.
 
     Args:
@@ -93,7 +95,8 @@ def coerce_coordinates(data: Any) -> tuple[Decimal, Decimal]:
 
 
 def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
-    """Parse a photo-reposition JSON payload into validated latitude/longitude Decimals.
+    """
+    Parse a photo-reposition JSON payload into validated latitude/longitude Decimals.
 
     Args:
         body: The raw request body.
@@ -111,7 +114,8 @@ def parse_reposition_payload(body: bytes) -> tuple[Decimal, Decimal]:
 
 
 def apply_image_map_update(image: Image, body: bytes) -> dict[str, Any]:
-    """Apply a map-visibility or reposition POST to *image*.
+    """
+    Apply a map-visibility or reposition POST to *image*.
     ``{"map_hidden": true}`` hides the photo on maps without clearing GPS.
 
     Args:
@@ -223,7 +227,8 @@ def extract_gps_coords(image_file: IO[bytes]) -> tuple[float, float] | None:
 
 @untrusted_parse("image.exif")
 def extract_gps_direction(image_file: IO[bytes]) -> float | None:
-    """Return the compass bearing the camera was pointing, or None if absent.
+    """
+    Return the compass bearing the camera was pointing, or None if absent.
 
     Args:
         image_file: The uploaded/stored image file to read EXIF from.
@@ -305,7 +310,8 @@ _XMP_ROLL_KEYS = ("poserolldegrees", "gimbalrolldegree")
 
 @untrusted_parse("image.exif")
 def extract_gps_orientation(image_file: IO[bytes]) -> tuple[float, float] | None:
-    """Return (pitch, roll) in degrees from a 360/panorama or drone photo's XMP block.
+    """
+    Return (pitch, roll) in degrees from a 360/panorama or drone photo's XMP block.
     Standard camera EXIF carries no such tags - only Google's Photo Sphere "GPano" schema (360/panorama cameras) or a drone's own gimbal metadata do, so this returns None for the overwhelming majority of photos."""
     try:
         image_file.seek(0)
@@ -455,7 +461,8 @@ def extract_focal_length(image_file: IO[bytes]) -> float | None:
 
 @untrusted_parse("image.exif")
 def extract_taken_at(image_file: IO[bytes]) -> datetime | None:
-    """Return the EXIF DateTimeOriginal capture time, or None if absent/unparseable.
+    """
+    Return the EXIF DateTimeOriginal capture time, or None if absent/unparseable.
     EXIF datetimes carry no timezone offset, so the result is made timezone-aware using the server's local time rather than the photo's actual capture location."""
     try:
         exif_ifd = _get_exif_ifd(image_file)
@@ -575,7 +582,8 @@ def extract_caption_from_metadata(image_file: IO[bytes]) -> str | None:
 
 @untrusted_parse("image.exif")
 def extract_source_url(image_file: IO[bytes]) -> str | None:
-    """Return a source URL embedded in the file's text metadata, if any.
+    """
+    Return a source URL embedded in the file's text metadata, if any.
 
     Args:
         image_file: The uploaded file or opened FieldFile to read.
@@ -613,7 +621,8 @@ _FILENAME_DATE_MIN_YEAR = 1995
 
 
 def extract_filename_taken_at(filename: str) -> datetime | None:
-    """Return a capture date/time parsed from a camera/phone-app filename convention, or None.
+    """
+    Return a capture date/time parsed from a camera/phone-app filename convention, or None.
 
     Args:
         filename: The original upload filename (path or bare name).
@@ -635,7 +644,8 @@ def extract_filename_taken_at(filename: str) -> datetime | None:
 
 
 def is_camera_generated_filename(filename: str) -> bool:
-    """Return True when a filename matches common phone/camera auto-naming conventions.
+    """
+    Return True when a filename matches common phone/camera auto-naming conventions.
 
     Args:
         filename: The stored or uploaded filename (path or bare name).
@@ -670,7 +680,8 @@ def _json_safe(value: Any) -> Any:
 
 @untrusted_parse("image.exif")
 def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
-    """Snapshot all EXIF metadata from an image file as a JSON-safe dict.
+    """
+    Snapshot all EXIF metadata from an image file as a JSON-safe dict.
     Captured before any downscaling/re-encoding so nothing is lost if the stored file is converted.
 
     Args:
@@ -703,7 +714,8 @@ def extract_exif_data(image_file: IO[bytes]) -> dict[str, Any] | None:
 
 
 def _xmp_subjects(xmp: dict[str, Any]) -> list[str]:
-    """Pull dc:subject keyword entries out of Pillow's parsed XMP dict.
+    """
+    Pull dc:subject keyword entries out of Pillow's parsed XMP dict.
 
     Args:
         xmp: The dict returned by ``PIL.Image.Image.getxmp()``.
@@ -741,7 +753,8 @@ def _xmp_subjects(xmp: dict[str, Any]) -> list[str]:
 
 @untrusted_parse("image.exif")
 def extract_embedded_keywords(image_file: IO[bytes]) -> list[str] | None:
-    """Read the XMP ``dc:subject`` and IPTC 2:25 keywords a photographer embedded.
+    """
+    Read the XMP ``dc:subject`` and IPTC 2:25 keywords a photographer embedded.
 
     Read with the EXIF snapshot, before the stored file is rewritten: the rewrite keeps no XMP or IPTC.
 
@@ -778,7 +791,8 @@ def extract_embedded_keywords(image_file: IO[bytes]) -> list[str] | None:
 
 
 def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int] = ()) -> bool:
-    """Whether any *other* Image row stores *name* in *field*.
+    """
+    Whether any *other* Image row stores *name* in *field*.
     Pin sharing copies a pin's photos by reusing the same storage key rather than duplicating bytes (``services.sharing.pin_sharing``), and a deduplicated upload reuses both the file and its thumbnail (``services.photos.uploads.attach_deduped_copy``).
 
     Args:
@@ -795,7 +809,8 @@ def file_still_referenced(field: str, name: str, *, exclude_pks: Collection[int]
 
 @dataclass(frozen=True)
 class StoredFileReplacement:
-    """A stored file rewritten under a new name, and the old one still on disk.
+    """
+    A stored file rewritten under a new name, and the old one still on disk.
     The superseded file is deliberately *not* deleted by them: ``services.media.access`` authorizes a media request from the row, so between the delete and the row naming its successor every request for the old path is authorized and then fails to open.
 
     Attributes:
@@ -807,7 +822,8 @@ class StoredFileReplacement:
 
 
 def discard_superseded_file(image: Image, superseded_name: str | None) -> None:
-    """Delete the file a rewrite replaced, now that the row names its successor.
+    """
+    Delete the file a rewrite replaced, now that the row names its successor.
     Call this *after* persisting ``image.image.name``, never before - the ordering is the point, see :class:`StoredFileReplacement`.
 
     Args:
@@ -822,7 +838,8 @@ def discard_superseded_file(image: Image, superseded_name: str | None) -> None:
 
 
 def pixels_only(img: PILImage.Image) -> PILImage.Image:
-    """Copy *img* without anything a Pillow writer would carry into the file it encodes.
+    """
+    Copy *img* without anything a Pillow writer would carry into the file it encodes.
 
     Passing no metadata to ``save`` is not enough: the JPEG and GIF writers copy the source's comment, and the TIFF
     writer copies XMP, IPTC and Photoshop tags from a TIFF source. The copy is a plain ``Image`` whose ``info`` keeps only
@@ -861,7 +878,8 @@ def _encodable(frame: PILImage.Image, target_format: str) -> PILImage.Image:
 
 
 def _stored_frames(source: PILImage.Image, max_dimension: int | None, target_format: str) -> tuple[list[PILImage.Image], list[int]]:
-    """Decode the frames to store: oriented, resized, and holding nothing but pixels.
+    """
+    Decode the frames to store: oriented, resized, and holding nothing but pixels.
 
     An animation is kept only in a format that can carry one, and only while its resized frames fit Pillow's
     decompression-bomb pixel budget; past that the first frame is stored rather than every frame held in memory.
@@ -896,7 +914,8 @@ def _stored_frames(source: PILImage.Image, max_dimension: int | None, target_for
 
 @untrusted_parse("image.decode")
 def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp: bool) -> StoredFileReplacement | None:
-    """Re-encode an Image's stored file from its pixels, under the uploader's size and format policy.
+    """
+    Re-encode an Image's stored file from its pixels, under the uploader's size and format policy.
 
     Every photo is rewritten, whatever it carries. Only the pixels and the colour profile reach the new file, so a
     stored photo can be served to anyone allowed to see it without a metadata check of its own. What the app keeps of
@@ -932,7 +951,8 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
 
 @untrusted_parse("image.decode")
 def reencode_image_file(stored_file: IO[bytes], *, max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
-    """Re-encode a stored image that is not a library photo (a comment image, an icon, an avatar) from its pixels.
+    """
+    Re-encode a stored image that is not a library photo (a comment image, an icon, an avatar) from its pixels.
 
     Args:
         stored_file: The stored file, open for reading.
@@ -951,7 +971,8 @@ def reencode_image_file(stored_file: IO[bytes], *, max_dimension: int | None, co
 
 
 def _encode_stored(stored_file: IO[bytes], max_dimension: int | None, convert_webp: bool) -> tuple[bytes, str]:
-    """Decode a stored file and encode its pixels, colour profile and animation timing into a new one.
+    """
+    Decode a stored file and encode its pixels, colour profile and animation timing into a new one.
 
     Returns:
         The encoded bytes, and the Pillow format they are in.
@@ -995,7 +1016,8 @@ THUMBNAIL_RETRY_AFTER_UNREADABLE = timedelta(days=7)
 
 
 def _readable_recently_enough(qs: QuerySet[ImageModel]) -> QuerySet[ImageModel]:
-    """Drop rows whose file was found unreadable inside the backoff window.
+    """
+    Drop rows whose file was found unreadable inside the backoff window.
 
     Args:
         qs: An ``Image`` queryset.
@@ -1009,7 +1031,8 @@ def _readable_recently_enough(qs: QuerySet[ImageModel]) -> QuerySet[ImageModel]:
 
 
 def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
-    """Primary keys of photos that still need a grid thumbnail.
+    """
+    Primary keys of photos that still need a grid thumbnail.
     This queryset is for the periodic backfill of rows that predate that, or whose original processing skipped it - not for page views, which must not do CPU work.
 
     Args:
@@ -1030,7 +1053,8 @@ def photos_missing_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKF
 
 @untrusted_parse("image.decode")
 def write_image_thumbnail(image: Image, *, max_dimension: int = THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
-    """Write a small WebP preview into ``image.thumbnail`` for grid display.
+    """
+    Write a small WebP preview into ``image.thumbnail`` for grid display.
 
     Args:
         image: The Image row whose original to preview.
@@ -1088,7 +1112,8 @@ _MARKER_THUMBNAIL_QUALITY = 45
 
 
 def photos_missing_marker_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
-    """Primary keys of photos that still need a map-marker thumbnail.
+    """
+    Primary keys of photos that still need a map-marker thumbnail.
 
     Args:
         after_pk: Exclusive lower bound, so a sweep can walk the table in batches without retrying the same unprocessable rows every tick.
@@ -1108,7 +1133,8 @@ def photos_missing_marker_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAI
 
 @untrusted_parse("image.decode")
 def write_image_marker_thumbnail(image: Image, *, max_dimension: int = MARKER_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
-    """Write a tiny WebP preview into ``image.marker_thumbnail`` for map markers.
+    """
+    Write a tiny WebP preview into ``image.marker_thumbnail`` for map markers.
 
     Args:
         image: The Image row whose original to preview.
@@ -1164,7 +1190,8 @@ _ANALYSIS_THUMBNAIL_QUALITY = 80
 
 
 def photos_missing_analysis_thumbnails(*, after_pk: int = 0, limit: int = THUMBNAIL_BACKFILL_BATCH) -> list[int]:
-    """Primary keys of photos that still need an analysis copy.
+    """
+    Primary keys of photos that still need an analysis copy.
 
     Args:
         after_pk: Exclusive lower bound, so a sweep can walk the table in batches without retrying the same unprocessable rows every tick.
@@ -1184,7 +1211,8 @@ def photos_missing_analysis_thumbnails(*, after_pk: int = 0, limit: int = THUMBN
 
 @untrusted_parse("image.decode")
 def write_image_analysis_thumbnail(image: Image, *, max_dimension: int = ANALYSIS_THUMBNAIL_MAX_DIMENSION, force: bool = False) -> bool:
-    """This exists so that nothing outside the sandbox tier ever has to decode an upload.
+    """
+    This exists so that nothing outside the sandbox tier ever has to decode an upload.
 
     Args:
         image: The Image row whose original to downscale.
@@ -1237,7 +1265,8 @@ def write_image_analysis_thumbnail(image: Image, *, max_dimension: int = ANALYSI
 
 
 def compute_checksum(image_file: IO[bytes]) -> str:
-    """Compute the SHA-256 hex digest of an uploaded image file.
+    """
+    Compute the SHA-256 hex digest of an uploaded image file.
     The file position is rewound before and after hashing so the file can still be saved afterwards.
 
     Args:
@@ -1254,7 +1283,8 @@ def compute_checksum(image_file: IO[bytes]) -> str:
 
 
 def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *, skip_malware_scan: bool = False) -> tuple[str, int] | None:
-    """Run every pre-storage safety check an uploaded file must pass, in order.
+    """
+    Run every pre-storage safety check an uploaded file must pass, in order.
 
     Args:
         file_obj: The uploaded file.
@@ -1307,7 +1337,8 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
 
 
 def _visible_uploader_name(img: Image, viewer_profile: Profile | None, memo: dict[int, str] | None = None) -> str:
-    """The uploader's name as this viewer is allowed to see it.
+    """
+    The uploader's name as this viewer is allowed to see it.
 
     Args:
         img: The photo.
@@ -1340,7 +1371,8 @@ def _visible_uploader_name(img: Image, viewer_profile: Profile | None, memo: dic
 
 
 def prime_uploader_memo(images: Sequence[Image], viewer_profile: Profile | None, memo: dict[int, str]) -> None:
-    """Fill *memo* for every uploader in *images* in one resolution.
+    """
+    Fill *memo* for every uploader in *images* in one resolution.
 
     The memo already stops the same uploader being resolved twice; this stops
     each *distinct* uploader costing its own pass, which at the ``COMMON_PIN``
@@ -1369,7 +1401,8 @@ def prime_uploader_memo(images: Sequence[Image], viewer_profile: Profile | None,
 
 
 def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Profile | None = None, uploader_memo: dict[int, str] | None = None) -> dict:
-    """Serialize an Image to a dict suitable for a photo gallery/map layer.
+    """
+    Serialize an Image to a dict suitable for a photo gallery/map layer.
     Shared by the pin, location wiki, and safety check-in gallery views so the upload response and map layer JSON stay in the same shape everywhere.
 
     Args:
@@ -1423,7 +1456,8 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
 
 
 def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
-    """Describe where *image* is filed and which albums it belongs to, for the lightbox.
+    """
+    Describe where *image* is filed and which albums it belongs to, for the lightbox.
     Owner-only info (see ``PhotoAssociationsView``) - not a general visibility check.
 
     Args:
@@ -1489,7 +1523,8 @@ def image_associations(image: Image, viewer: Profile) -> dict[str, Any]:
 
 
 def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bool:
-    """Remove an image's stored file, unless another row still points at it.
+    """
+    Remove an image's stored file, unless another row still points at it.
     Sharing a pin copies its photos by reusing the *same* storage key rather than duplicating the bytes (see ``services.sharing.pin_sharing.create_pin_from_share``), so one file can back several ``Image`` rows.
 
     Args:
@@ -1527,7 +1562,8 @@ def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bo
 
 
 def detach_image_from_pin(image: Any) -> None:
-    """Remove ``image`` from its pin - delete the row outright only if nothing else still needs it.
+    """
+    Remove ``image`` from its pin - delete the row outright only if nothing else still needs it.
 
     Args:
         image: The ``Image`` to remove from its pin."""
@@ -1540,7 +1576,8 @@ def detach_image_from_pin(image: Any) -> None:
 
 
 def detach_image_from_wiki(image: Image, *, withdrawn_by_contributor: bool) -> None:
-    """The wiki-side mirror of ``detach_image_from_pin``.
+    """
+    The wiki-side mirror of ``detach_image_from_pin``.
 
     Args:
         image: The ``Image`` to remove from its wiki.
@@ -1594,7 +1631,8 @@ class PreparedUpload:
 
 
 def prepare_photo_upload(file_obj: UploadedFile, profile: Profile | None) -> PreparedUpload:
-    """Stage a photo upload for asynchronous metadata reading and stripping.
+    """
+    Stage a photo upload for asynchronous metadata reading and stripping.
 
     Args:
         file_obj: The uploaded file, already validated by :func:`image_upload_error`.

@@ -23,7 +23,8 @@ def _bucket_shape(limit: int, window_seconds: float, burst: int) -> tuple[int, i
 
 @dataclass(frozen=True, slots=True)
 class FrameBudget:
-    """A token bucket per sender: ``burst`` charges at once, refilling at ``limit`` per ``window_seconds``.
+    """
+    A token bucket per sender: ``burst`` charges at once, refilling at ``limit`` per ``window_seconds``.
 
     Attributes:
         name: Distinguishes this budget's keys from every other budget's.
@@ -43,7 +44,8 @@ class FrameBudget:
         return f"{_KEY_PREFIX}:{self.name}:{identity}"
 
     def consume(self, identity: str) -> bool:
-        """Charge one event against *identity*'s budget.
+        """
+        Charge one event against *identity*'s budget.
 
         Args:
             identity: Who to charge. Callers build this from ids they already
@@ -62,7 +64,8 @@ class FrameBudget:
             return False
 
     def refund(self, identity: str) -> None:
-        """Give back one charge, for an event that turned out not to happen. Never past a full bucket.
+        """
+        Give back one charge, for an event that turned out not to happen. Never past a full bucket.
 
         Args:
             identity: The identity that was charged.
@@ -79,7 +82,8 @@ class FrameBudget:
 
 @dataclass(slots=True)
 class ConnectionRate:
-    """:class:`FrameBudget`'s bucket, private to one connection.
+    """
+    :class:`FrameBudget`'s bucket, private to one connection.
     Holds no cache and no lock: a consumer instance handles its own frames on one event loop, so a plain attribute is already serialised.
 
     Attributes:

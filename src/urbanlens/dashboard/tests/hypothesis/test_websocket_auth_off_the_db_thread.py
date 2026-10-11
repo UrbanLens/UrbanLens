@@ -1,4 +1,5 @@
-"""A WebSocket key check must not run a legacy key's PBKDF2 on the one thread every socket shares.
+"""
+A WebSocket key check must not run a legacy key's PBKDF2 on the one thread every socket shares.
 
 N21 H40. ``database_sync_to_async`` is thread-sensitive by default, so every call to it in a daphne
 process runs in asgiref's single shared executor thread. A key issued before P146 still verifies

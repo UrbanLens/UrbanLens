@@ -1,4 +1,5 @@
-"""Server-side helpers for direct-message end-to-end encryption.
+"""
+Server-side helpers for direct-message end-to-end encryption.
 The server's entire role in the E2EE scheme is storing opaque blobs and answering "which mode does this account authenticate in" - all cryptography happens in the browser (see ``frontend/ts/shared/e2ee-crypto.ts``)."""
 
 from __future__ import annotations
@@ -39,7 +40,8 @@ AUTH_MODE_DERIVED = "derived"
 
 
 def is_base64(value: str) -> bool:
-    """Return True when ``value`` is non-empty, well-formed standard base64.
+    """
+    Return True when ``value`` is non-empty, well-formed standard base64.
 
     Args:
         value: The candidate string.
@@ -57,7 +59,8 @@ def is_base64(value: str) -> bool:
 
 
 def valid_blob(value: Any, max_length: int, *, required: bool = True) -> bool:
-    """Validate one client-supplied base64 blob field.
+    """
+    Validate one client-supplied base64 blob field.
 
     Args:
         value: The raw JSON value.
@@ -72,7 +75,8 @@ def valid_blob(value: Any, max_length: int, *, required: bool = True) -> bool:
 
 
 def fake_auth_salt(identifier: str) -> str:
-    """Deterministic decoy salt for identifiers with no derived-auth account.
+    """
+    Deterministic decoy salt for identifiers with no derived-auth account.
 
     Args:
         identifier: The username or email being probed.
@@ -91,7 +95,8 @@ def fake_auth_salt(identifier: str) -> str:
 
 
 def group_member_token(group_uuid: Any, profile_id: int) -> str:
-    """Opaque per-(group, member) identifier for the key-rotation API.
+    """
+    Opaque per-(group, member) identifier for the key-rotation API.
 
     Args:
         group_uuid: The group chat's UUID.
@@ -107,7 +112,8 @@ def group_member_token(group_uuid: Any, profile_id: int) -> str:
 
 
 def resolve_login_user(identifier: str) -> User | None:
-    """Find the account an identifier would log in as (username or email).
+    """
+    Find the account an identifier would log in as (username or email).
     Mirrors ``EmailOrUsernameModelBackend``'s resolution order so login-params answers for the same account the login POST will hit.
 
     Args:
@@ -121,7 +127,8 @@ def resolve_login_user(identifier: str) -> User | None:
 
 
 def login_params_for_identifier(identifier: str) -> dict[str, str]:
-    """Build the login-params payload for one identifier.
+    """
+    Build the login-params payload for one identifier.
 
     Args:
         identifier: The username or email from the login form.

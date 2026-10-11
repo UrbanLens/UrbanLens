@@ -64,7 +64,8 @@ class SearchMatchesWikiAccessTests(TestCase):
         self.assertNotIn(_WIKI_NAME, _wiki_titles(GlobalSearchEngine().search(self.profile, "zephyr grain")))
 
     def test_creating_a_wiki_does_not_by_itself_offer_it(self) -> None:
-        """A result whose page 404s is worse than no result: it is a dead link
+        """
+        A result whose page 404s is worse than no result: it is a dead link
         that also confirms the place exists."""
         Wiki.objects.filter(pk=self.wiki.pk).update(created_by=self.profile)
 
