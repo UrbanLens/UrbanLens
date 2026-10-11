@@ -31,7 +31,8 @@ than believe you.
 
 ## The disclaimer block
 
-New standalone documents open with this, immediately after the title:
+New standalone documents open with this, immediately after the title. Older
+documents predate the convention and gain it when they are next rewritten:
 
 ```markdown
 > **Written by a Claude agent. Not authoritative.**
