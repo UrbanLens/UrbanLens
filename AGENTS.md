@@ -12,7 +12,7 @@ Django 6+, Channels (WebSockets), Celery, PostgreSQL + PostGIS; django-gis, GeoP
 
 ## Documentation
 
-**With few exceptions, everything in `docs/` was written by a Claude agent, not by Jess.** It is
+**Nearly everything in `docs/` was written by a Claude agent, not by Jess.** It is
 evidence, not authority. Re-measure before relying on a figure, and rewrite the doc when you find
 it wrong.
 
@@ -41,9 +41,7 @@ record: `grep -E '^\| N7 ' docs/INDEX.md`. A former `P#`/`T#` maps to its issue 
 
 ## Linting & Type Checking
 
-Always run ruff with `--fix`. It covers tests and `__init__.py`, under narrowed rule sets in
-`[tool.ruff.lint.per-file-ignores]`; `migrations/` and `settings/` are still excluded outright, so
-a passing run says nothing about those.
+Always run ruff with `--fix`. 
 
 **MyPy** finds bugs; it does not exist to be silenced. Fixing a warning can mean correcting code or
 types at the origin of the call rather than the point of failure. Never use `cast` or similar. Fix
