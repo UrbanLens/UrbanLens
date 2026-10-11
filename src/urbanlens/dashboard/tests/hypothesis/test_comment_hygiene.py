@@ -187,6 +187,26 @@ class RestatedSignatureTests(SimpleTestCase):
         self.assertEqual(_rules("a.py", source), ["docstring-restates-signature"])
 
 
+class AllowMarkerTests(SimpleTestCase):
+    def test_a_marker_on_or_above_the_line_allows_only_the_named_rule(self) -> None:
+        dated = "x = 1  # the county renamed the field on 2025-11-01\n"
+        self.assertEqual(_rules("a.py", dated), ["history-reference"])
+        same_line = "x = 1  # the county renamed the field on 2025-11-01; hygiene: allow history - still sent\n"
+        self.assertEqual(_rules("a.py", same_line), [])
+        line_above = "# hygiene: allow history-reference - requests before then use the old field\n" + dated
+        self.assertEqual(_rules("a.py", line_above), [])
+        wrong_rule = "# hygiene: allow block\n" + dated
+        self.assertEqual(_rules("a.py", wrong_rule), ["history-reference"])
+
+    def test_a_marker_two_lines_up_does_not_reach(self) -> None:
+        source = "# hygiene: allow history\nx = 0\nx = 1  # the county renamed the field on 2025-11-01\n"
+        self.assertEqual(_rules("a.py", source), ["history-reference"])
+
+    def test_a_marker_above_a_block_allows_it(self) -> None:
+        five = "x = 1\n" + "# hygiene: allow block - a worked example\n" + "# line\n" * 5 + "y = 2\n"
+        self.assertNotIn("comment-block", _rules("a.py", five))
+
+
 class BaselineTests(SimpleTestCase):
     def test_a_file_that_gains_or_loses_violations_is_reported(self) -> None:
         empty = {rule: {} for rule in checker.RULES}
