@@ -5,10 +5,11 @@ from __future__ import annotations
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.billing import RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.billing import banking

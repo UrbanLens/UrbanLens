@@ -14,9 +14,10 @@ from __future__ import annotations
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer
 
 #: What the consumer closes with when this deployment cannot carry a socket at all.

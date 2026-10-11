@@ -19,7 +19,7 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import User
-from django.test import SimpleTestCase, TransactionTestCase, override_settings
+from django.test import SimpleTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -27,7 +27,7 @@ from rest_framework import serializers
 from webauthn.helpers import bytes_to_base64url
 
 from urbanlens.core.tests.features import grant_alpha_features
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.controllers.csp_report import MAX_REPORT_BYTES
 from urbanlens.dashboard.external_api.fields import JSONField

@@ -13,13 +13,12 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
-from django.test import TransactionTestCase
 from django.utils import timezone
 from model_bakery import baker
 
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import (
     SafetyCheckin,

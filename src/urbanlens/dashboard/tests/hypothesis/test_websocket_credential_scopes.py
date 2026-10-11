@@ -11,11 +11,11 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.contrib.auth.models import AnonymousUser
-from django.test import TransactionTestCase
 from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model, get_application_model
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer, SafetyCheckinChatConsumer, UserNotificationConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key

@@ -13,10 +13,11 @@ from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.core.cache import cache
-from django.test import SimpleTestCase, TransactionTestCase, override_settings
+from django.test import SimpleTestCase, override_settings
 from model_bakery import baker
 import yaml
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.checks import websocket_frame_cap_conflict
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage

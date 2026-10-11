@@ -21,10 +21,11 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from django.contrib.auth import hashers
 from django.contrib.auth.models import User
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.auth import api_keys
 from urbanlens.dashboard.services.auth.api_keys import _HASH_SCHEME, _PREFIX_LENGTH, KEY_LABEL, generate_api_key

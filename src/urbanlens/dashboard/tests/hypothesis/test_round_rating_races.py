@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (

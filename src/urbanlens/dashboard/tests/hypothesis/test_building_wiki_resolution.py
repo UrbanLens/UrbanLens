@@ -13,12 +13,12 @@ from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.db import connection, transaction
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location

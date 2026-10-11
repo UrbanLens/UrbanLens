@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import Point
-from django.test import TransactionTestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin

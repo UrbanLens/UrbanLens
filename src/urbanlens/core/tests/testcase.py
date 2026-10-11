@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import logging
+from typing import ClassVar
 
 from django import test
+from django.core.management.sql import emit_post_migrate_signal
+from django.db import connections, transaction
 from hypothesis.extra.django._impl import HypothesisTestCase as _HypothesisMixin
 
 logger = logging.getLogger(__name__)
@@ -227,3 +230,82 @@ class SimpleTestCase(_CacheIsolationMixin, _MessagePrefixMixin, _HypothesisMixin
     whenever a test doesn't need the database. Django raises
     ``DatabaseOperationForbidden`` if a test accidentally performs a query.
     """
+
+
+class TransactionTestCase(test.TransactionTestCase):
+    """
+    Django's ``TransactionTestCase``, emptied after each test by deleting the rows it left rather than by ``flush``.
+
+    ``flush`` truncates all ~250 tables, which rewrites every table's and index's files, then re-runs ``post_migrate``
+    to recreate the content types and permissions it just removed: about 2.3 s per test, most of a typical test's
+    time. This deletes rows only from tables that have any, in one round trip, and leaves the content types and
+    permissions as they were before the test, removing only rows the test added; about 0.4 s. A test that deleted
+    one of them gets ``post_migrate`` to put it back, as ``flush`` would.
+
+    ``available_apps``, ``serialized_rollback`` and ``reset_sequences`` keep Django's own teardown.
+    """
+
+    #: Tables ``post_migrate`` fills, restored to their state before the test rather than emptied and refilled.
+    _POST_MIGRATE_TABLES: ClassVar[tuple[str, ...]] = ("django_content_type", "auth_permission")
+    _before: ClassVar[dict[str, tuple[int, ...]]] = {}
+
+    @classmethod
+    def _deletes_rows(cls, alias: str) -> bool:
+        return (
+            connections[alias].vendor == "postgresql"
+            and cls.available_apps is None
+            and not cls.serialized_rollback
+            and not cls.reset_sequences
+        )
+
+    @classmethod
+    def _post_migrate_rows(cls, alias: str) -> tuple[int, ...]:
+        """The highest id and the row count of each table in ``_POST_MIGRATE_TABLES``."""
+        quote = connections[alias].ops.quote_name
+        columns = ", ".join(
+            f"(SELECT coalesce(max(id), 0) FROM {quote(table)}), (SELECT count(*) FROM {quote(table)})"
+            for table in cls._POST_MIGRATE_TABLES
+        )
+        with connections[alias].cursor() as cursor:
+            cursor.execute(f"SELECT {columns}")
+            return tuple(cursor.fetchone())
+
+    @classmethod
+    def _fixture_setup(cls) -> None:
+        super()._fixture_setup()
+        cls._before = {
+            alias: cls._post_migrate_rows(alias)
+            for alias in cls._databases_names(include_mirrors=False)  # type: ignore[attr-defined]  # private, unstubbed
+            if cls._deletes_rows(alias)
+        }
+
+    def _fixture_teardown(self) -> None:
+        aliases = self._databases_names(include_mirrors=False)  # type: ignore[attr-defined]  # private, unstubbed
+        if not aliases or any(alias not in self._before for alias in aliases):
+            super()._fixture_teardown()
+            return
+        from django.contrib.contenttypes.models import ContentType
+
+        for alias in aliases:
+            self._delete_rows(alias, self._before[alias])
+        # Ids the test added are gone; any it cached would now name nothing.
+        ContentType.objects.clear_cache()
+
+    def _delete_rows(self, alias: str, before: tuple[int, ...]) -> None:
+        connection = connections[alias]
+        quote = connection.ops.quote_name
+        tables = set(connection.introspection.django_table_names(only_existing=True, include_views=False))
+        statements = [
+            f"IF EXISTS (SELECT 1 FROM {quote(table)}) THEN DELETE FROM {quote(table)}; END IF;"
+            for table in sorted(tables - set(self._POST_MIGRATE_TABLES))
+        ]
+        statements += [
+            f"DELETE FROM {quote(table)} WHERE id > {int(before[index * 2])};"
+            for index, table in enumerate(self._POST_MIGRATE_TABLES)
+        ]
+        # One round trip; every foreign key is deferred to the commit, so the order of the deletes does not matter.
+        with transaction.atomic(using=alias), connection.cursor() as cursor:
+            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+            cursor.execute(f"DO $teardown$ BEGIN {' '.join(statements)} END $teardown$")
+        if self._post_migrate_rows(alias)[1::2] != before[1::2]:
+            emit_post_migrate_signal(verbosity=0, interactive=False, db=alias)

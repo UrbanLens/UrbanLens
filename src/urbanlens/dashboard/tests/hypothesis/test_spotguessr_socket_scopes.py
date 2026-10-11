@@ -6,10 +6,10 @@ import json
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
-from django.test import TransactionTestCase
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import GameSessionConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile

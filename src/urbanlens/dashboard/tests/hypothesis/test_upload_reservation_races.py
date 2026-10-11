@@ -19,11 +19,12 @@ from unittest import mock
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connections
-from django.test import Client, TransactionTestCase, override_settings
+from django.test import Client, override_settings
 from django.urls import reverse
 from model_bakery import baker
 from PIL import Image as PILImage
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.images.model import Image, QuotaExemption
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin

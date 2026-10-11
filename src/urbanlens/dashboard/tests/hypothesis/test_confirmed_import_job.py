@@ -12,12 +12,12 @@ from celery.exceptions import SoftTimeLimitExceeded
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import tasks_run_inline
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.core import single_flight
 from urbanlens.dashboard.services.import_export.import_data import IMPORT_TTL_SECONDS

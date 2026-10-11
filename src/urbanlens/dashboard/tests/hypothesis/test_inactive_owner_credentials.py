@@ -18,7 +18,6 @@ from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser, User
-from django.test import TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -30,7 +29,7 @@ from oauth2_provider.models import (
     get_refresh_token_model,
 )
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
 from urbanlens.dashboard.consumers import UserNotificationConsumer, _credential_is_still_valid
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.billing import RoleSubscription

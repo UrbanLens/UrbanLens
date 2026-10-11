@@ -14,11 +14,10 @@ from unittest import mock
 
 from django.conf import settings
 from django.db import connection, transaction
-from django.test import TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 
 from urbanlens.core.semijoin import probe_scope
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase, TransactionTestCase
 from urbanlens.UrbanLens.settings._env import env_bool
 
 #: A statement that changes ``enable_seqscan`` for the rest of the session rather than the transaction.

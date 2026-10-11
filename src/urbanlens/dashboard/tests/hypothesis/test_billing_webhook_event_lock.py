@@ -17,11 +17,12 @@ from typing import Any
 from unittest import mock
 
 from django.contrib.auth.models import User
-from django.test import Client, TransactionTestCase, override_settings
+from django.test import Client, override_settings
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.concurrency import run_concurrently
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription, StripeWebhookEvent
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.billing import webhooks as billing_webhooks

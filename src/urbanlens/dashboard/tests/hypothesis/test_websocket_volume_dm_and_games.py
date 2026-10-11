@@ -11,11 +11,12 @@ from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.core.cache import cache
-from django.test import TransactionTestCase, override_settings
+from django.test import override_settings
 from model_bakery import baker
 import pytest
 
 from urbanlens.core.tests.features import grant_alpha_features
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer, TriviaSessionConsumer
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.model import Friendship

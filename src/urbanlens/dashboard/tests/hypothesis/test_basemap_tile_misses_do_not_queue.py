@@ -17,8 +17,8 @@ from unittest import mock
 
 from django.core.cache import caches
 from django.db import connections, transaction
-from django.test import TransactionTestCase
 
+from urbanlens.core.tests.testcase import TransactionTestCase
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
 from urbanlens.dashboard.services.apis.locations.basemap_vendor_tiles_gateway import BasemapVendorTilesGateway
 from urbanlens.dashboard.services.core import call_tally, provider_health
