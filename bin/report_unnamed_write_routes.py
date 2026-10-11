@@ -154,7 +154,7 @@ def main(argv: list[str] | None = None) -> int:
     Returns:
         The process exit status.
     """
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=__doc__.strip().splitlines()[0])
     parser.add_argument("--root", type=pathlib.Path, default=pathlib.Path.cwd(), help="repository root to scan for tests")
     parser.add_argument("--json", action="store_true", help="print the unnamed write routes as JSON")
     args = parser.parse_args(argv)
