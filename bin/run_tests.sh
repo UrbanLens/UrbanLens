@@ -15,12 +15,15 @@
 #   bin/run_tests.sh --fresh-db [pytest args...]# rebuild it (needed after a migration)
 #   bin/run_tests.sh --force --fresh-db ...     # rebuild even if something is connected
 #   bin/run_tests.sh --parallel[=N] [args...]   # N xdist workers (default: auto)
+#
+# Without --parallel, a directory or the whole suite runs on 4 xdist workers and files or test
+# ids in one process; UL_TEST_WORKERS or -n overrides (bin/lib/pytest_workers.sh).
 #   bin/run_tests.sh --shuffle [pytest args...] # randomise test order
 #   bin/run_tests.sh --no-venv-fix ...          # do not install missing dev deps
 #
 # --fast reuses a persistent DB (rebuild after migrations); set UL_TEST_DB_NAME per session on shared hosts.
 #
-# --parallel gives each xdist worker its own DB; wins on large selections, loses on single files.
+# --parallel gives each xdist worker its own DB, copied from a migrated template (core/tests/template_database.py).
 #
 # --shuffle is opt-in; reproduce failures with the printed seed.
 #
@@ -48,6 +51,8 @@ SHUFFLE=0
 # The copy-into-a-container sequence is shared with bin/sync_app.sh.
 # shellcheck source=bin/lib/container_sync.sh
 . "$(dirname "${BASH_SOURCE[0]}")/lib/container_sync.sh"
+# shellcheck source=bin/lib/pytest_workers.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib/pytest_workers.sh"
 
 args=()
 for arg in "$@"; do
@@ -73,6 +78,9 @@ if [ -n "$PARALLEL" ]; then
     # TestCase before any TransactionTestCase (whose teardown empties the tables
     # migrations seeded), as CI does.
     args=(-n "$PARALLEL" --dist loadscope --no-loadscope-reorder "${args[@]}")
+else
+    ul_default_xdist_args "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" "${args[@]}"
+    args=("${UL_XDIST_ARGS[@]}" "${args[@]}")
 fi
 if [ "$SHUFFLE" -eq 1 ]; then
     # Undoes the `-p no:randomly` in pyproject's addopts; a later -p wins.

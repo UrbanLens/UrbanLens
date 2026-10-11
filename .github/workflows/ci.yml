@@ -151,8 +151,9 @@ jobs:
       #
       # 1. Everything not marked `serial`, across four pytest-xdist workers, one per vCPU on ubuntu-latest. Measured
       #    2026-10-07: 4 workers took 50-53 min twice; 6 took 53; 8 took 36 on one runner and 59 on another; 12 took
-      #    68, since every worker collects the suite and migrates its own database first. `-n auto` counts physical
-      #    cores, which is 2 there. pytest-django suffixes each worker's database with its id
+      #    68, since every worker collected the suite and migrated its own database first. The workers now copy one
+      #    migrated template (src/urbanlens/core/tests/template_database.py), which the `serial` pass reuses. `-n auto`
+      #    counts physical cores, which is 2 there. pytest-django suffixes each worker's database with its id
       #    (test_urbanlens_ci_gw0, ...). `--dist loadscope --no-loadscope-reorder` hands out whole classes in the
       #    order pytest-django sorted them - every TestCase before any TransactionTestCase, whose teardown empties the
       #    tables migrations seeded - so each worker keeps Django's order.
