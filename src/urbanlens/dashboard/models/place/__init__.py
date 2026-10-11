@@ -2,6 +2,7 @@
 
 from urbanlens.dashboard.models.place.external_tag import ExternalTagSource, ExtractedTag, PlaceExternalTag
 from urbanlens.dashboard.models.place.external_tag_group import ExternalTagGroup, ExternalTagVocabularyEntry
+from urbanlens.dashboard.models.place.merge import PlaceMerge
 from urbanlens.dashboard.models.place.model import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
 from urbanlens.dashboard.models.place.queryset import (
     ExternalTagGroupManager,

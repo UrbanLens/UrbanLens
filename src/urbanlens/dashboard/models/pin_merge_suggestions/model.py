@@ -17,6 +17,9 @@ class PinMergeSuggestionOrigin(abstract.TextChoices):
     """What raised a PinMergeSuggestion."""
 
     LEGACY_CID_COLLISION = "legacy_cid_collision", "Legacy CID coordinate repair collision"
+    #: Two building places that were one real building were merged (``services.places.building_merge``), leaving the
+    #: owner with a pin on each.
+    DUPLICATE_BUILDING = "duplicate_building", "Duplicate building records merged"
 
 
 class PinMergeSuggestionStatus(abstract.TextChoices):

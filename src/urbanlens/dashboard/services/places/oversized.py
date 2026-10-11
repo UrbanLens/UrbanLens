@@ -91,6 +91,8 @@ def detach_oversized_place(place: Place) -> DetachOutcome:
     domain_wikis = list(Wiki.objects.filter(Q(location_id__in=location_ids) | Q(place=place)).values_list("pk", flat=True))
 
     Place.objects.filter(pk=place.pk).update(status=PlaceStatus.SUPERSEDED)
+    # A superseded building no longer counts toward its parcel's building_child_count.
+    lineage.refresh_derived_flags([place.parent_id])
     for child in list(place.children.all()):
         lineage.set_parent(child, None)
         outcome.children += 1

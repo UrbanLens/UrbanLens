@@ -145,10 +145,11 @@ def propagate_domain_root(place: Place) -> int:
 
 def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
     """Recompute the cached child summaries on the given places.
+    ``building_child_count`` counts only CURRENT buildings: a superseded one - a duplicate merged away, an implausible outline - no longer stands on the parcel, so it must not tip a one-building parcel into "multi-building" scope.
 
     Args:
         place_ids: Place primary keys; None entries and duplicates are ignored."""
-    from urbanlens.dashboard.models.place.model import PlaceKind
+    from urbanlens.dashboard.models.place.model import PlaceKind, PlaceStatus
 
     unique_ids = {pk for pk in place_ids if pk is not None}
     if not unique_ids:
@@ -160,7 +161,7 @@ def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
             Place.objects.filter(pk__in=ids).exclude(is_aggregate=flag).update(is_aggregate=flag)
 
     counts = dict(
-        Place.objects.filter(parent_id__in=unique_ids, parent_relation=PlaceRelation.PART_OF, kind=PlaceKind.BUILDING).values_list("parent_id").annotate(total=Count("pk")).values_list("parent_id", "total"),
+        Place.objects.filter(parent_id__in=unique_ids, parent_relation=PlaceRelation.PART_OF, kind=PlaceKind.BUILDING, status=PlaceStatus.CURRENT).values_list("parent_id").annotate(total=Count("pk")).values_list("parent_id", "total"),
     )
     by_count: dict[int, list[int]] = {}
     for pk in unique_ids:
