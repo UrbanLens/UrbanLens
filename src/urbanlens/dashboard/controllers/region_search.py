@@ -19,9 +19,7 @@ class RegionBoundarySearchView(LoginRequiredMixin, View):
     """
     Look up a place name's polygonal boundary for the Filters tab's region map.
 
-    GET /region-search/?q=<free text> → JSON ``{"results": [{"display_name": str, "geojson": dict},
-
-    ...]}``.
+    GET /region-search/?q=<free text> → JSON ``{"results": [{"display_name": str, "geojson": dict}, ...]}``.
     Only candidates with a Polygon/MultiPolygon geometry are returned - point addresses and other
     non-area results are dropped, since they can't be drawn as an include/exclude region.
     """

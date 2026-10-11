@@ -654,8 +654,8 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
         Ingest a batch of pre-clustered location results.
 
         Args:
-            request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count",
-            "label"}, ...]}``.
+            request: POST with a JSON body
+                ``{"clusters": [{"latitude", "longitude", "dates", "count", "label"}, ...]}``.
 
         Returns:
             JSON summary of suggestions created/updated, or a 400 error.

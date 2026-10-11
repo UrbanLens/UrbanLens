@@ -411,6 +411,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
         profile: The user who created this annotation.
         markup_type: One of line / arrow / text / square / circle / polygon.
         geometry: GeoJSON-style geometry dict.
+
             - LineString for line/arrow
             - Point for text, with an optional ``box_corner`` and ``rotation`` (degrees clockwise,
               relative to the screen rather than to north)

@@ -190,7 +190,7 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
     Nothing about the decision is cached, so a revocation takes effect on the very next request.
 
     Args:
-        raw_key: The full presented key, e.g. the ``Authorization`` header's token part after ``Bearer ``.
+        raw_key: The full presented key, e.g. the ``Authorization`` header's token part after the ``Bearer`` prefix.
 
     Returns:
         The matching, non-revoked ``ApiKey`` if the secret checks out; None

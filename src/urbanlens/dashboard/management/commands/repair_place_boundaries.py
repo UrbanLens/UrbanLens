@@ -9,7 +9,7 @@ locally, so the only genuinely new call per parcel is ``/parcels/{uuid}/boundari
 that has never been called, so there is no earlier response to reuse.
 
 - Parcels created by ``0027_places_backfill`` from pre-places location boundaries. They carry
-  ``geometry_generated_at=None``, and until recently ``geometry_sta...
+  ``geometry_generated_at=None``, and until recently ``geometry_sta...``
 - Parcels whose geometry *is* a provider answer, but from before the chain consulted
   ``/parcels/{uuid}/boundaries/``. For any New York parcel that answer was t...
 """

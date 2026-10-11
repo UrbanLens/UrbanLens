@@ -9,7 +9,7 @@ search identically.
 - ``{% map_search_bar %}`` pairs with ``window.LocationSearchEngine.attach(...)``
   (``frontend/ts/shared/location-search-engine.ts``).
 - ``{% map_toolbar %}`` renders the top-right tool icon row (screenshot, and - on the main map -
-  add/import/search/select) and pairs with ``window._openMapTool...
+  add/import/search/select) and pairs with ``window._openMapTool...``
 """
 
 from __future__ import annotations

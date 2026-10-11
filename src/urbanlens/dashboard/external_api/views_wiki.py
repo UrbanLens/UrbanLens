@@ -1186,8 +1186,8 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
         :func:`comment_is_visible` applies the same per-comment gates the thread listing does.
 
         Args:
-            request: The authenticated request. **kwargs: URL keyword arguments; ``location_slug`` and
-            ``comment_id`` are read here.
+            request: The authenticated request.
+            **kwargs: URL keyword arguments; ``location_slug`` and ``comment_id`` are read here.
 
         Returns:
             Tuple of (the comment, the requesting profile).

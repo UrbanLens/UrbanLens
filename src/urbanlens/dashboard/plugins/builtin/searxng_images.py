@@ -150,7 +150,7 @@ class SearxngImageMediaSource(NameSearchSource, GalleryMediaSource):
         self.store(pin, scope, {"items": results[:_MAX_IMAGES], "query": query or ""}, query_key=query or "")
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from the cached REData image results."""
+        """Rebuild ``MediaItem`` objects from the cached REData image results."""
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []

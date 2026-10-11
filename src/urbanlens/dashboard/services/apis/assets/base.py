@@ -79,7 +79,7 @@ class MediaItem:
 class MediaProvider(Gateway, ABC):
     """
     Template for gateways that return captioned media for a Location.
-    Subclasses implement ``_generate_media`` to yield ``MediaItem``s for a search term; ``get_media`` wraps that with the shared 7-day ``LocationCache``, so results are only fetched once per Location."""
+    Subclasses implement ``_generate_media`` to yield ``MediaItem`` objects for a search term; ``get_media`` wraps that with the shared 7-day ``LocationCache``, so results are only fetched once per Location."""
 
     display_name: ClassVar[str] = "Media"
     #: Restricts this provider to a geographic region (see ``services.geo.geo_boundary``);
@@ -122,9 +122,6 @@ class MediaProvider(Gateway, ABC):
             search_term: The search term to use to find media.
             address: The address of the location, if any. Some media providers
                 may use this, or quote it, differently than others.
-
-        Returns:
-            Generator of ``MediaItem``s.
         """
         ...
 
@@ -157,7 +154,7 @@ class MediaProvider(Gateway, ABC):
             search_names: The names the terms were built from, kept on the row.
 
         Returns:
-            Tuple of (list of ``MediaItem``s, empty when the provider found nothing; whether the result was served from cache).
+            Tuple of (list of ``MediaItem`` objects, empty when the provider found nothing; whether the result was served from cache).
 
         Raises:
             Exception: The outage that left every query unanswered, so that nothing is cached (see ``is_source_outage``).

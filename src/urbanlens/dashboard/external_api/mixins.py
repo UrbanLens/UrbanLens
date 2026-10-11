@@ -158,8 +158,9 @@ class _ReactionMixin:
         to someone else is byte-identical to a row that does not exist.
 
         Args:
-            request: The authenticated request. **kwargs: The URL keyword arguments, minus ``emoji`` which
-            this mixin has already consumed.
+            request: The authenticated request.
+            **kwargs: The URL keyword arguments, minus ``emoji`` which
+                this mixin has already consumed.
 
         Returns:
             Tuple of (the reactable row, the requesting profile).
@@ -176,8 +177,9 @@ class _ReactionMixin:
         Ensure the caller's reaction is present, idempotently.
 
         Args:
-            request: The authenticated request. *args: Unused positional URL arguments. **kwargs: URL
-            keyword arguments, including ``emoji``.
+            request: The authenticated request.
+            *args: Unused positional URL arguments.
+            **kwargs: URL keyword arguments, including ``emoji``.
 
         Returns:
             The target's reaction summary under: attr:`reaction_response_key`, or a 400 for an unsupported
@@ -191,8 +193,9 @@ class _ReactionMixin:
         Ensure the caller's reaction is absent, idempotently.
 
         Args:
-            request: The authenticated request. *args: Unused positional URL arguments. **kwargs: URL
-            keyword arguments, including ``emoji``.
+            request: The authenticated request.
+            *args: Unused positional URL arguments.
+            **kwargs: URL keyword arguments, including ``emoji``.
 
         Returns:
             The target's reaction summary under: attr:`reaction_response_key`, or a 400 for an unsupported
@@ -206,8 +209,8 @@ class _ReactionMixin:
 
         Args:
             request: The authenticated request.
-            want_present: True for PUT (reaction should exist afterwards), False for DELETE. **kwargs: URL
-            keyword arguments; ``emoji`` is consumed here and the...
+            want_present: True for PUT (reaction should exist afterwards), False for DELETE.
+            **kwargs: URL keyword arguments; ``emoji`` is consumed here and the...
 
         Returns:
             200 with ``{<reaction_response_key>: <summary>}``, or 400 when the emoji is not one this

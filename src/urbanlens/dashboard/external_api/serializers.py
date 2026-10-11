@@ -513,7 +513,7 @@ class PinUpdateSerializer(serializers.Serializer):
     success and lost the edit.
 
     - ``rating`` is deliberately excluded. A pin's rating is not a pin field at all - it is the caller's
-      ``Review`` of it, written through ``PUT``/``DELETE /pins/{...
+      ``Review`` of it, written through ``PUT``/``DELETE /pins/{...``
     - ``address``, ``city``, ``state`` and ``country`` are read-only. They are not stored on the pin:
       they are derived from the shared ``Location`` the pin points ...
     - ``official_name`` likewise belongs to the Location, not the pin; ``name`` here is the caller's own

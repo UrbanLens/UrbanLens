@@ -6,7 +6,7 @@ deliberate departures from that internal surface, both made for consistency with
 API rather than with the page the logic was copied from:
 
 - Every optional field here follows the same "absent means untouched, an explicit null clears it"
-  rule :class:`~urbanlens.dashboard.external_api.serializers.Pi...
+  rule ``~urbanlens.dashboard.external_api.serializers.Pi...``
 - ``add_label_uuids``/``remove_label_uuids`` uuids must resolve to a label the caller may use, or
   the whole request is refused with 400 - the internal view sil...
 """

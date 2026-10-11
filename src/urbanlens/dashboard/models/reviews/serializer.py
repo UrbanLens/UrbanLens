@@ -18,4 +18,5 @@ class ReviewSerializer(serializers.ModelSerializer):
         fields = ["id", "profile", "pin", "rating"]
 
     def create(self, validated_data):
+        """Create the review from the validated fields."""
         return Review.objects.create(**validated_data)

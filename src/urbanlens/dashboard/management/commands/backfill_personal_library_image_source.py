@@ -39,7 +39,8 @@ class Command(BaseCommand):
         Count, then relabel unless asked not to.
 
         Args:
-            *args: Unused. **options: Parsed command options.
+            *args: Unused.
+            **options: Parsed command options.
         """
         from urbanlens.dashboard.models.images.model import Image, ImageSource
         from urbanlens.dashboard.models.immich.model import ImmichAccount
