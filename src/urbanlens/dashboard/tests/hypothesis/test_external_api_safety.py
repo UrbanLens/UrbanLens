@@ -515,7 +515,7 @@ class SafetyCheckinMapsTests(_SafetyApiTestCase):
 
     Regression coverage for the bare top-level array this endpoint used to answer with - it could never gain a
     field later without breaking clients, so it was normalized onto ``{count,next,previous,results}`` (see
-    ``docs/notes/mobile_app_notes.md`` Part 7)."""
+    the Pagination note in ``docs/EXTERNAL_API.md``)."""
 
     def setUp(self) -> None:
         super().setUp()

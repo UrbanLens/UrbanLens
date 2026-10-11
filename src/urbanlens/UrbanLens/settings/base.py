@@ -811,7 +811,7 @@ CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY = "credentialless"
 
 # Content-Security-Policy (django-csp >= 4).
 #
-# script-src refuses inline script: no template or bundle-built markup carries any (docs/notes/csp-violations.md), and
+# script-src refuses inline script: no template or bundle-built markup carries any, and
 # test_templates_run_no_inline_script.py keeps it that way. htmx must not need 'unsafe-eval' either: no hx-on, js:
 # hx-vals or trigger filters (frontend/ts/shared/htmx-actions.ts replaces them).
 #: The keyless public vector basemap (openfreemap.org): free, no key, no usage limits, any use allowed.
@@ -1015,7 +1015,7 @@ allow_media_origin(_CSP_DIRECTIVES, UL_MEDIA_BASE_URL)
 allow_basemap_style_origins(_CSP_DIRECTIVES, _app_settings.basemap_style_base_url)
 allow_hosted_basemap_tiles(_CSP_DIRECTIVES, hosted_basemap_key(EGRESS_ENVIRONMENT, _app_settings.protomaps_api_key))
 
-# Enforced unless UL_CSP_ENFORCE=false; docs/notes/csp-violations.md covers diagnosing a block.
+# Enforced unless UL_CSP_ENFORCE=false.
 CSP_ENFORCE = _app_settings.csp_enforce
 if CSP_ENFORCE:
     CONTENT_SECURITY_POLICY = {"DIRECTIVES": _CSP_DIRECTIVES}

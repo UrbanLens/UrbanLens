@@ -1,4 +1,4 @@
-"""Tests for the passkey-PRF unlock layer (docs/designs/e2ee-passkey-unlock.md)."""
+"""Tests for the passkey-PRF unlock layer."""
 
 from __future__ import annotations
 

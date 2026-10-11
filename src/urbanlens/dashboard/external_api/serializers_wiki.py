@@ -426,8 +426,7 @@ class WikiCoverPhotoResponseSerializer(serializers.Serializer):
 class WikiOwnerSerializer(serializers.Serializer):
     """One shared owner record on a wiki's Ownership card (schema-only, read-only).
 
-    Write support is deliberately out of scope this pass - see
-    ``docs/notes/mobile_app_notes.md`` Part 7 for why.
+    Write support is deliberately out of scope this pass.
     """
 
     id = serializers.IntegerField(read_only=True)

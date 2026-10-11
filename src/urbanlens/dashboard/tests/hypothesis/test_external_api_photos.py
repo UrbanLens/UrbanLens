@@ -315,7 +315,7 @@ class JournalResponseShapeTests(TestCase):
 
     Regression coverage for the bare ``{entries,total,omitted_sources}`` shape this endpoint used to answer with
     - it could never gain a field later without breaking clients, so it was normalized onto
-    ``{count,next,previous,results}`` (see ``docs/notes/mobile_app_notes.md`` Part 7)."""
+    ``{count,next,previous,results}`` (see the Pagination note in ``docs/EXTERNAL_API.md``)."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)

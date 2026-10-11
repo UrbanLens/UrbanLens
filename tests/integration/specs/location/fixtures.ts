@@ -1,7 +1,7 @@
 /**
  * Shared setup for the Hudson River State Hospital specs: one pin at the requirement's coordinate,
  * enrichment started the way a user starts it (by opening the private pin page), and the parcel
- * waited for once per run. Reasoning lives in docs/LOCATION_DATA_TESTS.md.
+ * waited for once per run.
  */
 
 import { type APIRequestContext, type Browser, type Page, type PlaywrightWorkerArgs, type WorkerFixture } from "@playwright/test";

@@ -5,7 +5,7 @@ date: 2026-09-15
 
 # The map cache is an accelerator the site can lose, and labels ship once per document
 
-Formerly `D12`. Detail: [`docs/designs/map-data-contract-v11.md`](../designs/map-data-contract-v11.md).
+Formerly `D12`.
 
 Jess's constraint is that not every user's data can stay cached forever, and that prewarming may only make an already fast site snappier. So the map must be correct and fast enough with the cache empty. The mutable per-pin cache, which had three known races, was replaced by an immutable, version-keyed document cache (`SET NX` on a key derived from the content's ETag), with nothing a race can corrupt. Pins carry `label_ids`, and each label ships once in a per-document dictionary instead of being copied into every pin.
 

@@ -30,7 +30,7 @@ was not chased down; recorded as a measured fact, not a diagnosed one.
 **The non-matching variant fixed 2026-09-17**, by the same bounded-semi-join rewrite as P123's own
 file: ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own candidate primary keys,
 materialised as a concrete list first. See ``test_search_does_not_read_another_accounts_labels.py``'s
-module docstring for the measured mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
+module docstring for the measured mechanism.
 """
 
 from __future__ import annotations

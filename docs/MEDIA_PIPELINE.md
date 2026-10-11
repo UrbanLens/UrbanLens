@@ -124,8 +124,7 @@ produced a stripped/downscaled (or transcoded, or converted) copy. Until then,
 restrict the row to its uploader; everyone else gets the same "not found" a
 deleted file would produce. `SafetyContactPhotoView`, the one serving surface
 that does not go through `authorize_image`, filters `pending_scan=False`
-itself. See `Image.pending_scan` and the resolved entries in
-`docs/PROBLEMS.md`.
+itself. See `Image.pending_scan`.
 
 Every media type gets that gate, not just photos: a video or document is stored
 raw too, and its window is the *longer* one (an ffmpeg transcode runs for
@@ -139,8 +138,7 @@ this way retries a few times, then is deleted outright
 (`tasks._reject_image_upload`) rather than served raw. Clearing `pending_scan`
 on that path instead - "give up and fall back to visible" - was the actual
 first implementation, and was wrong: it degraded straight through the leak
-this whole mechanism exists to prevent. Kept as a cautionary example in
-`docs/PROBLEMS.md`'s resolved entry.
+this whole mechanism exists to prevent. Kept as a cautionary example.
 
 What makes it a sandbox, in the order that matters:
 
@@ -526,8 +524,7 @@ Three things a deployment has to know:
   `services/import_export/export.py` uses `FileField.path` twice, which raises
   on a non-filesystem storage.
 
-`docs/designs/media-object-storage.md` has the decision and why presigned URLs
-to the client were refused.
+ADR-0006 has the decision and why presigned URLs to the client were refused.
 
 ### How big an upload may be
 
@@ -574,8 +571,7 @@ decodes, the `render_preview` callers go through sandbox tasks (`render_proxied_
 enrichment photos go through `process_image_upload`, and the one legitimate
 exemption (`strip_exif_from_stored_photos`, a backfill over already-scanned files) is
 written down as an `allow_untrusted_parse` block rather than left implicit. What
-`warn` cannot show is an undecorated parser - P116 and P117 were the two known, both fixed.
-Tracked in `docs/PROBLEMS.md`.
+`warn` cannot show is an undecorated parser - two were known, both fixed.
 
 ## Media previews
 

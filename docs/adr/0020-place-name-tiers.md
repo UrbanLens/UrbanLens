@@ -5,7 +5,7 @@ date: 2026-09-23
 
 # A place's automatic name is ranked by kind of name before source
 
-Formerly `D20`. Detail: [`docs/designs/place-name-tiers.md`](../designs/place-name-tiers.md).
+Formerly `D20`.
 
 A staging pin on the Hudson River State Hospital campus was titled after the private road under it, because Nominatim came first in the source priority and nothing told a road from a place. Every automatic name candidate now carries a tier, which decides before the admin's source priority: Wikipedia article, then a historic-register listing whose own boundary contains the point, then site, building, point of interest, and road. Jess asked for the explicit ranking and ruled that the Wikipedia article beats the register listing, since a listing can name a single building on a larger property.
 

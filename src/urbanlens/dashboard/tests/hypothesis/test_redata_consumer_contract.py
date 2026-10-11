@@ -1,7 +1,7 @@
 """Every field UrbanLens reads from REData is one REData publishes, where UrbanLens reads it.
 
 The table is ``redata_contract.READS``: one row per UrbanLens reader and REData operation, listing the response fields
-the reader uses. It is checked against REData's own OpenAPI document, vendored by ``bin/vendor_redata_schema.py``.
+the reader uses. It is checked against REData's own OpenAPI document, vendored by a maintainer from a REData checkout.
 A failure here is a wire mismatch - the kind that left the Historical Maps gallery empty because it read ``sheet``
 fields at the top level - or a table that has fallen behind the code it describes.
 """

@@ -225,7 +225,7 @@ class ArchiveCheckinTests(TestCase):
 
 
 class ArchiveCheckinFailureCapTests(TestCase):
-    """archive_checkin's give-up-after-MAX_ARCHIVE_ATTEMPTS backstop for a checkin whose archival keeps failing (docs/PROBLEMS.md: a corrupted MessagingKeyBundle.public_key otherwise fails the same way on every 5-minute sweep forever, with no cap or alert)."""
+    """archive_checkin's give-up-after-MAX_ARCHIVE_ATTEMPTS backstop for a checkin whose archival keeps failing (a corrupted MessagingKeyBundle.public_key otherwise fails the same way on every 5-minute sweep forever, with no cap or alert)."""
 
     def setUp(self):
         self.owner = _profile()

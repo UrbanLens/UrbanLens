@@ -140,7 +140,7 @@ class WikiPatchTests(WikiDetailBaseTestCase):
         self.assertIn("fences", edit.changes)
 
     def test_invalid_security_value_is_rejected_not_skipped(self) -> None:
-        """The internal view silently drops this; the API must not (PROBLEMS.md)."""
+        """The internal view silently drops this; the API must not."""
         response = self._patch({"security": {"fences": "extremely"}})
         self.assertEqual(response.status_code, 400)
         self.wiki.refresh_from_db()

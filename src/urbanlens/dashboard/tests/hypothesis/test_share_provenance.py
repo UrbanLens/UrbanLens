@@ -82,7 +82,7 @@ class ExposureRecordingTests(_ProvenanceTestCase):
 
 
 class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
-    """A DatabaseError recording the exposure is swallowed inside its own nested atomic() savepoint (docs/PROBLEMS.md - naively wrapping the whole share-creation view in atomic() would otherwise convert this tolerated bookkeeping gap into a hard 500 for the entire share; nesting just this write keeps it genuinely all-or-nothing without risking that)."""
+    """A DatabaseError recording the exposure is swallowed inside its own nested atomic() savepoint (naively wrapping the whole share-creation view in atomic() would otherwise convert this tolerated bookkeeping gap into a hard 500 for the entire share; nesting just this write keeps it genuinely all-or-nothing without risking that)."""
 
     def _pending_share(self) -> PinShare:
         return PinShare.objects.create(

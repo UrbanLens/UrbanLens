@@ -151,7 +151,6 @@ def filter_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) 
     criteria = deserialize_criteria(pin_list.smart_filter, pin_list.profile)
     # root_pins(): every saved-filter preview call site (controllers/saved_filters.py) excludes detail/child pins
     # before matching criteria, so a child pin never joins a list its filter's preview would not have shown it on.
-    # See docs/audits/GOALS_CODE_AUDIT.md ("Lists: filter/manual reconciliation").
     matches = Pin.objects.filter(profile=pin_list.profile_id).root_pins().filter_by_criteria(criteria)
     if among is not None:
         matches = matches.filter(pk__in=among.values("pk"))

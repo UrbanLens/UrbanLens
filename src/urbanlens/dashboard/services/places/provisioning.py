@@ -303,8 +303,7 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
         return {}
 
     # REData's reconciled shape reports nesting: a coarse footprint enclosing finer ones becomes
-    # their `parent_ref` rather than a duplicate of them (its
-    # `../REData/docs/archive/buildings-dedup-spec.md`).
+    # their `parent_ref` rather than a duplicate of them.
     # Parenting every building to the parcel regardless made an envelope and the wings inside it
     by_ref: dict[str, int] = {}
     for index, building in enumerate(buildings):

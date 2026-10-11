@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if `docs/INDEX.md` has drifted from its own rules, or `docs/adr/` reuses a number."""
+"""Fail if `docs/INDEX.md` (where present) has drifted from its own rules, or `docs/adr/` reuses a number."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import re
 import subprocess
 import sys
 
-#: Status values each prefix allows, from the table in `docs/README.md`.
+#: Status values each prefix allows.
 _STATUSES = {
     "I": {"unvalidated", "actionable", "absorbed"},
     "X": {"holds", "collapsed", "untestable", "disqualified"},
@@ -45,6 +45,17 @@ def audit(index: str, adr_names: list[str]) -> list[str]:
 
     Returns:
         One human-readable line per drift, empty when everything agrees."""
+    return audit_index(index) + audit_adrs(adr_names)
+
+
+def audit_index(index: str) -> list[str]:
+    """Report every way the index breaks its rules.
+
+    Args:
+        index: Contents of `docs/INDEX.md`.
+
+    Returns:
+        One human-readable line per drift, empty when everything agrees."""
     failures: list[str] = []
 
     seen: dict[str, int] = {}
@@ -78,6 +89,18 @@ def audit(index: str, adr_names: list[str]) -> list[str]:
             if int(number) != expected:
                 failures.append(f"  next free {prefix} is {number}, but {prefix}{highest.get(prefix, 0)} is allocated - should be {prefix}{expected}")
 
+    return failures
+
+
+def audit_adrs(adr_names: list[str]) -> list[str]:
+    """Report every ADR file that is misnamed or reuses another's number.
+
+    Args:
+        adr_names: File names in `docs/adr/`.
+
+    Returns:
+        One human-readable line per drift, empty when everything agrees."""
+    failures: list[str] = []
     numbers: dict[str, list[str]] = {}
     for name in adr_names:
         if name == "README.md":
@@ -97,19 +120,17 @@ def main() -> int:
     root = pathlib.Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
     index_path = root / "docs/INDEX.md"
     adr_dir = root / "docs/adr"
-    if not index_path.is_file():
-        print("docs/INDEX.md is missing. AGENTS.md and .claude/agents/ both send readers to it.")
-        return 1
-
     adr_names = sorted(path.name for path in adr_dir.glob("*.md")) if adr_dir.is_dir() else []
-    failures = audit(index_path.read_text(encoding="utf-8"), adr_names)
+    # The index is kept out of the public mirror, so a checkout of that mirror has
+    # only the ADR directory to audit.
+    failures = audit(index_path.read_text(encoding="utf-8"), adr_names) if index_path.is_file() else audit_adrs(adr_names)
 
     if not failures:
         return 0
     print(f"docs/INDEX.md or docs/adr/ has drifted ({len(failures)}):")
     print("\n".join(failures))
     print()
-    print("The index is the allocator for the prefixes it still holds - see docs/README.md.")
+    print("The index is the allocator for the prefixes it still holds.")
     print("Problems and tasks are GitHub issues; decisions are ADRs in docs/adr/.")
     return 1
 

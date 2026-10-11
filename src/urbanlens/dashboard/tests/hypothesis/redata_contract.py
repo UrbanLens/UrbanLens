@@ -1,7 +1,7 @@
 """What UrbanLens reads from REData: one row per reader and REData operation, with the response fields it uses.
 
 ``test_redata_consumer_contract.py`` checks every row against REData's OpenAPI document, vendored at
-``VENDORED_SCHEMA`` by ``bin/vendor_redata_schema.py``. When a reader starts using a REData field, add the field to its
+``VENDORED_SCHEMA`` by a maintainer from a REData checkout. When a reader starts using a REData field, add the field to its
 row; when it starts calling an operation, add a row and re-vendor.
 
 Field paths are dot-separated keys from the body root. ``key[]`` steps into each item of the array at ``key``, a
@@ -24,7 +24,7 @@ from pathlib import Path
 
 VENDORED_SCHEMA = Path(__file__).parent / "fixtures" / "redata_openapi.json"
 #: REData's Overture shard boxes (``parcels.services.overture.shards.US_STATE_BBOXES``), vendored by
-#: ``bin/vendor_redata_schema.py --shards`` from the same REData as ``VENDORED_SCHEMA``.
+#: a maintainer from the same REData checkout as ``VENDORED_SCHEMA``.
 VENDORED_OVERTURE_SHARDS = Path(__file__).parent / "fixtures" / "redata_overture_shards.json"
 
 

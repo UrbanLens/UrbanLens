@@ -129,7 +129,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, ba
     # The wider problem this guards against is not concealment-specific: forms here post every field
     # rather than the changed ones, so a diff is the only thing standing between an untouched field
     # and a write.
-    # See "forms submit and save every field" in docs/PROBLEMS.md.
+    # See UrbanLens#265 ("dialog forms still post every field").
     shown = baseline if baseline is not None else wiki
 
     for field in WIKI_EDITABLE_FIELDS:

@@ -2,7 +2,7 @@
 
 Tracks which fields containing personal/private data are encrypted at rest, which are
 deliberately left plaintext (and why), what else on the box holds the same data, and what's
-still open. Companion to `docs/NOTES.md`, `docs/designs/e2ee.md`.
+still open.
 
 ## Scope: what this document covers, and what it deliberately does not
 
@@ -21,7 +21,7 @@ Two encryption layers exist in this codebase:
 | Layer | What it protects | Key holder | Documented in |
 |---|---|---|---|
 | `EncryptedTextField` (Fernet, server-side) | The fields tabled below | **The server** | This document |
-| E2EE message layer (X25519 + secretbox, client-side) | DM/group message bodies, safety archives | **The user's browser** | `docs/designs/e2ee.md` |
+| E2EE message layer (X25519 + secretbox, client-side) | DM/group message bodies, safety archives | **The user's browser** | `docs/FEATURES.md` |
 
 Only the second removes the server from the trust boundary. The first protects data that
 travels *without* the server's key - dumps, replicas, an insider's `SELECT`.

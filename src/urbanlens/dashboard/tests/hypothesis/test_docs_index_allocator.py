@@ -27,11 +27,13 @@ def _load_checker():
 
 
 def _row(ident: str, status: str = "current") -> str:
-    return f"| {ident} | {status} | 2026-10-07 | something measurable about {ident} | [`docs/NOTES.md`](NOTES.md) |"
+    return (
+        f"| {ident} | {status} | 2026-10-07 | something measurable about {ident} | [`docs/FEATURES.md`](FEATURES.md) |"
+    )
 
 
 def _index(rows: list[str], next_free: str) -> str:
-    """Build an `INDEX.md` holding `rows`, declaring `next_free`."""
+    """Build an index document holding `rows`, declaring `next_free`."""
     body = "\n".join(rows)
     return f"# INDEX\n\n**Next free id:** {next_free}\n\n| id | status | updated | claim | path |\n|---|---|---|---|---|\n{body}\n"
 

@@ -183,7 +183,7 @@ def repoint_cid_to_corrected_location(legacy_location: Location, correct_locatio
     ``GooglePlace.cid`` is unique, so the corrected Location can't claim this CID while the legacy
     Location's GooglePlace row still holds it. Clearing that row first, in one transaction, is what
     lets ``Location.objects.by_cid()`` resolve the CID to the corrected Location for every user from
-    now on instead of leaving it pinned to the wrong one (see docs/PROBLEMS.md P20).
+    now on instead of leaving it pinned to the wrong one.
 
     Args:
         legacy_location: The Location this CID is currently stuck on.

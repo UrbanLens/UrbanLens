@@ -77,8 +77,7 @@ nearest example reaches for the wrong tool.
 
 **2. The target must be EMPTY, not PostGIS-ready.**
 
-This is the opposite of the intuition, and `docs/PROBLEMS.md` asserted the intuition until this
-document replaced it. The dump installs PostGIS itself, so a target that already has it collides:
+This is the opposite of the intuition. The dump installs PostGIS itself, so a target that already has it collides:
 
 ```
 $ createdb restored -T template_postgis && psql -d restored -v ON_ERROR_STOP=1 -f backup_....sql

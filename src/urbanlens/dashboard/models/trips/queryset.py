@@ -414,7 +414,7 @@ class TripCommentQuerySet(abstract.DashboardQuerySet["TripComment"]):
         for the planner to join. Given the join, Postgres is free to drive it from the comment
         table and filter afterwards, which costs the site's comment count rather than the
         viewer's: 30 ms and a sequential scan of 50,000 rows for a viewer belonging to a handful
-        of trips, measured on the capacity population (docs/PROBLEMS.md P132).
+        of trips, measured on the capacity population (UrbanLens#281).
 
         Args:
             profile: The viewing profile.

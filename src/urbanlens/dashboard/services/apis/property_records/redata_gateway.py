@@ -865,7 +865,7 @@ class RedataGateway(Gateway):
             parcel_uuid: The parcel's REData uuid.
 
         Returns:
-            One dict per *physical building* (possibly empty), not one per source observation - REData reconciles them (its ``../REData/docs/archive/buildings-dedup-spec.md``).
+            One dict per *physical building* (possibly empty), not one per source observation - REData reconciles them.
 
         Raises:
             PropertyRecordsUnavailableError: The request to REData failed.

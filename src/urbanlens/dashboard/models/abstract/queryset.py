@@ -99,7 +99,7 @@ class DashboardQuerySet(django_models.QuerySet[_ModelT]):
         rows by primary key with whatever ``select_related``/``prefetch_related`` the caller wants.
         Carrying the hydration through the matching query costs planning time proportional to the
         relations it names, paid per call - 161.6 ms of it against 13.9 ms of execution on the map
-        autocomplete's keystroke query at capacity scale (docs/archive/PROBLEMS-ARCHIVE.md, P100).
+        autocomplete's keystroke query at capacity scale.
 
         Args:
             limit: Stop after this many ids; None for all of them.

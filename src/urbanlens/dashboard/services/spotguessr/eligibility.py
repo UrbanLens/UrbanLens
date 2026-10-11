@@ -1,5 +1,5 @@
 """Location eligibility for a SpotGuessr session.
-See ``docs/designs/drafts/spotguessr.md`` ("Eligibility") - the one rule repeated for every mode: only locations pinned by *every* participant are ever offered, including a solo session's one player."""
+The one rule repeated for every mode: only locations pinned by *every* participant are ever offered, including a solo session's one player."""
 
 from __future__ import annotations
 

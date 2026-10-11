@@ -151,7 +151,7 @@ test.describe.serial("friendships", () => {
         // Everything the two accounts already have between them, before this
         // test touches anything. This is the first test in the file, so it is
         // the one that meets the previous *run's* leftovers - and the surviving
-        // row is the open question in docs/PROBLEMS.md, 2026-08-24 ("re-adding a
+        // row is the open question ("re-adding a
         // removed friend"). Capturing it here means the next failure carries the
         // answer instead of another round of narrowing.
         const priorState: string[] = [];
@@ -194,7 +194,7 @@ test.describe.serial("friendships", () => {
                     `accepting answered ${accepted.status()}: ${(await accepted.text()).slice(0, 200)}.\n` +
                         `  After the request, the recipient saw status="${inbound?.status}" direction="${inbound?.direction}".\n` +
                         `  Before this test touched anything, the pair already had:\n    ${priorState.join("\n    ") || "(nothing)"}\n` +
-                        "  That prior row is the open question in docs/PROBLEMS.md 2026-08-24 - a constructed remove-then-re-request does not reproduce this.",
+                        "  That prior row is the open question - a constructed remove-then-re-request does not reproduce this.",
                 ).toBeLessThan(300);
             }
 

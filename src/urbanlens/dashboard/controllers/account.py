@@ -946,8 +946,7 @@ class LoginTwoFactorCancelView(View):
 
 
 #: How long "Not now" on the credential prompt stays quiet. Profile-persisted: the old per-session flag
-#: re-nagged SSO users on every signin, which trained them to dismiss security prompts (see
-#: docs/designs/e2ee-passkey-unlock.md).
+#: re-nagged SSO users on every signin, which trained them to dismiss security prompts.
 CREDENTIAL_PROMPT_SNOOZE = timedelta(days=30)
 
 

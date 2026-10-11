@@ -41,7 +41,7 @@ to the target pin count if re-running.
 - Cost was linear in pin count, not superlinear anywhere in the SQL: 438/566/571/610 μs per pin at
   1k/5k/10k/25k pins respectively.
 - The per-pin Valkey cache of the time: `page(500 pins)` cache hit 12.6ms, miss 236.8ms;
-  `rebuild(10k)` 6.79s cold. That cache was deleted on 2026-09-11 (D12), which is what closed P101 -
+  `rebuild(10k)` 6.79s cold. That cache was deleted on 2026-09-11 (ADR-0012) -
   these figures describe a path that no longer exists.
 
 ### After, 5,000 pins, with `ANALYZE` run post-seed
@@ -61,6 +61,5 @@ comparable to anything below.)
 ### What this does not cover
 
 Nothing here covers the autocomplete endpoint, which the four commits above do not touch. What was
-wrong with it turned out not to be missing trigram indexes at all - see P100 in
-`archive/PROBLEMS-ARCHIVE.md`, resolved 2026-09-21. The per-pin cache's race conditions (P101) were resolved by deleting the
-cache; see D12 and X17 for what replaced it and what it measures at.
+wrong with it turned out not to be missing trigram indexes at all (resolved 2026-09-21). The per-pin cache's race conditions were resolved by deleting the
+cache; see ADR-0012 for what replaced it.

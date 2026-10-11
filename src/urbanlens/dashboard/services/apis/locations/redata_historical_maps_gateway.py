@@ -3,6 +3,7 @@ Those tiles require REData API auth, so browser-facing consumers go through Urba
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
@@ -14,6 +15,31 @@ _VOLUMES_PATH = "/api/v1/maps/volumes/"
 #: Georeference authors accurate enough to list. ``derived_bounds`` is approximate, and it is
 #: also how Library of Congress Sanborn sheets are placed - LoC publishes no control points.
 OVERLAY_GRADE_SOURCES = "allmaps,redata,map_warper,derived_bounds"
+
+#: How long an answer REData marked ``complete: false`` (its deadline cut off the nearby-maps read) may be kept
+#: before the next ask goes back for the full one.
+PARTIAL_MAPS_STALE_AFTER = timedelta(minutes=5)
+
+
+class MapMatches(list):
+    """The matches of one ``/maps/`` answer, remembering whether REData finished reading.
+
+    A plain ``list`` to every reader that only shows the matches; :attr:`complete` is for the ones that cache them.
+    """
+
+    complete: bool = True
+
+
+def maps_answer_complete(matches: object) -> bool:
+    """Whether a ``get_maps_covering`` answer may be cached as the whole answer.
+
+    Args:
+        matches: What :meth:`RedataHistoricalMapsGateway.get_maps_covering` returned.
+
+    Returns:
+        False only for an answer REData marked incomplete. A plain list has no mark, so it counts as complete.
+    """
+    return getattr(matches, "complete", True) is not False
 
 
 class RedataHistoricalMapsGateway(RedataLocationContextGateway):
@@ -65,6 +91,9 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
 
         Returns:
             Match dicts ordered by containment then tightest footprint, so the first is the most detailed map of the spot.
+            The list's ``complete`` is False when REData's deadline cut off the nearby-maps read: the containing maps
+            are still in it, but a later ask may return more, so do not cache it as the whole answer. A body
+            without the key (older REData) is complete.
 
         Raises:
             LocationContextUnavailableError: The request failed or REData rejected a parameter.
@@ -81,7 +110,9 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         if limit is not None:
             params["limit"] = limit
         body = self.get_json(_MAPS_PATH, params)
-        return list(body.get("results") or [])
+        matches = MapMatches(body.get("results") or [])
+        matches.complete = body.get("complete") is not False
+        return matches
 
     def get_volumes_near(self, latitude: float, longitude: float, *, radius_meters: float | None = None, limit: int | None = None) -> list[dict[str, Any]]:
         """Fetch the catalogued volumes of scanned maps - a town's fire-insurance atlas, a county atlas - of the place a point is in or near.

@@ -1,8 +1,7 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see the repo-root `ROADMAP.md` for what's planned or partially
-built, and `docs/NOTES.md` for non-obvious behavior behind these features.
+(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise.
 
 ## Mapping & Pins
 
@@ -16,15 +15,14 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   editor keeps its own specialised menu.
 - **Pin** — a user's personal record for a place (custom name, private notes, icon, priority,
   status, last-visited date, marker coordinates), separate from the shared **Location** record
-  it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
-  this split exists.
+  it points to (canonical name, address, coordinates, Google CID).
 - Pin types: location, parcel, building, entrance, POI, danger, other
 - **Place** — one row per real-world parcel or building, and the unit everything shared hangs off:
   official geometry, the community wiki, boundary votes, and access. A coordinate resolves onto the
   most specific place containing it, so two people pinning opposite ends of one property share its
   page, its community, and its "places in common" entry without either coordinate being discarded.
   Buildings sit `PART_OF` their parcel; a split campus or a multi-parcel site sits above its parts
-  via `MEMBER_OF`. See `docs/NOTES.md` and `docs/designs/place-consolidation.md`.
+  via `MEMBER_OF`. See ADR-0004.
 - **Parcel vs. building scope** — on a property holding several buildings, a marker commits to
   describing either the *grounds* or one structure. A parcel-scoped marker suppresses its
   building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics) in
@@ -34,7 +32,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   P264). On an ordinary single-building property neither distinction exists, so markers stay neutral and
   both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
   it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
-  isn't the neutral default. See `docs/NOTES.md`.
+  isn't the neutral default.
 - **A new root pin's property is fetched without anyone opening it** (`services.pins.bootstrap`,
   `tasks.bootstrap_location`) — creating a top-level pin (map dialog, external API) queues a staged
   chain: REData prewarm of the point (`POST /locations/prewarm/`, scope `locations:prewarm`; a key
@@ -142,7 +140,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Nesting follows place lineage, so it agrees with access by construction, and runs whenever
   `get_or_create_for_location` creates a wiki (a pin, a share, an enrichment photo: P263) as well as
   when its boundary arrives; a wiki holding no place of its own looks for its container from the
-  place its point stands on upward (P231). See `docs/NOTES.md`.
+  place its point stands on upward.
 - **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
   the two coordinates are on the same property, returns the existing page instead of a second one.
   A viewer who has earned the page reaches it from their own location's URL. On a campus, a
@@ -813,8 +811,7 @@ direct-only because REData's contract can't reproduce what they show:
   collisions excluded, block-scale location precision stated on the panel. **Incident History is
   subscriber-only** (`SiteFeature.INCIDENT_HISTORY`) — a deeper, separately-gated sibling panel
   pulling REData's full 25-year window as a year-by-year trend, instead of the free panel's last 3
-  years/top 6 rows; the free panel is unaffected and stays free (see D10,
-  `docs/designs/incident-history-feature-gate.md`, for why it isn't folded into
+  years/top 6 rows; the free panel is unaffected and stays free (see ADR-0010 for why it isn't folded into
   `SiteFeature.NEARBY_RESEARCH`)
 - **Water & Hydrology** (USA, a Regional Data tab) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
   the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
@@ -832,8 +829,7 @@ direct-only because REData's contract can't reproduce what they show:
   valuations with their review stage — mailed/certified/board — Cook County today, via REData's
   `/parcels/{uuid}/assessments/`), and **supplementary recorded sales** (CT OPM, Cook County via
   `/parcels/{uuid}/sale-records/`) feed the Sale History cards — matched to the parcel by
-  address/PIN before attribution, with non-arms-length transfers excluded (see
-  `docs/designs/redata-integration.md`)
+  address/PIN before attribution, with non-arms-length transfers excluded
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the Private Pin page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
 - **What the weather was** — past trip activities show the *recorded* conditions for their day
   (high/low, rainfall, snowfall, peak wind and gust) from REData's `/weather/history/` (ERA5, worldwide,
@@ -962,8 +958,7 @@ through `available()`. Nothing is scheduled and nothing is cached, so REData's f
 
 ## Extensibility: Plugin System
 
-Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see
-`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, Private Pin
+Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`). A plugin can add rate-limited services, Private Pin
 panels, satellite/street-view providers, place-name providers, and lifecycle hooks. Plugins are
 discoverable from bundled modules, an env-var module list, or pip entry points, and can be
 enabled/disabled per-install or per-service without a restart. Inventory at `/site-admin/plugins/`.
@@ -1159,7 +1154,7 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   one that never goes out holds it at most `FINAL_WARNING_MAX_WAIT` past the overdue point. Each side claims
   its row with a conditional write, so the warning never follows a contact alert (`due_for_final_warning`,
   `due_for_escalation`)
-- A contact learns nothing of a check-in until escalation alerts them (GOALS.md, "Safety check-ins"); seeing it
+- A contact learns nothing of a check-in until escalation alerts them; seeing it
   earlier is for an accepted partner, whom the owner chose. "Shared with you", the shared status page, its
   photos, and every magic-link token route (portal, photo, route map, chat, mark-safe, opt-out) reach only a
   contact with `notified_at` set (`SafetyCheckinContact.objects.alerted`, `by_token`). The "found safe" and
@@ -1633,7 +1628,7 @@ free), and `SiteFeature.INCIDENT_HISTORY` restricts the deeper year-by-year Inci
 - **Four delivery paths, one authorization path** — `X-Accel-Redirect` to nginx off the media
   volume, `FileResponse` off disk, `X-Accel-Redirect` to an internal nginx proxy carrying a URL
   Django signed, or a stream from the object store through Django. Adding a fifth is a
-  `MediaByteSource` subclass. See `docs/designs/media-object-storage.md`.
+  `MediaByteSource` subclass. See ADR-0006.
 - **Uploads from their own origin** — `UL_MEDIA_BASE_URL` moves every media URL onto a separate
   hostname authenticated by a media-only signed cookie, so anything that slips past validation
   executes where there is no session cookie and no app data.
@@ -1957,8 +1952,7 @@ Reuse these rather than hand-rolling a counter, a lock or a check-then-insert.
 
 ## Games: SpotGuessr
 
-A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
-mapping: `docs/designs/drafts/spotguessr.md`. **Built (UL-391..UL-393): solo and multiplayer
+A GeoGuessr-style game built on the user's own pin/wiki/photo data. **Built (UL-391..UL-393): solo and multiplayer
 play, all three guess modes.** Everything below the line is not yet built.
 
 - Three modes: **Photos** (a photo shared to a pinned location's wiki - never a private,
@@ -2037,8 +2031,7 @@ design doc's "Multiplayer sessions" and "Multiplayer stall handling" sections.
 ## Games: Trivia
 
 A quiz game built on the same pin/wiki/location data as SpotGuessr: answer questions about
-places you've pinned, solo or with friends. Full design and phase mapping:
-`docs/designs/drafts/trivia.md`. **Built (Phases 1-4): solo and multiplayer play, all three
+places you've pinned, solo or with friends. **Built (Phases 1-4): solo and multiplayer play, all three
 question sources, AI content moderation, AI answer checking, and AI wiki incorporation.**
 Everything below the line is not yet built.
 
@@ -2114,8 +2107,7 @@ so a new answerable field is a registry entry rather than new game code.
   promotes a tentative row to applied** - `record_tentative_answers` accumulates `support_count`
   across sessions, and the `PENDING → APPLIED/DISMISSED` lifecycle the model defines is otherwise
   dead code (no controller, task, or admin path ever drives it past `PENDING`). An unsettled
-  disagreement today just accumulates support forever rather than ever resolving. See
-  `docs/audits/FEATURES_CODE_AUDIT.md`'s Consensus section for the open question this raises.
+  disagreement today just accumulates support forever rather than ever resolving.
 - **Trust, tracked but not yet gating the write.** `ConsensusProfile` carries a real Beta-Bernoulli
   posterior (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is
   already known — starting from a weakly-informative prior so a new player is neither trusted nor
