@@ -4,7 +4,7 @@ A copy of REData's ``parcels.services.overture.shards.US_STATE_BBOXES`` at relea
 each theme by these boxes, padded beyond each state and territory, and serves Overture only where its own
 ``is_usa_coordinates`` also holds. Alaska's box stops at -179.9, so the western Aleutians are in no shard.
 
-``OvertureShardTableTests`` holds this table equal to the copy ``bin/vendor_redata_schema.py --shards`` vendors.
+``OvertureShardTableTests`` holds this table equal to the copy a maintainer vendors from a REData checkout.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ scoped by ``trip__profiles=profile`` (``providers.py``) - and that path was neve
 the one to-many access scope in the module that does not go through the bounded semi-join, which is
 why it is measured separately rather than assumed to inherit the other's fix.
 
-Measured at capacity scale before this file existed (docs/PROBLEMS.md P132): that statement was
+Measured at capacity scale before this file existed (UrbanLens#281 ("global search read the whole site's rows")): that statement was
 30 ms and a sequential scan of 50,000 trip comments, on a population where the viewer belonged to a
 handful of trips.
 """

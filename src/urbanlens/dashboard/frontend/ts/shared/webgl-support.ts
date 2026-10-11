@@ -3,9 +3,8 @@
  * which caniuse put at 95.73% support *globally* in Aug 2026 - this deployment's own analytics have
  * never been measured, so the complement is not a figure for UrbanLens traffic. What actually makes
  * Leaflet a genuine second rendering engine rather than a plain "unsupported browser" message is
- * that nearly every map here is still Leaflet, and that does not expire when WebGL2 does - see `D12`
- * (REData's `../REData/docs/DECISIONS.md`) and `docs/designs/leaflet-to-maplibre-migration.md`
- * item 2 for the reasoning this module exists to serve.
+ * that nearly every map here is still Leaflet, and that does not expire when WebGL2 does - see REData's `D12`
+ * for the reasoning this module exists to serve.
  *
  * This is the branch point every converted map reads: a false answer here is what keeps the
  * pre-existing Leaflet path alive for that browser, so it must never throw.

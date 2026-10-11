@@ -1,4 +1,4 @@
-"""Repair or delete the import failures whose Google Maps CID lost its low digits to a float64 (REData ``docs/PROBLEMS.md`` P120).
+"""Repair or delete the import failures whose Google Maps CID lost its low digits to a float64 (REData's P120).
 
 The import wizard used to send each pin's CID through the browser as a JSON number, which a
 JavaScript ``Number`` returns with its low digits zeroed. Such a CID names no place; REData asked

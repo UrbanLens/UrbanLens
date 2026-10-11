@@ -5,7 +5,7 @@ date: 2026-09-06
 
 # Uploads over the ingress cap will be chunked to Django, not presigned multipart
 
-Formerly `D7`. Detail: [`docs/designs/large-upload-protocol.md`](../designs/large-upload-protocol.md).
+Formerly `D7`.
 
 Cloudflare's free plan caps a request body at 100 MB, below several of the app's upload limits. Until a new protocol exists, `UL_MAX_REQUEST_BODY_MB` lowers every upload limit to what the ingress will carry, so the browser refuses an oversize file before sending it. The protocol, when built, will be chunked upload to Django: it keeps the media validation pipeline unchanged, adds no public surface, and works on a single-machine self-host with no object store.
 

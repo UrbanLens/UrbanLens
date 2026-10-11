@@ -5,9 +5,9 @@ date: 2026-09-06
 
 # Media may live in an object store, but reads always pass the media gate
 
-Formerly `D6`. Detail: [`docs/designs/media-object-storage.md`](../designs/media-object-storage.md).
+Formerly `D6`.
 
-User media may be stored in an S3-compatible object store (`UL_MEDIA_STORAGE_BACKEND=s3`; filesystem stays the default), but a read is never served by handing the client a URL to that store. The client always gets `/media/<key>` and always passes `MediaGateView`. A presigned URL is a bearer token that carries no session, leaks through referrers, logs and shared links, and cannot be revoked, so it is exactly the surface `GOALS.md` requires to be impossible by construction.
+User media may be stored in an S3-compatible object store (`UL_MEDIA_STORAGE_BACKEND=s3`; filesystem stays the default), but a read is never served by handing the client a URL to that store. The client always gets `/media/<key>` and always passes `MediaGateView`. A presigned URL is a bearer token that carries no session, leaks through referrers, logs and shared links, and cannot be revoked, so it is exactly the surface the product goals require to be impossible by construction.
 
 ## Considered options
 

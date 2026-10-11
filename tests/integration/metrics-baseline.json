@@ -25,7 +25,7 @@
         "hrsh.pin_page.article_reveal_ms": { "max": 5000, "note": "Clicking the Article tab to the seeded content rendering, once the article already exists." },
         "hrsh.sources.buildings_with_pdf": { "min": 3, "note": "Of up to 3 sampled building pins, how many show >=1 CRIS document under Article > Sources." },
         "hrsh.sources.pdfs_per_building": { "min": 1, "note": "Median CRIS document count across sampled building pins' Sources tabs." },
-        "hrsh.sources.campus_distinct_buildings": { "min": 3, "note": "Distinct buildings named in the campus pin's own Sources tab; docs/PROBLEMS.md P24 says today it is only the nearest one." },
+        "hrsh.sources.campus_distinct_buildings": { "min": 3, "note": "Distinct buildings named in the campus pin's own Sources tab; see UrbanLens#272 (\"campus pin's CRIS detail fetches\")." },
         "hrsh.sources.wiki_distinct_buildings": { "min": 3, "note": "Same, read from the campus wiki's Sources tab." },
         "hrsh.sources.seconds_to_populate": { "max": 60, "note": "From selecting the Sources tab to its first CRIS document rendering; reads already-cached attachments, so this should be fast." },
         "hrsh.wiki.seconds_to_meaningful_title": { "max": 300, "note": "From the wiki existing to its name matching HRSH_NAME_PATTERN." },

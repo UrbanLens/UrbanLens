@@ -1,5 +1,5 @@
 /**
- * media-lightbox.ts fixed a real bug (docs/PROBLEMS.md, 2026-09-01).
+ * media-lightbox.ts fixed a real bug.
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";

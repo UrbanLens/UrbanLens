@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
 
-#: See docs/designs/drafts/spotguessr.md's config table - keep these in sync.
+#: Keep these in sync with the SpotGuessr config defaults.
 MIN_LOCATION_RATING = 1000.0
 MAX_LOCATION_RATING = 2000.0
 DIFFICULTY_BANDWIDTH = 200.0

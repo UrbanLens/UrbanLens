@@ -132,7 +132,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet["SafetyCheckin"]):
 
     def shared_with(self, profile: Profile) -> Self:
         """Return other profiles' check-ins where ``profile`` is an emergency contact who has been alerted.
-        Powers the safety overview's "Shared with you" section and a contact's reach to a check-in's photos. Before that alert a contact sees nothing of the check-in: GOALS.md ("Safety check-ins") gives contacts the plan "only if the user fails to check in on time", and earlier access to someone the owner explicitly chose - the accepted partner tier, ``partnered_with``.
+        Powers the safety overview's "Shared with you" section and a contact's reach to a check-in's photos. Before that alert a contact sees nothing of the check-in: the product goal for safety check-ins gives contacts the plan "only if the user fails to check in on time", and earlier access to someone the owner explicitly chose - the accepted partner tier, ``partnered_with``.
 
         Args:
             profile: The viewing profile.
@@ -185,7 +185,7 @@ class SafetyCheckinContactQuerySet(abstract.DashboardQuerySet["SafetyCheckinCont
     def by_token(self, token: str) -> Self:
         """Resolve a contact by their magic-link token, once that contact has been alerted.
         A contact identified only by email has no account to log into, so the public contact portal (and the check-in/markup-map views it links to) all resolve the requesting contact this same way - see the model's own docstring for why ``token`` is the credential here.
-        The token is only ever emailed with an alert, so one presented before it was leaked or guessed, and resolves to nothing: a contact learns nothing of a check-in, and can do nothing to it, before its owner misses it (GOALS.md, "Safety check-ins").
+        The token is only ever emailed with an alert, so one presented before it was leaked or guessed, and resolves to nothing: a contact learns nothing of a check-in, and can do nothing to it, before its owner misses it (the product goal for safety check-ins).
 
         Args:
             token: The magic-link token from the URL.

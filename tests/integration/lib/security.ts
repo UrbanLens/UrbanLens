@@ -182,7 +182,7 @@ export interface OwnPhotoFetch {
 
 /**
  * Fetches a just-uploaded photo's bytes as its owner, riding out the
- * async-rename race documented at `docs/PROBLEMS.md` P58: `tasks.process_image_upload`
+ * async-rename race: `tasks.process_image_upload`
  * re-encodes the stored file shortly after upload (`.png` -> `.webp`,
  * `downscale_stored_image`) and the row's `image` column - and therefore the
  * `url` a client was handed at upload time - can go stale before a

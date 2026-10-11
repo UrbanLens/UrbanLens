@@ -153,7 +153,7 @@ class SweepChunkQueryCostTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
         # One active achievement per registered metric, mirroring the
-        # docs/PROBLEMS.md measurement. Thresholds are unreachable so no
+        # measured scenario. Thresholds are unreachable so no
         # grant queries muddy the count.
         for metric in all_metrics():
             baker.make(

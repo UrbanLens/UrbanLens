@@ -20,10 +20,10 @@ bin/run_perf_tests.sh --url http://localhost:21810 \
 | `../../bin/perf/derive_budget.py` | Baseline p95 → the ceiling the measured pass is judged against. |
 | `../../bin/perf/pg_activity_sampler.sh` | 1 Hz `pg_stat_activity` by role, for the failures latency cannot see. |
 
-## P123 (fixed 2026-09-17): does the neighbour's search degrade as the labels table grows?
+## Fixed 2026-09-17: does the neighbour's search degrade as the labels table grows?
 
 The neighbour's rotation includes two `search.panel` requests, `global_search_match` and
-`global_search_miss` (see `docs/archive/PROBLEMS-ARCHIVE.md`'s entry, formerly P123, for the
+`global_search_miss` (the
 mechanism: a cross-account label-table scan with no access scoping - fixed, so this harness is now
 a regression guard rather than an active reproduction). Neither needs an actor phase to reproduce - the defect is triggered by
 total row count in `dashboard_labels`, not by anything happening in real time - so growing that
@@ -46,7 +46,7 @@ committing to a large seed, not for judging the defect.
 
 ### The same mechanism, five more relations
 
-`docs/archive/PROBLEMS-ARCHIVE.md`'s entry (formerly P123) generalises the same unscoped semi-join to
+The same unscoped semi-join generalises to
 `ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`, `TripSearchProvider`'s
 `activities__title`/`activities__notes`/`comments__text`, and `SafetySearchProvider`'s
 `messages__body` - confirmed at the unit level, fixed the same way as labels, and re-measured at
@@ -91,7 +91,7 @@ under 250ms one at a time.
 **A known wedge has to be held constant or it is the only thing you measure.**
 `Profile.compute_map_center` was O(n^2) in pins and sat on the map page's
 critical path — at 20,000 pins, minutes during which the process served nothing.
-That is what this harness found on its first honest run (P108, fixed: the
+That is what this harness found on its first honest run (fixed: the
 calculation is now linear and costs ~99 ms at that size). The seeder still
 stores the centre directly, because holding a known cost constant is worth doing
 whether or not it is currently large, and `precompute_map_center=False` leaves
@@ -108,7 +108,7 @@ than about the account under test.
 The default dev environment runs `runserver` under daphne, and **the process
 model changes the answer** - not by a little. Measured on the same account with
 the same harness: one user filtering cost the neighbour 4,431 ms on daphne and
-221 ms on gunicorn (X15). A run against `runserver` exercises the endpoints and
+221 ms on gunicorn. A run against `runserver` exercises the endpoints and
 the harness honestly; it does not tell you what the deployment does.
 
 ```bash
@@ -124,10 +124,10 @@ before you run a load test on one:
 
 - Set **`UL_ENVIRONMENT_SHARE=0`** in its `.env`. Otherwise, as staging, the
   import phase spends a share of every quota'd and billed provider's budget for
-  real, thousands of times (P109, D26). REData and AI stay reachable either way;
+  real, thousands of times (ADR-0026). REData and AI stay reachable either way;
   point `UL_REDATA_API_URL` at your own instance, or clear it, for a load run.
 - Set **`COMPOSE_PROFILES=metrics`** alongside `--metrics`, or the Celery
-  exporter is silently absent (N15).
+  exporter is silently absent.
 
 Containers are named `ul_<slug>_<service>`, so point the runner at
 `--provision-container ul_perf_app --db-container ul_perf_db`.

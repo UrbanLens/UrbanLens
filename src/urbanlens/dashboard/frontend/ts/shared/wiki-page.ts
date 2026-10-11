@@ -62,7 +62,7 @@ function replaceAbout(html: string): void {
  * Save the suggest-edits form as JSON.
  *
  * Every field is sent, not only the changed ones; the server diffs against what this viewer was shown (see
- * "forms submit and save every field" in docs/PROBLEMS.md).
+ * UrbanLens#265 ("dialog forms still post every field")).
  */
 export function installWikiEditForm(form: HTMLElement | null, editUrl: string): void {
     if (!(form instanceof HTMLFormElement)) return;

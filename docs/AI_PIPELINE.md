@@ -372,7 +372,6 @@ Every call through the inference client leaves one `ApiCallLog` row carrying
 the provider, model, status, latency, tokens and cost, and no content:
 `LLMGateway._get_response` writes it, or fills in the row an
 `api_call_slot` already reserved, and `vision.py` fills in its own slot.
-`docs/notes/billed-api-free-tiers.md` (R31) lists each path.
 
 Development and local send nothing to a hosted provider (D26, amended 2026-10-06). The feature's `api_call_slot`
 refuses by its own key, and both clients ask `egress.require_ai_provider` for `ai_<provider>` before a request leaves
