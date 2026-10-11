@@ -1,16 +1,19 @@
+#!/usr/bin/env python3
 """
-unused_methods.py
+report_unused_methods.py
 
 Find function and method definitions in a Python codebase that are never
 referenced anywhere else in the code, so they can be reviewed for removal.
 
+The report goes to docs/audits/unused_functions.txt unless -o says otherwise.
+
 Usage:
-    python unused_methods.py [DIRECTORY] [options]
+    python bin/report_unused_methods.py [DIRECTORY] [options]
 
 Examples:
-    python unused_methods.py .
-    python unused_methods.py src --exclude-dir tests --exclude-file queryset.py
-    python unused_methods.py . --workers 4 --json -o report.json
+    python bin/report_unused_methods.py .
+    python bin/report_unused_methods.py src --exclude-dir tests --exclude-file queryset.py
+    python bin/report_unused_methods.py . --workers 4 --json -o report.json
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from dataclasses import dataclass
 from fnmatch import fnmatch
 import json
 import os
+from pathlib import Path
 import re
 import sys
 from typing import TYPE_CHECKING
@@ -783,10 +787,14 @@ def write_json_report(results: dict[str, list[Finding]], output_path: str) -> No
 # ---------------------------------------------------------------------------
 
 
+#: The tracked report, resolved from this file so it lands there from any working directory.
+DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "audits" / "unused_functions.txt"
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("directory", nargs="?", default=".", help="Directory to scan (default: current directory)")
-    parser.add_argument("-o", "--output", default="unused_functions.txt", help="Report file path")
+    parser.add_argument("-o", "--output", default=str(DEFAULT_OUTPUT), help="Report file path (default: docs/audits/unused_functions.txt)")
     parser.add_argument("--json", action="store_true", help="Write the report as JSON instead of text")
     parser.add_argument("--exclude-dir", action="append", default=[], metavar="NAME", help="Extra directory name to skip (repeatable)")
     parser.add_argument(
