@@ -790,7 +790,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     media_root: Path = Field(default=Path("downloads"), description="The name of the media directory")
     downloads_dir: Path = Field(default=Path("downloads"), description="The name of the downloads directory")
     backups_dir: Path = Field(default=Path("backups"), description="The name of the backups directory")
-    log_root: Path = Field(default=Path("logs"), description="The name of the log directory")
     exports_dir: Path = Field(default=Path("exports"), description="The name of the exports directory")
     static_root: Path = Field(default=Path("frontend/static"), description="The name of the static directory")
 
@@ -912,7 +911,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "media_root": self.media_root,
             "downloads_dir": self.downloads_dir,
             "backups_dir": self.backups_dir,
-            "log_root": self.log_root,
             "exports_dir": self.exports_dir,
             "static_root": self.static_root,
         }
@@ -1074,18 +1072,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             except OSError:
                 # Report the path; a bare raise would hide which one failed.
                 logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
-
-        # Ensure app.log, debugging.log, and test.log exist in log dir
-        for filename in ["app.log", "debugging.log", "test.log"]:
-            try:
-                if not self.log_root.exists():
-                    self.log_root.mkdir(parents=True, exist_ok=True)
-                filepath = Path(self.log_root, filename)
-                if not filepath.exists():
-                    filepath.write_text("")
-            except OSError:
-                # Convenience only; Django reports an unwritable log dir itself.
-                logger.warning("Could not pre-create %s in %s; continuing.", filename, self.log_root, exc_info=True)
 
     def refresh_django(self):
         """Refresh django.conf.settings with current values."""
