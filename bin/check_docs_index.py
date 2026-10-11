@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if `docs/INDEX.md` (where present) has drifted from its own rules, or `docs/adr/` reuses a number."""
+"""Fail if `docs/internal/INDEX.md` (where present) has drifted from its own rules, or `docs/adr/` reuses a number."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def audit(index: str, adr_names: list[str]) -> list[str]:
     Report every way the index or the ADR directory breaks its rules.
 
     Args:
-        index: Contents of `docs/INDEX.md`.
+        index: Contents of `docs/internal/INDEX.md`.
         adr_names: File names in `docs/adr/`.
 
     Returns:
@@ -54,7 +54,7 @@ def audit_index(index: str) -> list[str]:
     Report every way the index breaks its rules.
 
     Args:
-        index: Contents of `docs/INDEX.md`.
+        index: Contents of `docs/internal/INDEX.md`.
 
     Returns:
         One human-readable line per drift, empty when everything agrees."""
@@ -121,7 +121,7 @@ def audit_adrs(adr_names: list[str]) -> list[str]:
 def main() -> int:
     """Read the index and the ADR directory, and print whatever `audit` finds wrong."""
     root = pathlib.Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
-    index_path = root / "docs/INDEX.md"
+    index_path = root / "docs/internal/INDEX.md"
     adr_dir = root / "docs/adr"
     adr_names = sorted(path.name for path in adr_dir.glob("*.md")) if adr_dir.is_dir() else []
     # The index is kept out of the public mirror, so a checkout of that mirror has
@@ -130,7 +130,7 @@ def main() -> int:
 
     if not failures:
         return 0
-    print(f"docs/INDEX.md or docs/adr/ has drifted ({len(failures)}):")
+    print(f"docs/internal/INDEX.md or docs/adr/ has drifted ({len(failures)}):")
     print("\n".join(failures))
     print()
     print("The index is the allocator for the prefixes it still holds.")

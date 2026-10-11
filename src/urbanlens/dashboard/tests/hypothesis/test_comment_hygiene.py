@@ -133,8 +133,8 @@ class HistoryReferenceTests(SimpleTestCase):
 
     def test_open_ids_are_read_from_the_problems_table(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (pathlib.Path(tmp) / "docs").mkdir()
-            (pathlib.Path(tmp) / "docs" / "PROBLEMS.md").write_text(
+            (pathlib.Path(tmp) / "docs" / "internal").mkdir(parents=True)
+            (pathlib.Path(tmp) / "docs" / "internal" / "PROBLEMS.md").write_text(
                 "| former id | issue |\n|---|---|\n| P7 | #266 |\n| T3 | #300 |\n"
             )
             self.assertEqual(checker.open_tracker_ids(pathlib.Path(tmp)), frozenset({"P7", "T3"}))
