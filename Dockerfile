@@ -113,7 +113,7 @@ RUN DJANGO_SECRET_KEY=build-time-placeholder-not-used-at-runtime \
     UL_SITE_URL=https://build.invalid \
     UL_DRAGONFLY_URL=redis://build.invalid:6379/0 \
     UL_RABBITMQ_URL=amqp://build.invalid:5672/ \
-    gosu appuser python /app/src/bin/init.py --frontend-only
+    gosu appuser python /app/bin/container_init.py --frontend-only
 
 # Git >= 2.35.2 refuses to run in directories not owned by the current user.
 RUN if [ "$UL_ENVIRONMENT" = "development" ] || [ "$UL_ENVIRONMENT" = "local" ]; then \
@@ -125,4 +125,4 @@ RUN chmod +x /docker-entrypoint.sh
 
 # Entrypoint fixes volume-mount ownership then drops to appuser via gosu
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["python", "/app/src/bin/init.py"]
+CMD ["python", "/app/bin/container_init.py"]

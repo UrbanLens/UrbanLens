@@ -149,7 +149,7 @@ services:
       <<: *app-build
 
     restart: unless-stopped
-    command: ["python", "/app/src/bin/init.py", "--no-db"]
+    command: ["python", "/app/bin/container_init.py", "--no-db"]
 
     depends_on:
       db-setup:
@@ -427,7 +427,7 @@ services:
       <<: *app-build
     # The only service given the owner's credentials: it migrates, converges every tier's login role,
     # and exits. Everything that connects to the database waits for it.
-    command: ["python", "/app/src/bin/init.py", "--db-only"]
+    command: ["python", "/app/bin/container_init.py", "--db-only"]
     restart: "no"
     depends_on:
       db:

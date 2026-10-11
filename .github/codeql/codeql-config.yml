@@ -6,7 +6,7 @@ name: "UrbanLens CodeQL config"
 # Hypothesis examples under `src/pgsql`, `src/.mypy_cache`, `src/.hypothesis`.
 paths:
   - src/urbanlens
-  - src/bin
+  - src/urbanlens_ai
   - bin
   - .github
   - tests

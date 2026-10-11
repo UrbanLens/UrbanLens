@@ -13,7 +13,7 @@ from django.conf import settings
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_INIT_PATH = _REPO_ROOT / "src" / "bin" / "init.py"
+_INIT_PATH = _REPO_ROOT / "bin" / "container_init.py"
 
 _WHITENOISE = "whitenoise.middleware.WhiteNoiseMiddleware"
 
@@ -38,7 +38,7 @@ _BELOW = (
 
 
 def _load_init_module():
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """Import ``bin/container_init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.
@@ -98,12 +98,12 @@ class StaticAssetsInImageTests(SimpleTestCase):
 
     def test_dockerfile_runs_the_frontend_build(self) -> None:
         dockerfile = (_REPO_ROOT / "Dockerfile").read_text()
-        self.assertIn("init.py --frontend-only", dockerfile)
+        self.assertIn("container_init.py --frontend-only", dockerfile)
 
     def test_dockerfile_build_runs_before_the_entrypoint_is_installed(self) -> None:
         """Ordering, so the build cannot be moved somewhere it has no venv or no source."""
         dockerfile = (_REPO_ROOT / "Dockerfile").read_text()
-        build_at = dockerfile.index("init.py --frontend-only")
+        build_at = dockerfile.index("container_init.py --frontend-only")
         self.assertGreater(build_at, dockerfile.index("COPY --chown=appuser:appuser . /app"))
         self.assertLess(build_at, dockerfile.index("COPY docker-entrypoint.sh"))
 

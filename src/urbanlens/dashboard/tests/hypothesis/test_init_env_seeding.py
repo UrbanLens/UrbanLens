@@ -9,11 +9,11 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 
-_INIT_PATH = pathlib.Path(__file__).resolve().parents[4] / "bin" / "init.py"
+_INIT_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "container_init.py"
 
 
 def _load_init_module():
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """Import ``bin/container_init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.

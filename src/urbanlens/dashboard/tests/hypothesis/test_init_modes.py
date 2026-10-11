@@ -14,14 +14,14 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
-_INIT_PATH = _REPO_ROOT / "src" / "bin" / "init.py"
+_INIT_PATH = _REPO_ROOT / "bin" / "container_init.py"
 
 _MIGRATE = "python src/urbanlens/manage.py migrate"
 _APPLY_ROLES = "python src/urbanlens/manage.py apply_database_roles"
 
 
 def _load_init_module() -> ModuleType:
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """Import ``bin/container_init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.
