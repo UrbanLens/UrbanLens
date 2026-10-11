@@ -45,7 +45,7 @@ class PinShareDetailViewTests(TestCase):
 
 
 class PinShareDetailViewPrivateNotesLeakTests(TestCase):
-    """The sender's ``pin.description`` (private personal notes, per Pin.description's own docstring - distinct from the public Location.description) was rendered unconditionally on this page for ANY share the recipient could reach, including a DETECTED share the recipient never consented to and a share long since ACCEPTED/REJECTED. Nothing about consenting to share a *pin* implies consenting to share its owner's private notes about it - that's a live reference into the sender's pin, exactly what docs/GOALS.md's sharing model forbids."""
+    """The sender's ``pin.description`` (private personal notes, per Pin.description's own docstring - distinct from the public Location.description) was rendered unconditionally on this page for ANY share the recipient could reach, including a DETECTED share the recipient never consented to and a share long since ACCEPTED/REJECTED. Nothing about consenting to share a *pin* implies consenting to share its owner's private notes about it - that's a live reference into the sender's pin, exactly what the product's sharing model forbids."""
 
     def setUp(self) -> None:
         self.sender: Profile = baker.make("auth.User").profile

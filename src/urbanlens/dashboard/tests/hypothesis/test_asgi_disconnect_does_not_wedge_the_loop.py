@@ -25,6 +25,7 @@ from django.http import HttpRequest, HttpResponse
 from django.test import override_settings
 from django.urls import path
 
+from urbanlens.core.tests.environment import probe_environ
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.UrbanLens import asgi
 
@@ -144,7 +145,13 @@ def _probe(handler_class: str) -> str:
         """,
     )
     result = subprocess.run(
-        [sys.executable, "-c", source], capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT), check=False
+        [sys.executable, "-c", source],
+        capture_output=True,
+        text=True,
+        timeout=300,
+        cwd=str(REPO_ROOT),
+        env=probe_environ(),
+        check=False,
     )
     lines = result.stdout.strip().splitlines()
     if not lines:

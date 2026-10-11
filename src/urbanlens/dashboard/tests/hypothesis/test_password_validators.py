@@ -214,8 +214,7 @@ class ValidatePasswordPolicyViewTests(TestCase):
     """POST /accounts/validate-password/ - the E2EE flows' pre-derive policy check.
 
     The client derives the login credential before submit, so this endpoint is the only place the configured
-    AUTH_PASSWORD_VALIDATORS ever see the real password (docs/NOTES.md, "Decisions from the 2026-07-23
-    session")."""
+    AUTH_PASSWORD_VALIDATORS ever see the real password."""
 
     def _post(self, body: dict):
         import json as jsonlib

@@ -640,7 +640,7 @@ class WikiCoverPhotoApiView(WikiApiView):
 class WikiOwnershipView(PaginatedListMixin, WikiApiView):
     """GET the wiki's shared Ownership card: current and past owners of this place.
 
-    Read-only this pass - see ``docs/notes/mobile_app_notes.md`` Part 7 for why the write side
+    Read-only this pass: the write side
     (adding/editing/unlinking an owner) is deferred rather than built here.
     Filtering happens here, server-side, before serialization, matching that module's own requirement
     that a withheld record never reach a template (or, here, a response body) at all.

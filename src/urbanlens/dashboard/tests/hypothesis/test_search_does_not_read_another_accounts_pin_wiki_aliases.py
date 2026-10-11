@@ -14,8 +14,7 @@ covers ``WikiAlias.name`` for this ``icontains`` path (migration 0049 only targe
 **Fixed 2026-09-17.** The crossing relation sitting three segments in does not change the fix: bounding
 and materialising the semi-join's candidate primary keys, and forcing the index plan for that internal
 lookup, fixes the non-matching variant here too - see
-``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism
-and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
+``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured mechanism.
 """
 
 from __future__ import annotations

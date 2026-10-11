@@ -2,7 +2,7 @@
 
 Every blob stored here was encrypted (or generated) in the user's browser;
 the server never sees the private key, the wrapping keys, or the passwords
-they derive from. See ``docs/designs/e2ee.md`` for the full format specification.
+they derive from.
 """
 
 from __future__ import annotations

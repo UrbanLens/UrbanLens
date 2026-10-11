@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 
+from urbanlens.core.tests.environment import probe_environ
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 _DEPTH = 60_000
@@ -52,6 +53,7 @@ class DeeplyNestedGeometryTests(SimpleTestCase):
             capture_output=True,
             text=True,
             timeout=300,
+            env=probe_environ(),
             check=False,
         )
         self.assertEqual(result.returncode, 0, f"the parse killed its process: {result.stderr[-1500:]}")

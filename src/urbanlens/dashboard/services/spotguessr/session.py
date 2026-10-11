@@ -2,8 +2,7 @@
 
 The one place ``controllers.spotguessr``/``consumers.GameSessionConsumer`` call
 into - the only layer that knows how eligibility, mode-specific selection,
-scoring, ratings, and real-time broadcast compose together. See
-``docs/designs/drafts/spotguessr.md`` for the full rules.
+scoring, ratings, and real-time broadcast compose together.
 """
 
 from __future__ import annotations
@@ -148,8 +147,7 @@ class KickTargetNotAParticipantError(SpotGuessrError):
 class GameConfig:
     """A validated, session-ready snapshot of SpotGuessr settings.
 
-    Mirrors what's stored on ``GameSession.config`` - see
-    ``docs/designs/drafts/spotguessr.md``'s config table for defaults.
+    Mirrors what's stored on ``GameSession.config``.
     """
 
     difficulty: float = 0.5

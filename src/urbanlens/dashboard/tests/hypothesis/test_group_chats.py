@@ -767,7 +767,7 @@ class GroupKeyEndpointTests(TestCase):
         self.assertTrue(group_e2ee_ready(self.group))
 
     def test_rotation_payload_never_contains_member_slugs(self) -> None:
-        """The whole point of the opaque tokens (docs/PROBLEMS.md PR #111
+        """The whole point of the opaque tokens (PR #111
         finding): fetching the rotation payload must not reveal the real slug
         of any member - their profile_visibility may mask them elsewhere."""
         _enroll(self.creator)

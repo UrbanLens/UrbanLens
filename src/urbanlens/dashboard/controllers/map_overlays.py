@@ -679,7 +679,7 @@ HISTORICAL_MAPS_CACHE_TTL = 86400
 
 
 def _start_historical_maps(request: HttpRequest, location: Location) -> Pending[list[dict[str, Any]]]:
-    from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+    from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway, maps_answer_complete
 
     latitude, longitude = float(location.latitude), float(location.longitude)
     return HistoricalMapsBrowseUpstream.start(
@@ -687,6 +687,8 @@ def _start_historical_maps(request: HttpRequest, location: Location) -> Pending[
         key=f"{latitude:.6f}:{longitude:.6f}",
         ttl=HISTORICAL_MAPS_CACHE_TTL,
         caller=account_or_address(request),
+        # An answer REData cut short at its deadline is shown but not kept, so the next browse asks again.
+        cacheable=maps_answer_complete,
     )
 
 

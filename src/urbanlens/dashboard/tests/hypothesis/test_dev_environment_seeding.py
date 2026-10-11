@@ -52,6 +52,9 @@ class SeedDevEnvironmentTests(TestCase):
         patcher = mock.patch("urbanlens.UrbanLens.settings.app.settings.demo_locations_file", str(self.manifest))
         patcher.start()
         self.addCleanup(patcher.stop)
+        # The seeder refuses production, and an unset UL_ENVIRONMENT - a worktree with no `.env` - reads as
+        # production. Pinned to the environment it is for; the refusal test patches its own over this.
+        self.enterContext(mock.patch("urbanlens.UrbanLens.settings.app.settings.environment_name", "development"))
 
     def _seed(self, entries: list[dict] | None = None) -> dict:
         with mock.patch(_CATALOG, return_value=entries if entries is not None else _ENTRIES):

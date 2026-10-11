@@ -16,6 +16,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import Client
 
+from urbanlens.core.tests.environment import OffProductionMixin
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -234,7 +235,7 @@ class TheMintedSessionIsARealSignInTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
-class ThePopulationCommandTests(TestCase):
+class ThePopulationCommandTests(OffProductionMixin, TestCase):
     """The command writes sessions only where they are private, and never in production."""
 
     def test_the_manifest_is_written_readable_by_its_owner_alone(self) -> None:

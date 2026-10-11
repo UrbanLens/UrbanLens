@@ -1,9 +1,9 @@
-"""Whether an external media item is about the place it was found for (P196).
+"""Whether an external media item is about the place it was found for .
 
 An item is about the place when it is geolocated inside the place's bounding box, or when it names the place: one of
 the place's names with a geographic indicator consistent with it, or a distinctive name alone when nothing geographic
-contradicts it. The rules, thresholds and their reasons are in ``docs/archive/PROBLEMS-ARCHIVE.md`` under P196. A
-newspaper page's dateline is not part of its text, and is not read (P216, in the same file).
+contradicts it. A
+newspaper page's dateline is not part of its text, and is not read.
 """
 
 from __future__ import annotations

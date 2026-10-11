@@ -602,7 +602,7 @@ class SafetyCheckinMediaGateTests(TestCase):
         self.assertEqual(self._fetch(), 200)
 
     def test_a_signed_in_emergency_contact_cannot_fetch_one_before_the_alert(self):
-        """GOALS.md: a contact sees the check-in only once its owner has missed it."""
+        """A contact sees the check-in only once its owner has missed it."""
         contact_user = _new_user()
         baker.make(
             "dashboard.SafetyCheckinContact",

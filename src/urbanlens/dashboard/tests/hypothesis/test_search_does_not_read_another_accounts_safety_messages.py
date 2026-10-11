@@ -15,7 +15,7 @@ original labels reproduction, just for a different to-many relation.
 its filter by the outer queryset's own candidate primary keys, materialised as a concrete list first
 rather than left as a nested subquery. See
 ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
-mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
+mechanism.
 """
 
 from __future__ import annotations

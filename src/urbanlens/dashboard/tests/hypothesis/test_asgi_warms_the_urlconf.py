@@ -26,6 +26,7 @@ import textwrap
 
 from django.conf import settings
 
+from urbanlens.core.tests.environment import probe_environ
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
@@ -50,6 +51,7 @@ def _probe() -> str:
         text=True,
         timeout=300,
         cwd=str(REPO_ROOT),
+        env=probe_environ(),
         check=False,
     )
     if result.returncode != 0:
@@ -78,7 +80,13 @@ class TheAsgiEntrypointWarmsTheUrlconfTests(SimpleTestCase):
             """,
         )
         result = subprocess.run(
-            [sys.executable, "-c", source], capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT), check=False
+            [sys.executable, "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=str(REPO_ROOT),
+            env=probe_environ(),
+            check=False,
         )
 
         self.assertEqual(result.stdout.strip().splitlines()[-1], "COLD", f"stderr:\n{result.stderr[-1500:]}")
@@ -94,7 +102,13 @@ class TheAsgiEntrypointWarmsTheUrlconfTests(SimpleTestCase):
             """,
         )
         result = subprocess.run(
-            [sys.executable, "-c", source], capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT), check=False
+            [sys.executable, "-c", source],
+            capture_output=True,
+            text=True,
+            timeout=300,
+            cwd=str(REPO_ROOT),
+            env=probe_environ(),
+            check=False,
         )
 
         self.assertEqual(result.returncode, 0, result.stderr[-1500:])

@@ -111,8 +111,7 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "photo-upload streak day. Not firing it is correct here: the recipient received these "
         "photos, they did not take them, and crediting an upload streak for accepting a share "
         "would be wrong. The recipient's photo-count metric is consequently not invalidated at "
-        'copy time; it self-heals on their next photo action. See "A guard for the '
-        'bulk-write class, which immediately found a fifth site" in docs/archive/PROBLEMS-ARCHIVE.md.'
+        "copy time; it self-heals on their next photo action."
     ),
     (
         "dashboard/services/undo/handlers/markup_map.py",

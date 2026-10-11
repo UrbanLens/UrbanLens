@@ -36,7 +36,7 @@ class Command(BaseCommand):
             help=(
                 "ISO date (YYYY-MM-DD), exclusive: only rows created before this are audited. "
                 "Deliberately not defaulted - this repo's history only pins the fix to a squashed "
-                "range (docs/PROBLEMS.md records the finding as noted 2026-07-26; the fix reached "
+                "range (the finding was noted 2026-07-26; the fix reached "
                 "this repo's main branch in the 2026-07-30 release merge). Pass the date you know "
                 "the fix actually reached your production database."
             ),

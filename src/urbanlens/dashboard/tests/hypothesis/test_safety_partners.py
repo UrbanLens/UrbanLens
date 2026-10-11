@@ -158,7 +158,7 @@ class AcceptCheckinPartnerInviteTests(TestCase):
 class IsOwnerOrAcceptedPartnerTests(TestCase):
     """is_owner_or_accepted_partner: the owner and unrelated-profile boundary cases.
 
-    Kept in a class of its own, separate from the @given property test below - per this repo's AGENTS.md,
+    Kept in a class of its own, separate from the @given property test below:
     Hypothesis example-shrinking and this TestCase's per-test transaction rollback don't always compose cleanly,
     so a plain fixture-sharing test placed alongside a `@given` method in the same class can see leftover data
     from it."""

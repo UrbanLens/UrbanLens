@@ -16,14 +16,13 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
 
-#: See docs/designs/drafts/spotguessr.md's config table - keep these in sync.
+#: Keep these in sync with the SpotGuessr config defaults.
 MAX_ROUND_POINTS = 5000
 MAX_DATE_POINTS = 1000
 DATE_DECAY_DAYS = 180.0
 
 #: points_for_distance()'s two-component blend: a fast near-field decay (rewards "a few blocks"
-#: precision) plus a slow city-scale decay (keeps "same city" meaningfully non-zero) - see
-#: docs/designs/drafts/spotguessr.md's Points section for the full rationale and sample values.
+#: precision) plus a slow city-scale decay (keeps "same city" meaningfully non-zero).
 NEAR_DECAY_KM = 1.5
 CITY_DECAY_KM = 40.0
 NEAR_WEIGHT = 0.65

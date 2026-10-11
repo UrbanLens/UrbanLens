@@ -3,7 +3,7 @@
 Each tier logs in as ``ul_<UL_PROCESS_ROLE>``, inheriting table privileges from one group role, with a
 ``CONNECTION LIMIT`` and a deadline. The limits sum to no more than the server accepts from non-superusers, so a
 tier that exhausts its budget fails its own connections rather than everyone's, and the owner - a superuser -
-keeps ``superuser_reserved_connections`` for migrations and operators. See R29 (``docs/notes/database-roles.md``).
+keeps ``superuser_reserved_connections`` for migrations and operators.
 """
 
 from __future__ import annotations

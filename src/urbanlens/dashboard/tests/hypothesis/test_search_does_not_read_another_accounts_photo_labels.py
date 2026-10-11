@@ -15,7 +15,7 @@ variant. The non-matching variant needed the same bounded-semi-join rewrite as P
 **Fixed 2026-09-17.** ``_semijoin`` now bounds ``labels``' filter by the outer queryset's own
 candidate primary keys, materialised as a concrete list first rather than left as a nested subquery -
 see ``test_search_does_not_read_another_accounts_labels.py``'s module docstring for the measured
-mechanism and ``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full writeup.
+mechanism.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-"""Tests for the custom-field REFERENCE picker's "wiki" kind recognizing boundary-mate wikis (docs/PROBLEMS.md follow-up)."""
+"""Tests for the custom-field REFERENCE picker's "wiki" kind recognizing boundary-mate wikis."""
 
 from __future__ import annotations
 

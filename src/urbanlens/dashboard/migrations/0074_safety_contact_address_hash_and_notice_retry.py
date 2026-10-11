@@ -69,7 +69,7 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(_settle_earlier_resolutions, migrations.RunPython.noop),
         migrations.RunPython(migrations.RunPython.noop, _drop_hash_only_opt_outs),
-        # Index creation goes dead last (migrations/AGENTS.md).
+        # Index creation goes dead last.
         migrations.AddIndex(
             model_name="safetycontactoptout",
             index=models.Index(fields=["email_hmac"], name="idxdb_scoo_email_hmac"),

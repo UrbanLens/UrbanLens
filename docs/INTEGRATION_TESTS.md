@@ -164,9 +164,6 @@ covering all of them; a finding is a lead to triage, not automatically a
 broken build, so the job does not fail on one unless
 `fail_on_findings`/`--fail-on-findings` is set.
 
-The first full `--all-tiers` run's findings are triaged in docs/archive/PROBLEMS-ARCHIVE.md,
-2026-08-28.
-
 ## sqlmap
 
 [sqlmap](https://github.com/sqlmapproject/sqlmap) against the same deployment,
@@ -317,8 +314,8 @@ lead to triage rather than automatically a broken build.
 
 Reports land in `tests/integration/reports/sqlmap/` (sqlmap's own
 `--output-dir` tree, including its full transcript log and, for anything
-actually dumped, the row data itself - handle those the way `docs/PROBLEMS.md`
-handles any other confirmed vulnerability), the same tree Nuclei and the
+actually dumped, the row data itself - handle those the way any other
+confirmed vulnerability is handled), the same tree Nuclei and the
 Playwright suite use, so all three are picked up by one CI artifact upload.
 
 ### What the first live calibration run found
@@ -394,7 +391,7 @@ they tell you when they fail.
 | `a11y` | Does anything on the main pages fail a WCAG AA check at serious or above? |
 | `security` | Do private rows stay private, do sessions stay bound, does user input stay data? |
 | `visual` | Opt-in screenshot comparison (`UL_E2E_VISUAL=1`). |
-| `location` | Opt-in live location-data specs for one real place (`UL_E2E_LOCATION_DATA=1`). Slow, and they spend real money at REData, EPA ECHO and Wikipedia - see `docs/LOCATION_DATA_TESTS.md`. |
+| `location` | Opt-in live location-data specs for one real place (`UL_E2E_LOCATION_DATA=1`). Slow, and they spend real money at REData, EPA ECHO and Wikipedia. |
 | `slow` | Opt-in specs that wait on Celery beat (`UL_E2E_SLOW=1`): a missed safety check-in escalating to its contacts (~20 minutes) and the hourly hard-delete of read self-destructing messages (up to ~70 minutes). One worker, 90-minute test timeout. Needs the `sharer`/`sharee` pair. |
 
 A run with no `--project` does everything except `visual`, `location`, `slow` and
@@ -423,20 +420,20 @@ Domains covered, and the question each spec file is really asking:
 | `security/input` | Do stored descriptions/comments/notes stay text, and do search/link/path inputs refuse to become HTML, SQL or files? |
 | `security/transport` | Do CORS, Host and method-override stay conservative through the real proxy? |
 | `security/surfaces` | Is `/dashboard/rest/` session-only, are API keys Bearer-only, is `/media/` gated, and are exports/webhooks/password-reset not oracles? |
-| `api/smart-lists` | Do manual add/remove decisions on a filter-backed list survive the filter, and is a pin listed once? Two tests are `test.fail()` GOALS conflicts. |
+| `api/smart-lists` | Do manual add/remove decisions on a filter-backed list survive the filter, and is a pin listed once? Two tests are `test.fail()` product-goal conflicts. |
 | `security/schema-sweep` | Walks every published endpoint that addresses an object by id, straight from the live `schema/`, and probes it as a stranger with another account's object. A path parameter this file has no rule for fails the run and names itself, so a new endpoint gets coverage the day it ships rather than waiting to be added by hand. |
 | `security/search-scope` | Does every search surface (not just `api/search`) leak another account's rows through a result, for a secret seeded into one private field at a time? |
-| `security/wiki-access` | Is a wiki the viewer has not earned indistinguishable from one that does not exist, on every read route and never surfaced through search? See N27 for the one case it deliberately does not rule on (permanent-access grandfathering via `Place`). |
-| `security/pin-share` | Does a pin share stay a suggestion - not a live reference to the sender's pin - before and after acceptance? Three tests are `test.fail()` GOALS conflicts (N27). |
-| `security/pin-wiki-copy` | Does pin data reach a linked wiki only as an opt-in, per-field copy? One test is a `test.fail()` GOALS conflict (N27). |
-| `security/trip-litmus` | Does editing a pin's fields ever change another user's view (a trip activity) instead of a copy? Two tests are `test.fail()` GOALS conflicts (N27). |
-| `security/dm-e2ee` | Does the server refuse a plaintext direct message? One test is a `test.fail()` GOALS conflict (N27). |
+| `security/wiki-access` | Is a wiki the viewer has not earned indistinguishable from one that does not exist, on every read route and never surfaced through search? The one case it deliberately does not rule on is permanent-access grandfathering via `Place`. |
+| `security/pin-share` | Does a pin share stay a suggestion - not a live reference to the sender's pin - before and after acceptance? Three tests are `test.fail()` product-goal conflicts. |
+| `security/pin-wiki-copy` | Does pin data reach a linked wiki only as an opt-in, per-field copy? One test is a `test.fail()` product-goal conflict. |
+| `security/trip-litmus` | Does editing a pin's fields ever change another user's view (a trip activity) instead of a copy? Two tests are `test.fail()` product-goal conflicts. |
+| `security/dm-e2ee` | Does the server refuse a plaintext direct message? One test is a `test.fail()` product-goal conflict. |
 | `smoke/detail-pages` | Does each detail/secondary page render its object's content, and refuse a missing object or a signed-out visitor? |
-| `ui/map-controls` | Does every map carry the main map's controls (zoom, layers with street/terrain/satellite, screenshot, location search)? Each "same controls" test is a `test.fail()` GOALS conflict. |
+| `ui/map-controls` | Does every map carry the main map's controls (zoom, layers with street/terrain/satellite, screenshot, location search)? Each "same controls" test is a `test.fail()` product-goal conflict. |
 | `slow/safety-contacts` | Does a contact learn nothing until a check-in is missed, then get a token link showing the plan and no live location? Real waits: ~15-minute grace plus a 5-minute sweep. |
-| `slow/dm-self-destruct` | Is a read "delete when read" message gone from the server, not just hidden? The immediate check is a `test.fail()` GOALS conflict; the hourly hard-delete sweep (runs at `:47` past the hour) is what actually removes it, and that check passes. |
+| `slow/dm-self-destruct` | Is a read "delete when read" message gone from the server, not just hidden? The immediate check is a `test.fail()` product-goal conflict; the hourly hard-delete sweep (runs at `:47` past the hour) is what actually removes it, and that check passes. |
 | `location/hrsh-boundary` | Does a parcel boundary ever arrive for a real place, and reach the map? |
-| `location/hrsh-boundary-provenance` | Did that boundary come from a *provider*, or did we invent it? Presence and provenance are separate questions, and the first spec passes while the second fails - see `docs/LOCATION_DATA_TESTS.md`. |
+| `location/hrsh-boundary-provenance` | Did that boundary come from a *provider*, or did we invent it? Presence and provenance are separate questions, and the first spec passes while the second fails. |
 | `location/*` | Live third-party data for one real place: place identity, buildings, wiki, media, property records, panels. Opt-in. |
 
 > **Calibration status.** Every spec here has now been run against a live
@@ -464,7 +461,7 @@ and point a second run at it.
 
 A deployment the suite drives can raise the caps with `UL_EXTERNAL_API_WRITE_RATE`,
 `UL_EXTERNAL_API_READ_RATE` and `UL_EXTERNAL_API_BURST_RATE` (DRF's `N/period`; see
-`staging.sample.env`). The GOALS specs added on 2026-09-23 - the schema sweep, search scope, wiki
+`staging.sample.env`). The product-goal specs added on 2026-09-23 - the schema sweep, search scope, wiki
 access - took a single run past 300 writes on the primary key, so every spec after that point failed on
 429. Two runs inside an hour also passed 1000 reads (2026-09-28: 27 security specs on 429). The dev
 stack now runs at 5000 writes and 10000 reads an hour and 600/minute. Production keeps the published caps.
@@ -560,7 +557,7 @@ for it.
 
 It exists for `specs/ui/map-document.spec.ts`, which asserts that a large
 account's map document answers inside a budget - cached and uncached. Those
-budgets are deliberately far above the measured numbers (X17): they are there to
+budgets are deliberately far above the measured numbers: they are there to
 catch a change of shape, a reintroduced per-pin query or a cache that stopped
 being used, not to measure anything. A run on a loaded shared host will be noisy
 well beyond the effect they guard against.
@@ -715,7 +712,7 @@ that had already happened.
 
 ### Assert on the toast
 
-`AGENTS.md` states the rule these helpers encode: results and errors surface as
+These helpers encode a rule: results and errors surface as
 toasts. That makes a toast the most reliable evidence of what the server
 actually decided - more reliable than re-reading the page, because a failed
 action usually leaves the page looking exactly as it did before. Toasts expire
@@ -893,7 +890,7 @@ Recorded so they do not have to be rediscovered:
   web UI and the published API has no endpoint that creates one, so the suite
   cannot make the precondition it needs through the surface it is testing. They
   resolve the wiki and skip with that reason; they start running the moment one
-  exists. Recorded as a finding in `docs/PROBLEMS.md`, 2026-08-24.
+  exists.
 - **A photo vote's success path cannot be exercised at all.**
   `POST photos/{uuid}/vote/` only accepts a photo carrying the
   `(location, media_source_key, media_item_key)` identity that
@@ -915,7 +912,7 @@ Recorded so they do not have to be rediscovered:
   public CDN.
 - **The comment-map composer is never opened.** No spec references `CommentMap`, `attachMap` or
   `composer`; the smoke sweep's page-error guard is the only thing behind the file it now ships as
-  on every page. See `docs/notes/comment-map-composer-test-coverage.md` (T3).
+  on every page. See UrbanLens#305 ("nothing opens the comment-map composer").
 - **A freshly provisioned account's first browser sign-in sometimes fails, then passes on retry.**
   The login form is still on screen with no visible error afterward. Not yet root-caused as of
   2026-09-23 - not reproduced against a request-level cause, and the built-in retry (see "Reading a

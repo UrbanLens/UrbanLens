@@ -16,6 +16,7 @@ from django.test import SimpleTestCase
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.environment import OffProductionMixin
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.maps import MapController
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
@@ -165,7 +166,7 @@ class TheReportTests(SimpleTestCase):
         self.assertTrue(route_costs.grows(light, _cost("heavy", "r", ms=1, rows=route_costs.MANY_ROWS, size=100)))
 
 
-class TheCommandTests(TestCase):
+class TheCommandTests(OffProductionMixin, TestCase):
     def _population_account(self) -> None:
         profile = prepare_signed_in_account(baker.make(User, username=population_username(0)))
         baker.make(Pin, profile=profile, name="Mill", location=baker.make(Location, latitude=41.0, longitude=-71.0))

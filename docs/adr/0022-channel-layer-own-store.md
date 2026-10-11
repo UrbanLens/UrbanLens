@@ -5,7 +5,7 @@ date: 2026-09-24
 
 # The Channels layer gets its own small Dragonfly
 
-Formerly `D22`. Detail: [`docs/designs/channel-layer-own-store.md`](../designs/channel-layer-own-store.md).
+Formerly `D22`.
 
 The shared Dragonfly runs without `cache_mode` (ADR-0016), so once full it refuses every write, including a Channels `group_send`, and the live half of chat, check-ins, notifications and games stops. What fills the cache grows with users; what the Channels layer holds is bounded. So the Channels layer gets its own Dragonfly (`channel-layer`, 256 MB), named by `UL_CHANNEL_LAYER_URL`, which falls back to the shared store when unset.
 

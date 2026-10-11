@@ -5,7 +5,7 @@ date: 2026-09-24
 
 # Storage quotas are enforced generally, not exactly
 
-Formerly `D8`. Detail: [`docs/designs/storage-running-total.md`](../designs/storage-running-total.md) (section D8).
+Formerly `D8`.
 
 The quota check reads `SUM(file_size)` and then inserts in a separate step, so concurrent uploads can overshoot a quota. Jess ruled on 2026-09-06 that exact enforcement is not worth a denormalised running-total counter: imprecise enforcement still stops one user consuming unbounded storage. An over-quota profile keeps everything it has uploaded and is barred from uploading more until it is back under.
 
