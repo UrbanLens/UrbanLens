@@ -10,6 +10,8 @@
 # Usage:
 #   UL_TEST_DB_NAME=test_<unique> bin/host_pytest.sh --reuse-db src/urbanlens/... -k ...
 #
+# Tests marked `slow` are skipped unless --slow is given (or UL_SKIP_SLOW=0); CI always runs them.
+#
 # UL_TEST_CONTAINER names a test-runner other than this checkout's. A directory or the whole suite runs on 4
 # pytest-xdist workers, files and test ids in one process; UL_TEST_WORKERS or -n overrides (bin/lib/pytest_workers.sh).
 
@@ -68,7 +70,18 @@ UL_DB_PASS=$(runner_env UL_DB_PASS)
 UL_DB_NAME=$(runner_env UL_DB_NAME)
 export UL_DB_HOST UL_DB_PORT UL_DB_USER UL_DB_PASS UL_DB_NAME
 
+args=()
+UL_SKIP_SLOW="${UL_SKIP_SLOW:-1}"
+for arg in "$@"; do
+    if [ "$arg" = "--slow" ]; then
+        UL_SKIP_SLOW=0
+    else
+        args+=("$arg")
+    fi
+done
+export UL_SKIP_SLOW
+
 # shellcheck source=bin/lib/pytest_workers.sh
 . bin/lib/pytest_workers.sh
-ul_default_xdist_args "$PWD" "$@"
-exec uv run pytest "${UL_XDIST_ARGS[@]}" "$@"
+ul_default_xdist_args "$PWD" "${args[@]}"
+exec uv run pytest "${UL_XDIST_ARGS[@]}" "${args[@]}"

@@ -12,6 +12,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.urls import NoReverseMatch, get_resolver, reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.tests.thread_writes import DiscardsLedgerRowsFromOtherThreadsMixin
@@ -274,6 +275,8 @@ class _WriteRouteSweep(_SweepBase):
 
 class _WriteRouteSweepTests(_WriteRouteSweep):
     """Every owner-scoped write route refuses a minimal or hostile request rather than crashing."""
+
+    pytestmark = pytest.mark.slow
 
     def test_no_write_route_answers_a_minimal_request_with_a_server_error(self) -> None:
         unexpected = {name: how for name, how in self._crashing_routes().items() if name not in _KNOWN_CRASHES}

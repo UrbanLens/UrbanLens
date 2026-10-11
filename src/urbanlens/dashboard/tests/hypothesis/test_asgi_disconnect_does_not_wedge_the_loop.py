@@ -25,6 +25,7 @@ import time
 from django.http import HttpRequest, HttpResponse
 from django.test import override_settings
 from django.urls import path
+import pytest
 
 from urbanlens.core.tests.environment import probe_environ
 from urbanlens.core.tests.testcase import SimpleTestCase
@@ -177,6 +178,7 @@ class CancelledRequestTests(SimpleTestCase):
             "the event loop stalled while a cancelled request's view was still running",
         )
 
+    @pytest.mark.slow
     def test_the_scenario_deadlocks_djangos_own_handler(self) -> None:
         """Anti-vacuity: the same scenario must wedge the stock handler, or the test above proves nothing."""
         self.assertEqual(

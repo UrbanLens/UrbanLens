@@ -466,6 +466,7 @@ addopts = "--import-mode=importlib -p no:randomly"
 markers = [
     "contract: OpenAPI conformance checks (tests/contract). Needs --contract-* options; not collected by default.",
     "serial: asserts on wall-clock time, so CI runs it after the pytest-xdist pass, alone, where no other worker's load can fail it.",
+    "slow: took 10 s or more on chiron. bin/host_pytest.sh and bin/run_tests.sh skip it unless given --slow (UL_SKIP_SLOW=1); CI runs it.",
 ]
 
 [tool.coverage.run]

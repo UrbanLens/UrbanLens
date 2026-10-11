@@ -6,6 +6,7 @@ import math
 
 from django.contrib.auth.models import User
 from model_bakery import baker
+import pytest
 
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
@@ -138,6 +139,7 @@ class GetNearbyOrCreateCreationTests(TestCase):
         self.assertFalse(second_created)
         self.assertEqual(first_pin.pk, second_pin.pk)
 
+    @pytest.mark.slow
     @given(two_distinct=two_distant_coord_pairs())
     @_db_settings
     def test_distant_coordinates_create_independent_pins(
@@ -165,6 +167,7 @@ class PinQuerySetRootPinsTests(TestCase):
         super().setUp()
         self.profile = baker.make(User).profile
 
+    @pytest.mark.slow
     @given(n_root=st.integers(min_value=0, max_value=5), n_child=st.integers(min_value=0, max_value=5))
     @_db_settings
     def test_root_pins_count_excludes_detail_pins(self, n_root: int, n_child: int) -> None:
@@ -206,6 +209,7 @@ class PinQuerySetVisitFiltersTests(TestCase):
         super().setUp()
         self.profile = baker.make(User).profile
 
+    @pytest.mark.slow
     @given(
         n_visited=st.integers(min_value=0, max_value=5),
         n_unvisited=st.integers(min_value=0, max_value=5),

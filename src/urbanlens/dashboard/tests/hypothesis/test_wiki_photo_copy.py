@@ -10,6 +10,7 @@ from django.middleware.csrf import get_token
 from django.test import Client, RequestFactory
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from hypothesis import given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
@@ -148,6 +149,7 @@ class CopyWikiPhotoToPinTests(TestCase):
 class AttributionFallbackPropertyTests(TestCase):
     """Property: the copy's author is always either the original's own credit, or a derived one."""
 
+    @pytest.mark.slow
     @settings(deadline=None)
     @given(existing_author=st.one_of(st.none(), st.text(min_size=1, max_size=100).filter(lambda s: "\x00" not in s)))
     def test_author_fallback_is_deterministic(self, existing_author: str | None) -> None:

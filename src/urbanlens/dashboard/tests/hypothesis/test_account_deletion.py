@@ -12,6 +12,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
+import pytest
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.celery_inline import notification_emails_sent
@@ -81,6 +82,7 @@ class ProfileQuerySetDueForDeletionReminderTests(TestCase):
         profile.refresh_from_db()
         self.assertNotIn(profile, Profile.objects.due_for_deletion_reminder())
 
+    @pytest.mark.slow
     @given(hours_ago=st.floats(min_value=0, max_value=143, allow_nan=False, allow_infinity=False))
     @hyp_settings(deadline=None)
     def test_never_includes_profiles_under_six_days_old(self, hours_ago: float):
@@ -107,6 +109,7 @@ class ProfileQuerySetDueForHardDeleteTests(TestCase):
         profile = _backdate_request(_new_profile(), ACCOUNT_DELETION_GRACE_PERIOD + datetime.timedelta(days=1))
         self.assertIn(profile, Profile.objects.due_for_hard_delete())
 
+    @pytest.mark.slow
     @given(days_ago=st.floats(min_value=0, max_value=6.99, allow_nan=False, allow_infinity=False))
     @hyp_settings(deadline=None)
     def test_never_includes_profiles_under_seven_days_old(self, days_ago: float):

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
+import pytest
 
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
@@ -48,6 +49,7 @@ class SweepDispatchTests(TestCase):
         ]
         return dispatched, ranges
 
+    @pytest.mark.slow
     @given(chunk_size=st.integers(min_value=-5, max_value=8))
     @hypothesis_settings(max_examples=15, deadline=None)
     def test_dispatch_partitions_every_profile_into_exactly_one_chunk(self, chunk_size: int) -> None:

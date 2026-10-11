@@ -19,6 +19,7 @@
 # Without --parallel, a directory or the whole suite runs on 4 xdist workers and files or test
 # ids in one process; UL_TEST_WORKERS or -n overrides (bin/lib/pytest_workers.sh).
 #   bin/run_tests.sh --shuffle [pytest args...] # randomise test order
+#   bin/run_tests.sh --slow [pytest args...]    # include tests marked `slow` (skipped by default; CI runs them)
 #   bin/run_tests.sh --no-venv-fix ...          # do not install missing dev deps
 #
 # --fast reuses a persistent DB (rebuild after migrations); set UL_TEST_DB_NAME per session on shared hosts.
@@ -47,6 +48,8 @@ FORCE_DROP=0
 ALLOW_DRIFT=0
 PARALLEL=""
 SHUFFLE=0
+# Tests marked `slow` are skipped locally unless --slow (or UL_SKIP_SLOW=0); CI runs them all.
+SKIP_SLOW="${UL_SKIP_SLOW:-1}"
 
 # The copy-into-a-container sequence is shared with bin/sync_app.sh.
 # shellcheck source=bin/lib/container_sync.sh
@@ -66,6 +69,7 @@ for arg in "$@"; do
         --parallel) PARALLEL="auto" ;;
         --parallel=*) PARALLEL="${arg#*=}" ;;
         --shuffle) SHUFFLE=1 ;;
+        --slow) SKIP_SLOW=0 ;;
         --no-venv-fix) VENV_FIX=0 ;;
         *) args+=("$arg") ;;
     esac
@@ -262,7 +266,7 @@ fi
 
 echo "==> pytest (UL_TEST_DB_NAME=$DB_NAME)"
 if [ -n "$DB_FLAG" ]; then
-    docker exec -e UL_TEST_DB_NAME="$DB_NAME" "$CONTAINER" /app/.venv/bin/python -m pytest "$DB_FLAG" "${args[@]}"
+    docker exec -e UL_TEST_DB_NAME="$DB_NAME" -e UL_SKIP_SLOW="$SKIP_SLOW" "$CONTAINER" /app/.venv/bin/python -m pytest "$DB_FLAG" "${args[@]}"
 else
-    docker exec -e UL_TEST_DB_NAME="$DB_NAME" "$CONTAINER" /app/.venv/bin/python -m pytest "${args[@]}"
+    docker exec -e UL_TEST_DB_NAME="$DB_NAME" -e UL_SKIP_SLOW="$SKIP_SLOW" "$CONTAINER" /app/.venv/bin/python -m pytest "${args[@]}"
 fi

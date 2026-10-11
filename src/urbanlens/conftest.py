@@ -100,6 +100,21 @@ _LONGEST_FILES = (
 )
 
 
+def _skip_slow(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """
+    Skip ``slow`` tests when ``UL_SKIP_SLOW=1``, which the local runners set unless given ``--slow``.
+
+    A test named by its node id still runs: asking for it by name is asking for it. Skipped rather than deselected,
+    so the summary counts what a local run left out.
+    """
+    if os.getenv("UL_SKIP_SLOW", "") != "1" or any("::" in arg for arg in config.args):
+        return
+    skip = pytest.mark.skip(reason="slow: run with --slow (bin/host_pytest.sh, bin/run_tests.sh) or UL_SKIP_SLOW=0")
+    for item in items:
+        if item.get_closest_marker("slow") is not None:
+            item.add_marker(skip)
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """
     On a pytest-xdist worker, move the longest files' ``TestCase`` tests to the front of the collection.
@@ -112,7 +127,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
     Only workers reorder, so a plain run keeps its usual order. Every worker sorts the same way, which xdist
     requires: it refuses to schedule when the workers' collections differ.
+
+    Also skips ``slow`` tests in local runs (see ``_skip_slow``).
     """
+    _skip_slow(config, items)
     if not hasattr(config, "workerinput"):
         return
 

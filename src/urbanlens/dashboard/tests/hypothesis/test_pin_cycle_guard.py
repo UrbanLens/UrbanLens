@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from model_bakery import baker
+import pytest
 
 from hypothesis import HealthCheck, given, settings, strategies as st
 from urbanlens.core.tests.testcase import TestCase
@@ -74,6 +75,7 @@ class PinCycleGuardBasicTests(TestCase):
 class PinCycleGuardDepthTests(TestCase):
     """The guard must hold at arbitrary chain depth, not just directly adjacent pins."""
 
+    @pytest.mark.slow
     @given(depth=st.integers(min_value=1, max_value=8))
     @_db_settings
     def test_closing_the_loop_at_the_far_end_of_a_chain_is_detected(self, depth: int) -> None:
@@ -86,6 +88,7 @@ class PinCycleGuardDepthTests(TestCase):
         # Making root's parent the tail would close the loop, unless tail is root itself.
         self.assertTrue(root.would_create_cycle(tail))
 
+    @pytest.mark.slow
     @given(depth=st.integers(min_value=1, max_value=8))
     @_db_settings
     def test_chain_members_are_not_falsely_flagged_against_unrelated_pin(self, depth: int) -> None:

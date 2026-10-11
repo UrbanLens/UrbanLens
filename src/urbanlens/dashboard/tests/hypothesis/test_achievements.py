@@ -159,6 +159,7 @@ class StreakArithmeticTests(TestCase):
         self.assertEqual(streak.current_length, 3)
         self.assertEqual(streak.last_day, start + datetime.timedelta(days=1))
 
+    @pytest.mark.slow
     @given(
         gaps=st.lists(st.integers(min_value=1, max_value=4), min_size=1, max_size=12),
     )
@@ -643,6 +644,7 @@ class AchievementModelTests(AchievementTestsBase):
         with pytest.raises(ValidationError):
             achievement.clean()
 
+    @pytest.mark.slow
     @given(value=st.integers(min_value=0, max_value=10_000), threshold=st.integers(min_value=1, max_value=1_000))
     @hypothesis_settings(max_examples=40, deadline=None)
     def test_progress_is_always_a_clamped_percentage(self, value: int, threshold: int) -> None:

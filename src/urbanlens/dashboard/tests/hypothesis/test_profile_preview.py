@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from django.db import transaction
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
@@ -246,6 +247,7 @@ class PreviewVisibilityPropertyTests(TestCase):
             return bool(relations & {"pin", "friend", "trip"})
         return False
 
+    @pytest.mark.slow
     def test_preview_matches_profile_visibility(self) -> None:
         """
         The previewed page is visible iff the real audience would pass the check.

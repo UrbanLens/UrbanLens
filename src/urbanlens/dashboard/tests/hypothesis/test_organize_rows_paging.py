@@ -18,6 +18,7 @@ from django.test import override_settings
 from django.urls import reverse
 import lxml.html
 from model_bakery import baker
+import pytest
 
 from hypothesis import given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.labels import ensure_label
@@ -367,6 +368,7 @@ class PagingPropertyTests(TestCase):
         super().setUp()
         self.profile = baker.make(User).profile
 
+    @pytest.mark.slow
     @hyp_settings(max_examples=30, deadline=None)
     @given(
         specs=st.lists(
