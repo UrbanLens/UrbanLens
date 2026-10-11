@@ -122,7 +122,7 @@ test.describe("editing a pin never changes what trip members see", () => {
         test.fail();
         test.info().annotations.push({
             type: "goals-conflict",
-            description: `${LITMUS_QUOTE} vs models/trips/model.py:314 (TripActivity.effective_title reads self.pin.display_label live) -> services/trips/trip_activities.py:315 (API effective_title) and services/trips/trip_map.py:44 (map label)`,
+            description: `${LITMUS_QUOTE} vs models/trips/model.py:320 (TripActivity.effective_title reads self.pin.display_label live) -> services/trips/trip_activities.py:326 (API effective_title) and services/trips/trip_map.py:45 (map label)`,
         });
         const trip = await tripWithPinActivity(sharerApi, shareeApi, "ren");
         const baselineTitle = (await memberActivity(shareeApi, trip)).effective_title;

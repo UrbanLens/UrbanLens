@@ -122,7 +122,7 @@ test.describe("no search provider returns another account's rows", () => {
             ...(await probe(scope, [{ what: "a pin description", token: tokens.description, ids }], everywhere)),
             ...(await probe(scope, [{ what: "a pin alias", token: tokens.alias, ids }], everywhere)),
             ...(await probe(scope, [{ what: "a pin label", token: tokens.label, ids }], everywhere)),
-            // The location searches match name, aliases, description and labels only (map_pins/autocomplete.py:76-86).
+            // The location searches match name, aliases, description and labels only (map_pins/autocomplete.py:77-87).
             ...(await probe(scope, [{ what: "a pin note", token: tokens.note, ids }], ["api search", "web search panel"])),
         ];
         expect(problems, problems.join("\n")).toEqual([]);

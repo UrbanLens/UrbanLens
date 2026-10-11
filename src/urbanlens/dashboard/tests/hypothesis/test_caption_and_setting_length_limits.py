@@ -100,7 +100,7 @@ class MapOverlayCaptionLengthTests(TestCase):
     The overlay's submitted *name* becomes the Image caption, and is bounded.
 
     `_image_from_request`'s upload branch hands `request.POST["name"]` to `upload_photo` as the caption, and
-    that service checks the column width (`photo_upload.py:142`) before anything reaches the database."""
+    that service checks the column width (`photo_upload.py:146`) before anything reaches the database."""
 
     def setUp(self) -> None:
         super().setUp()

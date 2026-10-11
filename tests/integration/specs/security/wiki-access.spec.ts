@@ -168,7 +168,7 @@ test.describe("a wiki the viewer has not earned does not exist for them", () => 
         test.info().annotations.push({
             type: "decision",
             description:
-                "D19 (ruled 2026-09-23): viewing or sharing to a Place-resolved wiki grants access permanently (services/wiki/wiki_access.py:390, services/wiki/wiki_share.py:110). A placeless location has no domain to grant, so this is the exact-location rule. The Place case is covered in pytest (test_grandfathered_parcel_split_access.py): only a paid REData lookup, made by the location project alone, gives a pin a Place.",
+                "D19 (ruled 2026-09-23): viewing or sharing to a Place-resolved wiki grants access permanently (services/wiki/wiki_access.py:408, services/wiki/wiki_share.py:112). A placeless location has no domain to grant, so this is the exact-location rule. The Place case is covered in pytest (test_grandfathered_parcel_split_access.py): only a paid REData lookup, made by the location project alone, gives a pin a Place.",
         });
         test.slow();
         const { pin, locationSlug, wiki } = await pinWithWiki(api, { name: resourceName("wiki access grant") });

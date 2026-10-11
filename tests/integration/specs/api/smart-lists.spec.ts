@@ -125,7 +125,7 @@ test.describe("smart lists", () => {
 
     test("a manual removal survives a resync and an edit of the pin", async ({ api, apiRequestContext }) => {
         test.fail();
-        goalsConflict("services/pins/pin_list_membership.py:267 deletes the row, so resync_smart_list (:90) and sync_pin_against_smart_lists (:79) re-add it");
+        goalsConflict("services/pins/pin_list_membership.py:277 deletes the row, so resync_smart_list (:90) and sync_pin_against_smart_lists (:79) re-add it");
         const list = await smartList(api);
 
         const removed = await removeFromList(apiRequestContext, api, list.slug, [list.member]);
@@ -154,7 +154,7 @@ test.describe("smart lists", () => {
 
     test("a manual add of a filter member survives the filter no longer matching", async ({ api }) => {
         test.fail();
-        goalsConflict("services/pins/pin_list_membership.py:234 skips a pin already present, so the manual decision is never recorded and :86 removes it");
+        goalsConflict("services/pins/pin_list_membership.py:242 skips a pin already present, so the manual decision is never recorded and :86 removes it");
         const list = await smartList(api);
         expect(occurrences(await members(api, list.slug), list.member)).toBe(1);
 

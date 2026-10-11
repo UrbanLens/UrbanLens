@@ -192,19 +192,19 @@ const SELECTOR_BY_PARAM: Record<string, SelectorKey> = {
  */
 const PLACEHOLDERS: Record<string, string> = {
     suggestion_id:
-        "suggestions are produced by background photo/import analysis, not by any API call; both action views filter by the caller (external_api/views.py:1571-1575, 1655)",
+        "suggestions are produced by background photo/import analysis, not by any API call; both action views filter by the caller (external_api/views.py:1603-1607, 1655)",
     share_id:
-        "a pin share needs an accepted friendship and the web send flow (no external route); the respond view looks it up with to_profile=caller (views_pin_shares.py:57-61). specs/security/pin-share.spec.ts owns it",
-    turn_id: "an assistant turn bills a model provider; poll and confirm compare the cached turn's profile_id with the caller (views_assistant.py:183, 230)",
+        "a pin share needs an accepted friendship and the web send flow (no external route); the respond view looks it up with to_profile=caller (views_pin_shares.py:59-63). specs/security/pin-share.spec.ts owns it",
+    turn_id: "an assistant turn bills a model provider; poll and confirm compare the cached turn's profile_id with the caller (views_assistant.py:186, 230)",
     n: "an assistant proposal index, only meaningful under a real turn (see turn_id)",
     session_id:
-        "a SpotGuessr session is alpha-gated and bills Street View; every session view resolves through GameSessionParticipant filtered by the caller (views_games.py:201, 727)",
+        "a SpotGuessr session is alpha-gated and bills Street View; every session view resolves through GameSessionParticipant filtered by the caller (views_games.py:208, 727)",
     round_id: "only meaningful under a real session (see session_id)",
-    partner_id: "needs a second account to accept a partner invite; the delete filters by the owner-scoped check-in (external_api/views.py:3344)",
-    image_id: "the check-in photo delete filters by the owner-scoped check-in and profile=caller (external_api/views.py:3407)",
-    map_uuid: "attaching needs a markup map, which the external API cannot create; the delete filters through the owner-scoped check-in (external_api/views.py:3469)",
+    partner_id: "needs a second account to accept a partner invite; the delete filters by the owner-scoped check-in (external_api/views.py:3414)",
+    image_id: "the check-in photo delete filters by the owner-scoped check-in and profile=caller (external_api/views.py:3478)",
+    map_uuid: "attaching needs a markup map, which the external API cannot create; the delete filters through the owner-scoped check-in (external_api/views.py:3541)",
     notification_uuid:
-        "marking read answers 204 whether or not a row matched, by design (external_api/views.py:4206-4213), and whether a stranger's call flipped the owner's row cannot be observed without racing notifications.spec.ts's read-all",
+        "marking read answers 204 whether or not a row matched, by design (external_api/views.py:4295-4302), and whether a stranger's call flipped the owner's row cannot be observed without racing notifications.spec.ts's read-all",
 };
 
 /** Parameters whose endpoints are not object reads or writes at all. */
@@ -228,7 +228,7 @@ const EXEMPT_ENDPOINTS: ReadonlyArray<{ pattern: RegExp; methods?: Method[]; why
 
 /**
  * Refused for every API key before any lookup: `messages:*` scopes are OAuth2-only
- * (external_api/permissions.py:32, 59), and every messaging and key-exchange view requires one.
+ * (external_api/permissions.py:33, 59), and every messaging and key-exchange view requires one.
  */
 const REFUSED_FOR_KEYS = ["messages/", "e2ee/"];
 
@@ -236,7 +236,7 @@ const REFUSED_FOR_KEYS = ["messages/", "e2ee/"];
 const OWNER_READS: Record<string, { via?: string; statuses?: number[]; why: string }> = {
     "safety/partner-checkins/{checkin_uuid}/": {
         via: "safety/checkins/{checkin_uuid}/",
-        why: "the partner surface excludes the owner by design (views_safety_chat.py:161-170); the owner reads the same check-in by uuid",
+        why: "the partner surface excludes the owner by design (views_safety_chat.py:165-175); the owner reads the same check-in by uuid",
     },
     "pins/{pin_slug}/panels/{panel_key}/": {
         statuses: [200, 202, 204, 404],
