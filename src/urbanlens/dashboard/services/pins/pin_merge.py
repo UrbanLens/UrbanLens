@@ -946,8 +946,33 @@ def _merge_visits(survivor: Pin, loser: Pin) -> None:
     PinVisit.objects.filter(pin=loser).update(pin=survivor)
 
 
+def _note_texts(header: str, body: str) -> list[str]:
+    """Split a merge note into texts that each fit a ``PinNote``, without losing a character.
+    Each text starts with the header (``(continued)`` after the first). A break falls on a paragraph boundary when one
+    is in the second half of the room left, else mid-text - a single value longer than a note (a full description)
+    simply continues in the next one.
+
+    Args:
+        header: The note's first line.
+        body: Everything after it.
+
+    Returns:
+        The note texts, in order.
+    """
+    texts: list[str] = []
+    current_header, remaining = header, body
+    while remaining:
+        room = MAX_PIN_NOTE_LENGTH - len(current_header) - 2
+        piece, remaining = remaining[:room], remaining[room:]
+        if remaining and (cut := piece.rfind("\n\n")) > room // 2:
+            piece, remaining = piece[:cut], piece[cut + 2 :] + remaining
+        texts.append(f"{current_header}\n\n{piece}")
+        current_header = f"{header} (continued)"
+    return texts
+
+
 def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str], loser_pk: int) -> None:
-    """Write what the survivor did not keep as one private note on it (split only if it exceeds a note's length).
+    """Write what the survivor did not keep as one private note on it, continued across notes only when it exceeds one.
 
     Args:
         survivor: The pin that stays.
@@ -959,13 +984,8 @@ def _write_merge_note(survivor: Pin, record: _MergeRecord, labels: dict[int, str
         return
     header = f"Merged {labels[loser_pk]} into {labels[survivor.pk]} on {timezone.localdate().isoformat()}. Where both pins held something different, this pin kept one; the other is below."
     entries = [f"{label}:\n{value}" if "\n" in value else f"{label}: {value}" for label, value in record.lines]
-    chunk = header
-    for entry in entries:
-        if len(chunk) + 2 + len(entry) > MAX_PIN_NOTE_LENGTH:
-            PinNote.objects.create(pin=survivor, text=chunk)
-            chunk = f"{header} (continued)"
-        chunk = f"{chunk}\n\n{entry}"[:MAX_PIN_NOTE_LENGTH]
-    PinNote.objects.create(pin=survivor, text=chunk)
+    for text in _note_texts(header, "\n\n".join(entries)):
+        PinNote.objects.create(pin=survivor, text=text)
 
 
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:

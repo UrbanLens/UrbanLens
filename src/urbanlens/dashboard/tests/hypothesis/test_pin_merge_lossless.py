@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 from urbanlens.dashboard.services.pins import pin_merge
 from urbanlens.dashboard.services.pins.pin_merge import PIN_FIELD_POLICY, merge_pins
 from urbanlens.dashboard.services.wiki.articles import save_article
@@ -205,6 +206,20 @@ class PinColumnsAreKeptTests(_MergeTestCase):
         self.assertIn("Loser's\nmultiline notes", note)
         self.assertIn("1975-06-01", note)
         self.assertIn("Merged Grist Works into Old Mill", note)
+
+    def test_a_value_longer_than_one_note_continues_in_the_next_without_losing_a_character(self) -> None:
+        """A 50,000-character description fills a note by itself; slicing it to fit dropped its tail."""
+        Pin.objects.filter(pk=self.survivor.pk).update(description="Survivor's notes")
+        Pin.objects.filter(pk=self.loser.pk).update(description="Z" * MAX_PIN_NOTE_LENGTH)
+        self.loser.refresh_from_db()
+        self.survivor.refresh_from_db()
+
+        merge_pins(self.survivor, self.loser, self.profile)
+
+        notes = list(PinNote.objects.filter(pin=self.survivor).values_list("text", flat=True))
+        self.assertGreater(len(notes), 1)
+        self.assertTrue(all(len(text) <= MAX_PIN_NOTE_LENGTH for text in notes))
+        self.assertEqual(sum(text.count("Z") for text in notes), MAX_PIN_NOTE_LENGTH)
 
     def test_the_higher_danger_and_priority_are_kept_and_the_lower_noted(self) -> None:
         Pin.objects.filter(pk=self.survivor.pk).update(danger=1, priority=4)

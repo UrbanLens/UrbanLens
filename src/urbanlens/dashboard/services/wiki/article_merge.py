@@ -53,17 +53,20 @@ def adopt_history(kept: Article, absorbed: Article) -> int:
         return ArticleRevision.objects.filter(article=absorbed).update(article=kept)
 
 
-def latest_human_editor_id(article: Article) -> int | None:
-    """The newest revision's editor on *article* that is a person, falling back to ``last_edited_by``.
+def live_text_editor_id(article: Article) -> int | None:
+    """Who wrote the article's current text: the newest revision's editor.
+    Deliberately not "the newest revision with an editor": when the newest one came from a deleted account (or a
+    system seed), crediting an earlier person would attribute text they never wrote to them - and, under concealment,
+    show it to their friends.
 
     Args:
         article: The article to inspect.
 
     Returns:
-        A profile pk, or None when no person ever edited it (a Wikipedia seed, a deleted account).
+        A profile pk, or None when no living person wrote the current text. ``last_edited_by`` when there are no revisions.
     """
-    editor_id = article.revisions.filter(editor__isnull=False).order_by("-created", "-pk").values_list("editor_id", flat=True).first()
-    return editor_id if editor_id is not None else article.last_edited_by_id
+    newest = article.revisions.order_by("-created", "-pk").first()
+    return newest.editor_id if newest is not None else article.last_edited_by_id
 
 
 def write_merge_revision(article: Article, *, content: str, editor: Profile | None, edit_summary: str) -> ArticleRevision:
