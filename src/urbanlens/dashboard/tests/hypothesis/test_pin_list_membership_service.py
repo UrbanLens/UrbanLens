@@ -175,7 +175,9 @@ class ReorderListItemsTests(MembershipServiceTestCase):
             with CaptureQueriesContext(connection) as ctx:
                 reorder_list_items(pin_list, list(reversed(ids)))
             (write,) = [q["sql"] for q in ctx.captured_queries if q["sql"].lstrip().upper().startswith("UPDATE")]
-            return len(re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write))
+            # Integer literals too: the two lists' own primary keys are in the statement, and
+            # pk 9 against pk 10 is a character of difference that is not growth.
+            return len(re.sub(r"\b\d+\b", "0", re.sub(r"ARRAY\[[^\]]*\]|'\{[^}]*\}'", "[]", write)))
 
         pins = self._pins(14)
         add_pins_to_list(self.pin_list, pins[:2])
