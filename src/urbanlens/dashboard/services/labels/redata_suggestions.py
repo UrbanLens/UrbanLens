@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Sequence
 
     from urbanlens.dashboard.models.labels.model import Label
     from urbanlens.dashboard.models.pin.model import Pin
@@ -41,13 +41,35 @@ def _label_definition(label: Label, *, is_active: bool) -> dict[str, Any]:
     Args:
         label: The label to describe.
         is_active: False retires the label - see :func:`queue_label_retirement`."""
-    return {
-        "external_id": str(label.uuid),
-        "name": label.name,
-        "parent_ids": [str(u) for u in label.parents.suggestable().values_list("uuid", flat=True)],
-        "description": label.description or "",
-        "is_active": is_active,
-    }
+    return _label_definitions([label], is_active=is_active)[0]
+
+
+def _label_definitions(labels: Sequence[Label], *, is_active: bool) -> list[dict[str, Any]]:
+    """
+    Build the ``POST /labels/`` definition dicts for ``labels``, reading every label's parents in one query.
+
+    Every new profile is seeded with dozens of tag and category labels, so a query per label was paid on each signup.
+
+    Args:
+        labels: Saved labels to describe, in the order the definitions are wanted.
+        is_active: False retires the labels - see :func:`queue_label_retirement`."""
+    from urbanlens.dashboard.models.labels.model import Label
+
+    parent_ids: dict[int, list[str]] = {label.pk: [] for label in labels}
+    if parent_ids:
+        # Label's default ordering, as ``label.parents`` would give each label's own.
+        for child_id, parent_uuid in Label.objects.suggestable().filter(children__in=list(parent_ids)).values_list("children", "uuid"):
+            parent_ids[child_id].append(str(parent_uuid))
+    return [
+        {
+            "external_id": str(label.uuid),
+            "name": label.name,
+            "parent_ids": parent_ids[label.pk],
+            "description": label.description or "",
+            "is_active": is_active,
+        }
+        for label in labels
+    ]
 
 
 def _profile_ids_for_label(label: Label) -> list[int]:
@@ -148,7 +170,7 @@ def backfill_profile(profile: Profile) -> tuple[int, int]:
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
     labels = list(Label.objects.visible_to(profile).suggestable())
-    definitions = [_label_definition(label, is_active=True) for label in labels]
+    definitions = _label_definitions(labels, is_active=True)
     for i in range(0, len(definitions), MAX_LABELS_PER_DEFINE_REQUEST):
         sync_label_definitions([profile.pk], definitions[i : i + MAX_LABELS_PER_DEFINE_REQUEST])
 
@@ -194,7 +216,7 @@ def queue_label_definitions_sync(labels: Iterable[Label]) -> None:
         if label.kind in (KIND_TAG, KIND_CATEGORY):
             by_owner.setdefault(label.profile_id, []).append(label)
     for owned in by_owner.values():
-        _queue_definitions(_profile_ids_for_label(owned[0]), [_label_definition(label, is_active=True) for label in owned])
+        _queue_definitions(_profile_ids_for_label(owned[0]), _label_definitions(owned, is_active=True))
 
 
 def queue_label_retirement(label: Label) -> None:
