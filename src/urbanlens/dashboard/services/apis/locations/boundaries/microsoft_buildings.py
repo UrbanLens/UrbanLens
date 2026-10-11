@@ -10,19 +10,21 @@ import io
 import json
 import logging
 import math
+from pathlib import Path
 import re
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, feature_intersects_bbox, validate_bbox
 from urbanlens.dashboard.services.apis.locations.boundaries.shards import read_shard
 from urbanlens.dashboard.services.core.gateway import Gateway
-from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from django.contrib.gis.geos import Polygon
 
+#: Microsoft's index of every part file (``Location``, ``QuadKey``, ``Url``, ``Size``), shipped with the package.
+DATASET_LINKS_FILE = Path(__file__).with_name("data") / "dataset-links.csv"
 #: Parts run to 292 MB compressed where the dataset is dense (Tokyo's; one in the US is 170 MB); one past this is skipped.
 MAX_PART_BYTES = 64 * 1024 * 1024
 _SIZE_UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
@@ -86,9 +88,7 @@ class MicrosoftBuildingFootprintsGateway(Gateway, BoundaryProvider):
 
     def _load_dataset_links(self) -> list[dict[str, str]]:
         if self._dataset_links is None:
-            # Load from {PROJECT_ROOT}/data/dataset-links.csv
-            dataset_file = settings.project_root / "data" / "dataset-links.csv"
-            self._dataset_links = list(csv.DictReader(io.StringIO(dataset_file.read_text())))
+            self._dataset_links = list(csv.DictReader(io.StringIO(DATASET_LINKS_FILE.read_text())))
         return self._dataset_links
 
     def list_available_locations(self) -> set[str]:

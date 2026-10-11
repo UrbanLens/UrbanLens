@@ -191,3 +191,13 @@ class RateLimitedSessionTests(TestCase):
 
         self.assertTrue(request.call_args.kwargs["stream"])
         huge.raw.read.assert_not_called()
+
+
+class ShippedLinksFileTests(SimpleTestCase):
+    """The links file ships beside the gateway, so a lookup finds it whatever the working directory."""
+
+    def test_the_shipped_links_file_loads(self) -> None:
+        locations = MicrosoftBuildingFootprintsGateway().list_available_locations()
+
+        self.assertIn("UnitedStates", locations)
+        self.assertGreater(len(locations), 100)
