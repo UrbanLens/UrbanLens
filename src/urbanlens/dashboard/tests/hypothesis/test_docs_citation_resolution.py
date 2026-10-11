@@ -115,6 +115,61 @@ class CitationResolutionTests(SimpleTestCase):
         self.assertEqual(broken_code, {})
         self.assertEqual(broken_docs, {"docs/gone.md": ["docs/a.md"]})
 
+    def test_a_bare_name_resolves_against_docs_internal_too(self) -> None:
+        """`INDEX.md` means `docs/internal/INDEX.md` since the working records moved there."""
+        root = self._repo({"docs/internal/INDEX.md": "# index\n", "bin/tool.py": '"""see INDEX.md."""\n'})
+        broken_code, _ = self.checker.broken_citations(root)
+        self.assertEqual(broken_code, {})
+
+
+class InternalCitationTests(SimpleTestCase):
+    """
+    A published file may not cite `docs/internal/` or `bin/internal/`.
+
+    Published means no `private` glob in `.forgejo/sync.toml` matches the file. The mirror lacks everything under
+    those directories, so such a citation dangles there and names what was kept back.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.checker = _load_checker()
+
+    _SYNC = 'private = ["docs/*.md", "docs/internal/**", "**/AGENTS.md"]\n'
+
+    def _repo(self, files: dict[str, str]) -> pathlib.Path:
+        return CitationResolutionTests._repo(self, {".forgejo/sync.toml": self._SYNC, **files})
+
+    def test_a_published_file_citing_an_internal_record_is_reported(self) -> None:
+        root = self._repo({"docs/internal/NOTES.md": "# notes\n", "src/app.py": '"""see docs/internal/NOTES.md."""\n'})
+        self.assertEqual(
+            self.checker.internal_citations_from_public_files(root), {"src/app.py": ["docs/internal/NOTES.md"]}
+        )
+
+    def test_private_files_may_cite_internal_records(self) -> None:
+        """A doc under a private glob, an agent file in any directory, and the sync config itself."""
+        root = self._repo(
+            {
+                "docs/internal/NOTES.md": "# notes\n",
+                "docs/TOOLING.md": "see docs/internal/NOTES.md\n",
+                "src/pkg/AGENTS.md": "see docs/internal/NOTES.md\n",
+            },
+        )
+        self.assertEqual(self.checker.internal_citations_from_public_files(root), {})
+
+    def test_a_single_star_does_not_cross_a_directory(self) -> None:
+        """`docs/*.md` keeps the flat reference docs private, not a published page one level down."""
+        root = self._repo({"docs/adr/0001-x.md": "see docs/internal/NOTES.md\n"})
+        self.assertEqual(
+            self.checker.internal_citations_from_public_files(root), {"docs/adr/0001-x.md": ["docs/internal/NOTES.md"]}
+        )
+
+    def test_bin_internal_counts_too(self) -> None:
+        root = self._repo({"bin/run.sh": "bin/internal/setup.sh\n"})
+        self.assertEqual(
+            self.checker.internal_citations_from_public_files(root), {"bin/run.sh": ["bin/internal/setup.sh"]}
+        )
+
 
 class SiblingCheckoutCitationTests(SimpleTestCase):
     """

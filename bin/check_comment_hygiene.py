@@ -90,7 +90,7 @@ HISTORY_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ),
 )
 
-# P-numbers and G-numbers are retired PROBLEMS ids; the open ones are still listed in docs/PROBLEMS.md.
+# P-numbers and G-numbers are retired PROBLEMS ids; the open ones are still listed in docs/internal/PROBLEMS.md.
 # P0 is a severity, and P256/P384/P521 are curves.
 TRACKER_ID = re.compile(r"\b(P\d{1,4}|G\d{1,2}-\d{1,3})\b")
 NOT_TRACKER_IDS = frozenset({"P0", "P256", "P384", "P521"})
@@ -292,10 +292,10 @@ def dense_functions(path: str, functions: list[ast.FunctionDef | ast.AsyncFuncti
 
 def open_tracker_ids(root: Path) -> frozenset[str]:
     """
-    Ids that docs/PROBLEMS.md still maps to an open issue.
+    Ids that docs/internal/PROBLEMS.md still maps to an open issue.
     """
     try:
-        return frozenset(OPEN_IDS_TABLE.findall((root / "docs" / "PROBLEMS.md").read_text(encoding="utf-8")))
+        return frozenset(OPEN_IDS_TABLE.findall((root / "docs" / "internal" / "PROBLEMS.md").read_text(encoding="utf-8")))
     except OSError:
         return frozenset()
 

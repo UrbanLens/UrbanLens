@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail if code cites a ``docs/`` path that does not exist."""
+"""Fail if code cites a ``docs/`` path that does not exist, or a published file cites an internal one."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tomllib
 
 #: ``docs/a/b.md``, ``../SiblingRepo/docs/a/b.md``, or any run of ``../``
 #: walking up from the citing file. Extensions are listed rather than
@@ -18,8 +19,9 @@ _CITATION = re.compile(r"(?:\.\./)*(?:[A-Za-z0-9_.-]+/)?docs/[A-Za-z0-9_./-]+\.(
 #: of a root ``TODO.md`` survived its rename in ``3f12e875``.
 #: Capitalised because that is the convention for the repository-level documents
 #: this is about, and lowercase would match every ``readme.md`` in prose.
-#: Resolved against ``docs/`` as well as the root, since a bare ``FEATURES.md``
-#: means ``docs/FEATURES.md`` here and is not a defect.
+#: Resolved against ``docs/`` and ``docs/internal/`` as well as the root, since a
+#: bare ``FEATURES.md`` means ``docs/FEATURES.md`` here and a bare ``INDEX.md``
+#: means ``docs/internal/INDEX.md``; neither is a defect.
 _BARE_CITATION = re.compile(r"(?<![\w./-])([A-Z][A-Za-z0-9_-]*\.md)\b")
 
 #: Files whose citations are checked. Everything else is prose about prose.
@@ -44,12 +46,113 @@ _SKIP_FILES = {
     # Names the index it audits, which is kept out of the public mirror; the
     # checker handles its absence, so the name is an input, not a pointer.
     "bin/check_docs_index.py",
+    # `privatize` names paths the GitHub mirror still holds, which may no longer
+    # exist here; each entry is an instruction to forge-sync, not a pointer.
+    ".forgejo/sync.toml",
 }
 
 #: Build output that happens to be tracked. Minified bundles contain runs like
 #: ``A5.md`` that are property accesses, not citations, and nothing in a
 #: generated file is a pointer a reader would follow anyway.
 _SKIP_PREFIXES = ("src/urbanlens/frontend/static/",)
+
+
+#: Where a bare ``NAME.md`` may live besides the repository root.
+_BARE_NAME_HOMES = ("docs", "docs/internal")
+
+#: A path under a directory whose whole content is kept off the public mirror.
+_INTERNAL_CITATION = re.compile(r"(?:\.\./)*(?:[A-Za-z0-9_.-]+/)?(?:docs|bin)/internal(?:/[A-Za-z0-9_./*-]*)?")
+
+#: Always private, whatever `.forgejo/sync.toml` lists: forge-sync never mirrors its own configuration.
+_ALWAYS_PRIVATE = (".forgejo/**",)
+
+#: Published files that name an internal path as an input or output rather than as a pointer for a reader:
+#: each reads or writes it, and works (or says why it cannot) when the mirror lacks it.
+_MAY_NAME_INTERNAL = {
+    # This file, which names the directories it polices.
+    "bin/check_docs_refs.py",
+    # Audits docs/internal/INDEX.md, and skips the audit where the file is absent.
+    "bin/check_docs_index.py",
+    # Writes its report to docs/internal/audits/ by default; -o chooses elsewhere.
+    "bin/report_unused_methods.py",
+    # Reads the open P# ids from docs/internal/PROBLEMS.md, and treats every id as retired without it.
+    "bin/check_comment_hygiene.py",
+    # Specimens for this checker, not citations.
+    "src/urbanlens/dashboard/tests/hypothesis/test_docs_citation_resolution.py",
+}
+
+
+def _glob_regex(pattern: str) -> re.Pattern[str]:
+    """
+    A forge-sync path glob as a regex over repo-relative paths.
+
+    ``**/`` matches any number of leading directories (none included), ``**`` anything, ``*`` and ``?`` stay
+    within one path segment. Patterns are anchored at the repository root, as `.forgejo/sync.toml` writes them.
+    """
+    out = []
+    i = 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pattern.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pattern[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pattern[i] == "?":
+            out.append("[^/]")
+            i += 1
+        else:
+            out.append(re.escape(pattern[i]))
+            i += 1
+    return re.compile("".join(out) + r"\Z")
+
+
+def private_patterns(root: pathlib.Path) -> list[re.Pattern[str]]:
+    """
+    The `private` globs from `.forgejo/sync.toml`, plus the ones forge-sync always applies.
+
+    Args:
+        root: Repository root.
+
+    Returns:
+        One compiled pattern per glob; only `.forgejo/**` when the file is absent.
+    """
+    config = root / ".forgejo" / "sync.toml"
+    globs = list(_ALWAYS_PRIVATE)
+    if config.exists():
+        globs += tomllib.loads(config.read_text(encoding="utf-8")).get("private", [])
+    return [_glob_regex(glob) for glob in globs]
+
+
+def internal_citations_from_public_files(root: pathlib.Path) -> dict[str, list[str]]:
+    """
+    Every published file that cites a path under ``docs/internal/`` or ``bin/internal/``.
+
+    A file is published unless a `private` glob in `.forgejo/sync.toml` matches it. Such a citation dangles on the
+    public mirror, and says out loud where the unpublished material is.
+
+    Args:
+        root: Repository root to scan.
+
+    Returns:
+        Citing file -> the internal paths it names.
+    """
+    private = private_patterns(root)
+    found: dict[str, list[str]] = {}
+    for name in _tracked_files(root):
+        if name in _MAY_NAME_INTERNAL or name.startswith(_SKIP_PREFIXES) or any(pattern.match(name) for pattern in private):
+            continue
+        try:
+            text = (root / name).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        hits = sorted({hit.rstrip(".") for hit in _INTERNAL_CITATION.findall(text)})
+        if hits:
+            found[name] = hits
+    return found
 
 
 def _tracked_files(root: pathlib.Path) -> list[str]:
@@ -77,7 +180,7 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
     """
     if (root / citation).exists():
         return True
-    if "/" not in citation and (root / "docs" / citation).exists():
+    if "/" not in citation and any((root / home / citation).exists() for home in _BARE_NAME_HOMES):
         return True
     resolved = ((root / citing).parent / citation).resolve()
     if resolved.exists():
@@ -169,6 +272,7 @@ def main() -> int:
     """Report unresolvable docs citations, failing only on the ones in code."""
     root = pathlib.Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
     broken_code, broken_docs = broken_citations(root)
+    leaks = internal_citations_from_public_files(root)
 
     if broken_docs:
         print("Citations between documents that do not resolve (reported, not fatal):")
@@ -176,8 +280,16 @@ def main() -> int:
             print(f"  {citation}  <- {', '.join(sorted(broken_docs[citation]))}")
         print()
 
+    if leaks:
+        print("Published files cite internal paths (docs/internal/, bin/internal/), which the public mirror does not have:")
+        for name in sorted(leaks):
+            print(f"  {name}: {', '.join(leaks[name])}")
+        print()
+        print("Cite a published document instead, or make the citing file private in .forgejo/sync.toml.")
+        print()
+
     if not broken_code:
-        return 0
+        return 1 if leaks else 0
 
     print("Code and configuration cite docs/ paths that do not exist:")
     for citation in sorted(broken_code):
