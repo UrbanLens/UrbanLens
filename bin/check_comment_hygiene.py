@@ -13,6 +13,11 @@ Rules:
     docstring-restates-signature: an Args, Returns or Yields section in which
         every entry only repeats a parameter's name or a type the hints state.
 
+A justified exception is marked where it is, on the reported line or the line
+above it: ``hygiene: allow <rule>[, <rule>]`` (``history``, ``block``,
+``density`` and ``restates`` stand for the full rule names), followed by the
+reason, e.g. ``# hygiene: allow history - the county renamed the field then``.
+
 Existing violations are recorded per rule and file in ``BASELINE``. A file may
 not gain violations, and a file that loses some fails until the baseline is
 lowered with ``--update-baseline``, which refuses to raise any rule's total, so
@@ -53,6 +58,8 @@ CODE_LINES_PER_COMMENT = 3
 
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 RULES = ("comment-block", "comment-density", "history-reference", "docstring-restates-signature")
+RULE_ALIASES = {"history": "history-reference", "block": "comment-block", "density": "comment-density", "restates": "docstring-restates-signature"}
+ALLOW_MARKER = re.compile(r"hygiene:\s*allow\s+([a-z-]+(?:\s*,\s*[a-z-]+)*)")
 
 HASH_SUFFIXES = (".py", ".sh", ".yml", ".yaml", ".toml", ".conf")
 SLASH_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".scss")
@@ -474,7 +481,31 @@ def check_python(path: str, source: str, open_ids: frozenset[str]) -> list[Viola
     return found
 
 
+def allowed_rules(source: str) -> dict[int, set[str]]:
+    """
+    The rules an ``hygiene: allow`` marker exempts, by the 1-based line it is on.
+    """
+    allowed: dict[int, set[str]] = {}
+    for number, line in enumerate(source.splitlines(), 1):
+        match = ALLOW_MARKER.search(line)
+        if match:
+            names = {name.strip() for name in match.group(1).split(",")}
+            allowed[number] = {RULE_ALIASES.get(name, name) for name in names}
+    return allowed
+
+
 def check_file(path: str, source: str, open_ids: frozenset[str]) -> list[Violation]:
+    """
+    Every rule that applies to *path*'s language, less what a marker allows on or just above its line.
+    """
+    allowed = allowed_rules(source)
+    found = _check_language(path, source, open_ids)
+    if not allowed:
+        return found
+    return [v for v in found if v.rule not in allowed.get(v.line, set()) | allowed.get(v.line - 1, set())]
+
+
+def _check_language(path: str, source: str, open_ids: frozenset[str]) -> list[Violation]:
     """
     Every rule that applies to *path*'s language.
     """
