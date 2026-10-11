@@ -150,6 +150,13 @@ class BuildingCluster:
         return {ref for member in self.members if (ref := str(member.get("ref") or "").strip())}
 
     @property
+    def keys(self) -> set[str]:
+        """Every member's place key: its REData ``stable_ref``, else its ``ref``."""
+        from urbanlens.dashboard.services.places.overture_refs import building_key
+
+        return {key for member in self.members if (key := building_key(member))}
+
+    @property
     def name(self) -> str:
         """The first usable marker name across members, representative first (see ``building_name``)."""
         from urbanlens.dashboard.services.pins.pin_restructure import building_name

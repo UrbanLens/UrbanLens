@@ -338,5 +338,5 @@
   ]
  },
  "source": "src/redata/parcels/services/overture/shards.py",
- "x-redata-revision": "fix/pending-answer-transient-for-old-clients 45af1669"
+ "x-redata-revision": "feat/p98-stable-overture-ref 9edabc82"
 }

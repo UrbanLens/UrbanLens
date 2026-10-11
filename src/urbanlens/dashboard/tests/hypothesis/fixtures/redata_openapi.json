@@ -316,6 +316,12 @@
       "readOnly": true,
       "type": "string"
      },
+     "source_as_of": {
+      "additionalProperties": {},
+      "nullable": true,
+      "readOnly": true,
+      "type": "object"
+     },
      "year_built": {
       "nullable": true,
       "readOnly": true,
@@ -341,6 +347,7 @@
      "on_parcel",
      "on_survey_roster",
      "source",
+     "source_as_of",
      "year_built",
      "year_built_basis"
     ],
@@ -385,6 +392,38 @@
      "count",
      "providers",
      "results"
+    ],
+    "type": "object"
+   },
+   "BuildingRefResolution": {
+    "properties": {
+     "candidates": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "ref": {
+      "type": "string"
+     },
+     "stable_ref": {
+      "nullable": true,
+      "type": "string"
+     },
+     "status": {
+      "enum": [
+       "resolved",
+       "ambiguous",
+       "unknown"
+      ],
+      "type": "string"
+     }
+    },
+    "required": [
+     "candidates",
+     "ref",
+     "stable_ref",
+     "status"
     ],
     "type": "object"
    },
@@ -2838,8 +2877,40 @@
      }
     ]
    },
+   "HistoricalMapSearchPending": {
+    "properties": {
+     "error": {
+      "enum": [
+       "source_error"
+      ],
+      "type": "string"
+     },
+     "message": {
+      "type": "string"
+     },
+     "pending": {
+      "enum": [
+       "compute_timeout"
+      ],
+      "type": "string"
+     },
+     "retry_after": {
+      "type": "integer"
+     }
+    },
+    "required": [
+     "error",
+     "message",
+     "pending",
+     "retry_after"
+    ],
+    "type": "object"
+   },
    "HistoricalMapSearchResults": {
     "properties": {
+     "complete": {
+      "type": "boolean"
+     },
      "count": {
       "type": "integer"
      },
@@ -2851,6 +2922,7 @@
      }
     },
     "required": [
+     "complete",
      "count",
      "results"
     ],
@@ -7719,6 +7791,10 @@
       "readOnly": true,
       "type": "array"
      },
+     "stable_ref": {
+      "readOnly": true,
+      "type": "string"
+     },
      "year_built": {
       "nullable": true,
       "readOnly": true,
@@ -7754,6 +7830,7 @@
      "ref",
      "residual_geometry",
      "sources",
+     "stable_ref",
      "year_built",
      "year_built_basis",
      "year_built_source"
@@ -7832,6 +7909,12 @@
       "readOnly": true,
       "type": "string"
      },
+     "source_as_of": {
+      "additionalProperties": {},
+      "nullable": true,
+      "readOnly": true,
+      "type": "object"
+     },
      "year_built": {
       "nullable": true,
       "readOnly": true,
@@ -7858,6 +7941,7 @@
      "on_survey_roster",
      "ref",
      "source",
+     "source_as_of",
      "year_built",
      "year_built_basis"
     ],
@@ -8023,6 +8107,9 @@
       },
       "type": "object"
      },
+     "refresh_queued": {
+      "type": "boolean"
+     },
      "results": {
       "items": {
        "$ref": "#/components/schemas/ReferenceDocument"
@@ -8036,6 +8123,7 @@
      "providers",
      "query",
      "query_styles",
+     "refresh_queued",
      "results"
     ],
     "type": "object"
@@ -9659,7 +9747,7 @@
  "info": {
   "title": "REData API",
   "version": "1.0.0",
-  "x-redata-revision": "fix/pending-answer-transient-for-old-clients 45af1669"
+  "x-redata-revision": "feat/p98-stable-overture-ref 9edabc82"
  },
  "openapi": "3.0.3",
  "paths": {
@@ -9760,6 +9848,58 @@
        "application/json": {
         "schema": {
          "$ref": "#/components/schemas/BuildingRecordResults"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/buildings/resolve/": {
+   "get": {
+    "responses": {
+     "200": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BuildingRefResolution"
+        }
+       }
+      }
+     },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
+     "401": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
+        }
+       }
+      }
+     },
+     "403": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "properties": {
+          "error": {
+           "type": "string"
+          }
+         },
+         "type": "object"
         }
        }
       }
@@ -10826,6 +10966,15 @@
        }
       }
      },
+     "400": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     },
      "401": {
       "content": {
        "application/json": {
@@ -10850,6 +10999,15 @@
           }
          },
          "type": "object"
+        }
+       }
+      }
+     },
+     "503": {
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HistoricalMapSearchPending"
         }
        }
       }
