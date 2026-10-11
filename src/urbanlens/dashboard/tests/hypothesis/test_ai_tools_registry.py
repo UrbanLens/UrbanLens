@@ -327,6 +327,7 @@ class FuzzTests(TestCase):
         # (ORM access is fine; only @given + self.client is not).
         self.profile = _plain_profile()
 
+    @pytest.mark.slow
     @given(
         name=st.text(min_size=0, max_size=30),
         raw_args=st.dictionaries(

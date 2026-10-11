@@ -114,6 +114,7 @@ class EligibilityEngineTests(TestCase):
         candidate = PublicPinCandidate.objects.get(location=location)
         self.assertEqual(candidate.status, PublicPinCandidateStatus.OPEN)
 
+    @pytest.mark.slow
     def test_each_missing_criterion_blocks_eligibility(self) -> None:
         cases = {
             "no_alias": lambda w: w.aliases.all().delete(),

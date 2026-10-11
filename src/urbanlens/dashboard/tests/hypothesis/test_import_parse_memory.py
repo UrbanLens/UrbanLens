@@ -23,6 +23,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 import geopandas
 from model_bakery import baker
+import pytest
 import shapely
 
 from urbanlens.core.tests.testcase import TestCase
@@ -361,6 +362,7 @@ class PinFormatsAreReadInPiecesTests(_MemoryCase):
     def test_kml(self) -> None:
         self.assert_read_in_pieces("places.kml", _kml())
 
+    @pytest.mark.slow
     def test_kml_whose_styles_come_first(self) -> None:
         self.assert_read_in_pieces("places.kml", _kml_styles_first())
 
@@ -379,9 +381,11 @@ class PinFormatsAreReadInPiecesTests(_MemoryCase):
     def test_osm_xml(self) -> None:
         self.assert_read_in_pieces("map.osm", _osm())
 
+    @pytest.mark.slow
     def test_osm_xml_ways(self) -> None:
         self.assert_read_in_pieces("map.osm", _osm_ways())
 
+    @pytest.mark.slow
     def test_gpx_waypoints(self) -> None:
         self.assert_read_in_pieces("track.gpx", _gpx_waypoints())
 
@@ -406,12 +410,15 @@ class OneLargeElementTests(_MemoryCase):
     def test_a_kml_outline(self) -> None:
         self.assert_held_near_its_text("outline.kml", _kml_one_element("Polygon"))
 
+    @pytest.mark.slow
     def test_a_geojson_track(self) -> None:
         self.assert_held_near_its_text("track.geojson", _geojson_one_element("LineString"))
 
+    @pytest.mark.slow
     def test_a_geojson_outline(self) -> None:
         self.assert_held_near_its_text("outline.geojson", _geojson_one_element("Polygon"))
 
+    @pytest.mark.slow
     def test_an_osm_way(self) -> None:
         self.assert_held_near_its_text("route.osm", _osm_one_way())
 
@@ -425,6 +432,7 @@ class OneLargeElementTests(_MemoryCase):
 class HistoryFormatsAreReadInPiecesTests(_MemoryCase):
     """A history file is read to its end, holding what the import keeps - here nothing - but not the file."""
 
+    @pytest.mark.slow
     def test_location_history(self) -> None:
         self.assert_read_in_pieces("2019_JANUARY.json", _location_history(), fills_the_preview=False)
 

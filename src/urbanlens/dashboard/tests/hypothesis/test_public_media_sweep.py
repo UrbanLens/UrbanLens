@@ -14,6 +14,7 @@ from django.conf import settings
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
+import pytest
 
 from hypothesis import HealthCheck, given, settings as hypothesis_settings, strategies as st
 from urbanlens.dashboard.models.aliases.model import PinAlias
@@ -149,6 +150,7 @@ class SharedRowTests(_SweepCase):
 class ReadersSeeTheSameTests(_SweepCase):
     """Whatever a reader judging by the place's public names was shown before the sweep, it is shown after."""
 
+    @pytest.mark.slow
     @hypothesis_settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow])
     @given(
         cached=st.lists(st.sampled_from(ITEMS), unique_by=lambda item: item.url, min_size=1),

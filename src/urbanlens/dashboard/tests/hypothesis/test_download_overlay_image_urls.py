@@ -216,6 +216,7 @@ class TheOperatorsPathTests(TransactionTestCase):
                 cursor.execute(f"""DELETE FROM "{_TABLE}" WHERE "image_id" IS NULL AND "tile_url_template" = ''""")
         self._migrate(leaves)
 
+    @pytest.mark.slow
     @pytest.mark.xfail(
         strict=True,
         raises=ProgrammingError,

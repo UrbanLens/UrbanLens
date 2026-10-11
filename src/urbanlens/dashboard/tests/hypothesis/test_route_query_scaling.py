@@ -7,6 +7,7 @@ from django.db import connection, transaction
 from django.test.utils import CaptureQueriesContext
 from django.urls import NoReverseMatch, get_resolver, reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.tests.thread_writes import DiscardsLedgerRowsFromOtherThreadsMixin
@@ -167,6 +168,7 @@ class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
             "the external API is namespaced; without the prefix none of it reverses",
         )
 
+    @pytest.mark.slow
     def test_no_external_api_route_scales(self) -> None:
         """Same property, authenticated with a bearer key rather than a session."""
         self._headers = self._api_headers()
@@ -178,6 +180,7 @@ class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
 
         self.assertEqual(offenders, [], "these API routes scale with row count:\n  " + "\n  ".join(offenders))
 
+    @pytest.mark.slow
     def test_no_route_issues_more_queries_as_data_grows(self) -> None:
         offenders = [
             f"{name}({value}): {small} -> {large} queries"

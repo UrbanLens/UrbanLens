@@ -20,6 +20,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from django.utils import timezone
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import DirectMessageConsumer
@@ -148,6 +149,7 @@ class WebRouteSideChannelTests(_HiddenAccountFixture):
         self.assertIn("e2ee.partner_key", names)
         self.assertGreater(len(names), 25)
 
+    @pytest.mark.slow
     def test_every_profile_route_costs_the_same_for_a_hidden_account_as_for_none(self) -> None:
         for name, argument, extra in self._web_routes():
             for method in ("get", "post"):
@@ -369,6 +371,7 @@ class _RelationshipGrid(TestCase):
 class ViewableProfileQueryTests(_RelationshipGrid):
     """The one-query lookup must answer exactly as :meth:`Profile.can_view_profile` does, in every case."""
 
+    @pytest.mark.slow
     def test_the_query_agrees_with_can_view_profile_everywhere(self) -> None:
         for relationship in self.RELATIONSHIPS:
             viewer, subject = self._pair(relationship)
@@ -404,6 +407,7 @@ class ViewableProfileQueryTests(_RelationshipGrid):
 class ReachablePartnerQueryTests(_RelationshipGrid):
     """The one-query partner lookup must answer exactly as :func:`conversation_reachable` does, in every case."""
 
+    @pytest.mark.slow
     def test_the_query_agrees_with_conversation_reachable_everywhere(self) -> None:
         for relationship in self.RELATIONSHIPS:
             viewer, subject = self._pair(relationship)
@@ -432,6 +436,7 @@ def _known_by_the_old_rule(viewer: Profile, subject: Profile) -> bool:
 class KnownProfileQueryTests(_RelationshipGrid):
     """P281: the one-query lookup of a profile the actor could already know of agrees with the Python rule."""
 
+    @pytest.mark.slow
     def test_the_query_agrees_with_the_python_rule_everywhere(self) -> None:
         for relationship in self.RELATIONSHIPS:
             viewer, subject = self._pair(relationship)

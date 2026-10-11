@@ -26,6 +26,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_lists import _MAP_PIN_LIMIT, _list_items_queryset, _paginated_items_context
@@ -62,6 +63,7 @@ class PinListOverviewMapCapTests(TestCase):
         request = self.client.request(PATH_INFO="/", REQUEST_METHOD="GET").wsgi_request
         return _paginated_items_context(request, self.pin_list)
 
+    @pytest.mark.slow
     def test_the_map_payload_stops_at_the_cap(self) -> None:
         self._add_pins(_MAP_PIN_LIMIT + 5)
 
@@ -78,6 +80,7 @@ class PinListOverviewMapCapTests(TestCase):
         self.assertEqual(len(context["items_map_data"]), 3)
         self.assertFalse(context["items_map_truncated"])
 
+    @pytest.mark.slow
     def test_the_page_says_so_when_it_truncates(self) -> None:
         self._add_pins(_MAP_PIN_LIMIT + 5)
 
@@ -86,6 +89,7 @@ class PinListOverviewMapCapTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f"Showing {_MAP_PIN_LIMIT} of {_MAP_PIN_LIMIT + 5} pins on the map")
 
+    @pytest.mark.slow
     def test_the_rows_are_still_only_one_page(self) -> None:
         self._add_pins(_MAP_PIN_LIMIT + 5)
 
@@ -105,6 +109,7 @@ class PinListOverviewMapCapTests(TestCase):
             if "dashboard_pin_list_items" in query["sql"] and "COUNT" not in query["sql"]
         ]
 
+    @pytest.mark.slow
     def test_the_marker_payload_is_read_for_the_chosen_rows_only(self) -> None:
         """
         Building the markers in Python from every item on the list would
@@ -120,6 +125,7 @@ class PinListOverviewMapCapTests(TestCase):
         for sql in payload_reads:
             self.assertTrue(" IN (" in sql or "LIMIT 50" in sql, sql[-200:])
 
+    @pytest.mark.slow
     def test_the_coordinate_read_carries_no_payload_columns(self) -> None:
         """The read that is not restricted to 500 rows has to be the cheap one."""
         coordinate_reads = [sql for sql in self._item_reads() if "latitude" in sql and "description" not in sql]
@@ -132,6 +138,7 @@ class PinListOverviewMapCapTests(TestCase):
                 "dashboard_reviews", sql, "the coordinate read is dragging the marker payload's joins with it"
             )
 
+    @pytest.mark.slow
     def test_the_map_covers_the_area_rather_than_the_first_rows(self) -> None:
         """The defect the slice had: a list ordered by hand maps one cluster."""
         self._add_pins(_MAP_PIN_LIMIT + 5)

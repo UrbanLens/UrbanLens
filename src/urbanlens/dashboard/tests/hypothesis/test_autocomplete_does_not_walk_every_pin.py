@@ -39,6 +39,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.db import connection
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.explain import relations_read
 from urbanlens.core.tests.testcase import TestCase
@@ -145,6 +146,7 @@ class AutocompleteReadsOneAccountsPinsTests(TestCase):
         preamble = [("SET enable_sort = off", None)]
         return max(relations_read(sql, params, preamble=preamble).get(table, 0) for sql, params in searching)
 
+    @pytest.mark.slow
     def test_it_does_not_read_a_strangers_pins(self) -> None:
         """The cost of a keystroke belongs to the viewer's own pin count, not to the site's."""
         read = self._pin_rows_read()
@@ -156,6 +158,7 @@ class AutocompleteReadsOneAccountsPinsTests(TestCase):
             f"{MINE + THEIRS + 1}: the plan is walking the table and discarding other accounts' pins",
         )
 
+    @pytest.mark.slow
     def test_the_statement_that_scans_selects_one_column(self) -> None:
         """
         What the scanning query returns is what sets its planning cost.

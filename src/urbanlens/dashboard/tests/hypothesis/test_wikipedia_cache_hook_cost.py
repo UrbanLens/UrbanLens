@@ -17,6 +17,7 @@ from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -95,6 +96,7 @@ class WikipediaCacheHookCostTests(TestCase):
         pin_seed.assert_not_called()
         pin_link.assert_not_called()
 
+    @pytest.mark.slow
     def test_the_hook_makes_no_outbound_request(self) -> None:
         """The wiki's first article reaches the cover step, which is where a fetch would start."""
         with mock.patch.object(wiki_seed, "_store_cover_from_url", wraps=wiki_seed._store_cover_from_url) as cover:

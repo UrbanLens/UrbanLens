@@ -18,6 +18,7 @@ from django.core.cache import cache
 from django.urls import reverse
 import lxml.html
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
@@ -412,6 +413,7 @@ class ProbeAgreesWithThePanelsTests(PanelProbeTestCase):
         with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             return self.client.get(self._card_url(key)).status_code == 204
 
+    @pytest.mark.slow
     def test_bespoke_and_generic_cards(self) -> None:
         payloads = {
             "azure_maps": [{}, {"poi": None}, {"formatted_address": "1 Mill Street"}, {"poi": {"name": "Mill"}}],

@@ -17,6 +17,7 @@ from django.test import RequestFactory
 from django.test.utils import CaptureQueriesContext
 from django.urls import URLPattern, URLResolver, get_resolver, reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
@@ -138,6 +139,7 @@ class WikiRouteSideChannelTests(_HiddenLocationFixture):
         self.assertIn("location.wiki.detail_pins.json", names)
         self.assertGreater(len(names), 50)
 
+    @pytest.mark.slow
     def test_every_wiki_route_costs_the_same_for_a_hidden_location_as_for_none(self) -> None:
         for name, extra in _location_slug_routes():
             for method in ("get", "post"):

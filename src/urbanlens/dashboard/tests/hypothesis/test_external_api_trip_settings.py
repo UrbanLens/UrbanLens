@@ -5,6 +5,7 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from hypothesis import given, strategies as st
 from urbanlens.core.tests.testcase import TestCase
@@ -147,6 +148,7 @@ class SetTripPermissionsPresenceTests(_TripSettingsTestCase):
         with self.assertRaises(TripPermissionError):
             set_trip_permissions(trip, self.profile, changes={"allow_comments": Trip.PERM_NONE})
 
+    @pytest.mark.slow
     @given(
         submitted=st.dictionaries(st.sampled_from(TRIP_PERMISSION_FIELDS), st.sampled_from(_LEVELS)),
         initial=st.lists(st.sampled_from(_LEVELS), min_size=4, max_size=4),

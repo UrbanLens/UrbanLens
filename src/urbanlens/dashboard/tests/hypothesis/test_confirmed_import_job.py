@@ -15,6 +15,7 @@ from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase, TransactionTestCase
@@ -298,6 +299,7 @@ class ConfirmedImportFollowOnBatchingTests(TransactionTestCase):
 
         self.assertTrue(enqueue.called, "a 3-pin import queued no follow-on work at all")
 
+    @pytest.mark.slow
     def test_a_large_import_bounds_its_follow_on_enqueue_count_not_one_task_per_pin(self) -> None:
         """The headline claim: a 120-pin import's follow-on enqueues track pins/chunk_size, not pins."""
         from urbanlens.dashboard.services.core.bulk_followup import DEFAULT_CHUNK_SIZE
@@ -331,6 +333,7 @@ class ConfirmedImportFollowOnBatchingTests(TransactionTestCase):
                     len(chunk), DEFAULT_CHUNK_SIZE, f"{task.name} received an oversized chunk: {chunk}"
                 )
 
+    @pytest.mark.slow
     def test_a_large_imports_follow_on_ids_are_not_lost_or_duplicated(self) -> None:
         """Every pin's follow-on work must reach a batch task exactly once - none dropped, none doubled."""
         from urbanlens.dashboard.models.reputation.model import ReputationEvent

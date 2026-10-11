@@ -29,6 +29,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, override_settings
 from django.urls import reverse
 from PIL import Image as PILImage, PngImagePlugin, TiffImagePlugin
+import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
@@ -271,6 +272,7 @@ class TheDetectorSeesEveryCarrierTests(_MetadataCase):
 
 
 class TheStoredFileTests(_MetadataCase):
+    @pytest.mark.slow
     def test_no_metadata_survives_the_reencode(self) -> None:
         for convert_webp in (False, True):
             for max_dimension in (None, 16):
@@ -394,6 +396,7 @@ class CopiesMadeFromAFileStoredBeforeThePipelineTests(_MetadataCase):
 class APhotoUploadedThroughTheSiteTests(_MetadataCase):
     """The whole path: the upload endpoint, the upload task, and the bytes the media gate serves."""
 
+    @pytest.mark.slow
     def test_nothing_the_site_serves_carries_metadata(self) -> None:
         User.objects.create(username="bootstrap-admin")
         for slug, (name, data) in _fixtures().items():

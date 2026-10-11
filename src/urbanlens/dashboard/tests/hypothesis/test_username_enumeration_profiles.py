@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model
+import pytest
 
 from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.core.tests.testcase import TestCase
@@ -128,6 +129,7 @@ class WebRoutesHideProfilesTests(_HiddenProfilesTestCase):
         response = getattr(self.client, method)(url, _FORM if method == "post" else None)
         return response.status_code, _scrub(response.content, slug)
 
+    @pytest.mark.slow
     def test_every_route_answers_a_hidden_profile_as_it_answers_no_profile(self) -> None:
         for name, extra in WEB_ROUTES:
             for method in _METHODS:

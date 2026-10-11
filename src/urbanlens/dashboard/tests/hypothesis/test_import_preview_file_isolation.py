@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+import pytest
+
 from hypothesis import HealthCheck, given, settings as hyp_settings, strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.profile.model import Profile
@@ -175,6 +177,7 @@ class OneMalformedFileFailsAloneTests(SimpleTestCase):
 
         _assert_every_pin_is_on_the_globe(self, parse, name)
 
+    @pytest.mark.slow
     def test_no_single_structural_byte_rewritten_raises_past_the_per_file_guard(self) -> None:
         """Every structural byte of every seed, deleted, blanked or swapped: the edits random mutation rarely reaches."""
         gateway = GoogleMapsGateway(api_key="")
