@@ -146,6 +146,11 @@ REVIEWED: dict[str, str] = {
         "already resolved, so the retry sweep never re-sends a notice the old code sent. A reverse leaves the stamps: "
         "0072's code reads them as notices already sent, which they were or no longer need to be - lossy, valid."
     ),
+    "0075_pin_share_notification_labels.py": (
+        "Rewrites stored pin-share notification messages to name the place as the share consented to. The old text "
+        "named the sender's own pin, which the share never consented to pass on, so a reverse must not restore it; "
+        "the rewritten messages are ordinary strings to the old code."
+    ),
 }
 
 
