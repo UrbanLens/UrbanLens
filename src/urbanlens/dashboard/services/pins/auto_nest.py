@@ -62,7 +62,7 @@ def _remembered(swept: list[SweptBuilding], clusters: list[BuildingCluster], pin
     from urbanlens.dashboard.services.pins.building_clusters import SweptBuilding
     from urbanlens.dashboard.services.pins.pin_restructure import MAX_RESTRUCTURE_ITEMS
 
-    entries = [*swept, *(SweptBuilding(clusters[index].latitude, clusters[index].longitude, ref=min(clusters[index].refs, default="")) for index in sorted(pinned))]
+    entries = [*swept, *(SweptBuilding(clusters[index].latitude, clusters[index].longitude, ref=min(clusters[index].keys, default="")) for index in sorted(pinned))]
     unique: dict[tuple, SweptBuilding] = {}
     for entry in entries:
         unique.setdefault((quantize_coordinate(entry.effective_latitude, "latitude"), quantize_coordinate(entry.effective_longitude, "longitude")), entry)

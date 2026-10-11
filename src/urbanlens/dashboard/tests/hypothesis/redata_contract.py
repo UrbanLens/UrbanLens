@@ -763,6 +763,14 @@ READS: tuple[Read, ...] = (
         ),
     ),
     _get(
+        "services/places/overture_refs.py",
+        "/api/v1/parcels/{parcel_uuid}/buildings/",
+        "[].ref",
+        "[].stable_ref",
+        "[].geometry.*",
+    ),
+    _get(_PARCELS, "/api/v1/buildings/resolve/", "ref", "status", "stable_ref", "candidates"),
+    _get(
         "plugins/builtin/redata_building_attributes.py",
         "/api/v1/parcels/{parcel_uuid}/buildings/",
         *_BUILDING,

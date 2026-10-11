@@ -64,6 +64,10 @@ REASON_BLOCKED = "blocked"
 #: Used both for REData's own ``source_error`` reason and for failures that never reached REData at
 #: all (network errors, malformed responses, unexpected status codes) - all of those are equally
 REASON_SOURCE_ERROR = "source_error"
+
+#: How long a resolved and an unresolved building-ref answer are kept (see ``RedataGateway.resolve_building_ref``).
+_RESOLVED_REF_SECONDS = 24 * 3600
+_UNRESOLVED_REF_SECONDS = 3600
 #: REData's own outbound pacing refused the call before it reached the county
 #: source - distinct from ``REASON_SOURCE_ERROR`` (the source itself failed),
 #: and just as transient.
@@ -886,6 +890,32 @@ class RedataGateway(Gateway):
         """
         body, headers = self._get_json_and_headers(f"/api/v1/parcels/{parcel_uuid}/buildings/")
         return ParcelBuildings(list(body) if isinstance(body, list) else [], _unanswered_header(headers))
+
+    def resolve_building_ref(self, ref: str) -> dict[str, Any]:
+        """Map a building ref REData once served to its stable ``overture:<gers_id>``.
+
+        Transitional, as REData's endpoint is (its P98): used only to move places and floorplans off Overture's
+        legacy content-hash refs, and removed with them. A resolved answer is kept for a day, since a served hash
+        names one footprint for good; any other answer for an hour.
+
+        Args:
+            ref: The ref to resolve.
+
+        Returns:
+            REData's answer: ``ref``, ``status`` (``resolved``, ``ambiguous`` or ``unknown``), ``stable_ref`` and ``candidates``.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed, or it does not serve the endpoint yet.
+        """
+        key = f"redata:building-ref:{hashlib.sha256(ref.encode()).hexdigest()}"
+        kept = get_or_none(key, label="building ref resolution", alias=DEFAULT_CACHE_ALIAS)
+        if isinstance(kept, dict):
+            return kept
+        body = self._get_json("/api/v1/buildings/resolve/", params={"ref": ref})
+        if not isinstance(body, dict) or not isinstance(body.get("status"), str):
+            raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unreadable building ref resolution.")
+        set_or_skip(key, body, _RESOLVED_REF_SECONDS if body["status"] == "resolved" and body.get("stable_ref") else _UNRESOLVED_REF_SECONDS, label="building ref resolution", alias=DEFAULT_CACHE_ALIAS)
+        return body
 
     def lookup_boundaries(self, parcel_uuid: str) -> ParcelBoundaries:
         """Return every boundary candidate REData can find for a parcel, scored, and which of its sources did not answer.

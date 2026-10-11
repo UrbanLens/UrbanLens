@@ -298,9 +298,11 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     Returns:
         Dict mapping each record's index in ``buildings`` to its place."""
     from urbanlens.dashboard.services.pins.pin_restructure import building_footprint, building_name
+    from urbanlens.dashboard.services.places import overture_refs
 
     if parcel is None:
         return {}
+    resolver = overture_refs.RedataResolver() if provider == overture_refs.REDATA else None
 
     # REData's reconciled shape reports nesting: a coarse footprint enclosing finer ones becomes
     # their `parent_ref` rather than a duplicate of them.
@@ -319,9 +321,9 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
 
     def _key(building: dict) -> str:
         """The building's identity: global ids as they are, a building number only within this parcel."""
-        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
+        # "stable_ref" (else "ref") is the reconciled shape's id (e.g. "cris:02714.000098")
         # and doubles as the key floorplan lookups use - prefer it.
-        if ref := str(building.get("ref") or building.get("uuid") or building.get("id") or "").strip():
+        if ref := overture_refs.building_key(building) or str(building.get("uuid") or building.get("id") or "").strip():
             return ref
         if osm_id := building.get("osm_id"):
             # REData's own ref for an OSM building, so a later REData answer finds this place.
@@ -339,12 +341,14 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
 
     def _create(index: int, parent_place: Place) -> None:
         building = buildings[index]
-        footprint = building_footprint(building)
+        footprint = _as_multipolygon(building_footprint(building))
         key = _key(building)
+        if provider and key.startswith(overture_refs.OVERTURE_PREFIX):
+            key = overture_refs.key_for_building(building, footprint, resolver=resolver)
         _adopt_legacy_number_key(key)
         place = upsert_place(
             PlaceKind.BUILDING,
-            _as_multipolygon(footprint),
+            footprint,
             provider=provider if key else "",
             provider_key=key,
             name=building_name(building),
