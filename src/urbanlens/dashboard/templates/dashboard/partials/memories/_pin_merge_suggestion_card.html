@@ -36,13 +36,13 @@
                 </span>
             </label>
         </div>
-        <p class="pin-merge-suggestion-card-caption">The pin you don't pick will be deleted; its visits, photos, and other data move onto the one you keep.</p>
+        <p class="pin-merge-suggestion-card-caption">The pin you don't pick will be deleted; its visits, photos, and other data move onto the one you keep. Where both hold something different, the one you keep saves the other's in a note, its article history, or its markup.</p>
 
         {% if conflicts %}
         <div class="pin-merge-suggestion-conflicts">
             {% for conflict in conflicts %}
             <div class="pin-merge-suggestion-conflict">
-                <p class="pin-merge-suggestion-conflict-label">{{ conflict.label }} - keep which one?</p>
+                <p class="pin-merge-suggestion-conflict-label">{{ conflict.label }} - which should stay current?</p>
                 <label class="pin-merge-suggestion-conflict-option">
                     <input type="radio" name="resolution__{{ conflict.key }}" value="{{ suggestion.pin_a.pk }}" required>
                     <span>{{ suggestion.pin_a.effective_name }}'s ({{ conflict.pin_a_summary }})</span>
