@@ -66,7 +66,7 @@ def latest_human_editor_id(article: Article) -> int | None:
     return editor_id if editor_id is not None else article.last_edited_by_id
 
 
-def write_merge_revision(article: Article, *, content: str, editor: Profile | None, edit_summary: str) -> ArticleRevision:
+def write_merge_revision(article: Article, *, content: str, editor: Profile | None, edit_summary: str, revision_content: str | None = None) -> ArticleRevision:
     """Write *content* to *article* as a new newest revision, even when the text is unchanged.
     ``save_article`` skips a save that changes nothing, which is right for an editor but wrong after a merge: the adopted revisions interleave by date, so without a fresh newest row the history's top entry could be the other host's text while the page shows this one's.
 
@@ -75,6 +75,9 @@ def write_merge_revision(article: Article, *, content: str, editor: Profile | No
         content: The text the article holds from now on.
         editor: Who the revision is attributed to.
         edit_summary: One line explaining the merge.
+        revision_content: The text the revision records, when it must differ from the live text: a concealed editor's
+            revision may only carry what that editor could see (see ``services.wiki.concealment``). Defaults to
+            *content*.
 
     Returns:
         The new revision.
@@ -90,4 +93,4 @@ def write_merge_revision(article: Article, *, content: str, editor: Profile | No
             article.toc = [{"level": entry.level, "title": entry.title, "anchor": entry.anchor} for entry in rendered.toc]
             article.last_edited_by = editor
             article.save()
-        return ArticleRevision.objects.create(article=article, editor=editor, content=content, edit_summary=edit_summary[:255])
+        return ArticleRevision.objects.create(article=article, editor=editor, content=content if revision_content is None else revision_content, edit_summary=edit_summary[:255])
