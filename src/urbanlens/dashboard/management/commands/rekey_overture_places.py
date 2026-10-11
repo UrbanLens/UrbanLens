@@ -55,7 +55,12 @@ class Command(BaseCommand):
 
         apply: bool = options["apply"]
         resolver = overture_refs.RedataResolver()
-        report = overture_refs.migrate_legacy_refs(apply=apply, resolver=resolver, fetch_buildings=lambda uuid: RedataGateway().lookup_buildings(uuid))
+        report = overture_refs.migrate_legacy_refs(
+            apply=apply,
+            resolver=resolver,
+            fetch_buildings=lambda uuid: RedataGateway().lookup_buildings(uuid),
+            locate_parcel=lambda latitude, longitude: RedataGateway().lookup_parcel_uuid(latitude, longitude),
+        )
         verb = "re-keyed" if apply else "would re-key"
         for row in report.places:
             moved = row.outcome in (overture_refs.RESOLVED, overture_refs.FOOTPRINT)
