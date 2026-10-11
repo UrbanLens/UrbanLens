@@ -221,6 +221,9 @@ def key_for_building(building: dict[str, Any], footprint: GEOSGeometry | None, *
 #: Fetches a REData parcel's buildings by its uuid; raises ``PropertyRecordsUnavailableError`` when it cannot.
 BuildingsFetcher = Callable[[str], list[dict[str, Any]]]
 
+#: The uuid of REData's parcel at a latitude and longitude, or None; raises ``PropertyRecordsUnavailableError`` when it cannot.
+ParcelLocator = Callable[[float, float], str | None]
+
 #: Outcomes of :func:`migrate_legacy_refs`, per place.
 RESOLVED = "resolved"
 FOOTPRINT = "footprint"
@@ -286,7 +289,35 @@ def _footprint_match(place: Place, buildings: list[dict[str, Any]]) -> tuple[str
     return NO_MATCH, matches
 
 
-def _classify(place: Place, *, resolver: RedataResolver, fetch_buildings: BuildingsFetcher | None, buildings_by_parcel: dict[str, list[dict[str, Any]] | None]) -> LegacyPlace:
+def _redata_parcel_key(place: Place, locate_parcel: ParcelLocator | None) -> str:
+    """The REData parcel to match a building place's footprint against.
+
+    The parent's key when the parent is a REData parcel. Otherwise (a parcel drawn by hand, or from another source)
+    REData's parcel at the place's centroid, so a building under such a parcel is still matched.
+    """
+    from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+
+    parcel = place.parent
+    if parcel is not None and parcel.provider == REDATA and parcel.provider_key:
+        return parcel.provider_key
+    if locate_parcel is None or place.geometry is None:
+        return ""
+    centroid = place.geometry.centroid
+    try:
+        return locate_parcel(centroid.y, centroid.x) or ""
+    except PropertyRecordsUnavailableError:
+        logger.info("overture refs: no REData parcel at place %s", place.pk, exc_info=True)
+        return ""
+
+
+def _classify(
+    place: Place,
+    *,
+    resolver: RedataResolver,
+    fetch_buildings: BuildingsFetcher | None,
+    buildings_by_parcel: dict[str, list[dict[str, Any]] | None],
+    locate_parcel: ParcelLocator | None = None,
+) -> LegacyPlace:
     """Where one legacy-keyed place should move, by REData's resolve and then by footprint."""
     from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
 
@@ -302,17 +333,17 @@ def _classify(place: Place, *, resolver: RedataResolver, fetch_buildings: Buildi
         row.outcome, row.detail = AMBIGUOUS, ", ".join(str(candidate) for candidate in answer.get("candidates") or [])
         return row
     else:
-        parcel = place.parent
-        if fetch_buildings is None or parcel is None or parcel.provider != REDATA or not parcel.provider_key:
+        parcel_key = _redata_parcel_key(place, locate_parcel) if fetch_buildings is not None else ""
+        if fetch_buildings is None or not parcel_key:
             row.detail = "no REData parcel to match the footprint against"
             return row
-        if parcel.provider_key not in buildings_by_parcel:
+        if parcel_key not in buildings_by_parcel:
             try:
-                buildings_by_parcel[parcel.provider_key] = fetch_buildings(parcel.provider_key)
+                buildings_by_parcel[parcel_key] = fetch_buildings(parcel_key)
             except PropertyRecordsUnavailableError:
-                logger.info("overture refs: no buildings for parcel %s", parcel.provider_key, exc_info=True)
-                buildings_by_parcel[parcel.provider_key] = None
-        buildings = buildings_by_parcel[parcel.provider_key]
+                logger.info("overture refs: no buildings for parcel %s", parcel_key, exc_info=True)
+                buildings_by_parcel[parcel_key] = None
+        buildings = buildings_by_parcel[parcel_key]
         if buildings is None:
             row.outcome = UNAVAILABLE
             return row
@@ -326,11 +357,18 @@ def _classify(place: Place, *, resolver: RedataResolver, fetch_buildings: Buildi
     return row
 
 
-def migrate_legacy_refs(*, apply: bool, resolver: RedataResolver, fetch_buildings: BuildingsFetcher | None) -> MigrationReport:
+def migrate_legacy_refs(
+    *,
+    apply: bool,
+    resolver: RedataResolver,
+    fetch_buildings: BuildingsFetcher | None,
+    locate_parcel: ParcelLocator | None = None,
+) -> MigrationReport:
     """Re-key every building place, floorplan and swept-building record still on a legacy Overture ref.
 
     A place moves to the stable ref REData resolves its key to. A key REData never recorded (served before its
-    2026-10-11 release) is matched by footprint against the parent parcel's current buildings: the one stable
+    2026-10-11 release) is matched by footprint against its REData parcel's current buildings (the parent, or when
+    the parent is not from REData, REData's parcel at the place's centroid): the one stable
     Overture building whose footprint and the place's outline each hold the other's centroid. More than one match is
     ambiguous, and a stable ref another place already holds is a duplicate to merge;
     both leave the place unchanged, as does a REData that cannot answer. Nothing is deleted, and running it again
@@ -340,6 +378,8 @@ def migrate_legacy_refs(*, apply: bool, resolver: RedataResolver, fetch_building
         apply: Write; otherwise only report.
         resolver: Maps a legacy ref to its stable ref.
         fetch_buildings: A REData parcel's buildings, for the footprint match; None skips it.
+        locate_parcel: REData's parcel at a coordinate, for a place whose parent is not a REData parcel; None
+            leaves such places unmatched.
 
     Returns:
         Each legacy place's outcome, and the floorplan and swept-building refs that were (or would be) moved.
@@ -351,7 +391,7 @@ def migrate_legacy_refs(*, apply: bool, resolver: RedataResolver, fetch_building
     rows: list[LegacyPlace] = []
     claimed: set[str] = set()
     for place in legacy_keyed_places().select_related("parent").order_by("pk"):
-        row = _classify(place, resolver=resolver, fetch_buildings=fetch_buildings, buildings_by_parcel=buildings_by_parcel)
+        row = _classify(place, resolver=resolver, fetch_buildings=fetch_buildings, buildings_by_parcel=buildings_by_parcel, locate_parcel=locate_parcel)
         if row.new and row.new in claimed:
             row.outcome, row.detail = DUPLICATE, f"{row.new} goes to an earlier place in this run"
         elif row.outcome in (RESOLVED, FOOTPRINT):
@@ -404,6 +444,7 @@ __all__ = [
     "BuildingsFetcher",
     "LegacyPlace",
     "MigrationReport",
+    "ParcelLocator",
     "RedataResolver",
     "Rekeyed",
     "Resolver",

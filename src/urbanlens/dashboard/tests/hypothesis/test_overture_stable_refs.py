@@ -175,13 +175,16 @@ class MigrationTests(_PlacesTestCase):
         *,
         apply: bool = True,
         buildings: list[dict[str, Any]] | None = None,
+        locate_parcel: overture_refs.ParcelLocator | None = None,
     ) -> overture_refs.MigrationReport:
         def fetch(uuid: str) -> list[dict[str, Any]]:
             if buildings is None:
                 raise PropertyRecordsUnavailableError("source_error", "down")
             return buildings
 
-        return overture_refs.migrate_legacy_refs(apply=apply, resolver=FakeResolver(table), fetch_buildings=fetch)
+        return overture_refs.migrate_legacy_refs(
+            apply=apply, resolver=FakeResolver(table), fetch_buildings=fetch, locate_parcel=locate_parcel
+        )
 
     def test_a_resolved_place_moves_with_its_floorplans_and_a_dry_run_moves_nothing(self) -> None:
         place = self._building_place(_OLD, _square(0.2, 0.2))
@@ -302,6 +305,35 @@ class MigrationTests(_PlacesTestCase):
         Place.objects.filter(pk=orphan.pk).update(provider="redata", provider_key=_OLD)
         report = self._migrate({}, buildings=[_record(_NEW, _square(0.2, 0.2), stable_ref=_STABLE)])
         self.assertEqual(report.places[0].outcome, overture_refs.NO_MATCH)
+
+    def test_a_parent_from_another_source_is_matched_through_redatas_parcel_at_the_centroid(self) -> None:
+        orphan = make_place(PlaceKind.BUILDING, _square(0.2, 0.2))
+        Place.objects.filter(pk=orphan.pk).update(provider="redata", provider_key=_OLD)
+        asked: list[tuple[float, float]] = []
+
+        def locate(latitude: float, longitude: float) -> str:
+            asked.append((latitude, longitude))
+            return "parcel-uuid"
+
+        report = self._migrate(
+            {}, buildings=[_record(_NEW, _square(0.205, 0.2), stable_ref=_STABLE)], locate_parcel=locate
+        )
+        self.assertEqual([(row.outcome, row.new) for row in report.places], [(overture_refs.FOOTPRINT, _STABLE)])
+        self.assertEqual(len(asked), 1)
+        self.assertEqual(Place.objects.get(pk=orphan.pk).provider_key, _STABLE)
+
+    def test_no_redata_parcel_at_the_centroid_means_no_footprint_match(self) -> None:
+        orphan = make_place(PlaceKind.BUILDING, _square(0.2, 0.2))
+        Place.objects.filter(pk=orphan.pk).update(provider="redata", provider_key=_OLD)
+
+        def locate(latitude: float, longitude: float) -> str:
+            raise PropertyRecordsUnavailableError("no_parcel", "none here")
+
+        report = self._migrate(
+            {}, buildings=[_record(_NEW, _square(0.2, 0.2), stable_ref=_STABLE)], locate_parcel=locate
+        )
+        self.assertEqual(report.places[0].outcome, overture_refs.NO_MATCH)
+        self.assertEqual(Place.objects.get(pk=orphan.pk).provider_key, _OLD)
 
     def test_floorplans_and_swept_buildings_no_place_holds_are_moved(self) -> None:
         baker.make(Floorplan, building_ref=_OLD)
