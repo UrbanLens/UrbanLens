@@ -143,8 +143,7 @@ were not provided`, because by the time it looks the key is gone.
 ## What the first run found
 
 **Both fixed 2026-08-24** - kept here as the reason `test_operation_ids_are_unique` and
-`test_authenticated_operations_document_rejection` exist, not as open findings. Full history in
-`docs/PROBLEMS.md`.
+`test_authenticated_operations_document_rejection` exist, not as open findings.
 
 - **`operationId` collisions.** `passkey_wrap_create` and `passkey_wrap_destroy` were each
   claimed by two operations (`/dashboard/e2ee/passkey-wrap/` and `.../{credential_id}/`).
@@ -168,8 +167,8 @@ REData and no network.
   listing every response field the reader uses (`results[].sheet.thumbnail_url`; `[]` steps into an array, `{}` into a
   free-keyed map, a final `*` marks an object REData publishes untyped).
 - **The schema** is REData's own OpenAPI document, trimmed to the table's operations and vendored at
-  `tests/hypothesis/fixtures/redata_openapi.json`. `bin/vendor_redata_schema.py` refreshes it from a REData checkout
-  or deployment; its docstring has the commands.
+  `tests/hypothesis/fixtures/redata_openapi.json`. A maintainer refreshes it from a REData checkout
+  or deployment.
 - **Adding a REData read** means adding its fields to the table and re-vendoring. The test fails on a field REData
   does not publish where it is read, on an untyped object REData has since typed, and on vendored operations the table
   no longer names. It also holds REData's incident `category` vocabulary to the categories UrbanLens labels and sends.
@@ -182,7 +181,7 @@ REData and no network.
   stay unpublished, so the row is revisited when REData fills the gap.
 - **`optional`** on a row lists top-level fields REData publishes that an older REData UrbanLens still supports does
   not send, such as `/search/news/`'s `complete`, `degraded` and `providers` (REData 0.3.7 and later). The reader
-  defaults them, `bin/vendor_redata_schema.py` leaves them out of the body's `required`, and the test holds both that
+  defaults them, the vendoring leaves them out of the body's `required`, and the test holds both that
   and that REData still publishes them.
 - **What it cannot see:** fields REData sends but does not document (a parcel sub-resource's 404 `message` is one,
   hence a gap), and reads the harvest missed. The table was built by tracing every REData reader in the code; a new

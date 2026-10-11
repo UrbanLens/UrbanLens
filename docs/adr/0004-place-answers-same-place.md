@@ -5,7 +5,7 @@ date: 2026-08-27
 
 # Place is the single answer to "is this the same place?"
 
-Formerly `D4`. Detail: [`docs/designs/place-consolidation.md`](../designs/place-consolidation.md).
+Formerly `D4`.
 
 Pin dedup, wiki access, wiki dedup and "places in common" each answered "same place?" differently, which warped coordinates, duplicated wikis and official geometry, and left access filtering upheld only by discipline. A `Place` (parcel, building, site) now owns the official geometry and anchors the wiki, and every subsystem resolves through it. Dedup is boundary-based with no radius, so exact coordinates are always kept. Access derives only from official geometry; user and community drawings live in a table no access path reads. Each parent edge carries its access meaning: `PART_OF` places form one access domain that a pin anywhere in it grants in both directions, and a `MEMBER_OF` parent is earned only by holding every member.
 

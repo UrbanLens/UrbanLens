@@ -57,15 +57,8 @@ src/urbanlens/logs/*
 .coverage
 # Parallel-mode data files (one per process, before `coverage combine`).
 .coverage.*
-CLAUDE.local.md
-# Only the per-machine file. `settings.json` registers the hooks that protect
-# AGENTS.md and auto-format Python on write, and `.claude/agents/` holds the
-# docs-finder/docs-writer definitions - AGENTS.md promises all of that, so it
-# has to be in the tree rather than on one laptop.
-.claude/settings.local.json
+/*.local.md
 .cursor/
-docs/notes/ai/
-docs/notes/geocoding-analysis/
 
 # Secrets, authentication, etc
 .env
@@ -88,7 +81,6 @@ sample_data/Google Takeout.csv
 # mutmut copies the tree here to mutate it.
 mutants/
 
-docs/audits/codeql-findings.md
 
 # Agent scratch files have landed at the repo root untracked more than once.
 /_tmp*

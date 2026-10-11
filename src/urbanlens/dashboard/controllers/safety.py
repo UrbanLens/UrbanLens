@@ -758,8 +758,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         - Anyone, once the check-in has posted to a community wiki (``wiki_notified_at`` set) - linked from
           that wiki comment.
         - A logged-in profile an emergency contact on the check-in stands for (``SafetyCheckinContact.objects.reaching``),
-          once escalation has alerted that contact. Before then a contact sees nothing of the check-in: GOALS.md
-          ("Safety check-ins") gives contacts the plan only once the owner misses the check-in, and earlier access to
+          once escalation has alerted that contact. Before then a contact sees nothing of the check-in: the product goal gives contacts the plan only once the owner misses the check-in, and earlier access to
           an accepted partner the owner chose.
 
         Args:

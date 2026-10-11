@@ -5,7 +5,7 @@ broker messages sharing a FIFO queue with every other account's bulk work, drain
 own low concurrency - one account's import can hold another account's job behind thousands of rows
 for hours, none of which even belong to it. Wrapping the bulk action's per-row loop in
 :func:`batching_follow_on_work` buffers those ids and flushes bounded chunks instead, so the queue
-depth one action can create tracks ``rows / chunk_size``, not ``rows``. See docs/archive/PROBLEMS-ARCHIVE.md P109.
+depth one action can create tracks ``rows / chunk_size``, not ``rows``.
 
 Outside that context, :func:`enqueue_follow_on` enqueues exactly as ``safely_enqueue_task`` always
 has - a signal fired by someone's own single save is unaffected.

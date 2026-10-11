@@ -125,7 +125,7 @@ class TripActivityPhotosTests(WikiReachabilityTestCase):
     """A pin on a trip activity does *not* share its photos with the trip.
 
     Adding a place to an itinerary says where the group is going; it is not a per-photo decision, and
-    ``docs/GOALS.md`` requires one before a pin's contents reach anybody else."""
+    the product's sharing model requires one before a pin's contents reach anybody else."""
 
     def setUp(self) -> None:
         super().setUp()

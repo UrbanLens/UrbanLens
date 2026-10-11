@@ -409,7 +409,7 @@ def _write_json(temp_dir: str, filename: str, data: Any) -> None:
 
 def _copy_into_archive(stored: FieldFile | None, dest_dir: str, *, unique_suffix: object) -> str | None:
     """Stream a stored media file into the archive through its storage, disambiguating name collisions.
-    Never through a local path: object storage, which production uses, has none, and asking for one failed the whole export (see P321, "an export with photos fails outright on object storage", in docs/PROBLEMS.md). Two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
+    Never through a local path: object storage, which production uses, has none, and asking for one failed the whole export (see UrbanLens#300, "an export with photos fails outright on object storage"). Two rows can hold files with the same basename, so a collision gets the row's own identifier appended rather than silently overwriting the first copy.
 
     Args:
         stored: The row's file field, or None when the row has none.

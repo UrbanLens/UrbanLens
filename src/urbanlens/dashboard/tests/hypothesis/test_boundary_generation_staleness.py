@@ -130,7 +130,7 @@ class BoundaryGenerationStaleTests(TestCase):
         # Freeze the clock the implementation reads: unfrozen, a boundary-
         # adjacent example (age_days == configured_days) drifts stale by
         # however long the test body takes to run between stamping and
-        # checking, flaking the exact-equality case (see dashboard/tests/AGENTS.md).
+        # checking, flaking the exact-equality case.
         frozen_now = timezone.now()
         with patch("django.utils.timezone.now", return_value=frozen_now):
             location = self._make_location_with_row(age_days=age_days)

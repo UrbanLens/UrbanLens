@@ -48,9 +48,8 @@ tiny table, but one that reintroduces exactly this problem's cost shape for as l
 small) - forcing the index plan for this one, provably bounded, provably high-selectivity statement is safe
 where it would not be generally. Fixing this closed every remaining path this file's own docstring once
 called out as unreached, including the ones where the crossing relation sits after *path*'s first segment
-(articles' ``pin__aliases__name``/``wiki__aliases__name``, pins' own ``location__wiki__aliases__name``) - see
-``docs/archive/PROBLEMS-ARCHIVE.md`` (formerly P123) for the full mechanism and the verification that closed
-every variant across all fourteen files in this family, not just this one.
+(articles' ``pin__aliases__name``/``wiki__aliases__name``, pins' own ``location__wiki__aliases__name``).
+The verification closed every variant across all fourteen files in this family, not just this one.
 """
 
 from __future__ import annotations

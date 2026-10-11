@@ -213,7 +213,7 @@ class CheckinEditArchivedTests(_CheckinTestCase):
 class CheckinEditLockRaceTests(_CheckinTestCase):
     """Defect #2: lock flags were read off a stale instance and written back unlocked.
 
-    An escalation committing in that window (the beat tasks hold no lock of their own - see docs/PROBLEMS.md)
+    An escalation committing in that window (the beat tasks hold no lock of their own)
     left the edit free to rewrite the very fields contacts had just been emailed about."""
 
     def test_escalation_landing_mid_edit_still_freezes_the_title(self) -> None:

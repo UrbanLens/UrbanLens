@@ -11,7 +11,7 @@ from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuesti
 
 
 class NormalizeAnswerPropertyTests(SimpleTestCase):
-    """Pure-function properties - no DB needed, matching AGENTS.md's @given/self.client guidance."""
+    """Pure-function properties - no DB needed, so no self.client alongside @given."""
 
     @given(st.text(min_size=1, max_size=100))
     def test_is_idempotent(self, text: str) -> None:

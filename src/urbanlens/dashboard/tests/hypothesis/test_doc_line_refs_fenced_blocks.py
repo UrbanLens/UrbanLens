@@ -1,6 +1,6 @@
 """A line number inside a fenced code block is quoted output, not a citation (P49).
 
-`bin/check_doc_line_refs.py` failed on a traceback pasted into `PROBLEMS.md`: the frames carry the line numbers the code
+`bin/check_doc_line_refs.py` failed on a traceback pasted into a document: the frames carry the line numbers the code
 had when it crashed. Renumbering them would falsify the quote, so the check reads prose only. These run it against a
 throwaway repository, since this one's documents change daily and the test image carries no `docs/`.
 """
@@ -42,7 +42,7 @@ class FencedBlockTests(SimpleTestCase):
             (repo / "services").mkdir()
             (repo / "services" / "boundaries.py").write_text("one = 1\ntwo = 2\nthree = 3\n", encoding="utf-8")
             (repo / "docs").mkdir()
-            (repo / "docs" / "PROBLEMS.md").write_text(document, encoding="utf-8")
+            (repo / "docs" / "FEATURES.md").write_text(document, encoding="utf-8")
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             subprocess.run(["git", "add", "."], cwd=repo, check=True)
             previous = pathlib.Path.cwd()

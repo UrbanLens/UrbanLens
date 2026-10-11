@@ -125,7 +125,7 @@ class PlaceResolveTests(LocationSearchTestCase):
 
     def test_external_apis_disabled_is_forbidden_and_skips_the_provider(self) -> None:
         # The internal MapController.resolve_place omits this gate; this
-        # surface must not reproduce that (see docs/PROBLEMS.md).
+        # surface must not reproduce that.
         Profile.objects.filter(pk=self.profile.pk).update(external_apis_enabled=False)
         with patch(_RESOLVE_PLACE) as resolve_place:
             response = self._resolve(place_id="place-123")

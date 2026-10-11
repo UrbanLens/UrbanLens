@@ -196,7 +196,7 @@ repos:
         always_run: true
         stages: [manual]
       - id: docs-index
-        name: docs/INDEX.md and docs/adr/ follow their numbering rules
+        name: docs/adr/ and the docs index follow their numbering rules
         entry: python3 bin/check_docs_index.py
         language: system
         pass_filenames: false

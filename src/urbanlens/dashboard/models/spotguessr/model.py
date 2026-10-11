@@ -1,6 +1,6 @@
 """SpotGuessr models - Glicko-2 ratings, game sessions, rounds, guesses, and chat.
 
-See ``docs/designs/drafts/spotguessr.md`` for the full rules this schema encodes -
+The rules this schema encodes:
 eligibility ("pinned by every joined participant"), point-vs-boundary
 distance scoring, the difficulty slider, the Glicko-2 player/location rating
 pairing, and the multiplayer lobby lifecycle (UL-392).
@@ -53,7 +53,7 @@ class SpotGuessrMode(abstract.TextChoices):
 class GameSessionStatus(abstract.TextChoices):
     """Lifecycle of a GameSession.
     Solo sessions skip LOBBY entirely (created directly as ACTIVE with one JOINED participant).
-    Multiplayer sessions start in LOBBY and only become ACTIVE when the host explicitly begins the game - see ``docs/designs/drafts/spotguessr.md``'s "Multiplayer sessions" section.
+    Multiplayer sessions start in LOBBY and only become ACTIVE when the host explicitly begins the game.
     """
 
     LOBBY = "lobby", "Lobby"
@@ -199,8 +199,7 @@ class GameSessionParticipant(abstract.DashboardModel):
             they leave or are removed. A solo session's host row is created
             directly as JOINED - there is no invite step when you're the only
             player. Eligibility and "has everyone in this round guessed" read
-            JOINED participants only (see ``docs/designs/drafts/spotguessr.md``'s
-            eligibility rule 6) - an invitee who never accepts is not yet a player.
+            JOINED participants only - an invitee who never accepts is not yet a player.
         departure: How a JOINED player left once the game was under way; blank
             otherwise. The final scoreboard and the player's history keep these
             rows (``GameSessionParticipantQuerySet.played``/``in_history``).
@@ -274,8 +273,7 @@ class GameRound(abstract.DashboardModel):
             location's coordinates each time.
         target_is_point: Whether scoring measures from ``target_point``
             (the image had its own coordinates) rather than the location's
-            *current* effective boundary. See ``docs/designs/drafts/spotguessr.md``
-            ("Scoring: point vs. boundary distance") for why boundary-based
+            *current* effective boundary. Boundary-based
             rounds deliberately do NOT snapshot geometry - boundaries are
             community-maintained and get more accurate over time.
         target_point: Snapshot of the exact point used when

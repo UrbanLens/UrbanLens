@@ -240,8 +240,7 @@ Rules it inherits, and the ones it needs of its own:
 - **The admin surface, when built, defaults to aggregates.** Per-activity and
   per-period breakdowns are the point of it. A per-user drill-down that *names the
   targets* is a different thing — it would let a site admin read off which sensitive
-  locations a named user has visited — and is deliberately out of v1. See R10 in
-  `designs/reputation-and-gating.md`.
+  locations a named user has visited — and is deliberately out of v1.
 - **`lifetime_earned` never decreases.** Not a privacy rule but a safety one, recorded
   here because it constrains any future consumer: anything granting durable standing
   must read it rather than `total`, so that reverting somebody's contributions cannot
@@ -251,13 +250,11 @@ Rules it inherits, and the ones it needs of its own:
 
 The hidden reputation gate — defeating "pin a random address and check whether a wiki
 exists" probing — is **still not implemented, and the ledger that would feed it now is.**
-See `docs/designs/reputation-and-gating.md`, whose Design review section supersedes the
-rest of it.
 
 What changed 2026-08-24: the gate's original shape (withhold community content from the
 existing wiki) was found not to work here. The camouflage has to be the *empty state* —
 a gated place must look like one nobody has documented — and an audit of every observable
-channel (`designs/reputation-gating-tells.md`, 82 verified findings) established that
+channel (82 verified findings) established that
 filtering cannot reproduce it, because the empty state is a row the viewer *owns*. The
 gate architecture is deliberately deferred until there is real score data.
 
@@ -323,5 +320,5 @@ Answers to the questions this document was written to ask. Each names the work i
    day* — `?from_wiki=true`, uploads only, enforced server-side. A client can ask first:
    `wiki_slug` and `source` were already on the photo payload.
 
-7. **Earned credit.** **Not now** — finish the work above first. The design in
-   `docs/designs/reputation-and-gating.md` stays parked.
+7. **Earned credit.** **Not now** — finish the work above first. The design
+   stays parked.

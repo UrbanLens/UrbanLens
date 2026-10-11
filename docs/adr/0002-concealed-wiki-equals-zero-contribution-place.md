@@ -5,7 +5,7 @@ date: 2026-09-01
 
 # A concealed viewer sees a wiki identical to a place with no contributions
 
-Formerly `D2`. Detail: [`docs/designs/concealed-wiki-spec.md`](../designs/concealed-wiki-spec.md).
+Formerly `D2`.
 
 Viewers flagged as concealed (behaviour suggesting data-mining) can still reach wikis they earned, but must not learn anything the community contributed there. For such a viewer the wiki page, every partial, JSON endpoint and external-API route that resolves through the wiki must be byte-equivalent to the same place with zero user contributions and the same enrichment history. The rules are Jess's: hide user-contributed content, show automatically fetched content, always unset security indicators, always hide markup.
 

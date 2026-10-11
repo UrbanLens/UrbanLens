@@ -15,10 +15,7 @@ Start here
    :caption: Orientation
 
    README
-   INDEX
    FEATURES
-   GOALS
-   ROADMAP
 
 .. toctree::
    :maxdepth: 1
@@ -30,7 +27,6 @@ Start here
    AI_PIPELINE
    EXTERNAL_API
    METRICS
-   NOTES
 
 .. toctree::
    :maxdepth: 1
@@ -39,8 +35,8 @@ Start here
    TOOLING
    CONTRACT_TESTS
    INTEGRATION_TESTS
-   LOCATION_DATA_TESTS
-   PROBLEMS
+   MAP_PERFORMANCE
+   BACKUPS
 
 API reference
 -------------
@@ -58,13 +54,8 @@ Generated from the source by ``autoapi`` - every module under
    :glob:
 
    DEMO
-   archive/*
-   audits/*
-   designs/*
-   designs/*/*
+   adr/*
    mobile/*
-   notes/*
-   reports/*
 
 Indices and tables
 ==================

@@ -7,7 +7,7 @@ the thing under test only becomes true once the task runs:
 * A consumer broadcast. ``services.core.channel_broadcast.send_group_message`` does not call
   ``group_send`` itself; it enqueues ``tasks.broadcast_channel_group_message`` so the
   ``async_to_sync`` hop happens on the prefork worker rather than inside a gunicorn gevent
-  greenlet (see that task's docstring and docs/PROBLEMS.md's gevent/asyncio entry).
+  greenlet (see that task's docstring).
 * A prewarmed game round. ``get_or_create_round`` enqueues the prewarm for the *next* round, and
   the test's whole point is that the next round then comes from cache instead of being generated
   live.

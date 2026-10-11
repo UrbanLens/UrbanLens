@@ -982,7 +982,7 @@ export function showUnlockDialog(): Promise<boolean> {
         void getUnlockOptions().then((options) => {
             const overlay = document.createElement("div");
             overlay.className = "e2ee-recovery-overlay";
-            // Ladder order (docs/designs/e2ee-passkey-unlock.md): passkey first (one tap), then password, then recovery key.
+            // Ladder order: passkey first (one tap), then password, then recovery key.
             const passkeyBlock = options.passkey
                 ? `<button type="button" class="btn btn--primary e2ee-unlock-passkey">Unlock with your passkey</button>
                    <div class="e2ee-unlock-divider">or</div>`

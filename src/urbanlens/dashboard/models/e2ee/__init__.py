@@ -1,4 +1,4 @@
-"""End-to-end encryption key storage for direct messages (server holds only opaque blobs; see docs/designs/e2ee.md)."""
+"""End-to-end encryption key storage for direct messages (server holds only opaque blobs)."""
 
 from urbanlens.dashboard.models.e2ee.conversation_key import ConversationKey
 from urbanlens.dashboard.models.e2ee.group_key import GroupKey, GroupKeyEnvelope

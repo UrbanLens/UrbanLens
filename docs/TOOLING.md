@@ -4,11 +4,6 @@ What exists, what each thing catches, and when it is worth running. Every tool
 here was built because a specific defect got through without it — the evidence is
 recorded next to each so nobody has to re-derive whether it earns its runtime.
 
-Companion to `docs/reports/2026-08-11-codebase-audit.md`, whose **Coverage index**
-lists which areas have already been swept. Check that before choosing something to
-investigate; two sweeps were re-run from scratch during the audit because the
-answer was buried in 1,700 lines of prose.
-
 ## Running tests
 
 ### `bin/run_tests.sh`
@@ -338,8 +333,7 @@ the reading is what finds them.
 
 **The fix-density half was swept on 2026-08-20** — five readers over the top of
 that list, each finding then handed to an adversarial verifier told to refute it.
-10 findings, 9 survived, 4 fixed (see the 2026-08-20 hunt entry in
-`docs/PROBLEMS.md`). Two lessons about the method rather than the findings:
+10 findings, 9 survived, 4 fixed. Two lessons about the method rather than the findings:
 
 - **The verify pass earns its cost in both directions.** It killed one finding
   outright (a "privacy leak" whose facts were already public by design) and
@@ -362,7 +356,7 @@ the directory can be compared with `ls`.
 | `bin/check_imports_tracked.py` | An import resolving to a file git is not tracking |
 | `bin/check_migration_graph.py` | A migration depending on one a fresh checkout won't have |
 | `bin/check_docs_refs.py` | Code citing a `docs/` path that does not exist, or one only its author can read |
-| `bin/check_docs_index.py` | `docs/INDEX.md` drifting from the entries it allocates ids for |
+| `bin/check_docs_index.py` | The docs index drifting from the entries it allocates ids for |
 | `bin/check_outage_not_cached.py` | A `fetch` that caches a swallowed failure as though it were an answer |
 | `bin/check_notification_choke_point.py` | A notification written around the mute preference |
 | `bin/check_versioned_writes.py` | A model half-adopting field versioning, so bulk writes go unrecorded |
@@ -452,7 +446,7 @@ Exit status is not the check. `sphinx-build` reports "build succeeded" for a
 configuration that reads no source at all, which is what this repository shipped
 until 2026-09-05: `docs/conf.py` and `docs/index.rst` existed, no `automodule`
 directive was ever written, nothing ran `sphinx-apidoc`, and the output was three
-pages. Meanwhile `CLAUDE.md` justified its Google-docstring standard with the
+pages. Meanwhile the project's Google-docstring standard was justified with the
 claim that Sphinx consumes them. The script asserts a floor on the number of
 generated API pages instead.
 

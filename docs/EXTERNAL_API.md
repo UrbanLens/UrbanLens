@@ -5,8 +5,7 @@ mounted at `dashboard/api/external/v1/` (app namespace `external_api`), plus the
 `dashboard/e2ee/` which share the same authentication and are part of the same public contract.
 
 This is a reference, not a tutorial or a changelog — for the reasoning behind recent decisions, see
-`docs/notes/mobile_app_notes.md`. For known gaps, see the "Not Yet Implemented" section below and
-`docs/PROBLEMS.md`.
+`docs/adr/`. For known gaps, see the "Not Yet Implemented" section below.
 
 Machine-readable schema: `GET schema/` (OpenAPI, no auth required) and a browsable UI at `GET docs/`.
 Both are generated from the same `@extend_schema` decorators the endpoints below were checked
@@ -175,8 +174,7 @@ in a couple of seconds.
   — so a client sending `red` got 200 and no colour. Those requests are now 400s, which is a
   break by the letter of this rule. Taken anyway rather than minting a `/v2/`: nothing was ever
   stored for those requests, so no client can have been relying on the result, and the alternative
-  was leaving a documented rule that four endpoints did not follow. See `P39` in
-  [`archive/PROBLEMS-ARCHIVE.md`](archive/PROBLEMS-ARCHIVE.md).
+  was leaving a documented rule that four endpoints did not follow.
 - **WebSockets enforce scopes** exactly like HTTP: `ws/messages/` needs `messages:read` to connect
   and `messages:write` to send, `ws/notifications/` needs `notifications:read`, the safety
   check-in chat needs `safety:*`, and the game sockets need `games:*`. Since `messages:*` is
@@ -282,7 +280,7 @@ The `buildings` body carries `{"buildings": [...], "provider": "...", "unpinned_
 
 Read `can_create` rather than deriving it. A row with no `child_pin_name` is not necessarily one a pin can be made for: a building standing on a point the owner has already pinned with a *non-child* pin is unpinned and uncreatable at once, because a profile may not hold two pins at one point. `unpinned_count` is exactly the rows carrying `can_create`, so a client can show the number and the list without them disagreeing.
 
-**`satellite` and `street_view` are permanently excluded** — empty `api_kinds` by design, not an oversight (see D8 in `docs/notes/mobile_app_notes.md`): their web payload is base64 `data:` URIs (5-15MB/response), and this API's throttle counts requests, not bytes, so exposing them would hand any key holder an unmetered bandwidth amplifier. Needs a signed slide-image proxy that doesn't exist yet.
+**`satellite` and `street_view` are permanently excluded** — empty `api_kinds` by design, not an oversight: their web payload is base64 `data:` URIs (5-15MB/response), and this API's throttle counts requests, not bytes, so exposing them would hand any key holder an unmetered bandwidth amplifier. Needs a signed slide-image proxy that doesn't exist yet.
 
 **A panel source is closed to the API by default.** `PanelSource.api_kinds` defaults to an empty frozenset at the base class — the authoritative "not on the API" signal, independent of whether `api_payload()` happens to return data right now (it also returns `None` whenever the data simply hasn't landed yet). `InfoPanelSource`/`GalleryMediaSource` (the two most common plugin base classes) default `api_kinds` to non-empty, so a plugin author gets API exposure automatically unless they opt back out — five built-in plugins do so deliberately: `property_records`, `loopnet`, `yelp`, `google_places` (photos), and `google_images`, each citing a third-party redistribution/ToS restriction or a photo path that only resolves through an internal session-authenticated proxy anyway. EPA ECHO's nearby-facilities panel stays exposed *and* feature-gated (`NEARBY_RESEARCH`); its exact-site compliance card stays exposed and ungated, since that half is public government data by design.
 
@@ -448,7 +446,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 `PUT/DELETE /wikis/{location_slug}/cover-photo/` — scopes: `wiki:write` — PUT: `{image_uuid}`, must already be in the wiki's own gallery (404 otherwise) — DELETE clears it — response: `{cover_photo_url}`.
 
-`GET /wikis/{location_slug}/ownership/` — scopes: `wiki:read` — paginated shared owner records (`WikiOwner`) currently linked to this place, official ones only for a caller holding the property-owners feature — rows: `{id, name, company_name, address, care_of, phone, email, notes, source, created, updated}` — **read-only this pass**; see `docs/notes/mobile_app_notes.md` Part 7 for why the write side (which does exist internally) is deferred.
+`GET /wikis/{location_slug}/ownership/` — scopes: `wiki:read` — paginated shared owner records (`WikiOwner`) currently linked to this place, official ones only for a caller holding the property-owners feature — rows: `{id, name, company_name, address, care_of, phone, email, notes, source, created, updated}` — **read-only this pass**; the write side (which does exist internally) is deferred.
 
 `GET /wikis/{location_slug}/sales/` — scopes: `wiki:read` — paginated shared sale history (`WikiPropertySale`), newest first — rows: `{id, sale_price, sale_date, notes, source, previous_owners:[{id,name}], new_owners:[{id,name}], created}` — read-only, same reason as Ownership above.
 
@@ -619,7 +617,7 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 - `POST /friends/{profile_uuid}/block/` — block, creating the row if none exists — the only transition that works against a total stranger.
 - `POST /friends/{profile_uuid}/unblock/` — lift caller's own block — resulting status is `Removed`(not deleted).
 - `POST /friends/{profile_uuid}/mute/` — **deprecated** alias for `{"is_muted": true}`; cannot unmute.
-- `PATCH /friends/{profile_uuid}/mute/` — set mute to explicit target state (not a toggle) — `{"is_muted": bool}`. **Known limitations:** (1) `is_muted` lives on the shared `Friendship` row — **not per-viewer**, label it "muted" never "muted by you"; (2) **does not currently suppress any notification delivery** — tracked in `docs/PROBLEMS.md`. `DirectMessageMute` and per-group-chat mute are unrelated and do work.
+- `PATCH /friends/{profile_uuid}/mute/` — set mute to explicit target state (not a toggle) — `{"is_muted": bool}`. **Known limitations:** (1) `is_muted` lives on the shared `Friendship` row — **not per-viewer**, label it "muted" never "muted by you"; (2) **does not currently suppress any notification delivery**. `DirectMessageMute` and per-group-chat mute are unrelated and do work.
 
 ### Profiles
 
@@ -653,7 +651,7 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 
 - `POST /push-devices/` — register/re-activate this device — `address` never echoed back — idempotent on submitted address (safe to re-register every app launch) — 201 response: `{uuid, transport, name, created, dispatch_enabled}`.
 - `DELETE /push-devices/{device_uuid}/` — unregister.
-- `dispatch_enabled` (read-only bool) says whether the server will actually push to the device. **`transport: "fcm"` registrations are accepted and stored but never dispatched to** — no FCM sender exists yet (it needs a Google service-account credential), so only `transport: "unifiedpush"` returns true; see `docs/PROBLEMS.md`. A 201 alone does **not** mean delivery works — a Play-flavor client should read this field rather than show a notification setting that is silently dead.
+- `dispatch_enabled` (read-only bool) says whether the server will actually push to the device. **`transport: "fcm"` registrations are accepted and stored but never dispatched to** — no FCM sender exists yet (it needs a Google service-account credential), so only `transport: "unifiedpush"` returns true. A 201 alone does **not** mean delivery works — a Play-flavor client should read this field rather than show a notification setting that is silently dead.
 
 ---
 
@@ -795,7 +793,7 @@ Mounted at `dashboard/e2ee/` (not under `api/external/v1/`, but published in the
 
 The following `urls_*.py` modules exist under `external_api/` purely as placeholders — each is a docstring plus an empty `urlpatterns = []`, with no backing views and no reserved scopes in `ApiKeyScope`. Nothing below is reachable on this branch; treat any assumption otherwise as wrong.
 
-- **Connections** (`urls_connections.py`) — Immich/OAuth-identity-provider/plugin-backed connect-disconnect-status-resync flows. Docstring flags that a status endpoint must never echo a stored `EncryptedTextField` secret back through the API. Deferred, decision pending — see D7 in `docs/notes/mobile_app_notes.md`.
+- **Connections** (`urls_connections.py`) — Immich/OAuth-identity-provider/plugin-backed connect-disconnect-status-resync flows. Docstring flags that a status endpoint must never echo a stored `EncryptedTextField` secret back through the API. Deferred, decision pending.
 - **Memories, extra** (`urls_memories.py`) — now carries the timeline and on-this-day routes (see [Memories](#memories) above), plus the pre-existing `GET /memories/journal/` which predates this split. Dismissible memory cards remain unscheduled P2.
 - **Site** (`urls_site.py`) — **will not be exposed to the mobile app.** Site settings/quotas/feature flags, announcements, version/health, and staff-only site-admin ops are not part of this API's contract, now or planned — this module stays an empty placeholder by decision, not by scheduling.
 - **Tools** (`urls_tools.py`) — **import/export (KML/GPX/CSV) will not be built for the mobile app at this time**, though it may be revisited in the distant future; bulk edits and map/geometry helpers remain unscheduled P2. **Undo/restore already lives in this module** (`GET /undo/`, `POST /undo/{uuid}/restore/`) — see [Undo History](#undo-history) — it just isn't one of the "tools" the module's own docstring originally had in mind.

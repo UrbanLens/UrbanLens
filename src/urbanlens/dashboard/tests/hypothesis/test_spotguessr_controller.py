@@ -426,7 +426,7 @@ class SpotGuessrSettingsViewTests(TestCase):
 class SpotGuessrMultiplayerGuessRevealTests(TestCase):
     """The answer must stay hidden from an early guesser until every joined participant has guessed.
 
-    Per "Real-time sync" in docs/designs/drafts/spotguessr.md: guess.submitted carries no coordinates or score,
+    By design, guess.submitted carries no coordinates or score,
     and the answer only goes out with round.revealed."""
 
     def setUp(self) -> None:

@@ -1,4 +1,4 @@
-"""Tests for CloudflareGateway.MODEL_COSTS (docs/PROBLEMS.md follow-up)."""
+"""Tests for CloudflareGateway.MODEL_COSTS."""
 
 from __future__ import annotations
 

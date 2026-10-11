@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 #: Recommended system constant (0.3-1.2 per the paper); controls how much a
 #: single surprising result can move volatility. Must match
-#: ``docs/designs/drafts/spotguessr.md``'s config table.
+#: the SpotGuessr config defaults.
 DEFAULT_TAU = 0.5
 
 #: The paper's Illinois-algorithm root find stops once the bracket is this narrow.

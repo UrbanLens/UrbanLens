@@ -3,7 +3,7 @@
 A CID is an unsigned 64-bit integer. Above 2**53 a float64 cannot hold one exactly, and a CID that
 went through one - a JavaScript ``Number``, ``float()``, ``Decimal(str(float))`` - comes back as the
 float's shortest round-trip digits padded with zeros. REData stored 1,945 such ids on 2026-07-31
-(REData ``docs/PROBLEMS.md`` P120) and asked Google about every one of them, nightly, for months.
+(REData's P120) and asked Google about every one of them, nightly, for months.
 
 The rules match REData's ``google_places.cid_validation``, which applies them to every entry of
 ``POST /places/resolve-cids/`` and reports a refusal with the same :class:`InvalidCidError` codes.
