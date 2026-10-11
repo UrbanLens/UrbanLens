@@ -59,7 +59,8 @@ def _import_dir(job_id: str) -> str:
 
 
 def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> HttpResponse:
-    """Render a progress fragment in the error state for HTMX to swap in.
+    """
+    Render a progress fragment in the error state for HTMX to swap in.
 
     Args:
         request: The HTTP request.
@@ -77,7 +78,8 @@ def _export_error_partial(request: HttpRequest, job_id: str, message: str) -> Ht
 
 
 def _import_error_partial(request: HttpRequest, job_id: str, message: str) -> HttpResponse:
-    """Render an import progress fragment in the error state.
+    """
+    Render an import progress fragment in the error state.
 
     Args:
         request: The HTTP request.
@@ -101,7 +103,8 @@ class ToolsIndexView(LoginRequiredMixin, View):
     """Renders the Tools landing page (data export, import, invite friend, etc.)."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render tools/index.html.
+        """
+        Render tools/index.html.
 
         Args:
             request: The authenticated HTTP request.
@@ -142,7 +145,8 @@ class ExportStartView(LoginRequiredMixin, View):
     """Start a data export job in Celery."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Accept export parameters, enqueue a Celery task, return progress fragment.
+        """
+        Accept export parameters, enqueue a Celery task, return progress fragment.
 
         Args:
             request: POST with ``export_types`` list, optional ``google_takeout`` flag, and optional
@@ -192,7 +196,8 @@ class ExportStartView(LoginRequiredMixin, View):
         )
 
     def _start(self, request: HttpRequest, export_types: list[str], job_id: str, *, email_to_user: bool) -> HttpResponse | None:
-        """Prepare the job's directory and queue its export.
+        """
+        Prepare the job's directory and queue its export.
 
         Returns:
             None once it is queued, or the response saying why it was not.
@@ -226,7 +231,8 @@ class ExportStatusView(LoginRequiredMixin, View):
     """Return a progress fragment for an in-flight or completed export job."""
 
     def get(self, request: HttpRequest, job_id: str) -> HttpResponse:
-        """Poll export status and return updated HTML fragment.
+        """
+        Poll export status and return updated HTML fragment.
 
         Args:
             request: The authenticated HTTP request.
@@ -275,7 +281,8 @@ class ExportDownloadView(LoginRequiredMixin, View):
     """Serve the completed export ZIP file."""
 
     def get(self, request: HttpRequest, job_id: str) -> HttpResponse | FileResponse:
-        """Stream the export zip to the browser.
+        """
+        Stream the export zip to the browser.
 
         Args:
             request: The authenticated HTTP request.
@@ -335,7 +342,8 @@ class ExportDownloadView(LoginRequiredMixin, View):
 
 
 class ExportFormatDownloadView(LoginRequiredMixin, View):
-    """Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file (UL-382).
+    """
+    Download ALL of the requester's root pins as a single GeoJSON/KML/GPX/CSV file (UL-382).
 
     The quick, synchronous counterpart to the full ZIP export above: no Celery job, no polling - one GET
     straight to a file download, using the same per-format writers the targeted bulk export uses
@@ -345,7 +353,8 @@ class ExportFormatDownloadView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, fmt: str) -> HttpResponse:
-        """Serve every root pin the requester owns in the requested format.
+        """
+        Serve every root pin the requester owns in the requested format.
 
         Args:
             request: The authenticated HTTP request.
@@ -379,7 +388,8 @@ class ImportStartView(LoginRequiredMixin, View):
     """Accept a UrbanLens export ZIP and start an import job in Celery."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Validate the upload, save it, enqueue an import task, return progress fragment.
+        """
+        Validate the upload, save it, enqueue an import task, return progress fragment.
 
         Args:
             request: POST with ``import_file`` file field.
@@ -436,7 +446,8 @@ class ImportStartView(LoginRequiredMixin, View):
         )
 
     def _start(self, request: HttpRequest, upload: UploadedFile, job_id: str) -> HttpResponse | None:
-        """Save the upload and queue its import.
+        """
+        Save the upload and queue its import.
 
         Returns:
             None once it is queued, or the response saying why it was not.
@@ -473,7 +484,8 @@ class ImportStatusView(LoginRequiredMixin, View):
     """Return a progress fragment for an in-flight or completed import job."""
 
     def get(self, request: HttpRequest, job_id: str) -> HttpResponse:
-        """Poll import status and return updated HTML fragment.
+        """
+        Poll import status and return updated HTML fragment.
 
         Args:
             request: The authenticated HTTP request.
@@ -518,7 +530,8 @@ class AdminToolsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render tools/admin.html.
+        """
+        Render tools/admin.html.
 
         Args:
             request: The authenticated admin HTTP request.
@@ -536,7 +549,8 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
     raise_exception = True
 
     def post(self, request: HttpRequest) -> JsonResponse:
-        """Queue a database backup task.
+        """
+        Queue a database backup task.
 
         Args:
             request: The authenticated admin HTTP request.
@@ -562,7 +576,8 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 def _parse_cluster(cluster: Any) -> list[LocationHit]:
-    """Parse and validate one cluster row from the local-scan upload payload.
+    """
+    Parse and validate one cluster row from the local-scan upload payload.
 
     Args:
         cluster: One raw JSON object from the ``clusters`` array.
@@ -623,7 +638,8 @@ def _parse_cluster(cluster: Any) -> list[LocationHit]:
 
 
 class PhotoLocationScanUploadView(LoginRequiredMixin, View):
-    """POST /tools/photo-scan/upload/ - ingest results from the local folder scanner.
+    """
+    POST /tools/photo-scan/upload/ - ingest results from the local folder scanner.
 
     The scanner (``frontend/ts/entries/photo-location-scan.ts``) clusters and de-dupes matches entirely
     client-side before uploading, so this payload is small - one row per cluster, not per photo - and
@@ -634,7 +650,8 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
-        """Ingest a batch of pre-clustered location results.
+        """
+        Ingest a batch of pre-clustered location results.
 
         Args:
             request: POST with a JSON body ``{"clusters": [{"latitude", "longitude", "dates", "count",
@@ -677,7 +694,8 @@ class PhotoLocationScanUploadView(LoginRequiredMixin, View):
 
 
 class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
-    """POST /tools/photo-scan/upload-photo/ - upload one opt-in candidate photo.
+    """
+    POST /tools/photo-scan/upload-photo/ - upload one opt-in candidate photo.
 
     The local-folder scanner never uploads photo files by default (see ``PhotoLocationScanUploadView``)
 
@@ -686,7 +704,8 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest) -> JsonResponse:
-        """Create a candidate Image staged against a pending local-scan suggestion.
+        """
+        Create a candidate Image staged against a pending local-scan suggestion.
 
         Args:
             request: POST with multipart fields ``suggestion_id`` and ``image``.

@@ -1,4 +1,5 @@
-"""Export the site's public locations for import into a demo instance.
+"""
+Export the site's public locations for import into a demo instance.
 
 Nothing else qualifies, and in particular **a location having a wiki does not**: wiki visibility is
 *earned* per viewer (you must already hold a pin on that place or its place domain), and
@@ -28,7 +29,8 @@ class Command(BaseCommand):
         parser.add_argument("--indent", type=int, default=2, help="JSON indentation, for a readable diff.")
 
     def handle(self, *args, **options) -> None:
-        """Collect and write the export.
+        """
+        Collect and write the export.
 
         Raises:
             CommandError: The destination could not be written.
@@ -65,7 +67,8 @@ class Command(BaseCommand):
 
     @staticmethod
     def _wiki_payload(location) -> dict[str, Any] | None:
-        """The non-personal half of a public location's wiki.
+        """
+        The non-personal half of a public location's wiki.
 
         Args:
             location: The public Location.

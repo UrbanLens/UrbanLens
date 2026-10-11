@@ -71,7 +71,8 @@ class TheChannelLayerIsProvisionedTests(SimpleTestCase):
 
 
 class TheImageBuildSatisfiesTheSettingsTests(SimpleTestCase):
-    """The build runs collectstatic under UL_ENVIRONMENT=production, which imports the settings that now refuse
+    """
+    The build runs collectstatic under UL_ENVIRONMENT=production, which imports the settings that now refuse
     a deployment missing a store, a broker or a site URL."""
 
     def _build_step_environment(self) -> dict[str, str]:

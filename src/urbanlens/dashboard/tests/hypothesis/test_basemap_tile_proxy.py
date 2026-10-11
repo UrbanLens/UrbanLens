@@ -75,7 +75,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(download.call_count, 1)
 
     def test_a_400_is_also_a_definitive_miss(self) -> None:
-        """400 (invalid_parameter/unknown_layer) is as definitive as 404 - a
+        """
+        400 (invalid_parameter/unknown_layer) is as definitive as 404 - a
         cache branch narrowed to ``status == 404`` would still pass every
         other test in this file."""
         with (
@@ -90,7 +91,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(download.call_count, 1, "a 400 must be cached too, not just a 404")
 
     def test_a_layer_switched_to_vector_is_not_remembered_as_a_missing_tile(self) -> None:
-        """``vector_layer_not_served`` answers a question about the layer, not the coordinate.
+        """
+        ``vector_layer_not_served`` answers a question about the layer, not the coordinate.
 
         REData switched ``street`` and ``dark`` to vector on 2026-09-20, and answers a tile-by-tile
         request for either with this 400. Remembering that per coordinate for a week means the day
@@ -110,7 +112,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(download.call_count, 2, "a layer-level refusal must not be cached as a per-coordinate miss")
 
     def test_a_layer_switched_to_vector_drops_the_cached_catalogue(self) -> None:
-        """The catalogue is what told the client this layer was raster, so it is the stale thing.
+        """
+        The catalogue is what told the client this layer was raster, so it is the stale thing.
 
         Same reasoning as the ``ServiceDisabledError`` branch: a map draws what the catalogue named,
         so leaving a catalogue that advertises a proxied ``url_template`` for a layer REData now
@@ -133,7 +136,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         )
 
     def test_an_ordinary_400_is_still_cached(self) -> None:
-        """The narrowing above must not cost the common case: an out-of-range coordinate is still
+        """
+        The narrowing above must not cost the common case: an out-of-range coordinate is still
         a definitive per-coordinate answer and is still worth remembering."""
         with (
             mock.patch(_CONFIGURED, return_value=True),
@@ -171,7 +175,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(response.status_code, 503)
 
     def test_a_network_failure_answers_503_rather_than_500(self) -> None:
-        """OSError - a real ``requests`` connection failure, distinct from the
+        """
+        OSError - a real ``requests`` connection failure, distinct from the
         gateway's own structured error type - is the other member of the
         except tuple; dropping it from the tuple would 500 on an outage."""
         with (
@@ -183,7 +188,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(response.status_code, 503)
 
     def test_an_oversized_upstream_body_answers_503_rather_than_500(self) -> None:
-        """The third thing ``download_tile`` can raise, and the one the except tuple missed.
+        """
+        The third thing ``download_tile`` can raise, and the one the except tuple missed.
         ``read_capped`` refuses a body over 25MB - or one the gateway forgot to stream - with a
         bare ``GatewayRequestError``, which is neither an ``OSError`` nor the gateway's structured
         type. A viewport asks for ~30 tiles at once and nothing suppresses the retry, so one
@@ -212,7 +218,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertNotEqual(self.client.get(self.url).status_code, 200)
 
     def test_a_refused_call_stops_the_catalogue_offering_layers_this_deployment_cannot_serve(self) -> None:
-        """The catalogue is cached for a day, and a map that draws only what the catalogue named is
+        """
+        The catalogue is cached for a day, and a map that draws only what the catalogue named is
         entirely grey for that day once this deployment can no longer call REData at all - a
         disabled service, an exhausted budget, an environment that permits no outbound calls. The
         vendor layers it replaced were working; dropping the catalogue puts them back."""
@@ -231,7 +238,8 @@ class BasemapTileProxyTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(basemap_catalogue.basemap_tile_catalogue(allow_fetch=False), [])
 
     def test_a_busy_minute_keeps_the_catalogue(self) -> None:
-        """Being over budget, or unable to reach the vendor, is not evidence this deployment cannot
+        """
+        Being over budget, or unable to reach the vendor, is not evidence this deployment cannot
         serve the layer at all - and rebuilding the catalogue costs a ~1.45s REData call (``P131``),
         so dropping it every time a burst crosses the limit would flap under exactly the load that
         caused it."""
@@ -361,7 +369,8 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
             self.assertEqual(self.client.get(self.url).json()["layers"], [])
 
     def test_a_d15_entry_keeps_both_shapes(self) -> None:
-        """Since REData's D15 a self-hosted layer serves both ways, and the rewriter used to be an
+        """
+        Since REData's D15 a self-hosted layer serves both ways, and the rewriter used to be an
         if/else that discarded one before any client saw it - which left every Leaflet map on the
         hardcoded vendor CDN, because a vector entry arrived with no template to draw instead."""
         rows = [_D15_STREET]
@@ -381,7 +390,8 @@ class BasemapCatalogueTests(RedataConfiguredMixin, TestCase):
         )
 
     def test_a_d15_entry_carries_the_raster_half_s_own_credit_and_depth(self) -> None:
-        """The two halves are different datasets, so a client drawing one must not show the other's
+        """
+        The two halves are different datasets, so a client drawing one must not show the other's
         attribution or pan past its ceiling."""
         with mock.patch(_CONFIGURED, return_value=True), self._sources([_D15_STREET]):
             entry = self.client.get(self.url).json()["layers"][0]
@@ -410,7 +420,8 @@ _D15_STREET = {
 
 
 class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
-    """What a public share page may be handed: the proxy is login-required, so a template offered to
+    """
+    What a public share page may be handed: the proxy is login-required, so a template offered to
     an anonymous visitor paints 404s where a working layer used to be."""
 
     def setUp(self) -> None:
@@ -432,7 +443,8 @@ class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
             return catalogue_for_viewer(authenticated=authenticated)
 
     def test_a_signed_out_viewer_is_offered_the_style_without_the_proxy_template(self) -> None:
-        """Dropping the raster *entries* is no longer enough once a vector entry carries a template
+        """
+        Dropping the raster *entries* is no longer enough once a vector entry carries a template
         of its own - it has to come off the entries that stay."""
         entries = self._viewer([_D15_STREET], authenticated=False)
 
@@ -465,7 +477,8 @@ class SignedOutCatalogueTests(RedataConfiguredMixin, TestCase):
 
 
 class TileLogPrivacyTests(SimpleTestCase):
-    """A tile URL is a coordinate somebody was looking at.
+    """
+    A tile URL is a coordinate somebody was looking at.
 
     `ApiCallLog` records the endpoint of every gateway call to track volume and cost per service."""
 
@@ -506,7 +519,8 @@ class TileLogPrivacyTests(SimpleTestCase):
 
 
 class BasemapTileConcurrencyTests(RedataConfiguredMixin, TestCase):
-    """The bound that keeps a cold map load from occupying every request thread in the process.
+    """
+    The bound that keeps a cold map load from occupying every request thread in the process.
 
     A viewport is ~30 tiles requested at once and each uncached one blocks on a slow upstream, so
     without this the proxy is a site-wide stall waiting for someone to open a map.

@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def add_demolished_status(pin: Pin) -> None:
-    """Add the profile's "Demolished" status label to the pin if not already present.
+    """
+    Add the profile's "Demolished" status label to the pin if not already present.
 
     Args:
         pin: Pin instance whose statuses should be updated.
@@ -26,7 +27,8 @@ def add_demolished_status(pin: Pin) -> None:
 
 
 def add_demolished_status_to_wiki(wiki: Wiki) -> None:
-    """Add the canonical global "Demolished" status label to the wiki if not already present.
+    """
+    Add the canonical global "Demolished" status label to the wiki if not already present.
 
     Args:
         wiki: Wiki instance whose statuses should be updated."""

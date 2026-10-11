@@ -55,7 +55,8 @@ class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
     """``PinController.panel_info`` must refuse a source the viewer's plan excludes."""
 
     def setUp(self) -> None:
-        """A subscription-less pin owner, with EPA data already cached for their pin.
+        """
+        A subscription-less pin owner, with EPA data already cached for their pin.
 
         The very first user created in a fresh test database is auto-promoted to bootstrap site admin, and
         ``user_has_feature`` grants a site admin every feature - so a throwaway user absorbs that promotion and
@@ -78,7 +79,8 @@ class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_refusal_is_indistinguishable_from_an_unknown_panel_key(self) -> None:
-        """403 would confirm the panel exists and holds data for this pin.
+        """
+        403 would confirm the panel exists and holds data for this pin.
 
         Compared against a key no source has ever claimed, so this stays true
         even if the "no such panel" response itself is ever changed.
@@ -104,7 +106,8 @@ class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
         self.assertContains(response, "Nearby Plating Works")
 
     def test_the_ungated_sibling_panel_is_untouched(self) -> None:
-        """EPA's exact-site card is the integration's free, primary purpose.
+        """
+        EPA's exact-site card is the integration's free, primary purpose.
 
         Both panels read the same cache row, so a gate keyed on the row (rather
         than on the source) would take the free card down with the paid one.
@@ -114,7 +117,8 @@ class GatedPanelServingTests(RedataConfiguredMixin, TestCase):
         self.assertContains(response, "The Pinned Facility")
 
     def test_an_ungated_panel_gains_the_gate_when_its_source_declares_one(self) -> None:
-        """The controller consults the source, not a private list of panel keys.
+        """
+        The controller consults the source, not a private list of panel keys.
 
         Photon has never been gated; moving ``required_feature`` onto it must be enough to make ``panel_info``
         refuse it, or the controller is still deciding this for itself somewhere."""
@@ -144,7 +148,8 @@ class GatedPanelTabAssemblyTests(TestCase):
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.user.profile)
 
     def _tab_keys(self) -> list[str]:
-        """Render the Private Pin page and return its tab strip's source keys.
+        """
+        Render the Private Pin page and return its tab strip's source keys.
 
         Returns:
             The ``key`` of every tab in the page's ``panel_tabs`` context.
@@ -164,7 +169,8 @@ class GatedPanelTabAssemblyTests(TestCase):
         self.assertEqual(self._tab_keys()[-1], "epa_echo")
 
     def test_a_newly_gated_source_drops_out_of_the_tab_strip(self) -> None:
-        """Tab assembly reads ``required_feature``, not a hardcoded key list.
+        """
+        Tab assembly reads ``required_feature``, not a hardcoded key list.
 
         US Census is an always-available "Regional Data" tab that no controller constant marks as gated;
         declaring the feature on its source alone has to be enough to hide it, or the two records of "which

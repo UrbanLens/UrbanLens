@@ -14,7 +14,8 @@ from urbanlens.dashboard.models.social_link.model import SocialLink
 
 
 def _strip_scripts(html: str) -> str:
-    """Remove <script> blocks so substring checks can't false-positive on
+    """
+    Remove <script> blocks so substring checks can't false-positive on
     inline wiring-script string literals (same precedent as the other
     profile-page test files)."""
     return re.sub(r"<script\b[^>]*>.*?</script>", "", html, flags=re.DOTALL)
@@ -32,7 +33,8 @@ class ProfileSocialInlineRenderingTests(TestCase):
         return self.client.get(reverse("profile.view"))
 
     def test_owner_with_no_links_sees_no_social_section(self) -> None:
-        """Same "hide entirely" behavior as other viewers - adding a first
+        """
+        Same "hide entirely" behavior as other viewers - adding a first
         link is the Edit Profile page's job, not this page's."""
         content = _strip_scripts(self._get_own().content.decode())
         self.assertNotIn(">Social<", content)

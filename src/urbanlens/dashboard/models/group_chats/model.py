@@ -1,4 +1,5 @@
-"""Group chat models - multi-member conversations built on the direct message system.
+"""
+Group chat models - multi-member conversations built on the direct message system.
 A ``GroupChat`` is a named, multi-member conversation.
 A member only ever sees messages sent during their current stint (``GroupMessageQuerySet.visible_window``), which is what guarantees that someone added to a conversation cannot read anything sent before they joined. - ``GroupMessage`` - one message in one group, plaintext or end-to-end encrypted (same body-xor-ciphertext contract as ``DirectMessage``; group keys live in ``models.e2ee.group_key``). - ``GroupMessageShare`` - the per-recipient effect of sharing a pin into the group: every member gets their own ``PinShare``, exactly as if the sender had shared with each of them individually.
 """
@@ -23,7 +24,8 @@ MAX_GROUP_NAME_LENGTH = 100
 
 
 class GroupChat(abstract.DashboardModel):
-    """A named, multi-member conversation.
+    """
+    A named, multi-member conversation.
     ``uuid`` is the URL key (group ids are not guessable/enumerable).
     ``creator`` holds group-management rights (add/remove members); it is nullable only because profile deletion must not delete the group out from under the remaining members - a creator-less group simply has no one who can manage membership anymore.
     """
@@ -45,7 +47,8 @@ class GroupChat(abstract.DashboardModel):
     objects = GroupChatManager()
 
     def active_memberships(self):
-        """Return the current (not left/removed) memberships of this group.
+        """
+        Return the current (not left/removed) memberships of this group.
 
         Returns:
             QuerySet of ``GroupChatMembership`` rows with ``left_at`` unset.
@@ -53,7 +56,8 @@ class GroupChat(abstract.DashboardModel):
         return self.memberships.filter(left_at__isnull=True)
 
     def membership_for(self, profile: Profile) -> GroupChatMembership | None:
-        """Return `profile`'s active membership in this group, if any.
+        """
+        Return `profile`'s active membership in this group, if any.
 
         Args:
             profile: The profile to look up.
@@ -65,7 +69,8 @@ class GroupChat(abstract.DashboardModel):
         return self.active_memberships().filter(profile=profile).first()
 
     def is_manager(self, profile: Profile) -> bool:
-        """Return True when `profile` may manage this group's membership.
+        """
+        Return True when `profile` may manage this group's membership.
 
         Args:
             profile: The acting profile.
@@ -76,7 +81,8 @@ class GroupChat(abstract.DashboardModel):
         return self.creator_id == profile.pk and self.membership_for(profile) is not None
 
     def __str__(self) -> str:
-        """Return a human-readable description of this group.
+        """
+        Return a human-readable description of this group.
 
         Returns:
             String like "GroupChat(3, 'Weekend crew')".
@@ -88,7 +94,8 @@ class GroupChat(abstract.DashboardModel):
 
 
 class GroupChatMembership(abstract.DashboardModel):
-    """One member's stint in one group chat.
+    """
+    One member's stint in one group chat.
     ``created`` doubles as the join timestamp: history visibility starts there (see ``GroupMessageQuerySet.visible_window``).
     A member who leaves (or is removed) gets ``left_at`` set and loses access entirely; re-adding them creates a new row, so the absence window stays invisible to them.
     """
@@ -135,7 +142,8 @@ class GroupChatMembership(abstract.DashboardModel):
         return self.left_at is None
 
     def end(self, *, removed_by: Profile | None = None) -> None:
-        """End this stint now (leave or removal).
+        """
+        End this stint now (leave or removal).
 
         Args:
             removed_by: The manager who removed this member, or None for a
@@ -146,7 +154,8 @@ class GroupChatMembership(abstract.DashboardModel):
         self.save(update_fields=["left_at", "removed_by", "updated"])
 
     def __str__(self) -> str:
-        """Return a human-readable description of this membership.
+        """
+        Return a human-readable description of this membership.
 
         Returns:
             String like "GroupChatMembership(group=3, profile=7, active)".
@@ -170,7 +179,8 @@ class GroupChatMembership(abstract.DashboardModel):
 
 
 class GroupMessage(abstract.DashboardModel):
-    """One message in one group chat.
+    """
+    One message in one group chat.
     Same plaintext-or-encrypted contract as ``DirectMessage``: exactly one of ``body``/``ciphertext`` is non-empty, and ``key_version`` records which ``GroupKey`` version encrypted it (0 = plaintext).
     """
 
@@ -214,7 +224,8 @@ class GroupMessage(abstract.DashboardModel):
 
     @property
     def is_encrypted(self) -> bool:
-        """True when this message's content is end-to-end encrypted.
+        """
+        True when this message's content is end-to-end encrypted.
 
         Returns:
             True when ``ciphertext`` is set (the server cannot read the body).
@@ -222,7 +233,8 @@ class GroupMessage(abstract.DashboardModel):
         return bool(self.ciphertext)
 
     def share_for(self, viewer_id: int):
-        """Return the viewer's own share row on this message, if any.
+        """
+        Return the viewer's own share row on this message, if any.
         Iterates the (typically prefetched) ``shares`` relation rather than issuing a fresh query, so rendering a page of messages stays N+1-free.
 
         Args:
@@ -237,7 +249,8 @@ class GroupMessage(abstract.DashboardModel):
         return None
 
     def tombstone_text_for(self, viewer_id: int) -> str | None:
-        """Return placeholder text to show `viewer_id` instead of this message.
+        """
+        Return placeholder text to show `viewer_id` instead of this message.
         Mirrors ``DirectMessage.tombstone_text_for``: the sender always sees their own message in full.
 
         Args:
@@ -253,7 +266,8 @@ class GroupMessage(abstract.DashboardModel):
         return None
 
     def __str__(self) -> str:
-        """Return a human-readable description of this message.
+        """
+        Return a human-readable description of this message.
 
         Returns:
             String like "GroupMessage 3 in group 7: <body prefix>".
@@ -286,7 +300,8 @@ class GroupMessage(abstract.DashboardModel):
 
 
 class GroupMessageShare(abstract.DashboardModel):
-    """One member's copy of a pin shared into a group chat.
+    """
+    One member's copy of a pin shared into a group chat.
     Sharing a pin into a group counts as sharing it with every member individually: the service creates one ``PinShare`` per member (running the full provenance/exposure pipeline each time) and records each here so the thread can render that member's own accept/reject state on the card.
     """
 
@@ -314,7 +329,8 @@ class GroupMessageShare(abstract.DashboardModel):
         pin_share_id: int | None
 
     def __str__(self) -> str:
-        """Return a human-readable description of this share copy.
+        """
+        Return a human-readable description of this share copy.
 
         Returns:
             String like "GroupMessageShare(message=3, recipient=7)".

@@ -1,4 +1,5 @@
-"""The trip weather panel reads stored weather and fetches forecasts under the request-path policy.
+"""
+The trip weather panel reads stored weather and fetches forecasts under the request-path policy.
 
 N29 G5-26/G6-2/G2-14 (forecasts fetched per coordinate on the request with no deadline, even for activities
 weeks outside any forecast) and G5-27 (history built every calendar day between the earliest and latest

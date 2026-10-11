@@ -1,4 +1,5 @@
-"""Remove the ledger rows a test's deadline-pool threads committed, which the test's own transaction cannot roll back.
+"""
+Remove the ledger rows a test's deadline-pool threads committed, which the test's own transaction cannot roll back.
 
 A view that calls an upstream through ``services.core.timeout_utils`` runs the call on a pool thread, and that thread
 writes the call's ``ApiCallLog`` reservation (and creates the service's ``ApiRateLimit`` row) on its own database
@@ -25,7 +26,8 @@ def _ledger_models() -> tuple[type[Model], ...]:
 
 
 def _on_a_separate_connection(statements: list[tuple[str, list[Any]]]) -> list[Any]:
-    """Run each statement on a fresh autocommit connection, which sees only committed rows, and return the first column
+    """
+    Run each statement on a fresh autocommit connection, which sees only committed rows, and return the first column
     of each one's first row (``None`` for a statement that returns nothing)."""
     connection = connections.create_connection(DEFAULT_DB_ALIAS)
     try:
@@ -41,7 +43,8 @@ def _on_a_separate_connection(statements: list[tuple[str, list[Any]]]) -> list[A
 
 
 class DiscardsLedgerRowsFromOtherThreadsMixin:
-    """For a ``TestCase`` class whose requests reach the deadline pool: delete, once the class is done, every ledger
+    """
+    For a ``TestCase`` class whose requests reach the deadline pool: delete, once the class is done, every ledger
     row committed while it ran.
 
     Mixed in before ``TestCase``. Only rows above each table's highest id at class setup are touched, and only once the

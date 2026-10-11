@@ -64,7 +64,8 @@ def _opacity(value: object, default: int) -> int:
 
 
 def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
-    """Upgrade the matching security field on *owner* to at least 'some'.
+    """
+    Upgrade the matching security field on *owner* to at least 'some'.
 
     Only upgrades from unknown/no; never downgrades an existing value.
     """
@@ -83,7 +84,8 @@ def _apply_security_indicator(owner: Pin | Wiki, indicator: str) -> None:
 
 
 def _notify_linked_checkins(markup_map: MarkupMap, message: str) -> None:
-    """Re-notify emergency contacts of check-ins whose route map just changed.
+    """
+    Re-notify emergency contacts of check-ins whose route map just changed.
 
     Editing the route markup after contacts were already alerted is exactly the kind of plan change they
     need to hear about; ``notify_contacts_of_update`` itself rate-limits and no-ops for non-escalated
@@ -108,7 +110,8 @@ _GEOMETRY_TYPES = {
 
 
 def _coordinate_count(value: object, ceiling: int) -> int:
-    """Coordinate pairs in a GeoJSON ``coordinates`` value, stopping past *ceiling*.
+    """
+    Coordinate pairs in a GeoJSON ``coordinates`` value, stopping past *ceiling*.
 
     Shape-agnostic on purpose: Point, LineString, Polygon rings and the custom
     Circle all nest ``[lng, lat]`` pairs at different depths, and a counter that
@@ -136,7 +139,8 @@ def _coordinate_count(value: object, ceiling: int) -> int:
 
 
 def _geometry_too_large(geometry: dict) -> JsonResponse | None:
-    """Refuse a geometry carrying more points than a drawn shape ever does.
+    """
+    Refuse a geometry carrying more points than a drawn shape ever does.
 
     Args:
         geometry: The client-supplied geometry dict.
@@ -153,7 +157,8 @@ def _geometry_too_large(geometry: dict) -> JsonResponse | None:
 
 
 def _bounded_markup_rows(items: Any) -> tuple[list[Any], bool]:
-    """The newest page of a markup queryset, and whether anything was cut.
+    """
+    The newest page of a markup queryset, and whether anything was cut.
 
     The newest rather than the first: pin and wiki markup have no create
     ceiling, so a page of the oldest would hide every shape drawn once a
@@ -175,7 +180,8 @@ def _bounded_markup_rows(items: Any) -> tuple[list[Any], bool]:
 
 
 def _map_is_full(owner_kwargs: dict) -> JsonResponse | None:
-    """Refuse a create once a standalone map holds as many items as it can show.
+    """
+    Refuse a create once a standalone map holds as many items as it can show.
 
     Only ``parent_map``: a MarkupMap is the one owner kind that round-trips
     through ``to_snapshot()`` - the composer prefill and ``clone_markup_map``
@@ -203,7 +209,8 @@ def _map_is_full(owner_kwargs: dict) -> JsonResponse | None:
 
 
 def _sanitize_text_box_corner(geometry: dict) -> None:
-    """Drop ``geometry["box_corner"]`` if it isn't a valid [lng, lat] pair.
+    """
+    Drop ``geometry["box_corner"]`` if it isn't a valid [lng, lat] pair.
 
     A drag-created text label stores the opposite corner of the box the user dragged out alongside its
     anchor point, so the frontend can size/wrap the label to fit it.
@@ -222,7 +229,8 @@ def _resolve_owner(
     location_slug: str | None,
     map_uuid: str | None = None,
 ) -> tuple[Pin | Wiki | MarkupMap, QuerySet[PinMarkup]]:
-    """Resolve the markup owner (Pin, Wiki, or MarkupMap) from URL kwargs.
+    """
+    Resolve the markup owner (Pin, Wiki, or MarkupMap) from URL kwargs.
 
     Exactly one of *pin_slug* / *location_slug* / *map_uuid* is expected to be set, matching the three
     URL patterns these views are mounted under - personal markup under a pin's own map, shared/community
@@ -253,7 +261,8 @@ def _resolve_owner(
 
 
 def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
-    """Return the CustomLayer filter kwargs (parent_pin/parent_wiki) for *owner*.
+    """
+    Return the CustomLayer filter kwargs (parent_pin/parent_wiki) for *owner*.
 
     A MarkupMap owner (standalone maps have no custom layers) yields kwargs that can never match any
     real CustomLayer, so a layer lookup against it always resolves to None rather than needing a special
@@ -267,7 +276,8 @@ def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
 
 
 def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap, profile: Profile, owner_kwargs: dict) -> CustomLayer | None:
-    """Resolve a posted ``layer_uuid`` to a layer this profile may actually assign an item to.
+    """
+    Resolve a posted ``layer_uuid`` to a layer this profile may actually assign an item to.
 
     Scoped by owner exactly as before (a layer belonging to a different pin/ wiki, or any value on the
     map_uuid route, resolves to None); additionally scoped by ``visible_rows`` on a wiki owner, so a
@@ -296,7 +306,8 @@ def _resolve_visible_layer(layer_uuid: str | None, owner: Pin | Wiki | MarkupMap
 
 
 def _current_layer_is_visible(layer_id: int, owner: Pin | Wiki | MarkupMap, profile: Profile) -> bool:
-    """Whether *profile* could see the CustomLayer *layer_id* under *owner*.
+    """
+    Whether *profile* could see the CustomLayer *layer_id* under *owner*.
 
     Always True off a wiki - concealment is a wiki-only concept, so a Pin's or MarkupMap's own layers
     are never filtered.
@@ -309,7 +320,8 @@ def _current_layer_is_visible(layer_id: int, owner: Pin | Wiki | MarkupMap, prof
 
 
 class MarkupJsonView(LoginRequiredMixin, View):
-    """Return all markup items for a pin, location, or markup map as JSON.
+    """
+    Return all markup items for a pin, location, or markup map as JSON.
 
     GET /map/pin/<pin_slug>/markup/json/
     GET /location/<location_slug>/wiki/markup/json/
@@ -317,7 +329,8 @@ class MarkupJsonView(LoginRequiredMixin, View):
     """
 
     def get(self, request, pin_slug=None, location_slug=None, map_uuid=None):
-        """Return markup items (and, for maps, the saved viewport) as JSON.
+        """
+        Return markup items (and, for maps, the saved viewport) as JSON.
 
         Args:
             request: HttpRequest.
@@ -388,13 +401,15 @@ class MarkupJsonView(LoginRequiredMixin, View):
 
 
 class SafetyContactMarkupJsonView(View):
-    """Read-only markup JSON for the public, token-gated safety contact portal.
+    """
+    Read-only markup JSON for the public, token-gated safety contact portal.
 
     GET /safety/contact/<uuid:token>/markup/json/
     """
 
     def get(self, request: HttpRequest, token: str) -> HttpResponse:
-        """Return the linked check-in's route-map markup items as a JSON list.
+        """
+        Return the linked check-in's route-map markup items as a JSON list.
 
         Args:
             request: HttpRequest.
@@ -417,7 +432,8 @@ class SafetyContactMarkupJsonView(View):
 
 
 def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | None:
-    """Resolve the optional Pin/Wiki a standalone-map creation is scoped to.
+    """
+    Resolve the optional Pin/Wiki a standalone-map creation is scoped to.
 
     Lets the "take a screenshot" toolbar buttons on the pin detail and wiki pages tell the server which
     pin/wiki they were opened from, purely for ``default_markup_map_title()`` purposes - unlike the
@@ -445,7 +461,8 @@ def _resolve_title_context(request: HttpRequest, body: dict) -> Pin | Wiki | Non
 
 
 class MarkupMapCreateView(LoginRequiredMixin, View):
-    """Create a new standalone MarkupMap - either a draft, or a fully-drawn one.
+    """
+    Create a new standalone MarkupMap - either a draft, or a fully-drawn one.
 
     POST /markup-maps/new/
 
@@ -458,7 +475,8 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Create a MarkupMap owned by the caller, optionally fully populated.
+        """
+        Create a MarkupMap owned by the caller, optionally fully populated.
 
         Accepts optional JSON body fields ``center_lat``/``center_lng``/
         ``zoom``/``layer_mode``/``show_borders``/``bearing``/``title`` for the initial viewport, plus
@@ -496,7 +514,8 @@ class MarkupMapCreateView(LoginRequiredMixin, View):
 
 
 def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
-    """Apply viewport fields from a request body onto *markup_map* and save.
+    """
+    Apply viewport fields from a request body onto *markup_map* and save.
 
     Ignores fields that are absent or invalid; clamps zoom to Leaflet's range.
 
@@ -533,7 +552,8 @@ def _apply_view_state(markup_map: MarkupMap, body: dict) -> None:
 
 
 class MarkupMapSnapshotView(LoginRequiredMixin, View):
-    """Return a MarkupMap's full snapshot (viewport + markup) as JSON.
+    """
+    Return a MarkupMap's full snapshot (viewport + markup) as JSON.
 
     GET /markup-maps/<map_uuid>/snapshot/
 
@@ -544,7 +564,8 @@ class MarkupMapSnapshotView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Return the caller's own map as a snapshot dict.
+        """
+        Return the caller's own map as a snapshot dict.
 
         Args:
             request: HttpRequest.
@@ -558,7 +579,8 @@ class MarkupMapSnapshotView(LoginRequiredMixin, View):
 
 
 class MarkupMapViewStateView(LoginRequiredMixin, View):
-    """Persist a MarkupMap's viewport (centre/zoom/layer/borders) and title.
+    """
+    Persist a MarkupMap's viewport (centre/zoom/layer/borders) and title.
 
     POST /markup-maps/<map_uuid>/view/
 
@@ -567,7 +589,8 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Update viewport fields from the JSON body.
+        """
+        Update viewport fields from the JSON body.
 
         Args:
             request: HttpRequest with JSON body.
@@ -582,7 +605,8 @@ class MarkupMapViewStateView(LoginRequiredMixin, View):
 
 
 class PinMarkupMapsView(LoginRequiredMixin, View):
-    """ "Markup Maps" panel for the Private Pin page (loaded via HTMX).
+    """
+    "Markup Maps" panel for the Private Pin page (loaded via HTMX).
 
     GET /map/pin/<slug:pin_slug>/markup-maps/
 
@@ -593,7 +617,8 @@ class PinMarkupMapsView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        """Render the panel, or 204 when the pin has no associated maps.
+        """
+        Render the panel, or 204 when the pin has no associated maps.
 
         Args:
             request: HttpRequest.
@@ -611,7 +636,8 @@ class PinMarkupMapsView(LoginRequiredMixin, View):
 
 
 class MarkupMapDeleteView(LoginRequiredMixin, View):
-    """Delete a standalone MarkupMap (and, via cascade, its items).
+    """
+    Delete a standalone MarkupMap (and, via cascade, its items).
 
     A ``pre_delete`` signal on ``MarkupMap`` (see ``models.markup.signals``) additionally flags every
     Comment/TripComment/ DirectMessage referencing this map (``map_removed``), so those hosts can keep
@@ -619,7 +645,8 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Delete the map.
+        """
+        Delete the map.
 
         Args:
             request: HttpRequest.
@@ -634,7 +661,8 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
         return HttpResponse("", status=200)
 
     def delete(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Delete the map (DELETE verb alias for :meth:`post`).
+        """
+        Delete the map (DELETE verb alias for :meth:`post`).
 
         Args:
             request: HttpRequest.
@@ -647,7 +675,8 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
 
 
 def _map_visible_to(profile: Profile, markup_map: MarkupMap) -> Profile | None:
-    """Return whoever sent ``markup_map`` to ``profile`` through a legitimate channel, if any.
+    """
+    Return whoever sent ``markup_map`` to ``profile`` through a legitimate channel, if any.
 
     Checks the three ways a map can become visible to someone other than its owner: a DM attachment, a
     standalone :class:`MarkupMapShare`, or an attachment on an explicit :class:`PinShare`.
@@ -672,13 +701,15 @@ def _map_visible_to(profile: Profile, markup_map: MarkupMap) -> Profile | None:
 
 
 class MarkupMapCloneView(LoginRequiredMixin, View):
-    """ "Add to my maps": clone someone else's shared map into the caller's own maps.
+    """
+    "Add to my maps": clone someone else's shared map into the caller's own maps.
 
     POST /markup-maps/<map_uuid>/clone/
     """
 
     def post(self, request: HttpRequest, map_uuid: str) -> HttpResponse:
-        """Clone ``map_uuid`` into the caller's own Memories > Maps.
+        """
+        Clone ``map_uuid`` into the caller's own Memories > Maps.
 
         Args:
             request: HttpRequest.
@@ -702,7 +733,8 @@ class MarkupMapCloneView(LoginRequiredMixin, View):
 
 
 class MarkupView(LoginRequiredMixin, View):
-    """Create a new markup item for a pin, location, or markup map.
+    """
+    Create a new markup item for a pin, location, or markup map.
 
     POST /map/pin/<pin_slug>/markup/
     POST /location/<location_slug>/wiki/markup/
@@ -710,7 +742,8 @@ class MarkupView(LoginRequiredMixin, View):
     """
 
     def post(self, request, pin_slug=None, location_slug=None, map_uuid=None):
-        """Create a markup item.
+        """
+        Create a markup item.
 
         Args:
             request: HttpRequest with JSON body containing markup fields.
@@ -802,7 +835,8 @@ class MarkupView(LoginRequiredMixin, View):
 
 
 class MarkupEditView(LoginRequiredMixin, View):
-    """Update or delete a single markup item.
+    """
+    Update or delete a single markup item.
 
     POST/DELETE /map/pin/<pin_slug>/markup/<markup_uuid>/ POST/DELETE
     /location/<location_slug>/wiki/markup/<markup_uuid>/ POST/DELETE
@@ -815,7 +849,8 @@ class MarkupEditView(LoginRequiredMixin, View):
         return owner, get_object_or_404(qs, uuid=markup_uuid)
 
     def post(self, request, pin_slug=None, location_slug=None, markup_uuid=None, map_uuid=None):
-        """Update mutable fields on a markup item.
+        """
+        Update mutable fields on a markup item.
 
         Args:
             request: HttpRequest with JSON body.
@@ -881,7 +916,8 @@ class MarkupEditView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True})
 
     def delete(self, request, pin_slug=None, location_slug=None, markup_uuid=None, map_uuid=None):
-        """Delete a markup item.
+        """
+        Delete a markup item.
 
         Args:
             request: HttpRequest.

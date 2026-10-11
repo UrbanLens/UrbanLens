@@ -1,4 +1,5 @@
-"""Write-source tracking: who or what is making the writes on this thread.
+"""
+Write-source tracking: who or what is making the writes on this thread.
 Provenance has to be recorded at write time - inferring it afterwards from edit history does not work, because three writers already bypass the history entirely (a bulk ``update()``, a bare ``save()``, and one that omits ``updated`` from ``update_fields``).
 """
 
@@ -26,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 class WriteSource(TextChoices):
-    """Where a write came from.
+    """
+    Where a write came from.
     A merge resolution is a *reason* rather than a source - both user-driven and automatic merge resolution are possible, and the provenance of the things being merged is its own question - so that belongs in a separate field when merge work starts, not here.
     """
 
@@ -48,7 +50,8 @@ _unversioned: ContextVar[bool] = ContextVar("ul_unversioned", default=False)
 
 
 def current_write_source() -> str:
-    """Return the write source in force, defaulting to SYSTEM.
+    """
+    Return the write source in force, defaulting to SYSTEM.
 
     Resolves a deferred source on the first call and keeps the answer, the same way
     :func:`current_write_actor` does - a request that writes nothing never has to decide.
@@ -64,7 +67,8 @@ def current_write_source() -> str:
 
 
 def current_write_actor() -> int | None:
-    """Return the profile pk a write is attributable to, if any.
+    """
+    Return the profile pk a write is attributable to, if any.
 
     Resolves a deferred actor on the first call and keeps the answer, so a request that writes many
     rows looks it up once and one that writes none never looks it up at all.
@@ -86,7 +90,8 @@ def is_unversioned() -> bool:
 
 
 def bind_write_source(source: WriteOrigin, *, actor: WriteActor = None) -> None:
-    """Set the write source for the rest of this context, without a block.
+    """
+    Set the write source for the rest of this context, without a block.
     For entry points that own their whole context and have no natural place to wrap - a Celery task, which gets a fresh context per run.
 
     Args:
@@ -100,7 +105,8 @@ def bind_write_source(source: WriteOrigin, *, actor: WriteActor = None) -> None:
 
 
 def request_writer(request: object) -> tuple[Callable[[], str], Callable[[], int | None]]:
-    """The deferred source and actor for a request, for whoever is binding it.
+    """
+    The deferred source and actor for a request, for whoever is binding it.
 
     One definition for the two entry points that bind a request - ``WriteSourceMiddleware`` for the
     site, and ``ExternalApiView.initial`` for the API, which cannot use the middleware because it
@@ -129,7 +135,8 @@ def request_writer(request: object) -> tuple[Callable[[], str], Callable[[], int
 
 @contextlib.contextmanager
 def writing_as(source: WriteOrigin, *, actor: WriteActor = None) -> Iterator[None]:
-    """Declare the write source for the enclosed block.
+    """
+    Declare the write source for the enclosed block.
 
     Args:
         source: A :class:`WriteSource` value, or a callable returning one - called at the first
@@ -151,7 +158,8 @@ def writing_as(source: WriteOrigin, *, actor: WriteActor = None) -> Iterator[Non
 
 @contextlib.contextmanager
 def unversioned(*, reason: str) -> Iterator[None]:
-    """Run writes without recording revisions.
+    """
+    Run writes without recording revisions.
     For migrations and backfills, which legitimately rewrite history rather than extending it.
 
     Args:

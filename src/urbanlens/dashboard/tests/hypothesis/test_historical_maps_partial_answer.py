@@ -1,4 +1,5 @@
-"""A ``/maps/`` answer REData marked ``complete: false`` is shown but not kept as the whole answer.
+"""
+A ``/maps/`` answer REData marked ``complete: false`` is shown but not kept as the whole answer.
 
 REData's 8 s deadline can cut off the nearby-maps read; the containing maps still come back. Caching that for
 24 h (browse) or ``external_data_cache_days`` (Photos tab) hid the rest of the sheets until the entry lapsed. A body

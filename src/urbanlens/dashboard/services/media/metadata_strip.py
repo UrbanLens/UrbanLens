@@ -28,7 +28,8 @@ _VP8X_XMP_FLAG = 0x04
 
 
 def strip_metadata(data: bytes) -> bytes | None:
-    """Return *data* with metadata segments removed.
+    """
+    Return *data* with metadata segments removed.
 
     Args:
         data: The complete uploaded file.

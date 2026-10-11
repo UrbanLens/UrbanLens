@@ -23,7 +23,8 @@ _IDENTITY_DISPLAY_ORDER = {"Place Name": 0, "Official Name": 1, "Address": 2}
 
 
 def collapse_identity_fields(candidates: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Keep the most detailed version of near-duplicate Place Name/Official Name/Address text.
+    """
+    Keep the most detailed version of near-duplicate Place Name/Official Name/Address text.
     These three fields often carry the same core address at different levels of formatting completeness (e.g.
     A plain equality check only catches an exact match, not one string being a formatting-level superset of another.
 
@@ -133,7 +134,8 @@ class AddressableModel(DashboardModel):
 
     @property
     def deduplicated_identity_fields(self) -> list[tuple[str, str]]:
-        """(label, value) pairs for Place Name/Official Name/Address, with near-duplicates collapsed.
+        """
+        (label, value) pairs for Place Name/Official Name/Address, with near-duplicates collapsed.
         Pin overrides this to prefer its ``effective_*`` name/address variants.
 
         Returns:

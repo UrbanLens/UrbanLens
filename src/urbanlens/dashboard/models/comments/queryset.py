@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
 class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
     def reachable_by(self, profile: Profile) -> Self:
-        """Comments *profile* wrote, or that sit on a pin of theirs or a wiki they can reach.
+        """
+        Comments *profile* wrote, or that sit on a pin of theirs or a wiki they can reach.
 
         The candidate scope behind comment search - not the full visibility gate, which
         :meth:`visible_to` is. Each disjunct is resolved to ids on the comment table's own columns
@@ -45,7 +46,8 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
         return self.filter(scope)
 
     def mentions_all_visible_to(self, profile: Profile) -> Self:
-        """Drop comments naming a location *profile* has not pinned.
+        """
+        Drop comments naming a location *profile* has not pinned.
 
         Gate 3 of the comment visibility rules, as SQL - see
         ``services.comments.comments`` for what the gate is for and
@@ -70,7 +72,8 @@ class CommentQuerySet(abstract.FrontendDashboardQuerySet["Comment"]):
         return self.filter(~Exists(unpinned_mention))
 
     def visible_to(self, profile: Profile) -> Self:
-        """Gates 1-3 of the comment visibility rules, entirely in SQL.
+        """
+        Gates 1-3 of the comment visibility rules, entirely in SQL.
 
         The queryset counterpart to ``comments.comment_is_visible``, and held
         to it across the product of every visibility setting and every

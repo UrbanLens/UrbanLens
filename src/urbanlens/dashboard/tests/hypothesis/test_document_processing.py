@@ -147,7 +147,8 @@ class ExtractPdfTextTests(TestCase):
 
 
 class OcrResourceBoundsTests(TestCase):
-    """A PDF's page geometry is attacker-supplied; the raster it becomes must not be.
+    """
+    A PDF's page geometry is attacker-supplied; the raster it becomes must not be.
 
     `pdf2image` defaults to 200 DPI with no size limit, and a page's dimensions come from its own MediaBox -
     which the spec allows up to 14400pt (200 inches) a side."""
@@ -187,7 +188,8 @@ class OcrResourceBoundsTests(TestCase):
         self.assertEqual(convert.call_args.kwargs["last_page"], _OCR_MAX_PAGES)
 
     def test_the_size_bound_is_a_bare_int_so_poppler_preserves_aspect(self) -> None:
-        """A tuple would set the axes independently and could distort or under-bound.
+        """
+        A tuple would set the axes independently and could distort or under-bound.
 
         pdf2image turns an int into poppler's `-scale-to`, which scales the
         longest side - so one number bounds both axes whatever the page shape.

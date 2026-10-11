@@ -1,4 +1,5 @@
-"""Article rendering and persistence.
+"""
+Article rendering and persistence.
 Security: rendered HTML is always sanitized with nh3 against a fixed allowlist before it is stored or returned - article HTML is community/user input and must never reach a template unsanitized."""
 
 from __future__ import annotations
@@ -212,7 +213,8 @@ class _Spans:
 
 @dataclass(frozen=True, slots=True)
 class _SourceImage:
-    """Where an image's address sits in article source.
+    """
+    Where an image's address sits in article source.
 
     Attributes:
         start: The address's first character.
@@ -226,14 +228,16 @@ class _SourceImage:
 
 
 class _ImageScan:
-    """Every image address in one article's source that the article displays.
+    """
+    Every image address in one article's source that the article displays.
 
     The block structure comes from markdown-it and the inline syntax from the helpers its own image rule uses. That finds
     what rendering would show without an inline parse, which some text makes take seconds.
     """
 
     def __init__(self, content: str) -> None:
-        """Read the block structure of *content*.
+        """
+        Read the block structure of *content*.
 
         Args:
             content: Markdown article source.
@@ -284,7 +288,8 @@ class _ImageScan:
         return _SourceImage(start + bracketed, destination.pos - bracketed, _MD.normalizeLink(destination.str))
 
     def inline_images(self) -> Iterator[_SourceImage]:
-        """``![alt](address "title")``.
+        """
+        ``![alt](address "title")``.
 
         Each is read no further than the next ``![alt](``: markdown-it reads an address through up to 32 nested
         parentheses, so text made of nothing but openers would otherwise be read 32 times over. An address or title
@@ -324,7 +329,8 @@ class _ImageScan:
         return labels
 
     def reference_images(self) -> Iterator[_SourceImage]:
-        """The definition behind ``![alt][label]``, ``![label][]`` and ``![label]``, wherever it is written.
+        """
+        The definition behind ``![alt][label]``, ``![label][]`` and ``![label]``, wherever it is written.
 
         A definition a link shares with an image is rewritten too, so the link then opens the copy.
         """
@@ -337,7 +343,8 @@ class _ImageScan:
                     yield image
 
     def _definition(self, start: int, end: int, href: str) -> _SourceImage | None:
-        """The address of the definition of *href* written between *start* and *end*.
+        """
+        The address of the definition of *href* written between *start* and *end*.
 
         Footnote markers can come before it on its line (``[^1]: [label]: address``), so each ``[`` is tried in turn,
         and one that continues past a list item's indent is left to rendering.
@@ -359,7 +366,8 @@ class _ImageScan:
 
 
 def localize_article_images(content: str) -> str:
-    """Point every remote image in article source at this site's copy, so the editor never loads it from its host.
+    """
+    Point every remote image in article source at this site's copy, so the editor never loads it from its host.
 
     Covers inline, reference-style and raw HTML images. Links stay as they are, unless one shares a reference definition
     with an image, and so does code that shows image syntax. The original address is kept on the copy, keyed the way
@@ -396,7 +404,8 @@ _SLUG_DASH = re.compile(r"[\s_-]+")
 
 
 def _anchor_slug(title: str, used: set[str]) -> str:
-    """Derive a unique, URL-safe anchor id for a heading title.
+    """
+    Derive a unique, URL-safe anchor id for a heading title.
 
     Args:
         title: The heading's plain text.
@@ -416,7 +425,8 @@ def _anchor_slug(title: str, used: set[str]) -> str:
 
 
 def render_article(content: str) -> RenderedArticle:
-    """Render Markdown article source to sanitized HTML plus a TOC.
+    """
+    Render Markdown article source to sanitized HTML plus a TOC.
     Headings are demoted one level (``#`` becomes ``<h2>``) so the article can never inject a second ``<h1>`` into the page, and each heading receives a stable ``id`` used by the table of contents.
 
     Args:
@@ -485,7 +495,8 @@ def render_article(content: str) -> RenderedArticle:
 
 
 def get_article(*, pin: Pin | None = None, wiki: Wiki | None = None) -> Article | None:
-    """Fetch the existing article for a pin or wiki, or None.
+    """
+    Fetch the existing article for a pin or wiki, or None.
 
     Args:
         pin: The pin host (mutually exclusive with ``wiki``).
@@ -512,7 +523,8 @@ def save_article(
     wiki: Wiki | None = None,
     restored_from: ArticleRevision | None = None,
 ) -> tuple[Article, ArticleRevision | None]:
-    """Persist a new version of a pin/wiki article.
+    """
+    Persist a new version of a pin/wiki article.
 
     Args:
         editor: The profile making the edit, or None for a system-initiated save (e.g. seeding a new wiki article from a matched Wikipedia article) - both ``Article.last_edited_by`` and ``ArticleRevision.editor`` are already nullable (SET_NULL) for exactly this...
@@ -567,7 +579,8 @@ def save_article(
 
 
 class ArticleConflictError(Exception):
-    """Someone else saved the article while this editor was working on it.
+    """
+    Someone else saved the article while this editor was working on it.
 
     Attributes:
         current_revision_id: The id of the revision that is actually current, so a client can fetch it, show the other edit, and re-base."""
@@ -579,7 +592,8 @@ class ArticleConflictError(Exception):
 
 
 def latest_revision_id(article: Article | None) -> int | None:
-    """Return the id of *article*'s newest revision, or None.
+    """
+    Return the id of *article*'s newest revision, or None.
 
     Args:
         article: The article to inspect, or None when none exists yet.
@@ -602,7 +616,8 @@ def save_article_checked(
     pin: Pin | None = None,
     wiki: Wiki | None = None,
 ) -> tuple[Article, ArticleRevision | None]:
-    """Save an article, refusing the write if it would clobber a concurrent edit.
+    """
+    Save an article, refusing the write if it would clobber a concurrent edit.
     Wraps :func:`save_article` with the optimistic-concurrency check the article editor has always performed, moved here so the internal view and the external API cannot drift on it.
 
     Args:
@@ -648,7 +663,8 @@ def save_article_checked(
 
 
 def restore_revision(*, scope_article: Article, revision: ArticleRevision, editor: Profile | None) -> tuple[Article, ArticleRevision | None]:
-    """Restore an older revision's content as a new revision.
+    """
+    Restore an older revision's content as a new revision.
 
     Args:
         scope_article: The article being restored. *revision* must belong to it - callers scope the lookup rather than trusting a bare id.
@@ -674,7 +690,8 @@ def restore_revision(*, scope_article: Article, revision: ArticleRevision, edito
 
 
 def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
-    """Render one article as the external API's article body.
+    """
+    Render one article as the external API's article body.
     An article is host-agnostic - the same row shape backs a pin's private article and a community wiki's - so the payload is built here rather than in either host's view module.
 
     Args:
@@ -714,7 +731,8 @@ class DiffRow:
 
 
 def diff_revisions(old_content: str, new_content: str, *, context: int = 3) -> list[DiffRow]:
-    """Line diff between two revision bodies, with limited context.
+    """
+    Line diff between two revision bodies, with limited context.
 
     Args:
         old_content: The earlier revision's Markdown source.
@@ -742,7 +760,8 @@ def diff_revisions(old_content: str, new_content: str, *, context: int = 3) -> l
 
 
 class AnnotatedRevision(Protocol):
-    """An ``ArticleRevision`` carrying the two lengths the history query adds.
+    """
+    An ``ArticleRevision`` carrying the two lengths the history query adds.
 
     The row builder below is only ever handed rows from the queryset built
     beside it, which annotates both - but nothing in `ArticleRevision` itself
@@ -764,7 +783,8 @@ class AnnotatedRevision(Protocol):
 
 
 def revision_history_page(revisions: Any, viewer: Profile) -> tuple[Any, Callable[[AnnotatedRevision], dict[str, Any]]]:
-    """A revision-history queryset and its row builder, for paginating in SQL.
+    """
+    A revision-history queryset and its row builder, for paginating in SQL.
 
     The two callers (pin article, wiki article) both used to materialise the
     whole history and build a row per revision before paginating, so the page

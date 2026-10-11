@@ -1,4 +1,5 @@
-"""What UrbanLens reads from REData: one row per reader and REData operation, with the response fields it uses.
+"""
+What UrbanLens reads from REData: one row per reader and REData operation, with the response fields it uses.
 
 ``test_redata_consumer_contract.py`` checks every row against REData's OpenAPI document, vendored at
 ``VENDORED_SCHEMA`` by a maintainer from a REData checkout. When a reader starts using a REData field, add the field to its
@@ -30,7 +31,8 @@ VENDORED_OVERTURE_SHARDS = Path(__file__).parent / "fixtures" / "redata_overture
 
 @dataclass(frozen=True, slots=True)
 class Read:
-    """One UrbanLens reader's use of one REData response.
+    """
+    One UrbanLens reader's use of one REData response.
 
     Attributes:
         reader: Where the reading happens, relative to ``src/urbanlens/dashboard/``.

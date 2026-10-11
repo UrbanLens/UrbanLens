@@ -67,7 +67,8 @@ class TripCommentDeleteTests(TestCase):
         self.assertTrue(TripComment.objects.filter(pk=self.comment.pk).exists())
 
     def test_an_orphaned_comment_is_deletable_by_the_creator_only(self) -> None:
-        """`author` is SET_NULL, so the gate's set becomes `{None, creator}`.
+        """
+        `author` is SET_NULL, so the gate's set becomes `{None, creator}`.
 
         A bug that let a null author match the viewer would hand every comment
         whose writer deleted their account to any member at all.

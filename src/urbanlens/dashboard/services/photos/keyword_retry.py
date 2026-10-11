@@ -1,4 +1,5 @@
-"""Asking a keyword source again about a photo it did not answer for (P323).
+"""
+Asking a keyword source again about a photo it did not answer for (P323).
 
 When a source does not answer for a photo, ``generate_keywords_for_image`` keeps the photo's keywords from it (P322)
 and records an :class:`~urbanlens.dashboard.models.images.keyword.ImageKeywordRetry` row for the (photo, source). The
@@ -102,7 +103,8 @@ def _delay(attempts: int) -> timedelta:
 
 
 def note_outcome(image: Image, source: str, outcome: KeywordOutcome) -> None:
-    """Record what an upload's keyword run came to, for the sweep.
+    """
+    Record what an upload's keyword run came to, for the sweep.
 
     Nothing that run saw is held against the photo: it cannot tell a source that is down from one that fails on this
     photo. A refusal for good (``OFF``), a provider that does not run for the photo, and a photo with no analysis copy
@@ -140,7 +142,8 @@ def _forget_quietly(image_id: int, source: str) -> None:
 
 
 def _unanswered(image_id: int, source: str, *, counts: bool) -> None:
-    """Ask again later; hold the failure against the photo when ``counts``.
+    """
+    Ask again later; hold the failure against the photo when ``counts``.
 
     Gives the row up after :data:`MAX_ATTEMPTS` failures held against the photo, or on any failure :data:`MAX_WAIT`
     after its first (``first_failed_at``; a row only refused so far has none).
@@ -179,7 +182,8 @@ def _source_key(source: str) -> str:
 
 
 def source_backoff(source: str) -> tuple[int, float]:
-    """The sweep's backoff for one source.
+    """
+    The sweep's backoff for one source.
 
     Args:
         source: The provider's slug.
@@ -257,7 +261,8 @@ def _due_rows(sources: list[str], *, limit: int, now: datetime) -> list[ImageKey
 
 
 def _retry(row: ImageKeywordRetry, provider: PhotoKeywordProvider) -> str:
-    """Ask ``provider`` about the row's photo again, and record what came of it, except a failure.
+    """
+    Ask ``provider`` about the row's photo again, and record what came of it, except a failure.
 
     A failure, and an analysis copy that could not be read, are recorded by :func:`sweep` once the run is over, when it
     knows whether the source answered anyone and whether any copy could be read.
@@ -302,7 +307,8 @@ def _settle(failed: dict[str, list[int]], unreadable: list[tuple[int, str]], *, 
 
 
 def sweep(limit: int = SWEEP_BATCH) -> Counter[str]:
-    """Ask each keyword source again about the photos it did not answer for, within this run's limits.
+    """
+    Ask each keyword source again about the photos it did not answer for, within this run's limits.
 
     Args:
         limit: The most photos to ask a source about.

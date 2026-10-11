@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 class LLMGateway(ABC):
-    """Sends prompts to an AI provider through the sandboxed inference service.
+    """
+    Sends prompts to an AI provider through the sandboxed inference service.
     Concrete subclasses (:mod:`services.ai.anthropic`, :mod:`services.ai.openai`, :mod:`services.ai.cloudflare`) declare only what differs per provider - :attr:`PROVIDER`, a default model, and a cost catalog."""
 
     #: Set by each subclass; identifies which provider adapter the inference
@@ -97,7 +98,8 @@ class LLMGateway(ABC):
 
     @property
     def sent_tokens(self) -> int:
-        """Number of tokens for sentences in the LLMGateway instance.
+        """
+        Number of tokens for sentences in the LLMGateway instance.
 
         Returns:
             int: The number of tokens for sentences in the LLMGateway instance."""
@@ -105,7 +107,8 @@ class LLMGateway(ABC):
 
     @property
     def received_tokens(self) -> int:
-        """Number of received tokens.
+        """
+        Number of received tokens.
 
         Returns:
             int: The number of received tokens."""
@@ -113,7 +116,8 @@ class LLMGateway(ABC):
 
     @property
     def tokens(self) -> int:
-        """Total number of tokens, calculated as the sum of tokens sent and tokens received.
+        """
+        Total number of tokens, calculated as the sum of tokens sent and tokens received.
 
         Returns:
             int: The total number of tokens.
@@ -125,7 +129,8 @@ class LLMGateway(ABC):
 
     @property
     def cost(self) -> Decimal:
-        """Calculates the total cost for the tokens sent and received based on the model's costs per thousand tokens.
+        """
+        Calculates the total cost for the tokens sent and received based on the model's costs per thousand tokens.
 
         Returns:
             Decimal: The total cost for the tokens sent and received.
@@ -145,7 +150,8 @@ class LLMGateway(ABC):
 
     @staticmethod
     def _price(costs: tuple[Decimal, Decimal], sent: int, received: int) -> Decimal:
-        """Price ``sent`` and ``received`` tokens at ``costs`` per thousand, to the ledger's six places.
+        """
+        Price ``sent`` and ``received`` tokens at ``costs`` per thousand, to the ledger's six places.
 
         Args:
             costs: Cost per thousand (sent, received) tokens.
@@ -159,7 +165,8 @@ class LLMGateway(ABC):
         return round(sent * cost_per_thousand_sent / 1000 + received * cost_per_thousand_received / 1000, 6)
 
     def _call_cost(self, message_queue: MessageQueue, response: InferenceResponse) -> Decimal | None:
-        """The cost of one call: the provider's reported tokens, else an estimate of both sides.
+        """
+        The cost of one call: the provider's reported tokens, else an estimate of both sides.
 
         Args:
             message_queue: What was sent.
@@ -177,7 +184,8 @@ class LLMGateway(ABC):
 
     @singledispatchmethod
     def send_tokens(self, count: Any):
-        """Annotates the number of tokens sent and updates the token count accordingly.
+        """
+        Annotates the number of tokens sent and updates the token count accordingly.
 
         Args:
                 count (Any):
@@ -187,7 +195,8 @@ class LLMGateway(ABC):
 
     @send_tokens.register
     def _(self, count: int):
-        """Annotates the number of tokens sent and updates the token count accordingly.
+        """
+        Annotates the number of tokens sent and updates the token count accordingly.
 
         Args:
                 count (int):
@@ -198,7 +207,8 @@ class LLMGateway(ABC):
 
     @send_tokens.register
     def _(self, prompt: str):
-        """Processes the prompt to calculate and send tokens.
+        """
+        Processes the prompt to calculate and send tokens.
 
         Args:
                 prompt (str):
@@ -210,7 +220,8 @@ class LLMGateway(ABC):
 
     @send_tokens.register
     def _(self, messages: MessageQueue):
-        """Processes the messages to calculate and send tokens.
+        """
+        Processes the messages to calculate and send tokens.
 
         Args:
                 messages (MessageQueue):
@@ -222,7 +233,8 @@ class LLMGateway(ABC):
 
     @singledispatchmethod
     def receive_tokens(self, count: int):
-        """Updates the count of received tokens and logs the information.
+        """
+        Updates the count of received tokens and logs the information.
 
         Args:
                 count (int):
@@ -233,7 +245,8 @@ class LLMGateway(ABC):
 
     @receive_tokens.register
     def _(self, prompt: str):
-        """Process the prompt to calculate tokens and update the token count accordingly.
+        """
+        Process the prompt to calculate tokens and update the token count accordingly.
 
         Args:
                 prompt (str):
@@ -254,7 +267,8 @@ class LLMGateway(ABC):
         return model_name.lower()
 
     def calculate_tokens(self, prompt: str) -> int:
-        """Calculate the exact number of tokens in a given text prompt using the tokenizer from the transformers library.
+        """
+        Calculate the exact number of tokens in a given text prompt using the tokenizer from the transformers library.
 
         Args:
                 prompt (str):
@@ -274,7 +288,8 @@ class LLMGateway(ABC):
         return len(tokens)
 
     def calculate_combined_tokens(self, messages: MessageQueue | list[dict[str, str]]) -> int:
-        """Calculate the exact number of tokens in a combined prompt.
+        """
+        Calculate the exact number of tokens in a combined prompt.
 
         Args:
                 messages (dict):
@@ -287,7 +302,8 @@ class LLMGateway(ABC):
         return self.calculate_tokens(prompt)
 
     def prepare_system_prompt(self, **kwargs) -> str:
-        """Prepare a text prompt for the AI model to use as the system prompt.
+        """
+        Prepare a text prompt for the AI model to use as the system prompt.
 
         Returns:
             str: The prepared text prompt."""
@@ -299,7 +315,8 @@ class LLMGateway(ABC):
         return prompt
 
     def construct_messages(self, prompt: str) -> MessageQueue:
-        """Construct a list of messages to be used for chat completion.
+        """
+        Construct a list of messages to be used for chat completion.
 
         Args:
             prompt (str):
@@ -335,7 +352,8 @@ class LLMGateway(ABC):
         return queue
 
     def send_prompt(self, prompt: str, **kwargs) -> str | None:
-        """Send a prompt to the AI model and return the answer within its response.
+        """
+        Send a prompt to the AI model and return the answer within its response.
         If a high-confidence injection is detected (risk score >= 0.3) the sanitized version is used instead and a warning is logged.
 
         Args:
@@ -375,7 +393,8 @@ class LLMGateway(ABC):
         return None
 
     def _get_response(self, message_queue: MessageQueue, *, tools: list[ToolSpec] | None = None, timeout: float | None = None) -> InferenceResponse | None:
-        """Send the message queue to the inference service and return its response, unmodified.
+        """
+        Send the message queue to the inference service and return its response, unmodified.
 
         Args:
                 message_queue (MessageQueue):
@@ -414,7 +433,8 @@ class LLMGateway(ABC):
             return response
 
     def _report(self, call: AiCall, message_queue: MessageQueue, response: InferenceResponse) -> None:
-        """Fill an AI call's report from its response; a failure here leaves the report short, never the call failed.
+        """
+        Fill an AI call's report from its response; a failure here leaves the report short, never the call failed.
 
         Args:
             call: The report for this call.
@@ -429,7 +449,8 @@ class LLMGateway(ABC):
             logger.debug("Could not price a call to %s", self.model, exc_info=True)
 
     def _record_received_tokens(self, response: InferenceResponse) -> None:
-        """Prefer the provider's own reported usage; fall back to a tiktoken estimate.
+        """
+        Prefer the provider's own reported usage; fall back to a tiktoken estimate.
 
         Args:
             response: The normalized inference response.
@@ -440,7 +461,8 @@ class LLMGateway(ABC):
             self.receive_tokens(response.text)
 
     def _parse_answer(self, message_content: str) -> str | None:
-        """Parse the first <ANSWER> tag from the response body.
+        """
+        Parse the first <ANSWER> tag from the response body.
 
         Args:
             message_content: The content of the message to parse.
@@ -455,7 +477,8 @@ class LLMGateway(ABC):
         return None
 
     def _parse_answers(self, message_content: str) -> list[str]:
-        """Parse all <ANSWER>...</ANSWER> tags from the response body.
+        """
+        Parse all <ANSWER>...</ANSWER> tags from the response body.
 
         Args:
             message_content: The content of the message to parse.
@@ -482,7 +505,8 @@ class LLMGateway(ABC):
             return []
 
     def send_prompt_list(self, prompt: str, *, max_results: int | None = None, **kwargs) -> list[str]:
-        """Like send_prompt but returns every ANSWER tag as a list.
+        """
+        Like send_prompt but returns every ANSWER tag as a list.
 
         Args:
             prompt: The user prompt to send.
@@ -522,7 +546,8 @@ class LLMGateway(ABC):
         return []
 
     def send_with_tools(self, prompt: str, tools: list[ToolSpec], *, timeout: float | None = None) -> InferenceResponse | None:
-        """Send a prompt with provider-native tools available, and return the raw response.
+        """
+        Send a prompt with provider-native tools available, and return the raw response.
 
         Args:
             prompt: The full prompt for this round - the caller owns

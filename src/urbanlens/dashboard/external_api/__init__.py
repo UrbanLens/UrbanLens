@@ -1,4 +1,5 @@
-"""The external-facing REST API surface for third-party applications.
+"""
+The external-facing REST API surface for third-party applications.
 
 Deliberately separate from the internal REST surface under ``dashboard/rest/`` (see
 ``dashboard/urls.py``): different auth (API key or OAuth2 access token, not session), different

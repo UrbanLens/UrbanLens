@@ -88,7 +88,8 @@ class LabelCollectionTests(LabelApiTestCase):
         self.assertNotIn("Theirs", names)
 
     def test_effective_fields_reflect_the_callers_customization(self) -> None:
-        """Proves the with_customizations_for prefetch is actually applied.
+        """
+        Proves the with_customizations_for prefetch is actually applied.
 
         Without it these fields do not error - they silently report the
         label's own styling instead of the caller's override.

@@ -1,4 +1,5 @@
-"""Yelp plugin: business details panel and Media-gallery photos for a pin's location.
+"""
+Yelp plugin: business details panel and Media-gallery photos for a pin's location.
 Both contributions share one fetch (see :class:`YelpPanelSource`), keyed by coordinates only - never by the pin or wiki's user-given name (see ``services.apis.locations.redata_points_of_interest_gateway`` for why)."""
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ if TYPE_CHECKING:
 
 
 def _business_from_poi(poi: dict[str, Any]) -> dict[str, Any]:
-    """Map a REData ``yelp`` points-of-interest row onto a Yelp-Fusion-shaped business dict.
+    """
+    Map a REData ``yelp`` points-of-interest row onto a Yelp-Fusion-shaped business dict.
 
     Args:
         poi: One ``PointOfInterestSerializer``-shaped row with ``provider="yelp"``.

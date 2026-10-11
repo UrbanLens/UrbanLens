@@ -19,7 +19,8 @@ class TextPart(BaseModel):
 
 
 class ImagePart(BaseModel):
-    """An image inside a multi-part message, as base64-encoded bytes.
+    """
+    An image inside a multi-part message, as base64-encoded bytes.
 
     Base64 rather than a URL on purpose: a URL would be something the inference service has to *fetch*, which is
     exactly the capability this tier is built to not have (see ``docs/AI_PIPELINE.md`` - the egress allowlist
@@ -35,7 +36,8 @@ MessagePart = Annotated[TextPart | ImagePart, Field(discriminator="type")]
 
 
 class Message(BaseModel):
-    """One user/assistant turn in the conversation.
+    """
+    One user/assistant turn in the conversation.
 
     The system prompt is never a message here - it is :attr:`InferenceRequest.system`, a separate top-level
     field, matching Anthropic's own API shape."""
@@ -60,7 +62,8 @@ class Message(BaseModel):
 
 
 class ToolSpec(BaseModel):
-    """A tool the model may call, in JSON-Schema form.
+    """
+    A tool the model may call, in JSON-Schema form.
 
     Maps 1:1 onto each provider SDK's own tool-declaration shape (Anthropic's ``tools=[{name, description,
     input_schema}]``, OpenAI's function-calling schema) and, not coincidentally, onto MCP's ``Tool`` type - see
@@ -87,7 +90,8 @@ ContentBlock = Annotated[TextBlock | ToolUseBlock, Field(discriminator="type")]
 
 
 class Usage(BaseModel):
-    """Token accounting, provider-reported when available.
+    """
+    Token accounting, provider-reported when available.
 
     Fields are ``None`` when the provider's response didn't include usage (not every Cloudflare Workers AI model
     does) - the caller falls back to its own token estimate rather than treating a missing count as zero cost."""
@@ -131,7 +135,8 @@ class ClassificationLabel(BaseModel):
 
 
 class ClassifyRequest(BaseModel):
-    """An image-classification call - image in, scored labels out.
+    """
+    An image-classification call - image in, scored labels out.
 
     Deliberately *not* an :class:`InferenceRequest`."""
 

@@ -1,4 +1,5 @@
-"""Read an nginx config as directives-in-blocks, rather than as text.
+"""
+Read an nginx config as directives-in-blocks, rather than as text.
 
 Every guard the repo had over these files was an `assertIn` against whole-file
 text, which cannot see which block a directive landed in - so a `limit_conn_zone`
@@ -56,7 +57,8 @@ def _unquote(token: str) -> str:
 
 
 def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
-    """Parse an nginx config into the block each directive sits in.
+    """
+    Parse an nginx config into the block each directive sits in.
 
     Args:
         text: The config file's contents.
@@ -74,7 +76,8 @@ def directives_by_context(text: str) -> list[tuple[tuple[str, ...], str, int]]:
 
 
 def directive_arguments(text: str, name: str) -> list[list[str]]:
-    """Every argument list given to *name*, in file order.
+    """
+    Every argument list given to *name*, in file order.
 
     ``directives_by_context`` answers where a directive sits; this answers what
     it was set to, which is what a ceiling written in one file and relied on by
@@ -91,7 +94,8 @@ def directive_arguments(text: str, name: str) -> list[list[str]]:
 
 
 def parsed_directives(text: str) -> list[tuple[tuple[tuple[str, ...], ...], list[str], int]]:
-    """Parse an nginx config into ``(context, tokens, line)`` triples.
+    """
+    Parse an nginx config into ``(context, tokens, line)`` triples.
 
     The context frames carry each enclosing block's whole header, not just its
     name, so ``location /_protected_media/`` is distinguishable from any other
@@ -133,7 +137,8 @@ def parsed_directives(text: str) -> list[tuple[tuple[tuple[str, ...], ...], list
 
 
 def misplaced_directives(text: str) -> list[tuple[str, tuple[str, ...], int]]:
-    """Report directives nginx would refuse in the block they appear in.
+    """
+    Report directives nginx would refuse in the block they appear in.
 
     Only the contexts with a small closed directive set are judged, so this
     stays a statement about nginx rather than a re-implementation of it.

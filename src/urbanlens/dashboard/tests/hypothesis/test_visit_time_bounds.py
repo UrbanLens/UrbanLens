@@ -43,7 +43,8 @@ class VisitTimeSerializerTests(TestCase):
         self.assertIn("visited_at", serializer.errors)
 
     def test_a_clock_a_little_fast_is_tolerated(self) -> None:
-        """A client's clock is its own; a phone a minute fast is not lying.
+        """
+        A client's clock is its own; a phone a minute fast is not lying.
 
         The tolerance is what keeps this a check on the *date* rather than a
         trap for anybody whose device is not perfectly synchronised.
@@ -77,7 +78,8 @@ class VisitTimeServiceTests(TestCase):
         self.assertIsNotNone(visit.pk)
 
     def test_a_refused_visit_does_not_move_last_visited(self) -> None:
-        """The reason this matters at all.
+        """
+        The reason this matters at all.
 
         `last_visited` is what the pin list sorts on and what the detail page shows."""
         create_manual_visit(self.pin, visited_at=timezone.now() - datetime.timedelta(days=1))

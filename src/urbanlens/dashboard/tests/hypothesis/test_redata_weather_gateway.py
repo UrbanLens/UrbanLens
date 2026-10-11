@@ -1,4 +1,5 @@
-"""Tests for RedataWeatherGateway against REData's shipped contract
+"""
+Tests for RedataWeatherGateway against REData's shipped contract
 (``../REData/docs/api-reference.md``, "GET /weather/ - conditions, forecast and sun times for a point").
 """
 

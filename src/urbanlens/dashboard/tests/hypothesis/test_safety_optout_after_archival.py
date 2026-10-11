@@ -1,4 +1,5 @@
-"""An opt-out made from an emailed link after a check-in is archived still stops future alerts to that person.
+"""
+An opt-out made from an emailed link after a check-in is archived still stops future alerts to that person.
 
 Archival scrubs a typed-in contact's address, so the link used to record its opt-out against a placeholder and the
 person could be added, and alerted, again. A keyed hash of the address, kept on the archived contact, is what the

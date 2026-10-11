@@ -172,7 +172,8 @@ class _SameParcelChain:
 
 
 class UnconfirmedOutlineTests(TestCase):
-    """An outline the provider chain no longer returns at its own coordinate is wrong, not subdivided.
+    """
+    An outline the provider chain no longer returns at its own coordinate is wrong, not subdivided.
 
     HRSH's legacy 102.9 km² parcel held 99 locations across many real parcels. Treating its
     correction as a split would join every successor into one access family and grandfather grants

@@ -467,7 +467,8 @@ class DirectMessageEndpointTests(TestCase):
         self.assertTrue(message.reactions.filter(emoji="🔥").exists())
 
     def test_react_with_html_payload_rejected(self) -> None:
-        """A reaction is broadcast to and rendered by the other party, so an
+        """
+        A reaction is broadcast to and rendered by the other party, so an
         emoji carrying markup/JS must be refused before it is ever stored."""
         message = DirectMessage.objects.create(sender=self.partner, recipient=self.me, body="hi")
         response = self.client.post(
@@ -559,7 +560,8 @@ class ConversationPaginationTests(TestCase):
 
 
 class ThreadRenderingRegressionTests(TestCase):
-    """Regression coverage for a reported "no longer see X" batch of complaints: per-message controls, timestamps, and date-separator headers between days.
+    """
+    Regression coverage for a reported "no longer see X" batch of complaints: per-message controls, timestamps, and date-separator headers between days.
 
     Investigated first: the hover-reveal CSS for .dm-bubble__menu-btn/.dm-bubble__time (opacity: 0 until
     hover/focus/tap) predates every change in this session by over a week, and the group-chat commit touched
@@ -627,7 +629,8 @@ class ThreadRenderingRegressionTests(TestCase):
 
 
 class ThreadMapAttachmentRenderingTests(TestCase):
-    """Each map-carrying message must render its own snapshot/dialog DOM ids.
+    """
+    Each map-carrying message must render its own snapshot/dialog DOM ids.
 
     Regression: `_message_items.html` built the viewer id with `"dm-"|add:message.id`."""
 
@@ -666,7 +669,8 @@ class ThreadMapAttachmentRenderingTests(TestCase):
 
 
 class NotificationChannelPreferenceTests(TestCase):
-    """The `message` delivery preference actually selects the channels used.
+    """
+    The `message` delivery preference actually selects the channels used.
 
     Regression: _notify_recipient only skipped the in-app row for NONE, so a user who chose "Email" (not
     "Notification and email") still got bell notifications."""
@@ -725,7 +729,8 @@ class NotificationChannelPreferenceTests(TestCase):
 
 
 class MessageTextAlertTests(TestCase):
-    """The message_whatsapp/message_sms toggles actually deliver.
+    """
+    The message_whatsapp/message_sms toggles actually deliver.
 
     Regression: the preference booleans were stored and settable but no delivery code ever read them - enabling
     "new message -> WhatsApp/SMS" silently did nothing."""
@@ -800,7 +805,8 @@ class MessageTextAlertTests(TestCase):
         self.assertIn(self.sender.username, body)
 
     def test_alert_body_masks_a_sender_the_recipient_cant_view(self) -> None:
-        """Same recipient-scoped masking as the thread/bell/email paths - the
+        """
+        Same recipient-scoped masking as the thread/bell/email paths - the
         text alert goes out-of-band through a carrier, so a hidden sender's
         real username must not appear there either."""
         from urbanlens.dashboard.services.messaging.direct_messages import (
@@ -832,7 +838,8 @@ class MessageTextAlertTests(TestCase):
 
 
 class SelfDeletedMessageVisibilityTests(TestCase):
-    """Messages deleted-for-self stay out of the sidebar preview and unread badge.
+    """
+    Messages deleted-for-self stay out of the sidebar preview and unread badge.
 
     Regression: conversation_rows/unread_conversation_count ran on the raw involving() set, so a message the
     recipient had removed from their own view could still light the navbar badge and surface as the sidebar's
@@ -871,7 +878,8 @@ class SelfDeletedMessageVisibilityTests(TestCase):
         self.assertEqual(conversations_for(self.me), [])
 
     def test_self_deleted_message_stays_out_of_the_thread_page_too(self) -> None:
-        """Regression: thread_page() (reopening/scrolling a conversation) queried
+        """
+        Regression: thread_page() (reopening/scrolling a conversation) queried
         between() directly, without visible_to() - so a "remove for me" delete
         stuck in the sidebar/badge but reappeared the moment the thread reloaded.
         """
@@ -889,7 +897,8 @@ class SelfDeletedMessageVisibilityTests(TestCase):
 
 
 class SenderOwnDeletedForEveryoneVisibilityTests(TestCase):
-    """visible_to() must never hide a sender's own sent message from themselves.
+    """
+    visible_to() must never hide a sender's own sent message from themselves.
 
     Regression found while adding SelfDeletedMessageVisibilityTests above: the pre-existing `visible_to()`
     filter gated the SENDER's own rows on `deleted_by_sender_at__isnull=True` too - so once a sender used
@@ -968,7 +977,8 @@ class DeleteMessageForEveryoneRedactsNotificationTests(TestCase):
 
 
 class UnreadDropdownScalingTests(TestCase):
-    """The navbar dropdown shows at most eight unread rows.
+    """
+    The navbar dropdown shows at most eight unread rows.
 
     A user with hundreds of conversations paid for all of them on every `msgOpen`, and the empty-state flag
     ("all caught up" vs "no messages yet") was answered by testing the length of that same list."""

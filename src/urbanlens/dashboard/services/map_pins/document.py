@@ -1,4 +1,5 @@
-"""One account's map pins as a single streamed document.
+"""
+One account's map pins as a single streamed document.
 NDJSON rather than a JSON array: the client can split a `ReadableStream` on newlines in a few dozen lines, each line is a complete value, and a missing `end` line detects a truncated response, which a bare array cannot."""
 
 from __future__ import annotations
@@ -52,7 +53,8 @@ _BUILD_CLAIM_SECONDS = 120
 
 
 def document_etag(profile: Profile) -> tuple[str, int]:
-    """The document's identity, and how many pins it would carry.
+    """
+    The document's identity, and how many pins it would carry.
     Derived rather than stored: a hash over the pin collection's fingerprint and the two version numbers.
 
     Args:
@@ -73,7 +75,8 @@ def stream(
     total: int,
     decorate: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
 ) -> Iterator[bytes]:
-    """Serialize the document one batch at a time.
+    """
+    Serialize the document one batch at a time.
 
     Args:
         profile: Whose pins these are.
@@ -126,7 +129,8 @@ def stream(
 
 
 def paged_header(total: int, etag: str) -> bytes:
-    """A one-line document telling the client to use the paged endpoint.
+    """
+    A one-line document telling the client to use the paged endpoint.
 
     Args:
         total: How many pins the account holds.
@@ -139,7 +143,8 @@ def paged_header(total: int, etag: str) -> bytes:
 
 
 def max_pins() -> int:
-    """Largest account served as one document.
+    """
+    Largest account served as one document.
 
     Returns:
         The configured ceiling.
@@ -148,7 +153,8 @@ def max_pins() -> int:
 
 
 def _line(value: dict[str, Any]) -> bytes:
-    """Encode one NDJSON line.
+    """
+    Encode one NDJSON line.
 
     Args:
         value: The object to encode.
@@ -160,7 +166,8 @@ def _line(value: dict[str, Any]) -> bytes:
 
 
 def make_binary_client() -> Any:
-    """A Dragonfly client that does not decode what it reads.
+    """
+    A Dragonfly client that does not decode what it reads.
     Documents are stored gzipped, so the client must not try to read what it gets back as UTF-8.
 
     Returns:
@@ -172,7 +179,8 @@ def make_binary_client() -> Any:
 
 
 class MapDocumentCache:
-    """Gzipped documents in Dragonfly, keyed by the content they hold.
+    """
+    Gzipped documents in Dragonfly, keyed by the content they hold.
     The key contains the ETag, and the ETag is a pure function of the content, so two builders racing write identical bytes."""
 
     PREFIX = "ul:map-doc"
@@ -182,7 +190,8 @@ class MapDocumentCache:
         self.client = client if client is not None else make_binary_client()
 
     def key(self, etag: str) -> str:
-        """Where one version of this profile's document lives.
+        """
+        Where one version of this profile's document lives.
 
         Args:
             etag: The document's identity.
@@ -194,7 +203,8 @@ class MapDocumentCache:
 
     @staticmethod
     def ttl() -> int:
-        """How long an entry lives.
+        """
+        How long an entry lives.
 
         Returns:
             Seconds, or 0 when the cache is disabled.
@@ -203,7 +213,8 @@ class MapDocumentCache:
 
     @staticmethod
     def _decoded(stored: Any) -> bytes:
-        """Normalise whatever the client returned into bytes.
+        """
+        Normalise whatever the client returned into bytes.
 
         Args:
             stored: A value read back from the cache.
@@ -214,7 +225,8 @@ class MapDocumentCache:
         return stored.encode("latin-1") if isinstance(stored, str) else bytes(stored)
 
     def get(self, etag: str) -> bytes | None:
-        """The stored document for this exact version, if there is one.
+        """
+        The stored document for this exact version, if there is one.
 
         Args:
             etag: The document's identity.
@@ -233,7 +245,8 @@ class MapDocumentCache:
         return self._decoded(stored)
 
     def claim_build(self) -> bool:
-        """Whether this caller should be the one to enqueue a build.
+        """
+        Whether this caller should be the one to enqueue a build.
         Keyed on the account rather than the version for that reason.
 
         Returns:
@@ -246,7 +259,8 @@ class MapDocumentCache:
             return True
 
     def set(self, etag: str, body: bytes) -> bool:
-        """Store a built document, if nobody else already did.
+        """
+        Store a built document, if nobody else already did.
 
         Args:
             etag: The document's identity.
@@ -269,7 +283,8 @@ def build_and_store(
     *,
     decorate: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None,
 ) -> int:
-    """Build a profile's document and cache it.
+    """
+    Build a profile's document and cache it.
     Holds the whole document in memory, so it belongs in a worker rather than in a request - the streaming path above exists precisely so a request never has to.
 
     Args:

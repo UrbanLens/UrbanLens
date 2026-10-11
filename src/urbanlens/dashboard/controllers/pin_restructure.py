@@ -1,4 +1,5 @@
-"""One suggestion, offered once per pin: organize this property's hierarchy.
+"""
+One suggestion, offered once per pin: organize this property's hierarchy.
 
 Pinning a campus is one click; modelling it properly is a hundred more.
 
@@ -29,7 +30,8 @@ if TYPE_CHECKING:
 
 
 def _poll_attempt(request: HttpRequest) -> int:
-    """Which poll cycle this request is (0 for the initial load).
+    """
+    Which poll cycle this request is (0 for the initial load).
 
     Mirrors ``PinController._poll_attempt`` - the suggestion shares the panel machinery's poll budget
     without being a panel itself.
@@ -69,7 +71,8 @@ def _selected_buildings(request: HttpRequest, buildings: list[dict]) -> list[dic
 
 
 def _nestable_rows(nestable: list[Pin]) -> list[dict]:
-    """Per-candidate context for the dialog's "Pins on this property" list.
+    """
+    Per-candidate context for the dialog's "Pins on this property" list.
 
     Args:
         nestable: Candidates still worth offering (``plan.nestable``).
@@ -184,7 +187,8 @@ class PinRestructureOfferView(LoginRequiredMixin, View):
 
 
 class PinRestructureDismissView(LoginRequiredMixin, View):
-    """POST: decline the suggestion, for this pin or for every pin.
+    """
+    POST: decline the suggestion, for this pin or for every pin.
 
     ``?scope=all`` is the dialog's "Don't show again" - it turns the owner's ``suggest_pin_restructure``
     setting off, so the suggestion stops appearing everywhere, and still marks this pin so the setting
@@ -206,7 +210,8 @@ class PinRestructureDismissView(LoginRequiredMixin, View):
 
 
 class PinRestructureApplyView(LoginRequiredMixin, View):
-    """GET the chooser; POST selected buildings and matching top-level pins.
+    """
+    GET the chooser; POST selected buildings and matching top-level pins.
 
     Idempotent in the way that matters: the plan is recomputed here rather than trusted from the page,
     so buildings pinned (or pins nested) since the dialog rendered are simply skipped.
@@ -257,7 +262,8 @@ def _queue_wiki_mirror(pin, buildings) -> None:
 
 
 class PinBuildingImportView(LoginRequiredMixin, View):
-    """GET the chooser; POST selected unpinned buildings on this property.
+    """
+    GET the chooser; POST selected unpinned buildings on this property.
 
     The "Buildings on this Property" panel's own action, distinct from the restructure suggestion above:
     always available (never dismissed), and scoped strictly to buildings - it never re-parents anything.

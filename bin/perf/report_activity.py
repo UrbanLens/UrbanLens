@@ -47,7 +47,8 @@ class ActivitySummary:
 
 
 def load(path: Path) -> list[dict[str, str]]:
-    """Read the sampler CSV.
+    """
+    Read the sampler CSV.
 
     Args:
         path: The CSV written by ``pg_activity_sampler.sh``.
@@ -59,7 +60,8 @@ def load(path: Path) -> list[dict[str, str]]:
 
 
 def summarise(rows: list[dict[str, str]]) -> ActivitySummary:
-    """Reduce the samples to a peak, a breakdown, and a pressure verdict.
+    """
+    Reduce the samples to a peak, a breakdown, and a pressure verdict.
 
     Args:
         rows: Parsed CSV rows.
@@ -96,7 +98,8 @@ def summarise(rows: list[dict[str, str]]) -> ActivitySummary:
 
 
 def render(summary: ActivitySummary) -> str:
-    """Format the summary for a terminal.
+    """
+    Format the summary for a terminal.
 
     Args:
         summary: What :func:`summarise` produced.
@@ -125,7 +128,8 @@ def render(summary: ActivitySummary) -> str:
 
 
 def count_refusals(path: Path) -> int:
-    """How many times the database refused a connection, per its log.
+    """
+    How many times the database refused a connection, per its log.
 
     Args:
         path: A file holding the database container's log.
@@ -137,7 +141,8 @@ def count_refusals(path: Path) -> int:
 
 
 def failures(summary: ActivitySummary, refusals: int) -> list[str]:
-    """Why this run should fail, if it should.
+    """
+    Why this run should fail, if it should.
 
     Args:
         summary: What :func:`summarise` produced.
@@ -158,7 +163,8 @@ def failures(summary: ActivitySummary, refusals: int) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Print a summary of one sampler CSV.
+    """
+    Print a summary of one sampler CSV.
 
     Args:
         argv: Command-line arguments, for testing.

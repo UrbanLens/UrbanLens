@@ -1,4 +1,5 @@
-"""Viewing a profile must not cost a query per place the two accounts share.
+"""
+Viewing a profile must not cost a query per place the two accounts share.
 
 ``common_pin_location_ids`` picks one representative ``Location`` per shared
 place, and picked it with a ``.first()`` per place - so the profile page ran a

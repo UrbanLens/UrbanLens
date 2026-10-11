@@ -41,7 +41,8 @@ logger = logging.getLogger(__name__)
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
-    """Attach a showToast HX-Trigger to a response.
+    """
+    Attach a showToast HX-Trigger to a response.
 
     Args:
         response: The response to annotate.
@@ -58,7 +59,8 @@ def _show_toast(response: HttpResponse, message: str, level: str = "success") ->
 
 
 def _annotated(aliases, current_name: str | None):
-    """Mark each alias with whether it is the current name.
+    """
+    Mark each alias with whether it is the current name.
 
     Args:
         aliases: Alias queryset ordered for display.
@@ -108,7 +110,8 @@ def _render_pin_panel(request, pin: Pin) -> HttpResponse:
 
 
 def _render_location_panel(request, location: Location, wiki: Wiki, profile: Profile) -> HttpResponse:
-    """Render the wiki aliases panel with current-name annotation.
+    """
+    Render the wiki aliases panel with current-name annotation.
 
     Takes the profile rather than re-deriving it from the request: every caller has just had one back
     from ``resolve_visible_wiki``, and a second derivation can disagree with the first.

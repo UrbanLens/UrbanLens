@@ -1,4 +1,5 @@
-"""One marker per physical building, from a parcel's building records.
+"""
+One marker per physical building, from a parcel's building records.
 
 REData reports buildings it could not reconcile as separate records - an ``overlap_refs`` pair, two points a
 few metres apart - and the Overpass fallback reconciles nothing. A marker per record would put two pins on
@@ -83,7 +84,8 @@ def _record_point(building: dict[str, Any]) -> tuple[float, float] | None:
 
 
 def marker_point(building: dict[str, Any], boundary: GEOSGeometry | None = None) -> tuple[float, float] | None:
-    """Where a building's marker goes: on the building, and on the property.
+    """
+    Where a building's marker goes: on the building, and on the property.
 
     A record's own coordinate is its footprint's centroid, which can fall outside a concave footprint (a
     U-shaped ward block) or outside the parcel (a building straddling the lot line). A marker there would
@@ -176,7 +178,8 @@ class BuildingCluster:
         return site_scope.meters_between(self.latitude, self.longitude, latitude, longitude)
 
     def holding_footprint(self, latitude: float, longitude: float) -> GEOSGeometry | None:
-        """The smallest member footprint a coordinate is on, or None.
+        """
+        The smallest member footprint a coordinate is on, or None.
 
         Args:
             latitude: The coordinate's latitude.
@@ -194,7 +197,8 @@ class BuildingCluster:
         return min([self.distance_to(latitude, longitude), *(site_scope.meters_between(lat, lng, latitude, longitude) for lat, lng in self._points)])
 
     def covers(self, latitude: float, longitude: float) -> bool:
-        """Whether a marker at this coordinate already stands for this building.
+        """
+        Whether a marker at this coordinate already stands for this building.
 
         Args:
             latitude: The marker's latitude.
@@ -212,7 +216,8 @@ def _overlap_refs(building: dict[str, Any]) -> set[str]:
 
 
 def _same_building(building: dict[str, Any], footprint: GEOSGeometry | None, point: tuple[float, float], cluster: BuildingCluster) -> bool:
-    """Whether a sibling record describes the building a cluster's representative already stands for.
+    """
+    Whether a sibling record describes the building a cluster's representative already stands for.
 
     Compared against the representative only, never every member, so a row of terraced outbuildings each
     close to the next cannot chain into one cluster.
@@ -252,7 +257,8 @@ class _Entry:
 
 
 def cluster_buildings(buildings: Sequence[dict[str, Any]], boundary: GEOSGeometry | None = None) -> list[BuildingCluster]:
-    """Group building records into one cluster per physical building, parents before their children.
+    """
+    Group building records into one cluster per physical building, parents before their children.
 
     Records are only ever grouped with siblings - REData's ``parent_ref`` nesting is a verified "these are
     different buildings", so a wing never merges into the block it is part of. Siblings join when REData
@@ -333,7 +339,8 @@ def _same_point(a: Marker, b: Marker) -> bool:
 
 
 def match_clusters[M: Marker](clusters: Sequence[BuildingCluster], markers: Sequence[M]) -> tuple[dict[int, M], list[M]]:
-    """Pair clusters with the markers already standing for them, each marker claimed at most once.
+    """
+    Pair clusters with the markers already standing for them, each marker claimed at most once.
 
     A marker placed exactly on a cluster's marker point is claimed first, so a re-sweep recognises its own
     earlier pins however the records' refs have changed since. The rest are paired closest first, most deeply

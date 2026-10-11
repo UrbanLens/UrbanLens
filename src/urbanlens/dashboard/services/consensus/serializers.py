@@ -57,7 +57,8 @@ def serialize_answer(answer: ConsensusAnswer) -> dict[str, Any]:
 
 
 def serialize_round_reveal(round_: ConsensusRound) -> dict[str, Any]:
-    """The outcome + every participant's result - broadcast/returned once a round settles.
+    """
+    The outcome + every participant's result - broadcast/returned once a round settles.
     ``vote_options`` is only populated while ``resolution`` is ``VOTE_OPEN`` - the distinct candidate values participants can vote for, each carrying the ``ConsensusAnswer`` id a vote must reference."""
     answers = round_.answers.select_related("profile__user").order_by("submitted_at")
     data: dict[str, Any] = {

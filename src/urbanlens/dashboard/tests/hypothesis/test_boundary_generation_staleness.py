@@ -28,7 +28,8 @@ _hyp = hyp_settings(max_examples=30, deadline=None)
 
 
 def _resolved(location: Location, *, age_days: float, polygon=None) -> Location:
-    """Point a Location at a place resolved ``age_days`` ago.
+    """
+    Point a Location at a place resolved ``age_days`` ago.
 
     ``polygon=None`` models the real "the providers were asked and had nothing"
     case: the location is stamped as resolved but sits on no known place.

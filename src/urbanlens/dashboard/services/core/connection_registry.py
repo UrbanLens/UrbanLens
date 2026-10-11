@@ -1,4 +1,5 @@
-"""Which live connections an identity holds, as a sorted set that forgets dead ones.
+"""
+Which live connections an identity holds, as a sorted set that forgets dead ones.
 
 One member per connection, scored by when it last renewed. A worker that dies
 mid-connection never removes its members, so anything counted as "open" is only
@@ -31,7 +32,8 @@ _client_built = False
 
 
 def store_client() -> redis.Redis | None:
-    """One shared raw client, or None when no store is configured.
+    """
+    One shared raw client, or None when no store is configured.
 
     Raw rather than Django's cache API, which has no sorted sets. Shared because
     ``from_url`` builds a pool per call and this runs on every connect and disconnect.
@@ -50,7 +52,8 @@ def store_client() -> redis.Redis | None:
 
 @dataclass(frozen=True, slots=True)
 class ConnectionRegistry:
-    """Live connections per identity.
+    """
+    Live connections per identity.
 
     Attributes:
         prefix: Namespaces this registry's keys.
@@ -75,7 +78,8 @@ class ConnectionRegistry:
         return f"{self.prefix}:{identity}"
 
     def add(self, identity: str, connection_id: str) -> int | None:
-        """Register a connection and return how many live ones *identity* now holds.
+        """
+        Register a connection and return how many live ones *identity* now holds.
 
         Args:
             identity: Who holds it.
@@ -100,7 +104,8 @@ class ConnectionRegistry:
             return None
 
     def remove(self, identity: str, connection_id: str) -> None:
-        """Forget a connection. Left to age out when the store cannot be reached.
+        """
+        Forget a connection. Left to age out when the store cannot be reached.
 
         Args:
             identity: Who held it.
@@ -115,7 +120,8 @@ class ConnectionRegistry:
             logger.warning("Could not remove connection for %s", self.key(identity), exc_info=True)
 
     def refresh(self, identity: str, connection_id: str) -> None:
-        """Renew a live connection so it is not aged out.
+        """
+        Renew a live connection so it is not aged out.
 
         Args:
             identity: Who holds it.
@@ -132,7 +138,8 @@ class ConnectionRegistry:
             logger.warning("Could not renew connection for %s", key, exc_info=True)
 
     def count(self, identity: str) -> int | None:
-        """How many live connections *identity* holds.
+        """
+        How many live connections *identity* holds.
 
         Args:
             identity: Whose connections to count.

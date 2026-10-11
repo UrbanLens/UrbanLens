@@ -10,7 +10,8 @@ if TYPE_CHECKING:
 
 
 class FieldSnapshot:
-    """The concrete column values of a loaded record, for saving only what an edit changed.
+    """
+    The concrete column values of a loaded record, for saving only what an edit changed.
 
     A handler that loads a row, applies some request fields and calls a bare ``save()`` writes every
     column back as it was loaded, reverting whatever another request wrote in between.
@@ -32,7 +33,8 @@ class FieldSnapshot:
         return [field for field in self.instance._meta.concrete_fields if not field.primary_key]  # noqa: SLF001
 
     def changed(self) -> list[str]:
-        """Names of the columns whose value differs from the snapshot.
+        """
+        Names of the columns whose value differs from the snapshot.
 
         Returns:
             Field names, in model declaration order.
@@ -40,7 +42,8 @@ class FieldSnapshot:
         return [field.name for field in self._fields() if getattr(self.instance, field.attname) != self._before[field.attname]]
 
     def save_changes(self) -> list[str]:
-        """Write only the changed columns, plus ``updated`` when the model has one; write nothing if none changed.
+        """
+        Write only the changed columns, plus ``updated`` when the model has one; write nothing if none changed.
 
         Returns:
             The changed field names.

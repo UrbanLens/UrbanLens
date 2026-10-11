@@ -1,4 +1,5 @@
-"""Extensible aggregation of a profile's "memories" - routes, trips, visits, photos.
+"""
+Extensible aggregation of a profile's "memories" - routes, trips, visits, photos.
 
 Each source function does its own date/bbox filtering on its own model's already-indexed
 fields, and contributes independently: one source failing omits its own events, never the feed.
@@ -45,7 +46,8 @@ class BBox(NamedTuple):
 
 @dataclass(frozen=True, slots=True)
 class MemoryEvent:
-    """One row in the unified Memories feed - the extensibility seam for new memory types.
+    """
+    One row in the unified Memories feed - the extensibility seam for new memory types.
 
     Attributes:
         type: One of "route", "trip", "visit", "photo".
@@ -80,7 +82,8 @@ _DEFAULT_SLICE = 200
 
 
 def _in_slices[RowT: Model](queryset: QuerySet[RowT], size: int | None) -> Iterator[RowT]:
-    """Rows of an ordered queryset, fetched one ``LIMIT``/``OFFSET`` slice at a time.
+    """
+    Rows of an ordered queryset, fetched one ``LIMIT``/``OFFSET`` slice at a time.
 
     Iterating a queryset loads every row before yielding the first, so ``islice`` over a plain
     ``for row in queryset`` bounds nothing. A consumer that stops here stops the reads too.
@@ -97,7 +100,8 @@ def _in_slices[RowT: Model](queryset: QuerySet[RowT], size: int | None) -> Itera
 
 
 def _slices[RowT: Model](queryset: QuerySet[RowT], size: int | None) -> Iterator[list[RowT]]:
-    """The slices :func:`_in_slices` reads, for a caller that works on a slice's rows together.
+    """
+    The slices :func:`_in_slices` reads, for a caller that works on a slice's rows together.
 
     Args:
         queryset: Rows in a total order, so consecutive slices neither repeat nor skip.
@@ -162,7 +166,8 @@ def _routes_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
 
 
 def _trip_representative_point(trip: Trip, hidden: set[int]) -> tuple[float, float] | None:
-    """Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity the viewer may see.
+    """
+    Return a representative (lat, lng) for a trip, from its earliest coordinate-bearing activity the viewer may see.
 
     A stop whose location is hidden from the viewer (*hidden*, from ``viewer_hidden_activity_ids``) is passed over:
     its point would place the trip on the map, and a ``bbox`` filter could find it.
@@ -335,7 +340,8 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
 
 
 def _event_sources() -> tuple[Callable[..., Iterator[MemoryEvent]], ...]:
-    """The registered memory sources, resolved fresh on each call.
+    """
+    The registered memory sources, resolved fresh on each call.
 
     A module-level tuple would capture these at import time, which both hides
     monkeypatching from tests and quietly defeats any later attempt to swap a source.
@@ -349,7 +355,8 @@ def _event_sources() -> tuple[Callable[..., Iterator[MemoryEvent]], ...]:
 
 
 def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None, limit: int | None = None, before: datetime | None = None) -> list[MemoryEvent]:
-    """Merge every registered event source over [start, end], sorted newest-first.
+    """
+    Merge every registered event source over [start, end], sorted newest-first.
 
     Args:
         profile: The profile whose memories to fetch.

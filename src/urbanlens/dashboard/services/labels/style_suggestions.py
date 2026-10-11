@@ -66,7 +66,8 @@ def suggest_label_style(name: str, profile: Profile) -> LabelStyleSuggestion:
 
 
 def resolve_or_create_styled_label(profile: Profile, name: str, kind: str) -> tuple[Label, bool]:
-    """Resolve *name* as ``Label.objects.resolve_or_create`` does, giving a label it creates an AI-suggested icon and colour.
+    """
+    Resolve *name* as ``Label.objects.resolve_or_create`` does, giving a label it creates an AI-suggested icon and colour.
 
     The suggestion is a model call, so only for callers off the request path.
 

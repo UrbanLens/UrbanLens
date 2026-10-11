@@ -36,7 +36,8 @@ class PinAliasViewTestsBase(TestCase):
 
 
 class PinDetailHasEverUsedAliasesContextTests(TestCase):
-    """has_ever_used_aliases (drives the aliases onboarding card) is profile-wide.
+    """
+    has_ever_used_aliases (drives the aliases onboarding card) is profile-wide.
 
     Regression coverage: it used to be scoped per-pin (checking only the viewed pin's own alias list), so a user
     who had thoroughly used the alias feature on other pins still got nagged with "Save private alternate names
@@ -165,7 +166,8 @@ class PinAliasNicknameTests(PinAliasViewTestsBase):
         self.assertEqual(self.pin.aliases.filter(name__iexact="existing name").count(), 1)
 
     def test_create_alias_that_sanitizes_to_empty_is_rejected(self) -> None:
-        """A name made only of stripped characters must be rejected with 400, not crash.
+        """
+        A name made only of stripped characters must be rejected with 400, not crash.
 
         ``create_pin_alias`` sanitizes the name internally and raises ``ValueError`` when nothing survives (see
         ``test_alias_name_validation.py``), but this view's own pre-check only catches an *already*-empty
@@ -251,7 +253,8 @@ class LocationAliasNicknameTests(TestCase):
         self.assertEqual(self.wiki.aliases.filter(name__iexact="existing name").count(), 1)
 
     def test_create_alias_that_sanitizes_to_empty_is_rejected(self) -> None:
-        """A name made only of stripped characters must not silently become a blank alias.
+        """
+        A name made only of stripped characters must not silently become a blank alias.
 
         Contrast with ``PinAliasNicknameTests.test_create_alias_that_sanitizes_to_empty_is_rejected``: this view
         sanitizes *before* checking for emptiness, precisely to avoid the bug that check reproduces on the pin
@@ -275,7 +278,8 @@ class LocationAliasNicknameTests(TestCase):
 
 
 class PersistOfficialAliasesForLocationBackfillsPinsTests(TestCase):
-    """persist_official_aliases_for_location() backfills the named account's PinAlias rows too, not just WikiAlias.
+    """
+    persist_official_aliases_for_location() backfills the named account's PinAlias rows too, not just WikiAlias.
 
     A pin whose location's names were cached by something other than its own panel fetch (background enrichment,
     another account's pin at the same location) takes them when its owner opens the aliases panel.
@@ -370,7 +374,8 @@ class AliasPanelHeaderTitleAlignmentTests(TestCase):
 
 
 class LocationAliasUseGoesThroughTheServiceTests(TestCase):
-    """The wiki "use this name" view must not re-implement the rename itself.
+    """
+    The wiki "use this name" view must not re-implement the rename itself.
 
     Both are covered here so a future re-inlining of the logic fails loudly rather than quietly reintroducing
     them."""
@@ -385,7 +390,8 @@ class LocationAliasUseGoesThroughTheServiceTests(TestCase):
         self.client.force_login(self.user)
 
     def test_promoting_the_name_the_wiki_already_has_writes_no_history(self) -> None:
-        """A no-op rename must leave the audit trail untouched.
+        """
+        A no-op rename must leave the audit trail untouched.
 
         The old inline version always wrote a ``WikiEdit``, so promoting the alias that was already the name
         produced a junk ``{"name": {"from": "X", "to": "X"}}`` row."""
@@ -401,7 +407,8 @@ class LocationAliasUseGoesThroughTheServiceTests(TestCase):
         self.assertNotIn("HX-Trigger", response.headers)
 
     def test_announced_name_is_the_one_that_was_actually_stored(self) -> None:
-        """The toast and the wikiRenamed event must report the sanitized name.
+        """
+        The toast and the wikiRenamed event must report the sanitized name.
 
         ``Wiki.save()`` runs the incoming name through ``sanitize_name``, so the alias text and the stored name
         can differ."""

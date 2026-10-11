@@ -39,7 +39,8 @@ class AdminUserDeletionGuardTests(TestCase):
         return profile.deletion_scheduled_for is not None
 
     def test_a_correct_confirmation_schedules_deletion(self) -> None:
-        """The control: without this, every guard test below could pass because
+        """
+        The control: without this, every guard test below could pass because
         deletion never works at all."""
         self._post(action="request_delete", user_id=self.target.pk, confirm_text="zzaudit-target")
 

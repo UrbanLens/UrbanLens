@@ -58,7 +58,8 @@ class MemorySourceIsolationTests(TestCase):
             self.assertEqual(self._events(), [])
 
     def test_a_source_that_fails_midway_keeps_what_it_already_yielded(self) -> None:
-        """The sources are generators - a failure partway through must not discard
+        """
+        The sources are generators - a failure partway through must not discard
         the events it had already produced, nor the other sources' events."""
 
         def half_broken(profile, start, end, bbox, before=None, *, limit=None):

@@ -1,4 +1,5 @@
-"""Migration 0068 gives a rate-limit row still holding any earlier release's defaults 0.9.0's, and leaves an edited row alone.
+"""
+Migration 0068 gives a rate-limit row still holding any earlier release's defaults 0.9.0's, and leaves an edited row alone.
 
 `get_limit_config` writes a service's defaults into its row only when it creates it. 0064 moved rows from 0.8.0's
 values to 0.9.0's; a row created by an older release kept whatever that release wrote. Overpass rows from v0.3.0b0 and
@@ -90,7 +91,8 @@ class TheFrozenDataTests(TestCase):
                 self.assertEqual(len({tuple(old.items()) for old in earlier}), len(earlier))
 
     def test_the_0_9_0_values_are_what_the_registry_declares(self) -> None:
-        """The migration writes frozen values, so a default changed after it would leave old rows a stale one, silently.
+        """
+        The migration writes frozen values, so a default changed after it would leave old rows a stale one, silently.
 
         A change to one of these services' defaults reaches no existing row by itself. If this fails, the change needs
         a migration of its own that moves rows from these values to the new ones, as this one does from earlier

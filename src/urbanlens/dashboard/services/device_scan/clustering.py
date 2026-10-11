@@ -56,7 +56,8 @@ def _haversine_meters(a: Point, b: Point) -> float:
 
 
 def weight_for_age(age: timedelta) -> float:
-    """Recency weight for an observation this old - halves every ``DECAY_HALF_LIFE_DAYS``.
+    """
+    Recency weight for an observation this old - halves every ``DECAY_HALF_LIFE_DAYS``.
 
     Args:
         age: How long ago the observation was made.
@@ -68,7 +69,8 @@ def weight_for_age(age: timedelta) -> float:
 
 
 def confidence_for_weight(total_weight: float) -> float:
-    """Saturating confidence score for a cluster's total accumulated weight.
+    """
+    Saturating confidence score for a cluster's total accumulated weight.
 
     Args:
         total_weight: Sum of every contributing entry's recency weight.
@@ -79,7 +81,8 @@ def confidence_for_weight(total_weight: float) -> float:
 
 
 def weighted_centroid(points_with_weights: Sequence[tuple[Point, float]]) -> Point:
-    """Weighted average position of a set of points.
+    """
+    Weighted average position of a set of points.
 
     Args:
         points_with_weights: Non-empty sequence of (point, weight) pairs.
@@ -95,7 +98,8 @@ def weighted_centroid(points_with_weights: Sequence[tuple[Point, float]]) -> Poi
 
 
 def weighted_radius_meters(points_with_weights: Sequence[tuple[Point, float]], centroid: Point) -> float:
-    """Weighted RMS spread (in meters) of a set of points around their centroid.
+    """
+    Weighted RMS spread (in meters) of a set of points around their centroid.
 
     Args:
         points_with_weights: Non-empty sequence of (point, weight) pairs.
@@ -120,7 +124,8 @@ class _WeightedEntry:
 
 
 def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEntry:
-    """Build a :class:`_WeightedEntry` from a persisted scan entry.
+    """
+    Build a :class:`_WeightedEntry` from a persisted scan entry.
 
     Args:
         entry: A ``detected=True`` scan entry, with its ``upload`` joined and ``readings`` prefetched.
@@ -166,7 +171,8 @@ def routed_to(wiki_id: int) -> Q:
 
 
 def _cluster_entries(entries: Sequence[_WeightedEntry]) -> list[list[_WeightedEntry]]:
-    """Greedily group entries within ``MERGE_DISTANCE_METERS`` of a growing cluster centroid.
+    """
+    Greedily group entries within ``MERGE_DISTANCE_METERS`` of a growing cluster centroid.
     Heaviest (most recent/most corroborated) entries seed clusters first, so a cluster's running centroid stabilizes quickly.
 
     Args:
@@ -212,7 +218,8 @@ def _match_existing_marker(candidates: Sequence[WikiDeviceMarker], centroid: Poi
 
 
 def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[WikiDeviceMarker]:
-    """Recompute this (device, wiki) pair's fuzzy marker(s) from scratch.
+    """
+    Recompute this (device, wiki) pair's fuzzy marker(s) from scratch.
 
     Args:
         device: The device whose markers on this wiki are being recomputed.
@@ -289,7 +296,8 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
 
 
 def recount_absence_reports(marker: WikiDeviceMarker) -> WikiDeviceMarker:
-    """Set *marker*'s absence count from the reports made since the device was last seen there.
+    """
+    Set *marker*'s absence count from the reports made since the device was last seen there.
 
     Counted from the scans themselves, each reporter once, so repeating a report adds nothing and a redelivered
     upload cannot count twice.

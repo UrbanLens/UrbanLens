@@ -1,4 +1,5 @@
-"""Migration 0067 raises ``google_calendar`` to 120 calls a minute in a row nobody edited, and leaves an edited row alone.
+"""
+Migration 0067 raises ``google_calendar`` to 120 calls a minute in a row nobody edited, and leaves an edited row alone.
 
 It also clears push marks on links without auto-sync, which no earlier release would have delivered and this one would.
 

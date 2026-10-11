@@ -30,7 +30,8 @@ from urbanlens.dashboard.services.undo.service import (
 
 
 def _expire(undo_action: UndoAction) -> None:
-    """Push ``undo_action`` past its retention window, simulating elapsed time.
+    """
+    Push ``undo_action`` past its retention window, simulating elapsed time.
 
     ``.update()`` bypasses the instance, so the caller's in-memory ``created`` (and therefore ``is_expired``)
     would still read fresh without the refresh - production callers always re-fetch the row, so the staleness is
@@ -398,7 +399,8 @@ class UndoClearViewTests(TestCase):
 
 
 class UndoDescriptionFitsItsColumnTests(TestCase):
-    """A legally-named object must still be deletable.
+    """
+    A legally-named object must still be deletable.
 
     `stash_for_undo` writes `handler.describe(instances)` into `UndoAction.object_repr`, a `CharField(255)`."""
 

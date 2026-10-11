@@ -11,7 +11,8 @@ from urbanlens.dashboard.external_api import schema as schema_module
 
 
 def _fake_extension(target_class):
-    """A fresh, throwaway class shaped like an OpenApiGeneratorExtension subclass.
+    """
+    A fresh, throwaway class shaped like an OpenApiGeneratorExtension subclass.
 
     `_load_class` only touches `target_class`/`optional` on whatever `cls` it is given - real inheritance is not
     required - so this proves the wrapper's locking behavior without registering a spurious entry in the real

@@ -54,7 +54,8 @@ def _stack_response(profile: Profile, *, ok: bool = True, error: str | None = No
 
 
 def _history_for_panel(profile: Profile) -> QuerySet[UndoAction]:
-    """The history the panel renders, without the column it never shows.
+    """
+    The history the panel renders, without the column it never shows.
 
     Deferred here rather than in `get_undo_history` because the external API shares that function and
     does serialize the payload, where a defer would cost one query per row.

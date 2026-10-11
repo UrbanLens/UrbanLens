@@ -24,7 +24,8 @@ _HEURISTIC = {"active": None, "ranker": "heuristic"}
 
 
 class ScrubPersonalKeysTests(SimpleTestCase):
-    """The boundary guard, tested on shapes the endpoint does not currently return.
+    """
+    The boundary guard, tested on shapes the endpoint does not currently return.
 
     That is the point: it is here for the version of REData that grows a
     per-person field, not the one documented today.
@@ -209,7 +210,8 @@ class SiteAdminModelsViewTests(RedataConfiguredMixin, TestCase):
 
 
 class ReputationIsNotConsumedTests(SimpleTestCase):
-    """The per-contributor endpoint must stay unused, not merely unwired today.
+    """
+    The per-contributor endpoint must stay unused, not merely unwired today.
 
     The first version of this guard could not fail: it globbed a directory that does not exist, so it reported
     success with a real consumer present."""
@@ -309,7 +311,8 @@ class ReputationIsNotConsumedTests(SimpleTestCase):
 
 
 class TheDiagnosticsPageSurvivesAnUnconfiguredRedataTests(SiteAdminModelsViewTests):
-    """Constructing the gateway raises before anything can report on it.
+    """
+    Constructing the gateway raises before anything can report on it.
 
     ``_model_summary`` is careful to report an unreachable REData rather than
     raise - "a diagnostics page that 500s when the thing it diagnoses is down is

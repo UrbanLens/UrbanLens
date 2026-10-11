@@ -44,7 +44,8 @@ SEARCH_HINTS_CACHE_SECONDS = 60 * 15
 
 
 def _verified_hints(profile: Profile) -> list[str]:
-    """Return up to MAX_SEARCH_HINTS candidate queries that actually return a result for this profile.
+    """
+    Return up to MAX_SEARCH_HINTS candidate queries that actually return a result for this profile.
 
     Args:
         profile: The requesting user's profile.
@@ -97,7 +98,8 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
     """The search dialog's swap target: suggestions when empty, results otherwise."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render suggestions (blank query) or grouped search results.
+        """
+        Render suggestions (blank query) or grouped search results.
 
         Args:
             request: GET with ``q`` (the query, may be blank).
@@ -136,14 +138,16 @@ class GlobalSearchPanelView(LoginRequiredMixin, View):
 
 
 class GlobalSearchHintsView(LoginRequiredMixin, View):
-    """Verified "Try searching for" example queries, loaded separately from the main panel so running
+    """
+    Verified "Try searching for" example queries, loaded separately from the main panel so running
     several candidate searches never delays the dialog opening - see _panel.html's hx-get on this view.
 
     GET /search/hints/ → the hint-buttons fragment.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render only the example queries confirmed to return a result.
+        """
+        Render only the example queries confirmed to return a result.
 
         Args:
             request: GET, no params.
@@ -160,14 +164,16 @@ class GlobalSearchHintsView(LoginRequiredMixin, View):
 
 
 class GlobalSearchCommitView(LoginRequiredMixin, View):
-    """Records a query into search history.
+    """
+    Records a query into search history.
 
     Called by the dialog when the user commits to a search - pressing Enter or clicking a result -
     rather than on every debounced keystroke, so history holds intentional searches instead of prefixes.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Remember ``q`` for the requesting user.
+        """
+        Remember ``q`` for the requesting user.
 
         Args:
             request: POST with ``q``.
@@ -188,7 +194,8 @@ class GlobalSearchHistoryDeleteView(LoginRequiredMixin, View):
     """Deletes one remembered search (or all of them) and re-renders the panel."""
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Delete history rows for the requesting user.
+        """
+        Delete history rows for the requesting user.
 
         Args:
             request: POST with either ``history_id`` (one row) or ``all=1``.

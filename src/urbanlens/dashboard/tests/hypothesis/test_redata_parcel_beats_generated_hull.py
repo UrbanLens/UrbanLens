@@ -46,7 +46,8 @@ class CheapResolutionMustNotClaimTheChainRanTests(TestCase):
         return baker.make(Location, latitude=CAMPUS_LAT, longitude=CAMPUS_LON)
 
     def test_finding_no_known_place_leaves_the_coordinate_unasked(self) -> None:
-        """The reported case: a pin on ground no place covers yet.
+        """
+        The reported case: a pin on ground no place covers yet.
 
         Stamping here is what told the rest of the system the chain had
         already run, so REData was never called for this coordinate at all.
@@ -77,7 +78,8 @@ class CheapResolutionMustNotClaimTheChainRanTests(TestCase):
         )
 
     def test_a_genuine_provider_miss_is_still_recorded_once(self) -> None:
-        """The behaviour the stamp exists for, which must survive the fix.
+        """
+        The behaviour the stamp exists for, which must survive the fix.
 
         A coordinate the providers genuinely know nothing about is asked about once and then left alone -
         otherwise every page view re-runs the whole chain against an answer that will not change."""
@@ -109,7 +111,8 @@ class ProviderGeometryOutranksOurOwnHullTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=self.location)
 
     def _hull_row(self) -> Boundary:
-        """The row ``refit_child_pin_boundary`` leaves behind, made directly.
+        """
+        The row ``refit_child_pin_boundary`` leaves behind, made directly.
 
         Built rather than provoked through the signal so the test states the
         state under test instead of depending on hierarchy-change plumbing.
@@ -150,7 +153,8 @@ class ProviderGeometryOutranksOurOwnHullTests(TestCase):
         self.assertIsNotNone(polygon)
 
     def test_a_drawing_of_the_users_own_still_wins(self) -> None:
-        """Precedence changed for machine-fitted geometry only.
+        """
+        Precedence changed for machine-fitted geometry only.
 
         A person who drew their own outline on this pin outranks every
         provider, and that must not have been disturbed.
@@ -166,7 +170,8 @@ class ProviderGeometryOutranksOurOwnHullTests(TestCase):
         self.assertEqual(source, "pin", "a user's own drawing was overridden by provider geometry")
 
     def test_geometry_we_did_not_fit_ourselves_keeps_its_precedence(self) -> None:
-        """Only ``generated_from_children`` rows are stand-ins.
+        """
+        Only ``generated_from_children`` rows are stand-ins.
 
         A generated row that is not a hull around our own markers - the pre-places location default among them -
         is not this defect and keeps the precedence it had."""
@@ -198,7 +203,8 @@ class ArrivingGeometrySupersedesTheStandInTests(TestCase):
         self.child = baker.make(Pin, profile=self.profile, location=self.child_location, parent_pin=self.pin)
 
     def test_the_refit_drops_a_hull_that_a_parcel_has_superseded(self) -> None:
-        """ "Replace it right away" - not at the next cache expiry.
+        """
+        "Replace it right away" - not at the next cache expiry.
 
         The hull here is the one the child-pin signal fitted during setUp, not
         a constructed stand-in: this is the exact row the deployment had.

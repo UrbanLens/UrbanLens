@@ -1,4 +1,5 @@
-"""The sixteen tiles every map draws behind its base, and why they are kept far longer than a tile.
+"""
+The sixteen tiles every map draws behind its base, and why they are kept far longer than a tile.
 
 ``frontend/ts/shared/map-layers.ts`` fills the gap a zoom opens with a blurred picture of the world
 cut from the active base's own tiles. It asks for the whole world at ``z=2`` - sixteen tiles - and
@@ -42,7 +43,8 @@ class UnderlayDepthTests(SimpleTestCase):
             self.assertEqual(basemap_tiles._ttl_for(z), basemap_tiles._TILE_CACHE_TTL, f"z={z}")
 
     def test_an_absence_is_never_kept_as_long_as_bytes(self) -> None:
-        """Bytes at this depth will not change. "No such tile" is a claim about the vendor on one
+        """
+        Bytes at this depth will not change. "No such tile" is a claim about the vendor on one
         day, and a wrong one is a quadrant of every underlay on the site missing until it expires."""
         for z in (0, _WORLD_ZOOM, 12):
             self.assertLessEqual(basemap_tiles._ttl_for_absence(z), basemap_tiles._TILE_CACHE_TTL, f"z={z}")
@@ -89,14 +91,16 @@ class UnderlayTileLifetimeTests(TestCase):
         self.assertIn(f"max-age={VENDOR_TILES['satellite'].browser_max_age}", first["Cache-Control"])
 
     def test_the_lifetime_survives_the_cache_hit(self) -> None:
-        """A header stamped only on the fresh path would quietly shorten to nothing the moment the
+        """
+        A header stamped only on the fresh path would quietly shorten to nothing the moment the
         tile was cached - which is every request after the first, i.e. all of them."""
         first, second, _ = self._get(_WORLD_ZOOM)
 
         self.assertEqual(second["Cache-Control"], first["Cache-Control"])
 
     def test_an_ordinary_tile_is_left_on_the_ordinary_lifetime(self) -> None:
-        """This is a narrow exemption for sixteen URLs per layer, not a site-wide change to how
+        """
+        This is a narrow exemption for sixteen URLs per layer, not a site-wide change to how
         long a basemap tile is held."""
         with mock.patch.object(
             basemap_tiles.bounded_cache, "set_if_small", wraps=basemap_tiles.bounded_cache.set_if_small

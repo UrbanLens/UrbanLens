@@ -1,4 +1,5 @@
-"""The Immich picker must download a library once, not once per pin.
+"""
+The Immich picker must download a library once, not once per pin.
 
 Immich exposes no coordinate-radius filter, so "photos near this pin" can only
 be answered by fetching every geolocated asset and measuring in Python - tens

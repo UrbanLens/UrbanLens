@@ -118,7 +118,8 @@ class BuildRoundTests(TestCase):
 
 
 class SerializeStreetViewTests(TestCase):
-    """The one mode whose round payload deliberately includes the answer's
+    """
+    The one mode whose round payload deliberately includes the answer's
     coordinates - see StreetViewPanorama's docstring for why."""
 
     def setUp(self) -> None:

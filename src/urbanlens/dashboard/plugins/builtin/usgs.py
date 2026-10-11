@@ -63,7 +63,8 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
         LocationCache.set(pin.location, self.cache_source, result or {}, query_key=f"{lat:.4f},{lng:.4f}")
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The nearby historical topo scans, as both a summary card and media items.
+        """
+        The nearby historical topo scans, as both a summary card and media items.
 
         Args:
             pin: The pin whose panel is being read.
@@ -100,7 +101,8 @@ class UsgsTopoPanelSource(LocationCachePanelSource):
 
     @staticmethod
     def _caption(topo_map: dict[str, Any]) -> str:
-        """Title plus survey year for one scanned map.
+        """
+        Title plus survey year for one scanned map.
         The year is what actually distinguishes two otherwise identically-named editions of the same quadrangle, so it is folded into the caption rather than left as a separate field the media contract has no room for.
 
         Args:

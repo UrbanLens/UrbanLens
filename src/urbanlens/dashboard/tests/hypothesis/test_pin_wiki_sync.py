@@ -98,7 +98,8 @@ class SendPinsToWikiTests(TestCase):
         self.assertEqual(wiki.child_wikis.count(), 1)
 
     def test_a_pin_at_the_parent_wikis_own_point_is_skipped_not_a_500(self) -> None:
-        """A child pin landing exactly on the parent wiki's own coordinate.
+        """
+        A child pin landing exactly on the parent wiki's own coordinate.
 
         `_location_for_child_wiki` refuses a second Location at a point that already carries a wiki
         (`ChildWikiLocationError`) - most often the parent wiki itself, since a parcel's own coordinate is
@@ -160,7 +161,8 @@ class SendPinsToWikiTests(TestCase):
 
 
 class BuildingFootprintMatchingTests(TestCase):
-    """Two building-typed markers match by REData's real footprint, not just proximity.
+    """
+    Two building-typed markers match by REData's real footprint, not just proximity.
 
     A building pin shared from one end of a long hall and the receiving side's own pin for the same building at
     the other end can easily sit farther apart than site_scope.BUILDING_MATCH_METERS - but the parcel's building
@@ -232,7 +234,8 @@ class BuildingFootprintMatchingTests(TestCase):
         self.assertEqual(self.parent.detail_pins.count(), 1)
 
     def test_only_building_typed_markers_use_footprint_matching(self) -> None:
-        """A non-building marker at the same far-apart coordinates is never footprint-matched -
+        """
+        A non-building marker at the same far-apart coordinates is never footprint-matched -
         it's proximity-only, so it still gets created as its own separate marker."""
         baker.make(
             Wiki,
@@ -256,7 +259,8 @@ class BuildingFootprintMatchingTests(TestCase):
         self.assertEqual(self.wiki.child_wikis.count(), 2)
 
     def test_a_building_pin_at_a_different_building_is_not_matched(self) -> None:
-        """Footprint matching still respects "different building" - only markers inside
+        """
+        Footprint matching still respects "different building" - only markers inside
         the SAME footprint are treated as duplicates."""
         baker.make(
             Wiki,

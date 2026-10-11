@@ -1,4 +1,5 @@
-"""Tests for RedataGeocodeGateway against REData's shipped contract
+"""
+Tests for RedataGeocodeGateway against REData's shipped contract
 (``../REData/docs/api-reference.md``, "GET /geocode/" and "GET /geocode/reverse/").
 """
 

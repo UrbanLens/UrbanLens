@@ -33,7 +33,8 @@ class ProfileHeroAvatarIdTests(TestCase):
         self.assertContains(response, 'id="profile-hero-avatar"')
 
     def test_index_page_hero_avatar_also_carries_the_id(self) -> None:
-        """profile/index.html shares _profile_hero_body.html with edit.html -
+        """
+        profile/index.html shares _profile_hero_body.html with edit.html -
         the id must be present there too, not just on the edit page."""
         response = self.client.get(reverse("profile.view"))
         self.assertContains(response, 'id="profile-hero-avatar"')

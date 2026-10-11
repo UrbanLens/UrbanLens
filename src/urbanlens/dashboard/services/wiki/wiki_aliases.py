@@ -37,7 +37,8 @@ class WikiAliasExistsError(WikiAliasError):
 
 
 def create_wiki_alias(wiki: Wiki, profile: Profile, *, name: str, kind: str = AliasType.ALTERNATE) -> WikiAlias:
-    """Add a community name to *wiki* and record it in the wiki's history and the editor's undo stack.
+    """
+    Add a community name to *wiki* and record it in the wiki's history and the editor's undo stack.
 
     Args:
         wiki: The wiki to name; the real row, never a concealed projection.
@@ -70,7 +71,8 @@ def create_wiki_alias(wiki: Wiki, profile: Profile, *, name: str, kind: str = Al
 
 
 def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
-    """Whether *alias* is the name the wiki currently goes by.
+    """
+    Whether *alias* is the name the wiki currently goes by.
     The comparison is loose - :func:`normalize_name_for_comparison` folds case, spacing and punctuation - because that is the same rule the alias uniqueness constraint and the "you can't delete the current name" guard use.
 
     Args:
@@ -86,7 +88,8 @@ def alias_is_current_name(alias: WikiAlias, wiki: Wiki | None) -> bool:
 
 
 def promote_wiki_alias_to_name(wiki: Wiki, profile: Profile, alias: WikiAlias) -> WikiEdit | None:
-    """Promoting the alias that is *already* the name is a no-op rather than an error: "use this name" is an idempotent statement of intent, and a client that retries a request whose response it never saw must not be punished for it.
+    """
+    Promoting the alias that is *already* the name is a no-op rather than an error: "use this name" is an idempotent statement of intent, and a client that retries a request whose response it never saw must not be punished for it.
 
     Args:
         wiki: The wiki to rename.

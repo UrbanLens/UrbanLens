@@ -1,4 +1,5 @@
-"""Read and patch a profile's preferences as one flat document.
+"""
+Read and patch a profile's preferences as one flat document.
 This module exposes the same writable surface as a single allowlist, so the external API can serve one GET and one PATCH over it."""
 
 from __future__ import annotations
@@ -32,13 +33,15 @@ _USER_PASSTHROUGH_FIELDS: tuple[str, ...] = ("first_name", "last_name")
 
 
 class SettingsValidationError(Exception):
-    """Raised when a settings patch is rejected, carrying per-field messages.
+    """
+    Raised when a settings patch is rejected, carrying per-field messages.
 
     Attributes:
         errors: Field name -> human-readable reason, shaped to be returned directly as a 400 body."""
 
     def __init__(self, errors: dict[str, str]) -> None:
-        """Store the per-field errors.
+        """
+        Store the per-field errors.
 
         Args:
             errors: Field name -> human-readable reason.
@@ -152,7 +155,8 @@ _FEATURE_GATED_FIELDS: dict[str, SiteFeature] = {
 
 
 def _validate_storage_dimensions(profile: Profile, data: dict[str, Any], errors: dict[str, str]) -> None:
-    """Reject downscale caps above what the profile's plan entitles it to.
+    """
+    Reject downscale caps above what the profile's plan entitles it to.
 
     Args:
         profile: The profile being patched.
@@ -169,7 +173,8 @@ def _validate_storage_dimensions(profile: Profile, data: dict[str, Any], errors:
 
 
 def _validate_discord_username(data: dict[str, Any], errors: dict[str, str]) -> None:
-    """Reject a ``discord_username`` outside ``ContactMethodsForm``'s allowed character set.
+    """
+    Reject a ``discord_username`` outside ``ContactMethodsForm``'s allowed character set.
 
     Args:
         data: The submitted patch.
@@ -181,7 +186,8 @@ def _validate_discord_username(data: dict[str, Any], errors: dict[str, str]) -> 
 
 
 def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:
-    """Validate and apply a partial settings update to *profile* (and, for name fields, *user*) in memory.
+    """
+    Validate and apply a partial settings update to *profile* (and, for name fields, *user*) in memory.
 
     Args:
         profile: The profile to mutate.
@@ -234,7 +240,8 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
 
 
 def read_settings(profile: Profile, *, user: User) -> dict[str, Any]:
-    """Build the full settings document for *profile*.
+    """
+    Build the full settings document for *profile*.
 
     Args:
         profile: The profile to read.

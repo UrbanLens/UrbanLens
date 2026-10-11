@@ -1,4 +1,5 @@
-"""Wireless device scanning: ingested scan data and the wiki markers it produces.
+"""
+Wireless device scanning: ingested scan data and the wiki markers it produces.
 The mobile app's device-scanning feature uploads nearby-device readings (MAC address, signal-strength samples along a route, a client-estimated location, and a device-type guess) through the external API.
 See ``services.device_scan`` for the classification and clustering logic; this module only holds the data.
 """
@@ -74,7 +75,8 @@ class MarkerStatus(abstract.TextChoices):
 
 
 class ScannedDevice(abstract.FrontendDashboardModel):
-    """One physical wireless device, identified by its MAC address.
+    """
+    One physical wireless device, identified by its MAC address.
 
     Global rather than per-profile: many users' scans corroborate the same device. Its name and type are a
     summary of every scan's report (``services.device_scan.summary``), never one uploader's word.
@@ -103,7 +105,8 @@ class ScannedDevice(abstract.FrontendDashboardModel):
 
 
 class DeviceScanUpload(abstract.FrontendDashboardModel):
-    """One batch upload from the mobile app's device-scanning feature.
+    """
+    One batch upload from the mobile app's device-scanning feature.
     ``profile`` is null whenever the uploading profile has ``Profile.track_device_scans`` turned off - the upload is still processed (classification/markers are shared community data), just without personal attribution.
     Device scans are never deleted: when the uploading profile is, the upload stays with ``profile`` cleared.
     """
@@ -149,7 +152,8 @@ class DeviceScanUpload(abstract.FrontendDashboardModel):
 
 
 class DeviceScanEntry(abstract.DashboardModel):
-    """One device's data within one DeviceScanUpload.
+    """
+    One device's data within one DeviceScanUpload.
 
     ``location`` is the device's client-estimated position when ``detected``
     is True, or the point the client searched near when reporting that an
@@ -182,7 +186,8 @@ class DeviceScanEntry(abstract.DashboardModel):
 
 
 class DeviceSignalReading(abstract.DashboardModel):
-    """One raw (coordinate, signal strength) sample along a scan route.
+    """
+    One raw (coordinate, signal strength) sample along a scan route.
     Kept for richness beyond what the v1 clustering algorithm consumes (a per-entry average signal strength) - future refinements (proper trilateration, a signal-strength heatmap) can mine this without a schema change, per the "store as much data as possible" requirement.
     """
 
@@ -204,7 +209,8 @@ class DeviceSignalReading(abstract.DashboardModel):
 
 
 class WikiDeviceMarker(abstract.FrontendDashboardModel):
-    """A fuzzy (or manually pinpointed) device location on one wiki's map.
+    """
+    A fuzzy (or manually pinpointed) device location on one wiki's map.
     Multiple ACTIVE rows can exist for the same (device, wiki) pair while a moved device's old and new locations are both still corroborated - see ``services.device_scan.clustering`` for how they're reconciled.
     """
 

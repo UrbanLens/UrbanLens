@@ -1,4 +1,5 @@
-"""Deciding what a wiki shows to a viewer who has not earned its detail yet.
+"""
+Deciding what a wiki shows to a viewer who has not earned its detail yet.
 A wiki row exists for every place, so absence is itself a tell - and so is any visible difference in how the site behaves for this account."""
 
 from __future__ import annotations
@@ -34,7 +35,8 @@ _FRIEND_CACHE_ATTR = "_ul_accepted_friend_ids"
 
 
 def accepted_friend_ids(profile: Profile) -> set[int]:
-    """Return the profile pks this profile has an accepted friendship with.
+    """
+    Return the profile pks this profile has an accepted friendship with.
 
     Args:
         profile: The viewer.
@@ -58,7 +60,8 @@ def accepted_friend_ids(profile: Profile) -> set[int]:
 
 
 def visible_actor_ids(profile: Profile | None) -> set[int]:
-    """Return whose contributions a concealed viewer may still see.
+    """
+    Return whose contributions a concealed viewer may still see.
 
     Args:
         profile: The viewer, or None for a signed-out caller.
@@ -72,7 +75,8 @@ def visible_actor_ids(profile: Profile | None) -> set[int]:
 
 
 def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]:
-    """Return the field values a concealed viewer should be shown.
+    """
+    Return the field values a concealed viewer should be shown.
 
     Args:
         wiki: The wiki being rendered.
@@ -110,7 +114,8 @@ def concealed_field_values(wiki: Wiki, viewer: Profile | None) -> dict[str, Any]
 
 
 def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
-    """Whether this viewer should be shown the concealed form of this wiki.
+    """
+    Whether this viewer should be shown the concealed form of this wiki.
 
     Args:
         wiki: The wiki being rendered.
@@ -122,7 +127,8 @@ def concealment_active(wiki: Wiki, viewer: Profile | None) -> bool:
 
 
 def concealed_community_summary() -> dict[str, Any]:
-    """The community card as it reads for a place nobody has pinned but you.
+    """
+    The community card as it reads for a place nobody has pinned but you.
     That fuzz caches its value for a day keyed **only on the id passed in**, with no viewer in the key.
 
     Returns:
@@ -174,7 +180,8 @@ _ACTOR_FIELDS: dict[str, str] = {
 
 
 def conceal_rows[QuerySetT: QuerySet[Any]](queryset: QuerySetT, viewer: Profile | None) -> QuerySetT:
-    """Narrow a wiki-scoped queryset to what a concealed viewer may see.
+    """
+    Narrow a wiki-scoped queryset to what a concealed viewer may see.
 
     Args:
         queryset: Rows already scoped to one wiki. Generic, so a caller that
@@ -228,7 +235,8 @@ def conceal_rows[QuerySetT: QuerySet[Any]](queryset: QuerySetT, viewer: Profile 
 
 
 def visible_rows(queryset: Any, wiki: Wiki, viewer: Profile | None) -> Any:
-    """A wiki-scoped queryset narrowed to what *viewer* may see.
+    """
+    A wiki-scoped queryset narrowed to what *viewer* may see.
 
     Args:
         queryset: Rows already scoped to one wiki.
@@ -248,13 +256,15 @@ def _real_row(wiki: Wiki) -> Wiki:
 
 
 def _refuse_write(*_args: Any, **_kwargs: Any) -> NoReturn:
-    """Refuse a write through a concealed projection.
+    """
+    Refuse a write through a concealed projection.
     A projection carries concealed values for fields this viewer may not see, so persisting it would write those values over the real row - a concealment bug that silently destroys community content."""
     raise TypeError("this Wiki is a concealed projection and must not be written; re-fetch the row")
 
 
 def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
-    """Return *wiki* itself, or a concealed projection of it.
+    """
+    Return *wiki* itself, or a concealed projection of it.
     It also could not be used as a foreign key value, so every write path had to be taught about it.
 
     Args:
@@ -297,7 +307,8 @@ def conceal_wiki(wiki: Wiki, viewer: Profile | None) -> Wiki:
 
 
 class Concealable(Protocol):
-    """A model that can exist as a concealed projection of itself.
+    """
+    A model that can exist as a concealed projection of itself.
     Two do - ``Wiki`` and ``Article`` - and both declare the marker on the model rather than having it set on them ad hoc, so the distinction is visible where the row is defined."""
 
     _ul_concealed: bool
@@ -309,7 +320,8 @@ def is_concealed(row: Concealable) -> bool:
 
 
 def writable_wiki(wiki: Wiki) -> Wiki:
-    """Return a row that may be written: *wiki* itself, or a fresh fetch of it.
+    """
+    Return a row that may be written: *wiki* itself, or a fresh fetch of it.
 
     Args:
         wiki: A wiki, possibly a projection.
@@ -323,7 +335,8 @@ def writable_wiki(wiki: Wiki) -> Wiki:
 
 
 def redact_edit_changes(changes: Any) -> dict[str, Any]:
-    """Strip the pre-edit value out of an edit's diff.
+    """
+    Strip the pre-edit value out of an edit's diff.
     That is a leak a read gate cannot close, because it lands in the viewer's *own* edit row - content the rules promise always to show them.
 
     Args:
@@ -343,7 +356,8 @@ def redact_edit_changes(changes: Any) -> dict[str, Any]:
 
 
 def visible_article_revision(article: Article, viewer: Profile | None) -> ArticleRevision | None:
-    """The newest article revision *viewer* is entitled to see, or None.
+    """
+    The newest article revision *viewer* is entitled to see, or None.
     An article is entirely user-contributed prose, so unlike a wiki's fields it cannot be resolved write-by-write - there is nothing to merge on.
 
     Args:
@@ -356,7 +370,8 @@ def visible_article_revision(article: Article, viewer: Profile | None) -> Articl
 
 
 def conceal_article(article: Article | None, wiki: Wiki, viewer: Profile | None) -> Article | None:
-    """Return *article* itself, a projection of it, or None.
+    """
+    Return *article* itself, a projection of it, or None.
     Returning an empty article instead would be its own tell - the panel renders an always-editable canvas either way, so absence and emptiness look the same to the viewer, but only one of them is honest about what the row contains.
 
     Args:

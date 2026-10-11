@@ -43,7 +43,8 @@ def visit_logging_allowed(profile: Profile) -> bool:
 
 
 def route_import_allowed(profile: Profile) -> bool:
-    """True if GPS route/track import is allowed.
+    """
+    True if GPS route/track import is allowed.
     The dwell-detected visits an import can also produce are separately gated on :func:`visit_logging_allowed`, so a profile that tracks routes but not visits gets the track and no PinVisit rows."""
     return profile.track_routes
 
@@ -54,7 +55,8 @@ def geolocation_tracking_allowed(profile: Profile) -> bool:
 
 
 def build_visit_suggestion_message(*, location: Location | None = None, fallback: str = "at a location", **kwargs: str | None) -> str:
-    """Build a privacy-safe place description for a visit-suggestion notification.
+    """
+    Build a privacy-safe place description for a visit-suggestion notification.
     When there is no Location - e.g. the origin pin is private and was never linked to one - falls back to the origin pin's own official_name/city/state.
 
     Args:
@@ -89,7 +91,8 @@ def build_visit_suggestion_message(*, location: Location | None = None, fallback
 
 
 def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> Pin | None:
-    """Return a profile's own (non-detail) pin at a place, if one exists.
+    """
+    Return a profile's own (non-detail) pin at a place, if one exists.
 
     Args:
         profile: Profile to check.
@@ -111,7 +114,8 @@ def find_pin_at(profile: Profile, *, location_id: int | None = None, latitude: f
 
 
 def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius_m: int) -> Pin | None:
-    """Return a profile's closest pin within radius_m metres of a point, or None.
+    """
+    Return a profile's closest pin within radius_m metres of a point, or None.
 
     Args:
         latitude: Point latitude.
@@ -134,7 +138,8 @@ def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius
 
 
 def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:
-    """Return whether a profile already has a (non-detail) pin at a place.
+    """
+    Return whether a profile already has a (non-detail) pin at a place.
 
     Args:
         profile: Profile to check.
@@ -148,7 +153,8 @@ def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude:
 
 
 def find_existing_visit_on_date(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime) -> PinVisit | None:
-    """Return a profile's own visit already logged for this place on this calendar date, if any.
+    """
+    Return a profile's own visit already logged for this place on this calendar date, if any.
 
     Args:
         profile: Profile to check.
@@ -166,7 +172,8 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
 
 
 def resolve_location_for_point(latitude: float | Decimal, longitude: float | Decimal, *, fetch_if_missing: bool = True) -> Location:
-    """Return the exact shared Location for a point, creating one when none exists yet.
+    """
+    Return the exact shared Location for a point, creating one when none exists yet.
 
     Args:
         latitude: Point latitude.
@@ -200,7 +207,8 @@ def resolve_location_for_point(latitude: float | Decimal, longitude: float | Dec
 
 
 def create_minimal_pin(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
-    """Create a bare pin for a profile at a place, deliberately copying nothing private.
+    """
+    Create a bare pin for a profile at a place, deliberately copying nothing private.
 
     Args:
         profile: Profile the new pin belongs to.
@@ -216,7 +224,8 @@ def create_minimal_pin(profile: Profile, *, location: Location | None, latitude:
 
 
 def get_or_create_pin_at(profile: Profile, *, location: Location | None, latitude: float | Decimal, longitude: float | Decimal) -> Pin:
-    """Return a profile's existing pin at a place, creating a minimal one if needed.
+    """
+    Return a profile's existing pin at a place, creating a minimal one if needed.
 
     Args:
         profile: Profile the pin belongs to.
@@ -231,7 +240,8 @@ def get_or_create_pin_at(profile: Profile, *, location: Location | None, latitud
 
 
 def _mutual_candidates(suggested_to: Profile, suggested_by: Profile | None, candidate_profiles: list[Profile]) -> dict[int, Profile]:
-    """Return, keyed by pk, the candidates who are mutual connections of suggested_to.
+    """
+    Return, keyed by pk, the candidates who are mutual connections of suggested_to.
 
     Args:
         suggested_to: The profile being asked to confirm the visit.
@@ -247,7 +257,8 @@ def _mutual_candidates(suggested_to: Profile, suggested_by: Profile | None, cand
 
 
 def _suggester_name(recipient: Profile, suggested_by: Profile | None) -> str:
-    """Name the person a visit suggestion came from, as this recipient may see them.
+    """
+    Name the person a visit suggestion came from, as this recipient may see them.
     A name masked only in the template has already left the app.
 
     Args:
@@ -280,7 +291,8 @@ def create_visit_suggestion(
     from_my_activity: bool = False,
     destination_label: str | None = None,
 ) -> VisitSuggestion | None:
-    """Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
+    """
+    Create a VisitSuggestion, and its delivery notification unless the recipient opted out.
 
     Args:
         suggested_to: Profile being asked to confirm the visit.
@@ -378,7 +390,8 @@ def create_visit_suggestion(
 
 
 def _visit_source_for(suggestion: VisitSuggestion) -> str:
-    """Return the VisitSource the resulting PinVisit should use.
+    """
+    Return the VisitSource the resulting PinVisit should use.
 
     Args:
         suggestion: The suggestion being accepted.
@@ -401,7 +414,8 @@ def _visit_source_for(suggestion: VisitSuggestion) -> str:
 
 
 def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit | None:
-    """Accept a visit suggestion by logging a new, separate PinVisit.
+    """
+    Accept a visit suggestion by logging a new, separate PinVisit.
 
     Args:
         suggestion: The pending suggestion being accepted.
@@ -440,7 +454,8 @@ def accept_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Prof
 
 
 def merge_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profile) -> PinVisit:
-    """Accept a visit suggestion by adding its new participants to an existing visit.
+    """
+    Accept a visit suggestion by adding its new participants to an existing visit.
 
     Args:
         suggestion: The pending suggestion being accepted (must have existing_visit set).
@@ -470,7 +485,8 @@ def merge_visit_suggestion(suggestion: VisitSuggestion, accepting_profile: Profi
 
 
 def reject_visit_suggestion(suggestion: VisitSuggestion) -> None:
-    """Reject a pending visit suggestion.
+    """
+    Reject a pending visit suggestion.
 
     Args:
         suggestion: The pending suggestion being rejected.
@@ -483,7 +499,8 @@ def reject_visit_suggestion(suggestion: VisitSuggestion) -> None:
 
 
 def add_visited_status(pin: Pin) -> None:
-    """Add the profile's "Visited" status label to the pin if not already present.
+    """
+    Add the profile's "Visited" status label to the pin if not already present.
 
     Args:
         pin: Pin instance whose statuses should be updated.
@@ -497,7 +514,8 @@ def add_visited_status(pin: Pin) -> None:
 
 
 def _add_visited_status_to(profile: Profile, pins: list[Pin]) -> None:
-    """Add the profile's "Visited" status label to several of its pins.
+    """
+    Add the profile's "Visited" status label to several of its pins.
 
     Root pins get it in one write through the label's side of the relation, so ``m2m_changed`` fires once for
     the batch. That reverse-side signal does not cascade to ancestors, so a detail pin goes through
@@ -521,7 +539,8 @@ def _add_visited_status_to(profile: Profile, pins: list[Pin]) -> None:
 
 
 def remove_visited_status(pin: Pin) -> None:
-    """Clear a pin's "Visited" marking - the profile's status label and last_visited.
+    """
+    Clear a pin's "Visited" marking - the profile's status label and last_visited.
     Used when a pin was marked visited by mistake (e.g. a stray status label or an import glitch) and the user doesn't want to log a dated visit for it, so it should stop being surfaced in the Memories "log your visits" queue.
 
     Args:
@@ -536,7 +555,8 @@ def remove_visited_status(pin: Pin) -> None:
 
 
 def sync_last_visited(pin: Pin) -> None:
-    """Recompute pin.last_visited from the most recent PinVisit row.
+    """
+    Recompute pin.last_visited from the most recent PinVisit row.
 
     Args:
         pin: Pin instance to update in-place (saves only last_visited field).
@@ -547,12 +567,14 @@ def sync_last_visited(pin: Pin) -> None:
 
 
 class VisitLoggingDisabledError(Exception):
-    """The profile being visited has ``track_pin_visits`` off.
+    """
+    The profile being visited has ``track_pin_visits`` off.
     The message is for logs, not the response: a catch site must author its own user-facing text rather than relay it - see ``PinCreationError``'s docstring in ``services.pins.pin_creation`` for why."""
 
 
 class VisitInFutureError(Exception):
-    """The submitted visit time has not happened yet.
+    """
+    The submitted visit time has not happened yet.
     The message is for logs, not the response: a catch site must author its own user-facing text rather than relay it - see ``PinCreationError``'s docstring in ``services.pins.pin_creation`` for why."""
 
 
@@ -563,7 +585,8 @@ MAX_VISIT_CLOCK_SKEW = datetime.timedelta(minutes=5)
 
 
 def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str | None = None, markup_map: MarkupMap | None = None) -> PinVisit:
-    """Log a user-entered visit to a pin, with the same side effects the web form has.
+    """
+    Log a user-entered visit to a pin, with the same side effects the web form has.
 
     Args:
         pin: The pin that was visited.
@@ -589,7 +612,8 @@ def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str |
 
 
 def delete_visit(visit: PinVisit) -> None:
-    """Delete one visit and any map snapshot it owned, then re-derive last_visited.
+    """
+    Delete one visit and any map snapshot it owned, then re-derive last_visited.
     The visit's ``markup_map`` is deleted alongside it rather than orphaned: the FK is ``SET_NULL``, so a plain visit delete would leave the snapshot behind with nothing referencing it.
 
     Args:
@@ -607,7 +631,8 @@ _MARKER_RADIUS_M = 50
 
 
 def pins_containing_point(pins: Iterable[Pin], point: GEOSPoint) -> list[Pin]:
-    """The pins whose effective property boundary contains a point, in a fixed number of queries.
+    """
+    The pins whose effective property boundary contains a point, in a fixed number of queries.
 
     A pin with no boundary at all counts when its marker is within :data:`_MARKER_RADIUS_M`.
 
@@ -632,7 +657,8 @@ def pins_containing_point(pins: Iterable[Pin], point: GEOSPoint) -> list[Pin]:
 
 
 def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Iterable[Pin] | None = None) -> Pin | None:
-    """Return the first of a profile's root pins whose effective boundary contains a point.
+    """
+    Return the first of a profile's root pins whose effective boundary contains a point.
 
     Args:
         profile: Profile whose root pins should be checked.
@@ -647,7 +673,8 @@ def find_pin_containing_point(profile: Profile, point: GEOSPoint, *, pins: Itera
 
 
 def record_geolocation_pin_visits(profile: Profile, *, latitude: float | Decimal, longitude: float | Decimal, visited_at: datetime.datetime | None = None) -> list[PinVisit]:
-    """Record geolocation-based visits for the profile's pins containing a point.
+    """
+    Record geolocation-based visits for the profile's pins containing a point.
 
     Args:
         profile: Profile whose personal pins should be checked.

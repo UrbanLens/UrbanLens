@@ -15,7 +15,8 @@ _QUERYSET = "VersionedQuerySet"
 
 
 def _base_names(node: ast.ClassDef) -> set[str]:
-    """Return the class's base names, however they were written.
+    """
+    Return the class's base names, however they were written.
 
     Handles both ``VersionedModel`` and ``abstract.VersionedModel``; this codebase uses the dotted form for
     model bases and the bare form inside the abstract package itself."""
@@ -116,7 +117,8 @@ _ALL_FIELD_NAMES: set[str] | None = None
 
 
 def _field_exists_anywhere(field_name: str) -> bool:
-    """Whether any model in the tree declares a field by this name.
+    """
+    Whether any model in the tree declares a field by this name.
 
     Deliberately loose."""
     global _ALL_FIELD_NAMES  # noqa: PLW0603
@@ -136,7 +138,8 @@ def _field_exists_anywhere(field_name: str) -> bool:
 
 
 def _queryset_problems(versioned_models: dict[str, pathlib.Path]) -> list[str]:
-    """Report versioned models whose queryset does not intercept bulk writes.
+    """
+    Report versioned models whose queryset does not intercept bulk writes.
 
     This is the half that matters most: ``update()`` skips ``save()`` and every signal, so a model with the
     mixin but a plain queryset records instance saves and silently drops every bulk write."""

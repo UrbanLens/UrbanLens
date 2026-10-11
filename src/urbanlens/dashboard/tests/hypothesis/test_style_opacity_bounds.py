@@ -1,4 +1,5 @@
-"""A posted opacity or stroke width is clamped to the range it means, rather than kept as sent or a 500.
+"""
+A posted opacity or stroke width is clamped to the range it means, rather than kept as sent or a 500.
 
 The columns are 32-bit ``IntegerField``s with no validator: 150 was stored and rendered as-is, and a
 30-digit value overflowed the column on save.

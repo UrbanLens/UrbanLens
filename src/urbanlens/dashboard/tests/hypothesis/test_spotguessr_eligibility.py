@@ -80,7 +80,8 @@ class EligibleLocationsTests(TestCase):
 
 
 class HasEligibleLocationsTests(TestCase):
-    """The cheap pre-check SpotGuessrStartView uses to avoid creating a session
+    """
+    The cheap pre-check SpotGuessrStartView uses to avoid creating a session
     that can never play a single round - see its docstring for the rationale."""
 
     def test_false_for_a_profile_with_no_pins(self) -> None:
@@ -137,7 +138,8 @@ class SoloLabelFilterTests(TestCase):
 
 
 class MultiplayerLabelFilterCannotLeakTests(TestCase):
-    """The label filter must never surface a location some participant hasn't pinned themselves -
+    """
+    The label filter must never surface a location some participant hasn't pinned themselves -
     it can only narrow rule 1's "pinned by every participant" pool, never substitute for it."""
 
     def setUp(self) -> None:
@@ -173,7 +175,8 @@ class MultiplayerLabelFilterCannotLeakTests(TestCase):
         self.assertNotIn(shared_location, results)
 
     def test_someone_elses_private_label_id_cannot_be_used_to_probe_their_pins(self) -> None:
-        """A bystander's own private label, applied to a location the session participants
+        """
+        A bystander's own private label, applied to a location the session participants
         haven't pinned, must not make that location appear eligible for this session."""
         bystander = _make_profile()
         bystander_label = baker.make(Label, name="Bystander's secret spots", profile=bystander)

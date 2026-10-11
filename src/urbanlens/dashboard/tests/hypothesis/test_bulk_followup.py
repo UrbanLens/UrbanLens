@@ -1,4 +1,5 @@
-"""One bulk action's per-row signals must not create one broker message per row (P109).
+"""
+One bulk action's per-row signals must not create one broker message per row (P109).
 
 Importing 1,000 pins queued about 2,600 follow-on tasks - wiki creation, enrichment, category
 suggestion, reputation scoring, one set per pin - onto the same FIFO ``bulk`` queue every other

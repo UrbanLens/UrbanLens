@@ -29,7 +29,8 @@ class IndexController(ListController):
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        """Add the page name the stylesheet keys off.
+        """
+        Add the page name the stylesheet keys off.
 
         Every rule in ``_homepage.scss`` is scoped under ``body.page-home``, and ``base.html`` sets that
         class from ``page_name`` - which this view never supplied, so the landing page rendered with none of
@@ -44,13 +45,15 @@ class IndexController(ListController):
 
 
 class HomeOverviewView(LoginRequiredMixin, View):
-    """The logged-in homepage: a customizable dashboard overview.
+    """
+    The logged-in homepage: a customizable dashboard overview.
 
     GET /dashboard/home/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render the dashboard overview for the signed-in user.
+        """
+        Render the dashboard overview for the signed-in user.
 
         Args:
             request: The authenticated request.
@@ -74,7 +77,8 @@ class HomeOverviewView(LoginRequiredMixin, View):
 
 
 class HomeWidgetLayoutSaveView(LoginRequiredMixin, View):
-    """Persist the signed-in user's chosen homepage widget selection/order.
+    """
+    Persist the signed-in user's chosen homepage widget selection/order.
 
     POST /dashboard/home/widgets/  body: ``{"enabled_keys": ["stats", ...]}``
     """

@@ -23,7 +23,8 @@ PARTIAL_ANSWER_STALE_AFTER = timedelta(hours=1)
 
 
 class LocationCache(abstract.DashboardModel):
-    """Caches responses from external data sources keyed to a shared Location.
+    """
+    Caches responses from external data sources keyed to a shared Location.
     An empty-dict ``data`` field means "we searched and found nothing" - this is still a valid cached result so we don't hammer the upstream API again.
 
     ``audience`` is ``""`` for a row every viewer of the Location may read. A search built from a pin's own names is
@@ -64,7 +65,8 @@ class LocationCache(abstract.DashboardModel):
 
     @classmethod
     def get_fresh(cls, location: Location, source: str, audience: str = "", *, max_age: timedelta | None = None) -> LocationCache | None:
-        """Returns a non-stale cache entry, or None if missing or stale.
+        """
+        Returns a non-stale cache entry, or None if missing or stale.
 
         Args:
             location: The Location to look up.
@@ -83,7 +85,8 @@ class LocationCache(abstract.DashboardModel):
 
     @classmethod
     def fresh_since(cls, max_age: timedelta | None = None) -> datetime:
-        """The oldest ``updated`` a row may have and still be fresh.
+        """
+        The oldest ``updated`` a row may have and still be fresh.
 
         Args:
             max_age: A source's own limit, honoured when it is shorter than the site-wide ``external_data_cache_days``.
@@ -98,7 +101,8 @@ class LocationCache(abstract.DashboardModel):
 
     @classmethod
     def fresh_rows(cls, location_id: int, sources: Iterable[str], audiences: Iterable[str], since: datetime | None = None) -> dict[tuple[str, str], LocationCache]:
-        """Every non-stale row of these sources and audiences at one Location, in one query.
+        """
+        Every non-stale row of these sources and audiences at one Location, in one query.
 
         Args:
             location_id: The Location's primary key.
@@ -115,7 +119,8 @@ class LocationCache(abstract.DashboardModel):
 
     @classmethod
     def set(cls, location: Location, source: str, data: dict, query_key: str = "", audience: str = "", *, stale_after: timedelta | None = None, max_age: timedelta | None = None) -> LocationCache:
-        """Upsert a cache entry.
+        """
+        Upsert a cache entry.
 
         Args:
             location: The Location to cache data for.

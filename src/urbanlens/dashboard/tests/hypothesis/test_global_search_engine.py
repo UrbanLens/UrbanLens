@@ -89,7 +89,8 @@ class PinSearchTests(TestCase):
         self.assertNotEqual(result.subtitle, result.title)
 
     def test_result_subtitle_falls_back_to_display_name_without_an_address(self):
-        """A pin with only coordinates (no reverse-geocoded address yet) keeps
+        """
+        A pin with only coordinates (no reverse-geocoded address yet) keeps
         showing SOME context rather than a blank subtitle."""
         location = baker.make("dashboard.Location", latitude="10.0", longitude="10.0", official_name="Remote Outpost")
         baker.make("dashboard.Pin", profile=self.profile, location=location, name="Unnamed Location")

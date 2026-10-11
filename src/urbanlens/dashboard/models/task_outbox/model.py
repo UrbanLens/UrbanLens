@@ -10,7 +10,8 @@ from urbanlens.dashboard.models.task_outbox.queryset import TaskOutboxEntryManag
 
 
 class TaskOutboxEntry(abstract.DashboardModel):
-    """One enqueue that failed, replayed by ``tasks.drain_task_outbox``.
+    """
+    One enqueue that failed, replayed by ``tasks.drain_task_outbox``.
 
     Written by ``services.core.celery.safely_enqueue_task`` only when the broker refuses a message, in the
     caller's transaction, so the work survives exactly when the change that asked for it does.

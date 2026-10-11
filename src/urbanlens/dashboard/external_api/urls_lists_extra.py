@@ -1,4 +1,5 @@
-"""External-API routes for pin-list actions beyond CRUD and item membership.
+"""
+External-API routes for pin-list actions beyond CRUD and item membership.
 
 **List-level bulk delete/edit was scoped out of this pass.** The internal
 ``dashboard/controllers/pin_lists.py`` has no multi-list bulk action to mirror - only item-level

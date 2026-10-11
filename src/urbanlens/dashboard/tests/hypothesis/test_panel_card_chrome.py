@@ -13,7 +13,8 @@ class PanelChromeInvariantTests(SimpleTestCase):
     """Placement decides chrome, and nothing else may."""
 
     def test_no_panel_decides_its_own_chrome(self) -> None:
-        """``render_context`` must not be the thing that sets ``nested``.
+        """
+        ``render_context`` must not be the thing that sets ``nested``.
 
         Left in place, a panel moved into or out of a tab strip keeps whatever chrome its own module happened to
         declare, which is how eight standalone panels ended up with no card."""

@@ -1,4 +1,5 @@
-"""An imported overlay's foreign tile template: a recognised sheet is rebuilt onto this site's route, and any other
+"""
+An imported overlay's foreign tile template: a recognised sheet is rebuilt onto this site's route, and any other
 host's tiles are drawn through this site and kept (Jess, 2026-09-30, rulings item 16)."""
 
 from __future__ import annotations

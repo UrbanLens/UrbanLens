@@ -1,4 +1,5 @@
-"""Native push delivery: device registration and UnifiedPush dispatch.
+"""
+Native push delivery: device registration and UnifiedPush dispatch.
 Only the UnifiedPush transport dispatches today (an app-chosen push server - ntfy et al. - receives a plain POST of the JSON payload at the registered endpoint URL, per the UnifiedPush application-server contract)."""
 
 from __future__ import annotations
@@ -69,12 +70,14 @@ class EndpointResolutionError(PushRegistrationError):
 
 
 class EndpointUnreachableError(PushRegistrationError):
-    """The UnifiedPush endpoint resolves to a private/loopback/link-local/CGNAT address.
+    """
+    The UnifiedPush endpoint resolves to a private/loopback/link-local/CGNAT address.
     Distinct from :class:`EndpointResolutionError` so callers can tell "we don't know where this points" apart from "we know exactly where this points, and it's the SSRF guard's job to refuse it"."""
 
 
 def _validate_unifiedpush_endpoint(address: str) -> None:
-    """Reject UnifiedPush endpoint URLs the server should never POST to.
+    """
+    Reject UnifiedPush endpoint URLs the server should never POST to.
 
     Args:
         address: The submitted endpoint URL.
@@ -101,7 +104,8 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
 
 
 def register_device(profile: Profile, *, transport: str, address: str, name: str = "") -> PushDevice:
-    """Register (or re-activate) a push destination for a profile.
+    """
+    Register (or re-activate) a push destination for a profile.
 
     Args:
         profile: The owning profile.
@@ -142,7 +146,8 @@ def register_device(profile: Profile, *, transport: str, address: str, name: str
 
 
 def unregister_device(profile: Profile, device_uuid: UUID | str) -> bool:
-    """Revoke one of the profile's devices, if it exists.
+    """
+    Revoke one of the profile's devices, if it exists.
 
     Args:
         profile: The owning profile - another profile's device uuid is indistinguishable from a nonexistent one.
@@ -154,7 +159,8 @@ def unregister_device(profile: Profile, device_uuid: UUID | str) -> bool:
 
 
 def send_push_to_profile(profile_id: int, payload: dict) -> int:
-    """Deliver a notification payload to every active device of a profile.
+    """
+    Deliver a notification payload to every active device of a profile.
     Failures are per-device and never raise: one dead endpoint must not stop delivery to the user's other devices, and delivery as a whole is best-effort on top of the always-written ``NotificationLog`` row.
 
     Args:
@@ -173,7 +179,8 @@ def send_push_to_profile(profile_id: int, payload: dict) -> int:
 
 
 def send_push_to_devices(device_ids: list[int], payload: dict) -> int:
-    """Deliver a payload to one batch of devices, ``PUSH_CONCURRENCY`` at a time.
+    """
+    Deliver a payload to one batch of devices, ``PUSH_CONCURRENCY`` at a time.
 
     Args:
         device_ids: At most ``PUSH_BATCH_SIZE`` device primary keys; revoked ones are skipped.
@@ -197,7 +204,8 @@ def send_push_to_devices(device_ids: list[int], payload: dict) -> int:
 
 
 def _post_unifiedpush(device: PushDevice, payload: dict) -> bool:
-    """POST one payload to one UnifiedPush endpoint. Touches no database, so it can run on a pool thread.
+    """
+    POST one payload to one UnifiedPush endpoint. Touches no database, so it can run on a pool thread.
 
     Args:
         device: The destination device.
@@ -224,7 +232,8 @@ def _post_unifiedpush(device: PushDevice, payload: dict) -> bool:
 
 
 def _record_delivery(device: PushDevice, *, ok: bool) -> None:
-    """Update a device's delivery bookkeeping, revoking it after too many consecutive failures.
+    """
+    Update a device's delivery bookkeeping, revoking it after too many consecutive failures.
 
     Args:
         device: The device delivered to.

@@ -25,7 +25,8 @@ def _elevation_text(elevation_m: float) -> str:
 
 
 def _pick_elevation(readings: list[dict[str, Any]]) -> float | None:
-    """The single "best" elevation reading to show as one line.
+    """
+    The single "best" elevation reading to show as one line.
     REData orders ``results`` finest-resolution-first, so the first entry is authoritative."""
     if not readings:
         return None
@@ -65,7 +66,8 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
     inspects_content = True
 
     def has_content(self, data: dict | None) -> bool:
-        """Mirror of :meth:`render_context`'s own emptiness test.
+        """
+        Mirror of :meth:`render_context`'s own emptiness test.
 
         Args:
             data: The cached payload.

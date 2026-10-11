@@ -1,4 +1,5 @@
-"""Per-row bulk actions that tell a failed row apart from a skipped one.
+"""
+Per-row bulk actions that tell a failed row apart from a skipped one.
 
 A bulk endpoint that acts row by row (accept these suggestions, log these visits) skips ids it may not or need not
 act on, and can hit a row that crashes. :func:`run_each` gives each row its own savepoint, so a crash keeps none of
@@ -21,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class BulkOutcome:
-    """Counts for one bulk request.
+    """
+    Counts for one bulk request.
 
     Attributes:
         requested: Ids the caller named.
@@ -49,7 +51,8 @@ class BulkOutcome:
 
 
 def run_each[T](items: Iterable[T], action: Callable[[T], object], *, requested: int, description: str) -> BulkOutcome:
-    """Apply *action* to each item in its own savepoint, counting successes and failures.
+    """
+    Apply *action* to each item in its own savepoint, counting successes and failures.
 
     Args:
         items: The rows the caller may act on (already filtered to what is actionable).

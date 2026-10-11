@@ -1,4 +1,5 @@
-"""External visit participants: creation from the visit form, email invites, and deferred delivery.
+"""
+External visit participants: creation from the visit form, email invites, and deferred delivery.
 
 What the owner sees of a tagged address never depends on whether it has an account: the friendship is offered
 through a ``FriendInvitation`` and the visit through a ``VisitSuggestion``, each answered by the invitee separately.
@@ -29,7 +30,8 @@ _MAX_EXTERNAL_PARTICIPANTS_PER_VISIT = 25
 
 
 def resolve_suggest_participant_ids(request: HttpRequest) -> set[int]:
-    """Member participant ids the owner wants visit suggestions sent to.
+    """
+    Member participant ids the owner wants visit suggestions sent to.
 
     Args:
         request: Request carrying ``suggest_participant_ids`` checkboxes.
@@ -41,7 +43,8 @@ def resolve_suggest_participant_ids(request: HttpRequest) -> set[int]:
 
 
 def _deliver_to_member(owner: Profile, member: Profile, visit: PinVisit) -> None:
-    """Offer ``member`` the visit as a suggestion they can accept or decline.
+    """
+    Offer ``member`` the visit as a suggestion they can accept or decline.
 
     Args:
         owner: The pin owner who logged the visit.
@@ -75,7 +78,8 @@ def _deliver_to_member(owner: Profile, member: Profile, visit: PinVisit) -> None
 
 
 def _invite(request: HttpRequest, participant: ExternalVisitParticipant, email: str) -> None:
-    """Invite a tagged person by email: the friendship through a friend invitation, the visit once an account is proven to own the address.
+    """
+    Invite a tagged person by email: the friendship through a friend invitation, the visit once an account is proven to own the address.
 
     The request does the same for every address; which of the two applies is decided in ``deliver_to_participant``.
 
@@ -103,7 +107,8 @@ def _queue_delivery(participant_id: int, invitation_id: int) -> None:
 
 
 def deliver_to_participant(participant_id: int, invitation_id: int) -> None:
-    """Offer the visit to the account proven to own the invited address; an address without one waits for signup.
+    """
+    Offer the visit to the account proven to own the invited address; an address without one waits for signup.
 
     Args:
         participant_id: PK of the ExternalVisitParticipant.
@@ -125,7 +130,8 @@ def deliver_to_participant(participant_id: int, invitation_id: int) -> None:
 
 
 def sync_external_participants(request: HttpRequest, visit: PinVisit) -> None:
-    """Create/remove external participants for a visit from the submitted form.
+    """
+    Create/remove external participants for a visit from the submitted form.
 
     Args:
         request: Request carrying the visit form.
@@ -165,7 +171,8 @@ def sync_external_participants(request: HttpRequest, visit: PinVisit) -> None:
 
 
 def process_pending_visit_invites(user: User, email: str | None = None) -> int:
-    """Deliver deferred friend requests + visit suggestions for a (newly verified) email.
+    """
+    Deliver deferred friend requests + visit suggestions for a (newly verified) email.
 
     Args:
         user: The account the email belongs to.

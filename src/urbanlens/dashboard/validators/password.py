@@ -15,7 +15,8 @@ class ComplexityValidator:
     """Require uppercase, lowercase, and either a digit or a symbol."""
 
     def validate(self, password: str, user: AbstractBaseUser | None = None) -> None:
-        """Reject passwords that lack required character classes.
+        """
+        Reject passwords that lack required character classes.
 
         Args:
             password: Candidate password.
@@ -59,7 +60,8 @@ class ComplexityValidator:
 
 
 class HaveIBeenPwnedValidator:
-    """Reject passwords that appear in Have I Been Pwned breach data.
+    """
+    Reject passwords that appear in Have I Been Pwned breach data.
 
     Uses the k-anonymity range API so the full password never leaves the server.
     If the API is unreachable the check is skipped (fail-open) so signup/reset is not blocked by a
@@ -67,7 +69,8 @@ class HaveIBeenPwnedValidator:
     """
 
     def validate(self, password: str, user: AbstractBaseUser | None = None) -> None:
-        """Reject passwords found in known breaches.
+        """
+        Reject passwords found in known breaches.
 
         Args:
             password: Candidate password.

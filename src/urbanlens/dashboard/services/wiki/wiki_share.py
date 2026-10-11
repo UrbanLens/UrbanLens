@@ -1,4 +1,5 @@
-"""Sharing a pin's own content to the community Wiki for its Location.
+"""
+Sharing a pin's own content to the community Wiki for its Location.
 The user picks which of their pin's fields, names and photos to contribute; nothing here happens without that choice."""
 
 from __future__ import annotations
@@ -50,7 +51,8 @@ class WikiShareService:
         alias_ids: set[int] | None = None,
         image_ids: set[int] | None = None,
     ) -> tuple[Wiki, bool]:
-        """Create (or fetch) the Wiki for a pin's Location and link the pin to it.
+        """
+        Create (or fetch) the Wiki for a pin's Location and link the pin to it.
 
         Args:
             pin: The pin whose Location gets a community wiki.
@@ -112,7 +114,8 @@ class WikiShareService:
         return wiki, shared
 
     def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
-        """Name a newly-created wiki after the place, not its postal address.
+        """
+        Name a newly-created wiki after the place, not its postal address.
 
         Args:
             pin: The pin the wiki is being created from.
@@ -147,7 +150,8 @@ class WikiShareService:
             pin.images.filter(pk__in=image_ids).update(wiki=wiki)
 
     def _processed_photo_ids(self, pin: Pin, image_ids: set[int]) -> set[int]:
-        """Selected pin photos whose stored bytes have already completed upload processing.
+        """
+        Selected pin photos whose stored bytes have already completed upload processing.
         A photo's wiki link controls who may fetch its file, so an image is only eligible once ``process_image_upload`` has stripped embedded EXIF/location metadata from its stored bytes."""
         if not image_ids:
             return set()
@@ -166,7 +170,8 @@ class WikiShareService:
 
 
 def seedable_field_values(pin: Pin) -> list[dict]:
-    """Describe which pin scalar fields have values worth offering in the create-wiki dialog.
+    """
+    Describe which pin scalar fields have values worth offering in the create-wiki dialog.
 
     Args:
         pin: The pin whose fields are candidates for seeding.
@@ -182,13 +187,15 @@ def seedable_field_values(pin: Pin) -> list[dict]:
 
 
 def seedable_aliases(pin: Pin) -> list[PinAlias]:
-    """Every alias on the pin, for the create-wiki dialog's per-alias picker.
+    """
+    Every alias on the pin, for the create-wiki dialog's per-alias picker.
     Official aliases are included so the dialog can show them (always copied, not deselectable); the template distinguishes them via ``alias.kind``."""
     return list(pin.aliases.all())
 
 
 def seedable_photos(pin: Pin) -> list[Image]:
-    """The pin's most recent photos, for the create-wiki dialog's per-photo picker.
+    """
+    The pin's most recent photos, for the create-wiki dialog's per-photo picker.
     Capped, and ordered so the cap is stable: a LIMIT over an unordered queryset may return a different slice per call, which would make which photos are offerable depend on the query plan.
 
     Args:

@@ -36,7 +36,8 @@ _LIVE_STATUSES = [
 
 
 def _profile(**kwargs) -> Profile:
-    """Create a profile via its auto-created user.
+    """
+    Create a profile via its auto-created user.
 
     Args:
         **kwargs: Passed through to the ``auth.User`` baker call.
@@ -47,7 +48,8 @@ def _profile(**kwargs) -> Profile:
 
 
 def _stored_status(status: str) -> dict:
-    """The columns a queryset ``update()`` must write to store *status*, a block's time included.
+    """
+    The columns a queryset ``update()`` must write to store *status*, a block's time included.
 
     Args:
         status: The status to store.
@@ -59,7 +61,8 @@ def _stored_status(status: str) -> dict:
 
 
 def _friendship(from_profile: Profile, to_profile: Profile, status: str = FriendshipStatus.ACCEPTED) -> Friendship:
-    """Create one relationship row directly, bypassing the transition methods.
+    """
+    Create one relationship row directly, bypassing the transition methods.
 
     Args:
         from_profile: The originating profile.
@@ -88,7 +91,8 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
         self.friendship = _friendship(self.actor, self.other_profile)
 
     def test_muting_a_friend_leaves_them_a_friend(self) -> None:
-        """The regression this whole change exists for.
+        """
+        The regression this whole change exists for.
 
         ``Profile.are_friends`` is the chokepoint every visibility gate reads;
         if muting flips it to False, muting silently revokes access.
@@ -135,7 +139,8 @@ class MuteFlagDoesNotClobberStatusTests(TestCase):
         self.assertEqual(self.friendship.status, FriendshipStatus.ACCEPTED)
 
     def test_muting_is_not_mutual(self) -> None:
-        """The bug that made wiring mute into delivery unsafe until now.
+        """
+        The bug that made wiring mute into delivery unsafe until now.
 
         One row joins the pair, so a single shared boolean meant A muting B also read as muted from B's side -
         and B, who asked for nothing, would have been the one silenced."""
@@ -228,7 +233,8 @@ class MuteQuerySetTests(TestCase):
 
 
 class LegacyMutedRowRepairWiringTests(SimpleTestCase):
-    """``0010_v0_6_0``'s legacy ``status='Muted'`` repair, checked structurally.
+    """
+    ``0010_v0_6_0``'s legacy ``status='Muted'`` repair, checked structurally.
 
     Migration ``0057`` split ``muted`` into one column per side, so the callables now reference a column the
     live schema no longer has and can only be executed against a real historical state."""
@@ -248,7 +254,8 @@ class LegacyMutedRowRepairWiringTests(SimpleTestCase):
 
 
 class MuteWebsiteButtonTests(TestCase):
-    """The profile page's Mute/Unmute buttons must both work.
+    """
+    The profile page's Mute/Unmute buttons must both work.
 
     ``friend.unmute`` did not exist before this change - the template's Unmute button posted to
     ``friend.request``, which ``FriendshipStatus.can_request`` refuses for ``Muted``, so the button answered 400

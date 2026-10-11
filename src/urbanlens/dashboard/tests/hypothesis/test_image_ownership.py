@@ -73,7 +73,8 @@ class IsOwnContributionTests(TestCase):
         self.assertFalse(self._image(source=ImageSource.WIKIMEDIA, media_source_key="wikimedia").is_own_contribution)
 
     def test_a_materialised_row_that_fell_back_to_upload_is_not_owned(self) -> None:
-        """``_translated_source`` yields UPLOAD for an unrecognised panel key.
+        """
+        ``_translated_source`` yields UPLOAD for an unrecognised panel key.
 
         Without the ``media_source_key`` conjunct this row would read as the
         up-voter's own photograph purely because the panel was unrecognised.
@@ -91,7 +92,8 @@ class IsOwnContributionTests(TestCase):
         self.assertFalse(self._image(source=ImageSource.LINKED_URL).is_own_contribution)
 
     def test_the_queryset_agrees_with_the_property_row_for_row(self) -> None:
-        """The two are written separately and must not drift.
+        """
+        The two are written separately and must not drift.
 
         A page filters with the queryset form and then renders each row through the property; disagreement is a
         photo listed but marked withdrawable, or the reverse."""

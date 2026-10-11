@@ -31,7 +31,8 @@ _QUERY_KEY_MAX_LENGTH = 255
 
 @dataclass(frozen=True)
 class MediaItem:
-    """A single piece of captioned media from an external archive.
+    """
+    A single piece of captioned media from an external archive.
 
     Its URLs are kept without tracking parameters, so a file has one identity however the provider links it.
 
@@ -76,7 +77,8 @@ class MediaItem:
 
 
 class MediaProvider(Gateway, ABC):
-    """Template for gateways that return captioned media for a Location.
+    """
+    Template for gateways that return captioned media for a Location.
     Subclasses implement ``_generate_media`` to yield ``MediaItem``s for a search term; ``get_media`` wraps that with the shared 7-day ``LocationCache``, so results are only fetched once per Location."""
 
     display_name: ClassVar[str] = "Media"
@@ -102,7 +104,8 @@ class MediaProvider(Gateway, ABC):
     reject_address_derived_names: ClassVar[bool] = False
 
     def available(self) -> bool:
-        """Whether this install can ask this provider at all. An unavailable one is not scheduled and caches nothing,
+        """
+        Whether this install can ask this provider at all. An unavailable one is not scheduled and caches nothing,
         so its first answer once configured is a real one.
 
         Returns:
@@ -112,7 +115,8 @@ class MediaProvider(Gateway, ABC):
 
     @abstractmethod
     def _generate_media(self, search_term: str, address: str | None = None) -> Generator[MediaItem]:
-        """Yield MediaItems for ``search_term``.
+        """
+        Yield MediaItems for ``search_term``.
 
         Args:
             search_term: The search term to use to find media.
@@ -134,7 +138,8 @@ class MediaProvider(Gateway, ABC):
         audience: str = "",
         search_names: dict[str, list[str]] | None = None,
     ) -> tuple[list[MediaItem], bool]:
-        """Return captioned media for ``location``, using the 7-day LocationCache.
+        """
+        Return captioned media for ``location``, using the 7-day LocationCache.
 
         Args:
             location: The shared Location to cache results against.

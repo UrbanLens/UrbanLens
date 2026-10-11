@@ -1,4 +1,5 @@
-"""A pin share can only offer the sender's own pin, and only its own photos, map and child pins - enforced by the
+"""
+A pin share can only offer the sender's own pin, and only its own photos, map and child pins - enforced by the
 service every share path goes through, not by each caller's lookup."""
 
 from __future__ import annotations

@@ -1,4 +1,5 @@
-"""``{# #}`` comments that span lines render as text; the check must catch them.
+"""
+``{# #}`` comments that span lines render as text; the check must catch them.
 
 Django's single-line comment form is ``{# ... #}``. An opener that does not
 meet ``#}`` before the newline is not a comment - the tokens go out as text and
@@ -25,7 +26,8 @@ _payload = st.text(
 
 
 def _load_checker():
-    """Import ``bin/check_template_comments.py`` as a module.
+    """
+    Import ``bin/check_template_comments.py`` as a module.
 
     Returns:
         The imported module.

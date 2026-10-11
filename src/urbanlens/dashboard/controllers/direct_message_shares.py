@@ -44,7 +44,8 @@ class MessageSharePinView(LoginRequiredMixin, View):
     """GET/POST /messages/<profile_slug>/share/pin/ - share one of the sender's own pins in chat."""
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Render the pin-picker dialog body.
+        """
+        Render the pin-picker dialog body.
 
         Args:
             request: The incoming request.
@@ -59,7 +60,8 @@ class MessageSharePinView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/messages/_share_pin_dialog.html", {"partner": partner, "pins": pins})
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Create the PinShare + chat message and return the refreshed thread.
+        """
+        Create the PinShare + chat message and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -94,7 +96,8 @@ class MessageSharePinView(LoginRequiredMixin, View):
 
 
 def _get_share_message(profile: Profile, partner: Profile, message_id: int) -> DirectMessage:
-    """Resolve a message-with-share for a respond action, scoped to this conversation.
+    """
+    Resolve a message-with-share for a respond action, scoped to this conversation.
 
     Args:
         profile: The requesting (viewing) profile - must be the message's recipient.
@@ -124,7 +127,8 @@ def _get_share_message(profile: Profile, partner: Profile, message_id: int) -> D
 
 
 def _toast_response(request: HttpRequest, template: str, context: dict, *, level: str, message: str) -> HttpResponse:
-    """Render `template` and attach a `showToast` HX-Trigger.
+    """
+    Render `template` and attach a `showToast` HX-Trigger.
 
     Args:
         request: The incoming request.
@@ -142,7 +146,8 @@ def _toast_response(request: HttpRequest, template: str, context: dict, *, level
 
 
 class MessageShareRespondPinView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/share/pin/<message_id>/respond/ - accept/reject a `@pin` share in
+    """
+    POST /messages/<profile_slug>/share/pin/<message_id>/respond/ - accept/reject a `@pin` share in
     place.
 
     Mirrors `PinShareRespondView` but stays inside the DM thread: no page navigation, buttons replaced
@@ -151,7 +156,8 @@ class MessageShareRespondPinView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
-        """Apply the accept/reject decision and return the refreshed share card.
+        """
+        Apply the accept/reject decision and return the refreshed share card.
 
         Args:
             request: The incoming request.
@@ -184,7 +190,8 @@ class MessageShareRespondPinView(LoginRequiredMixin, View):
 
 
 class MessageMentionAddPinView(LoginRequiredMixin, View):
-    """POST /messages/<profile_slug>/mention/<mention_id>/add-pin/ - "Add to map" on a detected location.
+    """
+    POST /messages/<profile_slug>/mention/<mention_id>/add-pin/ - "Add to map" on a detected location.
 
     Accepts the DM_DETECTED share behind a coordinates/address mention (see
     ``services.messaging.dm_location_detection``), creating the recipient's pin at the shared location,
@@ -194,7 +201,8 @@ class MessageMentionAddPinView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: str, mention_id: int) -> HttpResponse:
-        """Create the pin from the mention's share and return the refreshed footer row.
+        """
+        Create the pin from the mention's share and return the refreshed footer row.
 
         Args:
             request: The incoming request.
@@ -232,7 +240,8 @@ class MessageShareRespondFriendView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/share/friend/<message_id>/respond/ - act on an `@friend` recommendation in place."""
 
     def post(self, request: HttpRequest, profile_slug: str, message_id: int) -> HttpResponse:
-        """Send a friend request to the recommended profile and return the refreshed card.
+        """
+        Send a friend request to the recommended profile and return the refreshed card.
 
         Args:
             request: The incoming request.
@@ -266,7 +275,8 @@ class MessageShareTripView(LoginRequiredMixin, View):
     """GET/POST /messages/<profile_slug>/share/trip/ - invite the partner to a trip in chat."""
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Render the trip-picker dialog body.
+        """
+        Render the trip-picker dialog body.
 
         Args:
             request: The incoming request.
@@ -281,7 +291,8 @@ class MessageShareTripView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/messages/_share_trip_dialog.html", {"partner": partner, "trips": trips})
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Create the trip invite + chat message and return the refreshed thread.
+        """
+        Create the trip invite + chat message and return the refreshed thread.
 
         Args:
             request: The incoming request.
@@ -323,7 +334,8 @@ class MessageShareFriendView(LoginRequiredMixin, View):
     """GET/POST /messages/<profile_slug>/share/friend/ - recommend one of the sender's friends in chat."""
 
     def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Render the friend-picker dialog body.
+        """
+        Render the friend-picker dialog body.
 
         Args:
             request: The incoming request.
@@ -338,7 +350,8 @@ class MessageShareFriendView(LoginRequiredMixin, View):
         return render(request, "dashboard/partials/messages/_share_friend_dialog.html", {"partner": partner, "friends": friends})
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Create the friend recommendation + chat message and return the refreshed thread.
+        """
+        Create the friend recommendation + chat message and return the refreshed thread.
 
         Args:
             request: The incoming request.

@@ -1,4 +1,5 @@
-"""A test deployment can raise the per-key caps without touching production's defaults.
+"""
+A test deployment can raise the per-key caps without touching production's defaults.
 
 The integration suite drives most of its requests through one key per account, and a full run spends
 more than 300 writes and 1000 reads an hour on it - every spec after that point dies on 429 instead of

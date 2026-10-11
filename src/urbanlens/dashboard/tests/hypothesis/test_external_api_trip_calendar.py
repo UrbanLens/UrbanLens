@@ -40,7 +40,8 @@ _ADDRESS = "1580 E Grand Blvd, Detroit, MI"
 
 
 def _bearer(raw_key: str) -> dict:
-    """Request kwargs carrying an API key as a bearer token.
+    """
+    Request kwargs carrying an API key as a bearer token.
 
     Args:
         raw_key: The raw (unhashed) API key value.
@@ -73,7 +74,8 @@ class _CalendarTestCase(TestCase):
         )
 
     def _patch_gateway(self) -> mock.MagicMock:
-        """Replace the gateway the sync service instantiates.
+        """
+        Replace the gateway the sync service instantiates.
 
         A fresh id per created event, the way Google actually answers: one export of a trip that has activities
         writes a trip-level link and an activity-level one, and the partial unique on (profile, google_event_id)
@@ -90,7 +92,8 @@ class _CalendarTestCase(TestCase):
         return gateway
 
     def _new_event(self, _body: dict, event_id: str | None = None) -> dict[str, str]:
-        """Return a distinct created-event payload for each gateway call.
+        """
+        Return a distinct created-event payload for each gateway call.
 
         Args:
             _body: The event body the service built (unused).
@@ -102,7 +105,8 @@ class _CalendarTestCase(TestCase):
         return {"id": f"evt-new-{self._created_events}"}
 
     def _shared_trip(self) -> Trip:
-        """A dated trip the key owner and the trip-mate both belong to.
+        """
+        A dated trip the key owner and the trip-mate both belong to.
 
         Returns:
             The saved trip, created by the trip-mate so the key owner is a plain member rather than an organizer."""
@@ -117,7 +121,8 @@ class _CalendarTestCase(TestCase):
         return trip
 
     def _own_trip(self) -> Trip:
-        """A dated trip the key owner created and joined.
+        """
+        A dated trip the key owner created and joined.
 
         Returns:
             The saved trip.
@@ -133,12 +138,14 @@ class _CalendarTestCase(TestCase):
 
 
 class ExportRespectsAdderVisibilityTests(_CalendarTestCase):
-    """A trip-mate's hidden coordinates must never reach a third party's calendar.
+    """
+    A trip-mate's hidden coordinates must never reach a third party's calendar.
 
     ``location_hidden`` was the only gate the exporter honoured."""
 
     def _mate_activity(self, trip: Trip, visibility: str, **kwargs) -> TripActivity:
-        """Add a located activity contributed by the trip-mate.
+        """
+        Add a located activity contributed by the trip-mate.
 
         Args:
             trip: The trip to add to. visibility: The adder's ``trip_pin_location_visibility`` level. **kwargs: Extra ``TripActivity`` field values.
@@ -212,7 +219,8 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
     """``POST /trips/{slug}/calendar/`` mirrors a trip onto the caller's calendar."""
 
     def _post(self, trip: Trip, body: dict | None = None, raw_key: str | None = None):
-        """POST the export endpoint for *trip*.
+        """
+        POST the export endpoint for *trip*.
 
         Args:
             trip: The trip to export. body: Optional JSON body. raw_key: Optional alternative API key.
@@ -260,7 +268,8 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         self.assertTrue(TripCalendarLink.objects.trip_level_link(trip, self.profile).auto_sync)
 
     def test_export_opens_no_transaction_around_the_upstream_calls(self) -> None:
-        """The third-party calls must not run inside a transaction this view opened.
+        """
+        The third-party calls must not run inside a transaction this view opened.
 
         Wrapping the fan-out in ``transaction.atomic`` would pin a database connection for the length of an
         unbounded series of upstream requests."""
@@ -301,7 +310,8 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         self.assertIn("error", response.json())
 
     def test_unconnected_calendar_is_409_with_the_sites_connect_url(self) -> None:
-        """The client must be sent to the site's own route, never to Google.
+        """
+        The client must be sent to the site's own route, never to Google.
 
         A Google authorization URL minted by this API would come back to the OAuth callback with no session
         attached, redirect to the login page, and lose the authorization code."""
@@ -393,7 +403,8 @@ class TripCalendarRemoveEndpointTests(_CalendarTestCase):
     """``DELETE /trips/{slug}/calendar/`` takes a trip back off the calendar."""
 
     def _delete(self, trip: Trip):
-        """DELETE the export endpoint for *trip*.
+        """
+        DELETE the export endpoint for *trip*.
 
         Args:
             trip: The trip to unexport.

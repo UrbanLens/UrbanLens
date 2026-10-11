@@ -23,7 +23,8 @@ MODEL_LABEL = "label"
 
 @register
 class LabelUndoHandler(UndoHandler):
-    """Restores a label's fields, hierarchy links, and pin assignments.
+    """
+    Restores a label's fields, hierarchy links, and pin assignments.
     Everything relational restores leniently: parents, children and pins that were deleted since are skipped, because they were never part of this deletion and a partial hierarchy beats none."""
 
     model_label = MODEL_LABEL
@@ -56,7 +57,8 @@ class LabelUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Label]:
-        """Recreate the labels, then relink hierarchy and pin assignments.
+        """
+        Recreate the labels, then relink hierarchy and pin assignments.
 
         Raises:
             UndoExpiredError: If the owning profile was deleted during the retention window, or if the label's name has been taken since the delete."""

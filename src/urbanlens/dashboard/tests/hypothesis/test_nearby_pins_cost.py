@@ -1,4 +1,5 @@
-"""The Private Pin page's nearby layer costs the same queries for two neighbours as for twenty.
+"""
+The Private Pin page's nearby layer costs the same queries for two neighbours as for twenty.
 
 It serialised each neighbour with `to_detail_json`, whose name reads the location's wiki and whose icon reads the
 pin's labels, one query each per pin: 266 queries a request on average under the capacity test.

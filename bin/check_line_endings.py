@@ -13,7 +13,8 @@ _REJECTED = {"crlf", "mixed", "cr"}
 
 
 def offending_files() -> list[tuple[str, str]]:
-    """Find tracked text files stored with an ending other than LF.
+    """
+    Find tracked text files stored with an ending other than LF.
 
     Returns:
         ``(path, index_ending)`` pairs, empty when the tree is clean.
@@ -45,7 +46,8 @@ def offending_files() -> list[tuple[str, str]]:
 
 
 def main() -> int:
-    """Report any tracked file stored with non-LF endings.
+    """
+    Report any tracked file stored with non-LF endings.
 
     Returns:
         0 when every tracked text file is LF, 1 otherwise.

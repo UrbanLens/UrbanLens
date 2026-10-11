@@ -1,4 +1,5 @@
-"""How long an uncached basemap tile takes, on a live server, against a local stand-in for the vendor.
+"""
+How long an uncached basemap tile takes, on a live server, against a local stand-in for the vendor.
 
 Production's slow-request log on 0.8.0 had a satellite miss at a median 1.44s of wall time and 1.11s of SQL, with
 seven queries each, while Esri answered in 0.09-0.33s. These measure the same request through the whole stack -
@@ -53,7 +54,8 @@ _REQUEST_THREADS = 8
 
 
 class _PooledWSGIServer(ThreadedWSGIServer):
-    """Request threads from a fixed pool, as gunicorn's gthread worker keeps them, rather than a new one per request.
+    """
+    Request threads from a fixed pool, as gunicorn's gthread worker keeps them, rather than a new one per request.
 
     It matters to what is measured: a connection a request thread keeps open is only reused by a later request on
     the same thread.
@@ -222,7 +224,8 @@ class MissLatencyTests(LiveServerTestCase):
                 self.assertEqual(vendor.requests - before, _MISSES)
 
     def test_a_cold_viewport_through_the_browsers_queue(self) -> None:
-        """The client paces own tiles through ``OWN_TILE_CONCURRENCY`` slots (``own-tiles.ts``) and retries a 503
+        """
+        The client paces own tiles through ``OWN_TILE_CONCURRENCY`` slots (``own-tiles.ts``) and retries a 503
         after a second; this replays a 30-tile viewport that way against the server's default slot count, at a
         few queue widths, to see whether a wider queue would be served or refused."""
         for width in (6, 12):

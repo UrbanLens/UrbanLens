@@ -30,7 +30,8 @@ class RedataHydrologyGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch streams, waterbodies, wetlands and the containing watershed.
+        """
+        Fetch streams, waterbodies, wetlands and the containing watershed.
 
         Args:
             latitude: WGS-84 latitude.

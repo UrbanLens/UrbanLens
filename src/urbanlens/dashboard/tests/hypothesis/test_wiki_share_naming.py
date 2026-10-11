@@ -36,7 +36,8 @@ class WikiCreationNamingTests(TestCase):
         return baker.make("dashboard.PinAlias", pin=pin, name=name, kind=kind)
 
     def test_a_pin_name_is_never_published_to_the_wiki(self) -> None:
-        """A pin name is the user's private label; only what they shared is used.
+        """
+        A pin name is the user's private label; only what they shared is used.
 
         This is a standing decision of the service (see ``test_pin_name_is_never_seeded_onto_wiki``) and naming
         must not become a way around it - the reported case works through the alias the user chose, which

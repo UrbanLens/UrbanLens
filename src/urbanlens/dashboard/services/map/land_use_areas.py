@@ -1,4 +1,5 @@
-"""The Private Pin map's Land Use layer: Census Special Land Use Area boundaries around a pin's parcel, via REData.
+"""
+The Private Pin map's Land Use layer: Census Special Land Use Area boundaries around a pin's parcel, via REData.
 
 REData answers which of the four Special Land Use Areas (military installation, correctional facility, national park,
 college or university) a parcel's coordinate falls inside on every parcel record, and draws their boundaries only on
@@ -55,7 +56,8 @@ STATUS_OUTSIDE_COVERAGE = "outside_coverage"
 
 
 class LandUseAreasBusyError(Exception):
-    """REData could not answer for now; ask again after ``retry_after`` seconds.
+    """
+    REData could not answer for now; ask again after ``retry_after`` seconds.
 
     Attributes:
         retry_after: Seconds until asking again is worthwhile.
@@ -67,7 +69,8 @@ class LandUseAreasBusyError(Exception):
 
 
 def land_use_layer_offered(pin: Pin) -> bool:
-    """Whether the pin's map offers the Land Use layer: REData is configured and the pin is in the United States.
+    """
+    Whether the pin's map offers the Land Use layer: REData is configured and the pin is in the United States.
 
     Args:
         pin: The pin whose map is being drawn.
@@ -79,7 +82,8 @@ def land_use_layer_offered(pin: Pin) -> bool:
 
 
 def land_use_area_collection(pin: Pin, *, caller: str | None = None) -> dict[str, Any]:
-    """The Special Land Use Areas around a pin's parcel, as a GeoJSON FeatureCollection.
+    """
+    The Special Land Use Areas around a pin's parcel, as a GeoJSON FeatureCollection.
 
     REData is asked under :class:`LandUseAreasUpstream`'s deadline, slots and per-caller rate.
 
@@ -119,7 +123,8 @@ def _in_coverage(pin: Pin) -> bool:
 
 
 def _parcel_record(pin: Pin, caller: str | None) -> dict[str, Any]:
-    """The parcel record the Property Records card cached for the pin, else REData's answer for its coordinate.
+    """
+    The parcel record the Property Records card cached for the pin, else REData's answer for its coordinate.
 
     The parcel's uuid and land-use flags do not go stale the way its owners do, so a cached record of any age is read.
     Without one, :meth:`RedataGateway.lookup_parcel` shares the card's own in-flight or recent lookup.
@@ -141,7 +146,8 @@ def _parcel_record(pin: Pin, caller: str | None) -> dict[str, Any]:
 
 
 def _expected_categories(record: dict[str, Any]) -> frozenset[str] | None:
-    """The categories the parcel record says the parcel is inside.
+    """
+    The categories the parcel record says the parcel is inside.
 
     Returns:
         The categories; empty when the record says none; None when the record cannot say - a REData that sends no
@@ -157,7 +163,8 @@ def _expected_categories(record: dict[str, Any]) -> frozenset[str] | None:
 
 
 def _cached_areas(parcel_uuid: str, expected: frozenset[str] | None, caller: str | None) -> dict[str, Any]:
-    """Ask REData for the parcel's boundaries, keeping the answer, and a failure briefly.
+    """
+    Ask REData for the parcel's boundaries, keeping the answer, and a failure briefly.
 
     Raises:
         LandUseAreasBusyError: REData could not answer for now, or did not within the last failure's wait.
@@ -183,7 +190,8 @@ def _cached_areas(parcel_uuid: str, expected: frozenset[str] | None, caller: str
 
 
 def _fetch_and_keep(key: str, parcel_uuid: str, expected: frozenset[str] | None) -> dict[str, Any]:
-    """Fetch the parcel's boundaries and keep them, so an answer that outran the deadline still serves the next ask.
+    """
+    Fetch the parcel's boundaries and keep them, so an answer that outran the deadline still serves the next ask.
 
     Raises:
         PropertyRecordsUnavailableError: REData did not answer.
@@ -204,7 +212,8 @@ def _fetch_and_keep(key: str, parcel_uuid: str, expected: frozenset[str] | None)
 
 
 def _ask[T](fetch: Callable[[], T], caller: str | None) -> T:
-    """Run one REData call under :class:`LandUseAreasUpstream`.
+    """
+    Run one REData call under :class:`LandUseAreasUpstream`.
 
     Raises:
         PropertyRecordsUnavailableError: REData answered with a failure, re-raised for the caller to read.

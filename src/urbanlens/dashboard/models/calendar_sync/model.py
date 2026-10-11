@@ -1,4 +1,5 @@
-"""Per-user Google Calendar integration models.
+"""
+Per-user Google Calendar integration models.
 Each user connects *their own* Google account via OAuth; the tokens stored here grant access to that user's personal calendar only.
 ``GoogleCalendarAccount`` holds the OAuth tokens for one profile, and ``TripCalendarLink`` records which trips have been mirrored to (or created from) which calendar events so imports and exports stay idempotent.
 """
@@ -30,7 +31,8 @@ from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
 class CalendarSyncDirection(TextChoices):
-    """Origin of a trip↔event link.
+    """
+    Origin of a trip↔event link.
 
     Attributes:
         IMPORTED: The trip was created in UrbanLens from a calendar event.
@@ -42,7 +44,8 @@ class CalendarSyncDirection(TextChoices):
 
 
 class GoogleCalendarAccount(abstract.DashboardModel):
-    """OAuth credentials for one user's own Google Calendar.
+    """
+    OAuth credentials for one user's own Google Calendar.
 
     One row per profile. Created by the "Connect Google Calendar" flow and
     deleted (after best-effort token revocation) when the user disconnects.
@@ -76,7 +79,8 @@ class GoogleCalendarAccount(abstract.DashboardModel):
 
     @property
     def is_token_expired(self) -> bool:
-        """Whether the access token is expired or about to expire.
+        """
+        Whether the access token is expired or about to expire.
         A 60-second safety margin is applied so a token that expires mid-call is treated as already expired.
 
         Returns:
@@ -94,7 +98,8 @@ class GoogleCalendarAccount(abstract.DashboardModel):
 
 
 class TripCalendarLink(abstract.DashboardModel):
-    """Association between a trip (or one of its activities) and one user's Google Calendar event.
+    """
+    Association between a trip (or one of its activities) and one user's Google Calendar event.
     Each member exports a trip to their *own* calendar, so a trip can have one link per profile.
     """
 
@@ -175,7 +180,8 @@ class TripCalendarLink(abstract.DashboardModel):
 
 
 class CalendarEventDeletion(abstract.DashboardModel):
-    """A Google Calendar event UrbanLens made, owed a delete because the trip or activity it mirrored is gone.
+    """
+    A Google Calendar event UrbanLens made, owed a delete because the trip or activity it mirrored is gone.
 
     The link that named the event goes with what it mirrored, so this row is the only record of the event left.
     ``tasks.delete_orphaned_calendar_events`` deletes it through the calendar budget, and the push sweep

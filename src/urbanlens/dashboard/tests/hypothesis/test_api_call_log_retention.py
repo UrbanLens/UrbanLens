@@ -13,7 +13,8 @@ _COST_SERIES_MONTHS = 12
 
 
 def _worst_case_cost_series_reach_days(months: int = _COST_SERIES_MONTHS) -> int:
-    """Most days back the cost series can ever need, over any starting date.
+    """
+    Most days back the cost series can ever need, over any starting date.
 
     The series covers ``months`` trailing *calendar* months, so the oldest row it reads is the 1st of the month
     ``months - 1`` back - and "now" can sit at the end of the current month."""
@@ -78,7 +79,8 @@ class ApiCallLogRetentionTests(SimpleTestCase):
 
 
 class PruneApiCallLogsUsesTheConfiguredRetentionTests(TestCase):
-    """The tests above only check that ``_API_CALL_LOG_RETENTION_DAYS`` is big enough.
+    """
+    The tests above only check that ``_API_CALL_LOG_RETENTION_DAYS`` is big enough.
 
     Nothing stops ``prune_api_call_logs`` itself from drifting away from that constant - e.g. a future edit that
     calls ``ApiCallLog.prune_older_than_days()`` with no argument, silently reverting to the model helper's own

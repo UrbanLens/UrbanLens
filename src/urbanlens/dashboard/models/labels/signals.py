@@ -86,7 +86,8 @@ CATEGORY_HIERARCHY: list[tuple[str, str]] = [
 
 
 def create_default_tags(sender: type[Profile], instance: Profile, created: bool, **kwargs) -> None:
-    """Create default personal status and category labels for every new profile.
+    """
+    Create default personal status and category labels for every new profile.
     Status labels: "Visited" is protected - it cannot be deleted or renamed.
     """
     if not created:
@@ -140,7 +141,8 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
 
 
 def create_default_saved_filters(profile: Profile) -> int:
-    """Seed the two saved filters a new profile starts with.
+    """
+    Seed the two saved filters a new profile starts with.
     The main map's filter bar is otherwise an empty shelf that a user has to learn the label formula syntax to fill, and these two are what almost everyone builds first: what I have seen, and what I still want to see.
 
     Args:
@@ -190,7 +192,8 @@ def create_default_saved_filters(profile: Profile) -> int:
 
 @receiver(pre_save, sender=Label, dispatch_uid="label_remember_prior_kind_for_redata")
 def remember_prior_kind_for_redata(sender: type[Label], instance: Label, **kwargs) -> None:
-    """Stash the label's previously-saved kind so post_save can detect a kind change.
+    """
+    Stash the label's previously-saved kind so post_save can detect a kind change.
     Only a tag/category<->status transition (via LabelEditView/LabelBulkConvertView's kind conversion) needs this - see sync_redata_taxonomy_on_save.
     """
     instance.redata_prior_kind = Label.objects.filter(pk=instance.pk).values_list("kind", flat=True).first() if instance.pk else None
@@ -219,7 +222,8 @@ def retire_redata_taxonomy_on_delete(sender: type[Label], instance: Label, **kwa
 
 @receiver(m2m_changed, sender=Label.parents.through, dispatch_uid="label_parents_sync_redata_taxonomy")
 def sync_redata_taxonomy_on_reparent(sender, instance: Label, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
-    """Resync a label's REData definition after its parent set changes (parent_ids is part of it).
+    """
+    Resync a label's REData definition after its parent set changes (parent_ids is part of it).
     ``Label.parents`` is symmetrical=False self-M2M, so both directions are real: ``child.parents.add(parent)`` (forward, instance is the child whose own parent_ids changed) and ``parent.children.add(child)`` / ``child.parents.add(parent)`` called from the parent side (reverse, instance is the parent, pk_set holds the affected children's ids - it is each child's definition that changed, not the parent's).
     """
     if action not in {"post_add", "post_remove", "post_clear"}:

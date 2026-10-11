@@ -1,4 +1,5 @@
-"""Gateway for Overture Maps' public GeoParquet release, for coordinates outside REData's mirror.
+"""
+Gateway for Overture Maps' public GeoParquet release, for coordinates outside REData's mirror.
 
 Callers go through ``boundaries.overture.OvertureProvider``, which answers coordinates REData's mirror covers from REData.
 """
@@ -91,7 +92,8 @@ _stac_index_cache: dict[str, list[tuple[str, tuple[float, float, float, float]]]
 
 
 def _index_entries(release: str) -> list[tuple[str, tuple[float, float, float, float]]]:
-    """Every data file the release's STAC index lists, with its extent.
+    """
+    Every data file the release's STAC index lists, with its extent.
 
     Raises:
         OSError: The index could not be fetched.
@@ -113,7 +115,8 @@ def _index_entries(release: str) -> list[tuple[str, tuple[float, float, float, f
 
 
 def _intersecting_files(theme: str, overture_type: str, bbox: tuple[float, float, float, float], release: str) -> list[str] | None:
-    """S3 keys of the release's ``overture_type`` files whose extent meets ``bbox``, or None when the index is unreadable.
+    """
+    S3 keys of the release's ``overture_type`` files whose extent meets ``bbox``, or None when the index is unreadable.
 
     Matched on the key's ``theme=/type=`` partition rather than the index's ``collection`` column, which
     release 2026-08-19.0 publishes null on every row - the library filters on it and finds nothing anywhere.
@@ -152,7 +155,8 @@ _EARTH_RADIUS_M = 6_371_000.0
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in metres.
+    """
+    Great-circle distance in metres.
 
     Args:
         lat1: First latitude in degrees.
@@ -180,7 +184,8 @@ def _clean_value(value: Any) -> Any:
 
 @dataclass(slots=True, kw_only=True)
 class OvertureMapsGateway(Gateway, BoundaryProvider):
-    """Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox from the public release.
+    """
+    Fetch Overture Maps theme data (buildings, addresses, places, ...) by bbox from the public release.
 
     Refuses a bbox centred where :func:`~urbanlens.dashboard.services.apis.locations.boundaries.overture.served_by_redata` holds.
 
@@ -230,7 +235,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         return result
 
     def _reserve_call_budget(self, overture_type: str) -> int:
-        """Refuse the call before it reaches Overture, if this service's own budget is spent.
+        """
+        Refuse the call before it reaches Overture, if this service's own budget is spent.
 
         `_fetch` reads GeoParquet straight from S3 via `pyarrow`/`geopandas`, bypassing
         `self.session` entirely - the one place `Gateway` normally wires up rate limiting (see
@@ -270,7 +276,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
             raise GatewayRateLimitedError(str(exc)) from exc
 
     def _resolve_release(self) -> str:
-        """The pinned release, else the latest one.
+        """
+        The pinned release, else the latest one.
 
         Resolved here rather than left to the library: its read resolves "latest" itself, but its
         STAC index lookup does not, and asks for ``/None/collections.parquet``.
@@ -297,7 +304,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         return release
 
     def _narrowed_files(self, overture_type: str, bbox: BBox, release: str) -> list[str]:
-        """The files the STAC index says intersect ``bbox``; refuse rather than read the whole theme.
+        """
+        The files the STAC index says intersect ``bbox``; refuse rather than read the whole theme.
 
         Without the index a lookup, however small, opens every partition file of the global theme.
 
@@ -387,7 +395,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         return best_containing_polygon(self._building_features(latitude, longitude), latitude, longitude)
 
     def get_building_attributes(self, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """Return the pinned building's physical attributes from Overture's Buildings theme.
+        """
+        Return the pinned building's physical attributes from Overture's Buildings theme.
 
         Args:
             latitude: WGS-84 latitude.
@@ -399,7 +408,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
         return building_attributes(self._building_features(latitude, longitude), latitude, longitude)
 
     def get_nearby_places(self, latitude: float, longitude: float, *, radius_m: float = 150.0, limit: int = 5) -> list[dict[str, Any]]:
-        """Return named points of interest near a coordinate from Overture's Places theme.
+        """
+        Return named points of interest near a coordinate from Overture's Places theme.
 
         Args:
             latitude: WGS-84 latitude.
@@ -418,7 +428,8 @@ class OvertureMapsGateway(Gateway, BoundaryProvider):
 
 
 def building_attributes(features: list[dict], latitude: float, longitude: float) -> dict[str, Any] | None:
-    """The physical attributes of the smallest Overture building containing a coordinate.
+    """
+    The physical attributes of the smallest Overture building containing a coordinate.
 
     Args:
         features: GeoJSON features carrying Overture's own building properties.
@@ -454,7 +465,8 @@ def building_attributes(features: list[dict], latitude: float, longitude: float)
 
 
 def nearby_places(features: list[dict], latitude: float, longitude: float, *, radius_m: float, limit: int) -> list[dict[str, Any]]:
-    """The named Overture places within ``radius_m`` of a coordinate, nearest first.
+    """
+    The named Overture places within ``radius_m`` of a coordinate, nearest first.
 
     Args:
         features: GeoJSON point features carrying Overture's own place properties.

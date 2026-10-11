@@ -31,7 +31,8 @@ class FindNearestPinTests(TestCase):
         self.assertEqual(find_nearest_pin(_LAT, _LNG, self.profile, 100).name, "near")
 
     def test_the_result_does_not_depend_on_insertion_order(self) -> None:
-        """The old ordering was stable but arbitrary; this would pass either way
+        """
+        The old ordering was stable but arbitrary; this would pass either way
         only if distance is what decides."""
         self._pin("near", -71.45013)
         self._pin("far", -71.45090)

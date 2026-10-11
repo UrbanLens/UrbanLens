@@ -16,7 +16,8 @@ class RedataElevationGateway(RedataLocationContextGateway):
     answers_at_null_island: ClassVar[bool] = True
 
     def get_elevation(self, latitude: float, longitude: float, *, force_refresh: bool = False) -> LocationContextEnvelope:
-        """Fetch every configured DEM's elevation reading at a coordinate.
+        """
+        Fetch every configured DEM's elevation reading at a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

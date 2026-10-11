@@ -1,4 +1,5 @@
-"""What the navbar every page renders costs, and that an event still reaches it.
+"""
+What the navbar every page renders costs, and that an event still reaches it.
 
 At 1,000 concurrent users the app container ran 3.71 of its four cores and was CPU-throttled 31.6%
 of the time while the database used 0.91 of its own four (``tests/perf/results/before2-*``), so
@@ -50,7 +51,8 @@ class _AccessStateCase(TestCase):
         SiteSettings.get_current()
 
     def cold(self, read: Callable[[User], Any]) -> tuple[Any, int]:
-        """*read*'s answer for a request that has not already paid for it, and what it cost.
+        """
+        *read*'s answer for a request that has not already paid for it, and what it cost.
 
         The user is re-loaded because Django memoises permissions on the instance, and the
         statements are counted through ``CaptureQueriesContext`` because ``connection.queries_log``
@@ -70,7 +72,8 @@ class _AccessStateCase(TestCase):
         return answer, len(captured.captured_queries)
 
     def committed(self) -> AbstractContextManager[list[Any]]:
-        """A block whose writes reach the invalidation, the way a real request's would.
+        """
+        A block whose writes reach the invalidation, the way a real request's would.
 
         The bump is deferred to the transaction's commit on purpose (see
         :func:`~urbanlens.dashboard.models.subscriptions.access_state.forget`), and a ``TestCase``

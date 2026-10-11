@@ -44,7 +44,8 @@ class TwilioGateway(Gateway):
         return number
 
     def send(self, to_number: str, body: str) -> bool:
-        """Send a text message, returning whether Twilio accepted it.
+        """
+        Send a text message, returning whether Twilio accepted it.
 
         Args:
             to_number: Destination phone number, in E.164 format (e.g. ``+15551234567``).

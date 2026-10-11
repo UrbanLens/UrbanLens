@@ -26,7 +26,8 @@ def manifest_path() -> Path | None:
 
 
 def read_manifest() -> list[dict[str, Any]]:
-    """The location entries a demo account should be given pins on.
+    """
+    The location entries a demo account should be given pins on.
 
     Returns:
         Entries as written by ``import_public_locations``."""
@@ -49,7 +50,8 @@ def _entry_key(entry: dict[str, Any]) -> tuple[Any, Any] | None:
 
 
 def merge_into_manifest(entries: list[dict[str, Any]]) -> Path | None:
-    """Add ``entries`` to the manifest that seeding reads, keyed on coordinates.
+    """
+    Add ``entries`` to the manifest that seeding reads, keyed on coordinates.
 
     Args:
         entries: Location entries to add, in export format.
@@ -70,7 +72,8 @@ def merge_into_manifest(entries: list[dict[str, Any]]) -> Path | None:
 
 
 def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
-    """Create or refresh a Location (and its Wiki) for each entry, in one transaction.
+    """
+    Create or refresh a Location (and its Wiki) for each entry, in one transaction.
 
     Args:
         entries: Entries in export format (``latitude``, ``longitude``, ``official_name``, ``official_name_source``, ``wiki``).
@@ -119,7 +122,8 @@ def import_location_entries(entries: list[dict[str, Any]]) -> tuple[int, int]:
 
 
 def redata_demo_locations() -> list[dict[str, Any]]:
-    """Public demo locations published by REData's ``/public-locations/`` catalog.
+    """
+    Public demo locations published by REData's ``/public-locations/`` catalog.
 
     Returns:
         Entries in export format (``latitude``, ``longitude``, ``official_name``, ``official_name_source``, ``wiki``) - possibly empty."""
@@ -152,7 +156,8 @@ def redata_demo_locations() -> list[dict[str, Any]]:
 
 
 def pool_locations() -> list[Location]:
-    """Resolve the manifest to Location rows that actually exist here.
+    """
+    Resolve the manifest to Location rows that actually exist here.
     Entries are matched, never created: ``import_public_locations`` is what creates them, and it is also what pulls each one's wiki across.
 
     Returns:

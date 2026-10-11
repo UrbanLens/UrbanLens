@@ -1,4 +1,5 @@
-"""Correcting an oversized parcel must not cost one provider-chain run per location it captured.
+"""
+Correcting an oversized parcel must not cost one provider-chain run per location it captured.
 
 A legacy parcel outline for Hudson River State Hospital covered 102.9 km² and held 99 locations.
 Re-resolving it read the shrink to 0.47 km² as a subdivision, then ran the full chain for every

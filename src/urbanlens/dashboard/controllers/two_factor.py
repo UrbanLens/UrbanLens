@@ -1,4 +1,5 @@
-"""TOTP (authenticator app) enrollment and backup-code management for Settings > Security.
+"""
+TOTP (authenticator app) enrollment and backup-code management for Settings > Security.
 
 When the request carries an ``HX-Request`` header (the forms in ``_security_section_body.html`` all
 do), it instead re-renders just that partial in place, so the section updates without a full page
@@ -60,7 +61,8 @@ class TOTPSetupStartView(LoginRequiredMixin, View):
 
 
 class TOTPQRCodeView(LoginRequiredMixin, View):
-    """GET: render the pending secret's QR code as a PNG.
+    """
+    GET: render the pending secret's QR code as a PNG.
 
     Reads the secret from the session rather than a URL parameter so it
     never appears in server logs, browser history, or a Referer header.

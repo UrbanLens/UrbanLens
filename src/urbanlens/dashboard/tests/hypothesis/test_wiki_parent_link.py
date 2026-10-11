@@ -52,7 +52,8 @@ class VisibleParentWikiTests(TestCase):
         self.assertEqual(visible_parent_wiki(child_wiki, self.profile), parent_wiki)
 
     def test_an_unearned_aggregate_parent_is_withheld(self) -> None:
-        """Holding one parcel of a multi-parcel campus does not earn the campus,
+        """
+        Holding one parcel of a multi-parcel campus does not earn the campus,
         so its wiki must not be named on the parcel's page."""
         campus = make_place(PlaceKind.PARCEL, None)
         parcel_a = make_place(

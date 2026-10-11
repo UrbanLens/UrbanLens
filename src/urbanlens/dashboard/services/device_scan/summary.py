@@ -1,4 +1,5 @@
-"""What the site shows for a device, summarised from every scan of it rather than taken from the latest one.
+"""
+What the site shows for a device, summarised from every scan of it rather than taken from the latest one.
 
 Each account counts once, by its latest report, so one uploader repeating itself cannot outvote others. An
 unattributed upload has no account to fold it into, so each counts as its own reporter.
@@ -19,7 +20,8 @@ if TYPE_CHECKING:
 
 
 def reporter(profile_id: int | None, upload_id: int) -> str:
-    """The key one reporter's scans share: their account, or the upload itself when it is unattributed.
+    """
+    The key one reporter's scans share: their account, or the upload itself when it is unattributed.
 
     Args:
         profile_id: The uploading profile, or None.
@@ -41,7 +43,8 @@ def _plurality(latest: dict[str, str]) -> str | None:
 
 
 def summarize_devices(devices: Iterable[ScannedDevice]) -> None:
-    """Recompute each device's type and name from all of its scans, saving any that changed.
+    """
+    Recompute each device's type and name from all of its scans, saving any that changed.
 
     Args:
         devices: The devices to summarise.

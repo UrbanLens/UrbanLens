@@ -1,4 +1,5 @@
-"""Tests for Profile model properties and helper functions.
+"""
+Tests for Profile model properties and helper functions.
 
 Pure-function tests use unittest.TestCase (no DB).
 DB-backed tests use django.test.TestCase with baker.

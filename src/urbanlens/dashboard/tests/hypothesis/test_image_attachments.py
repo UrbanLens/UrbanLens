@@ -61,7 +61,8 @@ class ImageAttachmentTests(TestCase):
         self.assertEqual(ImageAttachment.objects.filter(image=image).count(), 1)
 
     def test_a_row_must_attach_to_exactly_one_thing(self) -> None:
-        """Both set is counted twice by every reference count; neither keeps a
+        """
+        Both set is counted twice by every reference count; neither keeps a
         photo alive while attaching it to nothing, which is what would defeat
         collecting unreferenced photos."""
         image = _image(self.profile)
@@ -130,7 +131,8 @@ class ImageCollectionTests(TestCase):
         self.assertFalse(Image.objects.filter(pk=image.pk).exists())
 
     def test_an_uploaded_photo_is_never_collected(self) -> None:
-        """It is its owner's library whether or not anything points at it.
+        """
+        It is its owner's library whether or not anything points at it.
 
         Collecting on "no attachments" would delete people's own pictures the
         moment they removed the last pin that used them.

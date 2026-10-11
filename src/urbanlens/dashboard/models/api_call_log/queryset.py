@@ -28,7 +28,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return self.filter(created__gte=timezone.now() - delta)
 
     def today(self) -> Self:
-        """Filter to calls made today (UTC calendar day).
+        """
+        Filter to calls made today (UTC calendar day).
 
         A half-open range over the stored column rather than ``created__date``.
         The two ask the same question - TIME_ZONE is UTC, so the extraction
@@ -49,7 +50,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return self.since(timedelta(days=30))
 
     def this_calendar_month(self) -> Self:
-        """Filter to calls made since the 1st of this UTC month, the window a vendor's free tier resets on.
+        """
+        Filter to calls made since the 1st of this UTC month, the window a vendor's free tier resets on.
 
         Returns:
             Calls whose ``created`` falls in the current UTC calendar month.
@@ -57,7 +59,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return self.filter(created__gte=timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0))
 
     def billable(self) -> Self:
-        """Filter to calls that actually consumed the service's quota.
+        """
+        Filter to calls that actually consumed the service's quota.
         Excludes the entries written for calls that were *skipped* - geo-filtered, rate-limited, service-disabled, and refused for an input that could not return data.
         Those rows exist so a skipped attempt is visible in usage reporting, not because a request went out; counting them against a limit lets a burst of rejections spend a budget no request ever used.
 
@@ -71,7 +74,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return self.filter(was_rejected_input=True)
 
     def usage_by_profile(self, window: timedelta) -> list[tuple[int, int]]:
-        """Who consumed this queryset's calls over ``window``, heaviest first.
+        """
+        Who consumed this queryset's calls over ``window``, heaviest first.
 
         Composable rather than self-filtering: chain ``for_service`` and
         ``billable`` to ask about quota actually spent, or leave them off to
@@ -91,7 +95,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return [(row["profile_id"], row["spent"]) for row in rows]
 
     def active_consumers(self, window: timedelta) -> int:
-        """How many distinct people used this queryset's service over ``window``.
+        """
+        How many distinct people used this queryset's service over ``window``.
 
         The denominator of a fair share: one active consumer may reasonably
         have the whole budget, a hundred may not.
@@ -105,7 +110,8 @@ class ApiCallLogQuerySet(abstract.DashboardQuerySet["ApiCallLog"]):
         return self.since(window).exclude(profile__isnull=True).values("profile_id").distinct().count()
 
     def summary_by_service(self) -> list[Mapping[str, Any]]:
-        """Return per-service usage summary for the last 30 days.
+        """
+        Return per-service usage summary for the last 30 days.
 
         Counted in calls rather than rows, since a tallied service's row stands for a minute of them, and the mean
         response time is weighted the same way.

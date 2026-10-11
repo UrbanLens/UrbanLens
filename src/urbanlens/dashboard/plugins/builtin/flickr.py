@@ -1,4 +1,5 @@
-"""Flickr plugin: rate-limit defaults for all three Flickr integrations.
+"""
+Flickr plugin: rate-limit defaults for all three Flickr integrations.
 This plugin registers the shared rate-limit defaults so calls are throttled and logged like every other external API, and contributes the search provider's panel source."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ class FlickrPlugin(UrbanLensPlugin):
     order: ClassVar[int] = 41
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Flickr API.
+        """
+        Rate-limit defaults for the Flickr API.
 
         Returns:
             Defaults for the ``flickr`` service key.
@@ -43,7 +45,8 @@ class FlickrPlugin(UrbanLensPlugin):
         }
 
     def get_panel_sources(self) -> list[PanelSource]:
-        """Contribute the public Flickr search Media gallery provider.
+        """
+        Contribute the public Flickr search Media gallery provider.
         Uses the full-text ``flickr.photos.search`` API when a Flickr API key is configured, or falls back to Flickr's keyless public tags feed otherwise (weaker recall - see ``services.apis.flickr.search``'s module docstring)."""
         from urbanlens.dashboard.services.apis.flickr.oauth import is_configured
         from urbanlens.dashboard.services.apis.flickr.search import FlickrFeedSearchGateway, FlickrMediaPanelSource, FlickrSearchGateway

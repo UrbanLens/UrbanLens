@@ -1,4 +1,5 @@
-"""Tests for the saved filter's own dedicated page: a live-updating map of
+"""
+Tests for the saved filter's own dedicated page: a live-updating map of
 matching pins plus every editable option, replacing the old card "Edit"
 dialog - see SavedFilterDetailView/SavedFilterPreviewView and
 _filters_tab_grid.html's card link.
@@ -81,7 +82,8 @@ class SavedFilterDetailViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_save_action_points_at_the_existing_edit_endpoint(self) -> None:
-        """The page's form reuses saved_filters.edit for Save - no new save
+        """
+        The page's form reuses saved_filters.edit for Save - no new save
         endpoint was introduced, so resync/undo/derived-list logic there
         (already covered elsewhere) applies unchanged."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
@@ -93,7 +95,8 @@ class SavedFilterDetailViewTests(TestCase):
         self.assertContains(response, "dashboard/js/saved-filter-detail.js")
 
     def test_label_picker_renders_the_shared_rich_picker(self) -> None:
-        """Labels use the shared rich include/exclude picker (the same engine
+        """
+        Labels use the shared rich include/exclude picker (the same engine
         as the main map's filter sidebar - see initLabelPicker in shared/saved-filter-form.ts and
         ts/shared/label-picker.ts), not a flat checkbox list."""
         response = self.client.get(reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
@@ -168,7 +171,8 @@ class FiltersTabCardLinksToDetailPageTests(TestCase):
         self.assertContains(response, reverse("saved_filters.detail", args=[self.saved_filter.uuid]))
 
     def test_no_inline_edit_button(self) -> None:
-        """The card's own Edit button (and its dialog-opening hx-on wiring) is
+        """
+        The card's own Edit button (and its dialog-opening hx-on wiring) is
         gone - "New Filter" legitimately still opens the dialog for creating a
         new filter, so this only checks the edit-specific URL/wiring is absent."""
         response = self._get_filters_tab()

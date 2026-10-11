@@ -1,4 +1,5 @@
-"""Backfill PlaceExternalTag from already-cached Nominatim/Overture responses.
+"""
+Backfill PlaceExternalTag from already-cached Nominatim/Overture responses.
 
 Shipping PlaceExternalTag only populates it going forward: the Nominatim and
 Overture Building Characteristics panel/enrichment sources only sync tags at
@@ -44,7 +45,8 @@ class Command(BaseCommand):
             self._backfill_source(cache_source, tag_source, extractor, dry_run=dry_run)
 
     def _backfill_source(self, cache_source: str, tag_source: str, extractor: Callable[[dict], list[ExtractedTag]], *, dry_run: bool) -> None:
-        """Sync one provider's cached data onto every Place it covers.
+        """
+        Sync one provider's cached data onto every Place it covers.
 
         A Place can be shared by several Locations (see PlaceExternalTag's own docstring on the
         multi-tenant-Place trade-off) - to stay consistent with how the live panel/enrichment sync already

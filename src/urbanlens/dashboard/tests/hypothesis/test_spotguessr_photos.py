@@ -39,7 +39,8 @@ class CandidateImageForLocationPrivacyTests(TestCase):
         self.assertIsNone(candidate_image_for_location(location))
 
     def test_a_photo_attached_to_a_safety_checkin_is_never_eligible_even_if_location_matches(self) -> None:
-        """Defense in depth: even a photo with an (unusual) safety_checkin
+        """
+        Defense in depth: even a photo with an (unusual) safety_checkin
         link is caught by the same wiki==null gate as any other private
         photo - it was never explicitly shared to the wiki either."""
         location = _make_location()
@@ -131,7 +132,8 @@ class CandidateImageForLocationRelevanceTests(TestCase):
         self.assertEqual(candidate_image_for_location(self.location, allow_arbitrary_external_photos=True), image)
 
     def test_a_never_voted_external_photo_is_eligible_by_default(self) -> None:
-        """Non-negative, not strictly positive - a brand new photo with zero
+        """
+        Non-negative, not strictly positive - a brand new photo with zero
         votes must still be showable, or it could never accumulate the
         "shown, no reaction" signal that would eventually earn it a score."""
         image = self._external_image("d" * 40)

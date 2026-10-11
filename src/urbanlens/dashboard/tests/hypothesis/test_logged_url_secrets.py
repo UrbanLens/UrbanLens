@@ -149,7 +149,8 @@ class RedactionIsWiredTests(SimpleTestCase):
 
 @contextmanager
 def celery_worker_logging(stream: io.StringIO) -> Iterator[None]:
-    """Celery's own worker logging setup, which replaces the root logger's handlers, undone afterwards.
+    """
+    Celery's own worker logging setup, which replaces the root logger's handlers, undone afterwards.
 
     Yields:
         Nothing; the worker's handlers write to ``stream`` meanwhile.

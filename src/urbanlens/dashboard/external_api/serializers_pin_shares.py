@@ -1,4 +1,5 @@
-"""Request/response types for answering a pin someone shared with you.
+"""
+Request/response types for answering a pin someone shared with you.
 
 Small surface, two deliberate choices:
 

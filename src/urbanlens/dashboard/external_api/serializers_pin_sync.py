@@ -1,4 +1,5 @@
-"""Request/response types for the manual pin <-> wiki child-marker sync.
+"""
+Request/response types for the manual pin <-> wiki child-marker sync.
 
 ``child_pin_uuids`` is ``min_length=1`` because an empty list is never a meaningful request - the
 internal controller answers 400 for it, and silently succeeding with ``created: 0`` would let a

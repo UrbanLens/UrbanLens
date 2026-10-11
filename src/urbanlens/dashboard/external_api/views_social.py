@@ -1,4 +1,5 @@
-"""External-API views for unblocking, avatars, and private profile annotations.
+"""
+External-API views for unblocking, avatars, and private profile annotations.
 
 Every refusal here is 404 with the same body an unknown uuid produces: a blocked party must not be
 able to confirm the block exists, and a distinguishing 403 would do exactly that.
@@ -72,7 +73,8 @@ _NO_SUCH_PROFILE = "No such profile."
 
 
 class FriendUnblockView(FriendActionView):
-    """POST: lift a block this caller placed on the named profile.
+    """
+    POST: lift a block this caller placed on the named profile.
 
     Inherits the shared transition handler, so the uuid lookup, the ``social:write`` gate and the
     error-to-status mapping are the ones every other friendship action uses.
@@ -84,7 +86,8 @@ class FriendUnblockView(FriendActionView):
     not_found_message: ClassVar[str] = _NO_SUCH_PROFILE
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
-        """Lift the caller's own block on the target.
+        """
+        Lift the caller's own block on the target.
 
         Args:
             actor: The calling profile, which must be the one that blocked.
@@ -100,7 +103,8 @@ class FriendUnblockView(FriendActionView):
 
 
 class _OwnProfileApiView(ExternalApiView):
-    """Base for the routes that may only ever touch the caller's own profile.
+    """
+    Base for the routes that may only ever touch the caller's own profile.
 
     Factored out because the resolution rule is the security property, not a convenience: anything other
     than the caller's own slug answers 404, never 403, and never distinguishes "no such profile" from
@@ -110,7 +114,8 @@ class _OwnProfileApiView(ExternalApiView):
     """
 
     def own_profile(self, request: Request, profile_slug: str) -> Profile | None:
-        """The caller's profile, if *profile_slug* names it.
+        """
+        The caller's profile, if *profile_slug* names it.
 
         Args:
             request: The authenticated request.
@@ -127,7 +132,8 @@ class _OwnProfileApiView(ExternalApiView):
         return target
 
     def profile_detail(self, request: Request, profile_slug: str) -> Response:
-        """Answer with the shared profile-detail payload.
+        """
+        Answer with the shared profile-detail payload.
 
         Delegates to ``ProfileDetailView.get`` rather than assembling a second payload, so an avatar write
         and a subsequent profile read can never disagree about the same profile.
@@ -143,7 +149,8 @@ class _OwnProfileApiView(ExternalApiView):
 
 
 class ProfileAvatarView(_OwnProfileApiView):
-    """PUT a new avatar image; DELETE the current one.
+    """
+    PUT a new avatar image; DELETE the current one.
 
     ``social:write`` on both, not ``photos:write``: an avatar creates no ``Image`` row and consumes no
     photo quota, and ``photos:write`` would additionally authorize destroying the user's photo library.
@@ -164,7 +171,8 @@ class ProfileAvatarView(_OwnProfileApiView):
         responses={200: ProfileDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 413: ErrorSerializer, 422: ErrorSerializer, 503: ErrorSerializer},
     )
     def put(self, request: Request, profile_slug: str) -> Response:
-        """Replace the caller's avatar with the uploaded image.
+        """
+        Replace the caller's avatar with the uploaded image.
 
         Args:
             request: The authenticated request, carrying a ``file`` part.
@@ -204,7 +212,8 @@ class ProfileAvatarView(_OwnProfileApiView):
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, profile_slug: str) -> Response:
-        """Remove the caller's avatar, deleting the stored file.
+        """
+        Remove the caller's avatar, deleting the stored file.
 
         Args:
             request: The authenticated request.
@@ -223,7 +232,8 @@ class ProfileAvatarView(_OwnProfileApiView):
 
 
 class ProfileAvatarEmojiView(_OwnProfileApiView):
-    """POST: generate an emoji avatar instead of uploading one.
+    """
+    POST: generate an emoji avatar instead of uploading one.
 
     The same option the site's own picker offers, and the reason a client does not need an image library
     to give a new account a recognizable avatar.
@@ -237,7 +247,8 @@ class ProfileAvatarEmojiView(_OwnProfileApiView):
 
     @extend_schema(request=AvatarEmojiSerializer, responses={200: ProfileDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, profile_slug: str) -> Response:
-        """Generate and store an emoji avatar for the caller.
+        """
+        Generate and store an emoji avatar for the caller.
 
         Args:
             request: The authenticated request carrying ``animal`` and ``color``.
@@ -260,7 +271,8 @@ class ProfileAvatarEmojiView(_OwnProfileApiView):
 
 
 class _AnnotationApiView(ExternalApiView):
-    """Base for the private-annotation routes: nickname and trust.
+    """
+    Base for the private-annotation routes: nickname and trust.
 
     A subject the caller may not see answers 404 - the same 404 an unknown slug gets - because
     ``can_view_profile`` failing means the caller was never shown that this account exists.
@@ -275,7 +287,8 @@ class _AnnotationApiView(ExternalApiView):
     }
 
     def subject(self, request: Request, profile_slug: str) -> Profile | None:
-        """The annotated profile, if this caller may see it at all.
+        """
+        The annotated profile, if this caller may see it at all.
 
         Args:
             request: The authenticated request.
@@ -288,7 +301,8 @@ class _AnnotationApiView(ExternalApiView):
         return _resolve_profile(profile_slug, request.user.profile)
 
     def annotations_response(self, viewer: Profile, subject: Profile) -> Response:
-        """Build the shared annotations payload.
+        """
+        Build the shared annotations payload.
 
         Returned by the write endpoints as well as the read one, so a client gets the post-write state
         without a follow-up call it might forget to make.
@@ -313,7 +327,8 @@ class _AnnotationApiView(ExternalApiView):
 
 
 class ProfileAnnotationsView(_AnnotationApiView):
-    """GET: everything the caller privately records about one profile.
+    """
+    GET: everything the caller privately records about one profile.
 
     One call for the three things a profile screen needs to render the viewer's own overlay - nickname,
     trust, and how many notes exist - instead of three.
@@ -328,7 +343,8 @@ class ProfileAnnotationsView(_AnnotationApiView):
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})
     def get(self, request: Request, profile_slug: str) -> Response:
-        """Return the caller's private annotations about the named profile.
+        """
+        Return the caller's private annotations about the named profile.
 
         Args:
             request: The authenticated request.
@@ -345,7 +361,8 @@ class ProfileAnnotationsView(_AnnotationApiView):
 
 
 class ProfileNicknameView(_AnnotationApiView):
-    """PUT or DELETE the caller's private nickname for another profile.
+    """
+    PUT or DELETE the caller's private nickname for another profile.
 
     A singleton per (author, subject) pair, so ``PUT`` is a full replacement and is idempotent;
     ``DELETE`` is idempotent too, and succeeds whether or not a nickname was set.
@@ -355,7 +372,8 @@ class ProfileNicknameView(_AnnotationApiView):
 
     @extend_schema(request=ProfileNicknameWriteSerializer, responses={200: ProfileAnnotationsSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def put(self, request: Request, profile_slug: str) -> Response:
-        """Set or replace the caller's nickname for the named profile.
+        """
+        Set or replace the caller's nickname for the named profile.
 
         Args:
             request: The authenticated request carrying ``nickname``.
@@ -388,7 +406,8 @@ class ProfileNicknameView(_AnnotationApiView):
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, profile_slug: str) -> Response:
-        """Remove the caller's nickname for the named profile.
+        """
+        Remove the caller's nickname for the named profile.
 
         Args:
             request: The authenticated request.
@@ -407,7 +426,8 @@ class ProfileNicknameView(_AnnotationApiView):
 
 
 class ProfileTrustView(_AnnotationApiView):
-    """PUT or DELETE the caller's private 1-5 trust rating for another profile.
+    """
+    PUT or DELETE the caller's private 1-5 trust rating for another profile.
 
     Kept separate from the nickname route even though both are singletons on the same pair: they are
     independently meaningful, and a client that only wants to change one should not have to resend the
@@ -416,7 +436,8 @@ class ProfileTrustView(_AnnotationApiView):
 
     @extend_schema(request=ProfileTrustWriteSerializer, responses={200: ProfileAnnotationsSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def put(self, request: Request, profile_slug: str) -> Response:
-        """Set or replace the caller's trust rating for the named profile.
+        """
+        Set or replace the caller's trust rating for the named profile.
 
         Args:
             request: The authenticated request carrying ``rating``.
@@ -446,7 +467,8 @@ class ProfileTrustView(_AnnotationApiView):
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})
     def delete(self, request: Request, profile_slug: str) -> Response:
-        """Remove the caller's trust rating for the named profile.
+        """
+        Remove the caller's trust rating for the named profile.
 
         Args:
             request: The authenticated request.
@@ -465,7 +487,8 @@ class ProfileTrustView(_AnnotationApiView):
 
 
 class ProfileSocialLinksView(_OwnProfileApiView):
-    """GET a profile's public social links; PUT to fully replace the caller's own.
+    """
+    GET a profile's public social links; PUT to fully replace the caller's own.
 
     Visible to anyone who can see the profile at all - unlike contact methods, a social link carries no
     separate ``contact_visibility`` gate, matching ``controllers.userprofile.ViewProfileView``, which
@@ -481,7 +504,8 @@ class ProfileSocialLinksView(_OwnProfileApiView):
     }
 
     def _links_response(self, profile: Profile) -> Response:
-        """Build the shared social-links payload.
+        """
+        Build the shared social-links payload.
 
         Args:
             profile: The profile whose links are being served.
@@ -493,7 +517,8 @@ class ProfileSocialLinksView(_OwnProfileApiView):
 
     @extend_schema(responses={200: SocialLinksResponseSerializer, 404: ErrorSerializer})
     def get(self, request: Request, profile_slug: str) -> Response:
-        """Return the named profile's social links, if this caller may see the profile at all.
+        """
+        Return the named profile's social links, if this caller may see the profile at all.
 
         Args:
             request: The authenticated request.
@@ -510,7 +535,8 @@ class ProfileSocialLinksView(_OwnProfileApiView):
 
     @extend_schema(request=SocialLinksReplaceSerializer, responses={200: SocialLinksResponseSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def put(self, request: Request, profile_slug: str) -> Response:
-        """Replace the caller's entire social-link set.
+        """
+        Replace the caller's entire social-link set.
 
         Args:
             request: The authenticated request carrying ``links``.

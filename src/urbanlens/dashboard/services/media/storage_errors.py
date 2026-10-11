@@ -33,7 +33,8 @@ IMPORT_STORAGE_WAITS = 5
 
 
 def storage_retry_countdown(retries: int) -> int:
-    """Seconds before trying again work storage refused *retries* times already: a minute, doubling to 15.
+    """
+    Seconds before trying again work storage refused *retries* times already: a minute, doubling to 15.
 
     Args:
         retries: How many times it has waited already.
@@ -48,7 +49,8 @@ _TRANSIENT = (BotocoreConnectionError, HTTPClientError, RetriesExceededError, Ti
 
 
 def is_transient(exc: BaseException) -> bool:
-    """Whether a storage failure is the store being briefly unreachable or overloaded, rather than refusing for good.
+    """
+    Whether a storage failure is the store being briefly unreachable or overloaded, rather than refusing for good.
 
     A refusal that lasts, such as an access-denied key or a full disk, needs an operator, so it is logged louder.
 
@@ -68,7 +70,8 @@ def is_transient(exc: BaseException) -> bool:
 
 
 def is_missing(exc: BaseException) -> bool:
-    """Whether a storage failure means the file is not there, on either backend.
+    """
+    Whether a storage failure means the file is not there, on either backend.
 
     ``S3Storage.open`` turns a 404 into ``FileNotFoundError``, but only for the existence check it makes when the file
     is opened. The download happens on the first read, so an object deleted in between fails there with a 404

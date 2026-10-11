@@ -1,4 +1,5 @@
-"""A user's own calendar event is never deleted, a refused event does not stop a push, and the rollout command reaches
+"""
+A user's own calendar event is never deleted, a refused event does not stop a push, and the rollout command reaches
 every event that may hold a withheld location.
 
 An import links the user's own event; only an event UrbanLens made may be deleted, on every removal path. See

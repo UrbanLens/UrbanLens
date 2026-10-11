@@ -1,4 +1,5 @@
-"""Pure money/threshold helpers for paid subscriptions - no Stripe or network calls.
+"""
+Pure money/threshold helpers for paid subscriptions - no Stripe or network calls.
 Kept separate from ``models.subscriptions.model.SubscriptionRole`` so the model itself doesn't need a dependency on ``services.admin.cost_tracking``."""
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ STRIPE_MAXIMUM_CHARGE_CENTS = 99_999_999
 
 
 def typed_dollars_to_cents(raw: str) -> int | None:
-    """A dollar amount someone typed, as cents, or None when it is not one Stripe could charge.
+    """
+    A dollar amount someone typed, as cents, or None when it is not one Stripe could charge.
 
     Args:
         raw: The typed amount.
@@ -48,7 +50,8 @@ def cents_to_dollars(cents: int) -> Decimal:
 
 
 def role_pwyw_threshold_cents(role: SubscriptionRole, as_of: datetime.datetime | None = None) -> int | None:
-    """The pledge amount (cents) required for *role* to grant its features right now.
+    """
+    The pledge amount (cents) required for *role* to grant its features right now.
 
     Args:
         role: The role to evaluate.

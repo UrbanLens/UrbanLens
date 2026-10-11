@@ -1,4 +1,5 @@
-"""Environment for the Jinja2 template backend.
+"""
+Environment for the Jinja2 template backend.
 
 Templates stay on the Django engine until they are ported one at a time; this backend serves the ones that
 have moved. A template lives in exactly one engine's directories, so the two never race to resolve a name.
@@ -19,7 +20,8 @@ if TYPE_CHECKING:
 
 
 def environment(**options: Any) -> Environment:
-    """Build the environment Django's Jinja2 backend renders through.
+    """
+    Build the environment Django's Jinja2 backend renders through.
 
     Args:
         options: Backend options. Django supplies ``loader`` from the backend's ``DIRS``/``APP_DIRS``,

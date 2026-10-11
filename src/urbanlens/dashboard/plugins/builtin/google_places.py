@@ -1,4 +1,5 @@
-"""Google Places plugin: place-name candidates and rate-limit defaults.
+"""
+Google Places plugin: place-name candidates and rate-limit defaults.
 Google Places has no pin-detail panel of its own - its details payload is cached into ``LocationCache`` by the place-details flow (see ``tasks.prefetch_location_external_data``) and the linked ``GooglePlace`` row carries a resolved place name."""
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ if TYPE_CHECKING:
 
 
 class GoogleMapsPhotosPanelSource(GalleryMediaSource):
-    """Photos users have uploaded to Google Maps for a pin's location.
+    """
+    Photos users have uploaded to Google Maps for a pin's location.
     Found by coordinates only, via Places API (New) Nearby Search - never by the pin/wiki's user-given name."""
 
     key = "google_maps"
@@ -83,7 +85,8 @@ class GooglePlacesNameProvider(NameProvider):
         super().__init__(source="google_places", verbose_name="Google Places")
 
     def candidates(self, location: Location) -> list[str | None]:
-        """Return the cached Google place name and the cached details name.
+        """
+        Return the cached Google place name and the cached details name.
 
         Args:
             location: The location to name.
@@ -120,7 +123,8 @@ class GooglePlaceLinkEnrichmentSource(EnrichmentSource):
         return Q(google_place__isnull=True)
 
     def enrich(self, location: Location) -> bool:
-        """Link the location to its GooglePlace row, fetching the name if needed.
+        """
+        Link the location to its GooglePlace row, fetching the name if needed.
 
         Args:
             location: The location to link.

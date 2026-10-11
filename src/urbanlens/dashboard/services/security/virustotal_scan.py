@@ -1,4 +1,5 @@
-"""Ask VirusTotal for an existing verdict on a file, by hash, before falling back to ClamAV.
+"""
+Ask VirusTotal for an existing verdict on a file, by hash, before falling back to ClamAV.
 Only ever consulted for eligible externally-fetched assets - see ``malware_scan.VIRUSTOTAL_ELIGIBLE_SOURCES`` and ``malware_scan.malware_error_for_fetched_asset``."""
 
 from __future__ import annotations
@@ -14,12 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class VirusTotalNoVerdictError(Exception):
-    """VirusTotal has no usable, explicit verdict for a hash right now.
+    """
+    VirusTotal has no usable, explicit verdict for a hash right now.
     Never a reason to reject or retry an upload by itself - callers catch this and fall back to ``malware_error_for_upload`` (ClamAV), which remains the scanner of record."""
 
 
 def verdict_for_checksum(sha256: str) -> str | None:
-    """Ask VirusTotal for an explicit clean/malicious verdict on an already-known file hash.
+    """
+    Ask VirusTotal for an explicit clean/malicious verdict on an already-known file hash.
 
     Args:
         sha256: The file's SHA-256 hex digest.

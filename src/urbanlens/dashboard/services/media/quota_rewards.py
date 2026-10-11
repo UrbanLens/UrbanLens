@@ -1,4 +1,5 @@
-"""Deciding which stored files don't count against their uploader's storage quota.
+"""
+Deciding which stored files don't count against their uploader's storage quota.
 The user who upvoted it into the cache didn't author it, and the cache exists so the gallery doesn't break when the provider's URL rots. - A user's own photo, shared to a wiki, that enough other people marked relevant."""
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ WIKI_PHOTOS_SOURCE = "photos"
 
 
 def is_cached_external_media(image: Image) -> bool:
-    """Whether this row is a locally cached copy of an external provider's item.
+    """
+    Whether this row is a locally cached copy of an external provider's item.
 
     Args:
         image: The row to classify.
@@ -34,7 +36,8 @@ def is_cached_external_media(image: Image) -> bool:
 
 
 def community_relevant_vote_count(image: Image) -> int:
-    """How many *other* people have marked this contributed photo relevant.
+    """
+    How many *other* people have marked this contributed photo relevant.
 
     Args:
         image: A user-uploaded row shared to a wiki.
@@ -58,7 +61,8 @@ def community_relevant_vote_count(image: Image) -> int:
 
 
 def refresh_community_quota_bonus(image: Image) -> bool:
-    """Grant the community quota bonus if this photo has now earned it.
+    """
+    Grant the community quota bonus if this photo has now earned it.
     Only applies to a user's own upload that they shared to a wiki.
 
     Args:
@@ -88,7 +92,8 @@ def refresh_community_quota_bonus(image: Image) -> bool:
 
 
 def revoke_community_quota_bonus(image: Image) -> bool:
-    """Take the community bonus back when its contributor withdraws the photo.
+    """
+    Take the community bonus back when its contributor withdraws the photo.
     That one is one-way against everyone else's actions, for the reason in the module docstring; this is only for the contributor removing their own contribution, and only its caller can know that is what happened.
 
     Args:
@@ -111,7 +116,8 @@ def revoke_community_quota_bonus(image: Image) -> bool:
 
 
 def revoke_community_bonuses_on_wiki_delete(wiki_ids: Collection[int], *, deleted_by: Profile) -> int:
-    """Take back the bonuses ``deleted_by`` earned on the wikis they are deleting.
+    """
+    Take back the bonuses ``deleted_by`` earned on the wikis they are deleting.
     ``Image.wiki`` is ``SET_NULL``, so deleting a wiki detaches every contributor's photos in one statement.
 
     Args:

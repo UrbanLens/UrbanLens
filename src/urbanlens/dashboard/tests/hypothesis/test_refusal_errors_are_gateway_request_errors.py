@@ -1,4 +1,5 @@
-"""P122: a refused call must be catchable everywhere a failed one already is.
+"""
+P122: a refused call must be catchable everywhere a failed one already is.
 
 `rate_limiter._reserve_call` refuses a call by raising `RequestCancelledError` (or one of its three
 subclasses) - the family every ordinary gateway call passes through via `_RateLimitedSession`. That
@@ -45,7 +46,8 @@ class EveryRefusalIsAGatewayRequestErrorTests(SimpleTestCase):
 
 
 class ExistingNarrowCatchesStillWorkTests(SimpleTestCase):
-    """The other half of the fix: nothing that already catches the raw type must stop seeing it.
+    """
+    The other half of the fix: nothing that already catches the raw type must stop seeing it.
 
     Several call sites (`external_data.py`, `nominatim.py`, `cid_resolution.py`, and others) catch
     `RequestCancelledError`/`RateLimitExceededError` directly rather than through

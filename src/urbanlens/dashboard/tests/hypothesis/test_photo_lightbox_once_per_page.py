@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 
 class PinLightboxOncePerPageTests(TestCase):
-    """The pin gallery refreshes with an ``outerHTML`` swap, which inserts everything the response carries.
+    """
+    The pin gallery refreshes with an ``outerHTML`` swap, which inserts everything the response carries.
 
     A lightbox in that response added another dialog, picker and script on every refresh, and each script added
     another arrow-key listener, so one keypress stepped through several photos.

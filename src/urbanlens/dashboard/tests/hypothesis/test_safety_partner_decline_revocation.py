@@ -34,7 +34,8 @@ class DeclineRevokesLiveAccessTests(TestCase):
         )
 
     def _partner(self, status: str) -> SafetyCheckinPartner:
-        """Attach the partner profile to the fixture check-in with *status*.
+        """
+        Attach the partner profile to the fixture check-in with *status*.
 
         Args:
             status: One of ``SafetyCheckinPartnerStatus``.
@@ -56,7 +57,8 @@ class DeclineRevokesLiveAccessTests(TestCase):
         self.assertFalse(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists())
 
     def test_declining_a_pending_invite_broadcasts_nothing(self) -> None:
-        """An invitee never had access, so there is nothing to revoke.
+        """
+        An invitee never had access, so there is nothing to revoke.
 
         Worth pinning down rather than treating as harmless: the revocation frame goes to the whole check-in
         group, and the consumer only acts on it when the payload's ``profile_id`` matches its own."""

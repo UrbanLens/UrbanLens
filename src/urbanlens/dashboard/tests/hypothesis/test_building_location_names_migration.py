@@ -1,4 +1,5 @@
-"""P231/P255's data migration: existing building locations lose the campus's name and take their own CRIS record's.
+"""
+P231/P255's data migration: existing building locations lose the campus's name and take their own CRIS record's.
 
 On the dev stack ten building locations under HRSH were named "Hudson River State Hospital" from Wikipedia, with
 slugs minted from it, and most others had no provider name though a CRIS card standing on them named the building.

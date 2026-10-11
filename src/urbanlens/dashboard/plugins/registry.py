@@ -1,4 +1,5 @@
-"""Discovery and aggregation of UrbanLens plugins.
+"""
+Discovery and aggregation of UrbanLens plugins.
 A failure loading any one plugin is logged and skipped so a broken plugin never prevents startup."""
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ ENTRY_POINT_GROUP = "urbanlens.plugins"
 
 @dataclass(frozen=True, slots=True)
 class PluginInfo:
-    """One discovered plugin and where it came from.
+    """
+    One discovered plugin and where it came from.
 
     Attributes:
         plugin: The plugin instance.
@@ -44,7 +46,8 @@ class PluginInfo:
 
 
 class PluginRegistry:
-    """Holds every discovered plugin and aggregates their contributions.
+    """
+    Holds every discovered plugin and aggregates their contributions.
     Aggregation methods only consult *enabled* plugins, ordered by ``(plugin.order, plugin.name)`` so contribution ordering (e.g. imagery carousel provider order) is deterministic and plugin-controlled."""
 
     def __init__(self) -> None:
@@ -53,7 +56,8 @@ class PluginRegistry:
         self._discovered = False
 
     def discover(self, *, force: bool = False) -> None:
-        """Load plugins from all discovery sources; idempotent.
+        """
+        Load plugins from all discovery sources; idempotent.
         Runs inside ``AppConfig.ready()``, so nothing here may touch the database.
 
         Args:
@@ -77,7 +81,8 @@ class PluginRegistry:
         logger.info("Discovered %d plugins: %s", len(self._plugins), ", ".join(sorted(self._plugins)))
 
     def register(self, plugin: UrbanLensPlugin | type[UrbanLensPlugin], *, source: str = "code") -> UrbanLensPlugin | None:
-        """Register one plugin instance or class.
+        """
+        Register one plugin instance or class.
 
         Args:
             plugin: The plugin (a class is instantiated with no arguments).
@@ -108,7 +113,8 @@ class PluginRegistry:
         return instance
 
     def plugins(self) -> list[PluginInfo]:
-        """Every discovered plugin, ordered by ``(order, name)``.
+        """
+        Every discovered plugin, ordered by ``(order, name)``.
 
         Returns:
             All plugins regardless of enabled state (for the admin UI).
@@ -116,7 +122,8 @@ class PluginRegistry:
         return sorted(self._plugins.values(), key=lambda info: (info.plugin.order, info.plugin.name))
 
     def get(self, name: str) -> UrbanLensPlugin | None:
-        """Look up a plugin by name.
+        """
+        Look up a plugin by name.
 
         Args:
             name: The plugin slug.
@@ -128,7 +135,8 @@ class PluginRegistry:
         return info.plugin if info else None
 
     def is_enabled(self, name: str) -> bool:
-        """Whether a plugin is enabled for this install.
+        """
+        Whether a plugin is enabled for this install.
 
         Args:
             name: The plugin slug.
@@ -141,7 +149,8 @@ class PluginRegistry:
         return name not in settings.disabled_plugins
 
     def enabled_plugins(self) -> list[UrbanLensPlugin]:
-        """Enabled plugins, ordered by ``(order, name)``.
+        """
+        Enabled plugins, ordered by ``(order, name)``.
 
         Returns:
             Plugin instances whose contributions should be active.
@@ -151,7 +160,8 @@ class PluginRegistry:
     # Contribution aggregation
 
     def service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults declared by enabled plugins.
+        """
+        Rate-limit defaults declared by enabled plugins.
 
         Returns:
             Merged mapping of service key to defaults."""
@@ -165,7 +175,8 @@ class PluginRegistry:
         return merged
 
     def panel_sources(self) -> list[PanelSource]:
-        """Pin-detail panel sources contributed by enabled plugins.
+        """
+        Pin-detail panel sources contributed by enabled plugins.
 
         Returns:
             PanelSource instances in plugin order.
@@ -173,14 +184,16 @@ class PluginRegistry:
         return self._collect("get_panel_sources")
 
     def name_providers(self) -> list[NameProvider]:
-        """Place-name candidate providers contributed by enabled plugins.
+        """
+        Place-name candidate providers contributed by enabled plugins.
 
         Returns:
             NameProvider instances in plugin order, which is the arrival order the name resolver uses to break ties among unprioritized sources."""
         return self._collect("get_name_providers")
 
     def satellite_providers(self) -> list[SatelliteViewProvider]:
-        """The satellite-imagery provider chain, in plugin order.
+        """
+        The satellite-imagery provider chain, in plugin order.
 
         Returns:
             Freshly built provider gateway instances.
@@ -188,21 +201,24 @@ class PluginRegistry:
         return self._collect("get_satellite_providers")
 
     def enrichment_sources(self) -> list[EnrichmentSource]:
-        """Background-enrichment sources contributed by enabled plugins.
+        """
+        Background-enrichment sources contributed by enabled plugins.
 
         Returns:
             EnrichmentSource instances in plugin order; the scheduled enrichment task runs them in this order each cycle."""
         return self._collect("get_enrichment_sources")
 
     def photo_keyword_providers(self) -> list[PhotoKeywordProvider]:
-        """Photo keywording strategies contributed by enabled plugins.
+        """
+        Photo keywording strategies contributed by enabled plugins.
 
         Returns:
             PhotoKeywordProvider instances in plugin order; each stores its own keywords per image, so ordering only affects run order."""
         return self._collect("get_photo_keyword_providers")
 
     def street_view_providers(self) -> list[StreetViewProvider]:
-        """The street-level imagery provider chain, in plugin order.
+        """
+        The street-level imagery provider chain, in plugin order.
 
         Returns:
             Freshly built provider gateway instances.
@@ -274,7 +290,8 @@ class PluginRegistry:
                 logger.warning("Plugin entry point '%s' resolved to %r, which is not a plugin class, instance, or module", ep.name, loaded)
 
     def _register_module(self, module: ModuleType, *, source: str) -> None:
-        """Register every concrete plugin class defined in a module.
+        """
+        Register every concrete plugin class defined in a module.
         Only classes *defined in* the module count - imported plugin classes are skipped so a module can reference another plugin without re-registering it."""
         for attr in vars(module).values():
             if inspect.isclass(attr) and issubclass(attr, UrbanLensPlugin) and attr.__module__ == module.__name__ and attr.name and not inspect.isabstract(attr):

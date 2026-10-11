@@ -111,7 +111,8 @@ class TripUndoConflictTests(TestCase):
         self.assertEqual(Trip.objects.filter(name="Summer trip").count(), 2)
 
     def test_undo_is_refused_when_the_creator_no_longer_exists(self):
-        """The creator can be independently deleted (account deletion) during the
+        """
+        The creator can be independently deleted (account deletion) during the
         retention window - restoring must refuse cleanly, not raise a bare
         IntegrityError from the non-nullable-in-practice FK write."""
         creator = baker.make("auth.User").profile
@@ -126,7 +127,8 @@ class TripUndoConflictTests(TestCase):
         self.assertEqual(Trip.objects.filter(name="Summer trip").count(), 0)
 
     def test_undo_is_refused_when_a_member_no_longer_exists(self):
-        """Same failure mode, one level down the roster: a fellow member's
+        """
+        Same failure mode, one level down the roster: a fellow member's
         account is deleted, not the creator's."""
         member = baker.make("auth.User").profile
         trip = Trip.objects.create(name="Group trip", creator=self.profile)
@@ -141,7 +143,8 @@ class TripUndoConflictTests(TestCase):
         self.assertEqual(Trip.objects.filter(name="Group trip").count(), 0)
 
     def test_an_ordinary_undo_restores_the_full_membership_roster(self):
-        """Regression guard alongside the two refusal tests above: an intact
+        """
+        Regression guard alongside the two refusal tests above: an intact
         roster (nobody deleted) must still come back completely."""
         member = baker.make("auth.User").profile
         trip = Trip.objects.create(name="Group trip", creator=self.profile)

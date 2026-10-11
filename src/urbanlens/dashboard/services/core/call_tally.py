@@ -1,4 +1,5 @@
-"""Calls counted in the shared cache instead of written to the ledger one row each, and rolled up into it every minute.
+"""
+Calls counted in the shared cache instead of written to the ledger one row each, and rolled up into it every minute.
 
 For a service whose ``ServiceDefaults.ledger`` is :attr:`~urbanlens.dashboard.services.core.rate_limiter.CallLedger.TALLIED`.
 It is held to the same ``ApiRateLimit`` row, the same environment share (D26) and the same refusals as any other
@@ -117,7 +118,8 @@ def forget_limits() -> None:
 
 
 def publish_limits(service: str, row: Any = None) -> Limits:
-    """Share *service*'s row through the default cache, where every process's next call reads it.
+    """
+    Share *service*'s row through the default cache, where every process's next call reads it.
 
     Called by :func:`roll_up` every minute and whenever the row is saved (``models.api_rate_limit.signals``), so a
     call itself need never read the row.
@@ -142,7 +144,8 @@ def publish_limits(service: str, row: Any = None) -> Limits:
 
 
 def limits_for(service: str) -> Limits:
-    """*service*'s limits: as this process last saw them, else as last published, else from its row.
+    """
+    *service*'s limits: as this process last saw them, else as last published, else from its row.
 
     The row is read only when nothing has published it - a fresh store before the first roll-up - and the
     reader publishes what it read, so that is one read for the fleet rather than one per call.
@@ -186,7 +189,8 @@ def tally_key(service: str) -> str:
 
 
 def _windows(service: str, limits: Limits, now: float) -> tuple[tuple[str, int | None, int], ...]:
-    """``(counter key, limit at this deployment's share, ttl)`` for each budget window *now* falls in.
+    """
+    ``(counter key, limit at this deployment's share, ttl)`` for each budget window *now* falls in.
 
     Every one is fixed, keyed by the period it counts: the UTC minute, the UTC day, the thirty-day period since the
     epoch and the UTC calendar month. The ledger's minute and thirty days roll; its day and month are these same
@@ -209,7 +213,8 @@ def _windows(service: str, limits: Limits, now: float) -> tuple[tuple[str, int |
 
 @dataclass(slots=True)
 class Admission:
-    """One call the counters let through: recorded once its outcome is known, or released if it is never made.
+    """
+    One call the counters let through: recorded once its outcome is known, or released if it is never made.
 
     Attributes:
         service: The service key.
@@ -226,7 +231,8 @@ class Admission:
     interval_us: int | None = None
 
     def record(self, *, success: bool, status_code: int | None, response_ms: int | None) -> None:
-        """Add the call's outcome to the tally.
+        """
+        Add the call's outcome to the tally.
 
         Args:
             success: Whether it succeeded.
@@ -244,7 +250,8 @@ class Admission:
 
 
 def _take(service: str, limits: Limits, windows: tuple[tuple[str, int | None, int], ...], admission: Admission) -> bool:
-    """Count one call into the minimum interval and each window.
+    """
+    Count one call into the minimum interval and each window.
 
     Args:
         service: The service key.
@@ -277,7 +284,8 @@ def _take(service: str, limits: Limits, windows: tuple[tuple[str, int | None, in
 
 
 def admit(service: str, *, endpoint: str = "") -> Admission:
-    """Check a call to *service* against its limits on the counters, and count it. Never touches the database once
+    """
+    Check a call to *service* against its limits on the counters, and count it. Never touches the database once
     the limits are published (:func:`limits_for`).
 
     Args:
@@ -345,7 +353,8 @@ def record(
     response_ms: int | None = None,
     minute: int | None = None,
 ) -> bool:
-    """Add one call, or one refusal, to *service*'s tally. Never touches the database.
+    """
+    Add one call, or one refusal, to *service*'s tally. Never touches the database.
 
     An outcome the store cannot take is held in this process and added with its next one that the store does take.
 
@@ -463,7 +472,8 @@ def tallied_services() -> list[str]:
 
 
 def roll_up() -> int:
-    """Move every tallied service's counts into ``ApiCallLog``, and republish its limits.
+    """
+    Move every tallied service's counts into ``ApiCallLog``, and republish its limits.
 
     Each service's tally is taken in one step, so two runs at once split it rather than both writing it, and a call
     tallied while this runs lands in the next run. A tally whose rows cannot be written is put back.

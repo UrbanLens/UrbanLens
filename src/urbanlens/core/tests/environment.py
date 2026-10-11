@@ -1,4 +1,5 @@
-"""Pinning what the runner would otherwise decide: the environment a test, or a probe it starts, runs as.
+"""
+Pinning what the runner would otherwise decide: the environment a test, or a probe it starts, runs as.
 
 An unset ``UL_ENVIRONMENT`` reads as production. CI sets ``testing`` and the dev test-runner sets its own, but a worktree
 with no ``.env`` sets nothing, so a test that reads it passed in CI and failed there.
@@ -18,7 +19,8 @@ if TYPE_CHECKING:
 
 
 def probe_environ(base: Mapping[str, str] | None = None) -> dict[str, str]:
-    """*base* (this process's environment by default) with ``UL_ENVIRONMENT`` pinned to ``testing``.
+    """
+    *base* (this process's environment by default) with ``UL_ENVIRONMENT`` pinned to ``testing``.
 
     A child interpreter is not under pytest, so settings classify it by ``UL_ENVIRONMENT`` alone, and production
     refuses to load without a deployment's secrets. Pinned, a probe loads the same settings under every runner.
@@ -33,7 +35,8 @@ def probe_environ(base: Mapping[str, str] | None = None) -> dict[str, str]:
 
 
 class OffProductionMixin:
-    """Makes ``AppSettings.environment_name`` ``testing`` for each test.
+    """
+    Makes ``AppSettings.environment_name`` ``testing`` for each test.
 
     For tests of a command that refuses production. A test of that refusal patches its own value over this one.
     """

@@ -1,4 +1,5 @@
-"""One-off, read-only audit for BLOCKED ``Friendship`` rows that may predate
+"""
+One-off, read-only audit for BLOCKED ``Friendship`` rows that may predate
 ``services.social.friendship.block_profile``'s ``from_profile``/``to_profile`` normalization fix.
 
 A block placed against a complete stranger, with no prior row, was never affected: the fresh-row

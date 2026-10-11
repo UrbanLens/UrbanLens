@@ -34,7 +34,8 @@ def _match(
 
 
 class GeoreferenceAccuracyTests(TestCase):
-    """How well a sheet is placed - reported only where the number means something.
+    """
+    How well a sheet is placed - reported only where the number means something.
 
     `rmse_meters` is the fit's own residual, and REData's model docstring warns that a thin-plate spline
     interpolates its control points *by construction*, so its residual is ~0 whatever the placement is actually
@@ -167,7 +168,8 @@ class HistoricalMapBrowseTests(TestCase):
         self.assertIn(self.georeference_uuid, body)
 
     def test_the_sheet_thumbnail_and_catalogue_link_are_offered(self) -> None:
-        """Choosing between a dozen scans of one neighbourhood is a visual task.
+        """
+        Choosing between a dozen scans of one neighbourhood is a visual task.
 
         REData caches the institution's own thumbnail and catalogue page, and the picker showed neither - eleven
         rows reading "Sanborn Map of ..." is not a way to pick one."""

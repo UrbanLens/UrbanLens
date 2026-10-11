@@ -41,7 +41,8 @@ def _pin_from_geometry(geometry: BaseGeometry, index: int, source_label: str, us
 
 @untrusted_parse("geo.wkt")
 def wkt_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
-    """Convert a WKT file (one geometry per line) into pin dicts.
+    """
+    Convert a WKT file (one geometry per line) into pin dicts.
 
     Args:
         file_contents: The file, UTF-8 text, as bytes or a binary file.
@@ -59,7 +60,8 @@ def wkt_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list
 
 @untrusted_parse("geo.wkt")
 def iter_wkt_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
-    """:func:`wkt_to_dict`, one line at a time, reading no more of the file than that takes.
+    """
+    :func:`wkt_to_dict`, one line at a time, reading no more of the file than that takes.
 
     Args:
         file_contents: The file, UTF-8 text, as bytes or a binary file.
@@ -87,7 +89,8 @@ def iter_wkt_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> It
 
 @untrusted_parse("geo.wkb")
 def wkb_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list[dict[str, Any]]:
-    """Convert a WKB file into pin dicts.
+    """
+    Convert a WKB file into pin dicts.
 
     Args:
         file_contents: The file, as bytes or a seekable binary file positioned at its start.
@@ -102,7 +105,8 @@ def wkb_to_dict(file_contents: bytes | IO[bytes], user_profile: Profile) -> list
 
 @untrusted_parse("geo.wkb")
 def iter_wkb_pins(file_contents: bytes | IO[bytes], user_profile: Profile) -> Iterator[dict[str, Any]]:
-    """:func:`wkb_to_dict`, one line at a time, reading no more of the file than that takes.
+    """
+    :func:`wkb_to_dict`, one line at a time, reading no more of the file than that takes.
 
     A file that is not ASCII is one raw binary geometry, and is read whole.
 

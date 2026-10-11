@@ -1,4 +1,5 @@
-"""An uploaded icon or avatar is held where nothing serves it until the sandbox worker has re-encoded it (P119).
+"""
+An uploaded icon or avatar is held where nothing serves it until the sandbox worker has re-encoded it (P119).
 
 The upload is stored under :data:`HELD_PREFIX`, which has no media authorizer, so the gate serves it to nobody, and its
 name is kept in the row's ``<field>_upload`` column. The worker writes the re-encoded file into the field itself, so the
@@ -126,7 +127,8 @@ HELD_FIELDS: dict[str, HeldField] = {
 
 
 def held_field(instance: Model, field: str) -> HeldField:
-    """The :class:`HeldField` for *instance*'s *field*.
+    """
+    The :class:`HeldField` for *instance*'s *field*.
 
     Raises:
         KeyError: The field does not hold its uploads.
@@ -135,7 +137,8 @@ def held_field(instance: Model, field: str) -> HeldField:
 
 
 def icon_upload_error(upload: UploadedFile) -> tuple[str, int] | None:
-    """Every check a label, pin or award icon upload must pass before it is held, in order.
+    """
+    Every check a label, pin or award icon upload must pass before it is held, in order.
 
     The ceiling comes first, from the declared size, because the gauntlet's last step is the antivirus scan, which
     copies the whole file into this process and streams it to the shared clamd daemon.
@@ -168,7 +171,8 @@ def _delete_quietly(storage: Storage, name: str) -> bool:
 
 
 def hold_upload(instance: Model, field: str, upload: File) -> str:
-    """Store *upload* where nothing serves it and name it on *instance*, which the caller then saves.
+    """
+    Store *upload* where nothing serves it and name it on *instance*, which the caller then saves.
 
     Any upload *instance* already held is deleted once this transaction commits.
 
@@ -193,7 +197,8 @@ def hold_upload(instance: Model, field: str, upload: File) -> str:
 
 
 def discard_held_upload(instance: Model, field: str) -> str:
-    """Forget the upload *instance* holds for *field*, deleting it once this transaction commits.
+    """
+    Forget the upload *instance* holds for *field*, deleting it once this transaction commits.
 
     Args:
         instance: The row.
@@ -211,7 +216,8 @@ def discard_held_upload(instance: Model, field: str) -> str:
 
 
 def queue_held_upload(instance: Model, field: str) -> None:
-    """Ask the sandbox worker to publish the upload *instance* holds for *field*, once this transaction commits.
+    """
+    Ask the sandbox worker to publish the upload *instance* holds for *field*, once this transaction commits.
 
     Args:
         instance: A saved row.
@@ -229,7 +235,8 @@ def queue_held_upload(instance: Model, field: str) -> None:
 
 
 def publish_held(key: str, pk: int, held_name: str, attempt: str | None = None) -> bool:
-    """Write a re-encoded copy of a held upload into its field, if the row still holds that upload.
+    """
+    Write a re-encoded copy of a held upload into its field, if the row still holds that upload.
 
     One that cannot be decoded, or is over the field's upload ceiling, is dropped, and the field keeps what it showed.
 
@@ -320,7 +327,8 @@ def _publish_read(held: HeldField, key: str, row: Model, raw: bytes) -> bool:
 
 
 def drop_held(key: str, pk: int, held_name: str) -> bool:
-    """Forget a held upload that will never be published, if the row still holds it, and delete the file.
+    """
+    Forget a held upload that will never be published, if the row still holds it, and delete the file.
 
     Args:
         key: The :attr:`HeldField.key`.
@@ -339,7 +347,8 @@ def drop_held(key: str, pk: int, held_name: str) -> bool:
 
 
 def reencode_shown(key: str, pk: int, name: str) -> bool:
-    """Re-encode a file the field already shows, stored before uploads to it were held. One that cannot be decoded, or is over the field's upload ceiling, is removed.
+    """
+    Re-encode a file the field already shows, stored before uploads to it were held. One that cannot be decoded, or is over the field's upload ceiling, is removed.
 
     Args:
         key: The :attr:`HeldField.key`.
@@ -367,7 +376,8 @@ def reencode_shown(key: str, pk: int, name: str) -> bool:
 
 
 def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
-    """The ``(pk, held name)`` of every row holding an upload for *held*, served by the partial index on its column.
+    """
+    The ``(pk, held name)`` of every row holding an upload for *held*, served by the partial index on its column.
 
     Args:
         held: The field.
@@ -379,7 +389,8 @@ def held_rows(held: HeldField) -> QuerySet[Any, tuple[int, str]]:
 
 
 def sweep_held_uploads() -> tuple[int, int]:
-    """Queue stalled held uploads no publish is running, drop ones whose publish kept starting without finishing, and remove held files nothing names.
+    """
+    Queue stalled held uploads no publish is running, drop ones whose publish kept starting without finishing, and remove held files nothing names.
 
     One waiting for storage is left to :func:`~urbanlens.dashboard.services.media.upload_retry.retry_waiting_uploads`,
     and one whose file is gone starts waiting there. A file whose row was deleted is kept past the undo window, because

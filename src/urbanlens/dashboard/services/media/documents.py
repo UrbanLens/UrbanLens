@@ -1,4 +1,5 @@
-"""Document processing utilities - convert uploads to PDF and make them searchable.
+"""
+Document processing utilities - convert uploads to PDF and make them searchable.
 Every function here degrades gracefully (logs and returns None/unchanged) when a binary is missing, rather than failing the upload."""
 
 from __future__ import annotations
@@ -38,7 +39,8 @@ DOCUMENT_EXTENSIONS = CONVERTIBLE_DOCUMENT_EXTENSIONS | {".pdf"}
 
 
 def soffice_path() -> str | None:
-    """The absolute path to the LibreOffice headless binary, or None.
+    """
+    The absolute path to the LibreOffice headless binary, or None.
     Resolved once here rather than left to `exec`'s own PATH walk - see the note on `ffmpeg_path` in `videos.py` for what that does and does not buy."""
     return shutil.which("soffice")
 
@@ -50,7 +52,8 @@ def soffice_available() -> bool:
 
 @untrusted_parse("document.convert")
 def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
-    """Convert a non-PDF document upload to PDF in place, via LibreOffice headless.
+    """
+    Convert a non-PDF document upload to PDF in place, via LibreOffice headless.
     The stored file is replaced via the storage abstraction so this works regardless of storage backend.
 
     Args:
@@ -105,7 +108,8 @@ def convert_to_pdf(image: Image) -> StoredFileReplacement | None:
 
 @untrusted_parse("document.ocr")
 def extract_pdf_text(image: Image) -> str | None:
-    """Extract searchable text from a stored PDF: its native text layer plus OCR.
+    """
+    Extract searchable text from a stored PDF: its native text layer plus OCR.
     Both are best-effort - missing binaries or unparseable PDFs simply contribute no text rather than failing the upload.
 
     Args:

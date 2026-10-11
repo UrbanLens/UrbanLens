@@ -92,7 +92,8 @@ class DifficultyWeightTests(TestCase):
         self.assertGreater(obscure_weight, popular_weight)
 
     def test_a_location_with_enough_earned_games_ignores_the_proxy_entirely(self) -> None:
-        """Once real play history clears the threshold, the earned rating
+        """
+        Once real play history clears the threshold, the earned rating
         must be used outright - a popular location's proxy signal must not
         leak in and distort an earned (and possibly very different) rating."""
         location = _make_location()
@@ -135,7 +136,8 @@ class DifficultyWeightTests(TestCase):
 
 
 class PickNextLocationQueryCountTests(TestCase):
-    """Regression guard for the SpotGuessr /start/ slowness/timeouts.
+    """
+    Regression guard for the SpotGuessr /start/ slowness/timeouts.
 
     A profile with a large pin pool and few photo-eligible locations could rack up thousands of round trips on a
     single ``/start/`` request."""

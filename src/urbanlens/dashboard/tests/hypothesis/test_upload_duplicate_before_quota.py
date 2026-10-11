@@ -1,4 +1,5 @@
-"""A re-upload of a file the profile already stored is a duplicate, not a quota overrun.
+"""
+A re-upload of a file the profile already stored is a duplicate, not a quota overrun.
 
 It stores no new bytes, so a full quota must not change the answer from 409 to 413. The quota is
 reserved only once the duplicate lookup, inside the same reservation, has found nothing.

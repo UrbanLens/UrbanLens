@@ -7,7 +7,8 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class Status(TextChoices):
-    """Choices used for recording the status of a notification. This is used as a class, and never instantiated.
+    """
+    Choices used for recording the status of a notification. This is used as a class, and never instantiated.
 
     Examples:
             >>> if foo.status == Status.VALIDATED:

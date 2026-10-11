@@ -1,4 +1,5 @@
-"""Shapefile (.shp/.dbf/.shx bundle) pin import.
+"""
+Shapefile (.shp/.dbf/.shx bundle) pin import.
 Shapefiles are always distributed as a set of same-stem sidecar files rather than a single file, so unlike every other format here there is no single-file "sniff and parse" step."""
 
 from __future__ import annotations
@@ -43,7 +44,8 @@ def _stem(filename: str) -> str:
 
 
 def is_shapefile_part(filename: str) -> bool:
-    """Whether *filename* is one of the sidecar files a Shapefile bundle is made of.
+    """
+    Whether *filename* is one of the sidecar files a Shapefile bundle is made of.
 
     Args:
         filename: The file's name.
@@ -55,13 +57,15 @@ def is_shapefile_part(filename: str) -> bool:
 
 
 class ShapefileSpool:
-    """Shapefile sidecar parts copied to disk as they arrive, grouped by stem, so none is held in memory.
+    """
+    Shapefile sidecar parts copied to disk as they arrive, grouped by stem, so none is held in memory.
 
     A later part with the same stem and extension replaces an earlier one.
     """
 
     def __init__(self, directory: str) -> None:
-        """Spool into *directory*.
+        """
+        Spool into *directory*.
 
         Args:
             directory: Somewhere on disk, empty, and removed by the caller.
@@ -70,7 +74,8 @@ class ShapefileSpool:
         self._parts: dict[str, set[str]] = {}
 
     def add(self, filename: str, stream: IO[bytes]) -> None:
-        """Copy one part to disk.
+        """
+        Copy one part to disk.
 
         Args:
             filename: The part's name, whose stem groups it and whose extension says which part it is.
@@ -84,7 +89,8 @@ class ShapefileSpool:
             shutil.copyfileobj(stream, out, READ_CHUNK_BYTES)
 
     def bundles(self) -> Iterator[tuple[str, Path]]:
-        """Each complete bundle, in the order its first part arrived.
+        """
+        Each complete bundle, in the order its first part arrived.
 
         Yields:
             The bundle's stem and its ``.shp`` file, beside the other parts under the same name.
@@ -103,7 +109,8 @@ class ShapefileSpool:
 
 @untrusted_parse("geo.shapefile")
 def iter_shapefile_pins(shp_path: Path, stem: str, user_profile: Profile) -> Iterator[dict[str, Any]]:
-    """Read a Shapefile on disk into pin dicts, a batch of features at a time.
+    """
+    Read a Shapefile on disk into pin dicts, a batch of features at a time.
 
     GDAL's Arrow stream is a single cursor over the features; skipping to an offset instead would count the
     records a ``.dbf`` marks deleted, which GDAL does not return. A null attribute is left out, as an absent

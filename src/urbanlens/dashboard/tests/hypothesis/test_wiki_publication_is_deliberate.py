@@ -101,7 +101,8 @@ class GalleryJsonIdentityTests(TestCase):
         self.assertEqual(payload["uploader"], self.owner.username)
 
     def test_a_hidden_identity_is_not_named(self) -> None:
-        """Whatever the profile's own visibility rules decide, the gallery must
+        """
+        Whatever the profile's own visibility rules decide, the gallery must
         ask them rather than printing the username off the row."""
         self.owner.profile_visibility = VisibilityChoice.NO_ONE
         self.owner.save(update_fields=["profile_visibility"])

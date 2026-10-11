@@ -87,7 +87,8 @@ class FloorplanVersioningTests(TestCase):
         self.assertEqual(Floorplan.objects.at(self.place, datetime.date(1975, 6, 15)).name, "after fire")
 
     def test_a_plan_needs_no_place_at_all(self) -> None:
-        """Most of what gets explored has no footprint any provider knows.
+        """
+        Most of what gets explored has no footprint any provider knows.
 
         A plan tied to nothing is still a plan; requiring a Place would mean the only drawable buildings are the
         ones a data provider already catalogued."""
@@ -167,7 +168,8 @@ class FloorplanDocumentTests(TestCase):
         self.assertEqual(floor["markers"][0]["connector_id"], "stair-a")
 
     def test_local_metres_survive_the_round_trip_exactly(self) -> None:
-        """Coordinates are stored as authored - no projection on the way in.
+        """
+        Coordinates are stored as authored - no projection on the way in.
 
         A wall that shifts by centimetres per save would drift a plan apart
         over an editing session.
@@ -237,7 +239,8 @@ class FloorplanDocumentTests(TestCase):
         self.assertEqual(self.floorplan.valid_from, datetime.date(1962, 5, 1))
 
     def test_an_unknown_wall_kind_is_refused_rather_than_coerced(self) -> None:
-        """Silently turning an unrecognised kind into the default is how a
+        """
+        Silently turning an unrecognised kind into the default is how a
         whole class of item becomes wrong while looking like it saved."""
         document = self._document()
         document["floors"][0]["walls"][1]["kind"] = "forcefield"
@@ -248,7 +251,8 @@ class FloorplanDocumentTests(TestCase):
         self.assertIn("forcefield", str(caught.exception))
 
     def test_a_wall_missing_an_endpoint_is_refused(self) -> None:
-        """Defaulting a missing coordinate to zero would move the wall to the
+        """
+        Defaulting a missing coordinate to zero would move the wall to the
         plan origin without saying so."""
         document = self._document()
         del document["floors"][0]["walls"][1]["bx"]
@@ -259,7 +263,8 @@ class FloorplanDocumentTests(TestCase):
         self.assertIn("bx", str(caught.exception))
 
     def test_a_doors_swing_survives_the_round_trip(self) -> None:
-        """It is drawn from this value, so losing it silently loses the symbol.
+        """
+        It is drawn from this value, so losing it silently loses the symbol.
 
         The field had a column, choices and a serializer long before anything set it, which is exactly the
         situation where nobody would notice it failing to come back."""
@@ -273,7 +278,8 @@ class FloorplanDocumentTests(TestCase):
         self.assertEqual(opening["swing"], "double")
 
     def test_an_unknown_swing_is_refused_without_writing_half_a_plan(self) -> None:
-        """A whole plan is one document: a bad field late in it must lose none of it.
+        """
+        A whole plan is one document: a bad field late in it must lose none of it.
 
         The value is rejected rather than coerced, which is the same thing every other choice field here does -
         but the save is a wholesale replacement, so the interesting question is what survives the refusal."""
@@ -333,7 +339,8 @@ class FloorplanRoomSeedTests(TestCase):
         self.assertEqual(rooms[0]["name"], "Ward B")
 
     def test_a_room_outside_every_wall_is_still_stored(self) -> None:
-        """An unenclosed seed is a drawing that is not finished, not an error.
+        """
+        An unenclosed seed is a drawing that is not finished, not an error.
 
         Refusing to store it would lose the name the moment a wall was
         deleted.
@@ -351,7 +358,8 @@ class FloorplanRoomSeedTests(TestCase):
 
 
 class FloorplanOpeningConstraintTests(TestCase):
-    """An opening outside its wall, or inside out, is meaningless - not a
+    """
+    An opening outside its wall, or inside out, is meaningless - not a
     rendering quirk. The database refuses it so no write path can produce one."""
 
     def setUp(self) -> None:
@@ -384,7 +392,8 @@ class FloorplanOpeningConstraintTests(TestCase):
             FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.5, t_end=0.5)
 
     def test_deleting_a_wall_takes_its_openings_with_it(self) -> None:
-        """An opening has no position of its own - orphaning one would leave a
+        """
+        An opening has no position of its own - orphaning one would leave a
         door floating at coordinates that no longer exist."""
         FloorplanOpening.objects.create(wall=self.wall, kind="door", t_start=0.2, t_end=0.4)
 
@@ -393,7 +402,8 @@ class FloorplanOpeningConstraintTests(TestCase):
         self.assertEqual(FloorplanOpening.objects.count(), 0)
 
     def test_the_service_reports_a_bad_interval_rather_than_hitting_the_constraint(self) -> None:
-        """Reaching the constraint is an IntegrityError - a 500. The service
+        """
+        Reaching the constraint is an IntegrityError - a 500. The service
         catches it first and names what is wrong, which a client can act on."""
         document = {
             "plan_origin": _ORIGIN,
@@ -421,7 +431,8 @@ class FloorplanOpeningConstraintTests(TestCase):
 
 
 class FloorplanLockTests(TestCase):
-    """A lock belongs to the door it is fitted to.
+    """
+    A lock belongs to the door it is fitted to.
 
     "Which door is locked, and what opens it" is the field note this table exists for, so it has to survive a
     save/reload untouched - including the part of it nobody agreed a schema for."""
@@ -459,7 +470,8 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(locks[0]["key_attributes"], {"brand": "Abus", "bitting": "44213"})
 
     def test_key_attributes_survive_a_round_trip_whatever_shape_they_are(self) -> None:
-        """The point of a free-form field is that an unanticipated shape comes
+        """
+        The point of a free-form field is that an unanticipated shape comes
         back as it went in - otherwise the note may as well have been typed
         into a column somebody chose in advance."""
         recorded = {
@@ -498,7 +510,8 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(FloorplanOpening.objects.count(), 1, "removing a lock must not touch the door it was on")
 
     def test_a_second_lock_can_be_added_to_one_door(self) -> None:
-        """A hasp with a padlock and a deadbolt below it is one door, two
+        """
+        A hasp with a padlock and a deadbolt below it is one door, two
         locks - and the pair has to keep its authored order."""
         save_document(
             self.floorplan,
@@ -519,7 +532,8 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(FloorplanLock.objects.count(), 0)
 
     def test_deleting_a_wall_takes_the_locks_on_its_doors_with_it(self) -> None:
-        """Two cascades deep: the lock hangs off the opening, which hangs off
+        """
+        Two cascades deep: the lock hangs off the opening, which hangs off
         the wall, so redrawing a wall cannot leave a lock behind."""
         floor = FloorplanFloor.objects.create(floorplan=self.floorplan, level=0)
         wall = FloorplanWall.objects.create(floor=floor, ax=0, ay=0, bx=10, by=0)
@@ -531,7 +545,8 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(FloorplanLock.objects.count(), 0)
 
     def test_a_lock_defaults_to_an_unknown_state(self) -> None:
-        """Most locks are recorded from a photograph, which shows a padlock
+        """
+        Most locks are recorded from a photograph, which shows a padlock
         but not whether it is shut. Defaulting to "locked" would invent that."""
         save_document(self.floorplan, self._document([{"name": "padlock"}]), profile=self.profile)
 
@@ -540,7 +555,8 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(lock["key_attributes"], {})
 
     def test_an_unknown_lock_state_is_refused_rather_than_coerced(self) -> None:
-        """Silently falling back to "unknown" is how a door that was recorded
+        """
+        Silently falling back to "unknown" is how a door that was recorded
         as locked reads as unrecorded, with nothing to show it happened."""
         with self.assertRaises(ValueError) as caught:
             save_document(
@@ -551,7 +567,8 @@ class FloorplanLockTests(TestCase):
         self.assertEqual(FloorplanLock.objects.count(), 0)
 
     def test_key_attributes_that_are_not_an_object_are_reported(self) -> None:
-        """Free-form is not shapeless: a list reaches the database intact and
+        """
+        Free-form is not shapeless: a list reaches the database intact and
         breaks readers later, so it is a 400 here rather than a 500 there."""
         with self.assertRaises(ValueError) as caught:
             save_document(
@@ -563,7 +580,8 @@ class FloorplanLockTests(TestCase):
         self.assertIn("key_attributes", str(caught.exception))
 
     def test_a_locks_own_item_surface_round_trips(self) -> None:
-        """A lock is a floorplan item like any other - its condition and
+        """
+        A lock is a floorplan item like any other - its condition and
         references are how physical state is recorded, which is why ``state``
         carries only whether it is shut."""
         document = self._document(
@@ -614,7 +632,8 @@ class FloorplanResolutionTests(TestCase):
         upstream.assert_not_called()
 
     def test_another_users_plan_is_not_served(self) -> None:
-        """A plan records doors and entrances - not shared data.
+        """
+        A plan records doors and entrances - not shared data.
 
         Resolution is place-scoped, so without this every user who pinned the
         same building would receive whatever anyone else had traced.
@@ -708,7 +727,8 @@ class ResolveFloorplanRowTests(TestCase):
         self.assertIsNone(resolve_floorplan_row(self.place, profile=None))
 
     def test_a_local_plan_wins_over_a_community_one(self) -> None:
-        """Mirrors resolve_document's own local-wins precedent (test_a_local_plan_wins
+        """
+        Mirrors resolve_document's own local-wins precedent (test_a_local_plan_wins
         above) - the row-returning path must agree, or a caller using each function for
         a different endpoint of the same feature would show a different plan."""
         from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
@@ -738,7 +758,8 @@ class ResolveFloorplanRowTests(TestCase):
         self.assertEqual(row.pk, community.pk)
 
     def test_a_published_plan_is_withheld_when_the_wiki_is_not_visible(self) -> None:
-        """``_community_plan`` itself is what checks place_visible_to - returning None
+        """
+        ``_community_plan`` itself is what checks place_visible_to - returning None
         for an unreachable wiki is exactly what a caller lacking access must see."""
         from urbanlens.dashboard.services.floorplans.resolution import resolve_floorplan_row
 
@@ -811,7 +832,8 @@ class FloorplanEndpointTests(TestCase):
         self.assertEqual(len(body["floors"][0]["walls"]), 4)
 
     def test_the_origin_is_seeded_from_the_pin_when_the_document_omits_it(self) -> None:
-        """Every coordinate is metres from the origin, so a plan saved without
+        """
+        Every coordinate is metres from the origin, so a plan saved without
         one would have nowhere to be drawn."""
         response = self._save({"floors": [{"level": 0, "walls": _square_walls()}]})
 
@@ -878,7 +900,8 @@ class FloorplanEndpointTests(TestCase):
         self.assertContains(response, "floorplan-map")
 
     def test_a_markers_icon_and_colour_use_the_shared_pickers(self) -> None:
-        """Not controls of this editor's own, so the two cannot drift apart.
+        """
+        Not controls of this editor's own, so the two cannot drift apart.
 
         A marker is a pin by another name, and picking its icon or colour should be the same act in both places."""
         response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
@@ -890,7 +913,8 @@ class FloorplanEndpointTests(TestCase):
 
 
 class FloorplanVersionSafetyTests(TestCase):
-    """A save must never destroy a plan it was not editing.
+    """
+    A save must never destroy a plan it was not editing.
 
     Floorplans are expensive hand work: hours of tracing."""
 
@@ -1111,7 +1135,8 @@ class FloorplanFeatureCollectionTests(TestCase):
         return wall["properties"]["openings"][0]
 
     def test_a_door_reports_whether_it_opens(self) -> None:
-        """The first thing a map wants to say about a door, in one word.
+        """
+        The first thing a map wants to say about a door, in one word.
 
         A lock's type, condition and what opens it are the document's business;
         a renderer wants to colour the door.
@@ -1133,7 +1158,8 @@ class FloorplanFeatureCollectionTests(TestCase):
         self.assertEqual(self._with_locks("locked")["sill_meters"], 0.0)
 
     def test_walls_project_to_coordinates_near_the_origin(self) -> None:
-        """Local metres become degrees here, and nowhere else. A wall ten
+        """
+        Local metres become degrees here, and nowhere else. A wall ten
         metres from the origin must land within a fraction of a degree of it."""
         wall = next(f for f in self._collection()["features"] if f["properties"]["item_type"] == "wall")
 
@@ -1142,7 +1168,8 @@ class FloorplanFeatureCollectionTests(TestCase):
         self.assertAlmostEqual(lng, _ORIGIN["lng"], places=2)
 
     def test_the_projection_matches_the_editors_own(self) -> None:
-        """The server and the editor must agree, or a plan appears to move
+        """
+        The server and the editor must agree, or a plan appears to move
         when a viewer switches between them. Mirrors coords.ts exactly."""
         import math
 
@@ -1278,7 +1305,8 @@ class FloorplanFeatureCollectionTests(TestCase):
         self.assertIsNone(bounds_of(empty))
 
     def test_a_plan_with_no_origin_draws_nothing_rather_than_guessing(self) -> None:
-        """Without an origin the metres have no meaning; placing them at 0,0
+        """
+        Without an origin the metres have no meaning; placing them at 0,0
         would drop the whole plan into the Gulf of Guinea."""
         from urbanlens.dashboard.services.floorplans.features import feature_collection
 
@@ -1390,7 +1418,8 @@ class FloorplanCommunityTests(TestCase):
         self.assertFalse(personal_rooms & community_rooms)
 
     def test_publishing_carries_the_origin_across(self) -> None:
-        """Without it the copy's metres would have no anchor and the published
+        """
+        Without it the copy's metres would have no anchor and the published
         plan would be unplaceable."""
         self._wiki()
 
@@ -1416,7 +1445,8 @@ class FloorplanCommunityTests(TestCase):
 
 
 class FloorplanCommunityOverwriteTests(TestCase):
-    """A save that carries a community plan's uuid must not rewrite that plan.
+    """
+    A save that carries a community plan's uuid must not rewrite that plan.
 
     ``floorplan_for_editing`` deliberately lets anyone who can edit the wiki write the shared row - but the
     editor reaches it from a debounced autosave that fires seconds after the page opens, while the banner on
@@ -1473,7 +1503,8 @@ class FloorplanCommunityOverwriteTests(TestCase):
         )
 
     def test_saving_a_community_plans_uuid_does_not_destroy_it(self) -> None:
-        """The whole-document save deletes by omission, so an overwrite here
+        """
+        The whole-document save deletes by omission, so an overwrite here
         wipes every wall and room the author published."""
         response = self._save(
             {"uuid": str(self.community.uuid), "plan_origin": _ORIGIN, "floors": [{"level": 0, "walls": []}]}
@@ -1485,7 +1516,8 @@ class FloorplanCommunityOverwriteTests(TestCase):
         self.assertEqual(document["floors"][0]["rooms"][0]["name"], "Boiler room")
 
     def test_a_community_row_never_adopts_the_saving_users_private_pin(self) -> None:
-        """serialization._sync_linked_pin documents that a wiki copy has no
+        """
+        serialization._sync_linked_pin documents that a wiki copy has no
         owning pin; adopting one mints detail pins in that account for other
         people's markers."""
         self._save(
@@ -1528,7 +1560,8 @@ class FloorplanFloorDesignationTests(TestCase):
         self.assertEqual([f["designation"] for f in floors], ["G", "4A"])
 
     def test_a_blank_designation_stays_blank_rather_than_being_invented(self) -> None:
-        """Blank means "derive a label", which is the client's job - so the
+        """
+        Blank means "derive a label", which is the client's job - so the
         server must not helpfully fill one in."""
         self._save([{"level": 0}])
 
@@ -1547,14 +1580,16 @@ class FloorplanFloorDesignationTests(TestCase):
         self.assertEqual(floor["level"], 3)
 
     def test_two_floors_cannot_share_a_level(self) -> None:
-        """Refused up front as a 400. The unique constraint is DEFERRED, so it
+        """
+        Refused up front as a 400. The unique constraint is DEFERRED, so it
         would otherwise not fire until the outer commit - by which point the
         view can only answer 500."""
         with self.assertRaises(ValueError):
             self._save([{"level": 1}, {"level": 1}])
 
     def test_swapping_two_levels_in_one_save_commits(self) -> None:
-        """The constraint has to be DEFERRED: save_document writes floors one
+        """
+        The constraint has to be DEFERRED: save_document writes floors one
         row at a time inside a single transaction, so a swap necessarily
         collides part-way through and would fail a per-statement check."""
         self._save([{"level": 0, "designation": "G"}, {"level": 1, "designation": "1"}])
@@ -1572,7 +1607,8 @@ class FloorplanFloorDesignationTests(TestCase):
         self.assertEqual(by_level, {0: "1", 1: "G"})
 
     def test_a_mid_stack_renumber_in_one_save_commits(self) -> None:
-        """The other shape the deferred constraint exists for: deleting a
+        """
+        The other shape the deferred constraint exists for: deleting a
         middle floor and closing the gap moves 2 onto 1's old level."""
         self._save([{"level": 0}, {"level": 1}, {"level": 2}])
         floors = document_for(self.floorplan)["floors"]
@@ -1642,7 +1678,8 @@ class FloorplanOpeningRehostTests(TestCase):
         )
 
     def test_a_floor_payload_with_no_uuid_updates_that_storey_rather_than_replacing_it(self) -> None:
-        """Everything on a storey hangs off its row, so building a second floor and sweeping the first away as an orphan takes its walls, openings, locks and rooms with it by cascade. Levels are unique within a plan, so a payload that names a level and no uuid names the storey already at that level.
+        """
+        Everything on a storey hangs off its row, so building a second floor and sweeping the first away as an orphan takes its walls, openings, locks and rooms with it by cascade. Levels are unique within a plan, so a payload that names a level and no uuid names the storey already at that level.
 
         This was invisible for a long time because `_apply_item` re-saved every row unconditionally, and a save
         on a row still carrying its pk re-inserts it - so cascade-deleted rows came back and only a row that
@@ -1721,7 +1758,8 @@ class FloorplanOpeningRehostTests(TestCase):
         self.assertEqual(len(after["walls"][0]["openings"][0]["locks"]), 1, "the lock went with the replaced storey")
 
     def test_a_moved_opening_keeps_its_locks(self) -> None:
-        """FloorplanLock cascades from the opening, so a delete-and-recreate
+        """
+        FloorplanLock cascades from the opening, so a delete-and-recreate
         would destroy the lock silently."""
         save_document(
             self.floorplan,
@@ -1832,7 +1870,8 @@ class FloorplanFenceAndGateTests(TestCase):
             self._save([{"kind": "hedge", "ax": 0.0, "ay": 0.0, "bx": 1.0, "by": 0.0}])
 
     def test_a_gap_in_a_fence_is_a_virtual_span_and_still_encloses(self) -> None:
-        """A missing run is a stretch where nothing is built, not an opening cut
+        """
+        A missing run is a stretch where nothing is built, not an opening cut
         into fabric that continues - and it still bounds the yard, which is what
         makes the enclosed area nameable."""
         corners = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]
@@ -1869,7 +1908,8 @@ class FloorplanConcurrencyTests(TestCase):
         save_document(self.floorplan, document, profile=self.profile)
 
     def test_a_save_built_on_a_replaced_version_is_refused(self) -> None:
-        """The second tab's document is valid; it is just no longer current, and
+        """
+        The second tab's document is valid; it is just no longer current, and
         a whole-document save deletes by omission."""
         from urbanlens.dashboard.services.floorplans.serialization import StaleDocumentError
 
@@ -1884,7 +1924,8 @@ class FloorplanConcurrencyTests(TestCase):
             save_document(self.floorplan, second_tab, profile=self.profile)
 
     def test_a_document_with_no_token_still_saves(self) -> None:
-        """An older client, and a deliberate fork, both send none - refusing
+        """
+        An older client, and a deliberate fork, both send none - refusing
         those to catch a rarer problem is the wrong trade."""
         save_document(
             self.floorplan,
@@ -1962,7 +2003,8 @@ class FloorplanDocumentLimitsTests(TestCase):
             )
 
     def test_a_normal_plan_is_nowhere_near_the_ceilings(self) -> None:
-        """The limits exist to stop one request writing a million rows, not to
+        """
+        The limits exist to stop one request writing a million rows, not to
         constrain anybody's building."""
         floors = [{"level": level, "walls": _square_walls()} for level in range(20)]
 
@@ -1972,7 +2014,8 @@ class FloorplanDocumentLimitsTests(TestCase):
 
 
 class FloorplanAutosaveCostTests(TestCase):
-    """An autosave that changes nothing should cost almost nothing.
+    """
+    An autosave that changes nothing should cost almost nothing.
 
     The editor saves on a debounce after every edit, so this runs constantly."""
 
@@ -2004,7 +2047,8 @@ class FloorplanAutosaveCostTests(TestCase):
         )
 
     def _as_the_client_sends_it(self) -> dict:
-        """`document_for` as the editor would post it back.
+        """
+        `document_for` as the editor would post it back.
 
         The server never emits a marker's lat/lng - only the client knows the projection from plan-local metres
         (see `_sync_linked_pin`)."""
@@ -2025,7 +2069,8 @@ class FloorplanAutosaveCostTests(TestCase):
         return len(captured)
 
     def test_an_unchanged_resave_stays_within_its_current_cost(self) -> None:
-        """A save that changes nothing writes nothing, and this is the ceiling.
+        """
+        A save that changes nothing writes nothing, and this is the ceiling.
 
         `_apply_item` skips a row whose stored columns are unchanged, so a four-wall plan resaved as-is costs
         about 27 queries rather than the 33 it cost when every row was rewritten regardless."""
@@ -2045,7 +2090,8 @@ class FloorplanAutosaveCostTests(TestCase):
         self.assertLess(len(captured), 34, f"the posted document took {len(captured)} queries")
 
     def test_an_unchanged_resave_leaves_every_row_alone(self) -> None:
-        """Identity is the part that matters: rewriting a row it did not need to
+        """
+        Identity is the part that matters: rewriting a row it did not need to
         touch is wasted work, but *replacing* one loses whatever pointed at it."""
         before = {str(wall["uuid"]) for wall in document_for(self.floorplan)["floors"][0]["walls"]}
 
@@ -2055,7 +2101,8 @@ class FloorplanAutosaveCostTests(TestCase):
         self.assertEqual(before, after)
 
     def test_an_unchanged_resave_leaves_a_marker_s_twin_pin_alone(self) -> None:
-        """The twin is the most expensive row in an unchanged save and the one with
+        """
+        The twin is the most expensive row in an unchanged save and the one with
         least reason to move: a Pin save is not a row write, it runs the whole Pin
         signal chain, once per marker per debounced autosave."""
         from urbanlens.dashboard.models.pin.model import Pin
@@ -2103,7 +2150,8 @@ class FloorplanMarkerTests(TestCase):
         self.floorplan = Floorplan.objects.create(place=_building(), profile=self.profile)
 
     def test_a_connector_id_ties_a_stair_across_two_floors(self) -> None:
-        """A stack of floors reads as one building only when the vertical
+        """
+        A stack of floors reads as one building only when the vertical
         connections between them are identified."""
         save_document(
             self.floorplan,
@@ -2176,7 +2224,8 @@ class FloorplanMarkerAppearanceTests(TestCase):
         return document_for(self.floorplan)["floors"][0]["markers"][0]
 
     def test_an_icon_and_colour_survive_the_round_trip(self) -> None:
-        """The document has always *read* these off the linked pin; nothing
+        """
+        The document has always *read* these off the linked pin; nothing
         wrote them back, so anything set in the editor vanished on save."""
         saved = self._save(
             {
@@ -2194,7 +2243,8 @@ class FloorplanMarkerAppearanceTests(TestCase):
         self.assertEqual(saved["color"], "#F44336")
 
     def test_clearing_a_colour_returns_the_kind_default(self) -> None:
-        """Blank means "no override", which has to be distinguishable from a
+        """
+        Blank means "no override", which has to be distinguishable from a
         payload that simply did not mention the field."""
         first = self._save(
             {
@@ -2227,7 +2277,8 @@ class FloorplanMarkerAppearanceTests(TestCase):
         self.assertIsNone(saved["color"])
 
     def test_appearance_is_not_stored_on_the_marker(self) -> None:
-        """One value, not two: FloorplanMarker must stay free of appearance
+        """
+        One value, not two: FloorplanMarker must stay free of appearance
         columns or the pin page and the floorplan can disagree."""
         self._save(
             {
@@ -2325,7 +2376,8 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         self.assertIsNone(FloorplanMarker.objects.get().linked_pin)
 
     def test_a_marker_on_a_pinless_plan_gets_no_linked_pin(self) -> None:
-        """The wiki-published copy of a plan (see publish_to_wiki) has no owning pin to
+        """
+        The wiki-published copy of a plan (see publish_to_wiki) has no owning pin to
         parent a detail pin under, and must never reach across to another profile's own."""
         placeless = Floorplan.objects.create(place=self.place, profile=self.profile)  # pin left unset
 
@@ -2371,7 +2423,8 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         self.assertFalse(Pin.objects.filter(pk=linked_pk).exists())
 
     def test_deleting_the_linked_pin_deletes_the_marker(self) -> None:
-        """CASCADE the other way too: removing a detail pin from the pin page
+        """
+        CASCADE the other way too: removing a detail pin from the pin page
         must not leave a floorplan marker pointing at nothing."""
         save_document(
             self.floorplan,
@@ -2413,7 +2466,8 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         self.assertFalse(Pin.objects.filter(pk=linked_pk).exists())
 
     def test_two_floors_can_share_the_exact_same_ground_point(self) -> None:
-        """A stairwell sits at the same lat/lng on every storey it passes
+        """
+        A stairwell sits at the same lat/lng on every storey it passes
         through - resolve_child_pin_location's "no two of one profile's pins
         at the exact point" rule must not apply here."""
         save_document(
@@ -2498,7 +2552,8 @@ class FloorplanMarkerLinkedPinTests(TestCase):
         self.assertAlmostEqual(float(marker.linked_pin.location.longitude), -73.9311, places=4)
 
     def test_document_for_prefers_the_linked_pins_own_name_and_style(self) -> None:
-        """The pin is the freshest copy once it exists - it may have been
+        """
+        The pin is the freshest copy once it exists - it may have been
         renamed or restyled from the Private Pin page since this marker was
         last saved here."""
         save_document(
@@ -2532,7 +2587,8 @@ class FloorplanMarkerLinkedPinTests(TestCase):
 
 
 class FloorplanSessionItemIdentityTests(TestCase):
-    """A session-created item's row must survive a second save.
+    """
+    A session-created item's row must survive a second save.
 
     ``_sync()`` matches a payload item to an existing row purely by uuid and deletes anything left unmatched as
     an orphan - so the *client* is the one responsible for round-tripping the real uuid a save just assigned."""
@@ -2635,7 +2691,8 @@ class FloorplanDocumentContractTests(TestCase):
         self.assertIn("level", str(caught.exception))
 
     def test_a_floor_carries_no_outline_of_its_own(self) -> None:
-        """The storey's shape is whatever its walls enclose; a stored outline
+        """
+        The storey's shape is whatever its walls enclose; a stored outline
         would be a second, divergent answer to the same question."""
         save_document(
             self.floorplan,
@@ -2663,7 +2720,8 @@ class FloorplanEditorContextTests(TestCase):
         self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-ward-b")
 
     def test_the_pins_photos_are_offered_as_references(self) -> None:
-        """The pool attaches to every item, so a pin's own photos are the
+        """
+        The pool attaches to every item, so a pin's own photos are the
         likeliest evidence for a wall or the door cut into it."""
         from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -2735,7 +2793,8 @@ class FloorplanMultiBuildingPickerTests(TestCase):
 
 
 class PlacelessFloorplanTests(TestCase):
-    """A plan need not belong to a known building outline.
+    """
+    A plan need not belong to a known building outline.
 
     Most pins on a hand-mapped site resolve to no building place at all (no provider has an outline for a
     derelict structure), and refusing to save those made the editor a dead end for exactly the buildings most
@@ -2832,7 +2891,8 @@ class PlacelessFloorplanTests(TestCase):
 
 
 class FloorplanResponseOrderTests(TestCase):
-    """The order a saved document comes back in, which the editor relies on.
+    """
+    The order a saved document comes back in, which the editor relies on.
 
     After a save the editor copies the returned uuids back onto the objects it sent, so that a newly drawn wall
     keeps its identity instead of being created again on the next save."""
@@ -2878,7 +2938,8 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual([marker["name"] for marker in floor["markers"]], ["alpha", "beta"])
 
     def test_a_locks_own_notes_survive_the_round_trip(self) -> None:
-        """A lock is a floorplan item, so it carries the same fields as one.
+        """
+        A lock is a floorplan item, so it carries the same fields as one.
 
         The editor writes "broken, seized, rusted shut" into a lock's condition rather than into its state,
         which asks only whether the door is presently secured - so losing the condition would lose the
@@ -2917,7 +2978,8 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual(lock["key_attributes"], {"note": "brass yale, on the office ring"})
 
     def test_a_photo_attached_to_two_items_is_pooled_once(self) -> None:
-        """The pool holds each photo once however many things cite it.
+        """
+        The pool holds each photo once however many things cite it.
 
         The editor sends a pool entry carrying a client-side uuid and the same uuid in each item's references;
         the server has to create one row and resolve both citations to it within the one save."""
@@ -2946,7 +3008,8 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual(document["floors"][0]["walls"][1]["references"], [pooled])
 
     def test_resending_a_client_side_pool_id_recreates_the_row(self) -> None:
-        """Which is why the editor has to take the real uuid back.
+        """
+        Which is why the editor has to take the real uuid back.
 
         _Pools keys the existing pool by its real uuids, so a second save still carrying "local-ref-1" matches
         nothing, creates a second row and deletes the first as stale."""
@@ -2993,7 +3056,8 @@ class FloorplanResponseOrderTests(TestCase):
         self.assertEqual(FloorplanReference.objects.get(floorplan=self.floorplan).pk, first)
 
     def test_the_pool_comes_back_in_the_order_it_was_sent(self) -> None:
-        """Which is what lets the editor match its rows to the server's by position.
+        """
+        Which is what lets the editor match its rows to the server's by position.
 
         Both pool models order by sort_order, written from the payload index, so a save carrying new rows and
         existing ones together still answers in the order it was given rather than in whatever order the rows
@@ -3098,7 +3162,8 @@ class FloorplanResponseOrderTests(TestCase):
 
 
 class FloorplanFeatureScalingTests(QueryScalingMixin, TestCase):
-    """More doors on a plan must not mean more queries to draw it.
+    """
+    More doors on a plan must not mean more queries to draw it.
 
     Every opening carries a one-word answer to "does this door open", derived from its locks."""
 

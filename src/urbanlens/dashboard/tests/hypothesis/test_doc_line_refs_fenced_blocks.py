@@ -1,4 +1,5 @@
-"""A line number inside a fenced code block is quoted output, not a citation (P49).
+"""
+A line number inside a fenced code block is quoted output, not a citation (P49).
 
 `bin/check_doc_line_refs.py` failed on a traceback pasted into a document: the frames carry the line numbers the code
 had when it crashed. Renumbering them would falsify the quote, so the check reads prose only. These run it against a

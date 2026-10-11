@@ -9,7 +9,8 @@ from urbanlens.dashboard.services.auth.username import find_user_by_username, no
 
 
 def find_user_by_identifier(identifier: str, *, active_only: bool = True) -> User | None:
-    """The account an identifier names, the way the login form reads it.
+    """
+    The account an identifier names, the way the login form reads it.
 
     An exact username wins, whatever the account's state, so the auth backend still reports an inactive
     account as such. Otherwise an address matches the account's primary or a verified secondary in any
@@ -35,7 +36,8 @@ def find_user_by_identifier(identifier: str, *, active_only: bool = True) -> Use
 
 
 def canonical_identifier(identifier: str) -> str:
-    """One string for every spelling of an identifier, whether or not an account holds it.
+    """
+    One string for every spelling of an identifier, whether or not an account holds it.
 
     Keys per-identifier state that must not tell spellings apart - a lockout counter or a decoy salt -
     when there is no account to key it by instead.

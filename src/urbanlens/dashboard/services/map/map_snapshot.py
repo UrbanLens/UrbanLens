@@ -45,7 +45,8 @@ def _sanitize_markup_color(v: object, fallback: str = "#e74c3c") -> str:
 
 
 def _sanitize_optional_color(v: object) -> str | None:
-    """Return ``v`` if it is a hex colour or the string ``"none"``, else None.
+    """
+    Return ``v`` if it is a hex colour or the string ``"none"``, else None.
     Unlike the shared helper, callers here distinguish "no usable value" from "unset" by testing for None, so the empty-string fallback is mapped back."""
     return sanitize_optional_color(v) or None
 
@@ -65,7 +66,8 @@ def _sanitize_degrees(v: object) -> float:
 
 
 def _sanitize_latlngs(raw: object) -> list[list[float]]:
-    """Return the valid ``[lat, lng]`` pairs in ``raw``, up to the point ceiling.
+    """
+    Return the valid ``[lat, lng]`` pairs in ``raw``, up to the point ceiling.
 
     Stops at ``settings.MARKUP_MAX_GEOMETRY_POINTS`` - the same ceiling the
     markup controller refuses an oversized ``geometry`` with, so the two write
@@ -86,7 +88,8 @@ def _sanitize_latlngs(raw: object) -> list[list[float]]:
 
 
 def _sanitize_markup_shapes(shapes: object) -> list[dict]:
-    """Return cleaned shape dicts, dropping malformed, unknown or excess entries.
+    """
+    Return cleaned shape dicts, dropping malformed, unknown or excess entries.
 
     Trimmed at ``settings.MARKUP_MAX_SHAPES_PER_SNAPSHOT``: every kept shape
     becomes its own INSERT in ``replace_items_from_snapshot`` plus the two
@@ -130,7 +133,8 @@ def _sanitize_markup_shapes(shapes: object) -> list[dict]:
 
 
 def sanitize_map_data(data: object) -> dict | None:
-    """Validate and clamp a decoded map snapshot dict.
+    """
+    Validate and clamp a decoded map snapshot dict.
 
     Args:
         data: The decoded JSON value (expected to be a dict).
@@ -155,7 +159,8 @@ def sanitize_map_data(data: object) -> dict | None:
 
 
 def parse_map_data(request: HttpRequest, field: str = "map_data") -> dict | None:
-    """Extract, decode, validate, and sanitize a map snapshot from a POST field.
+    """
+    Extract, decode, validate, and sanitize a map snapshot from a POST field.
 
     Args:
         request: The HTTP request whose POST body carries the JSON blob.
@@ -176,7 +181,8 @@ def parse_map_data(request: HttpRequest, field: str = "map_data") -> dict | None
 
 
 def default_markup_map_title(context: Pin | Wiki | Trip | PinList | None = None) -> str:
-    """Return the default MarkupMap title to use when none was explicitly given.
+    """
+    Return the default MarkupMap title to use when none was explicitly given.
 
     Args:
         context: The Pin, Wiki, Trip, or PinList this map was created from, if known.
@@ -202,7 +208,8 @@ def materialize_markup_map(
     existing_map: MarkupMap | None = None,
     context: Pin | Wiki | Trip | PinList | None = None,
 ) -> MarkupMap | None:
-    """Create/update/delete a MarkupMap so it matches a submitted snapshot.
+    """
+    Create/update/delete a MarkupMap so it matches a submitted snapshot.
 
     Args:
         profile: Owner for a newly created map.

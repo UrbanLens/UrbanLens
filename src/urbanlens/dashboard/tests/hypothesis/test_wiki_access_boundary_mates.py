@@ -38,7 +38,8 @@ class LocationVisibleToSamePlaceTests(TestCase):
         self.assertFalse(location_visible_to(self.wiki_location, self.profile))
 
     def test_pin_at_a_different_location_on_the_same_place_is_visible(self) -> None:
-        """The regression this closes: nearly-identical coordinates that resolve
+        """
+        The regression this closes: nearly-identical coordinates that resolve
         to a distinct Location row, but stand on the same real-world thing."""
         nearby_location = Location.objects.create(latitude=40.0005, longitude=-74.0005)
         resolution.resolve_location_place(nearby_location)
@@ -64,7 +65,8 @@ class LocationVisibleToSamePlaceTests(TestCase):
         self.assertFalse(location_visible_to(self.wiki_location, self.profile))
 
     def test_a_user_drawn_polygon_does_not_grant_visibility(self) -> None:
-        """The anti-gaming invariant, now structural: the predicate never reads
+        """
+        The anti-gaming invariant, now structural: the predicate never reads
         the Boundary table, which is where every drawn shape lives."""
         far_location = Location.objects.create(latitude=40.5, longitude=-74.5)
         resolution.resolve_location_place(far_location)
@@ -84,7 +86,8 @@ class LocationVisibleToSamePlaceTests(TestCase):
         self.assertFalse(location_visible_to(self.wiki_location, self.profile))
 
     def test_a_pin_on_a_building_of_the_place_counts(self) -> None:
-        """A point inside a building footprint is on that building's grounds,
+        """
+        A point inside a building footprint is on that building's grounds,
         and the two share one access domain."""
         building = make_place(PlaceKind.BUILDING, _square(-74.001, 40.001, 0.0002), parent=self.parcel)
         inside_building = Location.objects.create(latitude=40.001, longitude=-74.001)

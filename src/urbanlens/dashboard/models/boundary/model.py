@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class BoundaryType(TextChoices):
-    """The kind of physical region a boundary describes.
+    """
+    The kind of physical region a boundary describes.
 
     PROPERTY is the parcel/grounds of a place (a campus, a lot). BUILDING is a
     single structure's footprint. When an external source is ambiguous about
@@ -28,7 +29,8 @@ class BoundaryType(TextChoices):
 
 
 class BoundarySource(TextChoices):
-    """External provider a candidate boundary's geometry came from.
+    """
+    External provider a candidate boundary's geometry came from.
     Blank (``""``) marks every other row: the canonical location default, wiki/pin customizations, and legacy rows from before per-source candidates existed.
     """
 
@@ -37,7 +39,8 @@ class BoundarySource(TextChoices):
 
 
 class Boundary(abstract.DashboardModel):
-    """A spatial boundary owned by a pin, a wiki, or a provider vote.
+    """
+    A spatial boundary owned by a pin, a wiki, or a provider vote.
     Three kinds of row remain, distinguished by which FK is set: **Official geometry does not live here.** It lives on ``Place.geometry``, written only by the provider chain and boundary voting.
     """
 
@@ -132,7 +135,8 @@ class Boundary(abstract.DashboardModel):
 
     @property
     def drawn_or_generated_polygon(self):
-        """User/community-drawn polygon, else the API-generated one, else None.
+        """
+        User/community-drawn polygon, else the API-generated one, else None.
 
         Unlike ``effective_polygon`` this never synthesizes a circle, so it is
         safe for resolution chains that must distinguish "has real geometry"
@@ -187,7 +191,8 @@ class Boundary(abstract.DashboardModel):
 
 
 class BoundaryRevision(abstract.DashboardModel):
-    """One immutable snapshot of a wiki's community-drawn boundary outline.
+    """
+    One immutable snapshot of a wiki's community-drawn boundary outline.
 
     ``WikiEdit.changes`` names these by id (``{"boundary_property": {"from": 12, "to": 13}}``) instead of carrying
     the geometry, so each outline is stored once, in binary, however many edits refer to it. Written only through

@@ -54,7 +54,8 @@ class ProfileNoteQuerySet(abstract.FrontendDashboardQuerySet["ProfileNote"]):
     """Custom queryset for ProfileNote models."""
 
     def for_pair(self, author: Profile, subject: Profile) -> ProfileNoteQuerySet:
-        """Notes a specific author has written about a specific subject.
+        """
+        Notes a specific author has written about a specific subject.
 
         Args:
             author: The profile who wrote the note(s).
@@ -77,7 +78,8 @@ class ProfileNicknameQuerySet(abstract.DashboardQuerySet["ProfileNickname"]):
     """Custom queryset for ProfileNickname models."""
 
     def for_pair(self, author: Profile, subject: Profile) -> ProfileNicknameQuerySet:
-        """The nickname row (at most one) an author has assigned to a subject.
+        """
+        The nickname row (at most one) an author has assigned to a subject.
 
         Args:
             author: The profile who assigned the nickname.
@@ -100,7 +102,8 @@ class ProfileTrustQuerySet(abstract.DashboardQuerySet["ProfileTrust"]):
     """Custom queryset for ProfileTrust models."""
 
     def for_pair(self, author: Profile, subject: Profile) -> ProfileTrustQuerySet:
-        """The trust rating row (at most one) an author has given a subject.
+        """
+        The trust rating row (at most one) an author has given a subject.
 
         Args:
             author: The profile who gave the rating.
@@ -123,7 +126,8 @@ class ProfileEmailQuerySet(abstract.DashboardQuerySet["ProfileEmail"]):
     """Custom queryset for ProfileEmail models."""
 
     def verified_for(self, normalized_email: str) -> ProfileEmailQuerySet:
-        """Verified claims on one normalized address (at most one row exists).
+        """
+        Verified claims on one normalized address (at most one row exists).
         Only verified rows count for identity matching anywhere - an unverified row is inert by design (see the model docstring).
 
         Args:

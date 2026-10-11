@@ -1,4 +1,5 @@
-"""Remove cached public-source results that no one is shown (P233).
+"""
+Remove cached public-source results that no one is shown (P233).
 
 P196's relevance rule (``services.media.subject_relevance``) is applied when a gallery is read, so a result about
 somewhere else is never shown, but it stays in its ``LocationCache`` row. This removes it from the row once nobody
@@ -38,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class SweepReport:
-    """What one sweep did.
+    """
+    What one sweep did.
 
     Attributes:
         rows: Cache rows judged.
@@ -59,7 +61,8 @@ def judged_sources() -> dict[str, GalleryMediaSource]:
 
 
 def sweep_public_media(*, batch_size: int = 100, budget_seconds: float | None = None) -> SweepReport:
-    """Judge every cached row not yet judged under the current rule, removing what no one is shown.
+    """
+    Judge every cached row not yet judged under the current rule, removing what no one is shown.
 
     Args:
         batch_size: Rows read per query.

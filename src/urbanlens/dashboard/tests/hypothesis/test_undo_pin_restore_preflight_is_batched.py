@@ -1,4 +1,5 @@
-"""Undoing a bulk pin delete validates the batch one row at a time.
+"""
+Undoing a bulk pin delete validates the batch one row at a time.
 
 N21 H58. Before recreating anything, `PinUndoHandler.restore` walks the payload
 checking that each pin's profile, location, wiki and labels still exist, and

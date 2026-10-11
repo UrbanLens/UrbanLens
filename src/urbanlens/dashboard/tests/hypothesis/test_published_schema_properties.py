@@ -13,7 +13,8 @@ _OPERATION_KEYS = frozenset({"get", "put", "post", "delete", "options", "head", 
 
 
 def _document() -> dict:
-    """Generate the published schema without issuing a request.
+    """
+    Generate the published schema without issuing a request.
 
     Imported inside the function rather than at module scope: drf-spectacular pulls in the urlconf, and that
     should happen when a test runs rather than when this module is collected.
@@ -37,7 +38,8 @@ class OperationIdTests(SimpleTestCase):
     """`operationId` is the name generated client code calls."""
 
     def test_no_two_operations_share_an_operation_id(self) -> None:
-        """A collision renames somebody's method without anybody deciding to.
+        """
+        A collision renames somebody's method without anybody deciding to.
 
         drf-spectacular does not fail on a duplicate - it appends ``_2`` to whichever operation it reaches
         second and logs a warning nobody reads."""
@@ -64,7 +66,8 @@ class DocumentedRefusalTests(SimpleTestCase):
     """An operation has to document the ways it says no."""
 
     def test_authenticated_operations_document_401_and_403(self) -> None:
-        """A client needs a branch for the failure it will meet most often.
+        """
+        A client needs a branch for the failure it will meet most often.
 
         Every authenticated endpoint answers 401 without credentials and 403 when the credential's scopes do not
         cover the call."""
@@ -115,7 +118,8 @@ class PublishedSurfaceTests(SimpleTestCase):
     """What the document is allowed to describe at all."""
 
     def test_the_internal_rest_surface_is_never_published(self) -> None:
-        """`/dashboard/rest/` has no public contract and must not appear.
+        """
+        `/dashboard/rest/` has no public contract and must not appear.
 
         Asserted here as well as in the existing e2ee-prefix tests because this one is about the *whole*
         document: a preprocessing hook that stopped filtering would leak the internal API without any single
@@ -126,7 +130,8 @@ class PublishedSurfaceTests(SimpleTestCase):
         self.assertFalse(leaked, "the published schema documents the internal REST surface:\n  " + "\n  ".join(leaked))
 
     def test_the_document_declares_a_security_scheme(self) -> None:
-        """Losing the authentication extension makes the whole API read as public.
+        """
+        Losing the authentication extension makes the whole API read as public.
 
         It happened once: drf-spectacular could not resolve ``ApiKeyAuthentication`` and emitted a schema
         documenting no authentication at all, so a client generated from it had no idea a bearer token existed."""
@@ -140,7 +145,8 @@ class StableNameTests(SimpleTestCase):
     """Component names are the type names generated client code uses."""
 
     def test_no_choice_set_is_named_by_its_hash(self) -> None:
-        """drf-spectacular names a colliding choice set by three hex digits of its hash, which change whenever its
+        """
+        drf-spectacular names a colliding choice set by three hex digits of its hash, which change whenever its
         choices do and rename a generated client's type (P310: alias kinds were ``KindA19Enum``)."""
         names = list(_document().get("components", {}).get("schemas", {}))
 

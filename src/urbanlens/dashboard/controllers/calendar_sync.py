@@ -1,4 +1,5 @@
-"""Google Calendar integration controllers.
+"""
+Google Calendar integration controllers.
 
 Connect/disconnect a user's own Google Calendar via OAuth, import calendar
 events as trips, and export trips as calendar events. Every view operates on
@@ -66,7 +67,8 @@ def _resolve_next_view_name(name: str | None) -> str:
 
 
 def _next_url(next_name: str) -> str:
-    """The actual redirect target for an already-resolved next-view name.
+    """
+    The actual redirect target for an already-resolved next-view name.
 
     ``settings.view`` specifically returns to its Connections tab (matching every other integration's
     connect/callback flow - see flickr.py, google_photos.py) rather than the bare settings URL, which
@@ -79,7 +81,8 @@ def _next_url(next_name: str) -> str:
 
 
 def _callback_uri(request: HttpRequest) -> str:
-    """Absolute OAuth callback URL for this deployment.
+    """
+    Absolute OAuth callback URL for this deployment.
 
     Args:
         request: The current request (used for scheme/host).
@@ -91,7 +94,8 @@ def _callback_uri(request: HttpRequest) -> str:
 
 
 def calendar_context(profile: Profile, trip=None) -> dict:
-    """Template context describing the viewer's calendar connection state.
+    """
+    Template context describing the viewer's calendar connection state.
 
     Args:
         profile: The viewing profile.
@@ -116,7 +120,8 @@ _GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try aga
 
 
 def _drop_expired_account(account: GoogleCalendarAccount) -> None:
-    """Delete a connection Google has already rejected.
+    """
+    Delete a connection Google has already rejected.
 
     Called only when a gateway call raises ``GoogleAuthExpiredError`` - Google refused the grant itself, so
     keeping the row around would just repeat the same failure on every next attempt. A failure that passes, or one
@@ -129,7 +134,8 @@ def _drop_expired_account(account: GoogleCalendarAccount) -> None:
 
 
 class GoogleCalendarConnectView(LoginRequiredMixin, View):
-    """Start the OAuth consent flow for the user's own Google Calendar.
+    """
+    Start the OAuth consent flow for the user's own Google Calendar.
 
     GET /trips/calendar/connect/?next=<view name>
     """
@@ -147,7 +153,8 @@ class GoogleCalendarConnectView(LoginRequiredMixin, View):
 
 
 class GoogleCalendarCallbackView(LoginRequiredMixin, View):
-    """OAuth callback: exchange the code and store the user's tokens.
+    """
+    OAuth callback: exchange the code and store the user's tokens.
 
     GET /trips/calendar/callback/
     """
@@ -200,7 +207,8 @@ class GoogleCalendarCallbackView(LoginRequiredMixin, View):
 
 
 class GoogleCalendarDisconnectView(LoginRequiredMixin, View):
-    """Revoke and remove the user's calendar connection.
+    """
+    Revoke and remove the user's calendar connection.
 
     POST /trips/calendar/disconnect/
     """
@@ -229,7 +237,8 @@ class GoogleCalendarSettingsSectionView(LoginRequiredMixin, View):
 
 
 class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
-    """POST /settings/google-calendar/disconnect/ - disconnect and re-render the settings subsection.
+    """
+    POST /settings/google-calendar/disconnect/ - disconnect and re-render the settings subsection.
 
     Separate from ``GoogleCalendarDisconnectView`` because that view always issues an ``HX-Redirect`` to
     the trips list (matching where its only other caller - the calendar import dialog - lives);
@@ -248,7 +257,8 @@ class GoogleCalendarSettingsDisconnectView(LoginRequiredMixin, View):
 
 
 class CalendarImportView(LoginRequiredMixin, View):
-    """Import dialog and import action for the user's calendar events.
+    """
+    Import dialog and import action for the user's calendar events.
 
     GET  /trips/calendar/import/  → dialog listing upcoming events
     POST /trips/calendar/import/  → queue the import of the selected events, answering with a progress fragment
@@ -324,7 +334,8 @@ class CalendarImportView(LoginRequiredMixin, View):
 
 
 class CalendarImportProgressView(LoginRequiredMixin, View):
-    """GET /trips/calendar/import/progress/<token>/ - the polled progress of one calendar import.
+    """
+    GET /trips/calendar/import/progress/<token>/ - the polled progress of one calendar import.
 
     The token signs the task id together with the importing profile: the result backend records no owner,
     and a result names the importer's own events.
@@ -360,7 +371,8 @@ class CalendarImportProgressView(LoginRequiredMixin, View):
 
 
 class CalendarImportPreviewView(LoginRequiredMixin, View):
-    """Second page of the import dialog: review trips, activities, and invitations.
+    """
+    Second page of the import dialog: review trips, activities, and invitations.
 
     POST /trips/calendar/import/preview/ → render the review step for the
 
@@ -406,7 +418,8 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
 
 
 class TripCalendarExportView(LoginRequiredMixin, View):
-    """Export a trip to (or remove it from) the user's own Google Calendar.
+    """
+    Export a trip to (or remove it from) the user's own Google Calendar.
 
     POST /trips/<slug>/calendar/export/ → create/update the event
     DELETE /trips/<slug>/calendar/export/ → delete the event
@@ -415,7 +428,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
     """
 
     def _render_button(self, request: HttpRequest, trip, profile: Profile, *, toast: tuple[str, str] | None = None, status: int = 200) -> HttpResponse:
-        """Re-render the calendar button partial, optionally with a toast.
+        """
+        Re-render the calendar button partial, optionally with a toast.
 
         Args:
             request: The HTTP request.
@@ -508,7 +522,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
 
 class TripCalendarAutoSyncView(LoginRequiredMixin, View):
-    """Toggle whether an already-exported trip keeps pushing future edits to its calendar event.
+    """
+    Toggle whether an already-exported trip keeps pushing future edits to its calendar event.
 
     POST /trips/<slug>/calendar/auto-sync/ → flip TripCalendarLink.auto_sync for the
 

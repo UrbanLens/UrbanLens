@@ -37,7 +37,8 @@ DEFAULT_ENRICHED_MAX_DIMENSION = 1024
 
 
 def enriched_max_dimension(source: str) -> int:
-    """The longest-edge cap a provider photo from *source* was stored under.
+    """
+    The longest-edge cap a provider photo from *source* was stored under.
 
     Args:
         source: The row's ``ImageSource`` value.
@@ -62,7 +63,8 @@ _PLACE_PHOTO_LIST_CACHE_SOURCE = "google_maps_photos"
 
 
 def _save_enriched_image(location: Location, content: bytes, *, source: str, source_url: str = "", caption: str = "", max_dimension: int) -> Image:
-    """Persist downloaded bytes as a wiki-attached, profile-less Image row, resized to WebP.
+    """
+    Persist downloaded bytes as a wiki-attached, profile-less Image row, resized to WebP.
 
     Args:
         location: The shared Location this photo belongs to.
@@ -137,7 +139,8 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
 
     @property
     def service_keys(self) -> tuple[str, ...]:
-        """Whichever of REData/Google Places ``places_resolution`` would actually dispatch to.
+        """
+        Whichever of REData/Google Places ``places_resolution`` would actually dispatch to.
         Budgeting against the *other*, unused path (e.g. a REData-only install's disabled/never-touched ``google_places`` service row) would wrongly throttle or skip this source."""
         if _redata_configured():
             return ("redata_places",)

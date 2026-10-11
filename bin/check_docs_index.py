@@ -37,7 +37,8 @@ _ADR_NAME = re.compile(r"^(\d{4})-[a-z0-9-]+\.md$")
 
 
 def audit(index: str, adr_names: list[str]) -> list[str]:
-    """Report every way the index or the ADR directory breaks its rules.
+    """
+    Report every way the index or the ADR directory breaks its rules.
 
     Args:
         index: Contents of `docs/INDEX.md`.
@@ -49,7 +50,8 @@ def audit(index: str, adr_names: list[str]) -> list[str]:
 
 
 def audit_index(index: str) -> list[str]:
-    """Report every way the index breaks its rules.
+    """
+    Report every way the index breaks its rules.
 
     Args:
         index: Contents of `docs/INDEX.md`.
@@ -93,7 +95,8 @@ def audit_index(index: str) -> list[str]:
 
 
 def audit_adrs(adr_names: list[str]) -> list[str]:
-    """Report every ADR file that is misnamed or reuses another's number.
+    """
+    Report every ADR file that is misnamed or reuses another's number.
 
     Args:
         adr_names: File names in `docs/adr/`.

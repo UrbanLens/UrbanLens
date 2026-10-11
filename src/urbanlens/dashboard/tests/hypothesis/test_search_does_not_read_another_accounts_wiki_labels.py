@@ -1,4 +1,5 @@
-"""Searching wikis via `label:` must not read label rows belonging to a wiki you cannot see.
+"""
+Searching wikis via `label:` must not read label rows belonging to a wiki you cannot see.
 
 Unlike Pin and Photo, ``WikiSearchProvider.search`` does not put ``"labels__name"`` in the field
 list it hands to ``apply_text`` (``providers.py``, ``WikiSearchProvider.search``) - so a bare
@@ -70,7 +71,8 @@ TOLERANCE = 20
 
 
 class _WikiLabelOperatorCase(TestCase):
-    """A viewer with access to one wiki (one exactly-named label), and a stranger's inaccessible
+    """
+    A viewer with access to one wiki (one exactly-named label), and a stranger's inaccessible
     wiki whose unrelated labels share the table."""
 
     def setUp(self) -> None:
@@ -125,7 +127,8 @@ class _WikiLabelOperatorCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the label table at all.
+        """
+        The full capture, and the statements in it that read the label table at all.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan
@@ -166,7 +169,8 @@ class SearchDoesNotReadAnotherAccountsWikiLabelsTests(_WikiLabelOperatorCase):
     """One wiki's labels must not be read to answer a `label:` search for a different, accessible wiki."""
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_elsewhere(self) -> None:
-        """A `label:` search that DOES match the viewer's own wiki must not also scan the stranger's.
+        """
+        A `label:` search that DOES match the viewer's own wiki must not also scan the stranger's.
 
         Unlike Photo's matching variant, the trigram index never touched this one: it targets
         icontains, and `label:` matches with iexact, a different compiled query. Fixed 2026-09-17 by
@@ -175,7 +179,8 @@ class SearchDoesNotReadAnotherAccountsWikiLabelsTests(_WikiLabelOperatorCase):
         self.assertDoesNotGrow(MINE)
 
     def test_it_does_not_read_a_strangers_labels_when_the_term_matches_nothing(self) -> None:
-        """A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
+        """
+        A `label:` search that matches nothing anywhere is the true negative: nothing to short-circuit on.
 
         Fixed 2026-09-17 by the bounded semi-join - see the module docstring.
         """

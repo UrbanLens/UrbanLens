@@ -1,4 +1,5 @@
-"""A building's ``year_built`` is stated as that building's only when REData says it dates the building itself (UrbanLens#321, "a parcel's assessor year").
+"""
+A building's ``year_built`` is stated as that building's only when REData says it dates the building itself (UrbanLens#321, "a parcel's assessor year").
 
 REData 0.3.6 says what each building's year dates (``year_built_basis``): ``"building"`` for a year a source gave the
 building, ``"parcel"`` for the assessor's one year for the parcel's principal improvement, which REData sets on at most

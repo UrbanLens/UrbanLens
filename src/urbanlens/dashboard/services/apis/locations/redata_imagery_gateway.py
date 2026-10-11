@@ -38,7 +38,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
     answers_at_null_island: ClassVar[bool] = True
 
     def get_imagery(self, latitude: float, longitude: float, *, providers: list[str] | None = None) -> LocationContextEnvelope:
-        """Return REData's normalized imagery results for a coordinate.
+        """
+        Return REData's normalized imagery results for a coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -57,7 +58,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
         return self.near_point(_IMAGERY_PATH, latitude, longitude, provider=providers)
 
     def get_timeline(self, latitude: float, longitude: float, *, trigger_archive: bool = False) -> dict[str, Any]:
-        """Return which dates imagery exists for at a coordinate.
+        """
+        Return which dates imagery exists for at a coordinate.
         Two shapes come back and both matter, because sources answer differently and neither can be expressed as the other:
 
         Args:
@@ -81,7 +83,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
         return self.get_json(_TIMELINE_PATH, params) or {}
 
     def download_bytes(self, url: str) -> bytes:
-        """Fetch a credentialed imagery source's bytes through REData's authenticated proxy.
+        """
+        Fetch a credentialed imagery source's bytes through REData's authenticated proxy.
 
         Args:
             url: The ``url`` field from an imagery result whose ``delivery``
@@ -107,7 +110,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
         return read_capped(response, what="REData imagery")
 
     def download_archived_copy(self, asset_uuid: str, *, width: int | None = None, height: int | None = None, zoom: int | None = None) -> bytes:
-        """Fetch REData's own composed, permanently archived copy of an imagery asset.
+        """
+        Fetch REData's own composed, permanently archived copy of an imagery asset.
         Rendered on first request and served from disk on every later one, so ``width``/``height``/``zoom`` only take effect the first time a given asset is downloaded.
 
         Args:
@@ -147,7 +151,8 @@ class RedataImageryGateway(RedataLocationContextGateway):
         return read_capped(response, what="REData imagery")
 
     def capture_time_series(self, asset_uuid: str, date: datetime.date, *, width: int = 1024, height: int = 1024) -> dict[str, Any] | None:
-        """Materialize one date from a continuous (``time_series``) imagery source.
+        """
+        Materialize one date from a continuous (``time_series``) imagery source.
         Only meaningful for a result whose ``delivery`` is ``time_series`` (today, only ``nasa_gibs``) - its ``url`` is a range, not a picture, and this is what turns one date in that range into a real, permanently stored image.
 
         Args:

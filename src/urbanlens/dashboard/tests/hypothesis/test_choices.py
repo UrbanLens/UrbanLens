@@ -1,4 +1,5 @@
-"""Property-based tests for TextChoices utilities and choice enums.
+"""
+Property-based tests for TextChoices utilities and choice enums.
 
 No database access - these are pure logic tests.
 """
@@ -133,7 +134,8 @@ class PinTypeTests(SimpleTestCase):
     @given(st.sampled_from(list(PinType)))
     @settings(max_examples=200)
     def test_icon_matches_the_declared_mapping(self, member: PinType) -> None:
-        """icon must return the glyph declared in PIN_TYPE_ICONS, not the push_pin fallback.
+        """
+        icon must return the glyph declared in PIN_TYPE_ICONS, not the push_pin fallback.
 
         Guards the shared mapping used by the pin/wiki lists, the type badge, and the ``pin_type_icon`` template
         filter - a member missing its entry would silently fall back to "push_pin" instead of failing loudly."""

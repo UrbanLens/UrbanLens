@@ -1,4 +1,5 @@
-"""The Organize page's label rows, a page at a time (P66).
+"""
+The Organize page's label rows, a page at a time (P66).
 
 Pages are keyed on the last row's sort key rather than an offset, so a label created or deleted between two
 page loads - REData's sync adds global tags in the background - neither repeats a row nor skips one.
@@ -41,7 +42,8 @@ def organize_page_size() -> int:
 
 
 def organize_rows_queryset(kind: str, profile: Profile) -> QuerySet[Label]:
-    """Every label of *kind* the Organize page lists for *profile*, in display order.
+    """
+    Every label of *kind* the Organize page lists for *profile*, in display order.
 
     The order ends on the pk because ``(order, name)`` is not unique: an own tag can share a global tag's name.
 
@@ -73,7 +75,8 @@ def organize_rows_queryset(kind: str, profile: Profile) -> QuerySet[Label]:
 
 @dataclass(frozen=True)
 class RowsCursor:
-    """The sort key of the last row a page showed; the next page starts after it.
+    """
+    The sort key of the last row a page showed; the next page starts after it.
 
     Attributes:
         order: Its ``Label.order``.
@@ -92,7 +95,8 @@ class RowsCursor:
 
     @classmethod
     def from_query(cls, params: Mapping[str, str]) -> RowsCursor | None:
-        """Read a cursor from request parameters.
+        """
+        Read a cursor from request parameters.
 
         Args:
             params: The query parameters.
@@ -127,7 +131,8 @@ class RowsCursor:
 
 @dataclass(frozen=True)
 class OrganizeRowsPage:
-    """One page of an Organize tab.
+    """
+    One page of an Organize tab.
 
     Attributes:
         labels: The labels on it, primed for their cards.
@@ -142,7 +147,8 @@ class OrganizeRowsPage:
 
 @dataclass(frozen=True)
 class OrganizeRowsMore:
-    """What the sentinel row at the end of a page needs.
+    """
+    What the sentinel row at the end of a page needs.
 
     Attributes:
         next_url: The next page.
@@ -156,7 +162,8 @@ class OrganizeRowsMore:
 
 
 def organize_rows_page(kind: str, profile: Profile, *, after: RowsCursor | None = None, limit: int | None = None) -> OrganizeRowsPage:
-    """One page of an Organize tab.
+    """
+    One page of an Organize tab.
 
     Args:
         kind: A label kind.
@@ -191,7 +198,8 @@ def organize_rows_page(kind: str, profile: Profile, *, after: RowsCursor | None 
 
 
 def organize_rows_more(page: OrganizeRowsPage, url_kind: str) -> OrganizeRowsMore | None:
-    """The sentinel for the end of *page*, or None when nothing follows it.
+    """
+    The sentinel for the end of *page*, or None when nothing follows it.
 
     Args:
         page: The page just rendered.

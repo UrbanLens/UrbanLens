@@ -58,7 +58,8 @@ _SETTLED_SECTION_REFUSALS = frozenset({REASON_FORBIDDEN, "census_data_api_not_co
 
 
 def _section_unanswered(exc: PropertyRecordsUnavailableError) -> bool:
-    """Whether REData could not answer a section for now, rather than answering it for good.
+    """
+    Whether REData could not answer a section for now, rather than answering it for good.
 
     Args:
         exc: What the section's lookup raised.
@@ -71,7 +72,8 @@ def _section_unanswered(exc: PropertyRecordsUnavailableError) -> bool:
 
 
 def _record_settles_owners(payload: dict[str, Any]) -> bool:
-    """Whether a record says who owns the parcel now, not just who some of its sources name.
+    """
+    Whether a record says who owns the parcel now, not just who some of its sources name.
 
     Only a missing section leaves the record itself whole; any other unanswered source is one of the record's own tiers.
 
@@ -88,7 +90,8 @@ def _record_settles_owners(payload: dict[str, Any]) -> bool:
 
 
 def _coverage_worth_calling(coverage: dict[str, Any], domain: str) -> bool:
-    """Whether a coverage-precheck domain is worth an actual supplementary call.
+    """
+    Whether a coverage-precheck domain is worth an actual supplementary call.
 
     Args:
         coverage: :meth:`RedataGateway.lookup_coverage`'s payload - ``{}`` both for a parcel with no coverage data and for a failed precheck (see :func:`_fetch_payload`), which is why this defaults to calling rather than skipping.
@@ -101,7 +104,8 @@ def _coverage_worth_calling(coverage: dict[str, Any], domain: str) -> bool:
 
 
 def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
-    """Call REData and return the shared LocationCache payload shape.
+    """
+    Call REData and return the shared LocationCache payload shape.
 
     Args:
         location: The Location to fetch a property record for.
@@ -134,7 +138,8 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
 
 
 def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: str) -> None:
-    """Add the parcel's sections asked for beside its record, each best-effort.
+    """
+    Add the parcel's sections asked for beside its record, each best-effort.
 
     A section REData could not answer for now is left out and named under the payload's ``unanswered_sources`` (see
     :data:`_SECTIONS`); a section REData refused for good is left out silently, as before.
@@ -226,7 +231,8 @@ def _add_sections(payload: dict[str, Any], gateway: RedataGateway, parcel_uuid: 
 
 
 def _lien_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Shape lien rows for display, newest filing first.
+    """
+    Shape lien rows for display, newest filing first.
     ``status`` is free text that publishers spell inconsistently, so it is passed through as a label rather than interpreted.
 
     Args:
@@ -248,7 +254,8 @@ def _lien_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _tax_status(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Summarise tax history into the two facts worth showing.
+    """
+    Summarise tax history into the two facts worth showing.
 
     Args:
         rows: Raw rows from :meth:`RedataGateway.lookup_tax_payments`.
@@ -275,7 +282,8 @@ _PARCEL_NUMBER_KEYS: tuple[str, ...] = ("pin", "parcel_identifier", "parcel_id")
 
 
 def _supplementary_sales(rows: list[dict[str, Any]], situs_address: str, apn: str) -> list[dict[str, Any]]:
-    """Sale rows attributable to *this* parcel, shaped for the sales_history pipeline.
+    """
+    Sale rows attributable to *this* parcel, shaped for the sales_history pipeline.
 
     Args:
         rows: Raw rows from :meth:`RedataGateway.lookup_sale_records`.
@@ -311,7 +319,8 @@ def _supplementary_sales(rows: list[dict[str, Any]], situs_address: str, apn: st
 
 
 def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, Any]]:
-    """One parcel's assessment rows, newest tax year first.
+    """
+    One parcel's assessment rows, newest tax year first.
 
     Args:
         rows: Raw rows from :meth:`RedataGateway.lookup_assessments`.
@@ -357,7 +366,8 @@ _OWNER_CONTACT_FIELDS: tuple[tuple[str, str], ...] = (
 
 
 def _owner_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Shape REData's owner rows for the cache, leaving out rows another REData client typed in.
+    """
+    Shape REData's owner rows for the cache, leaving out rows another REData client typed in.
 
     Args:
         rows: Raw rows from :meth:`RedataGateway.lookup_owners`.
@@ -388,7 +398,8 @@ def _owner_records(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _recorded_sales(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """REData's recorded sales of the parcel, shaped like the record's own ``sales_history``.
+    """
+    REData's recorded sales of the parcel, shaped like the record's own ``sales_history``.
 
     Args:
         rows: Raw rows from :meth:`RedataGateway.lookup_sales`.
@@ -410,7 +421,8 @@ def _recorded_sales(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def _merged_sales(known: list[dict[str, Any]], recorded: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The record's sales with REData's recorded ones added, one entry per date and price.
+    """
+    The record's sales with REData's recorded ones added, one entry per date and price.
 
     Args:
         known: The record's ``sales_history`` so far.
@@ -458,7 +470,8 @@ def _fit(field_name: str, value: str) -> str:
 
 
 def _current_owner_details(payload: dict[str, Any]) -> list[_OwnerDetails]:
-    """The owners the record names, each with the contact details known for it.
+    """
+    The owners the record names, each with the contact details known for it.
 
     Args:
         payload: A successful ``_fetch_payload`` result.
@@ -483,7 +496,8 @@ def _current_owner_details(payload: dict[str, Any]) -> list[_OwnerDetails]:
 
 
 def _owner_named(location: Location, name: str) -> WikiOwner:
-    """The owner of this name a location already knows, else a new OFFICIAL row, unlinked.
+    """
+    The owner of this name a location already knows, else a new OFFICIAL row, unlinked.
 
     Args:
         location: The location the record is for.
@@ -505,7 +519,8 @@ def _owner_named(location: Location, name: str) -> WikiOwner:
 
 
 def _sale_party_owner(location: Location, name: str) -> WikiOwner | None:
-    """The owner row a sale of this location names; a party to a sale is not made a current owner.
+    """
+    The owner row a sale of this location names; a party to a sale is not made a current owner.
 
     Args:
         location: The location sold.
@@ -519,7 +534,8 @@ def _sale_party_owner(location: Location, name: str) -> WikiOwner | None:
 
 
 def _current_official_owner(location: Location, details: _OwnerDetails) -> WikiOwner:
-    """Link the named owner to the location, keeping an official row's contact details current.
+    """
+    Link the named owner to the location, keeping an official row's contact details current.
 
     A member-entered owner of the same name is linked as it stands, never rewritten. A blank in the record never
     clears a known value.
@@ -555,7 +571,8 @@ def _parse_sale_price(raw: Any) -> Decimal | None:
 
 
 def _write_official_owners_and_sales(location: Location, payload: dict[str, Any]) -> None:
-    """Upsert OFFICIAL WikiOwner/WikiPropertySale rows from a successful fetch's payload.
+    """
+    Upsert OFFICIAL WikiOwner/WikiPropertySale rows from a successful fetch's payload.
 
     A location's linked owners are its current ones, as the community Sale History form treats them: the record's
     owners are linked, an official owner it no longer names is unlinked, and a sale's parties are recorded on the sale
@@ -628,7 +645,8 @@ SPECIAL_LAND_USE_LABELS: tuple[tuple[str, str], ...] = (
 
 
 def special_land_use_rows(areas: Any) -> list[dict[str, str]]:
-    """Name the Special Land Use Areas a parcel falls inside.
+    """
+    Name the Special Land Use Areas a parcel falls inside.
 
     Args:
         areas: REData's ``special_land_use_areas`` mapping - keyed by category, each value ``{"name": ..., "geoid": ...}`` or ``None``.
@@ -659,7 +677,8 @@ def _decimal_number(value: Any) -> float | None:
 
 
 def _may_see_nearby_research(user: Any) -> bool:
-    """Whether this user may see this panel's nearby-area (not-the-parcel-itself) data.
+    """
+    Whether this user may see this panel's nearby-area (not-the-parcel-itself) data.
     Currently gates only the neighbourhood demographics section - see :func:`_demographics_rows` and the module docstring.
 
     Args:
@@ -675,7 +694,8 @@ def _may_see_nearby_research(user: Any) -> bool:
 
 
 def _demographics_rows(demographics: Any, *, show_demographics: bool) -> list[dict[str, str]]:
-    """Neighbourhood context from the parcel's census tract, as display rows.
+    """
+    Neighbourhood context from the parcel's census tract, as display rows.
 
     Args:
         demographics: :meth:`RedataGateway.lookup_demographics`'s payload, or None/anything falsy (no coordinate, outside the USA, or the endpoint was unavailable - see ``_fetch_payload``'s best-effort handling of it).
@@ -715,7 +735,8 @@ def _observed_span(owner: dict[str, Any]) -> str:
 
 
 def _owner_rows(data: dict[str, Any]) -> list[dict[str, str]]:
-    """The owner's contact details, its other parcels and the parcel's former owners, for an entitled viewer.
+    """
+    The owner's contact details, its other parcels and the parcel's former owners, for an entitled viewer.
 
     Args:
         data: The cached property-record payload.
@@ -747,7 +768,8 @@ def _owner_rows(data: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def _render_available(data: dict[str, Any], *, show_owner: bool, show_demographics: bool) -> dict[str, Any]:
-    """Build the info-panel context for a successful record.
+    """
+    Build the info-panel context for a successful record.
 
     Args:
         data: The cached property-record payload.
@@ -918,7 +940,8 @@ class PropertyRecordsPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSou
             _write_official_owners_and_sales(pin.location, payload)
 
     def site_answer_covers(self, pin: Pin, data: dict) -> bool:
-        """Whether ``pin`` stands on the site's parcel; a pin across the road is on another one.
+        """
+        Whether ``pin`` stands on the site's parcel; a pin across the road is on another one.
 
         Args:
             pin: The nested pin.
@@ -939,7 +962,8 @@ class PropertyRecordsPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSou
         return bool(parcel.contains(Point(float(pin.effective_longitude or 0), float(pin.effective_latitude or 0), srid=4326)))
 
     def adopted(self, pin: Pin, data: dict) -> None:
-        """Record the site parcel's official owners and sales against the building's location too.
+        """
+        Record the site parcel's official owners and sales against the building's location too.
 
         Args:
             pin: The building pin.
@@ -949,7 +973,8 @@ class PropertyRecordsPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSou
             _write_official_owners_and_sales(pin.location, data)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Render the found record, the manual-lookup pointer card, or nothing (204).
+        """
+        Render the found record, the manual-lookup pointer card, or nothing (204).
         The owner's name and the demographics section are each shown only to a viewer entitled to them - see ``services.property.owner_access.viewer_of`` for who that is, and why an unresolvable viewer withholds both rather than showing them."""
         from urbanlens.dashboard.services.property.owner_access import can_see_official_owners, viewer_of
 
@@ -963,7 +988,8 @@ class PropertyRecordsPanelSource(RedataBackedSource, CoordinateGatedInfoPanelSou
         return None
 
     def overview_summary(self, pin: Pin, data: dict) -> OverviewSummary | None:
-        """The owner, parcel number and year built, for the Property Records Overview.
+        """
+        The owner, parcel number and year built, for the Property Records Overview.
 
         The owner's name is shown only to a viewer entitled to it, as on the Parcel tab; anyone else is told one is on
         record.
@@ -1001,14 +1027,16 @@ class PropertyRecordsEnrichmentSource(LocationCacheEnrichmentSource):
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self) -> bool:
-        """Requires REData to be configured - this source has no other backend.
+        """
+        Requires REData to be configured - this source has no other backend.
         Without it the cycle picks candidates, every fetch raises, and the run logs one exception per location."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
         return redata_configured()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Call REData and, on success, upsert OFFICIAL owner/sale rows.
+        """
+        Call REData and, on success, upsert OFFICIAL owner/sale rows.
 
         Args:
             location: The location to fetch a property record for.

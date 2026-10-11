@@ -1,4 +1,5 @@
-"""A deleted drawn region must stay deleted (P27).
+"""
+A deleted drawn region must stay deleted (P27).
 
 leaflet-draw's remove tool only stages a deletion, committed through its own Save action; starting
 any other draw or edit tool reverts it. Region maps use `shared/region-delete.ts` instead, which

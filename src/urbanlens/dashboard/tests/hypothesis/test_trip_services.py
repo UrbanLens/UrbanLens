@@ -36,7 +36,8 @@ _STATUSES = [TripActivity.STATUS_PROPOSED, TripActivity.STATUS_CONFIRMED, TripAc
 
 
 def _expected_can_perform(relationship: str, level: str) -> bool:
-    """The permission matrix, restated independently of the implementation.
+    """
+    The permission matrix, restated independently of the implementation.
 
     Written from the documented rules rather than by reading ``can_perform``, so the two have to agree for this
     to mean anything.
@@ -61,7 +62,8 @@ def _expected_can_perform(relationship: str, level: str) -> bool:
 
 @dataclass
 class _StubActivity:
-    """The minimal shape ``compute_activity_index_map`` reads off an activity.
+    """
+    The minimal shape ``compute_activity_index_map`` reads off an activity.
 
     Standing in for a real ``TripActivity`` keeps the numbering property test pure, so Hypothesis can drive it
     without a database (see the module docstring)."""
@@ -301,7 +303,8 @@ class BuildTripMapPointsInvariantTests(TestCase):
         )
 
     def test_indices_stay_contiguous_across_every_skip_combination(self) -> None:
-        """Exhaustive over one activity of each kind: numbering never gaps.
+        """
+        Exhaustive over one activity of each kind: numbering never gaps.
 
         The pure numbering rule is property-tested separately in :class:`ActivityIndexNumberingPropertyTests`;
         this is the end-to-end confirmation that the real query path produces the same thing."""
@@ -365,7 +368,8 @@ class BuildTripMapPointsInvariantTests(TestCase):
 
 
 class BuildActivityRowsChildTripMaskingTests(TestCase):
-    """build_activity_rows must mask a linked child trip's name/uuid exactly like it masks location.
+    """
+    build_activity_rows must mask a linked child trip's name/uuid exactly like it masks location.
 
     Regression: the row dict never carried a masked child-trip field at all, so the template read
     act.child_trip.name/.uuid directly and unconditionally "this points at trip X" (and X's real name) defeats
@@ -404,7 +408,8 @@ class BuildActivityRowsChildTripMaskingTests(TestCase):
         self.assertEqual(row["display_child_trip_uuid"], str(self.child_trip.uuid))
 
     def test_child_trip_is_also_blanked_when_hidden_only_by_the_adders_privacy_setting(self) -> None:
-        """Must reuse the same effective_location_hidden gate as the location fields, not just the raw location_hidden flag.
+        """
+        Must reuse the same effective_location_hidden gate as the location fields, not just the raw location_hidden flag.
 
         viewer_hidden_activity_ids' privacy-setting bucket only ever applies to an activity that actually
         carries a location (there is no place fact to withhold otherwise), so this needs a real Location -
@@ -417,7 +422,8 @@ class BuildActivityRowsChildTripMaskingTests(TestCase):
 
 
 class CompleteActivityVisibilityTests(TestCase):
-    """complete_activity must refuse to complete an activity whose location a viewer can't see.
+    """
+    complete_activity must refuse to complete an activity whose location a viewer can't see.
 
     Regression: completing only required trip-contribute permission, with no check against the activity's own
     effective location-hidden state - so any trip member could "complete" an activity someone else hid from

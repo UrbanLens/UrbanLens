@@ -85,7 +85,8 @@ def _slow_lines(records: list) -> list[str]:
 
 
 def _field(line: str, name: str) -> str:
-    """One `key=value` field out of a log line.
+    """
+    One `key=value` field out of a log line.
 
     Args:
         line: The formatted log line.
@@ -136,7 +137,8 @@ class TheNumbersAreRightTests(TestCase):
         self.assertGreaterEqual(wall_ms, SLOW_SECONDS * 1000 * 0.9)
 
     def test_cpu_time_separates_waiting_from_working(self) -> None:
-        """The field R27 turned on, and the reason a total alone is not enough.
+        """
+        The field R27 turned on, and the reason a total alone is not enough.
 
         `/slow/` sleeps, so its wall time is large and its CPU time is nearly nothing."""
         with self.assertLogs("urbanlens.dashboard.middleware", level="WARNING") as logged:
@@ -198,7 +200,8 @@ class TheNumbersAreRightTests(TestCase):
 
 @override_settings(ROOT_URLCONF=_URLCONF, UL_SLOW_REQUEST_MS=100)
 class ASlowRequestThatFailsIsStillReportedTests(TestCase):
-    """A slow request that then failed is the one most worth having a line for.
+    """
+    A slow request that then failed is the one most worth having a line for.
 
     Measured rather than assumed, and the first draft of this asserted the wrong thing: Django wraps **every**
     middleware in `convert_exception_to_response`, so a view's exception has already become a 500 by the time it
@@ -216,7 +219,8 @@ class ASlowRequestThatFailsIsStillReportedTests(TestCase):
         self.assertEqual(_field(lines[0], "status"), "500")
 
     def test_a_request_with_no_response_reports_raised(self) -> None:
-        """The `finally`'s other branch, exercised where it can be reached.
+        """
+        The `finally`'s other branch, exercised where it can be reached.
 
         `response=None` is what the middleware holds when the call it wrapped did not return one."""
         from urbanlens.dashboard.middleware import RequestTelemetryMiddleware, _SqlStats
@@ -243,7 +247,8 @@ class TheMiddlewareIsActuallyInstalledTests(TestCase):
         )
 
     def test_the_threshold_setting_exists_in_production_settings(self) -> None:
-        """`override_settings` invents a name production lacks, so assert the real one.
+        """
+        `override_settings` invents a name production lacks, so assert the real one.
 
         Every test above sets `UL_SLOW_REQUEST_MS`; without this, all of them
         would keep passing against a middleware reading a setting nobody defines.

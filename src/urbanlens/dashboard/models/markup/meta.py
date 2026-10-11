@@ -4,7 +4,8 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class MapLayerMode(TextChoices):
-    """Base tile layer selected for a MarkupMap viewport.
+    """
+    Base tile layer selected for a MarkupMap viewport.
 
     Values match the canonical keys used by the shared frontend layers engine
     (``frontend/ts/shared/map-layers.ts``); use :func:`normalize_layer_mode`
@@ -33,7 +34,8 @@ def normalize_layer_mode(value: object, default: str = ...) -> str: ...
 @overload
 def normalize_layer_mode(value: object, default: None) -> str | None: ...
 def normalize_layer_mode(value: object, default: str | None = MapLayerMode.STREET.value) -> str | None:
-    """Normalize a layer-mode identifier to a canonical MapLayerMode value.
+    """
+    Normalize a layer-mode identifier to a canonical MapLayerMode value.
     Accepts canonical values as-is and maps legacy aliases ("standard", "topo", ...) still present in old client snapshots.
 
     Args:

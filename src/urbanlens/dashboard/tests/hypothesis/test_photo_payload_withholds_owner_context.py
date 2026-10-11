@@ -52,7 +52,8 @@ class PhotoPayloadWithholdsOwnerContextTests(TestCase):
         self.assertIsNone(payload["visit_id"])
 
     def test_the_private_pin_name_appears_nowhere_in_the_payload(self) -> None:
-        """Not merely absent from the field named after it: absent entirely.
+        """
+        Not merely absent from the field named after it: absent entirely.
 
         A future change that threads the pin name into a title, an alt text or a
         breadcrumb would pass the field-by-field assertions above.

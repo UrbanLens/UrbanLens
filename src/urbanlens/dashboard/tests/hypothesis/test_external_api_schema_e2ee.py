@@ -30,14 +30,16 @@ E2EE_SCHEMA_PATHS = (
 
 
 class SchemaPrefixFilterTests(SimpleTestCase):
-    """The preprocessing hook itself, exercised without generating a schema.
+    """
+    The preprocessing hook itself, exercised without generating a schema.
 
     Driving the hook directly is what lets the "anchored, not a substring" property be stated precisely - the
     near-miss paths below never appear in the real urlconf, so a schema-wide substring assertion could not catch
     a filter that had been loosened to ``"e2ee" in path``."""
 
     def _filter(self, paths: list[str]) -> list[str]:
-        """Run *paths* through the hook and return the ones it kept.
+        """
+        Run *paths* through the hook and return the ones it kept.
 
         Args:
             paths: Candidate URL paths, in the ``path`` position of the ``(path, path_regex, method, callback)`` tuples drf-spectacular hands the hook.
@@ -59,7 +61,8 @@ class SchemaPrefixFilterTests(SimpleTestCase):
         self.assertEqual(self._filter(["/dashboard/rest/pins/"]), [])
 
     def test_the_match_is_anchored_at_the_start_of_the_path(self) -> None:
-        """A path that merely *contains* an admitted prefix must not be published.
+        """
+        A path that merely *contains* an admitted prefix must not be published.
 
         Guards against someone "simplifying" the prefix test into a substring test, which would quietly publish
         any internal route whose URL happened to embed one of these words."""
@@ -75,7 +78,8 @@ class SchemaPrefixFilterTests(SimpleTestCase):
         self.assertEqual(self._filter(["/dashboard/e2ee-debug/keys/"]), [])
 
     def test_the_path_prefix_pattern_anchors_every_branch(self) -> None:
-        """``^a|b`` anchors only ``a`` - every branch has to be inside the group.
+        """
+        ``^a|b`` anchors only ``a`` - every branch has to be inside the group.
 
         drf-spectacular prepends ``^`` to ``SCHEMA_PATH_PREFIX`` only when the value does not already start with
         one, so an unanchored alternation would leave every branch after the first free to match mid-path and
@@ -95,7 +99,8 @@ class SchemaPrefixFilterTests(SimpleTestCase):
         self.assertEqual(compiled.sub("", "/dashboard/e2ee/keys/"), "/keys/")
 
     def test_every_published_prefix_is_absolute_and_trailing_slashed(self) -> None:
-        """A prefix missing its trailing slash would admit sibling mounts by accident.
+        """
+        A prefix missing its trailing slash would admit sibling mounts by accident.
 
         ``"/dashboard/e2ee"`` (no slash) matches ``/dashboard/e2ee-debug/`` too;
         the trailing slash is what makes each entry name exactly one mount.
@@ -116,7 +121,8 @@ class SchemaDocumentContentTests(TestCase):
         return response.content.decode()
 
     def test_e2ee_paths_appear_in_the_published_schema(self) -> None:
-        """Every bearer-capable E2EE route is documented.
+        """
+        Every bearer-capable E2EE route is documented.
 
         This is the assertion whose absence cost the mobile team a P0: the endpoints already worked, so nothing
         but the schema could have told them so."""
@@ -136,7 +142,8 @@ class SchemaDocumentContentTests(TestCase):
         self.assertIn("/dashboard/api/external/v1/wikis/", body)
 
     def test_operation_ids_and_tags_did_not_collapse(self) -> None:
-        """Admitting a second mount must not silently rename every operation.
+        """
+        Admitting a second mount must not silently rename every operation.
 
         When ``SCHEMA_PATH_PREFIX`` is unset drf-spectacular estimates it as the longest path every endpoint
         shares, and strips that to derive operation ids and tags."""
@@ -150,7 +157,8 @@ class SchemaDocumentContentTests(TestCase):
         self.assertIn("- wikis\n", body)
 
     def test_the_e2ee_surface_is_not_mirrored_under_the_external_mount(self) -> None:
-        """There must be exactly one published key-exchange contract, not two.
+        """
+        There must be exactly one published key-exchange contract, not two.
 
         ``controllers/e2ee.py``'s module docstring forbids duplicating these views under ``/api/external/v1/``,
         and the reason is specific: two copies of a key-exchange contract drift, and a drifted key-exchange

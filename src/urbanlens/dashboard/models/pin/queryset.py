@@ -36,7 +36,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.filter(parent_pin__isnull=True)
 
     def tree_root_id(self, pin_id: int) -> int:
-        """The top of *pin_id*'s ``parent_pin`` chain, in one recursive query.
+        """
+        The top of *pin_id*'s ``parent_pin`` chain, in one recursive query.
 
         Args:
             pin_id: Any pin's primary key.
@@ -48,7 +49,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return pin_id if root is None else root
 
     def filter_by_security_indicators(self, criteria) -> Self:
-        """Filter by exact match on each ``security_<field>`` criterion; ignores unset values.
+        """
+        Filter by exact match on each ``security_<field>`` criterion; ignores unset values.
 
         Args:
             criteria: The same criteria dict ``filter_by_criteria`` receives.
@@ -80,7 +82,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.filter(Q(last_visited__isnull=False) | labelled_visited)
 
     def visited_without_record(self) -> Self:
-        """Visited pins with no dated visit row, excluding dismissed ones.
+        """
+        Visited pins with no dated visit row, excluding dismissed ones.
 
         Returns:
             Distinct top-level pins that are marked visited but have zero rows in
@@ -89,7 +92,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.root_pins().visited().filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
 
     def with_placeholder_names(self) -> Self:
-        """Pins with a stored non-user name; callers check meaningfulness.
+        """
+        Pins with a stored non-user name; callers check meaningfulness.
 
         Returns:
             Filtered queryset, with ``location`` (and its wiki) preselected.
@@ -100,7 +104,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.filter(profile=profile)
 
     def modified_since(self, since) -> Self:
-        """Pins created or edited at or after ``since``.
+        """
+        Pins created or edited at or after ``since``.
 
         Args:
             since: Inclusive lower bound on the last-modified time.
@@ -111,7 +116,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.filter(updated__gte=since)
 
     def near_point(self, point: Point, radius_km: float) -> Self:
-        """Root pins within ``radius_km`` of ``point``, closest first.
+        """
+        Root pins within ``radius_km`` of ``point``, closest first.
 
         Args:
             point: PostGIS point to measure distance from.
@@ -124,7 +130,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.root_pins().filter(location__point__dwithin=(point, D(km=radius_km))).annotate(distance=Distance("location__point", point)).order_by("distance")
 
     def within_bounds(self, south: float, west: float, north: float, east: float) -> Self:
-        """Pins whose location falls within a lat/lng box.
+        """
+        Pins whose location falls within a lat/lng box.
 
         Args:
             south: Southern (minimum) latitude.
@@ -155,7 +162,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return self.filter(location__point__within=box(west, east))
 
     def apply_label_groups(self, groups: list[dict]) -> Self:
-        """Apply structured label filter groups; caller must call ``distinct()``.
+        """
+        Apply structured label filter groups; caller must call ``distinct()``.
 
         Args:
             groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``. An
@@ -196,7 +204,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return qs
 
     def matching_saved_filters(self, saved_filters: Iterable[SavedFilter]) -> Self:
-        """Narrow to pins that satisfy every one of ``saved_filters``.
+        """
+        Narrow to pins that satisfy every one of ``saved_filters``.
 
         Each filter joins as a subquery in this queryset's own SQL, so no pin is read until the result is.
 
@@ -212,7 +221,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return qs
 
     def filter_by_criteria(self, criteria) -> Self:
-        """Filter pins by a ``SearchForm`` criteria dict.
+        """
+        Filter pins by a ``SearchForm`` criteria dict.
 
         Args:
             criteria: Dict with optional keys: name, status (list), tags (QuerySet),
@@ -346,7 +356,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return qs.distinct()
 
     def filter_by_custom_fields(self, custom_field_criteria) -> Self:
-        """Filter pins by the owner's custom field values.
+        """
+        Filter pins by the owner's custom field values.
 
         Args:
             custom_field_criteria: List of dicts from
@@ -397,7 +408,8 @@ class PinQuerySet(abstract.PublicDashboardQuerySet["Pin"], TreeQuerySetMixin):
         return qs
 
     def overlapping(self) -> Self:
-        """Pins whose footprint overlaps another pin in this queryset.
+        """
+        Pins whose footprint overlaps another pin in this queryset.
 
         Returns:
             Pins (from this queryset) that overlap at least one other pin also
@@ -433,7 +445,8 @@ class PinManager(_PinManagerBase["Pin"]):
     """Manager for Pin."""
 
     def get_nearby_or_create(self, latitude, longitude, profile, threshold_meters=50, defaults=None):
-        """Get or create a pin, treating nearby coordinates as the same place.
+        """
+        Get or create a pin, treating nearby coordinates as the same place.
 
         Args:
             latitude (float): Latitude of the pin.

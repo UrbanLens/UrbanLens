@@ -123,7 +123,8 @@ class IsAddressDerivedNameTests(SimpleTestCase):
 
 
 class IsAddressDerivedNameFuzzyVariantsTests(SimpleTestCase):
-    """Real-world address variants (off-by-one house numbers, ranged/block addresses,
+    """
+    Real-world address variants (off-by-one house numbers, ranged/block addresses,
     abbreviated vs. full street suffixes and state names) must still be recognized
     as address-derived, not just an exact/near-exact match of the stored fields."""
 
@@ -416,7 +417,8 @@ class UpdateLocationNameResolutionTests(TestCase):
             self.assertTrue(update_location_name_from_external_sources(loc))
 
     def test_existing_pin_alias_is_left_untouched(self) -> None:
-        """A user-created alias with the same name must not be overwritten - the
+        """
+        A user-created alias with the same name must not be overwritten - the
         provider-sourced row is only created when no row already exists."""
         from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
 
@@ -531,7 +533,8 @@ class PinNameAliasInvariantTests(TestCase):
 
 
 class NameSourcePriorityPickerRenderTests(TestCase):
-    """The site-admin picker is the only one left - users can no longer override
+    """
+    The site-admin picker is the only one left - users can no longer override
     name-source priority themselves, see naming.py's FALLBACK_ONLY_NAME_SOURCES and
     default_name_resolver's docstring."""
 

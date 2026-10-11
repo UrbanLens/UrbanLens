@@ -16,7 +16,8 @@ def assert_agrees(
     describe: Callable[[Any], str] = repr,
     label: str = "candidate",
 ) -> None:
-    """Assert *candidate* returns what *reference* returns, for every subject.
+    """
+    Assert *candidate* returns what *reference* returns, for every subject.
 
     Any return value compares, not only a predicate's: a batch serializer held to the per-row one it replaced is
     the same question as a batch permission check held to the single one, and drifts the same silent way.

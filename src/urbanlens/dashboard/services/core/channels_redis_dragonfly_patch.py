@@ -1,4 +1,5 @@
-"""Make channels_redis's backup-queue script declare its keys, so Dragonfly stops rejecting it.
+"""
+Make channels_redis's backup-queue script declare its keys, so Dragonfly stops rejecting it.
 
 ``RedisChannelLayer._brpop_with_clean`` (the receive-side of every WebSocket consumer) runs a Lua
 script that references two keys through ``ARGV`` instead of declaring them via ``KEYS``. Standalone
@@ -28,7 +29,8 @@ _PATCHED_MARKER = "_urbanlens_dragonfly_safe"
 
 
 def patch_backup_queue_script() -> None:
-    """Replace ``RedisChannelLayer._brpop_with_clean`` with a cluster/Dragonfly-safe version.
+    """
+    Replace ``RedisChannelLayer._brpop_with_clean`` with a cluster/Dragonfly-safe version.
 
     No-op (with a logged warning) when the installed channels-redis version has not been checked
     against this patch's copy of the method, and idempotent on repeated calls.

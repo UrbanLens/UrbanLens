@@ -1,4 +1,5 @@
-"""Gunicorn config for the production ``app`` service.
+"""
+Gunicorn config for the production ``app`` service.
 
 Named explicitly by package.json's ``start`` script - but gunicorn also reads
 ``gunicorn.conf.py`` out of the working directory when nothing names it, and
@@ -24,7 +25,8 @@ from pathlib import Path
 
 
 def _multiproc_dir():
-    """Return the Prometheus multiprocess dir, if set.
+    """
+    Return the Prometheus multiprocess dir, if set.
 
     Returns:
         A ``Path`` when ``PROMETHEUS_MULTIPROC_DIR`` is set, else ``None``.
@@ -34,7 +36,8 @@ def _multiproc_dir():
 
 
 def on_starting(server):
-    """Clear stale Prometheus files before workers fork.
+    """
+    Clear stale Prometheus files before workers fork.
 
     Args:
         server: The gunicorn Arbiter instance.
@@ -54,7 +57,8 @@ def on_starting(server):
 
 
 def child_exit(server, worker):
-    """Retire a dead worker's live-gauge samples.
+    """
+    Retire a dead worker's live-gauge samples.
 
     Args:
         server: The gunicorn Arbiter instance.
@@ -71,7 +75,8 @@ def child_exit(server, worker):
 
 
 def post_fork(server, worker):
-    """Refuse the gevent worker, which this driver cannot be made cooperative under.
+    """
+    Refuse the gevent worker, which this driver cannot be made cooperative under.
 
     gevent monkey-patches pure-Python socket IO; psycopg is a C extension that
     bypasses it, so every query blocks the worker's whole event loop and with it
@@ -100,7 +105,8 @@ def post_fork(server, worker):
 
 
 def post_worker_init(worker):
-    """Warm the URLconf once the worker has initialised.
+    """
+    Warm the URLconf once the worker has initialised.
 
     Args:
         worker: The freshly initialised worker, used for its logger.
@@ -114,7 +120,8 @@ def post_worker_init(worker):
 
 
 def _warm_urlconf(worker):
-    """Import the URLconf now so the first request does not pay for it.
+    """
+    Import the URLconf now so the first request does not pay for it.
 
     Args:
         worker: The freshly forked worker, used for its logger.

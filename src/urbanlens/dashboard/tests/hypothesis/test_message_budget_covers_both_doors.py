@@ -64,7 +64,8 @@ class DirectMessageHttpBudgetTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_a_budget_spent_on_the_socket_is_spent_on_http_too(self) -> None:
-        """One budget, not two. Two per-door limits would both pass the test above
+        """
+        One budget, not two. Two per-door limits would both pass the test above
         and still let a sender send twice their allowance by alternating doors."""
         _run(self._spend_on_the_socket())
 
@@ -94,7 +95,8 @@ class DirectMessageHttpBudgetTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=3)
     def test_a_rejected_message_does_not_spend_the_budget(self) -> None:
-        """Validation refusals are the sender's client being wrong, not the sender
+        """
+        Validation refusals are the sender's client being wrong, not the sender
         sending too much - charging them would throttle someone for a bug."""
         for _ in range(5):
             self.client.post(self.url, {"body": "   "})
@@ -134,7 +136,8 @@ class GroupMessageHttpBudgetTests(TransactionTestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_group_and_direct_messages_share_one_sender_budget(self) -> None:
-        """One person's outbound messaging rate, not one per conversation shape.
+        """
+        One person's outbound messaging rate, not one per conversation shape.
 
         Keeping them separate would let a sender double their allowance by
         alternating between a group and a DM.
@@ -191,7 +194,8 @@ class ExternalApiBudgetTests(TestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=2)
     def test_a_throttled_send_is_a_429_not_a_500(self) -> None:
-        """A 500 tells an API client to retry a request the server thinks is broken,
+        """
+        A 500 tells an API client to retry a request the server thinks is broken,
         fires error alerting for benign traffic, and hides the actual reason."""
         statuses = [self._send(f"message {index}").status_code for index in range(5)]
 
@@ -234,7 +238,8 @@ class ChargePlacementTests(TestCase):
 
     @override_settings(UL_MESSAGES_PER_MINUTE=3)
     def test_a_recipient_who_refuses_messages_does_not_cost_the_sender_their_budget(self) -> None:
-        """The default ``direct_message_visibility`` is ANYTHING_IN_COMMON, so messaging someone new and being refused is ordinary use of a site built around discovering other people - not abuse to be charged for.
+        """
+        The default ``direct_message_visibility`` is ANYTHING_IN_COMMON, so messaging someone new and being refused is ordinary use of a site built around discovering other people - not abuse to be charged for.
 
         ``create_group_message`` already checks membership before charging; this is the same precondition on the
         other function."""

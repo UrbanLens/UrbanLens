@@ -140,7 +140,8 @@ class HasTunnelsTests(TestCase):
 
 
 class CommentEvidenceIsFilteredBeforeItIsCutTests(TestCase):
-    """Hidden comments must not crowd out the evidence the viewer may read.
+    """
+    Hidden comments must not crowd out the evidence the viewer may read.
 
     ``_comment_evidence`` took the first handful of matching comments and *then*
     ran them through the visibility gates, so a wiki whose thread is mostly

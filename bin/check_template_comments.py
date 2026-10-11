@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fail if a Django ``{# ... #}`` comment is not closed on the same line.
+"""
+Fail if a Django ``{# ... #}`` comment is not closed on the same line.
 
 ``{# #}`` is the single-line comment form. Django's lexer will not treat a
 ``{#`` that never meets a ``#}`` on that line as a comment, so the tokens are
@@ -49,7 +50,8 @@ def _tracked_template_paths() -> list[pathlib.Path]:
 
 
 def _blank_hidden_blocks(source: str) -> str:
-    """Replace ``{% comment %}`` / ``{% verbatim %}`` bodies with spaces.
+    """
+    Replace ``{% comment %}`` / ``{% verbatim %}`` bodies with spaces.
 
     Newlines are kept so line numbers in the remainder still match the file.
     """
@@ -61,7 +63,8 @@ def _blank_hidden_blocks(source: str) -> str:
 
 
 def unclosed_hash_comment_lines(source: str) -> list[int]:
-    """Return 1-based line numbers where a ``{#`` has no ``#}`` on that line.
+    """
+    Return 1-based line numbers where a ``{#`` has no ``#}`` on that line.
 
     Args:
         source: Template source, including any ``{% comment %}`` regions.
@@ -89,7 +92,8 @@ def unclosed_hash_comment_lines(source: str) -> list[int]:
 
 
 def check(paths: list[pathlib.Path] | None = None) -> int:
-    """Report hash-comments that are not closed on the line they open.
+    """
+    Report hash-comments that are not closed on the line they open.
 
     Args:
         paths: Templates to read.

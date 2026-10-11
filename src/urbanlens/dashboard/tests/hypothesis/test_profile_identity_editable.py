@@ -13,7 +13,8 @@ from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 
 
 def _strip_scripts(html: str) -> str:
-    """Remove <script> blocks so substring checks can't false-positive on the
+    """
+    Remove <script> blocks so substring checks can't false-positive on the
     wiring script's own inert HTML-shaped string literals (its renderText()
     closures build strings like '<span ... data-raw-username="...' as JS
     text on every render, regardless of viewer)."""
@@ -65,7 +66,8 @@ class ProfileIdentityEditableRenderingTests(TestCase):
         self.assertNotIn("data-raw-email=", content)
 
     def test_edit_profile_page_keeps_plain_text_not_the_inline_editor(self) -> None:
-        """Edit Profile already has real form inputs for all three - the
+        """
+        Edit Profile already has real form inputs for all three - the
         inline affordance must not double up there."""
         response = self.client.get(reverse("profile.edit"))
         content = _strip_scripts(response.content.decode())

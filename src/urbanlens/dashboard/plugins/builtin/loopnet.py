@@ -38,7 +38,8 @@ class LoopnetPanelSource(RedataBackedSource, GalleryMediaSource):
 
     @staticmethod
     def address(pin: Pin) -> str:
-        """Street + city + state search address, or ``""`` when insufficient.
+        """
+        Street + city + state search address, or ``""`` when insufficient.
 
         Args:
             pin: The pin whose location's address should be assembled.
@@ -65,7 +66,8 @@ class LoopnetPanelSource(RedataBackedSource, GalleryMediaSource):
         return bool(data and data.get("listings"))
 
     def fetch(self, pin: Pin) -> None:
-        """Resolve the pin's parcel and cache its LoopNet listings from REData.
+        """
+        Resolve the pin's parcel and cache its LoopNet listings from REData.
 
         Raises:
             PropertyRecordsUnavailableError: REData could not be asked, so there is no answer to cache.
@@ -104,7 +106,8 @@ class LoopnetPanelSource(RedataBackedSource, GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, data, query_key=address)
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached LoopNet listing photos into gallery items.
+        """
+        Turn cached LoopNet listing photos into gallery items.
 
         Args:
             data: This source's cached ``{"listings": [...]}`` dict.

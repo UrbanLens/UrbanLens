@@ -74,7 +74,8 @@ class DetectSharedPinsTests(_MapShareTestCase):
         self.assertEqual(matches, [])
 
     def test_zoomed_in_excludes_an_in_frame_pin_the_map_is_not_aimed_at(self) -> None:
-        """Being on screen is not being shared.
+        """
+        Being on screen is not being shared.
 
         A snapshot carries the viewport and the drawn shapes - never the sender's pins - so a recipient cannot
         learn about a pin the sender neither centred on nor drew anything near."""
@@ -160,7 +161,8 @@ class DetectSharedPinsTests(_MapShareTestCase):
 
 
 class ArrowTailDegeneracyTests(SimpleTestCase):
-    """An arrow whose tail sits on the target points nowhere in particular.
+    """
+    An arrow whose tail sits on the target points nowhere in particular.
 
     ``bearing_degrees`` from a point to itself is not merely arbitrary, it is unstable: a pin's boundary
     centroid lands ~1e-14 degrees off the tail through ordinary float error, which used to yield a confident
@@ -412,7 +414,8 @@ class MarkupMapShareCreateViewTests(_MapShareTestCase):
         )
 
     def test_notification_masks_hidden_sender(self) -> None:
-        """Regression: the notification text interpolated ``sender.username``
+        """
+        Regression: the notification text interpolated ``sender.username``
         directly, bypassing the recipient-scoped masking every other identity
         surface (thread renders, DM/group live payloads) already applies."""
         _befriend(self.profiles["a"], self.profiles["b"])

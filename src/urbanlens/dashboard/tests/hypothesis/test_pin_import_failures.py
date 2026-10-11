@@ -136,7 +136,8 @@ class RecordPinImportFailureTests(TestCase):
     def test_idempotent_for_any_cid_and_text_pair(
         self, cid: int, name: str, description: str, second_name: str, second_description: str
     ) -> None:
-        """No matter what varies between two calls for the same (profile, cid),
+        """
+        No matter what varies between two calls for the same (profile, cid),
         exactly one row must ever exist, and it must keep the first values."""
         user = baker.make(User)
         profile = user.profile
@@ -202,7 +203,8 @@ class ResolvePinImportFailureTests(TestCase):
         self.assertEqual(failure.pin_id, pin.pk)
 
     def test_resolve_passes_name_and_description_through_unmodified(self) -> None:
-        """Per its own docstring: this is a one-off manual recovery, not a replay
+        """
+        Per its own docstring: this is a one-off manual recovery, not a replay
         of the import pipeline - failure.description must not be re-run through
         strip_html/extract_image_urls/extract_link_urls."""
         failure = self._failure(description="Raw <b>html</b> and a [link](http://example.com)")
@@ -223,7 +225,8 @@ class ResolvePinImportFailureTests(TestCase):
 
 
 class ResolvePinImportFailureLegacyRepairTests(TestCase):
-    """resolve_pin_import_failure must move a matching legacy pin, not create a new one.
+    """
+    resolve_pin_import_failure must move a matching legacy pin, not create a new one.
 
     TEMPORARY: mirrors test_legacy_cid_coordinate_fix.py's own coverage of repair_legacy_pin_coordinates, but
     exercised through the manual resolve-a-failure entry point specifically - a regression test for a bug where
@@ -387,7 +390,8 @@ class AutoResolvePinImportFailureForCidTests(TestCase):
 
 
 class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
-    """resolve_deferred_pin_locations - failure recording on the unresolvable path,
+    """
+    resolve_deferred_pin_locations - failure recording on the unresolvable path,
     the three give-up branches, auto-resolve on success, and no duplication on rerun."""
 
     def setUp(self) -> None:
@@ -509,7 +513,8 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
         self.assertEqual(notification.url, reverse("memories.locations"))
 
     def test_pin_that_resolves_later_auto_resolves_its_prior_pending_failure(self) -> None:
-        """A cid that failed on one call and then resolves on a later call (a retry,
+        """
+        A cid that failed on one call and then resolves on a later call (a retry,
         or a fresh re-import) must have its pending failure cleared and pointed at
         the new pin - this is the auto-resolve half of the feature."""
         pins = [{"name": "Cresson Sanatorium", "description": "Old asylum", "cid": 12345, "label_ids": []}]
@@ -699,7 +704,8 @@ class PinImportFailureDismissViewTests(TestCase):
 
 
 class PinImportFailureQueuePartialViewTests(TestCase):
-    """GET /memories/locations/import-failures/queue/ - pending-only, unpaginated.
+    """
+    GET /memories/locations/import-failures/queue/ - pending-only, unpaginated.
 
     Unpaginated like pin_merge_suggestions: these are expected to be rare, so there's no page_obj/pagination-bar
     to collide with the page's own pin_suggestions pagination when both are rendered together."""
@@ -737,7 +743,8 @@ class PinImportFailureQueuePartialViewTests(TestCase):
         self.assertIn(f'id="pin-import-failure-card-{pending.pk}"', response.content.decode())
 
     def test_no_page_of_the_queue_shows_another_profile_s_failures(self) -> None:
-        """Ownership, checked across every page rather than on the first.
+        """
+        Ownership, checked across every page rather than on the first.
 
         This used to assert the queue was unpaginated, which it no longer is (P69) - but the half worth keeping
         is stronger when it walks the pages: a slice applied before the ownership filter would leak on some page
@@ -766,7 +773,8 @@ class PinImportFailureQueuePartialViewTests(TestCase):
 
 
 class LocationsPageRendersImportFailuresTests(TestCase):
-    """GET /memories/locations/ - the full page must render pending failures inline.
+    """
+    GET /memories/locations/ - the full page must render pending failures inline.
 
     Regression test: PinSuggestionQueueView.get() (controllers/pin_suggestions.py) renders locations.html with a
     *static* {% include %} of _pin_import_failures_queue.html using the same context dict as the rest of the
@@ -795,7 +803,8 @@ class LocationsPageRendersImportFailuresTests(TestCase):
 
 
 class PinImportFailureQueuePaginationTests(TestCase):
-    """The queue is paginated, and its pagination is its own.
+    """
+    The queue is paginated, and its pagination is its own.
 
     It was unpaginated on the stated grounds that these failures are "rare", which
     ``PinImportFailureGuessView``'s docstring in the same file contradicts: "a single import can leave hundreds
@@ -847,7 +856,8 @@ class PinImportFailureQueuePaginationTests(TestCase):
         self.assertEqual(self._cards(response), 4)
 
     def test_paging_the_failures_does_not_move_the_suggestion_queue(self) -> None:
-        """The reason this section has its own parameter.
+        """
+        The reason this section has its own parameter.
 
         Both queues render on Memories > Locations, and the suggestions queue pages on ``page``."""
         self._seed(30)
@@ -859,7 +869,8 @@ class PinImportFailureQueuePaginationTests(TestCase):
         self.assertEqual(response.context["page_obj"].number, 1, "the suggestion queue moved with the failure queue")
 
     def test_the_full_page_reports_the_total_not_the_page_size(self) -> None:
-        """The count gates whether the section renders at all, and is shown to
+        """
+        The count gates whether the section renders at all, and is shown to
         the user - a count of 12 for 30 failures would be a lie the pagination
         controls immediately contradict."""
         self._seed(30)

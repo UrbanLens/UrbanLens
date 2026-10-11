@@ -67,7 +67,8 @@ class DemoSocialContentTests(TestCase):
         self.assertGreater(sum(pin_list.items.count() for pin_list in lists), 0)
 
     def test_nothing_here_writes_a_notification_directly(self) -> None:
-        """The choke point (bin/check_notification_choke_point.py) is the real guard;
+        """
+        The choke point (bin/check_notification_choke_point.py) is the real guard;
         this just confirms the module this test covers writes none at all."""
         from urbanlens.dashboard.models.notifications.model import NotificationLog
 

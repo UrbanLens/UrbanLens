@@ -22,7 +22,8 @@ _counter = itertools.count()
 
 
 def _make_tag(name: str | None = None, **kwargs) -> Label:
-    """A fresh global tag with a name nothing else uses.
+    """
+    A fresh global tag with a name nothing else uses.
 
     The hierarchy properties under test do not care what the labels are called."""
     return baker.make(Label, name=name or f"tag-{next(_counter)}", kind=KIND_TAG, profile=None, **kwargs)

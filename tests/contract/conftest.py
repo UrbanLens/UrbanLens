@@ -19,7 +19,8 @@ CONTRACT_ROLE = "contract"
 
 
 def _assert_on_a_test_database() -> None:
-    """Refuse to run against anything but a test database.
+    """
+    Refuse to run against anything but a test database.
 
     Every request this suite generates goes through the real ORM, and ``UL_CONTRACT_METHODS=all`` makes some of
     them writes.
@@ -46,7 +47,8 @@ def _assert_on_a_test_database() -> None:
 
 @pytest.fixture(autouse=True)
 def _keep_the_test_connection_open():
-    """Stop the WSGI request cycle from closing the test's database connection.
+    """
+    Stop the WSGI request cycle from closing the test's database connection.
 
     Django's own test client disconnects ``close_old_connections`` from ``request_started`` before invoking the
     handler, and reconnects it after."""
@@ -68,7 +70,8 @@ def _keep_the_test_connection_open():
 
 @pytest.fixture
 def contract_headers() -> dict[str, str]:
-    """Credentials every generated request is sent with.
+    """
+    Credentials every generated request is sent with.
 
     In-process, an account is provisioned through the same service the Playwright suite's management command
     uses, so both suites authenticate as the same *kind* of user rather than two separately-invented ones.
@@ -99,7 +102,8 @@ def contract_headers() -> dict[str, str]:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """Mark this directory's tests, and give the ones that call the app a database.
+    """
+    Mark this directory's tests, and give the ones that call the app a database.
 
     ``django_db`` is applied here rather than written on the test because whether a database is wanted at all
     depends on the mode, which is a runtime decision."""

@@ -13,7 +13,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 
 class PinListsPanelRowCostTests(RenderTimeScalingMixin, TestCase):
-    """Organize's "Lists" tab renders every list the profile owns with no cap or slice.
+    """
+    Organize's "Lists" tab renders every list the profile owns with no cap or slice.
 
     Structurally invisible to ``test_route_query_scaling.py``'s generic sweep, which hits
     ``lists.list`` without an ``HX-Request`` header and only ever exercises its redirect branch -
@@ -28,7 +29,8 @@ class PinListsPanelRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Add *count* more of the profile's pin lists, each with a description.
+        """
+        Add *count* more of the profile's pin lists, each with a description.
 
         Args:
             count: How many rows to add.

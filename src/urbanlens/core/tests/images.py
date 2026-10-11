@@ -40,7 +40,8 @@ TIFF_BYTES = bytes.fromhex(
 
 
 def png_upload(name: str = "photo.png"):
-    """A ``SimpleUploadedFile`` holding a real PNG.
+    """
+    A ``SimpleUploadedFile`` holding a real PNG.
 
     Args:
         name: Filename to upload it under.
@@ -53,7 +54,8 @@ def png_upload(name: str = "photo.png"):
 
 
 def jpeg_upload(name: str = "photo.jpg"):
-    """A ``SimpleUploadedFile`` holding a real JPEG.
+    """
+    A ``SimpleUploadedFile`` holding a real JPEG.
 
     Args:
         name: Filename to upload it under.

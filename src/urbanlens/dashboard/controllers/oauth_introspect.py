@@ -10,7 +10,8 @@ from oauth2_provider.views import IntrospectTokenView
 
 
 class ActiveOwnerIntrospectTokenView(IntrospectTokenView):
-    """``oauth2_provider``'s introspection, reporting a deactivated account's token, or one with no account, inactive.
+    """
+    ``oauth2_provider``'s introspection, reporting a deactivated account's token, or one with no account, inactive.
 
     The toolkit answers from the token row alone, so without this a resource server would accept a token
     ``ActiveOwnerOAuth2Validator`` refuses everywhere else.
@@ -18,7 +19,8 @@ class ActiveOwnerIntrospectTokenView(IntrospectTokenView):
 
     @staticmethod
     def get_token_response(token_value: str | None = None) -> JsonResponse:
-        """Describe a token per RFC 7662, as inactive unless an active account owns it.
+        """
+        Describe a token per RFC 7662, as inactive unless an active account owns it.
 
         Args:
             token_value: The token asked about.

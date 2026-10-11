@@ -84,7 +84,8 @@ _DATE_PHRASE = (
 
 @dataclass(slots=True)
 class ParsedQuery:
-    """A structured interpretation of a raw search query.
+    """
+    A structured interpretation of a raw search query.
 
     Attributes:
         raw: The query exactly as typed.
@@ -136,7 +137,8 @@ class ParsedQuery:
         return not (self.terms or self.has_structure)
 
     def describe_filters(self) -> list[str]:
-        """Human-readable chips describing the structured filters in effect.
+        """
+        Human-readable chips describing the structured filters in effect.
 
         Returns:
             Short strings like ``"Photos"``, ``"Jun 1 - Aug 31, 2025"``, ``"in Cincinnati"`` for the results header."""
@@ -176,7 +178,8 @@ class ParsedQuery:
         return [chip for chip in chips if chip]
 
     def describe_problems(self) -> list[str]:
-        """Warnings to show beside the results.
+        """
+        Warnings to show beside the results.
         Covers the two cases where an empty result would otherwise be misleading: a key that looks like an operator but is not one, and an operator that is real but cannot currently be answered."""
         notes = [f"\u201c{key}:\u201d isn't a search operator, so it was searched as text." for key in self.unknown_keys]
         notes.extend(f"\u201c{key}:\u201d {reason}" for key, reason in self.unsupported)
@@ -190,7 +193,8 @@ def _month_range(year: int, month: int) -> tuple[date, date]:
 
 
 def _season_range(name: str, year: int) -> tuple[date, date]:
-    """Inclusive date range of a season occurrence labelled by its starting year.
+    """
+    Inclusive date range of a season occurrence labelled by its starting year.
 
     Args:
         name: A key of ``_SEASONS``.
@@ -239,7 +243,8 @@ def _last_month_occurrence(month: int, today: date) -> tuple[date, date]:
 
 
 def _resolve_calendar_date(phrase: str, today: date, year_hint: int | None = None) -> date | None:
-    """Resolve a single date phrase (one side of a "between X and Y" clause) to a concrete date.
+    """
+    Resolve a single date phrase (one side of a "between X and Y" clause) to a concrete date.
 
     Args:
         phrase: A lowercase date phrase, e.g. "march 5, 2024", "3/5/2024", "2024-03-05", "march 2024", or "2024".
@@ -287,7 +292,8 @@ def _resolve_calendar_date(phrase: str, today: date, year_hint: int | None = Non
 
 
 def _between_range(first: str, second: str, today: date) -> tuple[date, date]:
-    """Resolve a "between X and Y" clause into an inclusive (start, end) range.
+    """
+    Resolve a "between X and Y" clause into an inclusive (start, end) range.
 
     Args:
         first: The date phrase before "and".
@@ -316,7 +322,8 @@ def _between_range(first: str, second: str, today: date) -> tuple[date, date]:
 
 
 def _extract_dates(text: str, today: date) -> tuple[str, date | None, date | None, str | None]:
-    """Find and strip the first recognized date phrase from ``text``.
+    """
+    Find and strip the first recognized date phrase from ``text``.
 
     Args:
         text: Lowercased query text.
@@ -372,7 +379,8 @@ _NEARBY_PATTERN = re.compile(r"\bnearby\b")
 
 
 def _extract_near_me(text: str) -> tuple[str, str | None]:
-    """Strip a "near me"/"nearby"/"close to me"/"around me" phrase.
+    """
+    Strip a "near me"/"nearby"/"close to me"/"around me" phrase.
 
     Args:
         text: Lowercased query text with dates/types already removed.
@@ -395,7 +403,8 @@ _CLAUSE_BOUNDARY_KEYWORDS = ("in", "near", "around", "at", "during")
 
 
 def _extract_person(text: str) -> tuple[str, str | None]:
-    """Strip a "from <person>" clause from ``text``, stopping at the next clause.
+    """
+    Strip a "from <person>" clause from ``text``, stopping at the next clause.
     Only recognized when the query already named the ``messages`` or ``pins`` type (see call site), so "photos from paris" keeps "paris" as free text/place instead of being misread as a person's name.
 
     Args:
@@ -423,7 +432,8 @@ def _extract_person(text: str) -> tuple[str, str | None]:
 
 
 def _extract_place(text: str) -> tuple[str, str | None]:
-    """Strip a trailing "in/near/around/at <place>" clause from ``text``.
+    """
+    Strip a trailing "in/near/around/at <place>" clause from ``text``.
     Only a *trailing* clause is treated as a place so mid-sentence usages stay part of the free text.
 
     Args:
@@ -442,7 +452,8 @@ def _extract_place(text: str) -> tuple[str, str | None]:
 
 
 def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
-    """Strip type-restricting keywords from ``working``, at either end of the query.
+    """
+    Strip type-restricting keywords from ``working``, at either end of the query.
     Many entries in ``TYPE_KEYWORDS`` are ordinary English words ("pin", "map", "trip", "visit", "comment"), so a match anywhere in the sentence produces false-positive hijacks - "please visit my page" must not become a visits-only search.
 
     Args:
@@ -465,7 +476,8 @@ def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
 
 
 def extract_fallback_terms(raw: str) -> list[str]:
-    """Reduce a raw query to leftover meaningful words, for the plain-text fallback.
+    """
+    Reduce a raw query to leftover meaningful words, for the plain-text fallback.
     Applies the same date-phrase, type-keyword, near-me-phrase, and stopword stripping the primary parse uses, without imposing any of those as search filters.
 
     Args:
@@ -485,7 +497,8 @@ def extract_fallback_terms(raw: str) -> list[str]:
 
 
 def parse_query(raw: str) -> ParsedQuery:
-    """Parse a raw global-search query into structured filters plus free text.
+    """
+    Parse a raw global-search query into structured filters plus free text.
 
     Args:
         raw: The query exactly as the user typed it.
@@ -562,7 +575,8 @@ _UNSUPPORTED_HAS: dict[str, str] = {
 
 
 def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
-    """Fold scanned operator clauses into *parsed*, in place.
+    """
+    Fold scanned operator clauses into *parsed*, in place.
     Operators set the same fields the English heuristics would, so downstream consumers never learn which register the user wrote in.
 
     Args:
@@ -611,7 +625,8 @@ def _apply_clauses(parsed: ParsedQuery, scanned: OperatorScan) -> None:
 
 
 def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
-    """Resolve one date operator's value onto *parsed*.
+    """
+    Resolve one date operator's value onto *parsed*.
     Reuses the same phrase vocabulary the English path uses, so ``visited:"last march"`` and "visited last march" resolve identically rather than being two date parsers that drift."""
     today = timezone.localdate()
     spoken = value.lower().replace("-", " ").strip()
@@ -629,7 +644,8 @@ def _apply_date_clause(parsed: ParsedQuery, key: str, value: str) -> None:
 
 
 def _resolve_types(values: tuple[str, ...]) -> set[str]:
-    """Result-type slugs named by a ``type:`` clause.
+    """
+    Result-type slugs named by a ``type:`` clause.
     Accepts the same words the English path accepts (``photo``, ``photos``, ``picture``...), so the two registers share one vocabulary."""
     resolved: set[str] = set()
     for value in values:

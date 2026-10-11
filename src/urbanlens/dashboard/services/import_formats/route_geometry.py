@@ -24,7 +24,8 @@ class RouteGeometry(NamedTuple):
 
 
 def simplify_and_measure(points: list[tuple[float, float]]) -> RouteGeometry:
-    """Simplify a raw (lat, lng) point sequence and measure its true distance.
+    """
+    Simplify a raw (lat, lng) point sequence and measure its true distance.
 
     Args:
         points: Raw ``(latitude, longitude)`` points in recording order.

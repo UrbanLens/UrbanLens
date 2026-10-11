@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 class ProfileConnectionManager[ConnectionT: Model](DashboardManager[ConnectionT]):
-    """Lookups for a one-per-profile connection that this process may be unable to decrypt.
+    """
+    Lookups for a one-per-profile connection that this process may be unable to decrypt.
 
     A row this process cannot decrypt is not necessarily dead: another process may hold a key this
     one has not been given yet, mid key-rotation. Reads therefore treat it as absent and leave it
@@ -30,7 +31,8 @@ class ProfileConnectionManager[ConnectionT: Model](DashboardManager[ConnectionT]
     """
 
     def get_for_profile(self, profile: Profile) -> ConnectionT | None:
-        """Return this profile's connection, or None if there is none this process can read.
+        """
+        Return this profile's connection, or None if there is none this process can read.
 
         Args:
             profile: The profile whose connection to look up.
@@ -45,7 +47,8 @@ class ProfileConnectionManager[ConnectionT: Model](DashboardManager[ConnectionT]
             return None
 
     def delete_for_profile(self, profile: Profile) -> None:
-        """Remove this profile's connection, whether or not this process can decrypt it.
+        """
+        Remove this profile's connection, whether or not this process can decrypt it.
 
         Args:
             profile: The profile whose connection to remove.
@@ -56,7 +59,8 @@ class ProfileConnectionManager[ConnectionT: Model](DashboardManager[ConnectionT]
             self._delete_rows_of(profile)
 
     def clear_undecryptable(self, profile: Profile) -> bool:
-        """Remove this profile's connection only if this process cannot decrypt it.
+        """
+        Remove this profile's connection only if this process cannot decrypt it.
 
         Args:
             profile: The profile whose connection to check.
@@ -73,7 +77,8 @@ class ProfileConnectionManager[ConnectionT: Model](DashboardManager[ConnectionT]
         return False
 
     def connect_for_profile(self, profile: Profile, defaults: Mapping[str, Any]) -> tuple[ConnectionT, bool]:
-        """Create or update this profile's connection, replacing one this process cannot decrypt.
+        """
+        Create or update this profile's connection, replacing one this process cannot decrypt.
 
         A readable connection is updated in place, so fields the caller does not pass (its
         creation time, a refresh token the provider omitted on re-consent) survive.

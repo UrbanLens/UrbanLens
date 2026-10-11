@@ -32,7 +32,8 @@ def record_event(
     wiki: Wiki | int | None = None,
     occurred_at: datetime.datetime | None = None,
 ) -> ReputationEvent | None:
-    """Write an unscored ledger row for a contribution that just happened.
+    """
+    Write an unscored ledger row for a contribution that just happened.
 
     Args:
         profile: Who contributed.
@@ -84,7 +85,8 @@ def record_event(
 
 
 def score_event(event: ReputationEvent) -> Decimal | None:
-    """Work out what an unscored row was worth, and store it. Rules do not implement those themselves, so none can forget to.
+    """
+    Work out what an unscored row was worth, and store it. Rules do not implement those themselves, so none can forget to.
 
     Args:
         event: The row to value.
@@ -141,7 +143,8 @@ def score_event(event: ReputationEvent) -> Decimal | None:
 
 
 def _decay_multiplier(event: ReputationEvent) -> Decimal:
-    """Return the diminishing-returns factor for this row.
+    """
+    Return the diminishing-returns factor for this row.
     Counts rows *before* this one so the factor does not depend on the order the scorer happens to reach them in."""
     from urbanlens.dashboard.models.reputation.model import ReputationEvent
 
@@ -160,7 +163,8 @@ def _decay_multiplier(event: ReputationEvent) -> Decimal:
 
 
 def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
-    """Trim *value* to whatever the period ceilings still allow.
+    """
+    Trim *value* to whatever the period ceilings still allow.
 
     Returns:
         The allowed value, and a short note naming the binding cap (empty when neither bound)."""
@@ -191,7 +195,8 @@ def _apply_caps(event: ReputationEvent, value: Decimal) -> tuple[Decimal, str]:
 
 
 def retract_event(event: ReputationEvent, *, reason: str) -> bool:
-    """Stop a row counting, reversibly.
+    """
+    Stop a row counting, reversibly.
 
     Args:
         event: The row.
@@ -211,7 +216,8 @@ def retract_event(event: ReputationEvent, *, reason: str) -> bool:
 
 
 def retract_events_for_target(target: Any, *, reason: str) -> int:
-    """Stop every row recorded about ``target`` counting.
+    """
+    Stop every row recorded about ``target`` counting.
     For an ending that the *contributor* chose - only their caller knows that, which is why the intent is passed in rather than inferred, the same rule ``services.media.quota_rewards`` follows for the community quota bonus.
 
     Args:
@@ -237,7 +243,8 @@ MODERATED_REMOVAL_WEIGHT = Decimal("0.9")
 
 
 def weight_events_for_target(target: Any, *, weight: Decimal, reason: str) -> int:
-    """Scale what every row about ``target`` contributes, without erasing it.
+    """
+    Scale what every row about ``target`` contributes, without erasing it.
 
     Args:
         target: The object the rows are about.
@@ -267,7 +274,8 @@ def _mark_stale_for_target(kind: str, target_id: int) -> None:
 
 
 def restore_event(event: ReputationEvent) -> bool:
-    """Undo a retraction - the revert-of-a-revert case.
+    """
+    Undo a retraction - the revert-of-a-revert case.
 
     Args:
         event: The row.
@@ -299,7 +307,8 @@ def _mark_stale(profile_id: int) -> None:
 
 
 def recompute_total(profile: Profile | int) -> Decimal:
-    """Rebuild a profile's cached totals from the ledger.
+    """
+    Rebuild a profile's cached totals from the ledger.
 
     Args:
         profile: Whose totals to rebuild.

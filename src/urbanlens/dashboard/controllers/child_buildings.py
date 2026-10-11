@@ -21,7 +21,8 @@ def _own_pin(request: HttpRequest, pin_slug: str) -> Pin | None:
 
 
 def building_card_context(request: HttpRequest, building: Pin) -> dict:
-    """What one building's card renders.
+    """
+    What one building's card renders.
 
     Args:
         request: The current request, for its viewer.
@@ -43,7 +44,8 @@ def building_card_context(request: HttpRequest, building: Pin) -> dict:
 
 
 class PinChildBuildingCardView(LoginRequiredMixin, View):
-    """One building child's card, loaded when its row in the parent's Buildings list is opened.
+    """
+    One building child's card, loaded when its row in the parent's Buildings list is opened.
 
     GET /map/pin/<building slug>/building-card/
     """

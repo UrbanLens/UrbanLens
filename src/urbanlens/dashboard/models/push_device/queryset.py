@@ -19,7 +19,8 @@ class PushDeviceQuerySet(abstract.FrontendDashboardQuerySet["PushDevice"]):
         return self.filter(revoked_at__isnull=True)
 
     def for_profile(self, profile: Profile) -> PushDeviceQuerySet:
-        """Restrict to one profile's registered devices.
+        """
+        Restrict to one profile's registered devices.
 
         Args:
             profile: The owning profile.

@@ -19,7 +19,8 @@ NGINX_CONF = Path(__file__).resolve().parents[3] / "config" / "nginx" / "nginx.c
 
 
 class ProxyConfigTests(SimpleTestCase):
-    """The nginx config ships in this repo, so it can be asserted on like code.
+    """
+    The nginx config ships in this repo, so it can be asserted on like code.
 
     A precise version is free reconnaissance: it tells a scanner exactly which advisories to try before sending
     a single interesting request."""
@@ -42,7 +43,8 @@ class ProxyConfigTests(SimpleTestCase):
 
 
 def parse_csp(header_value: str) -> dict[str, list[str]]:
-    """Split a CSP header into ``{directive: [source, ...]}``.
+    """
+    Split a CSP header into ``{directive: [source, ...]}``.
 
     Args:
         header_value: The raw header value, e.g.
@@ -59,7 +61,8 @@ def parse_csp(header_value: str) -> dict[str, list[str]]:
 
 class TransportSecuritySettingTests(SimpleTestCase):
     def test_hsts_is_tied_to_the_ssl_redirect_gate(self) -> None:
-        """One switch, not two: an HTTP-only deployment must not advertise HSTS.
+        """
+        One switch, not two: an HTTP-only deployment must not advertise HSTS.
 
         Sending HSTS from a deployment intentionally served over HTTP makes it unreachable in any browser that
         has seen the header, and it is not promptly reversible."""
@@ -73,7 +76,8 @@ class TransportSecuritySettingTests(SimpleTestCase):
         self.assertFalse(getattr(settings, "SECURE_HSTS_PRELOAD", False))
 
     def test_cookies_are_never_weaker_than_the_tls_gate(self) -> None:
-        """One-directional, not equality.
+        """
+        One-directional, not equality.
 
         Both settings default to ``SECURE_SSL_REDIRECT`` but are explicitly overridable
         (``_env_bool("SESSION_COOKIE_SECURE", ...)``), and marking cookies secure on a deployment that also
@@ -171,14 +175,16 @@ class SecurityHeadersMiddlewareTests(SimpleTestCase):
         )
 
     def test_cross_origin_embedder_policy_is_not_enforced(self) -> None:
-        """The enforcing header would block every base-map tile: Leaflet requests
+        """
+        The enforcing header would block every base-map tile: Leaflet requests
         them without CORS, and none of the tile vendors img-src admits sends CORP (P56)."""
         response = self.client.get("/health/")
 
         self.assertIsNone(response.headers.get("Cross-Origin-Embedder-Policy"))
 
     def test_the_report_only_value_is_credentialless_not_require_corp(self) -> None:
-        """`require-corp` demands a CORP header the pasted host will not have;
+        """
+        `require-corp` demands a CORP header the pasted host will not have;
         `credentialless` drops credentials instead and still renders it."""
         self.assertEqual(settings.CROSS_ORIGIN_EMBEDDER_POLICY_REPORT_ONLY, "credentialless")
 
@@ -199,7 +205,8 @@ class CspHeaderTests(SimpleTestCase):
     """The Content-Security-Policy actually reaching responses, enforced unless a deployment opts out."""
 
     def test_middleware_is_installed_directly_below_securityheadersmiddleware(self) -> None:
-        """Order matters: the nonce must exist before any view can read it.
+        """
+        Order matters: the nonce must exist before any view can read it.
 
         SecurityHeadersMiddleware sits between the two - both must stay above
         everything that can short-circuit a response.
@@ -236,7 +243,8 @@ class CspHeaderTests(SimpleTestCase):
             self.assertFalse(fresh().csp_enforce)
 
     def test_hardening_directives_are_present(self) -> None:
-        """The four directives that cost nothing and close real classes of attack.
+        """
+        The four directives that cost nothing and close real classes of attack.
 
         ``object-src 'none'`` kills plugin-based script execution, ``base-uri`` stops an injected ``<base>``
         from repointing every relative URL, ``frame-ancestors`` covers clickjacking and ``form-action`` stops an
@@ -272,7 +280,8 @@ class CspHeaderTests(SimpleTestCase):
         )
 
     def test_scripts_cannot_run_inline(self) -> None:
-        """No template or bundle-built markup runs inline script (P34, P83), so an injected one must not run either.
+        """
+        No template or bundle-built markup runs inline script (P34, P83), so an injected one must not run either.
 
         Styles keep 'unsafe-inline': Leaflet and the pages position elements with inline styles.
         """
@@ -298,13 +307,15 @@ class CspHeaderTests(SimpleTestCase):
 
 
 class CspMatchesTheTemplatesTests(SimpleTestCase):
-    """Guards the policy against drifting away from what the pages actually load.
+    """
+    Guards the policy against drifting away from what the pages actually load.
 
     These read the base template rather than hardcoding a host list, so they keep working as the frontend
     changes: tightening the policy while the templates still need a host fails here instead of in production."""
 
     def test_every_third_party_asset_host_is_allowed(self) -> None:
-        """A missing host here is a blank page once the policy is enforced.
+        """
+        A missing host here is a blank page once the policy is enforced.
 
         Read from the asset table rather than scraped out of base.html, which is where these URLs used to be
         written: the table is what the templates resolve through now, and it covers every page rather than the

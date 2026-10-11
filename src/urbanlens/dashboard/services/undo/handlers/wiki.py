@@ -1,4 +1,5 @@
-"""Undo handler for Wiki (community pages - deletable as a child/"detail" wiki, or as a
+"""
+Undo handler for Wiki (community pages - deletable as a child/"detail" wiki, or as a
 detail pin, which is a child wiki - see controllers.detail_pins).
 """
 
@@ -41,7 +42,8 @@ _RESTORABLE_FIELDS = (
 
 
 def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
-    """Expand ``wikis`` to include their full child-wiki subtree.
+    """
+    Expand ``wikis`` to include their full child-wiki subtree.
     Deleting a wiki cascades to its ``child_wikis`` (``Wiki.parent_wiki`` is ``on_delete=CASCADE``), so stashing only the given wikis would silently lose any nested child wikis on restore.
 
     Args:
@@ -92,7 +94,8 @@ class WikiUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Wiki]:
-        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels.
+        """
+        Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels.
 
         Raises:
             UndoExpiredError: If the location, creator profile, or any label this batch referenced was independently deleted during the retention window, or the location has acquired a new wiki since, since recreating the row would otherwise fail with an uncaught IntegrityError."""
@@ -155,7 +158,8 @@ class WikiUndoHandler(UndoHandler):
 
     @classmethod
     def redo_delete(cls, payload: dict[str, Any]) -> None:
-        """Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
+        """
+        Re-delete the wikis ``restore`` recreated, and re-take what it re-granted.
         The inherited implementation only deletes the rows.
 
         Args:

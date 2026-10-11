@@ -65,7 +65,8 @@ class NearestBuildingTests(SimpleTestCase):
         self.assertEqual(_nearest_building([no_coords, _NEAR_BUILDING], 42.65, -73.75), _NEAR_BUILDING)
 
     def test_ranks_by_ground_distance_not_degrees(self) -> None:
-        """A degree of longitude is shorter than a degree of latitude away from the equator.
+        """
+        A degree of longitude is shorter than a degree of latitude away from the equator.
 
         Comparing raw degree deltas therefore over-weights east-west separation and can rank a genuinely farther
         building first."""
@@ -116,7 +117,8 @@ class FetchBuildingPayloadTests(TestCase):
             self.assertEqual(_fetch_building_payload(42.65, -73.75), {})
 
     def test_a_transient_outage_propagates_rather_than_caching_emptiness(self) -> None:
-        """A LocationCache row marks the source fetched, so an outage must not write one.
+        """
+        A LocationCache row marks the source fetched, so an outage must not write one.
 
         This returned ``{}`` until 2026-08-19, which blanked the card for the whole external-data cache window
         after any REData hiccup - the defect ``test_outage_not_cached_as_empty.py`` exists to prevent."""
@@ -130,7 +132,8 @@ class FetchBuildingPayloadTests(TestCase):
             _fetch_building_payload(42.65, -73.75)
 
     def test_an_unconfigured_gateway_propagates_too(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
+        """
+        RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
 
         The unconfigured state is simulated rather than left to the ambient environment: an install that *does*
         configure REData (any dev machine with UL_REDATA_API_URL set) would otherwise reach the real API here
@@ -240,7 +243,8 @@ class EnrichmentSourceTests(TestCase):
         self.assertEqual(query_key, "42.65000,-73.75000")
 
     def test_the_source_is_skipped_entirely_when_unconfigured(self) -> None:
-        """A whole-cycle skip, not a per-location failure.
+        """
+        A whole-cycle skip, not a per-location failure.
 
         `run_enrichment_cycle` consults `gate()` once via `self_reported_skip`;
         without it the cycle shortlists candidates and every fetch raises.
@@ -284,7 +288,8 @@ class PluginContributionsTests(SimpleTestCase):
 
 
 class NearestBuildingExclusionTests(SimpleTestCase):
-    """The nearest record is not always the right record.
+    """
+    The nearest record is not always the right record.
 
     REData labels three kinds of record this card cannot honour, and ranking the raw list let each of them win
     on distance."""

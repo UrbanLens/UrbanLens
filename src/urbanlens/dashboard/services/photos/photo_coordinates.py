@@ -1,4 +1,5 @@
-"""Turning anonymized SpotGuessr coordinate guesses into an estimated photo position.
+"""
+Turning anonymized SpotGuessr coordinate guesses into an estimated photo position.
 See ``services.spotguessr.photo_coordinates`` for where guesses actually get recorded; this module only turns the accumulated ``PhotoCoordinateGuess`` rows for one photo into a single cached estimate on ``Image``."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ OUTLIER_TRIM_FRACTION = 0.15
 
 
 def recompute_estimated_coordinates(image_id: int) -> None:
-    """Recompute and cache one photo's estimated position from its correct guesses so far.
+    """
+    Recompute and cache one photo's estimated position from its correct guesses so far.
 
     Args:
         image_id: pk of the ``Image`` being estimated - not the object itself, since callers already have just the id and this never needs to touch the rest of the row until the final update."""

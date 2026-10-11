@@ -28,7 +28,8 @@ class App(scripts.App):
     """Extend djangofoundry app behaviour."""
 
     def get_argument(self, argument_name: str, args: tuple, kwargs: dict) -> Any:
-        """Fetch an argument from args/kwargs.
+        """
+        Fetch an argument from args/kwargs.
 
         Args:
             argument_name: The name of the argument to retrieve.
@@ -53,7 +54,8 @@ class App(scripts.App):
         return kwargs.get(argument_name)
 
     def pip_install(self, package_name: str) -> bool:
-        """Install a package via pip and pin it in requirements.txt.
+        """
+        Install a package via pip and pin it in requirements.txt.
 
         Args:
             package_name: The name of the package to install.
@@ -107,7 +109,8 @@ class App(scripts.App):
         return True
 
     def perform(self, command: Actions, *args, **kwargs) -> Any:
-        """Perform the action for a command.
+        """
+        Perform the action for a command.
 
         Args:
             command: The action to perform.

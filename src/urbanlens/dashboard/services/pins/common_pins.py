@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 
 def _on_a_shared_place() -> Q:
-    """Pins whose place may be shared: they have one, and it is not implausibly large (``PlaceQuerySet.implausible``).
+    """
+    Pins whose place may be shared: they have one, and it is not implausibly large (``PlaceQuerySet.implausible``).
 
     Every other pin matches only its exact Location.
     """
@@ -27,7 +28,8 @@ def _on_a_shared_place() -> Q:
 
 
 def pins_sharing_a_place_with(profile: Profile) -> QuerySet[Pin]:
-    """Anyone's pins on something *profile* has also pinned: the same place where a pin's location has one, else the same Location.
+    """
+    Anyone's pins on something *profile* has also pinned: the same place where a pin's location has one, else the same Location.
 
     Left in the database, so asking whether two people share a place reads one row however much either has pinned.
 
@@ -44,7 +46,8 @@ def pins_sharing_a_place_with(profile: Profile) -> QuerySet[Pin]:
 
 
 def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
-    """Return the ids of locations pinned by every one of ``profiles``.
+    """
+    Return the ids of locations pinned by every one of ``profiles``.
     Two profiles count as sharing a place when their pins resolve onto the same real-world thing, not only when they land on the identical coordinate row (see :func:`pins_sharing_a_place_with`).
 
     Args:
@@ -68,7 +71,8 @@ def common_pin_location_ids(profiles: Sequence[Profile]) -> set[int]:
 
 
 def common_pin_locations(profiles: Sequence[Profile]) -> QuerySet[Location]:
-    """Return the locations pinned by every one of ``profiles``.
+    """
+    Return the locations pinned by every one of ``profiles``.
 
     Args:
         profiles: The profiles to intersect.

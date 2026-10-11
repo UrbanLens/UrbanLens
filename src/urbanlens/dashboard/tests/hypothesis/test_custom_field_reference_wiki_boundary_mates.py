@@ -46,7 +46,8 @@ class ReferenceableWikiQuerysetBoundaryMateTests(TestCase):
         self.assertNotIn(self.wiki, referenceable_queryset("wiki", self.profile))
 
     def test_boundary_mate_pin_wiki_is_referenceable(self) -> None:
-        """The regression this fix closes: a pin at a distinct Location row
+        """
+        The regression this fix closes: a pin at a distinct Location row
         whose point still falls inside the wiki location's own boundary."""
         nearby_location = Location.objects.create(latitude=40.0005, longitude=-74.0005)
         self.assertNotEqual(nearby_location.pk, self.wiki_location.pk)

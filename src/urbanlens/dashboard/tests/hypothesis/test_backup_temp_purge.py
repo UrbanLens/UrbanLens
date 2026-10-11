@@ -55,7 +55,8 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
             self.assertFalse(stale.exists())
 
     def test_an_in_flight_dump_is_left_alone(self) -> None:
-        """The regression that would matter most: reaping a live dump's temp file
+        """
+        The regression that would matter most: reaping a live dump's temp file
         corrupts the backup currently being written."""
         with TemporaryDirectory() as tmp:
             live = Path(tmp) / "backup_20260811_120000.sql.tmp"
@@ -105,7 +106,8 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
             self.assertTrue(stray.exists())
 
     def test_a_removal_failure_does_not_abort_the_rest_of_the_sweep(self) -> None:
-        """The try/except around os.remove exists so one uncooperative file (a permission
+        """
+        The try/except around os.remove exists so one uncooperative file (a permission
         error, a concurrent delete) can't abort the sweep before later stale files are
         reaped - assert the loop actually continues rather than propagating."""
         with TemporaryDirectory() as tmp:
@@ -128,7 +130,8 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
             self.assertFalse(removable.exists())
 
     def test_purging_old_backups_also_reaps_temp_files(self) -> None:
-        """The reaper has no scheduler of its own - it rides along with retention,
+        """
+        The reaper has no scheduler of its own - it rides along with retention,
         which runs after every successful dump."""
         with TemporaryDirectory() as tmp:
             stale = Path(tmp) / "backup_20260101_000000.sql.tmp"
@@ -140,7 +143,8 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
 
 
 class BackupTimeoutTests(SimpleTestCase):
-    """A wedged pg_dump must fail cleanly rather than run to the Celery task limit.
+    """
+    A wedged pg_dump must fail cleanly rather than run to the Celery task limit.
 
     `subprocess.TimeoutExpired` is not a `CalledProcessError`, so the original handler would not have caught one
     had a timeout been passed - it would propagate out of the task leaving the partial `.tmp` behind."""
@@ -180,7 +184,8 @@ class BackupTimeoutTests(SimpleTestCase):
 
 
 class PgDumpCredentialTests(SimpleTestCase):
-    """``PGPASSWORD`` adds nothing only while the password is ``UL_DB_PASS``, which the dump inherits anyway.
+    """
+    ``PGPASSWORD`` adds nothing only while the password is ``UL_DB_PASS``, which the dump inherits anyway.
 
     Should the password ever come from anywhere but the environment (a secrets file, a vault), pg_dump's
     environment would become the one readable place it lives, and this fails."""
@@ -207,7 +212,8 @@ class PgDumpCredentialTests(SimpleTestCase):
 
 
 class CountBasedRetentionTests(SimpleTestCase):
-    """`purge_old_backups`'s count-deletion loop had never run in any test.
+    """
+    `purge_old_backups`'s count-deletion loop had never run in any test.
 
     `test_backup_temp_purge.py` exercised only the `.tmp`-reaping side effect, with zero real `.sql` backups on
     disk - so `backup_files[self.backup_retention:]` was never reached."""

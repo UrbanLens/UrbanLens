@@ -21,7 +21,8 @@ class RedataSoilGateway(RedataLocationContextGateway):
         *,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch the soil-survey components of the map unit at a point.
+        """
+        Fetch the soil-survey components of the map unit at a point.
 
         Args:
             latitude: WGS-84 latitude.

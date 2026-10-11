@@ -53,7 +53,8 @@ class OvertureBuildingAttributesPanelSource(CoordinateGatedInfoPanelSource):
         return redata_configured() or not served_by_redata(float(pin.effective_latitude or 0), float(pin.effective_longitude or 0))
 
     def fetch(self, pin: Pin) -> None:
-        """Look up the pinned building's Overture attributes and cache the result.
+        """
+        Look up the pinned building's Overture attributes and cache the result.
 
         A building with its nearby places unheard from (skipped for time, or their source out) is cached marked
         partial, so the row lapses within the hour; with no building either, nothing is cached.

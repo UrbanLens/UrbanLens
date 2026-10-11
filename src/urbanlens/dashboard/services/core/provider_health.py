@@ -1,4 +1,5 @@
-"""Notice when an external provider is refusing or failing this deployment, back off, and tell a person.
+"""
+Notice when an external provider is refusing or failing this deployment, back off, and tell a person.
 
 The rate limiter caps how often a provider is asked, and ``upstream_breaker`` honours a wait a provider names. Neither
 judges a provider by what it has *done*: a provider answering 500, timing out or refusing every call is called at the
@@ -180,7 +181,8 @@ class Tally:
     failure_statuses: Counter[int] = field(default_factory=Counter)
 
     def add(self, outcome: str, count: int, status_code: int | None = None) -> None:
-        """Count ``count`` calls with this outcome.
+        """
+        Count ``count`` calls with this outcome.
 
         Args:
             outcome: An :class:`Outcome` value; anything else counts nothing.
@@ -244,7 +246,8 @@ class Verdict:
 
 
 def judge(tally: Tally, baseline: Baseline | None = None) -> Verdict | None:
-    """What a window of calls says about a provider, or ``None`` when it holds too few to say.
+    """
+    What a window of calls says about a provider, or ``None`` when it holds too few to say.
 
     The absolute rules need no baseline on purpose: a provider that has answered nothing all week would otherwise
     have that week as its normal.
@@ -274,7 +277,8 @@ def judge(tally: Tally, baseline: Baseline | None = None) -> Verdict | None:
 
 
 def backoff_duration(level: int) -> timedelta:
-    """How long the ``level``-th consecutive backoff lasts: doubling from 15 minutes, capped at a day.
+    """
+    How long the ``level``-th consecutive backoff lasts: doubling from 15 minutes, capped at a day.
 
     Args:
         level: 1 for the first backoff in a row.
@@ -297,7 +301,8 @@ def _span(delta: timedelta) -> str:
 
 
 def describe(tally: Tally, window: str, *, baseline: Baseline | None = None) -> str:
-    """One sentence naming the counts behind a verdict, for the site admin and the alert.
+    """
+    One sentence naming the counts behind a verdict, for the site admin and the alert.
 
     Args:
         tally: The window's calls.
@@ -347,7 +352,8 @@ def _bucket_expression() -> Func:
 
 
 def _read_counts(since: datetime, until: datetime | None = None, *, bucketed: bool = True) -> list[_Count]:
-    """Calls that reached a source since ``since``, by provider, outcome, status and bucket.
+    """
+    Calls that reached a source since ``since``, by provider, outcome, status and bucket.
 
     A call refused here before it was sent (rate limited, disabled, geo-filtered) says nothing about the source, and a
     reservation still waiting for its response has no outcome yet; both are left out.
@@ -500,7 +506,8 @@ def _note_failing(row: ProviderHealth, hour: Tally, step: _Step) -> None:
 
 
 def _step(row: ProviderHealth, counts: list[_Count], now: datetime) -> _Step:
-    """Move one provider through its states on this run's counts.
+    """
+    Move one provider through its states on this run's counts.
 
     An unhealthy provider that stops being called is cleared once there is too little left to judge it on - a day of
     probing without :data:`PROBE_SAMPLE` calls, or a degraded one with under :data:`MIN_SAMPLE` calls in the day - so a
@@ -564,7 +571,8 @@ def _step(row: ProviderHealth, counts: list[_Count], now: datetime) -> _Step:
 
 
 def evaluate_provider_health(*, now: datetime | None = None) -> EvaluationReport:
-    """Judge every provider on the last day of calls, move each one's state, publish the gate's snapshot, and alert.
+    """
+    Judge every provider on the last day of calls, move each one's state, publish the gate's snapshot, and alert.
 
     Args:
         now: The time to evaluate at; the current time when omitted.
@@ -673,7 +681,8 @@ def _alert(rows: dict[str, ProviderHealth], steps: dict[str, _Step], now: dateti
 
 
 def deliver_alert(title: str, message: str) -> None:
-    """Send one digest to every channel routed for the ``provider_health`` event, unless alerts are off.
+    """
+    Send one digest to every channel routed for the ``provider_health`` event, unless alerts are off.
 
     Args:
         title: The digest's subject.
@@ -777,7 +786,8 @@ def _count_suppressed(provider: str) -> None:
 
 
 def suppressed_today(provider: str) -> int:
-    """How many calls the gate refused for ``provider`` today (UTC), for the site admin.
+    """
+    How many calls the gate refused for ``provider`` today (UTC), for the site admin.
 
     Args:
         provider: The provider's service key.
@@ -793,7 +803,8 @@ def suppressed_today(provider: str) -> int:
 
 
 def backed_off(service: str) -> bool:
-    """Whether the gate refuses every background call to ``service`` until its backoff ends.
+    """
+    Whether the gate refuses every background call to ``service`` until its backoff ends.
 
     Takes no live or probe slot, unlike :func:`refusal_for`, so a sweep can ask before choosing work and leave the
     probe for the call it then makes. Says False on any cache failure, as the gate admits then.
@@ -818,7 +829,8 @@ class Refusal:
 
 
 def refusal_for(service: str, *, background: bool | None = None) -> Refusal | None:
-    """Why a call to ``service`` must not be made now, or ``None`` to go ahead.
+    """
+    Why a call to ``service`` must not be made now, or ``None`` to go ahead.
 
     A ``None`` uses up a live or probe slot where the provider needed one, so call this only for a call that will be
     made. Admits on any cache failure.
@@ -848,7 +860,8 @@ def refusal_for(service: str, *, background: bool | None = None) -> Refusal | No
 
 
 def check_admission(service: str, *, endpoint: str = "") -> None:
-    """Refuse a call ``refusal_for`` says no to, the way a tripped ``upstream_breaker`` does.
+    """
+    Refuse a call ``refusal_for`` says no to, the way a tripped ``upstream_breaker`` does.
 
     The refusal is logged as rate limited and recorded as unanswered, so a caller building a "nothing here" answer
     inside ``outages_observed`` sees it and does not keep that answer.

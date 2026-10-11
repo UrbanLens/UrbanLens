@@ -32,7 +32,8 @@ def _git(*args: str) -> set[str]:
 
 
 def _visible_paths() -> set[str]:
-    """Every path a fresh checkout of the resulting commit would contain.
+    """
+    Every path a fresh checkout of the resulting commit would contain.
 
     Tracked files plus anything newly staged, minus anything staged for deletion - the last matters because a
     commit that removes a module while leaving its importers behind fails identically."""
@@ -43,7 +44,8 @@ def _visible_paths() -> set[str]:
 
 
 def _module_candidates(module: str) -> list[str]:
-    """Paths that would satisfy ``import module`` - a module file or a package.
+    """
+    Paths that would satisfy ``import module`` - a module file or a package.
 
     Returned as posix-style strings since that's what ``git ls-files`` emits (even on Windows) - comparing
     against ``str(Path(...))`` here would compare backslash-joined paths against forward-slash ones and never
@@ -82,7 +84,8 @@ _TEMPLATE_NAMES = ("template_name", "_TEMPLATE", "_PARTIAL")
 
 
 def _referenced_templates(source: str) -> set[str]:
-    """Template paths this source actually renders.
+    """
+    Template paths this source actually renders.
 
     Restricted to literals passed to a known template callable or assigned to a template-shaped name, rather
     than every ``.html`` string in the file."""
@@ -115,7 +118,8 @@ def _referenced_templates(source: str) -> set[str]:
 
 
 def _missing_templates(visible: set[str], python_files: list[str]) -> list[str]:
-    """Templates referenced by committed Python that a fresh checkout would lack.
+    """
+    Templates referenced by committed Python that a fresh checkout would lack.
 
     Same failure as a missing module, one layer later: the app starts, then the
     view 500s with ``TemplateDoesNotExist`` the first time that path is rendered.

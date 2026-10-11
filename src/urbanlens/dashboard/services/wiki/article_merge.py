@@ -1,4 +1,5 @@
-"""Folding one article's edit history into another's, so merging two hosts loses no text.
+"""
+Folding one article's edit history into another's, so merging two hosts loses no text.
 An :class:`Article` is one host's live text; every version it ever held lives in its :class:`ArticleRevision` rows.
 Merging two pins (or two wikis) leaves room for only one live article, so the other's rows move across as history: each keeps its own editor, summary and timestamp, and stays viewable, diffable and restorable from the kept article's history page.
 """
@@ -15,7 +16,8 @@ if TYPE_CHECKING:
 
 
 def record_live_text(article: Article) -> ArticleRevision | None:
-    """Make sure the article's live text exists as a revision before its history moves.
+    """
+    Make sure the article's live text exists as a revision before its history moves.
     A save always writes one, but an article created directly (an import, a fixture) can hold text no revision carries - and that text would otherwise vanish with the row.
 
     Args:
@@ -36,7 +38,8 @@ def record_live_text(article: Article) -> ArticleRevision | None:
 
 
 def adopt_history(kept: Article, absorbed: Article) -> int:
-    """Move every revision of *absorbed* onto *kept*, leaving *absorbed* with none.
+    """
+    Move every revision of *absorbed* onto *kept*, leaving *absorbed* with none.
     The rows move rather than being copied, so ``restored_from`` links between them stay valid and nothing is duplicated.
 
     Args:
@@ -54,7 +57,8 @@ def adopt_history(kept: Article, absorbed: Article) -> int:
 
 
 def live_text_editor_id(article: Article) -> int | None:
-    """Who wrote the article's current text: the newest revision's editor.
+    """
+    Who wrote the article's current text: the newest revision's editor.
     Deliberately not "the newest revision with an editor": when the newest one came from a deleted account (or a
     system seed), crediting an earlier person would attribute text they never wrote to them - and, under concealment,
     show it to their friends.
@@ -70,7 +74,8 @@ def live_text_editor_id(article: Article) -> int | None:
 
 
 def write_merge_revision(article: Article, *, content: str, editor: Profile | None, edit_summary: str, revision_content: str | None = None) -> ArticleRevision:
-    """Write *content* to *article* as a new newest revision, even when the text is unchanged.
+    """
+    Write *content* to *article* as a new newest revision, even when the text is unchanged.
     ``save_article`` skips a save that changes nothing, which is right for an editor but wrong after a merge: the adopted revisions interleave by date, so without a fresh newest row the history's top entry could be the other host's text while the page shows this one's.
 
     Args:

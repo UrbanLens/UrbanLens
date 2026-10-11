@@ -1,4 +1,5 @@
-"""Who may fetch which file under ``MEDIA_ROOT``.
+"""
+Who may fetch which file under ``MEDIA_ROOT``.
 The policy lives in a service rather than in the view so that :mod:`urbanlens.dashboard.checks` can inspect it without importing a controller, and so a second byte-serving surface can reuse it rather than restate it."""
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ _AUTHORIZERS: dict[str, MediaAuthorizer] = {}
 
 
 def declares_media_family(prefix: str) -> Callable[[_F], _F]:
-    """Mark a callable ``upload_to`` as writing into the *prefix* family.
+    """
+    Mark a callable ``upload_to`` as writing into the *prefix* family.
 
     Args:
         prefix: The leading path segment the callable's return value starts with (e.g. ``"pin_images"``).
@@ -43,7 +45,8 @@ def declares_media_family(prefix: str) -> Callable[[_F], _F]:
 
 
 def media_authorizer(prefix: str) -> Callable[[MediaAuthorizer], MediaAuthorizer]:
-    """Register the decorated function as the authorizer for one path family.
+    """
+    Register the decorated function as the authorizer for one path family.
 
     Args:
         prefix: The ``upload_to`` prefix this authorizer answers for, without slashes (e.g. ``"comment_images"``).
@@ -66,7 +69,8 @@ def media_authorizer(prefix: str) -> Callable[[MediaAuthorizer], MediaAuthorizer
 
 
 def registered_families() -> frozenset[str]:
-    """Return every path family that has an authorizer.
+    """
+    Return every path family that has an authorizer.
 
     Returns:
         The registered ``upload_to`` prefixes.
@@ -75,7 +79,8 @@ def registered_families() -> frozenset[str]:
 
 
 def authorize_media(profile: Profile, rel_path: str) -> bool:
-    """Decide whether *profile* may fetch the file at *rel_path*.
+    """
+    Decide whether *profile* may fetch the file at *rel_path*.
 
     Args:
         profile: The authenticated requester's profile.
@@ -93,7 +98,8 @@ def authorize_media(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("pin_images")
 def authorize_image(profile: Profile, rel_path: str) -> bool:
-    """Authorize a ``pin_images/`` file via its ``Image`` row.
+    """
+    Authorize a ``pin_images/`` file via its ``Image`` row.
     Direct-message-only attachments are restricted to the DM's sender and recipient.
 
     Args:
@@ -139,7 +145,8 @@ def authorize_image(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("comment_images")
 def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
-    """Authorize a ``comment_images/`` file via its Comment/TripComment row.
+    """
+    Authorize a ``comment_images/`` file via its Comment/TripComment row.
 
     Args:
         profile: The authenticated requester's profile.
@@ -200,7 +207,8 @@ def authorize_comment_image(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("avatars")
 def authorize_avatar(profile: Profile, rel_path: str) -> bool:
-    """Authorize an avatar for anyone its profile is visible to, the rule ``resolve_visible_identity`` renders by.
+    """
+    Authorize an avatar for anyone its profile is visible to, the rule ``resolve_visible_identity`` renders by.
 
     Avatars render site-wide beside their owner's username, so the rule follows the profile rather than any one
     surface; a viewer the identity is masked from gets no avatar URL, and this refuses the file to one who kept
@@ -228,7 +236,8 @@ def authorize_avatar(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("pin_custom_icons")
 def authorize_pin_icon(profile: Profile, rel_path: str) -> bool:
-    """Authorize a pin's custom icon for the owner of a pin that uses it.
+    """
+    Authorize a pin's custom icon for the owner of a pin that uses it.
     Every surface that emits a pin's icon URL is scoped to the pin's owner, and a shared pin arrives as the recipient's own copy.
 
     Args:
@@ -245,7 +254,8 @@ def authorize_pin_icon(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("label_icons")
 def authorize_label_icon(profile: Profile, rel_path: str) -> bool:
-    """Authorize a label's custom icon for anyone the label is visible to: its owner, or everyone for a global label.
+    """
+    Authorize a label's custom icon for anyone the label is visible to: its owner, or everyone for a global label.
 
     Args:
         profile: The authenticated requester's profile.
@@ -261,7 +271,8 @@ def authorize_label_icon(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("achievement_icons")
 def authorize_icon(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch an achievement icon, since awards render on other members' profiles.
+    """
+    Allow any authenticated user to fetch an achievement icon, since awards render on other members' profiles.
 
     Args:
         profile: The authenticated requester's profile (unused).
@@ -275,7 +286,8 @@ def authorize_icon(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("remote_tiles")
 def authorize_remote_tile(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch a kept tile of a map another host publishes openly.
+    """
+    Allow any authenticated user to fetch a kept tile of a map another host publishes openly.
 
     Args:
         profile: The authenticated requester's profile (unused).
@@ -289,7 +301,8 @@ def authorize_remote_tile(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("proxied_renders")
 def authorize_proxied_render(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch a kept rendering of a file the REData proxies serve to anyone.
+    """
+    Allow any authenticated user to fetch a kept rendering of a file the REData proxies serve to anyone.
 
     Args:
         profile: The authenticated requester's profile (unused).
@@ -303,7 +316,8 @@ def authorize_proxied_render(profile: Profile, rel_path: str) -> bool:
 
 @media_authorizer("remote_copies")
 def authorize_remote_copy(profile: Profile, rel_path: str) -> bool:
-    """Allow any authenticated user to fetch a stored copy of a third-party image, which its provider publishes openly.
+    """
+    Allow any authenticated user to fetch a stored copy of a third-party image, which its provider publishes openly.
 
     Args:
         profile: The authenticated requester's profile (unused).

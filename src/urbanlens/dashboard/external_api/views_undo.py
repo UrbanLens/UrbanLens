@@ -1,4 +1,5 @@
-"""External-facing undo endpoints: list and restore recently deleted items.
+"""
+External-facing undo endpoints: list and restore recently deleted items.
 
 Routed under ``urls_tools.py`` (see that module's docstring): undo is a
 utility that belongs to no single resource, aggregating across every model
@@ -61,7 +62,8 @@ _DOMAIN_WRITE_SCOPES_BY_MODEL_LABEL: dict[str, ApiKeyScope] = {
 
 
 class UndoListView(ExternalApiView):
-    """GET: the caller's recent delete history available to undo.
+    """
+    GET: the caller's recent delete history available to undo.
 
     A credential without the paired domain-read scope for a given entry's ``model_label`` has that entry
     omitted rather than causing a 403 - ``omitted`` names the dropped model_labels so a client can
@@ -86,7 +88,8 @@ class UndoListView(ExternalApiView):
 
 
 class UndoRestoreView(ExternalApiView):
-    """POST: restore one of the caller's undo entries.
+    """
+    POST: restore one of the caller's undo entries.
 
     Requires ``undo:write`` and the entry's own domain write scope -
     restoring a delete needs the same authority the delete itself needed.
@@ -98,7 +101,8 @@ class UndoRestoreView(ExternalApiView):
 
     @extend_schema(request=None, responses={200: None, 404: ErrorSerializer, 410: ErrorSerializer})
     def post(self, request: Request, undo_uuid: UUID) -> Response:
-        """Restore one of the caller's undo entries.
+        """
+        Restore one of the caller's undo entries.
 
         Looked up without the ``active()`` filter ``get_undo_history`` applies
 

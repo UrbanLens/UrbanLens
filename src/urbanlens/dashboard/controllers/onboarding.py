@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 
 class WelcomeOnboardingView(LoginRequiredMixin, View):
-    """Shown once, on first login, before any other onboarding step.
+    """
+    Shown once, on first login, before any other onboarding step.
 
     GET /welcome/ -> render the toggle form (all pre-checked).
     POST /welcome/ -> save the toggles and mark onboarding complete.

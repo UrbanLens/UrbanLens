@@ -38,7 +38,8 @@ LOST_KEY = "lost-field-encryption-key-for-tests"
 
 @contextmanager
 def using_keys(active: str | None, fallbacks: list[str] | None = None) -> Iterator[None]:
-    """Run the block with a specific field-encryption key set.
+    """
+    Run the block with a specific field-encryption key set.
 
     Args:
         active: Value for ``field_encryption_key``; None falls back to SECRET_KEY.
@@ -158,7 +159,8 @@ class FailSoftTests(SimpleTestCase):
         self.assertEqual(degraded.ciphertext, ciphertext)
 
     def test_a_degraded_value_survives_pickling_and_copying(self) -> None:
-        """A cached or copied model holding one must not explode.
+        """
+        A cached or copied model holding one must not explode.
 
         ``str``'s default reduction would call the one-argument constructor this class does not have."""
         ciphertext = self._undecryptable()
@@ -194,7 +196,8 @@ class FailSoftTests(SimpleTestCase):
 
 
 class FailSoftSaveRoundTripTests(TestCase):
-    """A real model save during a key-mismatch window must leave the row recoverable.
+    """
+    A real model save during a key-mismatch window must leave the row recoverable.
 
     ``phone_number`` rather than ``bio`` because preservation covers only string-defaulted fields; see
     ``UndecryptableValue`` and ``test_nullable_fail_soft_field_is_still_destroyed_by_a_save`` below."""
@@ -234,7 +237,8 @@ class FailSoftSaveRoundTripTests(TestCase):
 
 
 class EncryptionKeyStrengthValidatorTests(SimpleTestCase):
-    """Configuration-time floor on ``field_encryption_key``.
+    """
+    Configuration-time floor on ``field_encryption_key``.
 
     The derivation is one unsalted SHA256, so key strength is input strength, and a Fernet token's HMAC lets an
     attacker verify guesses offline against a single stolen row."""
@@ -262,7 +266,8 @@ class EncryptionKeyStrengthValidatorTests(SimpleTestCase):
         self.assertIsNone(AppSettings._reject_weak_encryption_keys(None))
 
     def test_a_weak_retired_key_is_allowed_so_the_rotation_can_finish(self) -> None:
-        """The floor cannot apply to fallbacks, or it strands the installs that need it.
+        """
+        The floor cannot apply to fallbacks, or it strands the installs that need it.
 
         An install already running a weak key follows the documented rotation by listing that key as a fallback
         - and if the validator refuses it there, the settings module never loads, so `rotate_field_encryption`
@@ -322,7 +327,8 @@ class RotateFieldEncryptionCommandTests(TestCase):
             call_command("rotate_field_encryption", stdout=StringIO(), stderr=StringIO())
 
     def test_skip_undecryptable_finishes_the_rotation(self) -> None:
-        """One unreadable row must not be able to block a rotation forever.
+        """
+        One unreadable row must not be able to block a rotation forever.
 
         A value no configured key can decrypt is already lost, so retiring a key takes nothing further from it -
         while refusing to finish leaves every other value still depending on the key being retired."""

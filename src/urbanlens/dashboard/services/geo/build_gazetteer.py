@@ -1,4 +1,5 @@
-"""Rebuilds the gazetteer's bundled data from ``geonamescache``, a development dependency.
+"""
+Rebuilds the gazetteer's bundled data from ``geonamescache``, a development dependency.
 
 Run it after upgrading geonamescache: ``bun run gazetteer:build``.
 """

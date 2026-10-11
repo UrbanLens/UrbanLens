@@ -59,7 +59,8 @@ class RecordCheckResultTests(SimpleTestCase):
     def test_a_correct_check_always_scores_higher_than_an_incorrect_one_would_have(
         self, alpha: float, beta: float
     ) -> None:
-        """From the same starting profile, passing a check must always beat failing it.
+        """
+        From the same starting profile, passing a check must always beat failing it.
 
         Not "a correct check never lowers trust" in absolute terms - the decay-toward-prior step (applied
         identically either way) can itself nudge a near-certain profile's score down by a hair even on a pass,
@@ -70,7 +71,8 @@ class RecordCheckResultTests(SimpleTestCase):
         self.assertGreater(after_correct.trust_score, after_incorrect.trust_score)
 
     def test_a_run_of_failures_drags_a_trusted_profile_down(self) -> None:
-        """A previously-trusted profile that starts failing checks should visibly lose trust.
+        """
+        A previously-trusted profile that starts failing checks should visibly lose trust.
 
         Values verified numerically (not just asserted on faith): starting at alpha=20/beta=2 (trust_score
         ~0.909, a solidly-trusted profile), 20 consecutive failures land at ~0.429 - a real, substantial drop

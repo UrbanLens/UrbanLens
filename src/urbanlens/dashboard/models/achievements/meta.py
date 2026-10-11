@@ -5,7 +5,8 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class ActivityKind(TextChoices):
-    """The daily actions a streak can be built from.
+    """
+    The daily actions a streak can be built from.
     Each value is one row per profile per calendar day in :class:`~urbanlens.dashboard.models.achievements.model.ProfileActivityDay`, which is what makes streaks idempotent: uploading thirty photos in one day is still a single day of the "photos" streak.
     """
 
@@ -24,7 +25,8 @@ METRIC_STREAK_PREFIX = "streak_"
 
 
 def streak_metric_key(kind: str) -> str:
-    """Return the metric key that reads the longest streak for *kind*.
+    """
+    Return the metric key that reads the longest streak for *kind*.
 
     Args:
         kind: An :class:`ActivityKind` value.

@@ -1,4 +1,5 @@
-"""The unauthenticated REData media proxies never hand a browser a document on the app origin (P139).
+"""
+The unauthenticated REData media proxies never hand a browser a document on the app origin (P139).
 
 The attack: a CRIS attachment (third-party bytes) that REData labels ``text/html`` or ``image/svg+xml``.
 Served verbatim, it renders as a page on this origin, where the site CSP is report-only by default and

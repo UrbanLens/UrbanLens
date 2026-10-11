@@ -1,4 +1,5 @@
-"""Every AI call writes exactly one ``ApiCallLog`` row: service, model, time, status, tokens, cost - never content.
+"""
+Every AI call writes exactly one ``ApiCallLog`` row: service, model, time, status, tokens, cost - never content.
 
 Each test drives a real AI path with only the inference client (the one thing that leaves the
 process) replaced, and the text the path puts in its prompt set to a marker that must not

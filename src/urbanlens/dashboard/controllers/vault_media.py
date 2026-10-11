@@ -1,4 +1,5 @@
-"""Vault → Photos / Documents: each media kind's gallery page, its windowed grid's JSON pages, and its uploads.
+"""
+Vault → Photos / Documents: each media kind's gallery page, its windowed grid's JSON pages, and its uploads.
 
 Every view here takes the ``kind`` URL kwarg and reads what differs from that kind's ``MediaKindSpec``.
 Deleting an item goes through ``vault_photos.PhotoActionView``, whose ``delete`` checks only ownership.
@@ -33,7 +34,8 @@ _MAX_ITEMS_PER_FETCH = 100
 
 
 def _sorted_gallery(spec: MediaKindSpec, profile: Profile, request: HttpRequest) -> QuerySet[Image]:
-    """The profile's uploads of *spec*'s kind, ordered by the request's ``sort``.
+    """
+    The profile's uploads of *spec*'s kind, ordered by the request's ``sort``.
 
     Args:
         spec: Which gallery.
@@ -51,13 +53,15 @@ def _sorted_gallery(spec: MediaKindSpec, profile: Profile, request: HttpRequest)
 
 
 class VaultMediaView(LoginRequiredMixin, View):
-    """A media kind's gallery page - upload zone and the grid's first page.
+    """
+    A media kind's gallery page - upload zone and the grid's first page.
 
     GET /vault/<plural>/
     """
 
     def get(self, request: HttpRequest, kind: str) -> HttpResponse:
-        """Render the gallery page.
+        """
+        Render the gallery page.
 
         Args:
             request: The HTTP request.
@@ -95,7 +99,8 @@ class VaultMediaView(LoginRequiredMixin, View):
 
 
 class VaultMediaItemsView(LoginRequiredMixin, View):
-    """One page of a media kind's gallery as JSON, for the windowed grid.
+    """
+    One page of a media kind's gallery as JSON, for the windowed grid.
 
     GET /vault/<plural>/items/?offset=&limit=&sort=
 
@@ -104,7 +109,8 @@ class VaultMediaItemsView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, kind: str) -> JsonResponse:
-        """Return one page of the profile's gallery, in the requested sort.
+        """
+        Return one page of the profile's gallery, in the requested sort.
 
         Args:
             request: The HTTP request, with ``offset``/``limit``/``sort`` query params.
@@ -129,7 +135,8 @@ class VaultMediaItemsView(LoginRequiredMixin, View):
 
 
 class VaultMediaUploadView(LoginRequiredMixin, View):
-    """Upload one file to a media kind's gallery (called once per file by the page's uploader).
+    """
+    Upload one file to a media kind's gallery (called once per file by the page's uploader).
 
     POST /vault/<plural>/upload/
 
@@ -138,7 +145,8 @@ class VaultMediaUploadView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, kind: str) -> JsonResponse:
-        """Create an unfiled Image and queue its processing.
+        """
+        Create an unfiled Image and queue its processing.
 
         Args:
             request: The HTTP request, carrying the file under the kind's upload field.

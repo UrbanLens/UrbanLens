@@ -1,4 +1,5 @@
-"""Request and response schemas for the trip settings and calendar endpoints.
+"""
+Request and response schemas for the trip settings and calendar endpoints.
 
 The write side is a genuinely different contract - every field optional, at least one required
 overall - so it is a separate class rather than a flag on that one.
@@ -20,7 +21,8 @@ if TYPE_CHECKING:
 
 
 class TripPermissionsUpdateSerializer(serializers.Serializer):
-    """A presence-keyed partial update of a trip's four permission levels.
+    """
+    A presence-keyed partial update of a trip's four permission levels.
 
     A ``default=`` on any of these would silently reintroduce the very defect the service was fixed for
 
@@ -34,7 +36,8 @@ class TripPermissionsUpdateSerializer(serializers.Serializer):
     allow_comments = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, required=False)
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
-        """Require at least one permission field to be present.
+        """
+        Require at least one permission field to be present.
 
         Args:
             attrs: The fields actually submitted, already choice-validated.
@@ -51,7 +54,8 @@ class TripPermissionsUpdateSerializer(serializers.Serializer):
 
 
 class TripCalendarStatusSerializer(serializers.Serializer):
-    """Whether a trip is mirrored to the caller's Google Calendar (schema-only).
+    """
+    Whether a trip is mirrored to the caller's Google Calendar (schema-only).
 
     ``connected`` and ``linked`` are separate on purpose: a connected account with no link means the
     calendar is reachable but this trip has never been exported to it, which is a different next action
@@ -73,7 +77,8 @@ class TripCalendarStatusSerializer(serializers.Serializer):
 
 
 class TripCalendarExportRequestSerializer(serializers.Serializer):
-    """Options for a trip export.
+    """
+    Options for a trip export.
 
     ``auto_sync`` is presence-keyed like everything else on this surface: omitting it leaves whatever
     the existing link already had, so re-exporting a trip to refresh its dates cannot quietly switch off
@@ -116,7 +121,8 @@ class TripCalendarRemovalResponseSerializer(serializers.Serializer):
 
 
 class TripCalendarBlockedSerializer(serializers.Serializer):
-    """A 409 the client resolves by sending the user through a browser.
+    """
+    A 409 the client resolves by sending the user through a browser.
 
     Both cases this covers - no connected calendar, and a grant Google has since rejected - are fixed by
     the same one-time consent flow, which cannot happen over an API credential: it ends in a redirect

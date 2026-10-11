@@ -12,7 +12,8 @@ from urbanlens.dashboard.services.security.link_urls import InvalidLinkUrlError,
 
 
 class IconField(serializers.CharField):
-    """An icon value: a picker catalogue entry, a Material icon name, an uploaded icon's URL, or one emoji.
+    """
+    An icon value: a picker catalogue entry, a Material icon name, an uploaded icon's URL, or one emoji.
 
     The column is rendered into marker, chip and popup HTML, so anything else is refused here rather than
     stored and escaped later.
@@ -28,7 +29,8 @@ class IconField(serializers.CharField):
 
 
 class LinkUrlField(serializers.CharField):
-    """An http(s) link, checked by the rule every link writer shares (``services.security.link_urls``).
+    """
+    An http(s) link, checked by the rule every link writer shares (``services.security.link_urls``).
 
     DRF's ``URLField`` also admits ftp, which the link models refuse on save.
     """
@@ -49,13 +51,15 @@ class LinkUrlField(serializers.CharField):
 
 
 class JSONField(serializers.JSONField):
-    """DRF's JSON field, refusing a form-posted value nested past the recursion limit as invalid rather than a 500.
+    """
+    DRF's JSON field, refusing a form-posted value nested past the recursion limit as invalid rather than a 500.
 
     A form post hands the field raw text, which DRF decodes with ``json.loads`` and catches only ``ValueError``.
     """
 
     def to_internal_value(self, data: Any) -> Any:
-        """Decode *data*, or check that an already-decoded value serializes.
+        """
+        Decode *data*, or check that an already-decoded value serializes.
 
         Args:
             data: The submitted value.

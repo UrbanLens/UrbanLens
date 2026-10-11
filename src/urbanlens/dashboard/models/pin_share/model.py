@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 
 
 class PinShare(abstract.DashboardModel):
-    """A one-to-one share of a single place from one profile to another.
+    """
+    A one-to-one share of a single place from one profile to another.
     Shares form a tree: when the shared pin itself arrived via an earlier share (the sharer accepted someone else's share and is now passing the place along), ``parent_share`` points at that earlier share.
     ``pin`` is None for location-only shares, e.g. raw coordinates or a street address detected in a direct message when the sender never pinned the place.
     """
@@ -135,7 +136,8 @@ class PinShare(abstract.DashboardModel):
 
     @property
     def shared_location_id(self) -> int | None:
-        """PK of the shared place's Location - the snapshot, else the pin's current one.
+        """
+        PK of the shared place's Location - the snapshot, else the pin's current one.
         Prefers the ``location`` snapshot taken at share time: the sharer may have moved their pin somewhere else since, and this share is about where the pin was when it was shared.
 
         Returns:
@@ -154,7 +156,8 @@ class PinShare(abstract.DashboardModel):
 
     @property
     def place_label(self) -> str:
-        """The sender's own label for the shared place, for the sender's eyes only.
+        """
+        The sender's own label for the shared place, for the sender's eyes only.
 
         Returns:
             The pin's display label when a pin exists, otherwise :attr:`safe_place_label`'s location label.
@@ -165,7 +168,8 @@ class PinShare(abstract.DashboardModel):
 
     @property
     def safe_place_label(self) -> str:
-        """What the share calls the place to anyone but its sender: ``shared_name``, else the snapshotted location.
+        """
+        What the share calls the place to anyone but its sender: ``shared_name``, else the snapshotted location.
 
         Never read through ``pin``. The sender's name for it is not shared unless they typed it as ``shared_name``,
         and the pin may have been renamed or moved since.
@@ -185,7 +189,8 @@ class PinShare(abstract.DashboardModel):
 
     @property
     def resulting_pin(self) -> Pin | None:
-        """The recipient-side Pin this share produced, once accepted.
+        """
+        The recipient-side Pin this share produced, once accepted.
         Covers both accept paths: a brand-new Pin (``source_share`` points back here) and the "recipient already had this place pinned" dedup case (no `source_share` link, so it's found by location instead).
 
         Returns:
@@ -212,7 +217,8 @@ class PinShare(abstract.DashboardModel):
 
     @classmethod
     def chain_share_count(cls, root_share_ids: list[int]) -> int:
-        """Total number of shares in the trees rooted at the given shares.
+        """
+        Total number of shares in the trees rooted at the given shares.
         Counts the roots themselves plus every transitive reshare below them (breadth-first over ``parent_share``), so "A shared with B, B shared with C and D, D shared with E and F" counts 5 for A's share.
 
         Args:

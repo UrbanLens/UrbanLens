@@ -10,7 +10,8 @@ _FIGURES_CACHE_KEY = "public-costs-page-figures-v1"
 
 
 class CostsView(TemplateView):
-    """Render the public page showing UrbanLens's estimated running costs.
+    """
+    Render the public page showing UrbanLens's estimated running costs.
 
     Gated behind ``SiteSettings.public_costs_page_enabled`` (off by default) - the page 404s until an
     admin turns it on from the site-admin cost tracking page.
@@ -21,7 +22,8 @@ class CostsView(TemplateView):
     template_name = "dashboard/pages/costs/index.html"
 
     def get_context_data(self, **kwargs):
-        """Add the cost breakdown and monthly total chart series to the context.
+        """
+        Add the cost breakdown and monthly total chart series to the context.
 
         Args:
             **kwargs: Standard ``TemplateView`` keyword arguments.
@@ -44,7 +46,8 @@ class CostsView(TemplateView):
 
     @staticmethod
     def _figures() -> dict:
-        """The aggregate figures, computed at most once per cache window.
+        """
+        The aggregate figures, computed at most once per cache window.
 
         Every one is a trailing thirty-day or monthly total, and
         ``active_user_count`` joins every user against every pin they own. The

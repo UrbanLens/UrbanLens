@@ -60,7 +60,8 @@ ACTIVITY_NOT_FOUND = "No such activity."
 
 
 def _as_bool(value: Any) -> bool:
-    """Coerce a form/JSON value to a bool, accepting the usual text spellings.
+    """
+    Coerce a form/JSON value to a bool, accepting the usual text spellings.
 
     Args:
         value: A real bool, or one of the ``"true"``/``"1"``/``"on"`` spellings an HTML form or a loosely-typed JSON body produces.
@@ -73,7 +74,8 @@ def _as_bool(value: Any) -> bool:
 
 
 def _clean_text(value: Any) -> str | None:
-    """Strip a free-text field, collapsing blank/absent to ``None``.
+    """
+    Strip a free-text field, collapsing blank/absent to ``None``.
 
     Args:
         value: The raw submitted value.
@@ -87,7 +89,8 @@ def _clean_text(value: Any) -> str | None:
 
 
 def activity_queryset(trip: Trip) -> QuerySet[TripActivity]:
-    """Return the trip's activities in itinerary order with every relation needed to render them.
+    """
+    Return the trip's activities in itinerary order with every relation needed to render them.
 
     Args:
         trip: The trip whose activities are wanted.
@@ -108,7 +111,8 @@ def activity_queryset(trip: Trip) -> QuerySet[TripActivity]:
 
 
 def get_activity(trip: Trip, activity_id: int) -> TripActivity:
-    """Return one of the trip's own activities.
+    """
+    Return one of the trip's own activities.
 
     Args:
         trip: The trip that must own the activity.
@@ -126,7 +130,8 @@ def get_activity(trip: Trip, activity_id: int) -> TripActivity:
 
 
 def compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, int]:
-    """Return ``{activity_id: map_index}`` for activities that get a numbered map marker.
+    """
+    Return ``{activity_id: map_index}`` for activities that get a numbered map marker.
     Completed activities and activities whose location is hidden or has no coordinates are skipped, so the remaining numbers stay contiguous from 1.
 
     Args:
@@ -144,7 +149,8 @@ def compute_activity_index_map(activities: Iterable[TripActivity]) -> dict[int, 
 
 
 def expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
-    """Widen the trip's persisted date range to include *activity_date*.
+    """
+    Widen the trip's persisted date range to include *activity_date*.
 
     Args:
         trip: The trip to widen.
@@ -162,7 +168,8 @@ def expand_trip_dates(trip: Trip, activity_date: datetime.date) -> None:
 
 
 def _checked_schedule(value: datetime.datetime | None, label: str) -> datetime.datetime | None:
-    """Refuse a schedule outside the span an activity may occupy.
+    """
+    Refuse a schedule outside the span an activity may occupy.
 
     Args:
         value: The proposed time, or None.
@@ -182,7 +189,8 @@ def _checked_schedule(value: datetime.datetime | None, label: str) -> datetime.d
 
 
 def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.datetime | None:
-    """Combine separate date and time strings into an aware datetime.
+    """
+    Combine separate date and time strings into an aware datetime.
     If only a date is provided, midnight is used so the caller can distinguish "date only" from "date + time" by inspecting the time component.
 
     Args:
@@ -208,7 +216,8 @@ def parse_scheduled_at(date_str: str | None, time_str: str | None) -> datetime.d
 
 
 def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: Trip | None = None) -> tuple[Location | None, Pin | None]:
-    """Resolve an activity's target place from submitted location fields.
+    """
+    Resolve an activity's target place from submitted location fields.
 
     A ``location_uuid``/``location_slug`` names only a Location *profile* may see, or one already on an activity of
     *trip* (what the edit dialog sends back); anything else is treated as not given, at the same cost as a reference
@@ -265,7 +274,8 @@ def resolve_activity_place(body: Mapping[str, Any], profile: Profile, *, trip: T
 
 
 def create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivity, completer: Profile) -> None:
-    """Log the completer's visit and suggest visits to everyone whose effective RSVP was yes.
+    """
+    Log the completer's visit and suggest visits to everyone whose effective RSVP was yes.
     Everyone else gets a suggestion to accept or reject, because the system can't know they actually went.
 
     Args:
@@ -307,7 +317,8 @@ def create_visit_entries_for_completed_activity(trip: Trip, activity: TripActivi
 
 
 def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = True) -> list[dict[str, Any]]:
-    """Build one render row per activity: index, votes, RSVP, permissions, visibility, leg.
+    """
+    Build one render row per activity: index, votes, RSVP, permissions, visibility, leg.
     The single source of the activities-panel context and of the external API's activity list, so the two can never diverge on what a viewer is allowed to see or manage.
 
     Args:
@@ -419,7 +430,8 @@ def build_activity_rows(trip: Trip, viewer: Profile, *, include_legs: bool = Tru
 
 
 def _attach_legs(rows: list[dict[str, Any]], viewer: Profile, *, include_legs: bool) -> None:
-    """Attach the driving leg arriving at each activity, or ``None``.
+    """
+    Attach the driving leg arriving at each activity, or ``None``.
     Legs are only computed between consecutive non-completed stops whose coordinates this viewer may see - a hidden location must not leak even as a distance.
 
     Args:
@@ -447,7 +459,8 @@ def _attach_legs(rows: list[dict[str, Any]], viewer: Profile, *, include_legs: b
 
 
 def reserve_activity_positions(trip: Trip, count: int) -> int:
-    """Lock *trip* for the rest of the current transaction and make room for *count* more activities.
+    """
+    Lock *trip* for the rest of the current transaction and make room for *count* more activities.
 
     Positions are taken after the highest existing ``order``, not the activity count, which deletions make stale.
 
@@ -484,7 +497,8 @@ def create_activity(
     status: Any = TripActivity.STATUS_PROPOSED,
     location_hidden: Any = False,
 ) -> TripActivity:
-    """Add an activity to a trip's itinerary.
+    """
+    Add an activity to a trip's itinerary.
 
     Args:
         trip: The trip to add to.
@@ -565,7 +579,8 @@ def create_activity(
 
 
 def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
-    """Resolve a nested child trip, scoped to the linking user's own trips.
+    """
+    Resolve a nested child trip, scoped to the linking user's own trips.
     Without this scoping any authenticated user could link an arbitrary trip they have no access to, and its activities (titles, coordinates, schedule) would render as ghost markers on this trip's map for every member.
 
     Args:
@@ -581,7 +596,8 @@ def _resolve_child_trip(child_trip_uuid: Any, actor: Profile) -> Trip | None:
 
 
 def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Mapping[str, Any]) -> TripActivity:
-    """Apply a presence-keyed partial update to an activity.
+    """
+    Apply a presence-keyed partial update to an activity.
     Only keys actually present in *changes* are touched, so the external API's PATCH semantics and the internal form's full-replace semantics are the same call - the internal controller simply supplies every key.
     A blank ``title`` or ``place`` from an actor who may not see the activity's location keeps the stored one: it was never shown to them.
 
@@ -640,7 +656,8 @@ def update_activity(trip: Trip, actor: Profile, activity_id: int, *, changes: Ma
 
 
 def _apply_title(activity: TripActivity, title: str | None, *, withheld: bool) -> None:
-    """Set a title the actor submitted, which is theirs from then on rather than the place's.
+    """
+    Set a title the actor submitted, which is theirs from then on rather than the place's.
 
     The edit dialog posts every field, and a title taken from a place the actor may not see reached them blank
     (``shown_activity_title``): submitting it back blank is not a request to clear a title they were never shown.
@@ -662,7 +679,8 @@ def _apply_title(activity: TripActivity, title: str | None, *, withheld: bool) -
 
 
 def _apply_place(activity: TripActivity, location: Location | None, pin: Pin | None, *, withheld: bool) -> None:
-    """Set the place the actor submitted, unless they submitted back blank a place they were never shown.
+    """
+    Set the place the actor submitted, unless they submitted back blank a place they were never shown.
 
     The edit dialog posts every field, and its place is blank for an actor who may not see the stop's location, as
     its title is. Clearing the location on that save would also stop the stop being hidden, and show them the name it
@@ -699,7 +717,8 @@ def _editable_state(activity: TripActivity) -> tuple[Any, ...]:
 
 
 def delete_activity(trip: Trip, actor: Profile, activity_id: int) -> None:
-    """Delete one activity from a trip.
+    """
+    Delete one activity from a trip.
 
     Args:
         trip: The trip owning the activity.
@@ -715,7 +734,8 @@ def delete_activity(trip: Trip, actor: Profile, activity_id: int) -> None:
 
 
 def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: float, lng: float) -> tuple[float, float]:
-    """Save a map-drag position override for one activity.
+    """
+    Save a map-drag position override for one activity.
     Only ``lat_override``/``lng_override`` change - the underlying Pin and Location coordinates are never touched.
 
     Args:
@@ -753,7 +773,8 @@ def set_activity_position(trip: Trip, actor: Profile, activity_id: int, *, lat: 
 
 
 def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetime.date) -> TripActivity:
-    """Reschedule an activity to a new date (calendar drag-and-drop).
+    """
+    Reschedule an activity to a new date (calendar drag-and-drop).
     Only the date changes - an existing time-of-day component is preserved.
 
     Args:
@@ -788,7 +809,8 @@ def move_activity(trip: Trip, actor: Profile, activity_id: int, *, date: datetim
 
 
 def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str | None) -> None:
-    """Set (or clear) the actor's vote on a proposed activity.
+    """
+    Set (or clear) the actor's vote on a proposed activity.
     An explicit value rather than a toggle: a mobile client retrying over a flaky connection would otherwise flip its own vote back off.
 
     Args:
@@ -820,7 +842,8 @@ def set_activity_vote(trip: Trip, actor: Profile, activity_id: int, *, vote: str
 
 
 def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status: object) -> TripActivity:
-    """Set an activity's status, or toggle proposed/confirmed when none is given.
+    """
+    Set an activity's status, or toggle proposed/confirmed when none is given.
 
     Args:
         trip: The trip owning the activity.
@@ -858,7 +881,8 @@ def set_activity_status(trip: Trip, actor: Profile, activity_id: int, *, status:
 
 
 def set_activity_rsvp(trip: Trip, actor: Profile, activity_id: int, *, rsvp: str | None) -> None:
-    """Set or clear the actor's RSVP override for one activity.
+    """
+    Set or clear the actor's RSVP override for one activity.
     Clearing removes the override so the activity immediately inherits the member's current trip-wide RSVP again.
 
     Args:
@@ -894,7 +918,8 @@ def set_activity_rsvp(trip: Trip, actor: Profile, activity_id: int, *, rsvp: str
 
 
 def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed_date: datetime.date | None = None) -> TripActivity:
-    """Mark an activity completed, snapping a future date back to today.
+    """
+    Mark an activity completed, snapping a future date back to today.
     Completing implies the activity was confirmed to have happened, so it expands the trip's date range the same way confirming it would - even if it was only ever "proposed" beforehand.
 
     Args:
@@ -942,7 +967,8 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
 
 
 def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None:
-    """Apply an explicit ordering to the trip's non-completed activities.
+    """
+    Apply an explicit ordering to the trip's non-completed activities.
     Only ever accepts an exact permutation of the trip's own current non-completed activities - never partial, never containing another trip's ids - so a stale or tampered order can't silently drop or hijack anything.
 
     Args:

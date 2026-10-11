@@ -158,7 +158,8 @@ class SaveArticleTests(TestCase):
             save_article(editor=self.profile, content="x")
 
     def test_rejects_both_hosts_at_once(self) -> None:
-        """The neither- and both-hosts branches share one condition (`(pin is None) == (wiki
+        """
+        The neither- and both-hosts branches share one condition (`(pin is None) == (wiki
         is None)`) - a regression that only checked for "neither" would still pass the test
         above while silently accepting a pin+wiki call it should reject."""
         location = baker.make(Location)
@@ -255,7 +256,8 @@ class PinArticleViewTests(TestCase):
         self.assertFalse(Article.objects.filter(pin=self.pin).exists())
 
     def test_meta_bar_is_gone(self) -> None:
-        """The privacy/word-count/last-edited/revision-count meta bar was removed
+        """
+        The privacy/word-count/last-edited/revision-count meta bar was removed
         as redundant now the Private Pin page always shows an Edit History tab."""
         save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
         response = self.client.get(reverse("pin.article", args=[self.pin.slug]))
@@ -265,7 +267,8 @@ class PinArticleViewTests(TestCase):
         self.assertNotContains(response, "word")
 
     def test_panel_is_always_the_editable_canvas_no_edit_click_needed(self) -> None:
-        """Notion-style: the Article tab is always the WYSIWYG canvas itself, with
+        """
+        Notion-style: the Article tab is always the WYSIWYG canvas itself, with
         no separate read-only mode and no Edit button to click through first -
         see frontend/ts/entries/article-wysiwyg.ts."""
         save_article(editor=self.profile, content="Built in 1900. Some history here.", pin=self.pin)
@@ -571,7 +574,8 @@ class ArticleImagesAreLocalTests(TestCase):
         self.assertEqual(article.content, sample)
 
     def test_the_stored_copy_is_the_one_rendering_would_have_shown(self) -> None:
-        """Rendering keys a copy by the address the browser would load; a source rewritten under another key would
+        """
+        Rendering keys a copy by the address the browser would load; a source rewritten under another key would
         make a second copy of the same picture and change nothing else."""
         sample = (
             "![a](https://img.example/x_(1).jpg) ![b](<https://img.example/sp ace.jpg>) ![c][r] "
@@ -667,7 +671,8 @@ class StoredSourceShowsWhatTheAuthorWroteTests(TestCase):
 
 
 class ArticleImageScanIsLinearTests(SimpleTestCase):
-    """Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
+    """
+    Every save runs the image scan in the request, so text built to make its patterns backtrack must not hold a
     worker. Before the fix 1,000 backticks took thirteen seconds, 2,000 four minutes, 20,000 ``<img `` fifty, and
     50,000 ``![`` ten."""
 

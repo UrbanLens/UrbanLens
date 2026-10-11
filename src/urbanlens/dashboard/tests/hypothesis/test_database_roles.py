@@ -192,7 +192,8 @@ class RefusedRolesTests(TestCase):
 
 
 class PooledRolesTests(TestCase):
-    """Behind a transaction-mode pooler the pooler is the budget, and a per-role limit counts its idle server
+    """
+    Behind a transaction-mode pooler the pooler is the budget, and a per-role limit counts its idle server
     connections rather than the tier's real concurrency (the infrastructure repo's 0.8.0 deploy findings, item 10)."""
 
     def test_the_settings_it_reads_exist(self) -> None:

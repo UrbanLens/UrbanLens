@@ -22,7 +22,8 @@ class ImportLabelCaseDedupTests(TestCase):
         self.profile = Profile.objects.get(user=baker.make(User))
 
     def _run_import(self, rows: list[dict]) -> ImportResult:
-        """Write the labels.json the importer reads, and import it.
+        """
+        Write the labels.json the importer reads, and import it.
 
         JSON, not CSV: ``_import_labels`` calls ``_read_json(data_dir, "labels.json")`` and returns immediately
         when that is empty - a CSV named labels.csv is simply not seen, so every assertion silently passes on an
@@ -55,7 +56,8 @@ class ImportLabelCaseDedupTests(TestCase):
         self.assertEqual(Label.objects.filter(profile=self.profile, name__iexact="ZzAudit Abandoned").count(), 1)
 
     def test_the_import_does_not_fail_on_the_duplicate(self) -> None:
-        """The regression that matters: an IntegrityError here aborts everything
+        """
+        The regression that matters: an IntegrityError here aborts everything
         after it, so one re-cased label would cost the user the whole import."""
         Label.objects.create(profile=self.profile, name="ZzAudit Abandoned", kind=KIND_TAG)
 

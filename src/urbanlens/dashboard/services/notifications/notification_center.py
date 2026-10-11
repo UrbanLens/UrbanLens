@@ -1,4 +1,5 @@
-"""Reading and acknowledging a user's notifications, and editing delivery preferences.
+"""
+Reading and acknowledging a user's notifications, and editing delivery preferences.
 Extracted from ``controllers.notifications`` so the bell dropdown and the external API share one implementation instead of the API re-deriving queries that already existed as view bodies."""
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ MAX_NOTIFICATION_PAGE_SIZE = 100
 
 
 class InvalidNotificationCursorError(InvalidCursorError):
-    """A :func:`list_notifications` pagination cursor didn't decode, or wasn't ours.
+    """
+    A :func:`list_notifications` pagination cursor didn't decode, or wasn't ours.
     Kept distinct from the base :class:`InvalidCursorError` so a catch site here can dispatch on this feed specifically."""
 
 
@@ -44,7 +46,8 @@ def list_notifications(
     cursor: str | None = None,
     limit: int = DEFAULT_NOTIFICATION_PAGE_SIZE,
 ) -> NotificationPage:
-    """Return one page of ``profile``'s notifications, newest first.
+    """
+    Return one page of ``profile``'s notifications, newest first.
     Ordered by ``(-created, -pk)`` so the keyset stays deterministic when several notifications share a timestamp (a batch fan-out routinely produces those).
 
     Args:
@@ -80,7 +83,8 @@ def list_notifications(
 
 
 def mark_notification_read(profile: Profile, notification_uuid: UUID | str) -> bool:
-    """Mark one of ``profile``'s own notifications read.
+    """
+    Mark one of ``profile``'s own notifications read.
     The profile filter is applied *before* the uuid match, so a uuid belonging to another profile behaves exactly like one that does not exist - the caller learns nothing about notifications that are not theirs.
 
     Args:
@@ -93,7 +97,8 @@ def mark_notification_read(profile: Profile, notification_uuid: UUID | str) -> b
 
 
 def mark_all_read(profile: Profile) -> int:
-    """Mark every one of ``profile``'s unread notifications read.
+    """
+    Mark every one of ``profile``'s unread notifications read.
 
     Args:
         profile: The owner whose notifications to clear.
@@ -105,7 +110,8 @@ def mark_all_read(profile: Profile) -> int:
 
 
 def unread_count(profile: Profile) -> int:
-    """Count ``profile``'s unread notifications.
+    """
+    Count ``profile``'s unread notifications.
 
     Args:
         profile: The owner whose notifications to count.
@@ -117,7 +123,8 @@ def unread_count(profile: Profile) -> int:
 
 
 def dismiss_notification(profile: Profile, notification_id: int | None) -> bool:
-    """Mark one of ``profile``'s notifications dismissed so it leaves the bell inbox.
+    """
+    Mark one of ``profile``'s notifications dismissed so it leaves the bell inbox.
 
     Args:
         profile: The notification's owner; another profile's row is left alone.
@@ -131,7 +138,8 @@ def dismiss_notification(profile: Profile, notification_id: int | None) -> bool:
 
 
 def inbox_notifications(profile: Profile, *, limit: int = 20) -> list[NotificationLog]:
-    """Newest non-dismissed notifications for the bell dropdown.
+    """
+    Newest non-dismissed notifications for the bell dropdown.
 
     Args:
         profile: The owner whose inbox to read.
@@ -144,7 +152,8 @@ def inbox_notifications(profile: Profile, *, limit: int = 20) -> list[Notificati
 
 
 def preference_field_names() -> tuple[str, ...]:
-    """The notification-preference stems that actually exist on the model.
+    """
+    The notification-preference stems that actually exist on the model.
     Derived by introspecting ``NotificationPreference`` for char fields whose choices are ``DeliveryPreference``, rather than repeating a list.
 
     Returns:
@@ -156,7 +165,8 @@ def preference_field_names() -> tuple[str, ...]:
 
 
 def get_preferences(profile: Profile) -> NotificationPreference:
-    """Return ``profile``'s preference row, creating the default one if absent.
+    """
+    Return ``profile``'s preference row, creating the default one if absent.
 
     Args:
         profile: The owner whose preferences to read.
@@ -169,7 +179,8 @@ def get_preferences(profile: Profile) -> NotificationPreference:
 
 
 def update_preferences(profile: Profile, changes: dict[str, Any]) -> NotificationPreference:
-    """Apply a partial preference update and return the saved row.
+    """
+    Apply a partial preference update and return the saved row.
     WhatsApp and SMS cannot be enabled without a number to deliver to, so those flags are forced off when the profile has no corresponding number - server-side, regardless of what the caller submitted.
 
     Args:
@@ -203,7 +214,8 @@ def update_preferences(profile: Profile, changes: dict[str, Any]) -> Notificatio
 
 
 def serialize_preferences(prefs: NotificationPreference) -> dict[str, dict[str, Any]]:
-    """Shape a preference row as the nested per-stem document the API serves.
+    """
+    Shape a preference row as the nested per-stem document the API serves.
 
     Args:
         prefs: The row to serialize.

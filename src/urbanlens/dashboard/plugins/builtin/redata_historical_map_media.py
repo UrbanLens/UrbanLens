@@ -52,7 +52,8 @@ class HistoricalMapMediaSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}", stale_after=stale_after)
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Turn cached map matches into gallery tiles. Sheets without a preview image are skipped.
+        """
+        Turn cached map matches into gallery tiles. Sheets without a preview image are skipped.
 
         Args:
             data: This source's cached ``{"maps": [...]}``, each a ``/maps/`` match whose catalogue record is under ``sheet``.
@@ -89,7 +90,8 @@ _FULL_VIEW_PIXELS = 1600
 
 
 def _image_service(sheet: dict) -> str:
-    """The sheet's IIIF image service base, or ``""`` when it has none.
+    """
+    The sheet's IIIF image service base, or ``""`` when it has none.
 
     ``!w,h`` sizing reads the same in IIIF Image API 2 and 3, so the base serves either version.
 

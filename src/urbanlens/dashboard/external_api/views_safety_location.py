@@ -1,4 +1,5 @@
-"""External-API endpoint for a safety check-in's live location.
+"""
+External-API endpoint for a safety check-in's live location.
 
 Reuses ``safety:read``/``safety:write`` rather than minting a dedicated scope - the containment that
 matters here is structural (this endpoint, and only this endpoint, ever touches the ``live_*``
@@ -42,7 +43,8 @@ class SafetyCheckinLocationView(SafetyCheckinViewerScopedView):
 
     @extend_schema(responses={200: SafetyCheckinLocationSerializer, 404: ErrorSerializer})
     def get(self, request: Request, checkin_slug: str) -> Response:
-        """Return the check-in owner's current shared position.
+        """
+        Return the check-in owner's current shared position.
 
         Args:
             request: The authenticated request.
@@ -59,7 +61,8 @@ class SafetyCheckinLocationView(SafetyCheckinViewerScopedView):
 
     @extend_schema(request=SafetyCheckinLocationUpdateSerializer, responses={200: SafetyCheckinLocationSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, checkin_slug: str) -> Response:
-        """Report a new fix and/or toggle sharing, as the check-in's owner.
+        """
+        Report a new fix and/or toggle sharing, as the check-in's owner.
 
         A partner resolves the same check-in through :meth:`get_viewable_checkin` but is refused here
         exactly like a nonexistent one - a 403 would confirm the slug names a real check-in belonging to

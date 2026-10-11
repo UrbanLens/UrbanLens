@@ -45,7 +45,8 @@ class UnsupportedReactionEmojiError(CommentValidationError):
 
 @dataclass(slots=True)
 class VisibleComment:
-    """One comment that survived every visibility gate, plus its visible replies.
+    """
+    One comment that survived every visibility gate, plus its visible replies.
 
     Attributes:
         comment: The underlying model instance.
@@ -60,7 +61,8 @@ class VisibleComment:
 
 
 def top_level_comment_queryset(comments_qs: QuerySet[Comment], replies_qs: QuerySet[Comment] | None = None) -> QuerySet[Comment]:
-    """Narrow a comment queryset to top-level rows with the right joins preloaded.
+    """
+    Narrow a comment queryset to top-level rows with the right joins preloaded.
     Shared so both callers page over an identically-shaped queryset - the prefetches here are what keep :func:`visible_comment_tree` from issuing a query per comment while it walks replies and reactions.
 
     Args:
@@ -94,7 +96,8 @@ def top_level_comment_queryset(comments_qs: QuerySet[Comment], replies_qs: Query
 
 
 def visible_comment_tree(comments: list[Comment], profile: Profile) -> list[VisibleComment]:
-    """Filter *comments* to what *profile* may see, resolving mentions.
+    """
+    Filter *comments* to what *profile* may see, resolving mentions.
 
     Args:
         comments: Top-level comments to filter - already ordered, prefetched (see :func:`top_level_comment_queryset`) and paginated by the caller, since the internal panel and the API page differently.
@@ -153,7 +156,8 @@ def visible_comment_tree(comments: list[Comment], profile: Profile) -> list[Visi
 
 
 def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can_view: dict[int, bool]) -> str | None:
-    """Apply gates 1-3 to one comment.
+    """
+    Apply gates 1-3 to one comment.
 
     Args:
         comment: The comment to test.
@@ -175,7 +179,8 @@ def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can
 
 
 def visible_comment_count(comments: CommentQuerySet, profile: Profile) -> int:
-    """How many of *comments* this viewer may actually see.
+    """
+    How many of *comments* this viewer may actually see.
 
     The number rendered beside a thread has to agree with the thread, or it
     reinstates the oracle gate 3 exists to close: a comment mentioning a
@@ -203,7 +208,8 @@ def visible_comment_count(comments: CommentQuerySet, profile: Profile) -> int:
 
 
 def comment_is_visible(comment: Comment, profile: Profile) -> bool:
-    """Whether *profile* may see this one comment - gates 1-3, same as the list.
+    """
+    Whether *profile* may see this one comment - gates 1-3, same as the list.
     The single-comment counterpart to :func:`visible_comment_tree`, for the endpoints that address a comment **by id** rather than rendering a thread: reacting to one, replying to one, resolving one for a detail response.
 
     Args:
@@ -223,7 +229,8 @@ def comment_is_visible(comment: Comment, profile: Profile) -> bool:
 
 
 def comment_mentions(text: str) -> list[dict[str, str]]:
-    """Resolve the ``@[Display](loc:uuid)`` tokens in *text* to display/slug pairs.
+    """
+    Resolve the ``@[Display](loc:uuid)`` tokens in *text* to display/slug pairs.
     Only safe to call on text that has already passed :func:`visible_comment_tree` - by that point the viewer has provably pinned every location mentioned, so naming them reveals nothing new.
 
     Args:
@@ -242,7 +249,8 @@ def comment_mentions(text: str) -> list[dict[str, str]]:
 
 
 def aggregate_reactions(comment: Comment, profile: Profile) -> dict[str, dict[str, Any]]:
-    """Summarize a comment's reactions from the viewer's perspective.
+    """
+    Summarize a comment's reactions from the viewer's perspective.
 
     Args:
         comment: The comment whose reactions to aggregate.
@@ -260,7 +268,8 @@ def aggregate_reactions(comment: Comment, profile: Profile) -> dict[str, dict[st
 
 
 def create_comment(*, profile: Profile, pin: Pin | None = None, wiki: Wiki | None = None, text: str, parent: Comment | None = None) -> Comment:
-    """Create a comment on a pin or a wiki.
+    """
+    Create a comment on a pin or a wiki.
 
     Args:
         profile: The authoring profile.
@@ -286,7 +295,8 @@ def create_comment(*, profile: Profile, pin: Pin | None = None, wiki: Wiki | Non
 
 
 def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
-    """Add *profile*'s reaction to *comment*, or remove it if already present.
+    """
+    Add *profile*'s reaction to *comment*, or remove it if already present.
 
     Args:
         profile: The reacting profile.

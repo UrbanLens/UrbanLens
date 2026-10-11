@@ -44,7 +44,8 @@ class WikiEditPointsHookTests(TestCase):
         self.assertEqual(consensus_profile.total_points, points.MANUAL_EDIT_POINTS * 2)
 
     def test_a_consensus_sourced_edit_is_never_double_awarded(self) -> None:
-        """A WikiEdit created with consensus_round set must NOT also trigger the manual-edit award.
+        """
+        A WikiEdit created with consensus_round set must NOT also trigger the manual-edit award.
 
         Consensus's own resolution code (services.consensus.session) awards its (larger) in-game points directly
         via `points.award_points` before creating the WikiEdit - the signal must recognize this edit already got

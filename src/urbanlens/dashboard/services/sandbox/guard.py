@@ -1,4 +1,5 @@
-"""Keeps parsing of untrusted uploads inside the container built to contain it.
+"""
+Keeps parsing of untrusted uploads inside the container built to contain it.
 So the mitigation is not detection, it is placement: decode somewhere that a successful exploit gains little."""
 
 from __future__ import annotations
@@ -33,7 +34,8 @@ _stack_logged: set[str] = set()
 
 
 class ProcessRole(StrEnum):
-    """What this process is, as declared by ``UL_PROCESS_ROLE``.
+    """
+    What this process is, as declared by ``UL_PROCESS_ROLE``.
     Only :attr:`SANDBOX` may parse untrusted uploads; the rest are named so a violation's log line says which container broke the rule rather than just "not the sandbox".
 
     Attributes:
@@ -59,7 +61,8 @@ class ProcessRole(StrEnum):
 
 
 class UntrustedParsePolicy(StrEnum):
-    """How strictly the sandbox boundary is enforced in this process.
+    """
+    How strictly the sandbox boundary is enforced in this process.
 
     Attributes:
         ALLOW: No enforcement.
@@ -72,12 +75,14 @@ class UntrustedParsePolicy(StrEnum):
 
 
 class UnsandboxedParseError(RuntimeError):
-    """An untrusted-parse operation was attempted outside the sandbox worker.
+    """
+    An untrusted-parse operation was attempted outside the sandbox worker.
     Raised rather than logged so the violation surfaces where it was introduced."""
 
 
 class DirectInferencePolicy(StrEnum):
-    """How strictly a direct, in-process AI provider call is enforced.
+    """
+    How strictly a direct, in-process AI provider call is enforced.
 
     Attributes:
         ALLOW: No enforcement.
@@ -94,7 +99,8 @@ class DirectInferenceError(RuntimeError):
 
 
 def current_role() -> ProcessRole:
-    """The role of the process making this call.
+    """
+    The role of the process making this call.
 
     Returns:
         The ``UL_PROCESS_ROLE`` value, or :attr:`ProcessRole.UNSPECIFIED` when it is unset or not a role this version knows about."""
@@ -106,7 +112,8 @@ def current_role() -> ProcessRole:
 
 
 def current_policy() -> UntrustedParsePolicy:
-    """How this process should react to an out-of-sandbox parse.
+    """
+    How this process should react to an out-of-sandbox parse.
 
     Returns:
         :attr:`UntrustedParsePolicy.DENY` unconditionally under :attr:`ProcessRole.AI`, regardless of ``UL_UNTRUSTED_PARSE_POLICY`` - the AI worker's compose env sets that variable to ``deny`` too, but the tool loop calls arbitrary, registry-dispatched..."""
@@ -120,7 +127,8 @@ def current_policy() -> UntrustedParsePolicy:
 
 
 def current_direct_inference_policy() -> DirectInferencePolicy:
-    """How this process should react to a direct, in-process AI provider call.
+    """
+    How this process should react to a direct, in-process AI provider call.
 
     Returns:
         The configured policy, defaulting to :attr:`DirectInferencePolicy.WARN` for an unset or unrecognised value - same rationale as :func:`current_policy`."""
@@ -132,7 +140,8 @@ def current_direct_inference_policy() -> DirectInferencePolicy:
 
 
 def check_direct_inference() -> None:
-    """Enforce that a direct, in-process AI provider call only happens outside a deployed role.
+    """
+    Enforce that a direct, in-process AI provider call only happens outside a deployed role.
 
     Raises:
         DirectInferenceError: The policy is ``deny`` and this process has a real ``UL_PROCESS_ROLE``."""
@@ -153,7 +162,8 @@ def check_direct_inference() -> None:
 
 @contextmanager
 def allow_untrusted_parse(reason: str) -> Iterator[None]:
-    """Permit untrusted-parse calls inside this block.
+    """
+    Permit untrusted-parse calls inside this block.
     For the cases where a parser is pointed at bytes the server itself produced - a thumbnail this app encoded, a test fixture - rather than at something a user uploaded.
 
     Args:
@@ -170,7 +180,8 @@ def allow_untrusted_parse(reason: str) -> Iterator[None]:
 
 
 def check_untrusted_parse(operation: str) -> None:
-    """Enforce the sandbox boundary for one operation, without decorating it.
+    """
+    Enforce the sandbox boundary for one operation, without decorating it.
 
     Args:
         operation: What is about to be parsed, e.g. ``"image.decode"``.
@@ -203,7 +214,8 @@ def check_untrusted_parse(operation: str) -> None:
 
 
 def untrusted_parse(operation: str) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Mark a function as handing untrusted bytes to a parser.
+    """
+    Mark a function as handing untrusted bytes to a parser.
     Decorated functions run only in the sandbox worker (or under an explicit :func:`allow_untrusted_parse` block).
 
     Args:

@@ -118,7 +118,8 @@ _SETTLED_EXTRACTION_REFUSALS: frozenset[str] = frozenset({REASON_NOT_EXTRACTABLE
 
 
 class PropertyRecordsUnavailableError(GatewayRequestError):
-    """Raised when REData reports no record is available, or the request to it failed.
+    """
+    Raised when REData reports no record is available, or the request to it failed.
 
     Attributes:
         reason: REData's ``REASON_*`` string when it responded with a structured error (e.g. ``"manual_only"``, ``"no_data_found"``); ``REASON_SOURCE_ERROR`` for anything REData didn't cleanly report itself (a network failure, a malformed response, or a...
@@ -148,7 +149,8 @@ class PropertyRecordsBusyError(PropertyRecordsUnavailableError, UpstreamBusyErro
 
 
 class PropertyRecordsComputingError(PropertyRecordsBusyError):
-    """REData is computing this parcel's answer in the background and will have it after ``retry_after`` seconds.
+    """
+    REData is computing this parcel's answer in the background and will have it after ``retry_after`` seconds.
 
     Not an outage of REData or a source: a caller neither caches the silence nor settles for a fallback's answer, and
     asks again once the wait is over.
@@ -158,7 +160,8 @@ class PropertyRecordsComputingError(PropertyRecordsBusyError):
 
 
 def _computing_reason(reason: str, body: Mapping[str, Any]) -> str | None:
-    """Why a 503 says REData is still computing the answer, or None when it does not say so.
+    """
+    Why a 503 says REData is still computing the answer, or None when it does not say so.
 
     Args:
         reason: The body's ``error``.
@@ -175,7 +178,8 @@ def _computing_reason(reason: str, body: Mapping[str, Any]) -> str | None:
 
 
 def _computing_wait(body: Mapping[str, Any]) -> int:
-    """The wait a computing 503's body names, in seconds.
+    """
+    The wait a computing 503's body names, in seconds.
 
     Args:
         body: REData's 503 body.
@@ -191,7 +195,8 @@ def _computing_wait(body: Mapping[str, Any]) -> int:
 
 
 def _refused(response: requests.Response) -> PropertyRecordsBusyError:
-    """The error for an endpoint REData refused this key, held off for as long as the breaker holds the endpoint.
+    """
+    The error for an endpoint REData refused this key, held off for as long as the breaker holds the endpoint.
 
     Args:
         response: REData's 401 or 403.
@@ -203,7 +208,8 @@ def _refused(response: requests.Response) -> PropertyRecordsBusyError:
 
 
 def _download_failure(response: requests.Response) -> PropertyRecordsUnavailableError:
-    """The error for a request REData answered with a status its caller does not handle itself.
+    """
+    The error for a request REData answered with a status its caller does not handle itself.
 
     Args:
         response: REData's response.
@@ -221,7 +227,8 @@ def _download_failure(response: requests.Response) -> PropertyRecordsUnavailable
 
 
 def _hold_wait(retry_after: object) -> int:
-    """How long to leave a resource REData is holding, from the ``retry_after`` of its ``unresolved`` answer.
+    """
+    How long to leave a resource REData is holding, from the ``retry_after`` of its ``unresolved`` answer.
 
     Args:
         retry_after: REData's ``retry_after``: the time the hold ends, as an ISO 8601 timestamp, or a number of seconds. Anything else is unread.
@@ -253,7 +260,8 @@ def _seconds_from_now(value: object) -> float | None:
 
 
 def _named_wait(response: requests.Response) -> int | None:
-    """The wait a 503 named in its ``Retry-After`` header, or None.
+    """
+    The wait a 503 named in its ``Retry-After`` header, or None.
 
     Args:
         response: REData's 503.
@@ -265,7 +273,8 @@ def _named_wait(response: requests.Response) -> int | None:
 
 
 def parcel_unanswered_sources(body: Mapping[str, Any]) -> list[Any] | None:
-    """The tiers REData could not hear from for a parcel, as its lookup body says.
+    """
+    The tiers REData could not hear from for a parcel, as its lookup body says.
 
     The top-level ``complete`` and ``sources`` (each entry ``{tier, status, host, http_status, message}``, as a failed
     source in the lookup's 503) say it when present; ``record_payload.unanswered_sources`` is the fallback, for a REData
@@ -290,7 +299,8 @@ def parcel_unanswered_sources(body: Mapping[str, Any]) -> list[Any] | None:
 
 
 def unanswered_tiers(payload: Mapping[str, Any]) -> frozenset[int]:
-    """The REData tier numbers (1 is the county GIS parcel layer) a parcel payload lacks.
+    """
+    The REData tier numbers (1 is the county GIS parcel layer) a parcel payload lacks.
 
     Args:
         payload: A :meth:`RedataGateway.lookup_parcel` payload.
@@ -319,7 +329,8 @@ def _parcel_lookup_share_seconds(body: Mapping[str, Any]) -> int:
 
 
 def _demographics_share_seconds(body: Any) -> int:
-    """How long a parcel's demographics answer is shared.
+    """
+    How long a parcel's demographics answer is shared.
 
     Briefly when REData says the answer is partial or degraded, or answered the tract question at county level, which it
     does when it cannot resolve the tract (as before its tract layer has synced). An older REData sends no level.
@@ -350,7 +361,8 @@ def _failure_memo(exc: PropertyRecordsUnavailableError) -> dict[str, Any]:
 
 
 def _remembered_failure(memo: Mapping[str, Any]) -> PropertyRecordsUnavailableError:
-    """The error a :func:`_failure_memo` was taken from, as a caller classifies it.
+    """
+    The error a :func:`_failure_memo` was taken from, as a caller classifies it.
 
     Args:
         memo: The remembered failure.
@@ -372,7 +384,8 @@ UNANSWERED_SOURCES_HEADER = "X-REData-Unanswered-Sources"
 
 
 def _provider_results(body: Any) -> LocationContextEnvelope:
-    """A near-a-parcel answer in REData's provider envelope, keeping whether every provider answered.
+    """
+    A near-a-parcel answer in REData's provider envelope, keeping whether every provider answered.
 
     Args:
         body: REData's ``{count, complete, results, providers}`` body.
@@ -393,7 +406,8 @@ def _provider_results(body: Any) -> LocationContextEnvelope:
 
 @dataclass(slots=True, frozen=True)
 class ParcelBuildings:
-    """A parcel's buildings as REData answered them.
+    """
+    A parcel's buildings as REData answered them.
 
     Attributes:
         buildings: One dict per physical building.
@@ -406,7 +420,8 @@ class ParcelBuildings:
 
 @dataclass(slots=True, frozen=True)
 class ParcelBoundaries:
-    """A parcel's boundary candidates as REData answered them.
+    """
+    A parcel's boundary candidates as REData answered them.
 
     Attributes:
         candidates: The scored candidates, as :meth:`RedataGateway.lookup_boundaries` describes them.
@@ -419,7 +434,8 @@ class ParcelBoundaries:
 
 
 def _unanswered_header(headers: Mapping[str, Any]) -> tuple[str, ...]:
-    """The sources a parcel answer's ``X-REData-Unanswered-Sources`` header names.
+    """
+    The sources a parcel answer's ``X-REData-Unanswered-Sources`` header names.
 
     Args:
         headers: The response headers.
@@ -456,7 +472,8 @@ class RedataGateway(Gateway):
 
     @staticmethod
     def _send(send: Callable[..., requests.Response], url: str, **kwargs: Any) -> requests.Response:
-        """Make one request, turning a failure to make it into this gateway's own error.
+        """
+        Make one request, turning a failure to make it into this gateway's own error.
 
         Args:
             send: The session method to call.
@@ -480,7 +497,8 @@ class RedataGateway(Gateway):
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
 
     def _get_json(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
-        """GET one REData endpoint and return its decoded JSON body.
+        """
+        GET one REData endpoint and return its decoded JSON body.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
@@ -495,7 +513,8 @@ class RedataGateway(Gateway):
         return self._get_json_and_headers(path, params=params)[0]
 
     def _get_json_and_headers(self, path: str, *, params: dict[str, Any] | None = None) -> tuple[Any, Mapping[str, str]]:
-        """GET one REData endpoint and return its decoded JSON body with the response headers.
+        """
+        GET one REData endpoint and return its decoded JSON body with the response headers.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
@@ -547,7 +566,8 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def _get_pages(self, path: str) -> list[dict[str, Any]]:
-        """Every row of a page-number-paginated REData list, up to :data:`MAX_PARCEL_ROW_PAGES` pages.
+        """
+        Every row of a page-number-paginated REData list, up to :data:`MAX_PARCEL_ROW_PAGES` pages.
 
         Pages are asked for by number on this gateway's own host: ``next`` names whatever host REData saw the request
         on, and following it would hand the API key to that host.
@@ -594,7 +614,8 @@ class RedataGateway(Gateway):
             raise PropertyRecordsBusyError(exc.reason, str(exc), retry_after=_UNSETTLED_PARCEL_RETRY_SECONDS, links=exc.links) from exc
 
     def lookup_parcel(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> dict[str, Any]:
-        """Look up (retrieving/refreshing as needed) the parcel record at a coordinate.
+        """
+        Look up (retrieving/refreshing as needed) the parcel record at a coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -631,7 +652,8 @@ class RedataGateway(Gateway):
         return payload
 
     def lookup_parcel_uuid(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> str | None:
-        """Resolve the REData parcel uuid at a coordinate, for uuid-keyed endpoints.
+        """
+        Resolve the REData parcel uuid at a coordinate, for uuid-keyed endpoints.
 
         Args:
             latitude: WGS-84 latitude.
@@ -650,7 +672,8 @@ class RedataGateway(Gateway):
         return body.get("uuid") or None
 
     def lookup_coverage(self, parcel_uuid: str) -> dict[str, dict[str, Any]]:
-        """Return which of REData's supplementary endpoints are worth calling for a parcel.
+        """
+        Return which of REData's supplementary endpoints are worth calling for a parcel.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -665,7 +688,8 @@ class RedataGateway(Gateway):
         return dict(body) if isinstance(body, dict) else {}
 
     def lookup_demographics(self, parcel_uuid: str) -> dict[str, Any] | None:
-        """Return neighbourhood demographics for the census tract containing a parcel, shared by every location on it.
+        """
+        Return neighbourhood demographics for the census tract containing a parcel, shared by every location on it.
 
         An answer is shared as long as a parcel lookup is (briefly when partial or coarser, see
         :func:`_demographics_share_seconds`); a failure is remembered briefly, or for as long as REData asked, and raised
@@ -696,7 +720,8 @@ class RedataGateway(Gateway):
         return dict(demographics) if isinstance(demographics, dict) else None
 
     def lookup_national_parks(self, parcel_uuid: str) -> dict[str, Any]:
-        """Return the NPS park unit containing a parcel (if any), plus nearby ones.
+        """
+        Return the NPS park unit containing a parcel (if any), plus nearby ones.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -711,7 +736,8 @@ class RedataGateway(Gateway):
         return dict(body) if isinstance(body, dict) else {}
 
     def lookup_land_use_areas(self, parcel_uuid: str) -> dict[str, dict[str, Any]]:
-        """Return the boundary of each Census Special Land Use Area a parcel's coordinate falls inside.
+        """
+        Return the boundary of each Census Special Land Use Area a parcel's coordinate falls inside.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -731,7 +757,8 @@ class RedataGateway(Gateway):
         return {str(category): dict(area) for category, area in body.items() if isinstance(area, dict)}
 
     def lookup_assessments(self, parcel_uuid: str) -> LocationContextEnvelope:
-        """Return annual assessor valuations near a parcel.
+        """
+        Return annual assessor valuations near a parcel.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -746,7 +773,8 @@ class RedataGateway(Gateway):
         return _provider_results(self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/"))
 
     def lookup_liens(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return recorded liens and fines against a parcel.
+        """
+        Return recorded liens and fines against a parcel.
         ``status`` is free text - publishers spell it inconsistently and REData does not normalise it - so treat it as a label to show, not a value to branch on.
 
         Args:
@@ -761,7 +789,8 @@ class RedataGateway(Gateway):
         return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/liens/")
 
     def lookup_owners(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return every owner REData has linked to a parcel, former ones included.
+        """
+        Return every owner REData has linked to a parcel, former ones included.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -776,7 +805,8 @@ class RedataGateway(Gateway):
         return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/owners/")
 
     def lookup_sales(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return the sales REData has recorded against a parcel across every retrieval, newest first.
+        """
+        Return the sales REData has recorded against a parcel across every retrieval, newest first.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -790,7 +820,8 @@ class RedataGateway(Gateway):
         return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/sales/")
 
     def lookup_tax_payments(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """``delinquent`` is the publisher's own determination rather than something derived from ``paid`` - a row can be unpaid but not yet delinquent, since bills are unpaid before their due date.
+        """
+        ``delinquent`` is the publisher's own determination rather than something derived from ``paid`` - a row can be unpaid but not yet delinquent, since bills are unpaid before their due date.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -804,7 +835,8 @@ class RedataGateway(Gateway):
         return self._get_pages(f"/api/v1/parcels/{parcel_uuid}/tax-payments/")
 
     def lookup_sale_records(self, parcel_uuid: str) -> LocationContextEnvelope:
-        """Return supplementary recorded sales near a parcel.
+        """
+        Return supplementary recorded sales near a parcel.
         Rows are **near-parcel** - ``parcel`` is null and nothing links a row to a specific parcel - so callers must match by address (or a raw PIN in ``attributes``) before attributing a sale to a property.
 
         Args:
@@ -820,7 +852,8 @@ class RedataGateway(Gateway):
         return _provider_results(self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/"))
 
     def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
-        """Return cached LoopNet commercial listings for a parcel.
+        """
+        Return cached LoopNet commercial listings for a parcel.
 
         Args:
             parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
@@ -834,7 +867,8 @@ class RedataGateway(Gateway):
         return dict(self._get_json(f"/api/v1/parcels/{parcel_uuid}/listings/") or {})
 
     def download_listing_photo(self, listing_uuid: str, photo_id: int) -> tuple[bytes, str]:
-        """Download one LoopNet listing photo's actual file bytes.
+        """
+        Download one LoopNet listing photo's actual file bytes.
 
         Args:
             listing_uuid: The listing's REData uuid (from :meth:`lookup_listings`).
@@ -862,7 +896,8 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def lookup_buildings(self, parcel_uuid: str) -> list[dict[str, Any]]:
-        """Return every building REData can find for a parcel, reconciled across sources.
+        """
+        Return every building REData can find for a parcel, reconciled across sources.
         Never fetches/caches a *new* parcel - this only reads buildings for a parcel REData already resolved (see :meth:`lookup_parcel_uuid`).
 
         Args:
@@ -877,7 +912,8 @@ class RedataGateway(Gateway):
         return self.lookup_parcel_buildings(parcel_uuid).buildings
 
     def lookup_parcel_buildings(self, parcel_uuid: str) -> ParcelBuildings:
-        """Every building REData can find for a parcel, and which of its sources did not answer.
+        """
+        Every building REData can find for a parcel, and which of its sources did not answer.
 
         Args:
             parcel_uuid: The parcel's REData uuid.
@@ -892,7 +928,8 @@ class RedataGateway(Gateway):
         return ParcelBuildings(list(body) if isinstance(body, list) else [], _unanswered_header(headers))
 
     def resolve_building_ref(self, ref: str) -> dict[str, Any]:
-        """Map a building ref REData once served to its stable ``overture:<gers_id>``.
+        """
+        Map a building ref REData once served to its stable ``overture:<gers_id>``.
 
         Transitional, as REData's endpoint is (its P98): used only to move places and floorplans off Overture's
         legacy content-hash refs, and removed with them. A resolved answer is kept for a day, since a served hash
@@ -918,7 +955,8 @@ class RedataGateway(Gateway):
         return body
 
     def lookup_boundaries(self, parcel_uuid: str) -> ParcelBoundaries:
-        """Return every boundary candidate REData can find for a parcel, scored, and which of its sources did not answer.
+        """
+        Return every boundary candidate REData can find for a parcel, scored, and which of its sources did not answer.
 
         Args:
             parcel_uuid: The parcel's REData uuid.
@@ -933,7 +971,8 @@ class RedataGateway(Gateway):
         return ParcelBoundaries(list(body) if isinstance(body, list) else [], _unanswered_header(headers))
 
     def lookup_floorplans(self, parcel_uuid: str, *, building_ref: str = "", on_date: str | None = None) -> list[dict[str, Any]]:
-        """List a parcel's floorplan version summaries, resolved by date.
+        """
+        List a parcel's floorplan version summaries, resolved by date.
         No floorplan provider exists in REData yet, so an empty list is the expected answer for a long time - absence is quiet.
 
         Args:
@@ -958,7 +997,8 @@ class RedataGateway(Gateway):
         return list(results) if isinstance(results, list) else []
 
     def lookup_floorplan_document(self, floorplan_uuid: str) -> dict[str, Any] | None:
-        """Fetch one floorplan version's full nested document.
+        """
+        Fetch one floorplan version's full nested document.
 
         Args:
             floorplan_uuid: The plan version's uuid, from a summary row.
@@ -973,7 +1013,8 @@ class RedataGateway(Gateway):
         return body if isinstance(body, dict) else None
 
     def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200, provider: str | None = None) -> list[dict[str, Any]]:
-        """Find (fetching/caching as needed) cultural/historic resources near a coordinate.
+        """
+        Find (fetching/caching as needed) cultural/historic resources near a coordinate.
         Only the fast, unauthenticated layer-query tier runs here - a resource's full detail record (including its attachments) is a separate, un-eager step, see :meth:`fetch_cultural_resource_detail`.
 
         Args:
@@ -1010,7 +1051,8 @@ class RedataGateway(Gateway):
         return rows
 
     def fetch_cultural_resource_detail(self, resource_uuid: str) -> dict[str, Any]:
-        """Fetch a CRIS resource's full detail record and attachments, shared by every panel asking about it.
+        """
+        Fetch a CRIS resource's full detail record and attachments, shared by every panel asking about it.
 
         Every building on a campus matches the campus's own CRIS record, so each building's panel asks for it.
 
@@ -1026,7 +1068,8 @@ class RedataGateway(Gateway):
         return coalesced(f"redata:cris-detail:{resource_uuid}", lambda: self._fetch_cultural_resource_detail_now(resource_uuid), ttl=_CULTURAL_RESOURCE_SHARE_SECONDS)
 
     def _fetch_cultural_resource_detail_now(self, resource_uuid: str) -> dict[str, Any]:
-        """Fetch (and cache onto the resource) a CRIS resource's full detail record and attachments.
+        """
+        Fetch (and cache onto the resource) a CRIS resource's full detail record and attachments.
         REData answers with an envelope - ``{"detail_status": ..., "resource": {...}}`` - because "the source was asked and genuinely publishes nothing deeper" and "detail was retrieved" both leave a resource whose ``detail_retrieved_at`` is set.
 
         Args:
@@ -1068,7 +1111,8 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def queue_cultural_resource_details(self, latitude: float, longitude: float, *, radius_meters: float) -> dict[str, Any]:
-        """Ask REData to fetch the detail record of every resource near a coordinate, in the background.
+        """
+        Ask REData to fetch the detail record of every resource near a coordinate, in the background.
         REData paces the fetches against each provider's own rate budget, so a site with 100+ resources is warmed without one caller spending that budget inline; later lookups then carry each resource's ``attachments``.
 
         Args:
@@ -1099,7 +1143,8 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def download_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int) -> tuple[bytes, str]:
-        """Download one CRIS attachment/photo's actual file bytes.
+        """
+        Download one CRIS attachment/photo's actual file bytes.
 
         Args:
             resource_uuid: The resource's REData uuid.
@@ -1127,7 +1172,8 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def extract_cultural_resource_attachment(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
-        """OCR/AI-extract a document attachment, shared by every panel asking about it.
+        """
+        OCR/AI-extract a document attachment, shared by every panel asking about it.
 
         Args:
             resource_uuid: The resource's REData uuid.
@@ -1159,7 +1205,8 @@ class RedataGateway(Gateway):
             raise
 
     def _extract_cultural_resource_attachment_now(self, resource_uuid: str, attachment_id: int, *, timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
-        """OCR/AI-extract a ``document``-kind attachment's fields and any embedded photos.
+        """
+        OCR/AI-extract a ``document``-kind attachment's fields and any embedded photos.
 
         REData extracts only a document whose file it holds, and fetches the file from CRIS only when it is downloaded,
         so a refusal is answered by downloading it and asking once more.
@@ -1210,7 +1257,8 @@ class RedataGateway(Gateway):
         raise _download_failure(response)
 
     def download_extracted_image(self, resource_uuid: str, attachment_id: int, image_id: int) -> tuple[bytes, str]:
-        """Download one image extracted from a document attachment's actual file bytes.
+        """
+        Download one image extracted from a document attachment's actual file bytes.
 
         Args:
             resource_uuid: The resource's REData uuid.

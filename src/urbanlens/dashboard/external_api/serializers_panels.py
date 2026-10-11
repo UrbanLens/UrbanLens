@@ -1,4 +1,5 @@
-"""Serializers for the external API's panel domain.
+"""
+Serializers for the external API's panel domain.
 
 Detail body is the per-kind ``PanelSource.api_payload()`` dict, passed through unserialized.
 """

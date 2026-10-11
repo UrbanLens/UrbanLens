@@ -30,7 +30,8 @@ class TheStatementDoesNotGrowWithTheAccountTests(TestCase):
         self.pin = baker.make(Pin, profile=self.profile, location=self.location)
 
     def _vote_irrelevant(self, count: int) -> None:
-        """Mark *count* distinct gallery items as not relevant.
+        """
+        Mark *count* distinct gallery items as not relevant.
 
         Args:
             count: How many marks to create.
@@ -50,7 +51,8 @@ class TheStatementDoesNotGrowWithTheAccountTests(TestCase):
         )
 
     def _payload_sql(self) -> str:
-        """The statement the map sends to build one page of payloads.
+        """
+        The statement the map sends to build one page of payloads.
 
         Returns:
             The longest statement the page issued, which is the payload query.

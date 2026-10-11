@@ -17,7 +17,8 @@ class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet["PinMarkup"]):
     """QuerySet for PinMarkup map annotations (lines, arrows, text labels)."""
 
     def bulk_create(self, objs, *args, **kwargs):
-        """Create the items, coercing their colours the way ``save`` would.
+        """
+        Create the items, coercing their colours the way ``save`` would.
         ``bulk_create`` issues raw SQL and never calls ``save``, so the model-level colour validation - the thing standing between a stored string and the client's ``innerHTML`` - does not apply to it.
 
         Args:
@@ -69,7 +70,8 @@ class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet["MarkupMap"]):
         return self.filter(cloned_from=source)
 
     def unattached(self) -> Self:
-        """Maps not linked from any host model (drafts / leftovers).
+        """
+        Maps not linked from any host model (drafts / leftovers).
 
         Returns:
             Maps with no safety check-in, comment, trip comment, or visit

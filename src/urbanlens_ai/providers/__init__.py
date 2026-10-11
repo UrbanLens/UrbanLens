@@ -14,7 +14,8 @@ __all__ = ["ProviderAdapter", "ProviderError", "ProviderInputRefusedError", "bui
 
 
 def build_adapter(provider: Provider, config: InferenceConfig) -> ProviderAdapter:
-    """Construct the adapter for ``provider``, using this service's own credentials.
+    """
+    Construct the adapter for ``provider``, using this service's own credentials.
 
     Args:
         provider: Which provider to build an adapter for.

@@ -1,4 +1,5 @@
-"""A link the Wayback Machine could not archive is asked about again later (P308).
+"""
+A link the Wayback Machine could not archive is asked about again later (P308).
 
 The archive task asked once: a lookup that timed out or met a 429 or 5xx, or a save that failed, was logged and
 dropped, and nothing looked for links still without a snapshot. On dev, 86 links naming 63 URLs had none; asked

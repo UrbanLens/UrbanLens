@@ -12,7 +12,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 
 class FriendsPageRowCostTests(RenderTimeScalingMixin, TestCase):
-    """The full friends page renders every accepted connection with no cap or slice.
+    """
+    The full friends page renders every accepted connection with no cap or slice.
 
     P69 left it that way on the theory that friend count bounds it regardless of account age, not
     because a row was measured and found cheap - and each row's ``area`` field is an
@@ -27,7 +28,8 @@ class FriendsPageRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Add *count* more accepted friends, each with a populated (encrypted) area field.
+        """
+        Add *count* more accepted friends, each with a populated (encrypted) area field.
 
         Args:
             count: How many rows to add.

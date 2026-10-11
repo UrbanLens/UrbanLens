@@ -1,4 +1,5 @@
-"""A parcel REData answers as partial is not settled: the boundary waits, the body is shared briefly, the cache keeps it an hour.
+"""
+A parcel REData answers as partial is not settled: the boundary waits, the body is shared briefly, the cache keeps it an hour.
 
 REData answers a parcel one of its tiers could not reach with a top-level ``complete: false`` and the tier under
 ``sources`` (``{tier, status, host, http_status, message}``), and holds it only briefly before asking that tier again.

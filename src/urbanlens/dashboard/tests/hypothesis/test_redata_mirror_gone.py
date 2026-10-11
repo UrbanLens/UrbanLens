@@ -1,4 +1,5 @@
-"""REData media rows and street-view captures whose source image is gone never reach a gallery, carousel or copy (P325).
+"""
+REData media rows and street-view captures whose source image is gone never reach a gallery, carousel or copy (P325).
 
 REData marks such a row ``attributes.mirror_gone`` (``{"status", "reason", "at"}``, REData
 ``parcels/services/mirror_state.py``): its ``thumbnail_url`` does not load, REData never mirrors it, and its download

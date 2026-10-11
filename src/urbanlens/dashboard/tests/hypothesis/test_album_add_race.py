@@ -33,7 +33,8 @@ class AlbumAddRaceTests(TestCase):
         )
 
     def _add_with_stale_read(self, images: list[Image]) -> int:
-        """Run the add as if another process inserted between our read and our write.
+        """
+        Run the add as if another process inserted between our read and our write.
 
         Patching ``for_album`` to see nothing reproduces exactly that window without
         needing real concurrency, which a single-connection test cannot produce.

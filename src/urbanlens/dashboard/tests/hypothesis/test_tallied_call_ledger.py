@@ -1,4 +1,5 @@
-"""A tallied service is held to its limits on the shared cache's counters, and its calls still reach the ledger.
+"""
+A tallied service is held to its limits on the shared cache's counters, and its calls still reach the ledger.
 
 ``basemap_vendor_tiles`` is the service these were written for: one call per uncached tile, which on the per-call
 ledger cost a locked ``ApiRateLimit`` row and an ``ApiCallLog`` insert each. Every call here goes through the real
@@ -85,7 +86,8 @@ class TheTileServiceIsTalliedTests(SimpleTestCase):
         self.assertIs(SERVICE_REGISTRY[_SERVICE].ledger, CallLedger.TALLIED)
 
     def test_no_tallied_service_carries_a_budget_that_is_money(self) -> None:
-        """The counters' windows are fixed, so a thirty-day budget can reach twice its limit across a boundary: fine
+        """
+        The counters' windows are fixed, so a thirty-day budget can reach twice its limit across a boundary: fine
         for politeness, not for a bill."""
         for name, defaults in SERVICE_REGISTRY.items():
             if defaults.ledger is CallLedger.TALLIED:
@@ -136,7 +138,8 @@ class TheCountersHoldTheLimitTests(_TalliedTestCase):
         self.assertEqual(wire.call_count, 3)
 
     def test_a_call_refused_by_the_day_does_not_use_up_the_minute(self) -> None:
-        """Otherwise a full day would also fill every minute it is refused in, and the refusals would be counted
+        """
+        Otherwise a full day would also fill every minute it is refused in, and the refusals would be counted
         against a window no call was made in."""
         self.limits(calls_per_minute=2, calls_per_day=1)
 
@@ -330,7 +333,8 @@ class ACounterOutageRefusesTests(_TalliedTestCase):
         self.assertEqual([query["sql"] for query in queries.captured_queries], [])
 
     def test_an_outcome_the_store_could_not_take_rides_along_with_the_next(self) -> None:
-        """The store can go between admitting a call and recording it; the call was counted, and is recorded late
+        """
+        The store can go between admitting a call and recording it; the call was counted, and is recorded late
         rather than written to the database on the request."""
         with vendor_wire():
             with mock.patch.object(counters, "add_to_tally", side_effect=CounterUnavailableError("store down")):
@@ -444,7 +448,8 @@ class TheRollUpKeepsSpendVisibleTests(_TalliedTestCase):
         self.assertEqual(ApiCallLog.objects.filter(service=_SERVICE).aggregate(total=Sum("calls"))["total"], 6)
 
     def test_a_tally_whose_rows_cannot_be_built_is_put_back(self) -> None:
-        """The tally is out of the store before its rows exist, so building them has to be covered too.
+        """
+        The tally is out of the store before its rows exist, so building them has to be covered too.
 
         Raised as an error the task does not expect, so it still fails loudly; nothing is lost either way.
         """

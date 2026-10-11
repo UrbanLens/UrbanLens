@@ -1,4 +1,5 @@
-"""This deployment's egress policy, applied at the point every external call passes through (D26).
+"""
+This deployment's egress policy, applied at the point every external call passes through (D26).
 
 The rules are in :mod:`urbanlens.UrbanLens.egress`. This module reads the settings they take, finds each
 service's :class:`~urbanlens.UrbanLens.egress.EgressCategory`, and refuses a call the environment does
@@ -48,7 +49,8 @@ LOG_INTERVAL_SECONDS = 600.0
 
 @dataclass(frozen=True, slots=True)
 class Unledgered:
-    """An external path that does not go through a gateway's rate-limited session or an ``api_call_slot``.
+    """
+    An external path that does not go through a gateway's rate-limited session or an ``api_call_slot``.
 
     Attributes:
         category: How it is classified.
@@ -125,7 +127,8 @@ _AI_PROVIDER_SERVICES = frozenset(f"ai_{provider}" for provider in HOSTED_AI_PRO
 
 
 def ai_provider_service(provider: str) -> str:
-    """The service key a hosted AI provider is classified, overridden and logged under.
+    """
+    The service key a hosted AI provider is classified, overridden and logged under.
 
     Args:
         provider: A provider name, e.g. ``"cloudflare"``.
@@ -144,7 +147,8 @@ def current_environment() -> str:
 
 
 def environment_share() -> float:
-    """This deployment's share of every ``quota`` and ``billed`` budget.
+    """
+    This deployment's share of every ``quota`` and ``billed`` budget.
 
     Returns:
         ``UL_ENVIRONMENT_SHARE`` when set, else the environment's default. The test suite takes all of it
@@ -179,7 +183,8 @@ def forget_categories() -> None:
 
 
 def explicit_category(service: str) -> EgressCategory | None:
-    """How ``service`` is classified, or None when nothing classifies it.
+    """
+    How ``service`` is classified, or None when nothing classifies it.
 
     Args:
         service: A rate-limiter service key, or a key from :data:`UNLEDGERED_SERVICES`.
@@ -229,7 +234,8 @@ def _provider_override_share() -> float:
 
 
 def egress_decision(service: str) -> EgressDecision:
-    """This deployment's terms for ``service``.
+    """
+    This deployment's terms for ``service``.
 
     Where hosted AI is refused (development, local), an AI *feature* nobody named is still let start when a provider
     has been opted in: which provider a feature calls is the site's setting, known only when it calls, so the
@@ -258,7 +264,8 @@ def service_share(service: str) -> float:
 
 
 def direct_fallback_permitted() -> bool:
-    """Whether a REData-first chain may go on to a direct ``quota`` or ``billed`` provider after REData fails.
+    """
+    Whether a REData-first chain may go on to a direct ``quota`` or ``billed`` provider after REData fails.
 
     Only production: anywhere else a REData failure is reported as unavailable, so a busy REData does not
     push its load onto the direct provider from an address production shares.
@@ -267,7 +274,8 @@ def direct_fallback_permitted() -> bool:
 
 
 def hosted_basemap_api_key() -> str:
-    """The Protomaps key this deployment's browsers fetch the street and dark tiles with: production's and staging's (D26).
+    """
+    The Protomaps key this deployment's browsers fetch the street and dark tiles with: production's and staging's (D26).
 
     The key reaches the page, which is how Protomaps keys are meant to be used: their dashboard restricts the origins
     it answers. It is still never logged here.
@@ -300,7 +308,8 @@ _REFUSALS: ContextVar[list[str] | None] = ContextVar("egress_refusals", default=
 
 @contextmanager
 def collect_refusals() -> Iterator[list[str]]:
-    """Record every service the environment refuses while the block runs, however the caller handled it.
+    """
+    Record every service the environment refuses while the block runs, however the caller handled it.
 
     A panel source that swallows a refusal and returns empty-handed is then still told apart from one that
     found nothing.
@@ -321,7 +330,8 @@ def collect_refusals() -> Iterator[list[str]]:
 
 
 def require_egress(service: str) -> EgressDecision:
-    """Refuse a call this environment does not allow, before anything is sent or recorded.
+    """
+    Refuse a call this environment does not allow, before anything is sent or recorded.
 
     Args:
         service: The rate-limiter service key.
@@ -354,7 +364,8 @@ def require_egress(service: str) -> EgressDecision:
 
 
 def require_ai_provider(provider: str) -> EgressDecision:
-    """Refuse a request this environment may not send to a hosted AI provider, before anything leaves the process.
+    """
+    Refuse a request this environment may not send to a hosted AI provider, before anything leaves the process.
 
     The last gate on an AI call: every feature's slot has asked for the feature already, but a feature runs on
     whichever provider the site's AI settings pick, and a call that goes through no slot reaches the provider all the
@@ -401,7 +412,8 @@ GATED_BACKGROUND_TASKS: dict[str, set[str]] = {}
 
 
 def external_background_task(entry: str) -> Callable[[Callable[P, R]], Callable[P, R | None]]:
-    """Mark a scheduled task as reaching outside, and skip it where background egress is off.
+    """
+    Mark a scheduled task as reaching outside, and skip it where background egress is off.
 
     Beat already leaves such an entry out of the schedule off production. This stops a run that got onto a queue
     some other way: a sweep that re-enqueues itself, a chain, or an operator's ``.delay()``.

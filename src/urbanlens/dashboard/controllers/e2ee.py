@@ -1,4 +1,5 @@
-"""Endpoints for direct-message end-to-end encryption key storage.
+"""
+Endpoints for direct-message end-to-end encryption key storage.
 
 Blobs are encrypted client-side; views validate shape and store.
 """
@@ -52,7 +53,8 @@ RESET_CONFIRMATION = "RESET"
 
 
 def _get_profile(request: HttpRequest | Request) -> Profile:
-    """Return (creating if needed) the requesting user's profile.
+    """
+    Return (creating if needed) the requesting user's profile.
 
     Args:
         request: The authenticated request.
@@ -65,7 +67,8 @@ def _get_profile(request: HttpRequest | Request) -> Profile:
 
 
 def _json_body(request: HttpRequest | Request) -> dict[str, Any] | None:
-    """Parse the request body as a JSON object.
+    """
+    Parse the request body as a JSON object.
 
     Args:
         request: The incoming request.
@@ -88,7 +91,8 @@ def _json_body(request: HttpRequest | Request) -> dict[str, Any] | None:
 
 
 def _require_current_password_proof(user: Any, data: dict[str, Any]) -> Response | None:
-    """Require proof of the current login credential for password accounts.
+    """
+    Require proof of the current login credential for password accounts.
 
     Load-bearing under credential authentication, not just for sessions: a stolen ``messages:write``
     OAuth2 token must not be enough on its own to re-key someone's account.
@@ -126,7 +130,8 @@ class E2EELoginParamsView(APIView):
 
     @extend_schema(exclude=True)
     def get(self, request: Request) -> Response:
-        """Return the auth mode and salt for one login identifier.
+        """
+        Return the auth mode and salt for one login identifier.
 
         Args:
             request: The request; ``identifier`` query param holds the username or email typed into the
@@ -154,7 +159,8 @@ class E2EEEnrollView(DualAuthJsonView):
         responses={201: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None, 409: None},
     )
     def post(self, request: Request) -> Response:
-        """Create the caller's key bundle.
+        """
+        Create the caller's key bundle.
 
         Args:
             request: JSON body with ``public_key``, ``recovery_wrapped_secret``, optional
@@ -245,7 +251,8 @@ class E2EEOwnKeysView(DualAuthJsonView):
 
     @extend_schema(operation_id="e2ee_own_keys_retrieve", responses={200: e2ee_schema.E2EEOwnKeysResponseSerializer})
     def get(self, request: Request) -> Response:
-        """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
+        """
+        Return the caller's bundle, or an "enrolled: false" body when not enrolled.
 
         Not being enrolled yet is the common, expected state for most accounts (checked unconditionally on
         every page load to render the encryption status indicator), so it is reported as a normal 200 rather
@@ -311,7 +318,8 @@ class E2EEPartnerKeyView(DualAuthJsonView):
 
     @extend_schema(responses={200: e2ee_schema.E2EEPartnerKeyResponseSerializer, 404: None})
     def get(self, request: Request, profile_slug: str) -> Response:
-        """Return the partner's public key when a DM relationship is permitted.
+        """
+        Return the partner's public key when a DM relationship is permitted.
 
         Args:
             request: The authenticated request.
@@ -343,7 +351,8 @@ class E2EEConversationKeyView(DualAuthJsonView):
 
     @extend_schema(responses={200: e2ee_schema.E2EEConversationKeysResponseSerializer, 404: None})
     def get(self, request: Request, profile_slug: str) -> Response:
-        """Return the caller's wrapped copy of every key version for this pair.
+        """
+        Return the caller's wrapped copy of every key version for this pair.
 
         Args:
             request: The authenticated request.
@@ -372,7 +381,8 @@ class E2EEConversationKeyView(DualAuthJsonView):
 
     @extend_schema(request=e2ee_schema.E2EEConversationKeyCreateRequestSerializer, responses={200: e2ee_schema.E2EEWrappedKeySerializer, 201: e2ee_schema.E2EEWrappedKeySerializer, 400: None, 404: None})
     def post(self, request: Request, profile_slug: str) -> Response:
-        """Store the next conversation-key version for this pair.
+        """
+        Store the next conversation-key version for this pair.
 
         The creating client generates the random key and seals it to both participants' public keys; the
         server stores the two blobs it cannot open.
@@ -433,7 +443,8 @@ class E2EEConversationKeyView(DualAuthJsonView):
 
 
 class E2EERewrapView(DualAuthJsonView):
-    """POST: replace wrapped private-key copies (same key, new wrapping).
+    """
+    POST: replace wrapped private-key copies (same key, new wrapping).
 
     Used after a password reset (re-wrap under the new password, clearing the stale flag) and when
     regenerating the recovery key.
@@ -453,7 +464,8 @@ class E2EERewrapView(DualAuthJsonView):
     )
     @extend_schema(request=e2ee_schema.E2EERewrapRequestSerializer, responses={200: e2ee_schema.E2EEOkResponseSerializer, 400: None})
     def post(self, request: Request) -> Response:
-        """Update wrapped copies on the caller's bundle.
+        """
+        Update wrapped copies on the caller's bundle.
 
         Args:
             request: JSON body with optional ``password_wrapped_secret`` + ``password_wrap_salt`` (together)
@@ -512,7 +524,8 @@ class E2EERewrapView(DualAuthJsonView):
 
 
 def _new_wrap_kdf(data: dict[str, Any]) -> tuple[int, int] | None:
-    """The KDF cost a new password wrap was made at: the body's, else the default; None when it is invalid.
+    """
+    The KDF cost a new password wrap was made at: the body's, else the default; None when it is invalid.
 
     The floor is the one enroll applies, for the same reason: it decides how expensive the stored blob is to attack
     offline.
@@ -535,7 +548,8 @@ def _new_wrap_kdf(data: dict[str, Any]) -> tuple[int, int] | None:
 
 
 class _E2EEPasskeyWrapBase(DualAuthJsonView):
-    """Shared credential lookup for the two passkey-wrap routes.
+    """
+    Shared credential lookup for the two passkey-wrap routes.
 
     The blob these views store was wrapped client-side under an HKDF of the WebAuthn ``prf`` output for
     one of the caller's own passkeys; the server keeps what it cannot open, exactly like the password
@@ -545,7 +559,8 @@ class _E2EEPasskeyWrapBase(DualAuthJsonView):
     """
 
     def _resolve_credential(self, request: Request, credential_id_b64: str) -> WebAuthnCredential | None:
-        """Resolve a base64url credential id to one of the caller's passkeys.
+        """
+        Resolve a base64url credential id to one of the caller's passkeys.
 
         Args:
             request: The authenticated request.
@@ -565,7 +580,8 @@ class _E2EEPasskeyWrapBase(DualAuthJsonView):
 
 
 class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
-    """POST a passkey-wrapped copy of the caller's private key.
+    """
+    POST a passkey-wrapped copy of the caller's private key.
 
     Upserts: re-enrolling a credential replaces its wrap. DELETE lives on
     :class:`E2EEPasskeyWrapItemView`, which is the item route.
@@ -588,7 +604,8 @@ class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
         responses={200: e2ee_schema.E2EEOkResponseSerializer, 201: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None, 404: None},
     )
     def post(self, request: Request) -> Response:
-        """Create or replace the wrap for one of the caller's passkeys.
+        """
+        Create or replace the wrap for one of the caller's passkeys.
 
         Args:
             request: JSON body with ``credential_id`` (base64url), ``prf_input`` (base64 32-byte PRF
@@ -631,7 +648,8 @@ class E2EEPasskeyWrapView(_E2EEPasskeyWrapBase):
 
 
 class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
-    """DELETE one passkey's wrap, addressed by credential id.
+    """
+    DELETE one passkey's wrap, addressed by credential id.
 
     The passkey itself is untouched; deleting the passkey cascades to its wrap separately.
     POST belongs to :class:`E2EEPasskeyWrapView`, the collection route, so a POST here is a 405 from DRF
@@ -651,7 +669,8 @@ class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
     )
     @extend_schema(responses={200: e2ee_schema.E2EEOkResponseSerializer, 403: None, 404: None})
     def delete(self, request: Request, credential_id: str) -> Response:
-        """Delete the wrap for one of the caller's passkeys.
+        """
+        Delete the wrap for one of the caller's passkeys.
 
         Args:
             request: The authenticated request; JSON body may carry ``current_password``.
@@ -675,7 +694,8 @@ class E2EEPasskeyWrapItemView(_E2EEPasskeyWrapBase):
 
 
 class E2EEGroupKeyView(DualAuthJsonView):
-    """GET/POST the wrapped group-key versions for one group chat.
+    """
+    GET/POST the wrapped group-key versions for one group chat.
 
     GET returns only the caller's own envelopes (one per version they were a member for), plus what a
     client needs to rotate: the latest version number, whether that version still covers the group's
@@ -691,7 +711,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
     }
 
     def _resolve(self, request: Request, group_uuid: UUID) -> tuple[Profile, Any, Any] | None:
-        """Resolve the caller's profile, the group, and their active membership.
+        """
+        Resolve the caller's profile, the group, and their active membership.
 
         Args:
             request: The authenticated request.
@@ -724,7 +745,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
     )
     @extend_schema(responses={200: e2ee_schema.E2EEGroupKeysResponseSerializer, 404: None})
     def get(self, request: Request, group_uuid: UUID) -> Response:
-        """Return the caller's envelopes and the group's rotation state.
+        """
+        Return the caller's envelopes and the group's rotation state.
 
         Args:
             request: The authenticated request.
@@ -771,7 +793,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
     )
     @extend_schema(request=e2ee_schema.E2EEGroupKeyCreateRequestSerializer, responses={200: e2ee_schema.E2EEWrappedKeySerializer, 201: e2ee_schema.E2EEWrappedKeySerializer, 400: None, 404: None})
     def post(self, request: Request, group_uuid: UUID) -> Response:
-        """Store the next group-key version.
+        """
+        Store the next group-key version.
 
         Args:
             request: JSON body with ``version`` and ``wrapped`` (a mapping of each member's opaque rotation
@@ -835,7 +858,8 @@ class E2EEGroupKeyView(DualAuthJsonView):
 
 
 class E2EEChangePasswordView(LoginRequiredMixin, View):
-    """POST: change (or, for OAuth accounts, set) the login password.
+    """
+    POST: change (or, for OAuth accounts, set) the login password.
 
     Always moves the account to derived auth: the client derives the new credential (``new_auth_key``)
     and a fresh salt in the browser, so the raw new password never reaches the server.
@@ -845,7 +869,8 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Rotate the account's password and reconcile its E2EE state.
+        """
+        Rotate the account's password and reconcile its E2EE state.
 
         Args:
             request: JSON body with ``current_secret`` (required when the account has a usable password),
@@ -904,7 +929,8 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
 
 
 class E2EERewrapAllView(DualAuthJsonView):
-    """GET: every wrapped key copy addressed to the caller, for bulk re-wrap.
+    """
+    GET: every wrapped key copy addressed to the caller, for bulk re-wrap.
 
     Used by the reset flow when the client still holds (or can unlock) the OLD private key: it unseals
     each copy locally, re-seals it to the new public key, and submits the results alongside the reset so
@@ -919,7 +945,8 @@ class E2EERewrapAllView(DualAuthJsonView):
 
     @extend_schema(responses={200: e2ee_schema.E2EERewrapAllResponseSerializer})
     def get(self, request: Request) -> Response:
-        """List the caller's sealed conversation-key copies and group envelopes.
+        """
+        List the caller's sealed conversation-key copies and group envelopes.
 
         Args:
             request: The authenticated request.
@@ -947,7 +974,8 @@ MAX_REWRAP_ENTRIES = 10_000
 
 
 def _parse_rewrap_entries(raw: Any) -> dict[int, str] | None:
-    """Validate a client-submitted rewrapped-key list into an id→blob mapping.
+    """
+    Validate a client-submitted rewrapped-key list into an id→blob mapping.
 
     Args:
         raw: The JSON value (expected: list of ``{id, wrapped_key}`` dicts).
@@ -972,7 +1000,8 @@ def _parse_rewrap_entries(raw: Any) -> dict[int, str] | None:
 
 
 class E2EEResetView(DualAuthJsonView):
-    """POST: replace the caller's keypair entirely (last resort).
+    """
+    POST: replace the caller's keypair entirely (last resort).
 
     When the client still holds the old private key it submits re-sealed copies of every
     conversation/group key alongside the reset, and the caller's message history stays readable under
@@ -992,7 +1021,8 @@ class E2EEResetView(DualAuthJsonView):
     )
     @extend_schema(request=e2ee_schema.E2EEResetRequestSerializer, responses={200: e2ee_schema.E2EEResetResponseSerializer, 400: None, 403: None})
     def post(self, request: Request) -> Response:
-        """Replace the caller's key bundle with brand-new key material.
+        """
+        Replace the caller's key bundle with brand-new key material.
 
         Args:
             request: JSON body with ``confirm`` (must equal ``"RESET"``), ``public_key``,

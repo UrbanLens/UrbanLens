@@ -218,7 +218,8 @@ class ChildPinExactOverlapServiceTests(TestCase):
         self.assertEqual(resolve_child_pin_location(self.profile, 41.00020, -75.00020).pk, existing.pk)
 
     def test_resolver_quantizes_to_the_stored_precision(self) -> None:
-        """Location identity is (lat, lon) at the field's 6dp, so two inputs that
+        """
+        Location identity is (lat, lon) at the field's 6dp, so two inputs that
         round to the same stored coordinate must resolve to the same row rather
         than racing the (latitude, longitude) unique constraint."""
         first = resolve_child_pin_location(self.profile, 41.00030004, -75.00030004)
@@ -228,7 +229,8 @@ class ChildPinExactOverlapServiceTests(TestCase):
 
 
 class ChildPinLocationResolutionPropertyTests(TestCase):
-    """Property-based generalization of the rule above.
+    """
+    Property-based generalization of the rule above.
 
     Calls ``resolve_child_pin_location`` directly rather than through self.client, per this repo's documented
     @given + self.client incompatibility."""

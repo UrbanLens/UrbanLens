@@ -15,14 +15,16 @@ def _always(_value: object) -> bool:
 
 
 class ProcessMemo[T]:
-    """Holds one value for ``ttl_seconds``, shared by every thread in the process.
+    """
+    Holds one value for ``ttl_seconds``, shared by every thread in the process.
 
     Not the Django cache: the point is to skip work without adding a round trip, and each process answering from
     its own copy is fine for anything allowed to be ``ttl_seconds`` stale.
     """
 
     def __init__(self, ttl_seconds: float) -> None:
-        """Create an empty memo.
+        """
+        Create an empty memo.
 
         Args:
             ttl_seconds: How long a kept value is served before it is recomputed.
@@ -38,7 +40,8 @@ class ProcessMemo[T]:
         return held if held is not None and time.monotonic() < self._expires_at else None
 
     def get(self, compute: Callable[[], T], *, keep: Callable[[T], bool] = _always) -> T:
-        """Return the held value, or compute one; concurrent callers wait for a single computation.
+        """
+        Return the held value, or compute one; concurrent callers wait for a single computation.
 
         Args:
             compute: Produces a fresh value. An exception propagates and nothing is held.

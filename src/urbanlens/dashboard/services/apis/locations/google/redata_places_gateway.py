@@ -35,7 +35,8 @@ def _is_budget_refusal_body(body: Any) -> bool:
 
 
 def _is_rate_limit(response: Any, body: Any) -> bool:
-    """Whether REData said "not now" for its Places budget, rather than failing the one question.
+    """
+    Whether REData said "not now" for its Places budget, rather than failing the one question.
 
     Args:
         response: REData's non-success response.
@@ -58,7 +59,8 @@ class PlacesRateLimitedError(GatewayRateLimitedError, UpstreamBusyError):
 
 
 def _rows(body: Any) -> list[dict[str, Any]]:
-    """Unwrap REData's ``{"count", "results"}`` collection envelope.
+    """
+    Unwrap REData's ``{"count", "results"}`` collection envelope.
     All three of these endpoints answer through REData's ``collection_response`` helper, so the rows are under ``results`` - never a bare array.
 
     Args:
@@ -106,7 +108,8 @@ class RedataPlacesGateway(Gateway):
         return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json"}
 
     def _request(self, path: str, *, params: dict[str, Any] | None = None, stream: bool = False) -> Any:
-        """GET one REData endpoint and return the raw ``requests.Response``.
+        """
+        GET one REData endpoint and return the raw ``requests.Response``.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
@@ -130,7 +133,8 @@ class RedataPlacesGateway(Gateway):
             raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
 
     def _error_for(self, response: Any, message: str) -> GatewayRequestError:
-        """Build the exception a failed ``response`` should raise.
+        """
+        Build the exception a failed ``response`` should raise.
 
         Args:
             response: The non-success ``requests.Response`` being reported.
@@ -152,7 +156,8 @@ class RedataPlacesGateway(Gateway):
         return GatewayRequestError(message)
 
     def get_place(self, place_id: str) -> dict[str, Any] | None:
-        """Fetch (and, on REData's end, permanently cache) one place's full details.
+        """
+        Fetch (and, on REData's end, permanently cache) one place's full details.
 
         Args:
             place_id: Google's own ``place_id``.
@@ -178,7 +183,8 @@ class RedataPlacesGateway(Gateway):
         return coalesced(_shared_key("place", {"place_id": place_id}), details, ttl=_SHARED_SECONDS)
 
     def search_nearby(self, latitude: float, longitude: float, radius_meters: float = 200, included_types: list[str] | None = None, max_results: int = 20) -> list[dict[str, Any]]:
-        """Search places near a coordinate via REData.
+        """
+        Search places near a coordinate via REData.
 
         Args:
             latitude: WGS-84 latitude.
@@ -211,7 +217,8 @@ class RedataPlacesGateway(Gateway):
         return coalesced(_shared_key("places-nearby", {**params, "latitude": round(latitude, 6), "longitude": round(longitude, 6)}), search, ttl=_SHARED_SECONDS)
 
     def search_text(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200, max_results: int = 20) -> list[dict[str, Any]]:
-        """Free-text place search via REData.
+        """
+        Free-text place search via REData.
 
         Args:
             query: Free text - an address, business name, or "coffee near Main St".
@@ -239,7 +246,8 @@ class RedataPlacesGateway(Gateway):
         return _rows(response.json())
 
     def autocomplete(self, query: str, latitude: float | None = None, longitude: float | None = None, radius_meters: float = 200) -> list[dict[str, Any]]:
-        """Predictions-as-you-type via REData.
+        """
+        Predictions-as-you-type via REData.
 
         Args:
             query: The partial text typed so far.
@@ -266,7 +274,8 @@ class RedataPlacesGateway(Gateway):
         return _rows(response.json())
 
     def download_photo(self, place_id: str, photo_record_id: int) -> tuple[bytes, str] | None:
-        """Download one photo's actual image bytes via REData.
+        """
+        Download one photo's actual image bytes via REData.
 
         Args:
             place_id: The place's Google ``place_id``.

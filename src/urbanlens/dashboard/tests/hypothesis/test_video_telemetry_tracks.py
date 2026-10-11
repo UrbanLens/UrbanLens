@@ -1,4 +1,5 @@
-"""A video's location is not only in its tags: drones caption every frame with their position, and action cameras
+"""
+A video's location is not only in its tags: drones caption every frame with their position, and action cameras
 record GPS telemetry in a track of its own. A stored video keeps its pictures and sound and none of those tracks.
 
 DJI writes an SRT subtitle track (``[latitude: ...] [longitude: ...]`` per frame); GoPro writes GPMF in a ``gpmd``

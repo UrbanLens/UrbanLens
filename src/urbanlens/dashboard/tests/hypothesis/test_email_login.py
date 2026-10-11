@@ -85,7 +85,8 @@ class LoginViewEmailTests(TestCase):
 
 
 class LoginLockoutIdentifierNormalizationTests(TestCase):
-    """The lockout counter must key on the resolved account, not the raw string.
+    """
+    The lockout counter must key on the resolved account, not the raw string.
 
     ``EmailOrUsernameModelBackend`` resolves Gmail dot/plus variants and verified secondary emails to the same
     account before authenticating (see ``EmailOrUsernameModelBackendTests`` above)."""

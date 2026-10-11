@@ -24,7 +24,8 @@ if _frame_cap_conflict:
 
 
 def _warm_urlconf() -> None:
-    """Import the HTTP URLconf at boot rather than on the first request.
+    """
+    Import the HTTP URLconf at boot rather than on the first request.
 
     The imports above cover the *websocket* patterns only, so the HTTP URLconf -
     which reaches every controller, and through them GeoPandas/Shapely - stays

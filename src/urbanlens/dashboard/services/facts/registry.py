@@ -9,7 +9,8 @@ from urbanlens.dashboard.models.facts.model import FactDataType, FactSubjectType
 
 @dataclass(frozen=True)
 class FactKeyDefinition:
-    """Everything key-specific about validating and displaying one kind of Fact.
+    """
+    Everything key-specific about validating and displaying one kind of Fact.
 
     Attributes:
         key: The ``Fact.key``/``FactEvidence`` value this definition governs.

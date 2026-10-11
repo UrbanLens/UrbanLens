@@ -59,7 +59,8 @@ class SmartBoundaryAntimeridianTests(TestCase):
         self.assertEqual(_boundary_matching_ids(pin_list), {west.pk, east.pk})
 
     def test_both_paths_agree(self) -> None:
-        """They answer the same question at different times; disagreeing means a
+        """
+        They answer the same question at different times; disagreeing means a
         pin joins on its sync and vanishes on resync."""
         east = self._pin("east of line", -179.5)
         pin_list = self._list(_region(179.0, 181.0))

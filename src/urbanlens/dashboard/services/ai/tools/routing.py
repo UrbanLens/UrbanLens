@@ -14,7 +14,8 @@ from urbanlens.dashboard.services.geo.distance import haversine_km
 
 
 def _resolve_point(context: ToolContext, pin_slug: str, lat: float | None, lng: float | None) -> tuple[float, float] | None:
-    """A ``(lat, lng)`` endpoint from one of the requesting profile's own pins, or an explicit coordinate.
+    """
+    A ``(lat, lng)`` endpoint from one of the requesting profile's own pins, or an explicit coordinate.
     Never resolves any other profile's pin - see ``Pin.objects.by_profile``."""
     pin_slug = pin_slug.strip()
     if pin_slug:

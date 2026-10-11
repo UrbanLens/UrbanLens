@@ -117,7 +117,8 @@ class CrossUserRouteAccessTests(TestCase):
         self.assertEqual(leaks, [], "\n".join(leaks))
 
     def test_a_stranger_cannot_mutate_another_users_objects(self) -> None:
-        """POST/DELETE as a stranger must never report success.
+        """
+        POST/DELETE as a stranger must never report success.
 
         ``204 No Content`` with an empty body is this codebase's HTMX idiom for "nothing to swap", and several
         custom-field views use it as their the object to None and the view returns 204 without writing)."""
@@ -137,7 +138,8 @@ class CrossUserRouteAccessTests(TestCase):
         self.assertEqual(leaks, [], "\n".join(leaks))
 
     def test_a_child_id_cannot_be_smuggled_through_the_callers_own_parent(self) -> None:
-        """Nested routes must re-scope the child to the parent in the URL.
+        """
+        Nested routes must re-scope the child to the parent in the URL.
 
         The parent ownership check passes here on purpose - the caller owns the pin/trip/location in the URL."""
         parents = {

@@ -34,7 +34,8 @@ class BackfillWikiEditPointsTests(TestCase):
         WikiEdit.objects.filter(pk=edit.pk).update(consensus_points=points)
 
     def test_the_reverting_row_is_marked_is_revert_and_keeps_its_own_award(self) -> None:
-        """`reverted_by` is stored on the *target*, pointing at the row that reverted it.
+        """
+        `reverted_by` is stored on the *target*, pointing at the row that reverted it.
 
         So it is the reverting row - not the target - that shows up in the reverse `reverts` relation the
         backfill queries, and it is the reverting row that gets `is_revert=True`."""
@@ -79,7 +80,8 @@ class BackfillWikiEditPointsTests(TestCase):
         self.assertEqual(unscored.consensus_points, MANUAL_EDIT_POINTS)
 
     def test_already_scored_non_consensus_rows_are_overwritten_to_the_flat_rate_too(self) -> None:
-        """The real behavior, not the defensive one: the second update() has no "already scored" guard.
+        """
+        The real behavior, not the defensive one: the second update() has no "already scored" guard.
 
         Any non-revert row with an editor and no consensus_round matches it, whatever `consensus_points` already
         holds - including a value a live per-diff award (`points_for_changes`) legitimately computed, which need

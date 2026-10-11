@@ -533,7 +533,8 @@ class PinBulkExportViewTests(TestCase):
 
 @override_settings(CACHES=_LOCMEM_CACHES)
 class BulkSelectionSizeLimitTests(TestCase):
-    """The website's bulk write endpoints bound the selection, like the API's do.
+    """
+    The website's bulk write endpoints bound the selection, like the API's do.
 
     Every external-API bulk endpoint already declares `max_length=500` on its uuid list."""
 

@@ -1,4 +1,5 @@
-"""Gateway for REData's ``/land-cover/`` endpoint.
+"""
+Gateway for REData's ``/land-cover/`` endpoint.
 One value covers a 30 m raster pixel (``resolution_meters``): a small urban parcel sits inside a single pixel, so the answer describes its block rather than its garden."""
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ class RedataLandCoverGateway(RedataLocationContextGateway):
         *,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch the NLCD land-cover classification at a point.
+        """
+        Fetch the NLCD land-cover classification at a point.
 
         Args:
             latitude: WGS-84 latitude.

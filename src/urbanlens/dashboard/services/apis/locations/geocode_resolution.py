@@ -12,7 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 def geocode_address(address: str) -> tuple[float | None, float | None]:
-    """Resolve a free-text address to coordinates, trying REData then direct Nominatim.
+    """
+    Resolve a free-text address to coordinates, trying REData then direct Nominatim.
 
     Args:
         address: The address string to geocode.
@@ -47,7 +48,8 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
 
 
 def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
-    """Forward-geocode one address through the project's Nominatim gateway.
+    """
+    Forward-geocode one address through the project's Nominatim gateway.
 
     Args:
         address: The address string to geocode.

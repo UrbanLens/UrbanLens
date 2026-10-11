@@ -13,7 +13,8 @@ class _Wiki:
 
 
 class PinCreationExternalWorkTests(SimpleTestCase):
-    """The old per-pin ``enqueue_location_creation`` signal must stay removed.
+    """
+    The old per-pin ``enqueue_location_creation`` signal must stay removed.
 
     That enrichment is lazy now (default boundaries generate on first pin-detail-page view), and background Wiki
     creation is queued by a separate, narrower signal (``ensure_wiki_for_pin_location``, covered by
@@ -37,7 +38,8 @@ class _Pin:
 
 
 class PinEnsuresWikiSignalTests(SimpleTestCase):
-    """New pins with a Location queue background Wiki creation.
+    """
+    New pins with a Location queue background Wiki creation.
 
     ``models.pin.signals.ensure_wiki_for_pin_location`` gates on three independent conditions - newly created,
     has a Location, and the pinning profile has community features enabled - any one of which alone must block
@@ -83,7 +85,8 @@ class PinEnsuresWikiSignalTests(SimpleTestCase):
 
 
 class WikiCategorySignalTests(SimpleTestCase):
-    """New Wikis enqueue category suggestion after commit.
+    """
+    New Wikis enqueue category suggestion after commit.
 
     Category auto-tagging moved from Location to Wiki in the wiki split (see
     urbanlens.dashboard.models.wiki.signals); location.signals is now an intentionally-empty stub."""

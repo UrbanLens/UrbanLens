@@ -1,4 +1,5 @@
-"""One upstream call for many identical asks.
+"""
+One upstream call for many identical asks.
 
 The panels of one page, and the building pins of one site, ask an upstream the same question within seconds of
 each other, each from its own task. The first caller makes the call and shares the answer through the shared
@@ -44,7 +45,8 @@ def _in_flight(key: str) -> bool:
 
 
 def coalesced[T](key: str, compute: Callable[[], T], *, ttl: int | Callable[[T], int], wait_seconds: float = 20.0, poll_seconds: float = 0.25) -> T:
-    """``compute()``'s answer, shared with every caller asking under ``key`` within ``ttl`` seconds.
+    """
+    ``compute()``'s answer, shared with every caller asking under ``key`` within ``ttl`` seconds.
 
     A failure is not shared: the next caller makes its own attempt. A caller that finds the question already in
     flight waits up to ``wait_seconds`` for its answer, then asks for itself.

@@ -198,7 +198,8 @@ class IncomingDetectedShareHidesLivePinTests(_ShareChainTestCase):
         self.assertEqual(groups[0]["place_label"], "Old Mill")
 
     def test_an_explicit_pending_share_is_listed_by_the_place_not_the_pin(self):
-        """Still listed for the recipient to decide on, under the name the share carries - not the sender's own,
+        """
+        Still listed for the recipient to decide on, under the name the share carries - not the sender's own,
         which a share without a ``shared_name`` never consented to pass on."""
         share = PinShare.objects.create(
             pin=self.pin_a,
@@ -275,7 +276,8 @@ class MemoriesSharingMapsPageTests(_ShareChainTestCase):
 
 
 class SharingPagePaginationTests(_ShareChainTestCase):
-    """P69: the Sharing page rendered both halves of its toggle, unbounded.
+    """
+    P69: the Sharing page rendered both halves of its toggle, unbounded.
 
     The two halves are a client-side toggle, so the received half was queried, grouped and rendered on every
     load for a panel nobody had opened - and neither half had a slice, so both grew with the account."""

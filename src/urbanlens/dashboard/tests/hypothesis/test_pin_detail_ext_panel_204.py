@@ -45,7 +45,8 @@ class ExtPanel204MarkerTests(EveryPanelGateConfiguredMixin, TestCase):
         return response.content.decode()
 
     def test_bespoke_cards_carry_the_marker(self) -> None:
-        """Cards with their own dedicated controller/route (not the generic simple_info_panels loop).
+        """
+        Cards with their own dedicated controller/route (not the generic simple_info_panels loop).
 
         Nominatim is deliberately excluded here - it moved into the "Location Data" tab strip (see
         LocationDataTabsTests) and is no longer a standalone auto-loading card, so it no longer carries this
@@ -91,7 +92,8 @@ class ExtPanel204MarkerTests(EveryPanelGateConfiguredMixin, TestCase):
         self.assertIn("data-ext-panel-204", content[max(0, idx - 200) : idx + 200])
 
     def test_generic_loop_panels_carry_the_marker(self) -> None:
-        """gdelt/epa_echo_detail - panels from the same bug report stuck on "Loading..." forever - come from the same simple_info_panels loop, which now carries the marker unconditionally.
+        """
+        gdelt/epa_echo_detail - panels from the same bug report stuck on "Loading..." forever - come from the same simple_info_panels loop, which now carries the marker unconditionally.
 
         photon/overture_building_attributes are deliberately excluded here - they moved into the "Location Data"
         tab strip (see LocationDataTabsTests) and are no longer part of simple_info_panels."""
@@ -131,7 +133,8 @@ class ExtPanel204MarkerTests(EveryPanelGateConfiguredMixin, TestCase):
 
 
 class ExtPanel204StartsHiddenTests(EveryPanelGateConfiguredMixin, TestCase):
-    """Optional cards must not flash a header+spinner before their fetch resolves.
+    """
+    Optional cards must not flash a header+spinner before their fetch resolves.
 
     Each such card's initial server-rendered markup must now also carry `hidden`, so it never paints until its
     HTMX response (a real 200, revealing it) arrives; a 204 removes it exactly as before."""
@@ -176,7 +179,8 @@ class ExtPanel204StartsHiddenTests(EveryPanelGateConfiguredMixin, TestCase):
             self.assertIn("hidden", content[max(0, idx - 300) : idx], f"panel {key} does not start hidden")
 
     def test_the_restructure_offer_slot_is_not_itself_hidden(self) -> None:
-        """The empty #pin-restructure-slot wrapper (not a data-ext-panel-204 card
+        """
+        The empty #pin-restructure-slot wrapper (not a data-ext-panel-204 card
         itself) is already invisible by having no content - it must not also gain
         a `hidden` attribute, which would suppress the real card once it loads."""
         content = self._content()
@@ -184,7 +188,8 @@ class ExtPanel204StartsHiddenTests(EveryPanelGateConfiguredMixin, TestCase):
         self.assertNotIn("hidden", content[idx : idx + 200])
 
     def test_core_sections_are_unaffected(self) -> None:
-        """Sections expected on every page (no data-ext-panel-204) keep their
+        """
+        Sections expected on every page (no data-ext-panel-204) keep their
         original spinner-first behavior - they must not start hidden."""
         content = self._content()
         for section_id in ("pin-overview", "pin-aliases-panel", "pin-custom-fields-panel", "pin-ownership-panel"):
@@ -193,7 +198,8 @@ class ExtPanel204StartsHiddenTests(EveryPanelGateConfiguredMixin, TestCase):
 
 
 class PendingPanelPlaceholderMarkerTests(TestCase):
-    """The self-polling "still fetching" placeholder (panel_pending.html) must carry the same data-ext-panel-204 marker as the panel it stands in for.
+    """
+    The self-polling "still fetching" placeholder (panel_pending.html) must carry the same data-ext-panel-204 marker as the panel it stands in for.
 
     It didn't: the marker was applied to the section's initial (first-load) render only, not to
     panel_pending.html's own outer div - so once a panel's background fetch hadn't landed yet and the page

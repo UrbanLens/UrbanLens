@@ -79,7 +79,8 @@ DEFAULT_CONTACT_MESSAGE = (
 
 
 def humanize_hours_minutes(delta: timedelta) -> str:
-    """Render a duration as a human-readable "X hours Y minutes" string.
+    """
+    Render a duration as a human-readable "X hours Y minutes" string.
 
     Args:
         delta: The duration to render.
@@ -104,7 +105,8 @@ _CONTACT_ADDRESS_DIGEST_PURPOSE = "safety-contact-address"
 
 
 def contact_address_digest(address: str) -> str:
-    """The keyed hash archival keeps of an alerted contact's address, so an opt-out from its emailed link still counts.
+    """
+    The keyed hash archival keeps of an alerted contact's address, so an opt-out from its emailed link still counts.
 
     Args:
         address: The address, in any spelling - it is normalized first, so every spelling of one mailbox matches.
@@ -118,7 +120,8 @@ def contact_address_digest(address: str) -> str:
 
 
 def contact_address_digests(addresses: set[str]) -> set[str]:
-    """Every digest ``contact_address_digest`` could have kept for these normalized addresses, under any configured key.
+    """
+    Every digest ``contact_address_digest`` could have kept for these normalized addresses, under any configured key.
 
     Args:
         addresses: Normalized addresses.
@@ -130,7 +133,8 @@ def contact_address_digests(addresses: set[str]) -> set[str]:
 
 
 class EmergencyContactDefault(abstract.DashboardModel):
-    """A reusable emergency contact saved to a profile's safety defaults.
+    """
+    A reusable emergency contact saved to a profile's safety defaults.
     Copied onto each new SafetyCheckin as a SafetyCheckinContact snapshot at creation time - editing a default here does not retroactively change any check-in that already copied it.
     """
 
@@ -155,7 +159,8 @@ class EmergencyContactDefault(abstract.DashboardModel):
 
     @property
     def display_name(self) -> str:
-        """Return the best available display name for this contact.
+        """
+        Return the best available display name for this contact.
 
         Returns:
             The label if set, else the linked profile's username, else the raw email.
@@ -167,7 +172,8 @@ class EmergencyContactDefault(abstract.DashboardModel):
         return self.email or "Unknown contact"
 
     def __str__(self) -> str:
-        """Return a human-readable description of this default contact.
+        """
+        Return a human-readable description of this default contact.
 
         Returns:
             String like "<name> (default for <owner id>)".
@@ -200,7 +206,8 @@ class SafetyPreference(abstract.DashboardModel):
 
     @property
     def default_grace_period_hours(self) -> float:
-        """``default_grace_period`` expressed in hours, for prefilling numeric form fields.
+        """
+        ``default_grace_period`` expressed in hours, for prefilling numeric form fields.
 
         Returns:
             The grace period as a plain float number of hours.
@@ -209,7 +216,8 @@ class SafetyPreference(abstract.DashboardModel):
 
     @property
     def default_grace_period_display(self) -> str:
-        """``default_grace_period`` as a human-readable "X hours Y minutes" string.
+        """
+        ``default_grace_period`` as a human-readable "X hours Y minutes" string.
 
         Returns:
             E.g. "30 minutes", "1 hour", or "1 hour 30 minutes".
@@ -217,7 +225,8 @@ class SafetyPreference(abstract.DashboardModel):
         return humanize_hours_minutes(self.default_grace_period)
 
     def __str__(self) -> str:
-        """Return a human-readable description of this preference row.
+        """
+        Return a human-readable description of this preference row.
 
         Returns:
             String like "Safety preferences for <profile id>".
@@ -240,7 +249,8 @@ class SafetyCheckinStatus(abstract.TextChoices):
 
     @classmethod
     def resolved_statuses(cls) -> tuple[str, ...]:
-        """Return the statuses that mean the check-in has concluded.
+        """
+        Return the statuses that mean the check-in has concluded.
 
         Returns:
             Tuple of terminal status values.
@@ -249,7 +259,8 @@ class SafetyCheckinStatus(abstract.TextChoices):
 
     @classmethod
     def unescalated_statuses(cls) -> tuple[str, ...]:
-        """Return the statuses of a check-in still heading toward escalation.
+        """
+        Return the statuses of a check-in still heading toward escalation.
 
         Returns:
             Tuple of the statuses before OVERDUE that are not terminal.
@@ -258,7 +269,8 @@ class SafetyCheckinStatus(abstract.TextChoices):
 
 
 class SafetyCheckin(abstract.PublicDashboardModel):
-    """A planned trip with an expected check-in time and emergency contacts.
+    """
+    A planned trip with an expected check-in time and emergency contacts.
     If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the linked ``SafetyCheckinContact`` rows are notified.
     ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing detail/check-in pages use it for a human-readable URL; the contact portal keeps using its unguessable ``token``, since that's a security credential, not just an identifier.
 
@@ -388,7 +400,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     @property
     def is_resolved(self) -> bool:
-        """Whether this check-in has reached a terminal status.
+        """
+        Whether this check-in has reached a terminal status.
 
         Returns:
             True when status is checked_in, found_safe, or cancelled.
@@ -397,7 +410,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     @property
     def contacts_locked(self) -> bool:
-        """Whether title/message/contacts are frozen because contacts were already notified.
+        """
+        Whether title/message/contacts are frozen because contacts were already notified.
 
         Returns:
             True once ``escalated_at`` is set - the trip plan, destination, and route markup
@@ -409,7 +423,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     @property
     def notifications_locked(self) -> bool:
-        """Whether the message/contacts/wiki-notify fields are frozen against further edits.
+        """
+        Whether the message/contacts/wiki-notify fields are frozen against further edits.
 
         Returns:
             True once contacts have already been notified (``contacts_locked``) or the
@@ -420,7 +435,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         return self.contacts_locked or self.status == SafetyCheckinStatus.CHECKED_IN
 
     def _slugify_base(self) -> str:
-        """Return the raw text the URL slug is derived from.
+        """
+        Return the raw text the URL slug is derived from.
 
         Returns:
             The check-in's title, or "checkin" if blank.
@@ -428,7 +444,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         return self.title or "checkin"
 
     def _slugify_qs(self):
-        """Return the queryset used to check slug uniqueness, scoped per-profile.
+        """
+        Return the queryset used to check slug uniqueness, scoped per-profile.
 
         Returns:
             This profile's other check-ins (excluding self, if saved).
@@ -439,7 +456,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         return qs
 
     def __str__(self) -> str:
-        """Return a human-readable description of this check-in.
+        """
+        Return a human-readable description of this check-in.
 
         Returns:
             String like "<title> (<profile id>)".
@@ -460,7 +478,8 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
 
 class SafetyCheckinContact(abstract.DashboardModel):
-    """A single emergency contact attached to one specific check-in.
+    """
+    A single emergency contact attached to one specific check-in.
     A snapshot, not a live link back to ``EmergencyContactDefault`` - editing or deleting a default afterward does not affect check-ins already created from it.
     ``token`` is the magic-link credential for the public contact portal, since a contact identified only by email has no account to log into.
     """
@@ -492,7 +511,8 @@ class SafetyCheckinContact(abstract.DashboardModel):
 
     @property
     def display_name(self) -> str:
-        """Return the best available display name for this contact.
+        """
+        Return the best available display name for this contact.
 
         Returns:
             The name if set, else the linked profile's username, else the raw email.
@@ -513,7 +533,8 @@ class SafetyCheckinContact(abstract.DashboardModel):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        """Return a human-readable description of this contact.
+        """
+        Return a human-readable description of this contact.
 
         Returns:
             String like "<name> for checkin <id>".
@@ -543,7 +564,8 @@ class SafetyContactOptOutScope(abstract.TextChoices):
 
 
 class SafetyContactOptOut(abstract.DashboardModel):
-    """Records that a contact (by profile or email) no longer wants safety check-in notifications.
+    """
+    Records that a contact (by profile or email) no longer wants safety check-in notifications.
     Identity is exactly one of ``contact_profile``, ``email``, or ``email_hmac`` - the last for an opt-out made from a
     link on a check-in whose archival already scrubbed the address.
     """
@@ -576,7 +598,8 @@ class SafetyContactOptOut(abstract.DashboardModel):
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:
-        """Return a human-readable description of this opt-out.
+        """
+        Return a human-readable description of this opt-out.
 
         Returns:
             String like "<contact> opted out (<scope>)".
@@ -632,7 +655,8 @@ class SafetyCheckinPartnerStatus(abstract.TextChoices):
 
 
 class SafetyCheckinPartner(abstract.DashboardModel):
-    """A trusted account granted early, full visibility into one check-in, plus the ability to conclude it.
+    """
+    A trusted account granted early, full visibility into one check-in, plus the ability to conclude it.
     Unlike a ``SafetyCheckinContact`` (notified without opting in, only once overdue/escalated), a partner sees the full check-in - plan, contacts, chat, and any shared live location - from the moment they accept, well before anything goes wrong.
     """
 
@@ -651,7 +675,8 @@ class SafetyCheckinPartner(abstract.DashboardModel):
     objects = SafetyCheckinPartnerManager()
 
     def __str__(self) -> str:
-        """Return a human-readable description of this partner assignment.
+        """
+        Return a human-readable description of this partner assignment.
 
         Returns:
             String like "<username> partner on checkin <id> (<status>)".
@@ -668,7 +693,8 @@ class SafetyCheckinPartner(abstract.DashboardModel):
 
 
 class SafetyCheckinArchive(abstract.DashboardModel):
-    """The encrypted, owner-only remnant of a concluded check-in.
+    """
+    The encrypted, owner-only remnant of a concluded check-in.
     Created by ``services.visits.safety.archive_checkin`` once a resolved check-in's grace window elapses: the check-in's PII (plan, contacts, chat, resolution details) is serialized to JSON, encrypted with a fresh random key (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to only the owner's ``MessagingKeyBundle.public_key`` - after which the plaintext columns on ``SafetyCheckin``/``SafetyCheckinContact``/ ``SafetyCheckinMessage`` are scrubbed.
     """
 
@@ -683,7 +709,8 @@ class SafetyCheckinArchive(abstract.DashboardModel):
         checkin_id: int
 
     def __str__(self) -> str:
-        """Return a human-readable description of this archive row.
+        """
+        Return a human-readable description of this archive row.
 
         Returns:
             String like "Archive for checkin <id> (sealed v3)".
@@ -695,7 +722,8 @@ class SafetyCheckinArchive(abstract.DashboardModel):
 
 
 class SafetyCheckinMessage(abstract.DashboardModel):
-    """A chat message on a check-in, from either the owner or an emergency contact.
+    """
+    A chat message on a check-in, from either the owner or an emergency contact.
     Exactly one of ``sender_profile``/``sender_contact`` is set at the application layer: the owner and any contact who is also a site user post as ``sender_profile``; a contact with no account posts as ``sender_contact`` so their display name still resolves without a login.
     """
 
@@ -712,7 +740,8 @@ class SafetyCheckinMessage(abstract.DashboardModel):
 
     @property
     def sender_name(self) -> str:
-        """Return the display name of whoever sent this message.
+        """
+        Return the display name of whoever sent this message.
 
         Returns:
             The contact's display name, the sending profile's username, or "Unknown".
@@ -724,7 +753,8 @@ class SafetyCheckinMessage(abstract.DashboardModel):
         return "Unknown"
 
     def __str__(self) -> str:
-        """Return a human-readable description of this message.
+        """
+        Return a human-readable description of this message.
 
         Returns:
             String like "[<sender>] <body prefix>".

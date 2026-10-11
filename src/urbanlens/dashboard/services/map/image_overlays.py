@@ -1,4 +1,5 @@
-"""Creating georeferenced image overlays, for every entry point that makes one.
+"""
+Creating georeferenced image overlays, for every entry point that makes one.
 
 The manage-overlays form, the historical-map picker and the archive importer all create overlays; each goes
 through :func:`create_overlay` so the per-map cap and the "download, never reference" rule for a pasted URL
@@ -70,7 +71,8 @@ def at_overlay_limit(owner: Pin | Wiki) -> bool:
 
 
 def historical_tile_template(georeference_uuid: str) -> str:
-    """The XYZ template for one REData georeference, served through this site's own tile proxy.
+    """
+    The XYZ template for one REData georeference, served through this site's own tile proxy.
 
     ``reverse()`` can't emit literal ``{z}/{x}/{y}``, so it builds with zeros and substitutes, keeping the template
     tied to URL routing rather than a hardcoded prefix.
@@ -85,7 +87,8 @@ _REDATA_SHEET_TILES = re.compile(r"/api/v1/maps/georeferences/(?P<uuid>[0-9a-fA-
 
 
 def recognized_sheet_template(template: str) -> str | None:
-    """This site's template for a georeferenced sheet named by another address for it.
+    """
+    This site's template for a georeferenced sheet named by another address for it.
 
     Recognised: this site's own historical-tile route, relative or on any host (another deployment's export), and
     REData's own tile URL for the georeference.
@@ -114,7 +117,8 @@ def recognized_sheet_template(template: str) -> str | None:
 
 
 def imported_tile_template(template: str) -> str:
-    """What an imported overlay's tile template becomes on this site.
+    """
+    What an imported overlay's tile template becomes on this site.
 
     A recognised sheet is rebuilt onto this site's own route. Any other public host's tiles are drawn through this
     site and kept (:mod:`~urbanlens.dashboard.services.map.remote_tiles`), so no viewer's browser is sent to it.
@@ -137,7 +141,8 @@ def imported_tile_template(template: str) -> str:
 
 
 def exported_tile_template(template: str) -> str:
-    """The template an archive carries for an overlay: a kept host's own, so another deployment can keep it too.
+    """
+    The template an archive carries for an overlay: a kept host's own, so another deployment can keep it too.
 
     Args:
         template: The overlay's template on this site.
@@ -152,7 +157,8 @@ def exported_tile_template(template: str) -> str:
 
 
 def image_from_external_url(owner: Pin | Wiki, profile: Profile, url: str, *, caption: str = "") -> Image:
-    """Download a pasted image URL into an ``Image`` the overlay can own.
+    """
+    Download a pasted image URL into an ``Image`` the overlay can own.
 
     A referenced URL would send every viewer's browser, and so their IP address, to the foreign host, and its
     bytes would skip the upload pipeline that re-encodes every stored photo.
@@ -209,7 +215,8 @@ def create_overlay(
     default_visible: bool = True,
     uuid: str | None = None,
 ) -> MapImageOverlay:
-    """Create one overlay on *owner*'s map, enforcing the per-map cap.
+    """
+    Create one overlay on *owner*'s map, enforcing the per-map cap.
 
     The owner row is locked for the count, so two concurrent creates cannot both see room for one more.
 

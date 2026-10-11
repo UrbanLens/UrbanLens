@@ -90,7 +90,8 @@ class HeicGpsStripTests(TestCase):
 
 
 class HeicIsStoredInARenderableFormatTests(TestCase):
-    """Accepting the upload is only half of "HEIC just works".
+    """
+    Accepting the upload is only half of "HEIC just works".
 
     Commit 550b2cb8 removed the 415 that told the user to convert to JPEG first."""
 

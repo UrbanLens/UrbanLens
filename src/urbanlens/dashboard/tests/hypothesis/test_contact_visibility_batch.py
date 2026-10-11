@@ -80,7 +80,8 @@ class VisibleContactInfoPksAgreementTests(TestCase):
         )
 
     def test_a_pending_request_does_not_open_the_contact_gate(self) -> None:
-        """The difference from ``profile_visibility``: an unanswered request is not
+        """
+        The difference from ``profile_visibility``: an unanswered request is not
         an accepted friendship, and contact details wait for the acceptance."""
         sent_to_viewer = _profile(contact_visibility=VisibilityChoice.FRIENDS)
         Friendship.objects.create(
@@ -94,7 +95,8 @@ class VisibleContactInfoPksAgreementTests(TestCase):
         self._assert_agrees([sent_to_viewer])
 
     def test_a_temporary_grant_does_not_open_the_contact_gate(self) -> None:
-        """A grant reveals an identity. ``can_view_contact_info`` never consults it,
+        """
+        A grant reveals an identity. ``can_view_contact_info`` never consults it,
         so a batch path that reached the same fallback would over-share."""
         granted = _profile(contact_visibility=VisibilityChoice.NO_ONE)
         DirectMessageTemporaryAccess.objects.create(
@@ -172,7 +174,8 @@ class VisibleContactInfoPksAgreementTests(TestCase):
         self._assert_agrees([by_pin, by_friend, by_trip, by_nothing])
 
     def test_a_mixed_list_answers_each_row_on_its_own_setting(self) -> None:
-        """The shape a batching bug actually takes: one row's answer smeared
+        """
+        The shape a batching bug actually takes: one row's answer smeared
         across its neighbours."""
         friend = _profile(contact_visibility=VisibilityChoice.FRIENDS)
         self._befriend(friend)
@@ -183,7 +186,8 @@ class VisibleContactInfoPksAgreementTests(TestCase):
         self._assert_agrees([friend, stranger, public, silent, self.viewer])
 
     def test_the_two_fields_are_resolved_independently(self) -> None:
-        """One profile, opposite settings on the two fields. A helper that read the
+        """
+        One profile, opposite settings on the two fields. A helper that read the
         wrong attribute would answer both alike and pass every test above."""
         subject = _profile(
             profile_visibility=VisibilityChoice.ANYONE,
@@ -195,7 +199,8 @@ class VisibleContactInfoPksAgreementTests(TestCase):
 
 
 class RelatedProfileIdsSupersetTests(TestCase):
-    """``related_profile_ids`` narrows a queryset before the real check runs.
+    """
+    ``related_profile_ids`` narrows a queryset before the real check runs.
 
     It is allowed to be loose and is not allowed to be tight: an extra id costs one row for the real check to
     reject, while a missing one hides a profile the viewer is entitled to see."""
@@ -293,7 +298,8 @@ class RelatedProfileIdsSupersetTests(TestCase):
         self.assertIn(granted.pk, Profile.related_profile_ids(self.viewer))
 
     def test_it_covers_everything_the_real_check_passes(self) -> None:
-        """The contract, stated directly: for a population wired up every way a
+        """
+        The contract, stated directly: for a population wired up every way a
         gate can be satisfied, no profile the per-row check admits is missing."""
         shared = baker.make(Location)
         baker.make(Pin, profile=self.viewer, location=shared, parent_pin=None)

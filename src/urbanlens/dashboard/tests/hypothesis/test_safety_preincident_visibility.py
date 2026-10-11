@@ -1,4 +1,5 @@
-"""Before an incident a check-in shows to no contact, only to partners the owner chose; a contact sees it once alerted.
+"""
+Before an incident a check-in shows to no contact, only to partners the owner chose; a contact sees it once alerted.
 
 The safety check-in goal: contacts get the trip plan "only if the user fails to check in on time", and earlier access
 "must be explicitly chosen and consent-focused" - the accepted partner tier.

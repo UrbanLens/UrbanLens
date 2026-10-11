@@ -30,7 +30,8 @@ EPHEMERAL_ENVIRONMENTS = frozenset({EnvironmentTypes.LOCAL, EnvironmentTypes.DEV
 
 
 def environment_from_env(environ: Mapping[str, str] | None = None) -> EnvironmentTypes:
-    """Resolve ``UL_ENVIRONMENT``, refusing a process that does not say which environment it is.
+    """
+    Resolve ``UL_ENVIRONMENT``, refusing a process that does not say which environment it is.
 
     Unset or blank used to mean production, so a deployment that lost the variable spent production's budgets and
     sent real mail. Since Jess's ruling of 2026-10-07 it refuses to start instead, as an unknown name always has.

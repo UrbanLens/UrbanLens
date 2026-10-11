@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def _newest(queryset: Any, ordering: str, limit: int | None) -> Any:
-    """The newest ``limit`` rows of ``queryset``, or all of them when unlimited.
+    """
+    The newest ``limit`` rows of ``queryset``, or all of them when unlimited.
 
     Args:
         queryset: The source rows.
@@ -36,7 +37,8 @@ def _newest(queryset: Any, ordering: str, limit: int | None) -> Any:
 
 @dataclass(frozen=True, slots=True)
 class JournalEntry:
-    """One row in a profile's Journal feed - a visit note, a rating, or a comment.
+    """
+    One row in a profile's Journal feed - a visit note, a rating, or a comment.
 
     Attributes:
         kind: One of "visit", "review", "comment", "article".
@@ -59,7 +61,8 @@ class JournalEntry:
 
 
 def _visit_entries(profile: Profile, limit: int | None = None) -> Iterator[JournalEntry]:
-    """Yield a JournalEntry for each PinVisit the profile wrote notes for.
+    """
+    Yield a JournalEntry for each PinVisit the profile wrote notes for.
     Selecting only the pin left two queries per rendered row."""
     from urbanlens.dashboard.models.visits.model import PinVisit
 
@@ -99,7 +102,8 @@ def _review_entries(profile: Profile, limit: int | None = None) -> Iterator[Jour
 
 
 def _comment_entries(profile: Profile, limit: int | None = None) -> Iterator[JournalEntry]:
-    """Yield a JournalEntry for each comment the profile has posted, on pins, wikis, or trips.
+    """
+    Yield a JournalEntry for each comment the profile has posted, on pins, wikis, or trips.
     Taking ``limit`` across the pair instead would be wrong - all of it could come from whichever half happened to sort first."""
     from urbanlens.dashboard.models.comments.model import Comment
     from urbanlens.dashboard.models.trips.model import TripComment
@@ -173,7 +177,8 @@ JOURNAL_SOURCES: dict[str, Callable[[Profile, int | None], Iterator[JournalEntry
 
 
 def get_journal_entries(profile: Profile, sources: Iterable[str] | None = None, *, limit: int | None = None) -> list[JournalEntry]:
-    """Merge journal sources for a profile, sorted newest-first.
+    """
+    Merge journal sources for a profile, sorted newest-first.
 
     Args:
         profile: The profile whose journal to build.
@@ -244,7 +249,8 @@ def _source_count(key: str, profile: Profile) -> int:
 
 
 class JournalFeed(Sequence[JournalEntry]):
-    """A profile's journal as a sliceable sequence, fetched one slice at a time.
+    """
+    A profile's journal as a sliceable sequence, fetched one slice at a time.
     ``Paginator`` and DRF's paginator both ask a sequence only for its length and one slice, so this satisfies them without ever materialising the rest.
 
     Args:
@@ -269,7 +275,8 @@ class JournalFeed(Sequence[JournalEntry]):
         return total
 
     def __getitem__(self, index: int | slice) -> Any:
-        """One entry, or one slice of them, fetched no deeper than it needs.
+        """
+        One entry, or one slice of them, fetched no deeper than it needs.
         A bound counted from the end (``feed[-1]``, ``feed[:-2]``) needs the whole feed, and says so by building it: there is no prefix of a merged feed that answers "the last one"."""
         if isinstance(index, slice):
             # A negative step counts too, and its bounds can both be positive:

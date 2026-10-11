@@ -48,7 +48,8 @@ class _FakeRequest:
 
 
 class _FakeTieredView:
-    """Stand-in for a view that declares its scopes per HTTP method.
+    """
+    Stand-in for a view that declares its scopes per HTTP method.
 
     ``request_tier`` only ever reads ``throttle_tier_by_method`` and ``required_scopes_by_method`` off the view,
     so the real viewset machinery is irrelevant here - and deliberately avoided, since instantiating one would
@@ -85,7 +86,8 @@ class ScopeVocabularyTests(SimpleTestCase):
         self.assertEqual(len(values), len(set(values)))
 
     def test_games_scopes_exist_with_their_agreed_values(self) -> None:
-        """The games pair is spelled exactly as the mobile client and consent screen expect.
+        """
+        The games pair is spelled exactly as the mobile client and consent screen expect.
 
         Literals rather than the enum members, for the same reason ``ORIGINAL_DEFAULT_SCOPES`` is: repointing
         ``GAMES_READ`` at some other string would invalidate every grant already issued against the old one, and
@@ -94,7 +96,8 @@ class ScopeVocabularyTests(SimpleTestCase):
         self.assertEqual(ApiKeyScope.GAMES_WRITE.value, "games:write")
 
     def test_games_scopes_are_mirrored_into_settings(self) -> None:
-        """The games pair reached ``OAUTH2_PROVIDER["SCOPES"]``, labels included.
+        """
+        The games pair reached ``OAUTH2_PROVIDER["SCOPES"]``, labels included.
 
         ``test_settings_scopes_match_enum_exactly`` already covers this in aggregate, but only reports "the
         dicts differ"; this names the pair, so a half-applied change lands on an obviously-relevant failure."""
@@ -103,7 +106,8 @@ class ScopeVocabularyTests(SimpleTestCase):
         self.assertEqual(declared.get("games:write"), ApiKeyScope.GAMES_WRITE.label)
 
     def test_every_scope_lands_in_the_tier_its_suffix_implies(self) -> None:
-        """The suffix convention is load-bearing for rate limiting, not cosmetic.
+        """
+        The suffix convention is load-bearing for rate limiting, not cosmetic.
 
         ``request_tier`` classifies a request by looking for ``:write`` or ``:manage`` at the end of the scopes
         the method requires."""
@@ -114,7 +118,8 @@ class ScopeVocabularyTests(SimpleTestCase):
 
 
 class DefaultScopeImmutabilityTests(SimpleTestCase):
-    """The default PAT grant must not widen when the vocabulary grows.
+    """
+    The default PAT grant must not widen when the vocabulary grows.
 
     This is a deliberate security decision, not an oversight: see ``_default_api_key_scopes``'s docstring."""
 
@@ -146,7 +151,8 @@ class DefaultScopeImmutabilityTests(SimpleTestCase):
                 self.assertNotIn(scope.value, granted)
 
     def test_no_scope_added_after_the_original_four_leaks_into_the_default_grant(self) -> None:
-        """A blanket version of the above, so the next domain can't be forgotten.
+        """
+        A blanket version of the above, so the next domain can't be forgotten.
 
         The enumerated list is kept because a named failure is easier to act on, but it only protects the scopes
         somebody remembered to add to it."""
@@ -193,7 +199,8 @@ class Oauth2OnlyScopeTests(SimpleTestCase):
         self.assertTrue(self.permission.has_permission(_FakeRequest(credential), view))
 
     def test_games_scopes_are_not_oauth2_only(self) -> None:
-        """A PAT may play games - the DM restriction is about E2EE key material.
+        """
+        A PAT may play games - the DM restriction is about E2EE key material.
 
         Worth pinning down rather than leaving implicit: the games surface has no per-device secrets and a
         leaked key can at worst inflate someone's leaderboard score, so extending ``OAUTH2_ONLY_SCOPES`` to

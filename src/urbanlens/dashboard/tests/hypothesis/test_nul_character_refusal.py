@@ -1,4 +1,5 @@
-"""A NUL character in a request is a 400, before a view hands it to Postgres, which refuses it in text (P283).
+"""
+A NUL character in a request is a 400, before a view hands it to Postgres, which refuses it in text (P283).
 
 Twenty-five routes answered one with a 500: every search, and every write of a text field outside a Django form.
 """
@@ -222,7 +223,8 @@ class DecodedJsonTests(SimpleTestCase):
         self.assertEqual(decode_json(r'{"a": "\\u0000"}'), {"a": "\\u0000"})
 
     def test_the_strategy_draws_a_nul_in_a_key_and_in_a_nested_value(self) -> None:
-        """Anti-vacuity for the property above.
+        """
+        Anti-vacuity for the property above.
 
         Derandomized and without the example store, so the answer is the strategy's and not an earlier run's.
         """

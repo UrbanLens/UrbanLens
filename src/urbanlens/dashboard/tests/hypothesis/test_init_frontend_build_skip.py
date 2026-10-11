@@ -16,7 +16,8 @@ _INIT_PATH = _REPO_ROOT / "src" / "bin" / "init.py"
 
 
 def _load_init_module():
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """
+    Import ``src/bin/init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.

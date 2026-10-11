@@ -138,7 +138,8 @@ class NominatimGateway(Gateway):
         return [self._normalise(item) for item in raw if isinstance(item, dict)]
 
     def reverse_geocode_admin(self, latitude: float, longitude: float) -> dict[str, str] | None:
-        """Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
+        """
+        Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
 
         Args:
             latitude: WGS-84 latitude.
@@ -175,7 +176,8 @@ class NominatimGateway(Gateway):
         }
 
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """Reverse-geocode coordinates and return structured place metadata.
+        """
+        Reverse-geocode coordinates and return structured place metadata.
 
         Args:
             latitude: WGS-84 latitude.

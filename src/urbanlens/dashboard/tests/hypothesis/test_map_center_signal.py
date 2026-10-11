@@ -38,7 +38,8 @@ def _set_cached_centroid(profile: Profile) -> None:
 
 
 def _queued(enqueue: mock.Mock) -> list:
-    """The tasks an enqueue mock was handed.
+    """
+    The tasks an enqueue mock was handed.
 
     Args:
         enqueue: The patched ``safely_enqueue_task``.
@@ -49,7 +50,8 @@ def _queued(enqueue: mock.Mock) -> list:
 
 
 class NewPinQueuesARecomputeTests(TestCase):
-    """A new pin outdates the centroid, and must say so without throwing away the one being served.
+    """
+    A new pin outdates the centroid, and must say so without throwing away the one being served.
 
     Clearing it would hand the next visitor a read of every pin the account owns, to move an opening map
     position by less than a pixel."""
@@ -107,7 +109,8 @@ class NewPinQueuesARecomputeTests(TestCase):
         self.assertEqual(_queued(enqueue).count(refresh_profile_map_center), 1)
 
     def test_a_claim_nothing_ever_finished_is_retaken(self) -> None:
-        """``safely_enqueue_task`` reports an unreachable broker only in the log, so a claim can outlive the
+        """
+        ``safely_enqueue_task`` reports an unreachable broker only in the log, so a claim can outlive the
         work it was taken for. Without this, one lost enqueue would wedge the centre stale permanently."""
         from urbanlens.dashboard.tasks import refresh_profile_map_center
 
@@ -141,7 +144,8 @@ class RecomputingReleasesTheClaimTests(TestCase):
         self.assertIsNone(self.profile.map_center_stale_since)
 
     def test_the_claim_is_released_before_the_pins_are_read(self) -> None:
-        """A pin created while the coordinates are being read has to leave a claim behind for another pass.
+        """
+        A pin created while the coordinates are being read has to leave a claim behind for another pass.
         Releasing afterwards would overwrite it, and that pin would never reach the stored centre."""
         seen: list[datetime.datetime | None] = []
         real_compute = Profile.compute_map_center

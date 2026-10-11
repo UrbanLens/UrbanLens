@@ -18,7 +18,8 @@ from urbanlens.dashboard.services.notifications.notification_center import prefe
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the Authorization header kwargs for the test client.
+    """
+    Build the Authorization header kwargs for the test client.
 
     Args:
         raw_key: The plaintext API key.
@@ -62,7 +63,8 @@ class NotificationPreferenceCoverageTests(TestCase):
                 self.assertIn(f"{stem}_sms", model_fields)
 
     def test_preferences_cover_only_a_subset_of_notification_types(self) -> None:
-        """Documents the real gap rather than inventing defaults for the rest.
+        """
+        Documents the real gap rather than inventing defaults for the rest.
 
         Most ``NotificationType`` members have no preference column at all, so they have no per-type delivery
         control."""
@@ -72,7 +74,8 @@ class NotificationPreferenceCoverageTests(TestCase):
         self.assertLess(len(stems), len(all_types))
 
     def test_one_preference_stem_does_not_match_its_notification_type(self) -> None:
-        """Pins a real naming mismatch between the two enums.
+        """
+        Pins a real naming mismatch between the two enums.
 
         ``NotificationType.SAFETY_CHECKIN_PARTNER_INVITE`` has the value ``safety_ci_partner_invite``, but its
         preference columns are named ``safety_checkin_partner_invite*``."""
@@ -96,7 +99,8 @@ class _InboxCase(TestCase):
         api_key.save(update_fields=["scopes"])
 
     def _notify(self, profile: Profile, *, status: str = Status.UNREAD) -> NotificationLog:
-        """Create one notification for ``profile``.
+        """
+        Create one notification for ``profile``.
 
         Args:
             profile: The recipient. status: The notification's status.
@@ -181,7 +185,8 @@ class NotificationInboxTests(_InboxCase):
         self.assertEqual(foreign.status, Status.UNREAD)
 
     def test_a_matched_row_answers_exactly_like_an_unmatched_one(self) -> None:
-        """The third leg, and the one that makes this an anti-oracle test.
+        """
+        The third leg, and the one that makes this an anti-oracle test.
 
         The companion above compares two *non*-matches with each other, which shows only that a foreign uuid
         looks like a nonexistent one."""

@@ -1,4 +1,5 @@
-"""The comment-map composer is a file the browser keeps, not 52 KB inlined into every page on the site.
+"""
+The comment-map composer is a file the browser keeps, not 52 KB inlined into every page on the site.
 
 ``themes/base.html`` carried a 51,976-byte ``<script>`` defining the comment map and image-attachment composers.
 Every page extends that theme, so every page paid for it, whether or not it could open a composer at all - and
@@ -50,7 +51,8 @@ class SharedThemeScriptIsCacheableTests(TestCase):
         self.client.force_login(self.user)
 
     def body(self) -> bytes:
-        """An ordinary page, to see what the theme gives every one of them.
+        """
+        An ordinary page, to see what the theme gives every one of them.
 
         Returns:
             The rendered home page."""
@@ -89,7 +91,8 @@ class SharedThemeScriptIsCacheableTests(TestCase):
         self.assertEqual(inert_reads(SCRIPT_FILE.read_text()), [], "these config reads are quoted text, not values")
 
     def test_the_config_survives_a_signed_out_request(self) -> None:
-        """``logged_out.html`` extends the theme, and an anonymous request has no profile to read a uuid from.
+        """
+        ``logged_out.html`` extends the theme, and an anonymous request has no profile to read a uuid from.
 
         The template shrugged that off; a processor reaching for ``request.user.profile`` would not.
         """

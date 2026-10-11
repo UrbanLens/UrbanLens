@@ -1,4 +1,5 @@
-"""Overlap locks for scheduled sweeps.
+"""
+Overlap locks for scheduled sweeps.
 Beat tasks guard themselves with ``cache.add(key, ..., ttl)`` so two ticks cannot run the same sweep concurrently, then release in a ``finally``."""
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 def acquire_lock(key: str, timeout: int) -> str | None:
-    """Take a named overlap lock.
+    """
+    Take a named overlap lock.
 
     Args:
         key: Cache key identifying the sweep.
@@ -33,7 +35,8 @@ def acquire_lock(key: str, timeout: int) -> str | None:
 
 
 def release_lock(key: str, token: str | None) -> None:
-    """Release a lock taken by :func:`acquire_lock`, if it is still ours.
+    """
+    Release a lock taken by :func:`acquire_lock`, if it is still ours.
 
     Args:
         key: The same key passed to :func:`acquire_lock`.
@@ -57,7 +60,8 @@ def release_lock(key: str, token: str | None) -> None:
 
 @contextmanager
 def beat_lock(key: str, timeout: int) -> Iterator[bool]:
-    """Hold a named overlap lock for the duration of the block.
+    """
+    Hold a named overlap lock for the duration of the block.
 
     Args:
         key: Cache key identifying the sweep.

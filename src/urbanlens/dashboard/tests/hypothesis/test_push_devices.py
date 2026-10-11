@@ -214,7 +214,8 @@ class NotificationSignalTests(TestCase):
 
 
 class PushDeviceSerializerTests(TestCase):
-    """PushDeviceResponseSerializer is honest about per-transport dispatch status.
+    """
+    PushDeviceResponseSerializer is honest about per-transport dispatch status.
 
     There is no push-device list endpoint today (only register and delete), so
     the many=True serialization here stands in for any future read surface.

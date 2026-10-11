@@ -144,7 +144,8 @@ class LocalhostOnlyNetworkTests(TestCase):
             sock.close()
 
     def test_blocks_external_connect_ex(self) -> None:
-        """`connect_ex` is a separate C-level method - it does not route through `connect`.
+        """
+        `connect_ex` is a separate C-level method - it does not route through `connect`.
 
         A guard that patches only `connect` reports success here and opens a real outbound socket."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

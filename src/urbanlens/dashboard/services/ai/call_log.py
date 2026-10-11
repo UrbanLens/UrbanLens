@@ -1,4 +1,5 @@
-"""One ``ApiCallLog`` row for each AI call: provider, model, status, latency, tokens and cost.
+"""
+One ``ApiCallLog`` row for each AI call: provider, model, status, latency, tokens and cost.
 
 Never the prompt, an image or the answer. UrbanLens holds private and end-to-end-encrypted
 content, and the ledger is read by site admins and shown on the costs page.
@@ -29,7 +30,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class AiCall:
-    """What an AI call reports about itself for its row.
+    """
+    What an AI call reports about itself for its row.
 
     Attributes:
         success: Whether the provider answered.
@@ -51,7 +53,8 @@ _MAX_COST = Decimal("9999.999999")
 
 
 def failure_status(exc: InferenceError) -> int | None:
-    """The status worth recording for a failed inference call.
+    """
+    The status worth recording for a failed inference call.
 
     Only a 5xx: ai-inference answers 502 when the provider call failed. A 4xx is this deployment's own
     request or credential refused by ai-inference, not the provider's word, and ``provider_health``
@@ -67,7 +70,8 @@ def failure_status(exc: InferenceError) -> int | None:
 
 
 def ai_endpoint(provider: str, model: str) -> str:
-    """How an AI call's row names what was called.
+    """
+    How an AI call's row names what was called.
 
     Args:
         provider: The provider, e.g. ``"cloudflare"``.
@@ -81,7 +85,8 @@ def ai_endpoint(provider: str, model: str) -> str:
 
 @contextmanager
 def recorded_ai_call(*, service: str, provider: str, model: str) -> Iterator[AiCall]:
-    """Time one AI call and record it, however it ends.
+    """
+    Time one AI call and record it, however it ends.
 
     A failure to record is logged and swallowed: it never fails the call, and a call that raised is
     recorded as failed before the exception goes on. A call the environment refused (D26) was never made, so

@@ -1,4 +1,5 @@
-"""Per-user relevance marks for the Private Pin page's Media gallery.
+"""
+Per-user relevance marks for the Private Pin page's Media gallery.
 The Media gallery (Wikimedia/Smithsonian/Yelp/Google Images/...) renders straight from each provider's live results (see ``services.pins.external_data``) rather than persisting an ``Image`` row per item, so "relevant"/"not relevant" can't hang off an FK to one.
 """
 
@@ -17,7 +18,8 @@ ITEM_KEY_LENGTH = 40
 
 
 def media_item_key(url: str) -> str:
-    """Stable, short identifier for a transient Media gallery item.
+    """
+    Stable, short identifier for a transient Media gallery item.
 
     Args:
         url: The item's ``url`` (its full-resolution image URL - the same
@@ -32,7 +34,8 @@ def media_item_key(url: str) -> str:
 
 
 class MediaRelevance(abstract.DashboardModel):
-    """One user's relevance mark on one Media gallery item.
+    """
+    One user's relevance mark on one Media gallery item.
 
     ``is_relevant``: ``True`` (explicitly relevant - sorts first under
     "Relevant first"), ``False`` (not relevant - hidden by default), or the

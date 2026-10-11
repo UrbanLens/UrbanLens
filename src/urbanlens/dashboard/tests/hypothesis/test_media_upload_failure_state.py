@@ -60,7 +60,8 @@ class RecordUploadProcessingFailureTests(TestCase):
         self.assertEqual(failure.status, PhotoIssueStatus.PENDING)
 
     def test_the_photo_stays_quarantined(self) -> None:
-        """``pending_scan`` must not be cleared by failing.
+        """
+        ``pending_scan`` must not be cleared by failing.
 
         It is what keeps unscanned, unstripped bytes out of every gallery. A
         failure is precisely the case where the scan did not finish.
@@ -117,7 +118,8 @@ class RetryAndDiscardTests(TestCase):
         enqueue.assert_not_called()
 
     def test_retrying_is_bounded(self) -> None:
-        """A file that deterministically kills the decoder must not be endless.
+        """
+        A file that deterministically kills the decoder must not be endless.
 
         Without a ceiling the retry button is a way to feed the same
         child-killing file back to a two-slot sandbox worker forever.
@@ -196,7 +198,8 @@ class SweepBoundTests(TestCase):
         self.profile = Profile.objects.get(user=baker.make(User))
 
     def test_the_sweep_records_a_failure_once_its_budget_is_spent(self) -> None:
-        """The loop this closes: a row whose child dies is re-fed every tick.
+        """
+        The loop this closes: a row whose child dies is re-fed every tick.
 
         Each pass costs a sandbox slot on a file that has already killed a
         worker, and nothing ever tells the uploader.
@@ -299,7 +302,8 @@ class FailureCardViewTests(TestCase):
         )
 
     def test_a_refused_retry_puts_the_card_back(self) -> None:
-        """A refusal from a card-swapping button must not swallow the card.
+        """
+        A refusal from a card-swapping button must not swallow the card.
 
         `_toast`'s own docstring documents this trap: an empty body reports the
         problem and removes the only thing left to act on.

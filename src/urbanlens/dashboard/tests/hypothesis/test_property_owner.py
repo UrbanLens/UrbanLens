@@ -1,4 +1,5 @@
-"""Tests for the Ownership card: private-pin-vs-shared-wiki separation (mirroring
+"""
+Tests for the Ownership card: private-pin-vs-shared-wiki separation (mirroring
 PinAlias/WikiAlias), official-data locking, multi-owner sales, and permission gates."""
 
 from __future__ import annotations
@@ -253,7 +254,8 @@ class PinPropertySaleTabViewTests(OwnershipPanelViewTestsBase):
         self.assertEqual(response.status_code, 404)
 
     def test_add_sale_form_is_hidden_until_the_header_button_is_clicked(self) -> None:
-        """Regression guard: unlike the owner-add form, the sale-add form used
+        """
+        Regression guard: unlike the owner-add form, the sale-add form used
         to render with no `hidden` attribute at all - a page of empty inputs
         was shown before the user ever clicked "Add"."""
         response = self.client.get(reverse("pin.sales", args=[self.pin.slug]))

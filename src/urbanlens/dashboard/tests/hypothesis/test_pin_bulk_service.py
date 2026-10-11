@@ -1,4 +1,5 @@
-"""The bulk pin actions are one atomic service that refits each parent's boundary once (N29 G1-9, G1-22, G1-29).
+"""
+The bulk pin actions are one atomic service that refits each parent's boundary once (N29 G1-9, G1-22, G1-29).
 
 The web views looped over pins with no transaction (a merge even committed the target's promotion before finding
 out it had no sources), the API copied the loops and had drifted, and every reparent refitted its parent's

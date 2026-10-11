@@ -1,4 +1,5 @@
-"""Inviting people to a trip by email address.
+"""
+Inviting people to a trip by email address.
 
 The inviter sees the same outcome whether or not the address belongs to an account: a pending invitation
 listed under the address they typed, and nothing else until the invitee answers. The invitee answers two
@@ -46,7 +47,8 @@ MAX_ADDRESSES_PER_REQUEST = 50
 
 
 def parse_address_list(raw: object) -> list[str]:
-    """Split a comma, semicolon or whitespace separated list of addresses, dropping blanks and repeats.
+    """
+    Split a comma, semicolon or whitespace separated list of addresses, dropping blanks and repeats.
 
     Args:
         raw: A string, a list of strings, or nothing.
@@ -76,7 +78,8 @@ def invitation_path(invitation: TripInvitation) -> str:
 
 
 def invite_to_trip_by_email(trip: Trip, actor: Profile, email: str, *, invitation_url_builder: Callable[[str], str]) -> TripInvitation:
-    """Invite an email address to a trip without revealing whether it belongs to an account.
+    """
+    Invite an email address to a trip without revealing whether it belongs to an account.
 
     No refusal depends on whether the address belongs to someone else's account, and delivery - a
     notification for an account, an email otherwise - runs in a task after the request, so neither the
@@ -163,7 +166,8 @@ def _queue_delivery(invitation_id: int, url: str) -> None:
 
 
 def deliver_invitation(invitation: TripInvitation, url: str) -> None:
-    """Deliver a new invitation: a notification to the account proven to own its address, or an email to the address.
+    """
+    Deliver a new invitation: a notification to the account proven to own its address, or an email to the address.
 
     An account whose primary address is unverified is not trusted with the invitation; the mailbox gets it.
 
@@ -182,7 +186,8 @@ def deliver_invitation(invitation: TripInvitation, url: str) -> None:
 
 
 def send_invitation_email(invitation: TripInvitation, url: str) -> bool:
-    """Email an invitation to its unregistered address.
+    """
+    Email an invitation to its unregistered address.
 
     Args:
         invitation: The invitation to send.
@@ -253,7 +258,8 @@ def _notify_invitee(invitation: TripInvitation) -> None:
 
 
 def invitations_visible_to(trip: Trip, viewer: Profile) -> list[TripInvitation]:
-    """The email invitations a viewer may see and withdraw: their own, or every one when they created the trip.
+    """
+    The email invitations a viewer may see and withdraw: their own, or every one when they created the trip.
 
     Listed while either question is unanswered, so an inviter can still withdraw a friendship offer after the
     trip question is settled.
@@ -272,7 +278,8 @@ def invitations_visible_to(trip: Trip, viewer: Profile) -> list[TripInvitation]:
 
 
 def cancel_invitation(trip: Trip, actor: Profile, invitation_uuid: uuid.UUID | str) -> None:
-    """Withdraw an invitation: the actor's own, or any on a trip the actor created.
+    """
+    Withdraw an invitation: the actor's own, or any on a trip the actor created.
 
     Raises:
         TripNotFoundError: No such withdrawable invitation is the actor's to withdraw.
@@ -286,7 +293,8 @@ def cancel_invitation(trip: Trip, actor: Profile, invitation_uuid: uuid.UUID | s
 
 
 def invitation_for_token(token: uuid.UUID | str) -> TripInvitation:
-    """The invitation a token addresses, while any of its questions is open.
+    """
+    The invitation a token addresses, while any of its questions is open.
 
     Raises:
         TripNotFoundError: No such invitation, or it has expired.
@@ -298,7 +306,8 @@ def invitation_for_token(token: uuid.UUID | str) -> TripInvitation:
 
 
 def _claim(invitation: TripInvitation, profile: Profile) -> None:
-    """Bind an unbound invitation to the account answering it.
+    """
+    Bind an unbound invitation to the account answering it.
 
     Raises:
         TripNotFoundError: The invitation belongs to another account, or a block separates the two.
@@ -315,7 +324,8 @@ def _claim(invitation: TripInvitation, profile: Profile) -> None:
 
 
 def respond_to_trip(invitation: TripInvitation, profile: Profile, *, accept: bool) -> None:
-    """Join the trip, or decline it. Says nothing about friendship.
+    """
+    Join the trip, or decline it. Says nothing about friendship.
 
     Args:
         invitation: The invitation being answered.
@@ -357,7 +367,8 @@ def respond_to_trip(invitation: TripInvitation, profile: Profile, *, accept: boo
 
 
 def friendship_offer_open(invitation: TripInvitation, profile: Profile) -> bool:
-    """Whether the invitation's friendship question can be put to ``profile``.
+    """
+    Whether the invitation's friendship question can be put to ``profile``.
 
     Closed once answered, when the two are already friends or blocked, when either has Community off, and
     when ``profile``'s friend-request setting would not let the inviter ask.
@@ -374,7 +385,8 @@ def friendship_offer_open(invitation: TripInvitation, profile: Profile) -> bool:
 
 
 def respond_to_friendship(invitation: TripInvitation, profile: Profile, *, accept: bool) -> None:
-    """Become friends with the inviter, or decline. Says nothing about the trip.
+    """
+    Become friends with the inviter, or decline. Says nothing about the trip.
 
     Args:
         invitation: The invitation being answered.
@@ -410,7 +422,8 @@ def respond_to_friendship(invitation: TripInvitation, profile: Profile, *, accep
 
 
 def bind_invitations_to_account(user: User, *, email: str | None = None) -> int:
-    """Tie open invitations to an account whose address was just verified, and notify it.
+    """
+    Tie open invitations to an account whose address was just verified, and notify it.
 
     Nothing is joined or accepted: the account answers each invitation itself.
 

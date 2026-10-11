@@ -1,4 +1,5 @@
-"""A hidden stop never shows a member who may not see it a name taken from its place.
+"""
+A hidden stop never shows a member who may not see it a name taken from its place.
 
 A stop picked from a place search with no title typed stores the place's name as its title (P186), and an imported
 calendar event's location becomes an activity's title. ``TripActivity.title_from_place`` records that, and every
@@ -491,7 +492,8 @@ class TheSurfacesAgreeTests(SimpleTestCase):
 
 
 class BackfillTests(TestCase):
-    """A located stop's stored title may be its place search's name, and cannot be told from a typed one, so it is taken
+    """
+    A located stop's stored title may be its place search's name, and cannot be told from a typed one, so it is taken
     to be the place's until its author types one. A stop with no place has a place's name only from an import."""
 
     def test_every_title_that_may_be_a_places_is_marked_and_no_other(self) -> None:

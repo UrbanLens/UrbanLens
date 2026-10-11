@@ -39,7 +39,8 @@ class PasswordResetApiKeyRevocationTests(TestCase):
         _key, self.raw_key = generate_api_key(self.user, name="my-integration")
 
     def _start_reset(self, user: User | None = None) -> str:
-        """Walk the emailed link so the session carries the internal reset token.
+        """
+        Walk the emailed link so the session carries the internal reset token.
 
         Args:
             user: Whose link to build.
@@ -135,7 +136,8 @@ class PasswordResetApiKeyRevocationTests(TestCase):
         self.assertContains(response, "api-key-choice-dialog")
 
     def test_an_expired_link_for_a_real_account_reveals_nothing(self) -> None:
-        """The disclosure this page must not become.
+        """
+        The disclosure this page must not become.
 
         ``self.user`` is resolved from the uidb64 before the token is checked, and a uidb64 is an encoded
         integer pk."""

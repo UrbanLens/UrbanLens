@@ -100,7 +100,8 @@ class FriendAcceptedEmailTests(TestCase):
         self.assertEqual(mail.outbox[0].to, ["requester@example.com"])
 
     def test_the_auto_accept_branch_also_emails(self) -> None:
-        """request_or_accept_friendship's crossed-request path shares the same helper now.
+        """
+        request_or_accept_friendship's crossed-request path shares the same helper now.
 
         self.acceptor sent the original request; self.requester "requesting" them back crosses it and
         auto-accepts - so self.acceptor (the original sender) is who gets told it was accepted."""

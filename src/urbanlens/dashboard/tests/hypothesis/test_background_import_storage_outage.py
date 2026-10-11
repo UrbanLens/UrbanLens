@@ -1,4 +1,5 @@
-"""A background photo import waits out an object store that refuses a write, then imports the rest (P220).
+"""
+A background photo import waits out an object store that refuses a write, then imports the rest (P220).
 
 The Immich, Flickr, Flickr album and Google Photos imports, and an export archive's photos and overlay images, stored
 one file at a time and caught only a refused reservation. A Garage 503 or timeout on one photo failed the whole task
@@ -70,7 +71,8 @@ def garage_stores(request: AWSRequest) -> AWSResponse:
 
 
 class _Garage:
-    """An object store that stores every write, and refuses each one while it is down.
+    """
+    An object store that stores every write, and refuses each one while it is down.
 
     Attributes:
         down: Whether writes are refused.
@@ -358,7 +360,8 @@ class GooglePhotosImportStorageTests(_LibraryImportTests):
             return self.task.apply(args=(self.pin.pk, self.profile.pk, "sess", photo_ids)).get()
 
     def test_google_unreachable_after_storage_waits_fails_that_photo_and_not_the_import(self) -> None:
-        """A network error reaching Google fails the one photo, as Immich's and Flickr's do.
+        """
+        A network error reaching Google fails the one photo, as Immich's and Flickr's do.
 
         Escaping as a raw ``requests`` error, it went to the task's ``OSError`` autoretry, whose limit of 3 counts
         every retry the task has made, the storage waits included.

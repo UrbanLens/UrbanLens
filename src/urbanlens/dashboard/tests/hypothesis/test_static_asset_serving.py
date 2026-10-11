@@ -38,7 +38,8 @@ _BELOW = (
 
 
 def _load_init_module():
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """
+    Import ``src/bin/init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.
@@ -58,7 +59,8 @@ class StaticMiddlewarePositionTests(SimpleTestCase):
         self.assertIn(_WHITENOISE, settings.MIDDLEWARE)
 
     def test_static_storage_backend_still_hashes_outside_tests(self) -> None:
-        """The middleware and the storage backend have to agree about hashing.
+        """
+        The middleware and the storage backend have to agree about hashing.
 
         The manifest backend is what turns `dashboard/style.css` into a hashed name, and WhiteNoise's
         `immutable_file_test` asks that same storage whether a requested file is a hashed one before it promises
@@ -156,7 +158,8 @@ class StaticManifestVerificationTests(SimpleTestCase):
             self._initializer().verify_static_manifest()
 
     def test_a_build_step_that_produced_nothing_is_fatal(self) -> None:
-        """The failure mode the existence check cannot see.
+        """
+        The failure mode the existence check cannot see.
 
         `bun run sass` runs with raise_error=False, so a failed compile leaves no stylesheet, collectstatic
         collects nothing to replace it, and the resulting manifest is internally consistent with no CSS in it -
@@ -183,7 +186,8 @@ class StaticManifestVerificationTests(SimpleTestCase):
                 self._initializer().verify_static_manifest()
 
     def test_backslash_separator_is_fatal_even_though_the_file_exists(self) -> None:
-        """A Windows-generated manifest names files that exist and URLs that never match.
+        """
+        A Windows-generated manifest names files that exist and URLs that never match.
 
         51 of the shipped manifest's 166 entries looked like this."""
         with tempfile.TemporaryDirectory() as tmp:

@@ -1,4 +1,5 @@
-"""Share-chain provenance: who first told whom about a place, gaming-proof.
+"""
+Share-chain provenance: who first told whom about a place, gaming-proof.
 Exposures never reference the recipient's pins, so deleting/re-creating pins cannot clear them, and any future pin within :data:`EXPOSURE_RADIUS_METERS` of an exposed location chains its onward shares back to the originating share."""
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ EXPOSURE_RADIUS_METERS = 150
 
 
 def find_profile_pin_near_location(profile_id: int, location: Location | None, *, radius_meters: int = EXPOSURE_RADIUS_METERS) -> Pin | None:
-    """The profile's top-level pin at (or within ``radius_meters`` of) ``location``.
+    """
+    The profile's top-level pin at (or within ``radius_meters`` of) ``location``.
 
     Args:
         profile_id: PK of the pin owner to search.
@@ -53,7 +55,8 @@ def find_profile_pin_near_location(profile_id: int, location: Location | None, *
 
 
 def record_share_exposure(share: PinShare, *, source: ExposureSource = ExposureSource.SHARE_RECEIVED) -> LocationExposure | None:
-    """Record that ``share.to_profile`` learned about the shared place via ``share``.
+    """
+    Record that ``share.to_profile`` learned about the shared place via ``share``.
 
     Args:
         share: The just-created share to record.
@@ -85,7 +88,8 @@ def record_share_exposure(share: PinShare, *, source: ExposureSource = ExposureS
 
 
 def profile_is_exposed_to(profile_id: int, location: Location, *, radius_meters: int = EXPOSURE_RADIUS_METERS) -> bool:
-    """Whether ``profile_id`` already has any exposure within ``radius_meters`` of ``location``.
+    """
+    Whether ``profile_id`` already has any exposure within ``radius_meters`` of ``location``.
     Used by the detection paths (DM coordinates, trip activities) to avoid piling duplicate detected-share rows onto a place the recipient was already told about - the chain only needs the first one.
 
     Args:
@@ -99,7 +103,8 @@ def profile_is_exposed_to(profile_id: int, location: Location, *, radius_meters:
 
 
 def resolve_origin_share(profile_id: int, *, pin: Pin | None = None, location: Location | None = None) -> PinShare | None:
-    """The share through which ``profile_id`` originally learned about a place.
+    """
+    The share through which ``profile_id`` originally learned about a place.
 
     Args:
         profile_id: The prospective sharer (whose provenance is in question).
@@ -129,7 +134,8 @@ def resolve_origin_share(profile_id: int, *, pin: Pin | None = None, location: L
 
 
 def resolve_and_stamp_origin_share(pin: Pin) -> PinShare | None:
-    """Resolve a pin's origin share and persist it on the pin when it was heuristic.
+    """
+    Resolve a pin's origin share and persist it on the pin when it was heuristic.
 
     Args:
         pin: The pin about to be shared onward.
@@ -147,7 +153,8 @@ def resolve_and_stamp_origin_share(pin: Pin) -> PinShare | None:
 
 
 def propagate_exposures_for_pin_move(pin: Pin, old_location_id: int | None) -> int:
-    """Carry a moved pin's infection from its old location onto the new one. - Every exposure the owner had *near* the old location (a radius match, not an exact Location-row match - the pin may have been sitting close to, but not exactly on, an exposed...
+    """
+    Carry a moved pin's infection from its old location onto the new one. - Every exposure the owner had *near* the old location (a radius match, not an exact Location-row match - the pin may have been sitting close to, but not exactly on, an exposed...
 
     Args:
         pin: The pin that just moved (already saved with its new location).

@@ -1,4 +1,5 @@
-"""Querysets for the e2ee package's models.
+"""
+Querysets for the e2ee package's models.
 
 Pure read-query helpers only - nothing here touches wrapping/sealing logic
 or any key material.
@@ -27,7 +28,8 @@ class MessagingKeyBundleQuerySet(abstract.DashboardQuerySet["MessagingKeyBundle"
     """Custom queryset for MessagingKeyBundle models."""
 
     def for_profile(self, profile: Profile) -> MessagingKeyBundleQuerySet:
-        """The bundle row (at most one - ``profile`` is a OneToOneField) for a profile.
+        """
+        The bundle row (at most one - ``profile`` is a OneToOneField) for a profile.
 
         Args:
             profile: The profile to look up.
@@ -38,7 +40,8 @@ class MessagingKeyBundleQuerySet(abstract.DashboardQuerySet["MessagingKeyBundle"
         return self.filter(profile=profile)
 
     def for_profiles(self, profiles: Iterable[Profile] | Iterable[int]) -> MessagingKeyBundleQuerySet:
-        """Bundles for a set of profiles - accepts Profile instances or raw ids.
+        """
+        Bundles for a set of profiles - accepts Profile instances or raw ids.
 
         Args:
             profiles: Iterable of Profile instances (or profile ids).
@@ -60,7 +63,8 @@ class E2EEPasskeyWrapQuerySet(abstract.DashboardQuerySet["E2EEPasskeyWrap"]):
     """Custom queryset for E2EEPasskeyWrap models."""
 
     def usable_for_bundle(self, bundle) -> E2EEPasskeyWrapQuerySet:
-        """Wraps that can still unwrap this bundle's current keypair.
+        """
+        Wraps that can still unwrap this bundle's current keypair.
         A wrap whose ``bundle_version`` lags the bundle encrypts a superseded private key (a reset happened without the cleanup running) - serving it would produce an unlock that silently yields the wrong identity.
 
         Args:
@@ -83,7 +87,8 @@ class ConversationKeyQuerySet(abstract.DashboardQuerySet["ConversationKey"]):
     """Custom queryset for ConversationKey models."""
 
     def between(self, profile_a: Profile, profile_b: Profile) -> ConversationKeyQuerySet:
-        """Every key version for a conversation between two profiles, oldest first.
+        """
+        Every key version for a conversation between two profiles, oldest first.
 
         Args:
             profile_a: One participant (order doesn't matter).
@@ -110,7 +115,8 @@ class GroupKeyQuerySet(abstract.DashboardQuerySet["GroupKey"]):
     """Custom queryset for GroupKey models."""
 
     def for_group(self, group: GroupChat) -> GroupKeyQuerySet:
-        """Every key version for a group chat.
+        """
+        Every key version for a group chat.
 
         Args:
             group: The group chat.
@@ -121,7 +127,8 @@ class GroupKeyQuerySet(abstract.DashboardQuerySet["GroupKey"]):
         return self.filter(group=group)
 
     def with_outside_holders(self) -> GroupKeyQuerySet:
-        """Annotate ``has_outside_holder``: whether anyone outside the group's active membership holds this version.
+        """
+        Annotate ``has_outside_holder``: whether anyone outside the group's active membership holds this version.
 
         An envelope whose profile was deleted counts as outside, since that person may still hold the key.
 

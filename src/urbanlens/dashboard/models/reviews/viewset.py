@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
-    """Review endpoints.
+    """
+    Review endpoints.
     Only ``create_or_update`` (bound directly via ``as_view`` in ``dashboard/urls.py``) is actually routed - this viewset is never registered with the DRF router, so ``list``/``create``/``retrieve`` are never reachable.
     """
 
@@ -29,7 +30,8 @@ class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.
 
     @action(detail=True, methods=["patch"], url_path="create_or_update", url_name="create_or_update")
     def create_or_update(self, request, pk=None):
-        """Upsert the requester's own rating for a pin (star-rating widget).
+        """
+        Upsert the requester's own rating for a pin (star-rating widget).
         ``pk`` is the target pin's id, not a Review id - this always acts on the caller's own (profile, pin) rating, creating it on first use and updating it thereafter.
         ``profile`` and ``pin`` are never taken from the request body; only ``rating`` is client-controlled.
         """

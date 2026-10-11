@@ -14,7 +14,8 @@ class RecordSourcesTests(SimpleTestCase):
         self.assertEqual(record_sources(record), ["cris", "osm"])
 
     def test_precedence_order_is_preserved(self) -> None:
-        """REData orders `sources[]` richest-first; re-sorting would lose that.
+        """
+        REData orders `sources[]` richest-first; re-sorting would lose that.
 
         Keys are chosen so the expected result is neither the alphabetical nor the reverse-alphabetical ordering
         of themselves - `county_gis, cris, osm` (the previous data here) is already alphabetical, so a
@@ -69,7 +70,8 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
         self.assertEqual(row["source_label"], "")
 
     def test_every_source_redata_can_return_is_labelled(self) -> None:
-        """A missing label is silent: the chip just does not render.
+        """
+        A missing label is silent: the chip just does not render.
 
         REData's `BUILDING_SOURCES` has six entries and four of them had no label here, including `overpass` -
         which is in its *default* set, so the most common REData-sourced building on any parcel outside NY
@@ -88,7 +90,8 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
 
 
 class BuildingsOnPropertyTests(SimpleTestCase):
-    """REData labels what it over-returns; ignoring the label is how 2604 happened.
+    """
+    REData labels what it over-returns; ignoring the label is how 2604 happened.
 
     A parcel inside a broad CRIS archaeological sensitivity zone gets every surveyed building in that zone, each
     flagged ``is_on_property: false``."""
@@ -107,7 +110,8 @@ class BuildingsOnPropertyTests(SimpleTestCase):
         self.assertEqual(len(buildings_on_property([{"name": "osm row", "source": "osm"}])), 1)
 
     def test_a_parent_is_kept_in_the_list(self) -> None:
-        """A building containing others is still a building.
+        """
+        A building containing others is still a building.
 
         The Kirkbride case: a large building whose wings are separately mapped parents them, while remaining the
         structure the site is named after."""
@@ -144,7 +148,8 @@ _NESTED = [
 
 
 class BuildingNestingTests(SimpleTestCase):
-    """Nesting is reported by REData, not inferred from geometry here.
+    """
+    Nesting is reported by REData, not inferred from geometry here.
 
     It is a tree of arbitrary depth (a campus block parenting a wing parenting an annex), and it is not always
     cross-source - OSM models a `building` outline over its own `building:part` segments."""
@@ -160,7 +165,8 @@ class BuildingNestingTests(SimpleTestCase):
         self.assertEqual([r["depth"] for r in rows], [0, 1, 1])
 
     def test_siblings_are_sorted_within_their_parent_too(self) -> None:
-        """Sorting isn't only applied at the root: `_NESTED`'s two children happen to
+        """
+        Sorting isn't only applied at the root: `_NESTED`'s two children happen to
         already be given in alphabetical order, so that test alone wouldn't catch a
         `sorted()` dropped from the recursive per-parent walk."""
         records = [

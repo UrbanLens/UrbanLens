@@ -1,4 +1,5 @@
-"""Whether the page a panel request came from shows "child pin details".
+"""
+Whether the page a panel request came from shows "child pin details".
 
 A panel loaded by the page carries the setting as ``?children=``; a panel re-rendered by its own edit (a note
 posted, an alias added) carries nothing. Reading the setting from the request alone made such an edit drop the
@@ -22,7 +23,8 @@ _FLAGS = {"0", "1"}
 
 
 def child_details_requested(request: HttpRequest, target: Pin | Wiki) -> bool:
-    """Whether child pin or child wiki details show on the page asking for a panel.
+    """
+    Whether child pin or child wiki details show on the page asking for a panel.
 
     The request's own ``children`` flag decides when it carries one; then the page's address, which the toggle keeps
     current and htmx sends as ``HX-Current-URL``; then the page's default, as the page itself decides. Only the
@@ -59,7 +61,8 @@ def _page_paths(target: Pin | Wiki) -> set[str]:
 
 
 def default_child_details(target: Pin | Wiki) -> bool:
-    """Whether a page shows its children's details before anyone toggles them.
+    """
+    Whether a page shows its children's details before anyone toggles them.
 
     Args:
         target: The pin or wiki whose page it is.

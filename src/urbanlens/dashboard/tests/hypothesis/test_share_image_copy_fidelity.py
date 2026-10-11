@@ -83,7 +83,8 @@ class SharedImageCopyFidelityTests(TestCase):
         self.assertEqual(original.pin_id, self.pin.pk)
 
     def test_the_copy_is_exempt_from_the_recipients_storage_quota(self):
-        """The copy points at the sender's already-stored file (see this module's
+        """
+        The copy points at the sender's already-stored file (see this module's
         docstring and ``image=image.image.name`` in create_pin_from_share) - it
         occupies no storage of the recipient's own to charge quota for."""
         from urbanlens.dashboard.services.media.storage import get_storage_used_bytes
@@ -94,7 +95,8 @@ class SharedImageCopyFidelityTests(TestCase):
 
 
 class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
-    """Accepting a share gives you the place, not the person's account of it.
+    """
+    Accepting a share gives you the place, not the person's account of it.
 
     A share carries what is true about the site - its dates, and what was observed there."""
 
@@ -133,7 +135,8 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         self.assertEqual(str(new_pin.date_abandoned), "1994-06-15")
 
     def test_the_senders_personal_notes_never_travel(self) -> None:
-        """The description is the owner's own account of the place, and nothing in
+        """
+        The description is the owner's own account of the place, and nothing in
         the product lets somebody agree to pass it on. Absent a way to ask, no."""
         self.pin.description = "zzq-my-private-notes-about-this-place"
         self.pin.save(update_fields=["description"])
@@ -150,7 +153,8 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         self.assertNotEqual(new_pin.detail_bg_color, "#123456", "the recipient inherited the sender's pin styling")
 
     def test_the_senders_own_view_of_the_place_does_not_travel(self) -> None:
-        """Icon, colour and priority are how one person marked a place for
+        """
+        Icon, colour and priority are how one person marked a place for
         themselves, not anything true about it."""
         self.pin.icon = "zzq-custom-icon"
         self.pin.color = "#abcdef"
@@ -193,7 +197,8 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         self.assertEqual(create_pin_from_share(share).name, "The old hospital")
 
     def test_a_shared_photo_keeps_where_and_when_but_not_the_caption(self) -> None:
-        """Dates and coordinates place the photo; the caption is what the sharer
+        """
+        Dates and coordinates place the photo; the caption is what the sharer
         wrote about it, and exif_data/original_filename are the file behind it."""
         photo = Image.objects.create(
             image=SimpleUploadedFile("PXL_20260709_123456.jpg", b"not-a-real-jpeg", content_type="image/jpeg"),
@@ -229,7 +234,8 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         self.assertIn(self.sender.username, copy.author or "", "an unattributed photo should say who shared it")
 
     def test_the_senders_ratings_of_the_place_do_not_travel(self) -> None:
-        """vulnerability and danger look like properties of the site and are not:
+        """
+        vulnerability and danger look like properties of the site and are not:
         they are one person's assessment of it."""
         self.pin.vulnerability = 4
         self.pin.danger = 5
@@ -241,7 +247,8 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
         self.assertNotEqual(new_pin.danger, 5, "the recipient inherited the sender's danger rating")
 
     def test_the_senders_labels_do_not_travel(self) -> None:
-        """Labels are per-profile; the recipient must not end up holding the
+        """
+        Labels are per-profile; the recipient must not end up holding the
         sender's rows."""
         from urbanlens.dashboard.models.labels.model import Label
 
@@ -254,7 +261,8 @@ class SharedPinCarriesTheSiteNotTheOwnerTests(TestCase):
 
 
 class PendingScanImagesAreNotSharedTests(TestCase):
-    """A still-pending photo must not be copied into an accepted share.
+    """
+    A still-pending photo must not be copied into an accepted share.
 
     ``create_pin_from_share`` points the copy at the *same stored file* the sender's row uses and never runs
     ``process_image_upload`` on it - so a copy of a still-``pending_scan`` original would be immediately visible

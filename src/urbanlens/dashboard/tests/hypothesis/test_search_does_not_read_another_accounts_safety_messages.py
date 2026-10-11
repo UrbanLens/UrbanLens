@@ -1,4 +1,5 @@
-"""Searching your own safety check-ins must not read chat messages on a check-in you do not own.
+"""
+Searching your own safety check-ins must not read chat messages on a check-in you do not own.
 
 Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``):
 ``SafetySearchProvider.search`` feeds ``messages__body`` to ``apply_text``, and it crosses a to-many
@@ -52,7 +53,8 @@ TOLERANCE = 20
 
 
 class _SafetyMessageCase(TestCase):
-    """A viewer with one check-in they own (one message matching the term), and a stranger's
+    """
+    A viewer with one check-in they own (one message matching the term), and a stranger's
     check-in the viewer does not own, whose unrelated messages share the table."""
 
     def setUp(self) -> None:
@@ -107,7 +109,8 @@ class _SafetyMessageCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the safety-message table.
+        """
+        The full capture, and the statements in it that read the safety-message table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

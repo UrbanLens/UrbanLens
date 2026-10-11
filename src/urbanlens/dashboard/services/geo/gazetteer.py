@@ -1,4 +1,5 @@
-"""Places known by name: cities of 15,000 or more people worldwide, US states and counties, and countries.
+"""
+Places known by name: cities of 15,000 or more people worldwide, US states and counties, and countries.
 
 The data is GeoNames' (CC BY 4.0), extracted from ``geonamescache`` by :mod:`.build_gazetteer` into two small files
 here, because parsing the package's JSON cost each process a second and 60 MB. Read once per process.
@@ -25,7 +26,8 @@ _NON_ALNUM = re.compile(r"[^0-9a-z]+")
 
 
 def fold_place_name(name: str) -> str:
-    """A place name in the form names are compared in: accents dropped, casefolded, punctuation as single spaces.
+    """
+    A place name in the form names are compared in: accents dropped, casefolded, punctuation as single spaces.
 
     Args:
         name: A place name.
@@ -40,7 +42,8 @@ def fold_place_name(name: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class GazetteerCity:
-    """One city.
+    """
+    One city.
 
     Attributes:
         name: Its GeoNames name.
@@ -82,7 +85,8 @@ def _regions() -> dict[str, Any]:
 
 
 def cities_named(folded_name: str) -> tuple[GazetteerCity, ...]:
-    """Every city with this name.
+    """
+    Every city with this name.
 
     Args:
         folded_name: A name as :func:`fold_place_name` returns it.
@@ -95,7 +99,8 @@ def cities_named(folded_name: str) -> tuple[GazetteerCity, ...]:
 
 @cache
 def us_states() -> dict[str, str]:
-    """US states (and DC) by folded name.
+    """
+    US states (and DC) by folded name.
 
     Returns:
         Folded state name to its two-letter postal code.
@@ -111,7 +116,8 @@ def us_counties() -> frozenset[str]:
 
 @cache
 def countries() -> dict[str, str]:
-    """Countries by folded name.
+    """
+    Countries by folded name.
 
     Returns:
         Folded country name to its ISO 3166-1 alpha-2 code.
@@ -127,7 +133,8 @@ def country_names_by_code() -> dict[str, str]:
 
 @lru_cache(maxsize=1024)
 def nearest_city(latitude: float, longitude: float, *, within_km: float) -> GazetteerCity | None:
-    """The city nearest a point, when one is close enough.
+    """
+    The city nearest a point, when one is close enough.
 
     Args:
         latitude: WGS-84 latitude.

@@ -21,7 +21,8 @@ class ImmichAccountForm(forms.ModelForm):
         }
 
     def clean_server_url(self) -> str:
-        """Strip a trailing slash and reject a server that isn't publicly reachable.
+        """
+        Strip a trailing slash and reject a server that isn't publicly reachable.
 
         A self-hosted Immich server is fetched from server-side code (both a live ``ping()`` on connect and
         every subsequent asset/thumbnail proxy), so an unvalidated ``server_url`` would let any

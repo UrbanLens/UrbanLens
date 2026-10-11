@@ -1,4 +1,5 @@
-"""Server-side previews for Media-gallery items a browser can't render itself.
+"""
+Server-side previews for Media-gallery items a browser can't render itself.
 A TIFF renders as a broken image in every browser except Safari, and a PDF never renders in an ``<img>`` at all - so those items were reaching the page and then disappearing into the broken-image fallback or a grey document icon."""
 
 from __future__ import annotations
@@ -79,7 +80,8 @@ def _extension(url: str) -> str:
 
 
 def is_web_safe(url: str, content_type: str = "") -> bool:
-    """Whether a browser can render this item directly in an ``<img>``.
+    """
+    Whether a browser can render this item directly in an ``<img>``.
 
     Args:
         url: The item's URL.
@@ -94,7 +96,8 @@ def is_web_safe(url: str, content_type: str = "") -> bool:
 
 
 def needs_server_side_preview(url: str, content_type: str = "") -> bool:
-    """Whether this item must be converted server-side to be displayable.
+    """
+    Whether this item must be converted server-side to be displayable.
 
     Args:
         url: The item's URL.
@@ -119,7 +122,8 @@ class RemoteSourceTimeoutError(Exception):
 
 
 def fetch_remote_source(url: str, *, max_bytes: int, timeout: float = _FETCH_TIMEOUT) -> tuple[bytes, str] | None:
-    """Download a remote file for a server-side render, pinning each hop to the address it validated to.
+    """
+    Download a remote file for a server-side render, pinning each hop to the address it validated to.
 
     Args:
         url: The absolute http(s) URL to fetch.
@@ -181,7 +185,8 @@ def _thumb_source(item_url: str, thumb_url: str, content_type: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class GalleryUrls:
-    """Where a gallery tile gets its pictures.
+    """
+    Where a gallery tile gets its pictures.
 
     Attributes:
         thumb: The tile's ``<img src>``, ``""`` for an icon tile.
@@ -204,7 +209,8 @@ def _gallery_url(source: str, copies: dict[str, str], declared: str) -> str:
 
 
 def gallery_urls(items: Sequence[MediaItem], *, provider: str, with_views: bool = True) -> list[GalleryUrls]:
-    """The pictures for each gallery item, in order.
+    """
+    The pictures for each gallery item, in order.
 
     A provider's image is never linked directly: it becomes this site's copy (``remote_copies``), made and kept on first
     view. An in-app proxy URL is used as it is, flagged for a server-side preview when a browser cannot render it.
@@ -233,7 +239,8 @@ def gallery_urls(items: Sequence[MediaItem], *, provider: str, with_views: bool 
 
 
 def gallery_thumb_urls(items: Sequence[MediaItem], *, provider: str) -> list[str]:
-    """Each gallery item's ``<img src>``, without preparing lightbox copies (see :func:`gallery_urls`).
+    """
+    Each gallery item's ``<img src>``, without preparing lightbox copies (see :func:`gallery_urls`).
 
     Args:
         items: The gallery's items.
@@ -246,7 +253,8 @@ def gallery_thumb_urls(items: Sequence[MediaItem], *, provider: str) -> list[str
 
 
 def gallery_thumb_url(item: MediaItem, *, provider: str) -> str:
-    """:func:`gallery_thumb_urls` for one item.
+    """
+    :func:`gallery_thumb_urls` for one item.
 
     Args:
         item: The gallery item.
@@ -260,7 +268,8 @@ def gallery_thumb_url(item: MediaItem, *, provider: str) -> str:
 
 @untrusted_parse("document.render")
 def _pdf_first_page(raw: bytes):
-    """Render a PDF's first page to a PIL image, or None when poppler can't.
+    """
+    Render a PDF's first page to a PIL image, or None when poppler can't.
 
     Args:
         raw: The PDF file's bytes.
@@ -280,7 +289,8 @@ def _pdf_first_page(raw: bytes):
 
 @untrusted_parse("image.decode")
 def render_preview(raw: bytes, content_type: str = "", *, max_dimension: int = PREVIEW_MAX_DIMENSION) -> tuple[bytes, str] | None:
-    """Convert one file's bytes into a browser-renderable image.
+    """
+    Convert one file's bytes into a browser-renderable image.
 
     Args:
         raw: The source file's bytes.
@@ -360,7 +370,8 @@ def _preview_source_root() -> Path:
 
 
 def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str, str]:
-    """Write a source file where the sandbox worker can read it.
+    """
+    Write a source file where the sandbox worker can read it.
 
     Args:
         digest: A stable hash of the source URL, used as the filename.
@@ -379,7 +390,8 @@ def stage_preview_source(digest: str, raw: bytes, content_type: str) -> dict[str
 
 
 def load_preview_source(descriptor: dict[str, str]) -> tuple[bytes, str] | None:
-    """Read back what :func:`stage_preview_source` wrote.
+    """
+    Read back what :func:`stage_preview_source` wrote.
 
     Args:
         descriptor: The value :func:`stage_preview_source` returned.
@@ -394,7 +406,8 @@ def load_preview_source(descriptor: dict[str, str]) -> tuple[bytes, str] | None:
 
 
 def discard_preview_source(descriptor: dict[str, str]) -> None:
-    """Remove a staged source once its render is done with it.
+    """
+    Remove a staged source once its render is done with it.
 
     Args:
         descriptor: The value :func:`stage_preview_source` returned.
@@ -404,7 +417,8 @@ def discard_preview_source(descriptor: dict[str, str]) -> None:
 
 
 def sweep_preview_sources(max_age: int = PREVIEW_SOURCE_MAX_AGE) -> int:
-    """Delete staged sources whose render never ran.
+    """
+    Delete staged sources whose render never ran.
 
     Args:
         max_age: Age in seconds past which a staged file is an orphan.

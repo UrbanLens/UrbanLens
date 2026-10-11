@@ -48,7 +48,8 @@ def _response(
 
 
 class SlowDripBodyTests(SimpleTestCase):
-    """A server that keeps each read alive cannot keep the caller past the total deadline.
+    """
+    A server that keeps each read alive cannot keep the caller past the total deadline.
 
     Real sockets, because the property is about what a blocked ``recv`` does."""
 
@@ -90,7 +91,8 @@ class SlowDripHeaderTests(SimpleTestCase):
 
 
 class SlowDripOverTlsTests(SimpleTestCase):
-    """TLS wraps the socket the connection hook saw into a new object and detaches the original.
+    """
+    TLS wraps the socket the connection hook saw into a new object and detaches the original.
 
     A cut that only reached the original socket would do nothing over https."""
 

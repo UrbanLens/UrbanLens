@@ -22,7 +22,8 @@ MAX_PHOTO_IDS_PER_CONFIDENCE_LOOKUP = 1000
 
 
 def _empty_submit_result() -> dict[str, Any]:
-    """A "nothing was submitted" result.
+    """
+    A "nothing was submitted" result.
     Shared by the empty-input and the skipped-off-production paths so the two are indistinguishable to callers."""
     return {"count": 0, "results": {}, "unknown": [], "created": 0, "updated": 0, "image_warnings": {}, "pending": []}
 
@@ -56,7 +57,8 @@ class RedataPhotosGateway(RedataJsonGateway):
     api_key: str | None = field(default_factory=lambda: settings.redata_api_key)
 
     def get_model(self) -> dict[str, Any]:
-        """Return what is currently scoring photo relevance, and how well.
+        """
+        Return what is currently scoring photo relevance, and how well.
         Brier score is the headline metric on purpose: it is a proper scoring rule, so unlike AUC it penalises a model that ranks well while being systematically overconfident.
 
         Returns:
@@ -67,7 +69,8 @@ class RedataPhotosGateway(RedataJsonGateway):
         return self._get_json("/api/v1/photos/model/", timeout=_MODEL_READ_TIMEOUT)
 
     def submit_photos(self, photos: list[dict[str, Any]]) -> dict[str, Any]:
-        """Submit (upsert) photo observations for scoring.
+        """
+        Submit (upsert) photo observations for scoring.
 
         Args:
             photos: Up to :data:`MAX_PHOTOS_PER_SUBMIT` submission dicts, each
@@ -89,7 +92,8 @@ class RedataPhotosGateway(RedataJsonGateway):
         return self._post_json("/api/v1/photos/", {"photos": photos})
 
     def submit_votes(self, votes: list[dict[str, Any]]) -> dict[str, Any]:
-        """Record relevance votes - the model's training label, never a scoring input.
+        """
+        Record relevance votes - the model's training label, never a scoring input.
 
         Args:
             votes: Up to :data:`MAX_VOTES_PER_SUBMIT` vote dicts (``photo_id``,
@@ -108,7 +112,8 @@ class RedataPhotosGateway(RedataJsonGateway):
         return self._post_json("/api/v1/photos/votes/", {"votes": votes})
 
     def lookup_near(self, latitude: float, longitude: float, *, radius_meters: float | None = None, limit: int | None = None) -> list[dict[str, Any]]:
-        """Every photo this site submitted for a place near a coordinate, matched on the place rather than the camera.
+        """
+        Every photo this site submitted for a place near a coordinate, matched on the place rather than the camera.
 
         A local read on REData's side - it never answers 503 - that scores any photo with no current score first.
 
@@ -133,7 +138,8 @@ class RedataPhotosGateway(RedataJsonGateway):
         return _photo_rows(self._get_json("/api/v1/photos/lookup/", params))
 
     def photos_for_parcel(self, parcel_uuid: str, *, limit: int | None = None) -> list[dict[str, Any]]:
-        """Every photo whose place REData resolved to a parcel, best-scoring first.
+        """
+        Every photo whose place REData resolved to a parcel, best-scoring first.
 
         Args:
             parcel_uuid: The parcel's REData uuid.
@@ -150,7 +156,8 @@ class RedataPhotosGateway(RedataJsonGateway):
         return _photo_rows(self._get_json(f"/api/v1/parcels/{quote(parcel_uuid, safe='')}/photos/", params))
 
     def get_confidence_batch(self, photo_ids: list[str]) -> dict[str, Any]:
-        """Look up cached confidence scores for many photos at once.
+        """
+        Look up cached confidence scores for many photos at once.
 
         Args:
             photo_ids: Up to :data:`MAX_PHOTO_IDS_PER_CONFIDENCE_LOOKUP` ids.

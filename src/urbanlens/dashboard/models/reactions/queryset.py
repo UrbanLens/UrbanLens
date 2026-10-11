@@ -18,7 +18,8 @@ class ReactionQuerySet(abstract.DashboardQuerySet["Reaction"]):
     """Custom queryset for Reaction models."""
 
     def existing(self, profile: Profile, emoji: str, **target: Any) -> Reaction | None:
-        """Find this profile's existing reaction with this emoji on one target, if any.
+        """
+        Find this profile's existing reaction with this emoji on one target, if any.
         A Reaction's target is polymorphic - exactly one of ``comment``, ``trip_comment``, ``direct_message`` or ``group_message`` is ever set (see the model's own docstring and its per-target unique constraints) - so every caller toggling a reaction (comment/trip-comment/DM/group-message reaction views) needs the exact same "does this profile+emoji+target combo already exist" lookup, differing only in which target kwarg they pass.
 
         Args:

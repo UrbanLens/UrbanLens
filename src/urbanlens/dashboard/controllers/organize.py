@@ -42,7 +42,8 @@ _BASE_CTX = {
 
 
 def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") -> dict:
-    """Build template context shared by the Organize page and per-kind standalone pages.
+    """
+    Build template context shared by the Organize page and per-kind standalone pages.
 
     Args:
         request: The HTTP request (used for profile and permissions).
@@ -60,7 +61,8 @@ def build_organize_page_context(request: HttpRequest, active_tab: str = "tags") 
     on_labels_section = active_section == "labels"
 
     def _first_page(tab_key: str, kind: str, url_kind: str) -> tuple[list[Label], OrganizeRowsMore | None]:
-        """The first page of a label tab's cards when it is the one on screen, and nothing otherwise.
+        """
+        The first page of a label tab's cards when it is the one on screen, and nothing otherwise.
 
         An inactive tab loads its rows when revealed. Profiled at 500 tags, rendering every tab's cards up front
         cost ~12s of wall time against ~0.2s of database time.
@@ -124,7 +126,8 @@ class OrganizeIndexView(LoginRequiredMixin, View):
     """Unified Organize page with Labels (Tags/Categories/Statuses/People/Priority), Lists, and Filters tabs."""
 
     def get(self, request, *args, **kwargs):
-        """Render the organize page.
+        """
+        Render the organize page.
 
         Args:
             request: The HTTP request.
@@ -139,7 +142,8 @@ class OrganizeIndexView(LoginRequiredMixin, View):
 
 
 class OrganizePriorityListView(LoginRequiredMixin, View):
-    """Re-render the Display Order tab's priority list.
+    """
+    Re-render the Display Order tab's priority list.
 
     GET /organize/priority/list/
 
@@ -150,7 +154,8 @@ class OrganizePriorityListView(LoginRequiredMixin, View):
     """
 
     def get(self, request, *args, **kwargs):
-        """Render the priority-list partial.
+        """
+        Render the priority-list partial.
 
         Args:
             request: The HTTP request.
@@ -170,7 +175,8 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
     """Save the combined priority order for tags and categories."""
 
     def post(self, request, *args, **kwargs):
-        """Persist new order for the submitted item IDs.
+        """
+        Persist new order for the submitted item IDs.
 
         Per-profile ordering of globals would need an ``order`` column on ``LabelCustomization``; until that
         exists, refusing is the only correct answer.

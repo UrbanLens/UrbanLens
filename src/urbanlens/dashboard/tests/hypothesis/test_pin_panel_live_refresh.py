@@ -79,7 +79,8 @@ class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
         self.assertEqual(_hx_trigger_events(response), {"pinLinksChanged": True})
 
     def test_other_generic_panels_never_fire(self) -> None:
-        """Only epa_echo_detail is known to have a side effect - every other
+        """
+        Only epa_echo_detail is known to have a side effect - every other
         InfoPanelSource-backed panel must stay silent even on a poll."""
         LocationCache.set(self.pin.location, "photon", {"locality": "Old Mill"}, query_key="")
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]), {"attempt": "1"})
@@ -88,7 +89,8 @@ class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
 
 
 class PinDetailPageLiveRefreshMarkupTests(TestCase):
-    """The listening side: panels that can be mutated by another panel's fetch
+    """
+    The listening side: panels that can be mutated by another panel's fetch
     must actually listen for the corresponding event."""
 
     def setUp(self) -> None:

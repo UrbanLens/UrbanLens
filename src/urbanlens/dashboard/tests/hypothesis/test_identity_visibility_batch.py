@@ -224,7 +224,8 @@ class VisibleProfilePksAgreementTests(TestCase):
 
 
 class ViewersWhoCanSeeAgreementTests(TestCase):
-    """The mirror: one subject, many viewers, same contract.
+    """
+    The mirror: one subject, many viewers, same contract.
 
     Written because a group message carries its sender's name, so the name has to pass every recipient's own
     visibility - a question ``visible_profile_pks`` cannot batch, because it batches over subjects."""
@@ -304,7 +305,8 @@ class ViewersWhoCanSeeAgreementTests(TestCase):
         self._assert_agrees([with_common, without])
 
     def test_common_pin_across_different_locations_sharing_a_place(self) -> None:
-        """Mirror of VisibleProfilePksAgreementTests's test of the same name -
+        """
+        Mirror of VisibleProfilePksAgreementTests's test of the same name -
         the subject-side (viewers_who_can_see) batch path must be place-aware too."""
         self._set_visibility(VisibilityChoice.COMMON_PIN)
         place = baker.make(Place, kind=PlaceKind.PARCEL)

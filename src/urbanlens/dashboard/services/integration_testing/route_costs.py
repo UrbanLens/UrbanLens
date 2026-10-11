@@ -1,4 +1,5 @@
-"""What each GET route costs, requested as a light account and as a heavy one.
+"""
+What each GET route costs, requested as a light account and as a heavy one.
 
 A route whose query count stays flat can still fetch every row an account owns, and render all of it. Comparing rows,
 bytes and wall time between the two accounts is what finds that.
@@ -65,7 +66,8 @@ class RouteTarget:
 
 @dataclass(frozen=True, slots=True)
 class RouteCost:
-    """One route, requested repeatedly as one account.
+    """
+    One route, requested repeatedly as one account.
 
     Attributes:
         wall_ms: Every run's wall time, first run first.
@@ -132,7 +134,8 @@ def _answers_get(pattern: URLPattern) -> bool:
 
 
 def discover_routes(only: re.Pattern[str] | None = None, patterns: Iterable[URLPattern | URLResolver] | None = None) -> tuple[list[RouteTarget], list[RouteTarget]]:
-    """Every named route that answers GET, split into those a sweep requests and those it must not.
+    """
+    Every named route that answers GET, split into those a sweep requests and those it must not.
 
     Args:
         only: Keep only routes whose name this matches.
@@ -157,7 +160,8 @@ def discover_routes(only: re.Pattern[str] | None = None, patterns: Iterable[URLP
 
 
 def parameter_values(profile: Profile) -> dict[str, str | int]:
-    """URL parameters filled from the account's own rows: its first pin, that pin's location, a friend, a tag.
+    """
+    URL parameters filled from the account's own rows: its first pin, that pin's location, a friend, a tag.
 
     Args:
         profile: The account the sweep requests as.
@@ -183,7 +187,8 @@ def parameter_values(profile: Profile) -> dict[str, str | int]:
 
 
 def build_url(target: RouteTarget, values: Mapping[str, str | int]) -> str | None:
-    """The route's URL, or None when a parameter has no value or the values do not fit its converters.
+    """
+    The route's URL, or None when a parameter has no value or the values do not fit its converters.
 
     Args:
         target: The route.
@@ -206,7 +211,8 @@ def request_host() -> str:
 
 
 def signed_in_fetch(user: User, *, host: str) -> Callable[[str], HttpResponseBase]:
-    """A GET as *user*, over the whole middleware stack, that answers a route's exception with a 500.
+    """
+    A GET as *user*, over the whole middleware stack, that answers a route's exception with a 500.
 
     Args:
         user: Who to sign in as.
@@ -233,7 +239,8 @@ def _body_bytes(response: HttpResponseBase) -> int:
 
 
 def measure_route(fetch: Callable[[str], HttpResponseBase], url: str, *, account: str, name: str, runs: int) -> RouteCost:
-    """Request *url* *runs* times, each inside a transaction that is rolled back.
+    """
+    Request *url* *runs* times, each inside a transaction that is rolled back.
 
     Args:
         fetch: Makes the request.
@@ -268,7 +275,8 @@ def _request_once(fetch: Callable[[str], HttpResponseBase], url: str) -> tuple[_
 
 
 def population_extremes(username_prefix: str) -> tuple[User, User] | None:
-    """The accounts under *username_prefix* holding the fewest and the most root pins.
+    """
+    The accounts under *username_prefix* holding the fewest and the most root pins.
 
     Args:
         username_prefix: Selects the accounts.
@@ -283,7 +291,8 @@ def population_extremes(username_prefix: str) -> tuple[User, User] | None:
 
 
 def sweep(accounts: Sequence[tuple[str, User]], *, runs: int, host: str, only: re.Pattern[str] | None = None, progress: Callable[[str], object] | None = None) -> SweepResult:
-    """Request every visitable route as each account.
+    """
+    Request every visitable route as each account.
 
     Args:
         accounts: ``(label, user)`` pairs.
@@ -325,7 +334,8 @@ def grows(light: RouteCost, heavy: RouteCost) -> bool:
 
 
 def render(result: SweepResult, *, light: str, heavy: str) -> str:
-    """The sweep as Markdown, slowest route for the heavy account first.
+    """
+    The sweep as Markdown, slowest route for the heavy account first.
 
     Args:
         result: The sweep.

@@ -1,4 +1,5 @@
-"""daphne must not leave the URLconf import for its first request to pay.
+"""
+daphne must not leave the URLconf import for its first request to pay.
 
 The gunicorn app warms the URLconf in `post_worker_init` because resolving it
 reaches every controller and through them GeoPandas/Shapely - measured here at
@@ -66,7 +67,8 @@ class TheAsgiEntrypointWarmsTheUrlconfTests(SimpleTestCase):
         self.assertEqual(_probe(), "WARM", "daphne's first HTTP request still pays the URLconf import")
 
     def test_the_probe_can_tell_the_difference(self) -> None:
-        """Anti-vacuity: the probe must report COLD for a process that has only
+        """
+        Anti-vacuity: the probe must report COLD for a process that has only
         set Django up, or "WARM" would mean nothing."""
         source = textwrap.dedent(
             f"""
@@ -115,6 +117,7 @@ class TheAsgiEntrypointWarmsTheUrlconfTests(SimpleTestCase):
         self.assertGreater(int(result.stdout.strip().splitlines()[-1]), 100_000)
 
     def test_the_setting_names_a_real_module(self) -> None:
-        """`ROOT_URLCONF in sys.modules` is the whole assertion, so a typo in
+        """
+        `ROOT_URLCONF in sys.modules` is the whole assertion, so a typo in
         the setting would make both tests above vacuous."""
         self.assertEqual(settings.ROOT_URLCONF, "urbanlens.UrbanLens.urls")

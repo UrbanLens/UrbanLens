@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 @method_decorator(csrf_exempt, name="dispatch")
 class StripeWebhookView(View):
-    """Receive and process Stripe webhook events.
+    """
+    Receive and process Stripe webhook events.
 
     POST /billing/webhooks/stripe/
 

@@ -1,4 +1,5 @@
-"""Searching your own photos must not read keyword rows belonging to a photo you cannot see.
+"""
+Searching your own photos must not read keyword rows belonging to a photo you cannot see.
 
 ``test_search_does_not_read_another_accounts_photo_labels.py`` already covers
 ``PhotoSearchProvider``'s ``labels__name`` path. Its field list (``apply_text``'s call in
@@ -100,7 +101,8 @@ class _PhotoKeywordCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the keyword table.
+        """
+        The full capture, and the statements in it that read the keyword table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

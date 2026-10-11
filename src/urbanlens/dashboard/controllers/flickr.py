@@ -70,7 +70,8 @@ def _request_token_cache_key(oauth_token: str) -> str:
 
 
 def _within_radius(pin_point: tuple[float, float], photo: FlickrPhoto, radius_m: int) -> bool:
-    """Whether a photo is within ``radius_m`` of the pin, re-checking locally.
+    """
+    Whether a photo is within ``radius_m`` of the pin, re-checking locally.
 
     Flickr's search already filters server-side, so this only re-verifies photos that reported
     coordinates - one with none is kept as-is (Flickr included it in the radius search results, so it's
@@ -163,7 +164,8 @@ class FlickrDisconnectView(LoginRequiredMixin, View):
 
 
 class PinFlickrSearchView(LoginRequiredMixin, View):
-    """GET pin/<slug>/flickr/search/ - the user's own photos, filtered by mode.
+    """
+    GET pin/<slug>/flickr/search/ - the user's own photos, filtered by mode.
 
     Three modes (see ``PhotoImportMode``): nearby this pin's location, taken on
     one of the pin's recorded PinVisit dates, or unfiltered (most recent first).
@@ -296,7 +298,8 @@ def _album_base_context(*, target_kind: str, lookup_url: str, import_url: str) -
 
 
 def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], context: dict) -> HttpResponse:
-    """Shared POST handler: resolve a pasted album URL into a preview grid.
+    """
+    Shared POST handler: resolve a pasted album URL into a preview grid.
 
     Args:
         request: The POST request carrying ``album_url``.
@@ -339,7 +342,8 @@ def _album_lookup_response(request: HttpRequest, *, dedupe_urls: set[str], conte
 
 
 def _album_import_response(request: HttpRequest, *, target_kind: str, target_id: int, profile: Profile, album_url: str, photo_ids: list[str], progress_url_for: Callable[[str], str]) -> HttpResponse:
-    """Shared POST handler: enqueue the Celery import task for selected photos.
+    """
+    Shared POST handler: enqueue the Celery import task for selected photos.
 
     Args:
         request: The submitting POST request.
@@ -363,7 +367,8 @@ def _album_import_response(request: HttpRequest, *, target_kind: str, target_id:
 
 
 def _album_progress_response(request: HttpRequest, *, task_id: str, progress_url: str) -> HttpResponse:
-    """Shared GET handler: poll a Celery task's progress and render the fragment.
+    """
+    Shared GET handler: poll a Celery task's progress and render the fragment.
 
     Args:
         request: The polling GET request (used only for ``render``'s context).

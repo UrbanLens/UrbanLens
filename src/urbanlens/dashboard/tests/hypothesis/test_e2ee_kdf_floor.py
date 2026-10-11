@@ -74,7 +74,8 @@ class EnrolKdfFloorTests(TestCase):
 
 
 class RewrapKdfParametersTests(TestCase):
-    """A re-wrap must record the parameters the new blob was actually made with.
+    """
+    A re-wrap must record the parameters the new blob was actually made with.
 
     Enrolment accepts stronger-than-default parameters on purpose, and stores them."""
 
@@ -130,7 +131,8 @@ class RewrapKdfParametersTests(TestCase):
         self.assertEqual(bundle.kdf_memlimit, DEFAULT_KDF_MEMLIMIT)
 
     def test_a_rewrap_that_sends_nothing_is_recorded_as_the_defaults(self) -> None:
-        """An older client sends no parameters, but always wrapped with the pinned ones.
+        """
+        An older client sends no parameters, but always wrapped with the pinned ones.
 
         Leaving the bundle's own values in place is what caused the lockout, so
         "absent" has to mean the defaults rather than "unchanged".

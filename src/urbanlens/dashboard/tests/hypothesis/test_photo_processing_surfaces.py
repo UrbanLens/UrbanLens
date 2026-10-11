@@ -1,4 +1,5 @@
-"""Every surface that lists a user's upload names no file while it is still being processed (P142).
+"""
+Every surface that lists a user's upload names no file while it is still being processed (P142).
 
 The raw file of a pending upload is deleted once its re-encode lands, so any URL for it 404s moments later.
 """

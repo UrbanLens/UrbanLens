@@ -1,4 +1,5 @@
-"""A deactivated account's credentials stop working everywhere at once.
+"""
+A deactivated account's credentials stop working everywhere at once.
 
 Deactivation is how an account is suspended, and a session already ends with it. An OAuth token or an API key
 is a way into the same account, so each entry point that takes one refuses it once its owner is inactive: the

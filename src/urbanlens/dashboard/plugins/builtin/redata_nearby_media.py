@@ -1,4 +1,5 @@
-"""Nearby media plugin: the photographs, videos and webcams REData finds near a pin, as a Media-gallery tab.
+"""
+Nearby media plugin: the photographs, videos and webcams REData finds near a pin, as a Media-gallery tab.
 
 One ``media/lookup`` answer per point feeds this tab and the Aerial & Drone tab (``redata_aerial_media``), which takes
 the aerial rows this one leaves out; the street-level networks' rows belong to the Street-level tab
@@ -54,7 +55,8 @@ def stored_media_row(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def mirrored_media_url(row: dict[str, Any]) -> str:
-    """This site's proxy for REData's mirrored copy of a media row's image, or ``""`` when REData holds none.
+    """
+    This site's proxy for REData's mirrored copy of a media row's image, or ``""`` when REData holds none.
 
     REData's ``cached_url`` needs its API key, which never reaches a browser, so the tile reads it through
     ``PinRedataMediaView`` instead.
@@ -75,7 +77,8 @@ def _coordinate(value: object) -> float | None:
 
 
 def media_item_from_row(row: dict[str, Any], *, fallback_caption: str = "") -> MediaItem | None:
-    """A gallery tile for one REData media row.
+    """
+    A gallery tile for one REData media row.
 
     Args:
         row: A ``MediaItemSerializer`` row, or :func:`stored_media_row` of one.

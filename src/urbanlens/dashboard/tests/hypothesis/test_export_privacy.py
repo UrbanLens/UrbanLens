@@ -48,7 +48,8 @@ class ExportConnectionsPrivacyTests(TestCase):
         self.assertEqual(rows[0]["status"], "pending")
 
     def test_declined_and_ignored_are_indistinguishable_from_pending(self) -> None:
-        """The sender must not learn from their export whether (or how) the
+        """
+        The sender must not learn from their export whether (or how) the
         recipient responded - all three states export identically."""
         pending = self._outgoing(FriendshipStatus.REQUESTED)
         declined = self._outgoing(FriendshipStatus.DECLINED)
@@ -73,7 +74,8 @@ class ExportConnectionsPrivacyTests(TestCase):
         self.assertEqual(incoming_rows[0]["direction"], "incoming")
 
     def test_incoming_pending_request_keeps_identity(self) -> None:
-        """The RECIPIENT legitimately sees who requested them - same as the
+        """
+        The RECIPIENT legitimately sees who requested them - same as the
         incoming-requests widget."""
         Friendship.objects.create(from_profile=self.target, to_profile=self.exporter, status=FriendshipStatus.REQUESTED)
         rows = self._export()

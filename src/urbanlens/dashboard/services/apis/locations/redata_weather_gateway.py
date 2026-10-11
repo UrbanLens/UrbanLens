@@ -1,4 +1,5 @@
-"""Gateways for REData's weather endpoints - the forecast, and the record.
+"""
+Gateways for REData's weather endpoints - the forecast, and the record.
 Every registered provider (``open_meteo``, ``openweathermap``) answers in one call, each as its own entry in the near-a-coordinate envelope's ``results`` - REData never merges them, since they publish different capabilities (e.g."""
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ class RedataWeatherGateway(RedataLocationContextGateway):
     answers_at_null_island: ClassVar[bool] = True
 
     def get_weather(self, latitude: float, longitude: float) -> list[dict[str, Any]]:
-        """Fetch every registered weather provider's current/forecast/sun data for a point.
+        """
+        Fetch every registered weather provider's current/forecast/sun data for a point.
 
         Args:
             latitude: WGS-84 latitude.
@@ -45,7 +47,8 @@ class RedataWeatherHistoryGateway(RedataLocationContextGateway):
     answers_at_null_island: ClassVar[bool] = True
 
     def get_history(self, latitude: float, longitude: float, *, start: date, end: date) -> list[dict[str, Any]]:
-        """Fetch one recorded day's weather per day in a date range.
+        """
+        Fetch one recorded day's weather per day in a date range.
 
         Args:
             latitude: WGS-84 latitude.

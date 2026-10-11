@@ -10,7 +10,8 @@ MAX_ZOOM = 22
 
 
 def meters_per_pixel(latitude: float, zoom: float) -> float:
-    """Ground distance one pixel covers at *zoom* and *latitude*.
+    """
+    Ground distance one pixel covers at *zoom* and *latitude*.
 
     Args:
         latitude: WGS-84 latitude in degrees.
@@ -23,7 +24,8 @@ def meters_per_pixel(latitude: float, zoom: float) -> float:
 
 
 def native_zoom(resolution_meters: float, latitude: float) -> int:
-    """The deepest zoom whose pixels are no finer than a source's own resolution, so its tiles aren't enlarged.
+    """
+    The deepest zoom whose pixels are no finer than a source's own resolution, so its tiles aren't enlarged.
 
     Args:
         resolution_meters: The source's ground sample distance.

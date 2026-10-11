@@ -32,7 +32,8 @@ PDF_CONTENT_TYPE = "application/pdf"
 
 @dataclass(frozen=True, slots=True)
 class ListedDocument:
-    """One document and the source that listed it.
+    """
+    One document and the source that listed it.
 
     Attributes:
         source: The panel source whose cached payload names it.
@@ -45,7 +46,8 @@ class ListedDocument:
 
 @dataclass(frozen=True, slots=True)
 class SourceListing:
-    """What Article > Sources can show right now.
+    """
+    What Article > Sources can show right now.
 
     Attributes:
         documents: The documents, grouped by source in registry order.
@@ -57,7 +59,8 @@ class SourceListing:
 
 
 def _cached_payloads(location: Location, sources: Sequence[DocumentPanelSource], reader: Pin | None) -> dict[str, dict | None]:
-    """Each source's fresh cached payload for ``location``, as :func:`_cached_payload` reads it, in two queries at most.
+    """
+    Each source's fresh cached payload for ``location``, as :func:`_cached_payload` reads it, in two queries at most.
 
     Args:
         location: The location whose cache rows are read.
@@ -85,7 +88,8 @@ def _cached_payloads(location: Location, sources: Sequence[DocumentPanelSource],
 
 
 def _cached_payload(location: Location, source: DocumentPanelSource, reader: Pin | None = None) -> dict | None:
-    """A source's fresh cached payload for ``location``, or None when nothing fresh has landed.
+    """
+    A source's fresh cached payload for ``location``, or None when nothing fresh has landed.
 
     A name-built source's payload is the shared row's, plus the reader pin's own names' row when it has one.
     """
@@ -108,7 +112,8 @@ def collect_source_documents(
     reader: Pin | None = None,
     nested: Sequence[Location] = (),
 ) -> SourceListing:
-    """Gather every visible source's documents for a location, scheduling a fetch for any source not ready yet.
+    """
+    Gather every visible source's documents for a location, scheduling a fetch for any source not ready yet.
 
     A source that is not fetched for Sources (``DocumentPanelSource.fetched_for_sources``) lists what is cached and is
     never scheduled.
@@ -148,7 +153,8 @@ def collect_source_documents(
 
 
 def nested_documents(locations: Sequence[Location], sources: Sequence[DocumentPanelSource]) -> list[ListedDocument]:
-    """The documents the shared cache rows of nested markers' locations list, as each one's own page lists them.
+    """
+    The documents the shared cache rows of nested markers' locations list, as each one's own page lists them.
 
     Never fetches: a nested marker's rows are filled by its own page. Documents found by searching are judged against
     the nested place they were found for.
@@ -172,7 +178,8 @@ def nested_documents(locations: Sequence[Location], sources: Sequence[DocumentPa
 
 
 def documents_from_payloads(payloads: Sequence[tuple[Location, DocumentPanelSource, dict]]) -> list[ListedDocument]:
-    """List the documents in cached payloads at building scope, each once.
+    """
+    List the documents in cached payloads at building scope, each once.
 
     Args:
         payloads: ``(location, source, data)`` per cached row.
@@ -199,7 +206,8 @@ def documents_from_payloads(payloads: Sequence[tuple[Location, DocumentPanelSour
 
 
 def warm_site_scope_documents(pin: Pin) -> None:
-    """Fetch every document source not yet ready at site scope, for a pin that has just become a site.
+    """
+    Fetch every document source not yet ready at site scope, for a pin that has just become a site.
 
     Args:
         pin: The pin now describing a site.
@@ -225,7 +233,8 @@ def find_listed_document(
     site_scope: bool,
     nested: Sequence[Location] = (),
 ) -> ListedDocument | None:
-    """The document with this id, only when the location's cached payload lists it for this viewer and scope.
+    """
+    The document with this id, only when the location's cached payload lists it for this viewer and scope.
 
     Args:
         location: The location whose cache rows are read.
@@ -251,7 +260,8 @@ def find_listed_document(
 
 @dataclass(frozen=True, slots=True)
 class ServableDocument:
-    """A source document's bytes and how they are served.
+    """
+    A source document's bytes and how they are served.
 
     Attributes:
         content: The bytes.
@@ -265,7 +275,8 @@ class ServableDocument:
 
 
 def servable_document(content: bytes) -> ServableDocument | None:
-    """Judge a source document's bytes, alone, as a PDF or an allow-listed raster image (a scan).
+    """
+    Judge a source document's bytes, alone, as a PDF or an allow-listed raster image (a scan).
 
     Args:
         content: The document's bytes.
@@ -282,7 +293,8 @@ def servable_document(content: bytes) -> ServableDocument | None:
 
 
 def document_bytes(listed: ListedDocument) -> ServableDocument | None:
-    """A listed document, from the proxied-bytes cache or its source, only when its bytes are a PDF or image.
+    """
+    A listed document, from the proxied-bytes cache or its source, only when its bytes are a PDF or image.
 
     The upstream's declared type is never trusted: the gallery proxy caches whatever it was sent under the same key.
 

@@ -1,4 +1,5 @@
-"""Rate limiting for external API calls.
+"""
+Rate limiting for external API calls.
 ``_RateLimitedSession`` closes this by going through ``_reserve_call``/``_finalize_call`` instead of calling ``check_rate_limit`` and ``log_api_call`` directly - see their docstrings."""
 
 from __future__ import annotations
@@ -36,7 +37,8 @@ _EXTERNAL_CALLS_FORBIDDEN: ContextVar[bool] = ContextVar("external_calls_forbidd
 
 
 class ExternalCallForbiddenError(RuntimeError):
-    """A gateway request was attempted inside :func:`external_calls_forbidden`.
+    """
+    A gateway request was attempted inside :func:`external_calls_forbidden`.
 
     Not a :class:`GatewayRequestError`, so a caller that degrades quietly on an upstream failure does not mistake it
     for one.
@@ -502,7 +504,8 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
 
 
 def all_service_defaults() -> dict[str, ServiceDefaults]:
-    """Every known service's default config: static registry plus plugins.
+    """
+    Every known service's default config: static registry plus plugins.
     Plugin-declared defaults win over a same-keyed ``SERVICE_REGISTRY`` entry so converting an integration to a plugin fully transfers ownership of its configuration.
 
     Returns:
@@ -525,7 +528,8 @@ def _service_share(service: str) -> float:
 
 
 def free_tier_ceiling(service: str) -> int | None:
-    """How many calls to *service* this deployment may make this calendar month, or None.
+    """
+    How many calls to *service* this deployment may make this calendar month, or None.
 
     Args:
         service: The service key.
@@ -550,7 +554,8 @@ def free_tier_ceiling(service: str) -> int | None:
 
 
 def call_ledger(service: str) -> CallLedger:
-    """How *service*'s calls are counted and recorded.
+    """
+    How *service*'s calls are counted and recorded.
 
     Args:
         service: The service key.
@@ -587,7 +592,8 @@ def _is_billable(service: str) -> bool:
 
 
 def _refuse_if_billable(service: str, what: str, error: BaseException) -> bool:
-    """The answer to "may this call go ahead" when *what* could not be read.
+    """
+    The answer to "may this call go ahead" when *what* could not be read.
 
     Refused for anything that can cost money: this limiter is the only cap on spend at paid
     third-party APIs, and the database being unreadable is exactly when nobody is watching it.
@@ -614,7 +620,8 @@ def _still_at_fallback(row: Any, service: str) -> bool:
 
 
 def get_limit_config(service: str) -> Any:
-    """Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
+    """
+    Return the ``ApiRateLimit`` row for ``service``, creating it if absent.
     A row still holding the generic fallback takes the service's registered defaults once there are some; ``enabled`` is never touched.
     A row holding a service's own defaults is never rewritten here, since an admin may have chosen them: a changed default
     reaches existing rows only through a data migration that touches rows still holding an old default exactly (0064 for 0.8.0's,
@@ -649,7 +656,8 @@ def get_limit_config(service: str) -> Any:
 
 
 def service_is_permitted(service: str) -> bool:
-    """Check if the service is enabled and not rate limited.
+    """
+    Check if the service is enabled and not rate limited.
 
     Args:
         service: The service key.
@@ -660,7 +668,8 @@ def service_is_permitted(service: str) -> bool:
 
 
 def service_is_enabled(service: str, config: Any = None) -> bool:
-    """Check if the service is enabled.
+    """
+    Check if the service is enabled.
 
     Args:
         service: The service key.
@@ -689,7 +698,8 @@ def service_is_enabled(service: str, config: Any = None) -> bool:
 
 
 def check_rate_limit(service: str, config: Any = None) -> bool:
-    """Return ``True`` if a call to ``service`` is currently permitted.
+    """
+    Return ``True`` if a call to ``service`` is currently permitted.
     Only the windows that are actually configured are counted - a service with no ``calls_per_30_days`` never pays for that ``COUNT(*)``.
     Each window holds this deployment's share of the configured limit (``services.core.egress.service_share``): all of
     it for REData, our own hosts and AI (where AI is called at all), ``UL_ENVIRONMENT_SHARE`` of it for a ``quota`` or
@@ -775,7 +785,8 @@ def log_api_call(
     input_tokens: int | None = None,
     output_tokens: int | None = None,
 ) -> None:
-    """Record one API call in the ``ApiCallLog`` table.
+    """
+    Record one API call in the ``ApiCallLog`` table.
     Failures are swallowed so that logging problems never break callers.
 
     Args:
@@ -832,7 +843,8 @@ def log_api_call(
 
 
 def _reserve_call(service: str, *, endpoint: str = "") -> int:
-    """Atomically check ``service``'s rate limit and reserve a logged call slot.
+    """
+    Atomically check ``service``'s rate limit and reserve a logged call slot.
 
     Args:
         service: The service key.
@@ -918,7 +930,8 @@ def _finalize_call(
     input_tokens: int | None = None,
     output_tokens: int | None = None,
 ) -> None:
-    """Update a reservation row created by ``_reserve_call`` with the request's outcome.
+    """
+    Update a reservation row created by ``_reserve_call`` with the request's outcome.
     Updates the existing row in place rather than inserting a new one, so a reserved-but-not-yet-finalized call still counts toward ``check_rate_limit``'s window queries (which count rows regardless of ``success``) without double-counting once finalized.
 
     Args:
@@ -943,7 +956,8 @@ def _finalize_call(
 
 
 def _release_call(entry_pk: int) -> None:
-    """Drop a reservation row for a call the environment refused after it was reserved: a refusal leaves no row (D26).
+    """
+    Drop a reservation row for a call the environment refused after it was reserved: a refusal leaves no row (D26).
 
     Args:
         entry_pk: pk of the ``ApiCallLog`` row returned by ``_reserve_call``.
@@ -958,7 +972,8 @@ def _release_call(entry_pk: int) -> None:
 
 @dataclass(slots=True)
 class ApiCallSlot:
-    """One reserved call, filled in by the caller and recorded when the slot closes.
+    """
+    One reserved call, filled in by the caller and recorded when the slot closes.
 
     Attributes:
         service: The service key the slot reserved.
@@ -989,7 +1004,8 @@ _CURRENT_SLOT: ContextVar[ApiCallSlot | None] = ContextVar("api_call_slot", defa
 
 
 def current_call_slot() -> ApiCallSlot | None:
-    """The :func:`api_call_slot` the caller is running inside, if any.
+    """
+    The :func:`api_call_slot` the caller is running inside, if any.
 
     Returns:
         The open slot, or None.
@@ -999,7 +1015,8 @@ def current_call_slot() -> ApiCallSlot | None:
 
 @contextmanager
 def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
-    """Reserve one call to *service* before making it, and record its outcome after.
+    """
+    Reserve one call to *service* before making it, and record its outcome after.
 
     For calls that do not go through a gateway's rate-limited session (SDK clients, the
     inference client). The check and the ledger row are one locked step, so concurrent
@@ -1060,7 +1077,8 @@ def api_call_slot(service: str, *, endpoint: str = "") -> Iterator[ApiCallSlot]:
 
 @dataclass(frozen=True, slots=True)
 class CallNotes:
-    """What a gateway knows about its own request that the session cannot see.
+    """
+    What a gateway knows about its own request that the session cannot see.
 
     Attributes:
         model: The AI model the request asks, recorded on the row.
@@ -1076,7 +1094,8 @@ _CALL_NOTES: ContextVar[CallNotes | None] = ContextVar("api_call_notes", default
 
 @contextmanager
 def annotate_calls(*, model: str | None = None, usage: Callable[[Any], tuple[int | None, int | None]] | None = None) -> Iterator[None]:
-    """Have the rate-limited session record an AI model and token counts on the rows of the requests made inside.
+    """
+    Have the rate-limited session record an AI model and token counts on the rows of the requests made inside.
 
     Args:
         model: The AI model the requests ask.
@@ -1097,7 +1116,8 @@ _MAX_TOKEN_COUNT = 2**31 - 1
 
 
 def valid_token_count(value: object) -> int | None:
-    """A token count a provider reported, or None when it is not one the ledger can hold.
+    """
+    A token count a provider reported, or None when it is not one the ledger can hold.
 
     A value the column rejects would lose the whole row, so a garbled count is left out instead.
 
@@ -1113,7 +1133,8 @@ def valid_token_count(value: object) -> int | None:
 
 
 def _reported_usage(reader: Callable[[Any], tuple[int | None, int | None]] | None, response: Any) -> tuple[int | None, int | None]:
-    """The ``(input, output)`` token counts a gateway reads from a response, or ``(None, None)``.
+    """
+    The ``(input, output)`` token counts a gateway reads from a response, or ``(None, None)``.
 
     Args:
         reader: The gateway's reader, or None when it passed none.
@@ -1133,7 +1154,8 @@ def _reported_usage(reader: Callable[[Any], tuple[int | None, int | None]] | Non
 
 
 class _RateLimitedSession:
-    """Wraps ``requests.Session`` to enforce rate limits and log every call.
+    """
+    Wraps ``requests.Session`` to enforce rate limits and log every call.
     This is NOT a subclass of ``requests.Session`` - it delegates all attribute access to a real session so that caller code using ``self.session.get(...)`` continues to work unchanged."""
 
     def __init__(self, service_key: str, endpoint_for_log: Callable[[str], str] | None = None, *, session: requests.Session | None = None) -> None:
@@ -1176,7 +1198,8 @@ class _RateLimitedSession:
         return self._do_request(method, url, **kwargs)
 
     def _do_request(self, method: str, url: str, **kwargs):
-        """Reserve a rate-limit slot, make the request, record the result.
+        """
+        Reserve a rate-limit slot, make the request, record the result.
         The reservation (see ``_reserve_call``) atomically checks the rate limit and logs the attempt in one locked transaction, so this no longer has a check-then-log gap for concurrent callers to race through.
         A tallied service is checked and counted in one atomic step on the shared counters instead, and its outcome added to a tally rolled up into the ledger every minute (``services.core.call_tally``)."""
         from urbanlens.dashboard.services.core import call_tally, provider_health
@@ -1251,7 +1274,8 @@ class _RateLimitedSession:
 
 
 class RequestCancelledError(DashboardError, GatewayRequestError):
-    """Raised when a request is cancelled.
+    """
+    Raised when a request is cancelled.
 
     Also a :class:`GatewayRequestError` (P122): every gateway call passes through
     ``_reserve_call`` via ``_RateLimitedSession``, and a refusal is routine (development and the
@@ -1277,7 +1301,8 @@ class RequestCancelledError(DashboardError, GatewayRequestError):
 
 
 class RateLimitExceededError(RequestCancelledError):
-    """Raised when a rate limit prevents an API call from proceeding.
+    """
+    Raised when a rate limit prevents an API call from proceeding.
 
     Args:
         service: The rate-limiter service key.
@@ -1288,7 +1313,8 @@ class RateLimitExceededError(RequestCancelledError):
 
 
 class UpstreamThrottledError(RateLimitExceededError, UpstreamBusyError, GatewayRateLimitedError):
-    """Refused without a request, because the upstream told this deployment to wait and the wait has not passed.
+    """
+    Refused without a request, because the upstream told this deployment to wait and the wait has not passed.
 
     Args:
         service: The rate-limiter service key.
@@ -1310,7 +1336,8 @@ class ServiceDisabledError(RequestCancelledError):
 
 
 class EnvironmentRefusedError(ServiceDisabledError):
-    """This environment does not call the service at all (D26): not a failure, and not worth retrying here.
+    """
+    This environment does not call the service at all (D26): not a failure, and not worth retrying here.
 
     A :class:`ServiceDisabledError`, so every caller that already degrades on a switched-off service keeps
     working. Not transient, so it is never recorded as an unanswered call or held against the provider's

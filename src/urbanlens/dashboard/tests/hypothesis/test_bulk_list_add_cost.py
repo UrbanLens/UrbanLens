@@ -1,4 +1,5 @@
-"""Asking to confirm a bulk add to a list reads a count, not every pin the filter matched.
+"""
+Asking to confirm a bulk add to a list reads a count, not every pin the filter matched.
 
 The view loaded each match as a model before deciding whether to ask, so a filter matching an account's twenty
 thousand pins fetched twenty thousand rows to answer "add 20,000 pins?".

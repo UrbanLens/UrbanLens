@@ -1,4 +1,5 @@
-"""P202: a database backup is written gzip-compressed, and retention still counts the plain ones written before.
+"""
+P202: a database backup is written gzip-compressed, and retention still counts the plain ones written before.
 
 The first scheduled backup on the Kubernetes platform wrote 11.26 GB of plain SQL into a 12 Gi volume.
 """

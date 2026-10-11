@@ -23,7 +23,8 @@ _migration = importlib.import_module(
 
 
 class NearbyPanelRemovedTests(TestCase):
-    """The panel titled HRSH's Wikidata facts with the first Wikipedia article REData listed within a kilometre,
+    """
+    The panel titled HRSH's Wikidata facts with the first Wikipedia article REData listed within a kilometre,
     "Marist University": REData doesn't sort those articles by distance, and the panel matched by radius alone."""
 
     def test_no_panel_source_answers_for_its_key(self) -> None:

@@ -17,7 +17,8 @@ _SCRIPT = Path(__file__).resolve().parents[5] / "bin" / "run_codeql.py"
 
 
 def _load_runner():
-    """Import ``bin/run_codeql.py`` as a module.
+    """
+    Import ``bin/run_codeql.py`` as a module.
 
     Returns:
         The imported module.

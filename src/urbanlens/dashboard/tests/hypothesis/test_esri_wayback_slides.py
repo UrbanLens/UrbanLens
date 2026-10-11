@@ -1,4 +1,5 @@
-"""Esri Wayback slides must point at a tile Esri actually serves.
+"""
+Esri Wayback slides must point at a tile Esri actually serves.
 
 Wayback has no ``MapServer/export`` endpoint - it answers 404 with an HTML page, which Chrome's
 opaque-response blocking reports as ``ERR_BLOCKED_BY_ORB`` on every pin page's imagery panel.

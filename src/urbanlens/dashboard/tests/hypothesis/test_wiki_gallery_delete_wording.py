@@ -1,4 +1,5 @@
-"""The wiki gallery must know when deleting a photo only takes it off the wiki (P55).
+"""
+The wiki gallery must know when deleting a photo only takes it off the wiki (P55).
 
 `WikiImageView.delete` keeps a photo that is still on its owner's pin and only unlinks it from the
 wiki, so the gallery's "removed permanently" prompt and "Photo deleted." toast are false for it. The

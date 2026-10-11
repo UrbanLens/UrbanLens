@@ -1,4 +1,5 @@
-"""A Location is never created off the globe, whichever caller asks (P285).
+"""
+A Location is never created off the globe, whichever caller asks (P285).
 
 ``Location.latitude``/``longitude`` are ``numeric(9, 6)``, which hold up to ±999.999999, and nothing in the database
 stops a latitude of 95. P282-P284 checked each route that posts or imports a coordinate; these two methods are where

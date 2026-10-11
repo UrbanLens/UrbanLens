@@ -1,4 +1,5 @@
-"""Provision (or update) the first-party native app's OAuth2 application.
+"""
+Provision (or update) the first-party native app's OAuth2 application.
 
 The mobile/desktop app is a *public* OAuth2 client (RFC 8252): it cannot keep a secret, so it
 authenticates with PKCE only, and its ``client_id`` is not sensitive - it's baked into the shipped

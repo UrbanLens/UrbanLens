@@ -20,7 +20,8 @@ class VisitSuggestionStatus(abstract.TextChoices):
 
 
 class VisitSuggestion(abstract.DashboardModel):
-    """A proposed PinVisit sent to a user for confirmation.
+    """
+    A proposed PinVisit sent to a user for confirmation.
     Created when a user tags a connection as a co-visitor in the visit-add dialog (``origin_visit`` set), when a trip activity is marked completed and another RSVP'd-yes member needs to confirm they were there (``trip_activity`` set), when a safety check-in concludes and the checked-in user needs to confirm they actually made it to the planned destination (``safety_checkin`` set), when a user uploads a geotagged, timestamped photo to one of their pins and is asked to confirm the visit it implies (``origin_image`` set), or when a Google Takeout "My Activity" (Maps) import finds a "Directions to X" entry that doesn't match any existing pin (``from_my_activity`` set).
     Unlike the other four origins, a My Activity entry has no persisted row to link to - it's transient data parsed out of an uploaded file - so it's a boolean marker rather than a foreign key.
 
@@ -138,7 +139,8 @@ class VisitSuggestion(abstract.DashboardModel):
 
     @property
     def is_actionable(self) -> bool:
-        """Whether this suggestion is still awaiting a response.
+        """
+        Whether this suggestion is still awaiting a response.
 
         Returns:
             True when status is pending.
@@ -147,7 +149,8 @@ class VisitSuggestion(abstract.DashboardModel):
 
     @property
     def offers_merge(self) -> bool:
-        """Whether accepting this suggestion should offer a merge-or-separate choice.
+        """
+        Whether accepting this suggestion should offer a merge-or-separate choice.
 
         Returns:
             True when suggested_to already has a same-day visit at this place.
@@ -156,7 +159,8 @@ class VisitSuggestion(abstract.DashboardModel):
 
     @property
     def is_from_photo(self) -> bool:
-        """Whether this suggestion was raised from an uploaded photo.
+        """
+        Whether this suggestion was raised from an uploaded photo.
 
         Returns:
             True when ``origin_image`` is set, so the UI can phrase the prompt as
@@ -166,7 +170,8 @@ class VisitSuggestion(abstract.DashboardModel):
 
     @property
     def is_from_my_activity(self) -> bool:
-        """Whether this suggestion was raised from a Google Takeout My Activity import.
+        """
+        Whether this suggestion was raised from a Google Takeout My Activity import.
 
         Returns:
             True when ``from_my_activity`` is set, so the UI can phrase the
@@ -175,7 +180,8 @@ class VisitSuggestion(abstract.DashboardModel):
         return self.from_my_activity
 
     def __str__(self) -> str:
-        """Return a human-readable description of this suggestion.
+        """
+        Return a human-readable description of this suggestion.
 
         Returns:
             String like "Visit suggestion to <suggested_to_id> on YYYY-MM-DD".

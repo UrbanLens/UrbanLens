@@ -20,7 +20,8 @@ class RedataPointsOfInterestGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_points_of_interest"
 
     def find_near(self, latitude: float, longitude: float, *, provider: str | list[str], radius_meters: float | None = None, force_refresh: bool = False) -> list[dict[str, Any]]:
-        """Return points of interest from named REData providers near a coordinate.
+        """
+        Return points of interest from named REData providers near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.
@@ -55,7 +56,8 @@ _DOMAIN_TAG = "points_of_interest"
 
 
 def applicable_provider_tags(latitude: float, longitude: float) -> list[str]:
-    """Which points-of-interest providers cover a coordinate, per REData.
+    """
+    Which points-of-interest providers cover a coordinate, per REData.
 
     Args:
         latitude: WGS-84 latitude.

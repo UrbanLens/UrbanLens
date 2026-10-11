@@ -1,4 +1,5 @@
-"""The trip hero swapped in out of band must match the one the page rendered.
+"""
+The trip hero swapped in out of band must match the one the page rendered.
 
 The activities panel loads on every visit and carries a fresh hero, so whatever that copy lacks is
 missing from the page for good.

@@ -36,7 +36,8 @@ _EXPENSIVE = Template(
 
 
 def _render(template: Template, **extra: object) -> HttpResponse:
-    """Render one of the two templates over every achievement.
+    """
+    Render one of the two templates over every achievement.
 
     Args:
         template: The template to render. **extra: Extra context, i.e. the expensive view's icon list.
@@ -48,7 +49,8 @@ def _render(template: Template, **extra: object) -> HttpResponse:
 
 
 def cheap(request: HttpRequest) -> HttpResponse:
-    """A row costs two spans - what a well-behaved list page looks like.
+    """
+    A row costs two spans - what a well-behaved list page looks like.
 
     Args:
         request: The HTTP request.
@@ -59,7 +61,8 @@ def cheap(request: HttpRequest) -> HttpResponse:
 
 
 def expensive(request: HttpRequest) -> HttpResponse:
-    """A row costs a whole icon grid - the defect the mixin exists to catch.
+    """
+    A row costs a whole icon grid - the defect the mixin exists to catch.
 
     Args:
         request: The HTTP request.

@@ -1,4 +1,5 @@
-"""Recording daily activity and maintaining streak counters.
+"""
+Recording daily activity and maintaining streak counters.
 Callers just say "this profile did X" and :func:`record_activity` collapses repeats within a day, so the fifty photos someone uploads in an afternoon advance the photo streak by exactly one."""
 
 # Generic imports
@@ -24,13 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 def _owner_filter(profile: Profile | int) -> dict[str, Any]:
-    """Return the lookup kwargs identifying *profile*, accepting a bare PK.
+    """
+    Return the lookup kwargs identifying *profile*, accepting a bare PK.
     Signal handlers only have ``instance.profile_id``, and fetching the whole Profile just to write an activity row would add a query to every contributing write."""
     return {"profile_id": profile} if isinstance(profile, int) else {"profile": profile}
 
 
 def record_activity(profile: Profile | int, kind: str, day: datetime.date | None = None) -> bool:
-    """Record that *profile* performed *kind* on *day*, advancing their streak.
+    """
+    Record that *profile* performed *kind* on *day*, advancing their streak.
     Safe to call on every single write - the per-day uniqueness constraint makes repeats within a day a no-op, and only the first call of the day touches the streak counters.
 
     Args:
@@ -57,7 +60,8 @@ def record_activity(profile: Profile | int, kind: str, day: datetime.date | None
 
 
 def _advance_streak(profile: Profile | int, kind: str, day: datetime.date) -> ProfileStreak:
-    """Move the cached streak for (*profile*, *kind*) forward to include *day*.
+    """
+    Move the cached streak for (*profile*, *kind*) forward to include *day*.
 
     Args:
         profile: Whose streak to advance, as a Profile or its PK.
@@ -86,7 +90,8 @@ def _advance_streak(profile: Profile | int, kind: str, day: datetime.date) -> Pr
 
 
 def rebuild_streak(profile: Profile | int, kind: str) -> ProfileStreak:
-    """Recompute a profile's streak for one kind from the raw activity rows.
+    """
+    Recompute a profile's streak for one kind from the raw activity rows.
 
     Args:
         profile: Whose streak to rebuild, as a Profile or its PK.

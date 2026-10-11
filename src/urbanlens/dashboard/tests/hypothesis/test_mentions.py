@@ -1,4 +1,5 @@
-"""Tests for mention parsing and rendering in comment text.
+"""
+Tests for mention parsing and rendering in comment text.
 
 Pure-function tests (extract_location_uuids, is_visible_to) use unittest.TestCase.
 DB-backed tests (viewer_pinned_uuids, filter_visible_comments) use django.test.TestCase.

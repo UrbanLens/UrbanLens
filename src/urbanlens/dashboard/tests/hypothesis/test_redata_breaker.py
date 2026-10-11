@@ -1,4 +1,5 @@
-"""A throttled REData is left alone until the wait it named has passed.
+"""
+A throttled REData is left alone until the wait it named has passed.
 
 Reproduces the 2026-09-23 HRSH run: REData throttled the key's lookup budget at 20:02 ("Expected
 available in 989 seconds") and the stack kept calling - 1,041 of 1,439 REData calls in that hour
@@ -146,7 +147,8 @@ class ThrottlePoolsTests(TestCase):
 
 
 class BusySourceTests(TestCase):
-    """A 503 ``rate_limited`` is one of REData's own sources out of budget, not the key.
+    """
+    A 503 ``rate_limited`` is one of REData's own sources out of budget, not the key.
 
     A 503 ``key_budget_exhausted`` is the key's environment's share of that budget spent. It backs the source off
     in exactly the same way, so each test below runs for both.

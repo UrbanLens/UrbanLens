@@ -1,4 +1,5 @@
-"""An in-memory stand-in for the Redis commands the map caches issue.
+"""
+An in-memory stand-in for the Redis commands the map caches issue.
 
 Dragonfly clients here read their connection URL straight from the environment, so under test they
 open a real socket the network guard refuses - which is why the cache read paths had no coverage
@@ -66,7 +67,8 @@ class FakeRedis:
 
     # -- test affordances ---------------------------------------------------
     def evict(self, *names: str) -> None:
-        """Drop keys the way an eviction policy would, without touching the rest.
+        """
+        Drop keys the way an eviction policy would, without touching the rest.
 
         The failure this exists to reproduce: a cache whose "is it populated"
         marker outlives the data it vouches for.

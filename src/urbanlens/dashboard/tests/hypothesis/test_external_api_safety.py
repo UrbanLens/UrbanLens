@@ -57,7 +57,8 @@ class _SafetyApiTestCase(TestCase):
         self.detail_url = reverse("external_api:safety.checkins.detail", kwargs={"checkin_slug": self.checkin.slug})
 
     def _resolve_existing(self) -> None:
-        """Retire the setUp check-in so a fresh one can be created.
+        """
+        Retire the setUp check-in so a fresh one can be created.
 
         Must move ``status`` to a terminal value, not just stamp ``resolved_at``:
         ``SafetyCheckin.objects.active()`` - the queryset enforcing one active check-in per scope - keys off
@@ -94,7 +95,8 @@ class SafetyScopeTests(_SafetyApiTestCase):
         self.assertIn(self.client.get(self.list_url).status_code, (401, 403))
 
     def test_default_api_key_grant_cannot_reach_safety(self) -> None:
-        """The security line this whole surface rests on.
+        """
+        The security line this whole surface rests on.
 
         Emergency-contact addresses and partner-invite ability are categorically more sensitive than pins."""
         _key, raw = generate_api_key(self.user, "Default grant")
@@ -147,7 +149,8 @@ class SafetyOwnerIsolationTests(_SafetyApiTestCase):
 
 
 class SafetyContactTokenExposureTests(_SafetyApiTestCase):
-    """The contact-portal token must never leave the server.
+    """
+    The contact-portal token must never leave the server.
 
     ``SafetyCheckinContact.token`` is the sole credential for the session-free contact portal: holding it means
     being able to read the check-in, post to its chat, and mark the owner safe."""
@@ -417,7 +420,8 @@ class SafetyPartnerTests(_SafetyApiTestCase):
         self.assertIn("No user found", response.json()["error"])
 
     def test_blocked_invitee_is_400(self) -> None:
-        """Same message and status as an unknown username.
+        """
+        Same message and status as an unknown username.
 
         A block existing between the two profiles must not be distinguishable from the invitee not existing at
         all - confirming one confirms the other's account is real."""
@@ -511,7 +515,8 @@ class SafetyPreferencesApiTests(_SafetyApiTestCase):
 
 
 class SafetyCheckinMapsTests(_SafetyApiTestCase):
-    """The check-in maps endpoint answers with the standard paginated envelope.
+    """
+    The check-in maps endpoint answers with the standard paginated envelope.
 
     Regression coverage for the bare top-level array this endpoint used to answer with - it could never gain a
     field later without breaking clients, so it was normalized onto ``{count,next,previous,results}`` (see

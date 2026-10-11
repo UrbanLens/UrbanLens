@@ -1,4 +1,5 @@
-"""Processing an upload through a Garage outage waits for storage; it never removes the upload or marks it unreadable (P201).
+"""
+Processing an upload through a Garage outage waits for storage; it never removes the upload or marks it unreadable (P201).
 
 The re-encode, the scan and the derived copies read and write media storage. A timeout from the object store is also an
 OSError, which these paths took for an undecodable or unreadable file: a pending upload was retried three times over

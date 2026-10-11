@@ -1,4 +1,5 @@
-"""The password policy judges the password a person typed, never the credential their browser derived from it.
+"""
+The password policy judges the password a person typed, never the credential their browser derived from it.
 
 A browser enrolled in derived auth checks the typed password against ``AUTH_PASSWORD_VALIDATORS`` through
 ``validate_password_policy`` and submits only the derived credential, with its salt. Validating that credential again

@@ -15,7 +15,8 @@ EQUAL_AREA_SRID = 6933
 
 
 def area_sqm(geometry: GEOSGeometry) -> float:
-    """Area in square metres, within a fraction of a percent of PostGIS's geography area.
+    """
+    Area in square metres, within a fraction of a percent of PostGIS's geography area.
 
     Args:
         geometry: A polygonal geometry; an unset SRID is read as WGS-84.

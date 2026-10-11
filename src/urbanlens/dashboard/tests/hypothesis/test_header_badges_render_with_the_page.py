@@ -1,4 +1,5 @@
-"""A page's header badges arrive with the page, not as three more requests after it.
+"""
+A page's header badges arrive with the page, not as three more requests after it.
 
 Each signed-in page asked for its two unread counts and the safety banner as it loaded, and each of those requests paid
 the whole middleware stack to run one count.

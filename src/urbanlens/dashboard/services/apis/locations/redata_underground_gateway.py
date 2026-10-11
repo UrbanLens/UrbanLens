@@ -41,7 +41,8 @@ class RedataUndergroundGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch mapped subsurface structures near a coordinate.
+        """
+        Fetch mapped subsurface structures near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

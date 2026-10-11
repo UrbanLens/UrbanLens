@@ -1,4 +1,5 @@
-"""External-API views for SpotGuessr: solo play only, over a credential.
+"""
+External-API views for SpotGuessr: solo play only, over a credential.
 
 The web game is a superset of this: it also has a lobby, friend invites, a join/begin handshake,
 host-side "end the game now", and live session chat, all of which are coordinated over
@@ -101,7 +102,8 @@ MULTIPLAYER_REFUSAL = {"error": "This session requires the web client.", "error_
 
 
 def _rating_payload(rating: PlayerModeRating | None) -> dict[str, Any] | None:
-    """Describe one Glicko-2 rating row on the display scale, or None.
+    """
+    Describe one Glicko-2 rating row on the display scale, or None.
 
     Args:
         rating: The rating row, or None for a player who has never played.
@@ -121,7 +123,8 @@ def _rating_payload(rating: PlayerModeRating | None) -> dict[str, Any] | None:
 
 
 def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | None]:
-    """Parse+validate an optional ``geo_bounds`` GeoJSON query-string value.
+    """
+    Parse+validate an optional ``geo_bounds`` GeoJSON query-string value.
 
     Mirrors ``controllers.spotguessr._parse_geo_bounds`` exactly, translated to this API's ``{"error":
     ...}`` envelope instead of ``JsonResponse``.
@@ -149,7 +152,8 @@ def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | No
 
 
 class SoloSessionOnlyMixin:
-    """Refuses any session this API cannot honestly finish.
+    """
+    Refuses any session this API cannot honestly finish.
 
     Applied to every session-scoped view.
 
@@ -160,7 +164,8 @@ class SoloSessionOnlyMixin:
     """
 
     def refuse_if_multiplayer(self, session: GameSession) -> Response | None:
-        """Return the 409 refusal when *session* is not solo-playable, else None.
+        """
+        Return the 409 refusal when *session* is not solo-playable, else None.
 
         Args:
             session: The session the caller asked to act on.
@@ -177,7 +182,8 @@ class SoloSessionOnlyMixin:
 
 
 class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
-    """Base for every endpoint addressed by a session id.
+    """
+    Base for every endpoint addressed by a session id.
 
     Holds the two rules those endpoints share: the caller must participate in the session, and the
     session must be solo.
@@ -186,7 +192,8 @@ class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
     """
 
     def get_participant_session(self, request: Request, session_id: int) -> GameSession | None:
-        """The session, only if the calling credential's owner participates in it.
+        """
+        The session, only if the calling credential's owner participates in it.
 
         Any participant status qualifies (INVITED as well as JOINED), matching the internal controller: an
         invitee may look at a session before deciding about it.
@@ -202,7 +209,8 @@ class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
         return session_access.session_for(session_id, request.user.profile.pk)
 
     def resolve_solo_session(self, request: Request, session_id: int) -> tuple[GameSession | None, Response | None]:
-        """Resolve and vet a session in one call.
+        """
+        Resolve and vet a session in one call.
 
         Args:
             request: The authenticated request.
@@ -222,7 +230,8 @@ class SpotGuessrSessionScopedView(SoloSessionOnlyMixin, ExternalApiView):
 
 
 class SpotGuessrOverviewView(ExternalApiView):
-    """GET: the SpotGuessr start screen - settings, limits, your rating, and what to resume.
+    """
+    GET: the SpotGuessr start screen - settings, limits, your rating, and what to resume.
 
     The web route of the same name renders HTML, so this is a genuinely new endpoint rather than a
     re-exposure of an existing JSON one.
@@ -258,7 +267,8 @@ class SpotGuessrOverviewView(ExternalApiView):
         return Response(payload)
 
     def _friend_ratings(self, profile: Profile) -> list[dict[str, Any]]:
-        """Each visible friend's rating, with their identity resolved for *profile*.
+        """
+        Each visible friend's rating, with their identity resolved for *profile*.
 
         Args:
             profile: The viewer.
@@ -288,7 +298,8 @@ class SpotGuessrOverviewView(ExternalApiView):
 
 
 class SpotGuessrPreferencesView(ExternalApiView):
-    """PATCH: update the one genuinely user-editable SpotGuessr preference.
+    """
+    PATCH: update the one genuinely user-editable SpotGuessr preference.
 
     Mirrors ``controllers.spotguessr.SpotGuessrSettingsView`` exactly.
     ``last_config`` stays off this surface entirely - it is auto-managed by ``remember_last_config`` on
@@ -313,7 +324,8 @@ class SpotGuessrPreferencesView(ExternalApiView):
 
 
 class SpotGuessrEligibleCountView(ExternalApiView):
-    """GET: how many of the caller's own pins fall inside a candidate area.
+    """
+    GET: how many of the caller's own pins fall inside a candidate area.
 
     Mirrors ``controllers.spotguessr.SpotGuessrAreaPinCountView`` exactly - a lightweight pre-check so a
     client can warn "not enough pins here" before spending the (tighter, billed-imagery-capable)
@@ -340,7 +352,8 @@ class SpotGuessrEligibleCountView(ExternalApiView):
 
 
 class SpotGuessrEligiblePinsView(PaginatedListMixin, ExternalApiView):
-    """GET: the caller's own pins that are currently SpotGuessr-eligible.
+    """
+    GET: the caller's own pins that are currently SpotGuessr-eligible.
 
     A browse/read endpoint, not a play mode - solo eligibility is exactly "the player's own pinned
     locations" (see ``services.spotguessr.eligibility``), optionally narrowed to a candidate
@@ -384,7 +397,8 @@ class SpotGuessrEligiblePinsView(PaginatedListMixin, ExternalApiView):
 
 
 class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
-    """GET: the caller's session history. POST: start a new solo session.
+    """
+    GET: the caller's session history. POST: start a new solo session.
 
     POST starts a solo session *and* generates its first round, because a session without one is not
     something a client can do anything with.
@@ -473,7 +487,8 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
 
 
 def _host_slugs(sessions: list[GameSession]) -> dict[int, str | None]:
-    """Map the host profile id of each session to that profile's slug.
+    """
+    Map the host profile id of each session to that profile's slug.
 
     Resolved in one query for the whole page rather than per row, and existing at all because host *ids*
     must never reach the wire.
@@ -510,7 +525,8 @@ class SpotGuessrSessionDetailView(SpotGuessrSessionScopedView):
 
 
 class SpotGuessrRoundView(SpotGuessrSessionScopedView):
-    """GET: the session's current round, creating the next one when the last is done.
+    """
+    GET: the session's current round, creating the next one when the last is done.
 
     Left in the hourly read budget it would sit in a bucket sized for a mobile client's bulk sync, which
     is exactly the wrong ceiling for a call that runs eligibility passes and can bill a Street View
@@ -550,7 +566,8 @@ class SpotGuessrRoundView(SpotGuessrSessionScopedView):
 
 
 class SpotGuessrGuessView(SpotGuessrSessionScopedView):
-    """POST: submit this session's guess for one round.
+    """
+    POST: submit this session's guess for one round.
 
     Scoring, the date bonus, the country/state/city bonus, the Glicko-2 update, the reveal, and
     advancing to the next round all happen inside ``services.spotguessr.session.submit_guess`` - which
@@ -602,7 +619,8 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
 
 
 class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
-    """POST: force-reveal the current round because its round timer expired.
+    """
+    POST: force-reveal the current round because its round timer expired.
 
     The authoritative check is server-side (``round_.created`` plus the session's own
     ``round_time_limit_seconds``, never the client's clock) - this just gives a client whose local
@@ -633,7 +651,8 @@ class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
 
 
 class SpotGuessrRoundFeedbackView(SpotGuessrSessionScopedView):
-    """POST: thumbs up/down, or report, the photo a Photos-mode round just showed.
+    """
+    POST: thumbs up/down, or report, the photo a Photos-mode round just showed.
 
     A 400 for a round with no photo (Named Place/Street View); a 403 for a round this profile never
     guessed on - there is no "reaction to a photo you weren't shown" case to support.
@@ -684,7 +703,8 @@ class SpotGuessrSummaryView(SpotGuessrSessionScopedView):
 
 
 def _summary_payload(session: GameSession) -> dict[str, Any]:
-    """The service's session summary, with profile ids swapped for slugs.
+    """
+    The service's session summary, with profile ids swapped for slugs.
 
     The summary itself (points, rating delta, best round) is computed by
     ``services.spotguessr.session.session_summary`` and not recomputed here - this only rewrites the
@@ -705,7 +725,8 @@ def _summary_payload(session: GameSession) -> dict[str, Any]:
 
 
 class SpotGuessrRoundImageView(SoloSessionOnlyMixin, ExternalApiView):
-    """GET: the round's photo as bytes.
+    """
+    GET: the round's photo as bytes.
 
     The stored file is served as-is, through the same hand-off as the media gate: the upload
     pipeline re-encodes every photo from its pixels, so it carries no GPS or other metadata

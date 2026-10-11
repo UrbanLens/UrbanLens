@@ -186,7 +186,8 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertContains(response, "ul-bulk-bar-unlogged_visits")
 
     def test_bulk_toolbar_has_a_date_field_and_hover_pairing(self) -> None:
-        """The bulk toolbar's "log" action lets the user pick which date to
+        """
+        The bulk toolbar's "log" action lets the user pick which date to
         apply (not just today), and each card carries the class memories-tabs.ts
         pairs with its marker on hover."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
@@ -209,7 +210,8 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertNotContains(response, 'id="unlogged-visits-map"')
 
     def test_map_uses_the_shared_toolbar_not_the_bespoke_pill_button(self) -> None:
-        """Regression guard: the old .pin-select-toggle pill had its own unstyled
+        """
+        Regression guard: the old .pin-select-toggle pill had its own unstyled
         top-right button and never disabled Leaflet's on-map attribution control.
         Replaced with the same {% map_toolbar %} component every other map uses."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
@@ -220,7 +222,8 @@ class MemoriesVisitsViewTests(TestCase):
         self.assertNotContains(response, "pin-select-toggle")
 
     def test_map_page_enables_footer_attribution(self) -> None:
-        """show_map_footer must be set whenever the map itself renders, so
+        """
+        show_map_footer must be set whenever the map itself renders, so
         pin-select-map.ts's onAttribution callback has somewhere to write to."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))

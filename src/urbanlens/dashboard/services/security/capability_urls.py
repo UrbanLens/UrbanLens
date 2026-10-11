@@ -1,4 +1,5 @@
-"""Whether a URL works as a password: anyone holding it can open what it points at.
+"""
+Whether a URL works as a password: anyone holding it can open what it points at.
 
 A share link to a Drive folder, a Dropbox file, a photo album or a Google My Maps map is one, and so is any URL carrying
 a token, key or signature. Such a URL must not reach a service that publishes what it fetches, as the Wayback
@@ -59,7 +60,8 @@ _ACCESS_PARAM_NAMES = frozenset({"pass", "passcode", "invite", "jwt", "otp"})
 
 
 def is_capability_url(url: str) -> bool:
-    """Whether *url* grants access to whoever holds it.
+    """
+    Whether *url* grants access to whoever holds it.
 
     Args:
         url: An absolute http(s) URL.

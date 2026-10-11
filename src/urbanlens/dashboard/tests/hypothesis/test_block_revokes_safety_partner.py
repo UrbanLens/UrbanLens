@@ -108,7 +108,8 @@ class BlockRevokesSafetyPartnerTests(TestCase):
         )
 
     def test_a_partnership_on_someone_elses_checkin_is_untouched(self) -> None:
-        """The scoping is by *pair*, not by "either profile appears somewhere".
+        """
+        The scoping is by *pair*, not by "either profile appears somewhere".
 
         Both rows below involve one of the two blocking profiles, but paired with a third party rather than each
         other - a filter that matched on either profile alone (instead of the specific actor/target pair) would
@@ -140,7 +141,8 @@ class BlockRevokesSafetyPartnerTests(TestCase):
 
 
 class BlockWithdrawsPendingPinShareTests(TestCase):
-    """A pending share is an offer; blocking withdraws it.
+    """
+    A pending share is an offer; blocking withdraws it.
 
     This codebase already draws the line: ``DirectMessageShare.revoke`` undoes a share "only if the recipient
     hasn't acted on it yet", and leaves accepted ones "completely alone - there is nothing to revoke once the
@@ -189,7 +191,8 @@ class BlockWithdrawsPendingPinShareTests(TestCase):
         self.assertEqual(share.status, PinShareStatus.PENDING)
 
     def test_a_pending_share_between_the_blocked_profile_and_a_bystander_is_untouched(self) -> None:
-        """Same scoping concern from the other profile's side of the pair.
+        """
+        Same scoping concern from the other profile's side of the pair.
 
         A filter matching on either party alone (rather than the specific actor/target pair) would wrongly
         withdraw this - it never involves the blocker at all."""

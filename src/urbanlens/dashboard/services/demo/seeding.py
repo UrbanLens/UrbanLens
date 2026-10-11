@@ -1,4 +1,5 @@
-"""Build one demo account, with enough content to exercise the whole product.
+"""
+Build one demo account, with enough content to exercise the whole product.
 Runs only on a demo instance (``UL_DEMO_MODE``), against that instance's own database."""
 
 from __future__ import annotations
@@ -35,7 +36,8 @@ _PERSONAS = [
 
 
 def demo_username(seed: str, index: int) -> str:
-    """Username for one seeded account.
+    """
+    Username for one seeded account.
 
     Args:
         seed: Short random token identifying this demo session.
@@ -47,7 +49,8 @@ def demo_username(seed: str, index: int) -> str:
 
 
 def _make_user(seed: str, index: int, display_name: str, *, username: str = "", password: str = "") -> User:
-    """Create one active demo user with no email and a real password.
+    """
+    Create one active demo user with no email and a real password.
     A real password rather than ``set_unusable_password()``: an unusable one routes the very next request into the "set a password" prompt, which is not a demo.
 
     Args:
@@ -72,7 +75,8 @@ def _make_user(seed: str, index: int, display_name: str, *, username: str = "", 
 
 
 def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
-    """Stamp the profile the creation signal already made.
+    """
+    Stamp the profile the creation signal already made.
     Updated rather than constructed: ``profile_create_user_profile`` fires on every ``User`` insert, so a second ``Profile(...)`` would collide with the row that already exists.
 
     Args:
@@ -103,7 +107,8 @@ def _prepare_profile(user: User, *, bio: str, expires_at: Any) -> Profile:
 
 
 def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
-    """Give ``profile`` a pin on each pooled location.
+    """
+    Give ``profile`` a pin on each pooled location.
     Pinning is what grants wiki access - visibility is earned by holding a pin on the location - so this is also how a demo account comes to see each place's wiki, aliases and cached photos.
 
     Args:
@@ -118,7 +123,8 @@ def _pin_pool(profile: Profile, locations: list) -> list[Pin]:
 
 
 def seed_demo_account(*, ttl_hours: int = 24, username: str = "", password: str = "", locations: list[Location] | None = None) -> User:
-    """Create one demo login account, its personas, and their content.
+    """
+    Create one demo login account, its personas, and their content.
 
     Args:
         ttl_hours: How long before the account may be purged.
@@ -223,7 +229,8 @@ HUDSON_RIVER_STATE_HOSPITAL = {
 
 
 def ensure_location_pool() -> tuple[list[Location], str]:
-    """Make sure there is something for seeding to pin, and say what happened.
+    """
+    Make sure there is something for seeding to pin, and say what happened.
     The gap between "the seeder works" and "a fresh environment has content": the pool comes from an imported catalog, and a database nobody has imported into has none, so seeding succeeds and produces zero pins.
 
     Returns:
@@ -247,7 +254,8 @@ def ensure_location_pool() -> tuple[list[Location], str]:
 
 
 def _locations_for_entries(entries: list[dict[str, Any]]) -> list[Location]:
-    """Resolve just-imported export entries to their Location rows.
+    """
+    Resolve just-imported export entries to their Location rows.
 
     Args:
         entries: Entries in export format, as handed to ``import_location_entries``.
@@ -272,7 +280,8 @@ def _locations_for_entries(entries: list[dict[str, Any]]) -> list[Location]:
 
 
 def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) -> Pin:
-    """Give ``profile`` a pin on one named real place.
+    """
+    Give ``profile`` a pin on one named real place.
 
     Args:
         profile: Owner of the pin.
@@ -308,7 +317,8 @@ def seed_landmark_pin(profile: Profile, landmark: dict[str, str] | None = None) 
 
 
 def seed_dev_environment(*, username: str = "demo", password: str, ttl_hours: int = 24 * 365) -> dict[str, Any]:
-    """Seed one ephemeral dev environment with an account somebody can log into.
+    """
+    Seed one ephemeral dev environment with an account somebody can log into.
     A freshly created environment (the `infrastructure` repo's ``bin/dev_env.py``) has an empty database, so every page it serves is an empty state and nothing about the product can be seen without first building an account and content by hand.
 
     Args:

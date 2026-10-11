@@ -62,7 +62,8 @@ class FriendshipPairConstraintTests(TestCase):
         self.assertEqual(row.from_profile_id, higher.pk, "normalising to id order would rewrite who sent the request")
 
     def test_a_request_that_loses_the_race_returns_the_row_that_won(self) -> None:
-        """Two opposite requests at once: the constraint refuses the second.
+        """
+        Two opposite requests at once: the constraint refuses the second.
 
         Before it, this produced two rows for one relationship with the mute columns split across them."""
         winner = self._make(self.b, self.a, status=FriendshipStatus.REQUESTED)
@@ -159,7 +160,8 @@ class _Row:
 
 
 def _run_merge(rows: list[_Row]) -> None:
-    """Run the migration's merge over `rows`, in the order given.
+    """
+    Run the migration's merge over `rows`, in the order given.
 
     `_duplicated_pairs` is stubbed rather than reimplemented: it is one
     `GROUP BY ... HAVING COUNT(*) > 1`, and the behaviour under test is the
@@ -201,7 +203,8 @@ def _run_merge(rows: list[_Row]) -> None:
 
 
 class ReciprocalMergeBehaviourTests(TestCase):
-    """What the migration does to a pair that already exists.
+    """
+    What the migration does to a pair that already exists.
 
     Exercised against the function rather than through a real migration run, because the constraint this ships
     with makes the pair uncreatable - which is the point of it, and also why this state can only be reached by a
@@ -263,7 +266,8 @@ class ReciprocalMergeBehaviourTests(TestCase):
         self.assertFalse(second.deleted)
 
     def test_an_adopted_block_brings_its_direction_with_it(self) -> None:
-        """The one way this migration could corrupt rather than merge.
+        """
+        The one way this migration could corrupt rather than merge.
 
         `Friendship` has no "blocked_by" column - `from_profile` *is* the blocker - so taking the reversed row's
         BLOCKED status without its ends records the blocked party as the blocker."""
@@ -301,7 +305,8 @@ class ReciprocalMergeBehaviourTests(TestCase):
 
 
 class _RealApps:
-    """`apps` as the merge receives it, answering with the live `Friendship`.
+    """
+    `apps` as the merge receives it, answering with the live `Friendship`.
 
     The historical model differs from this one only by the constraint the
     fixture below drops; the merge touches no field that has changed since.
@@ -314,7 +319,8 @@ class _RealApps:
 
 
 class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
-    """The merge run over real rows, against the constraints production carries.
+    """
+    The merge run over real rows, against the constraints production carries.
 
     `ReciprocalMergeBehaviourTests` above drives the merge through `_Row`, whose `save()` is a no-op - so none
     of those tests can see a database constraint, the swap cases included."""
@@ -357,7 +363,8 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         self.assertLess(keeper.pk, loser.pk, "the keeper is the lowest-pk row, which is what the merge assumes")
 
     def test_a_pair_whose_losing_row_holds_the_restrictive_status_merges(self) -> None:
-        """The shape the migration exists for, and the one that aborted a release.
+        """
+        The shape the migration exists for, and the one that aborted a release.
 
         `a -> b Accepted` and `b -> a Blocked`: the block wins, so the keeper's
         ends swap to `(b, a)` - which is the loser's own key.
@@ -385,7 +392,8 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         self.assertEqual(survivor.status, FriendshipStatus.BLOCKED)
 
     def test_the_discarded_row_is_still_named_in_the_log(self) -> None:
-        """On a real database the log line is the only trace the row existed.
+        """
+        On a real database the log line is the only trace the row existed.
 
         `Model.delete()` sets the instance's pk to `None`, so deleting before
         logging reports "row None" - losing exactly what these warnings are for.
@@ -400,7 +408,8 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         self.assertIn(f"row {loser.pk} ", deletions[0], "the discarded row's id must survive its deletion")
 
     def test_the_merge_and_the_constraint_cannot_share_a_transaction(self) -> None:
-        """Why they are two migrations - demonstrated, not asserted.
+        """
+        Why they are two migrations - demonstrated, not asserted.
 
         The merge's UPDATE and DELETE queue deferred FK trigger events, and Postgres refuses to build an index
         over a table holding them."""
@@ -418,7 +427,8 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
         self.assertIn("pending trigger events", str(raised.exception))
 
     def test_every_pair_is_merged_not_just_the_first(self) -> None:
-        """An abort on pair one leaves the rest of the table untouched.
+        """
+        An abort on pair one leaves the rest of the table untouched.
 
         The reported failure had three pairs and reached one, which is what makes
         a partial run worth asserting against rather than a single merge.
@@ -442,7 +452,8 @@ class ReciprocalMergeAgainstTheDatabaseTests(TestCase):
 
 
 class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
-    """The merge and the constraint it clears the way for must stay in two migrations.
+    """
+    The merge and the constraint it clears the way for must stay in two migrations.
 
     A release squash collapses a branch's migrations into one file, and one file is one transaction - which is
     the whole hazard: see
@@ -506,7 +517,8 @@ class IndexWorkLivesInItsOwnMigrationTests(SimpleTestCase):
         return False
 
     def test_no_release_migration_alters_a_table_after_an_unflushed_data_migration(self) -> None:
-        """The general form of the rule, for the files a squash produces.
+        """
+        The general form of the rule, for the files a squash produces.
 
         Rows a data migration writes leave deferred checks pending until something fires them, and until then
         Postgres refuses ALTER TABLE and CREATE INDEX on that table. The squash tool follows each data migration

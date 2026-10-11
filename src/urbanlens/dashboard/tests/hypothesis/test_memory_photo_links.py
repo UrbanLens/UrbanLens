@@ -1,4 +1,5 @@
-"""A photo memory links to the page its photo is on, not the gallery fragment that page loads by htmx.
+"""
+A photo memory links to the page its photo is on, not the gallery fragment that page loads by htmx.
 
 The fragment rendered on its own, without the site around it.
 """

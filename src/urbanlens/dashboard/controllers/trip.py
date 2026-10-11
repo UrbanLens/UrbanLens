@@ -91,7 +91,8 @@ _TRIP_ERROR_STATUS: dict[type[TripError], int] = {
 
 
 def _trip_error_response(exc: TripError) -> HttpResponse:
-    """Turn a shared trip-service error into the plain-text response HTMX expects.
+    """
+    Turn a shared trip-service error into the plain-text response HTMX expects.
 
     Bodies stay plain text (not JSON) because the site's global ``htmx:responseError`` handler surfaces
     the raw body as a toast.
@@ -120,7 +121,8 @@ TRIP_LIST_PAGE_SIZE = 24
 
 
 def trip_list_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
-    """One page of the viewer's trips for ``trip_list_partial.html``, masked and sorted per the request.
+    """
+    One page of the viewer's trips for ``trip_list_partial.html``, masked and sorted per the request.
 
     Args:
         request: Carries ``sort``/``dir`` and ``page``.
@@ -152,7 +154,8 @@ def trip_list_context(request: HttpRequest, profile: Profile) -> dict[str, Any]:
 
 
 def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) -> None:
-    """Mask each listed trip's member/creator identities the viewer may not see.
+    """
+    Mask each listed trip's member/creator identities the viewer may not see.
 
     Mutates each ``TripMembership.profile``/``Trip.creator`` object in place (see
     ``identity_visibility.mask_profile_references``) so ``trip_list_partial.html`` can render
@@ -174,7 +177,8 @@ def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) ->
 
 
 def _annotate_viewer_membership(viewer: Profile, trips: Iterable[Trip]) -> None:
-    """Attach ``trip.viewer_membership`` (or ``None``) to each listed trip.
+    """
+    Attach ``trip.viewer_membership`` (or ``None``) to each listed trip.
 
     Reuses the ``memberships`` prefetch ``for_list_page`` already loads, so ``trip_list_partial.html``
     can gate viewer-only actions (e.g. "Start a check-in") on join status without an extra query per
@@ -189,7 +193,8 @@ def _annotate_viewer_membership(viewer: Profile, trips: Iterable[Trip]) -> None:
 
 
 def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
-    """Read and validate the `sort`/`dir` query params for the trips list page.
+    """
+    Read and validate the `sort`/`dir` query params for the trips list page.
 
     Args:
         request: The incoming request.
@@ -207,7 +212,8 @@ def _trip_list_sort_params(request: HttpRequest) -> tuple[str, str]:
 
 
 def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) -> Trip | HttpResponse:
-    """Return the trip when *profile* may see it, else the styled "not found" page.
+    """
+    Return the trip when *profile* may see it, else the styled "not found" page.
 
     That version rendered the same page for a missing trip and for one the viewer had no access to, but
     answered 404 for the first and 403 for the second - so the status code alone distinguished "no such
@@ -229,7 +235,8 @@ def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) ->
 
 
 def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
-    """Re-render the members panel partial.
+    """
+    Re-render the members panel partial.
 
     Args:
         request: The incoming request.
@@ -254,7 +261,8 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
 
 
 def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *, oob: bool = False) -> str:
-    """Render just the activities panel markup (index map, vote counts, per-activity permissions).
+    """
+    Render just the activities panel markup (index map, vote counts, per-activity permissions).
 
     Split out from ``_render_activities_panel`` so other views whose primary response is a different
     panel (e.g. toggling a member's organizer status) can still include a fresh copy as an out-of-band
@@ -298,7 +306,8 @@ def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *
 
 
 def _trip_hero_oob(request: HttpRequest, trip: Trip, *, viewer_has_joined: bool) -> str:
-    """Render the page hero as an out-of-band HTMX swap.
+    """
+    Render the page hero as an out-of-band HTMX swap.
 
     The hero lives in base.html's ``{% block hero %}`` (outside ``#trip-header``, as a sibling of ``{%
     block subnav %}``) so it renders in the correct spot above the page container, but its
@@ -324,7 +333,8 @@ def _trip_hero_oob(request: HttpRequest, trip: Trip, *, viewer_has_joined: bool)
 
 
 def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
-    """Re-render the activities panel as the primary HTMX response.
+    """
+    Re-render the activities panel as the primary HTMX response.
 
     Bundles out-of-band refreshes so sibling elements don't go stale after an activity
     add/edit/delete/complete:
@@ -354,7 +364,8 @@ def _render_activities_panel(request: HttpRequest, trip: Trip, profile: Profile)
 
 
 class TripOverviewView(LoginRequiredMixin, View):
-    """Trips section landing page: stats, a small calendar, and recent trips.
+    """
+    Trips section landing page: stats, a small calendar, and recent trips.
 
     GET /trips/  → overview page
     """
@@ -391,7 +402,8 @@ class TripOverviewView(LoginRequiredMixin, View):
 
 
 class TripListView(LoginRequiredMixin, View):
-    """Trips list page and trip creation.
+    """
+    Trips list page and trip creation.
 
     GET  /trips/list/   → list page
     POST /trips/create/ → create a new trip, return updated list partial
@@ -418,7 +430,8 @@ class TripListView(LoginRequiredMixin, View):
 
 
 class TripCalendarView(LoginRequiredMixin, View):
-    """Trips calendar page: a month view of the viewer's trips.
+    """
+    Trips calendar page: a month view of the viewer's trips.
 
     GET /trips/calendar/?month=YYYY-MM  → calendar page
     """
@@ -440,7 +453,8 @@ class TripCalendarView(LoginRequiredMixin, View):
 
 
 class TripCalendarMonthView(LoginRequiredMixin, View):
-    """One month of the trips calendar, for the prev/next controls.
+    """
+    One month of the trips calendar, for the prev/next controls.
 
     GET /trips/calendar/month/?month=YYYY-MM  → the calendar partial
     """
@@ -454,7 +468,8 @@ class TripCalendarMonthView(LoginRequiredMixin, View):
 
 
 class TripPickerView(LoginRequiredMixin, View):
-    """The viewer's trips matching a name fragment, as picker rows.
+    """
+    The viewer's trips matching a name fragment, as picker rows.
 
     GET /trips/picker/?q=<fragment>  → at most ``LIMIT`` ``<li>`` rows, most recently updated first
     """
@@ -473,7 +488,8 @@ class TripPickerView(LoginRequiredMixin, View):
 
 
 class TripCreateView(LoginRequiredMixin, View):
-    """Create a new trip.
+    """
+    Create a new trip.
 
     POST /trips/create/  → re-renders the trip list partial
     """
@@ -520,7 +536,8 @@ class TripCreateView(LoginRequiredMixin, View):
 
 
 class TripDetailView(LoginRequiredMixin, View):
-    """Trip detail page.
+    """
+    Trip detail page.
 
     GET /trips/<slug>/
     """
@@ -555,7 +572,8 @@ class TripDetailView(LoginRequiredMixin, View):
 
 
 class TripEditView(LoginRequiredMixin, View):
-    """Edit trip metadata.
+    """
+    Edit trip metadata.
 
     POST /trips/<slug>/edit/  → returns updated trip header partial
     """
@@ -594,7 +612,8 @@ class TripEditView(LoginRequiredMixin, View):
 
 
 class TripDeleteView(LoginRequiredMixin, View):
-    """Delete a trip (creator only).
+    """
+    Delete a trip (creator only).
 
     DELETE /trips/<slug>/delete/
     """
@@ -614,7 +633,8 @@ class TripDeleteView(LoginRequiredMixin, View):
 
 
 class TripActivitiesView(LoginRequiredMixin, View):
-    """Activities panel for a trip.
+    """
+    Activities panel for a trip.
 
     GET  /trips/<slug>/activities/  → render panel
     POST /trips/<slug>/activities/  → add activity, re-render panel
@@ -656,7 +676,8 @@ class TripActivitiesView(LoginRequiredMixin, View):
 
 
 class TripAiSuggestionsView(LoginRequiredMixin, View):
-    """AI-generated trip suggestions: pins worth adding, and a possible reorder.
+    """
+    AI-generated trip suggestions: pins worth adding, and a possible reorder.
 
     GET /trips/<slug>/ai-suggestions/ -> render panel (cached)
     POST /trips/<slug>/ai-suggestions/ -> force a fresh generation (cooldown-limited)
@@ -695,7 +716,8 @@ class TripAiSuggestionsView(LoginRequiredMixin, View):
 
 
 class TripApplySuggestedOrderView(LoginRequiredMixin, View):
-    """Apply an AI-suggested activity order.
+    """
+    Apply an AI-suggested activity order.
 
     POST /trips/<slug>/activities/apply-order/
 
@@ -736,7 +758,8 @@ class TripApplySuggestedOrderView(LoginRequiredMixin, View):
 
 
 class TripActivityEditView(LoginRequiredMixin, View):
-    """Edit a trip activity.
+    """
+    Edit a trip activity.
 
     POST /trips/<slug>/activities/<int:activity_id>/edit/  → re-render panel
     """
@@ -773,7 +796,8 @@ class TripActivityEditView(LoginRequiredMixin, View):
 
 
 class TripActivityDeleteView(LoginRequiredMixin, View):
-    """Delete a single activity and re-render the activities panel.
+    """
+    Delete a single activity and re-render the activities panel.
 
     DELETE /trips/<slug>/activities/<int:activity_id>/delete/
     """
@@ -793,7 +817,8 @@ class TripActivityDeleteView(LoginRequiredMixin, View):
 
 
 class TripActivityCompleteView(LoginRequiredMixin, View):
-    """Mark an activity as completed, snapping its date to today if it was in the future.
+    """
+    Mark an activity as completed, snapping its date to today if it was in the future.
 
     POST /trips/<slug>/activities/<int:activity_id>/complete/
     """
@@ -820,14 +845,16 @@ class TripActivityCompleteView(LoginRequiredMixin, View):
 
 
 class TripActivityVoteView(LoginRequiredMixin, View):
-    """Cast, update, or clear a member's vote on a proposed activity.
+    """
+    Cast, update, or clear a member's vote on a proposed activity.
 
     POST /trips/<slug>/activities/<int:activity_id>/vote/
     Form body: vote=up | vote=down | vote= (empty to clear)
     """
 
     def post(self, request, trip_slug, activity_id):
-        """Handle a vote submission and re-render the activities panel.
+        """
+        Handle a vote submission and re-render the activities panel.
 
         Args:
             request: The HTTP request.
@@ -857,7 +884,8 @@ _TRIP_COMMENTS_PAGE_SIZE = 8
 
 
 def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) -> HttpResponse:
-    """Re-render the comments panel from the shared visible-comment tree.
+    """
+    Re-render the comments panel from the shared visible-comment tree.
 
     Args:
         request: The incoming request.
@@ -898,7 +926,8 @@ def _render_trip_comments(request: HttpRequest, trip: Trip, profile: Profile) ->
 
 
 class TripCommentsView(LoginRequiredMixin, View):
-    """Comments panel for a trip.
+    """
+    Comments panel for a trip.
 
     GET  /trips/<slug>/comments/  → render panel
     POST /trips/<slug>/comments/  → add comment, re-render panel
@@ -939,7 +968,8 @@ class TripCommentsView(LoginRequiredMixin, View):
 
 
 class TripCommentDeleteView(LoginRequiredMixin, View):
-    """Delete a comment (author or trip creator only).
+    """
+    Delete a comment (author or trip creator only).
 
     DELETE /trips/<slug>/comments/<int:comment_id>/delete/
     """
@@ -958,7 +988,8 @@ class TripCommentDeleteView(LoginRequiredMixin, View):
 
 
 class TripMembersView(LoginRequiredMixin, View):
-    """Members panel for a trip.
+    """
+    Members panel for a trip.
 
     GET  /trips/<slug>/members/  → render panel
     POST /trips/<slug>/members/  → add a member by username or invite an email address, re-render panel
@@ -997,7 +1028,8 @@ class TripMembersView(LoginRequiredMixin, View):
 
 
 class TripMemberRemoveView(LoginRequiredMixin, View):
-    """Remove a member from a trip.
+    """
+    Remove a member from a trip.
 
     DELETE /trips/<slug>/members/<int:profile_id>/remove/
     Only the trip creator may remove members (members can remove themselves).
@@ -1020,7 +1052,8 @@ class TripMemberRemoveView(LoginRequiredMixin, View):
 
 
 class TripMemberOrganizerView(LoginRequiredMixin, View):
-    """Toggle organizer status for a trip member (creator only).
+    """
+    Toggle organizer status for a trip member (creator only).
 
     POST /trips/<slug>/members/<int:profile_id>/organizer/
     """
@@ -1051,13 +1084,15 @@ class TripMemberOrganizerView(LoginRequiredMixin, View):
 
 
 class TripMapDataView(LoginRequiredMixin, View):
-    """Return GeoJSON-style activity data for the trip map.
+    """
+    Return GeoJSON-style activity data for the trip map.
 
     GET /trips/<slug>/map-data/
     """
 
     def get(self, request, trip_slug):
-        """Return activity locations with coordinates as JSON.
+        """
+        Return activity locations with coordinates as JSON.
 
         Args:
             request: The HTTP request.
@@ -1078,7 +1113,8 @@ class TripMapDataView(LoginRequiredMixin, View):
 
 
 class TripActivityStatusView(LoginRequiredMixin, View):
-    """Toggle or set activity status (proposed/confirmed).
+    """
+    Toggle or set activity status (proposed/confirmed).
 
     POST /trips/<slug>/activities/<int:activity_id>/status/
     Body: {status: "proposed"|"confirmed"}
@@ -1104,7 +1140,8 @@ class TripActivityStatusView(LoginRequiredMixin, View):
 
 
 class TripActivityMoveView(LoginRequiredMixin, View):
-    """Update the date of an activity (calendar drag-and-drop).
+    """
+    Update the date of an activity (calendar drag-and-drop).
 
     POST /trips/<slug>/activities/<int:activity_id>/move/
     Body: {date: "YYYY-MM-DD"}
@@ -1139,7 +1176,8 @@ class TripActivityMoveView(LoginRequiredMixin, View):
 
 
 class TripMembershipJoinView(LoginRequiredMixin, View):
-    """Accept a trip invitation.
+    """
+    Accept a trip invitation.
 
     POST /trips/<slug>/join/
 
@@ -1166,7 +1204,8 @@ class TripMembershipJoinView(LoginRequiredMixin, View):
 
 
 class TripMemberRSVPView(LoginRequiredMixin, View):
-    """Set RSVP status for the current user on a trip.
+    """
+    Set RSVP status for the current user on a trip.
 
     POST /trips/<slug>/rsvp/
     Body: {rsvp: "yes"|"no"|"maybe"|""}
@@ -1191,7 +1230,8 @@ class TripMemberRSVPView(LoginRequiredMixin, View):
 
 
 class TripActivityRSVPView(LoginRequiredMixin, View):
-    """Set or clear the current user's RSVP override for one activity.
+    """
+    Set or clear the current user's RSVP override for one activity.
 
     POST /trips/<slug>/activities/<id>/rsvp/
 
@@ -1200,7 +1240,8 @@ class TripActivityRSVPView(LoginRequiredMixin, View):
     """
 
     def post(self, request, trip_slug, activity_id):
-        """Persist the activity RSVP override.
+        """
+        Persist the activity RSVP override.
 
         Args:
             request: The incoming HTTP request.
@@ -1226,7 +1267,8 @@ class TripActivityRSVPView(LoginRequiredMixin, View):
 
 
 class TripLeaveView(LoginRequiredMixin, View):
-    """Leave a trip (non-creator members only).
+    """
+    Leave a trip (non-creator members only).
 
     DELETE /trips/<slug>/leave/
 
@@ -1254,13 +1296,15 @@ class TripLeaveView(LoginRequiredMixin, View):
 
 
 class TripSettingsView(LoginRequiredMixin, View):
-    """Save trip settings (creator only).
+    """
+    Save trip settings (creator only).
 
     POST /trips/<slug>/settings/
     """
 
     def post(self, request, trip_slug):
-        """Handle POST to update trip permission settings.
+        """
+        Handle POST to update trip permission settings.
 
         Args:
             request: The HTTP request.
@@ -1292,7 +1336,8 @@ class TripSettingsView(LoginRequiredMixin, View):
 
 
 class TripActivityPositionView(LoginRequiredMixin, View):
-    """Save a map-drag position override for a trip activity.
+    """
+    Save a map-drag position override for a trip activity.
 
     POST /trips/<slug>/activities/<int:activity_id>/position/
 
@@ -1301,7 +1346,8 @@ class TripActivityPositionView(LoginRequiredMixin, View):
     """
 
     def post(self, request, trip_slug, activity_id):
-        """Handle POST to update map position override.
+        """
+        Handle POST to update map position override.
 
         Args:
             request: The HTTP request.
@@ -1332,7 +1378,8 @@ class TripActivityPositionView(LoginRequiredMixin, View):
 
 
 class TripChildTripSearchView(LoginRequiredMixin, View):
-    """Search for trips the current user can add as a child activity.
+    """
+    Search for trips the current user can add as a child activity.
 
     GET /trips/<slug>/child-trip-search/?q=<query>
 
@@ -1340,7 +1387,8 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
     """
 
     def get(self, request, trip_slug):
-        """Return JSON list of matching trips.
+        """
+        Return JSON list of matching trips.
 
         Args:
             request: The HTTP request.
@@ -1368,7 +1416,8 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
 
 
 def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> float:
-    """Absolute gap in seconds between a forecast slot and a scheduled time.
+    """
+    Absolute gap in seconds between a forecast slot and a scheduled time.
 
     Slots without one fall back to comparing wall clocks, forced naive on both sides so an
     offset-carrying ``date`` can't raise "can't subtract offset-naive and offset-aware datetimes" and
@@ -1408,7 +1457,8 @@ def _forecast_cell(coords: tuple[float, float]) -> tuple[float, float]:
 
 
 def _fetch_forecasts(cells: list[tuple[float, float]], *, caller: str | None) -> tuple[dict[tuple[float, float], list[ForecastSlot]], bool]:
-    """Forecast slots for each place, from the cache or one fetch under the forecast upstream's policy.
+    """
+    Forecast slots for each place, from the cache or one fetch under the forecast upstream's policy.
 
     The missing places are fetched one after another in a single background call holding one slot, each
     cached as it arrives, so a fetch that outlives the request still fills the cache for the next one.
@@ -1458,7 +1508,8 @@ def _fetch_forecasts(cells: list[tuple[float, float]], *, caller: str | None) ->
 
 
 def _build_activity_forecasts(activities: list[TripActivity], *, caller: str | None = None) -> list[dict]:
-    """For each activity, find the closest forecast slot at its location and time.
+    """
+    For each activity, find the closest forecast slot at its location and time.
 
     Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
     ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
@@ -1509,7 +1560,8 @@ def _build_activity_forecasts(activities: list[TripActivity], *, caller: str | N
 
 
 def _group_by_day(rows: list[dict]) -> list[tuple]:
-    """Bucket weather rows by their activity's calendar day, earliest first.
+    """
+    Bucket weather rows by their activity's calendar day, earliest first.
 
     Args:
         rows: Dicts carrying a ``scheduled_at``.
@@ -1528,7 +1580,8 @@ def _group_by_day(rows: list[dict]) -> list[tuple]:
 
 
 def _build_activity_history(activities: list[TripActivity]) -> tuple[list[dict], bool]:
-    """For each past activity, what the weather actually was on its day, from stored rows.
+    """
+    For each past activity, what the weather actually was on its day, from stored rows.
 
     Missing days are queued for a background fetch rather than fetched here, the way the visit-history panel
     does it; a record of a past day never changes, so once stored it needs no freshness handling.
@@ -1586,13 +1639,15 @@ TRIP_WEATHER_METHODS = frozenset({"GET"})
 
 
 class TripWeatherView(LoginRequiredMixin, View):
-    """Render the weather forecast panel for a trip.
+    """
+    Render the weather forecast panel for a trip.
 
     GET /trips/<slug>/weather/
     """
 
     def get(self, request, trip_slug):
-        """Return weather HTML partial for the trip.
+        """
+        Return weather HTML partial for the trip.
 
         Args:
             request: The HTTP request.

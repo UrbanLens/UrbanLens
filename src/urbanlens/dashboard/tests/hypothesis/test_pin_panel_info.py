@@ -256,7 +256,8 @@ class PinDetailHeroSubnavTests(RedataConfiguredMixin, TestCase):
         self.assertContains(response, "page-content")
 
     def test_hero_and_subnav_render_outside_the_htmx_overview_panel(self) -> None:
-        """The hero/subnav must be present on the initial full page load, not
+        """
+        The hero/subnav must be present on the initial full page load, not
         only after the #pin-overview panel's own hx-trigger="load" fetch completes -
         otherwise every tab (Article/Comments/History) would flash with no hero."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
@@ -289,7 +290,8 @@ class PinDetailHeroSubnavTests(RedataConfiguredMixin, TestCase):
         self.assertIn("epa_echo_detail", keys)
 
     def test_panel_tabs_context_has_the_expected_order_and_labels(self) -> None:
-        """Without the Nearby Research feature, panel_tabs is just the always-available ones -
+        """
+        Without the Nearby Research feature, panel_tabs is just the always-available ones -
         see NearbyResearchTabGatingTests for the combined-with-EPA case."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         tabs = response.context["panel_tabs"]
@@ -331,7 +333,8 @@ class PinDetailHeroSubnavTests(RedataConfiguredMixin, TestCase):
             self.assertNotIn(self._autoload_trigger(condensed_key), content)
 
     def test_epa_exact_site_detail_panel_still_has_an_autoload_trigger(self) -> None:
-        """Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card.
+        """
+        Unlike epa_echo (nearby list), epa_echo_detail is not tab-gated - it's a normal auto-loading card.
 
         Also what keeps the negative test above honest: if the trigger's spelling changes and this helper is not
         updated, this fails rather than letting that one pass by matching nothing."""
@@ -346,7 +349,8 @@ class PinDetailHeroSubnavTests(RedataConfiguredMixin, TestCase):
 
 
 class NearbyResearchTabGatingTests(TestCase):
-    """EPA's nearby-facility list tab (appended to the single "Regional Data" tab
+    """
+    EPA's nearby-facility list tab (appended to the single "Regional Data" tab
     strip - see PinController.view's panel_tabs) is subscription-gated; the always-
     available tabs (Census/Wildlife/Seismic) show either way, in the same card."""
 
@@ -410,7 +414,8 @@ class NearbyResearchTabGatingTests(TestCase):
         self.assertNotContains(response, "pin-nearby-research-section")
 
     def test_epa_nearby_list_not_in_autoloading_panels_even_with_the_feature(self) -> None:
-        """Nearby Research tabs are still click-to-load, like Regional Data - the feature only
+        """
+        Nearby Research tabs are still click-to-load, like Regional Data - the feature only
         controls whether the tab strip is shown at all, not whether it auto-fetches."""
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 

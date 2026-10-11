@@ -1,4 +1,5 @@
-"""External-API routes for the partner side of safety check-ins.
+"""
+External-API routes for the partner side of safety check-ins.
 
 Acknowledging that they have seen it, escalating when a check-in goes overdue, reading whatever live
 position the explorer chose to share, and managing their own standing invitations and defaults as a

@@ -292,7 +292,8 @@ class SearchSubscriptionFeatureTests(TestCase):
     """Search subscription feature defaults."""
 
     def test_vip_defaults_grant_search_feature(self):
-        """The "vip" role is seeded by a migration.
+        """
+        The "vip" role is seeded by a migration.
 
         Seeded again here, as test_subscriptions_model.py does: a ``TransactionTestCase`` that ran earlier in the
         same process empties the table, which pytest-xdist can arrange. The seed leaves an existing row alone.
@@ -396,7 +397,8 @@ class WebSearchViewTests(TestCase):
         self.assertIn("user edited location", own)
 
     def test_result_carries_a_bookmark_button_posting_to_pin_links(self) -> None:
-        """Bookmarking a web search result reuses the same pin.links endpoint (and
+        """
+        Bookmarking a web search result reuses the same pin.links endpoint (and
         therefore the same Wayback-archiving-on-create signal) as the Links card's
         own add-link dialog - see _pin_link_add_dialog.html."""
         from django.test import RequestFactory
@@ -464,7 +466,8 @@ class WebSearchViewTests(TestCase):
             self.assertIn(f'src="{reverse("media.remote_copy", args=[digest])}"', content)
 
     def test_empty_fresh_results_return_204_not_a_no_results_card(self) -> None:
-        """Regression guard: an empty search must hide the panel (204, the
+        """
+        Regression guard: an empty search must hide the panel (204, the
         site-wide data-ext-panel-204 convention) rather than rendering a
         visible "No results found." card."""
         from django.test import RequestFactory

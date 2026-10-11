@@ -1,4 +1,5 @@
-"""Gateway for Google's Open Buildings dataset (v3), read from Google's own bucket one S2 cell's shard at a time.
+"""
+Gateway for Google's Open Buildings dataset (v3), read from Google's own bucket one S2 cell's shard at a time.
 
 v3 (2023) is the current release of the 2D polygons and centroid points. The 2.5D Temporal dataset is published only
 as Earth Engine rasters, so it is not a source here.
@@ -66,7 +67,8 @@ def covered_level_4_cells() -> frozenset[str]:
 
 
 def _shard_tokens_for_bbox(bbox: BBox) -> list[str]:
-    """The level-6 cells overlapping ``bbox`` that the dataset covers.
+    """
+    The level-6 cells overlapping ``bbox`` that the dataset covers.
 
     Args:
         bbox: ``(min_lon, min_lat, max_lon, max_lat)``.
@@ -93,7 +95,8 @@ def _shard_tokens_for_bbox(bbox: BBox) -> list[str]:
 
 @dataclass(slots=True, kw_only=True)
 class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
-    """Fetch building polygons/points from Google's Open Buildings v3 dataset.
+    """
+    Fetch building polygons/points from Google's Open Buildings v3 dataset.
 
     Attributes:
         min_confidence: Drop rows below this model confidence score (dataset range is roughly 0.65-1.0)."""
@@ -106,7 +109,8 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
     min_confidence: float = 0.0
 
     def get_buildings(self, bbox: BBox, *, as_geojson: bool = True) -> list[dict]:
-        """Building footprint polygons overlapping ``bbox``.
+        """
+        Building footprint polygons overlapping ``bbox``.
         Pass ``as_geojson=False`` to get raw dicts with a ``geometry_wkt`` string instead, if you'd rather avoid the shapely dependency.
 
         Raises:
@@ -114,7 +118,8 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
         return self._download_shards(bbox, POLYGONS_BASE_URL, POLYGON_COLUMNS, as_geojson=as_geojson)
 
     def get_building_points(self, bbox: BBox) -> list[dict]:
-        """Building centroid points overlapping ``bbox`` (smaller/faster than polygons).
+        """
+        Building centroid points overlapping ``bbox`` (smaller/faster than polygons).
 
         Raises:
             ImpossibleInputError: ``bbox`` is outside the dataset's coverage."""
@@ -174,7 +179,8 @@ class GoogleOpenBuildingsGateway(Gateway, BoundaryProvider):
         }
 
     def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon | None:
-        """The smallest footprint holding the point.
+        """
+        The smallest footprint holding the point.
 
         Args:
             latitude: WGS-84 latitude.

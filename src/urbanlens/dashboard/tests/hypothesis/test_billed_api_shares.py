@@ -1,4 +1,5 @@
-"""Billed APIs stay inside the vendor's free tier summed over every deployment that holds a key.
+"""
+Billed APIs stay inside the vendor's free tier summed over every deployment that holds a key.
 
 A vendor's free allowance belongs to the billing account, which UrbanLens's production, staging
 and development deployments share with REData's. Each deployment therefore enforces the

@@ -58,7 +58,8 @@ NEGATIVE_CASES: dict[str, tuple[str, ...]] = {
 
 
 def _plain_profile():
-    """A profile with SiteFeature.AI granted - the gate these tests exercise past, not around.
+    """
+    A profile with SiteFeature.AI granted - the gate these tests exercise past, not around.
 
     The first user in a fresh DB is auto-promoted to site admin, so a throwaway user absorbs that first."""
     from urbanlens.dashboard.models.site_settings.model import SiteSettings

@@ -27,7 +27,8 @@ def azure_maps_request(
     params: dict[str, Any] | None = None,
     timeout: int = 10,
 ) -> dict[str, Any]:
-    """Issue an authenticated GET against one Azure Maps REST endpoint.
+    """
+    Issue an authenticated GET against one Azure Maps REST endpoint.
 
     Args:
         session: The calling gateway's (rate-limited) HTTP session.

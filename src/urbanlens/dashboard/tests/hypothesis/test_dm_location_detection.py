@@ -87,7 +87,8 @@ class ParseCoordinatesTests(TestCase):
         self.assertEqual(len(parse_coordinates(text)), 5)
 
     def test_adversarial_input_does_not_hang(self):
-        """Regression for the py/polynomial-redos CodeQL alert on _DECIMAL_HEMI_RE/_DMS_RE.
+        """
+        Regression for the py/polynomial-redos CodeQL alert on _DECIMAL_HEMI_RE/_DMS_RE.
 
         Uses bait sized right up to the DM length cap (so the length-cap defense-in-depth guard doesn't just
         truncate the regexes' way out of it) - this must complete near-instantly regardless."""
@@ -105,7 +106,8 @@ class ParseCoordinatesTests(TestCase):
         )
 
     def test_oversized_input_is_bounded_by_length_cap(self):
-        """A message far exceeding MAX_DIRECT_MESSAGE_LENGTH still returns fast.
+        """
+        A message far exceeding MAX_DIRECT_MESSAGE_LENGTH still returns fast.
 
         Defense-in-depth: parse_coordinates truncates before scanning, so even a hypothetical caller that skips
         body-length validation can't feed these regexes unbounded text."""

@@ -49,7 +49,8 @@ class WikiNeighbourTestCase(TestCase):
         self.wiki = baker.make(Wiki, location=self.location)
 
     def _processed(self, image: Image, **fields) -> Image:
-        """Finish a fixture upload the way ``tasks.process_image_upload`` would.
+        """
+        Finish a fixture upload the way ``tasks.process_image_upload`` would.
 
         A fresh upload is stored raw and gated to its uploader until that task runs (see
         ``Image.pending_scan``).
@@ -112,7 +113,8 @@ class PrivatePinPhotoIsNotOnTheWikiTests(WikiNeighbourTestCase):
         self.assertFalse(ImageAttachment.objects.filter(image=private, wiki=self.wiki).exists())
 
     def test_widening_your_own_visibility_is_not_consent_to_publish(self) -> None:
-        """`photo_upload_visibility` governs the audience for things you have
+        """
+        `photo_upload_visibility` governs the audience for things you have
         shared. It is not a decision to share, and a future shortcut reading
         "ANYONE means it is public anyway" must fail here."""
         self.owner.photo_upload_visibility = VisibilityChoice.ANYONE
@@ -124,7 +126,8 @@ class PrivatePinPhotoIsNotOnTheWikiTests(WikiNeighbourTestCase):
         self.assertNotIn(private.pk, on_the_wiki)
 
     def test_the_overlay_picker_shows_the_same_photos_as_the_gallery(self) -> None:
-        """Two surfaces onto one wiki's photos must not disagree about which
+        """
+        Two surfaces onto one wiki's photos must not disagree about which
         photos those are."""
         self._private_photo()
         shared = self._shared_photo()
@@ -163,7 +166,8 @@ class PrivatePinDataIsNotReachableTests(WikiNeighbourTestCase):
         )
 
     def test_the_child_pin_subtree_is_not_readable_by_a_neighbour(self) -> None:
-        """Child pins are entrances, hazards and stairs - the most operationally
+        """
+        Child pins are entrances, hazards and stairs - the most operationally
         sensitive thing a pin carries."""
         baker.make(
             Pin, profile=self.owner, location=self.location, parent_pin=self.owner_pin, name="zzq-hidden-entrance"
@@ -192,7 +196,8 @@ class PrivatePhotoBytesTests(WikiNeighbourTestCase):
         return self.client.get(f"/media/{image.image.name}").status_code
 
     def test_an_unshared_pin_photo_is_refused_whatever_the_setting_says(self) -> None:
-        """A photo on your pin is your record of a place, not a publication.
+        """
+        A photo on your pin is your record of a place, not a publication.
 
         `photo_upload_visibility` decides who may see a photo you have *shared*."""
         private = self._private_photo()

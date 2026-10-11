@@ -23,7 +23,8 @@ from urbanlens.dashboard.services.visits.safety import create_checkin
 
 
 def _bearer(raw_key: str) -> dict:
-    """Build the auth header kwargs for a bearer-key request.
+    """
+    Build the auth header kwargs for a bearer-key request.
 
     Args:
         raw_key: The plaintext API key.
@@ -66,7 +67,8 @@ class _SafetyLocationTestCase(TestCase):
         self.url = reverse("external_api:safety.checkins.location", kwargs={"checkin_slug": self.checkin.slug})
 
     def _issue_key(self, user: User, scopes: list[str] | None = None) -> str:
-        """Issue an API key for *user*.
+        """
+        Issue an API key for *user*.
 
         Args:
             user: The key's owner. scopes: Scope values to grant, defaulting to safety read + write.

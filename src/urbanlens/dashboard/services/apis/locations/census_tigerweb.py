@@ -42,7 +42,8 @@ class CensusTigerwebGateway(Gateway):
     base_url: str = _BASE_URL
 
     def _query_layer(self, layer_id: int, latitude: float, longitude: float) -> dict[str, Any] | None:
-        """Return the first feature's attributes intersecting a point, for one layer.
+        """
+        Return the first feature's attributes intersecting a point, for one layer.
 
         Raises:
             TigerwebUnavailableError: No answer, which is not the same as no feature.
@@ -69,7 +70,8 @@ class CensusTigerwebGateway(Gateway):
         return features[0].get("attributes") if features else None
 
     def get_state_boundary(self, state_abbr: str) -> dict[str, Any] | None:
-        """Return the raw Esri ring geometry of one US state's boundary.
+        """
+        Return the raw Esri ring geometry of one US state's boundary.
 
         Args:
             state_abbr: Two-letter USPS state abbreviation (e.g. ``"NY"``).
@@ -104,7 +106,8 @@ class CensusTigerwebGateway(Gateway):
         return features[0].get("geometry")
 
     def get_geography(self, latitude: float, longitude: float) -> dict[str, Any]:
-        """Return the US Census geography containing a coordinate.
+        """
+        Return the US Census geography containing a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

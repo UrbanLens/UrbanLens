@@ -1,4 +1,5 @@
-"""Tests for services.billing.webhooks - handlers operate on plain dicts (the shape
+"""
+Tests for services.billing.webhooks - handlers operate on plain dicts (the shape
 produced by stripe.Event.to_dict()/stripe.Subscription.retrieve(...).to_dict()), not
 live Stripe SDK objects. No real network access occurs."""
 
@@ -84,7 +85,8 @@ class SyncFromStripeSubscriptionTests(TestCase):
         self.assertFalse(subscription.threshold_met)
 
     def test_recompute_threshold_met_marks_a_cleared_pledge_true(self) -> None:
-        """Complement of the test above: a mutation that always resolves the recompute
+        """
+        Complement of the test above: a mutation that always resolves the recompute
         as unmet (or skips it) would still pass a suite that only ever exercises the
         below-threshold direction.
         """
@@ -214,7 +216,8 @@ class HandleCheckoutSessionCompletedTests(TestCase):
         self.assertEqual(subscription.amount_used_cents, 0)
 
     def test_carries_forward_the_usage_ledger_from_the_most_recent_prior_row(self) -> None:
-        """Two canceled rows exist for this (user, role) - the newer one's ledger must
+        """
+        Two canceled rows exist for this (user, role) - the newer one's ledger must
         win, not just "a" previous row, which pins the order_by("-created") direction.
         """
         from django.utils import timezone
@@ -267,7 +270,8 @@ class HandleSubscriptionUpdatedTests(TestCase):
         webhooks.handle_event(event)  # must not raise
 
     def test_a_late_update_cannot_resurrect_a_canceled_subscription(self) -> None:
-        """Stripe guarantees neither ordering nor single delivery.
+        """
+        Stripe guarantees neither ordering nor single delivery.
 
         ``customer.subscription.updated`` and ``.deleted`` are emitted together at cancellation, and Stripe
         retries a failed delivery with backoff for days - so the ``updated`` carrying the pre-cancellation
@@ -432,7 +436,8 @@ class HandleInvoicePaymentSucceededTests(TestCase):
         self.assertEqual(subscription.total_paid_cents, 1000)
 
     def test_out_of_order_delivery_carries_forward_a_prior_pwyw_ledger(self) -> None:
-        """The recovery path must not bypass the same usage-ledger carry-forward a
+        """
+        The recovery path must not bypass the same usage-ledger carry-forward a
         normal checkout.session.completed creation gets - otherwise resubscribing
         under this exact race would silently lose the prior banked balance."""
         from django.utils import timezone
@@ -496,7 +501,8 @@ class HandleInvoicePaymentFailedTests(TestCase):
 
 
 def _refund_object(refund_id: str, amount: int) -> mock.MagicMock:
-    """A stand-in for a live ``stripe.Refund`` instance from ``stripe.Refund.list(...)``.
+    """
+    A stand-in for a live ``stripe.Refund`` instance from ``stripe.Refund.list(...)``.
 
     Unlike the embedded ``charge.refunds.data`` entries (plain dicts straight off the webhook JSON), a real
     Stripe SDK object only supports ``.to_dict()``/ attribute/``[]`` access - not ``.get()`` - so the handler
@@ -566,7 +572,8 @@ class HandleChargeRefundedTests(TestCase):
         self.assertEqual(self.sub.total_paid_cents, 1500)
 
     def test_cumulative_second_event_applies_only_the_new_refund(self) -> None:
-        """charge.refunded delivers the charge's *cumulative* refund list - a second
+        """
+        charge.refunded delivers the charge's *cumulative* refund list - a second
         partial refund arrives as a fresh event (new event id) that re-contains the
         first refund, which must not be applied again."""
         self._mock_invoice()
@@ -617,7 +624,8 @@ class HandleChargeRefundedTests(TestCase):
         self.assertEqual(self.sub.total_paid_cents, 2000 - 500 - 300)
 
     def test_non_paginated_refund_list_never_calls_the_list_api(self) -> None:
-        """The extra API round-trip is only worth paying when Stripe says there's
+        """
+        The extra API round-trip is only worth paying when Stripe says there's
         more to fetch - the common case (a charge with a handful of refunds) must
         stay a single API call (the Invoice retrieve already mocked in setUp)."""
         self._mock_invoice()

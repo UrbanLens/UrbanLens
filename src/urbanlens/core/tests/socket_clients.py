@@ -1,4 +1,5 @@
-"""Find the files that own a WebSocket close handler, and read only their code.
+"""
+Find the files that own a WebSocket close handler, and read only their code.
 
 A file that constructs its own `WebSocket` owns its `onclose` and must handle
 the capacity refusal itself; a file that calls `openLiveSocket` inherits the
@@ -35,7 +36,8 @@ def executable_source(text: str) -> str:
 
 
 def hand_rolled(*roots: pathlib.Path) -> list[pathlib.Path]:
-    """Every file under *roots* that constructs a WebSocket of its own.
+    """
+    Every file under *roots* that constructs a WebSocket of its own.
 
     Args:
         roots: Directories to search.

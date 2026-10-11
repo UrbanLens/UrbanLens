@@ -53,7 +53,8 @@ class GetRouteBetweenTests(SimpleTestCase):
 
 
 class OsrmBaseUrlTests(SimpleTestCase):
-    """``UL_OSRM_BASE_URL``, and why the default has to be re-read per instance.
+    """
+    ``UL_OSRM_BASE_URL``, and why the default has to be re-read per instance.
 
     Without a configurable base URL every deployment routes through OSRM's
     public demo server, which that project documents as dev/testing only.

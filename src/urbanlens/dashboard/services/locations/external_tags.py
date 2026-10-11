@@ -25,7 +25,8 @@ _BOOLISH_VALUE_LABELS: dict[str, str] = {
 
 
 def humanize_tag_value(value: str) -> str:
-    """Turn a raw provider tag value into a display-friendly string.
+    """
+    Turn a raw provider tag value into a display-friendly string.
     Relocated from ``services.apis.locations.nominatim``'s private ``_humanize_osm_value`` (formerly used only for that panel's ``extra_details`` list) so it can also format values for the external-tag chips this module feeds.
 
     Args:
@@ -41,7 +42,8 @@ def humanize_tag_value(value: str) -> str:
 
 
 def extract_nominatim_tags(place_data: dict) -> list[ExtractedTag]:
-    """The classification tags in a Nominatim ``reverse_geocode()`` result.
+    """
+    The classification tags in a Nominatim ``reverse_geocode()`` result.
 
     Args:
         place_data: A normalised Nominatim result (or ``{}``/a partial dict).
@@ -63,7 +65,8 @@ def extract_nominatim_tags(place_data: dict) -> list[ExtractedTag]:
 
 
 def extract_overture_tags(attributes: dict) -> list[ExtractedTag]:
-    """The classification tags in an Overture ``get_building_attributes()`` result.
+    """
+    The classification tags in an Overture ``get_building_attributes()`` result.
     Never call this with the ``nearby_places``-merged dict ``OvertureBuildingAttributesPanelSource.fetch()`` builds for its cache row - ``nearby_places`` describes *other* points of interest near the coordinate, not this building, and has no place here.
 
     Args:

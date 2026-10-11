@@ -47,7 +47,8 @@ def _clamp_opacity(raw: str | None) -> int:
 
 
 def _render_section(request, profile: Profile) -> HttpResponse:
-    """Re-render the sidebar's Saved Filters section plus an OOB update of the map's toolbar.
+    """
+    Re-render the sidebar's Saved Filters section plus an OOB update of the map's toolbar.
 
     The bottom-right saved-filters toolbar (main map page only) mirrors the same
     ``profile.saved_filters`` list, so every create/delete response also carries an out-of-band swap of
@@ -61,7 +62,8 @@ def _render_section(request, profile: Profile) -> HttpResponse:
 
 
 def _dissolve_regions(search_form: SearchForm) -> dict[str, MultiPolygon | None]:
-    """Parse and independently dissolve a submitted form's include/exclude regions.
+    """
+    Parse and independently dissolve a submitted form's include/exclude regions.
 
     Each of ``include_regions``/``exclude_regions`` is dissolved on its own - overlapping polygons
     within the same type merge into one component; include and exclude are never merged against each
@@ -85,7 +87,8 @@ def _dissolve_regions(search_form: SearchForm) -> dict[str, MultiPolygon | None]
 
 
 class SavedFilterCreateView(LoginRequiredMixin, View):
-    """Save the main map's current filter state under a name.
+    """
+    Save the main map's current filter state under a name.
 
     POST /saved-filters/create/ → re-renders the sidebar's Saved Filters section.
 
@@ -137,7 +140,8 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
 
 
 def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
-    """Build the shared context every "every option editable" filter form needs.
+    """
+    Build the shared context every "every option editable" filter form needs.
 
     Used by both the create/edit dialog and the filter's own dedicated detail page, so the two never
     drift out of sync on what fields/choices they offer.
@@ -188,7 +192,8 @@ def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
 
 
 class SavedFilterEditView(LoginRequiredMixin, View):
-    """Render the Filters tab's create/edit dialog, and save edits.
+    """
+    Render the Filters tab's create/edit dialog, and save edits.
 
     GET /saved-filters/new/ (no uuid) → blank create-dialog body.
     GET /saved-filters/<uuid>/edit/ → same dialog body, pre-filled from the
@@ -250,7 +255,8 @@ class SavedFilterEditView(LoginRequiredMixin, View):
 
 
 class SavedFilterSuggestNameView(LoginRequiredMixin, View):
-    """Suggest a filter name from whatever criteria the create/edit dialog currently holds.
+    """
+    Suggest a filter name from whatever criteria the create/edit dialog currently holds.
 
     POST /saved-filters/suggest-name/ → JSON ``{"name": str | None}``
 
@@ -282,7 +288,8 @@ class SavedFilterSuggestNameView(LoginRequiredMixin, View):
 
 
 class SavedFilterMatchCountsView(LoginRequiredMixin, View):
-    """Live per-filter matching-pin counts for the map toolbar's icon-less filter badges.
+    """
+    Live per-filter matching-pin counts for the map toolbar's icon-less filter badges.
 
     GET /saved-filters/counts/ → JSON ``{"counts": {filter_uuid: count}}``
 
@@ -332,7 +339,8 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
 
 
 class SavedFilterDeleteView(LoginRequiredMixin, View):
-    """Delete a saved filter.
+    """
+    Delete a saved filter.
 
     POST /saved-filters/<uuid>/delete/ → re-renders the sidebar's Saved Filters section.
     """
@@ -353,7 +361,8 @@ _PREVIEW_MAP_PIN_LIMIT = 500
 
 
 def _preview_pins(query, total: int) -> list[dict]:
-    """The preview map's markers, capped for coverage rather than for order.
+    """
+    The preview map's markers, capped for coverage rather than for order.
 
     Over the cap, a slice keeps whichever pins sort first, which for a filter
     over a whole account is arbitrary and usually clustered - the preview then
@@ -384,7 +393,8 @@ def _serialize_preview_pins(pins) -> list[dict]:
 
 
 class SavedFilterDetailView(LoginRequiredMixin, View):
-    """A saved filter's own page: a live-updating map of its matching pins plus every editable option -
+    """
+    A saved filter's own page: a live-updating map of its matching pins plus every editable option -
     replaces the old static card + "Edit" dialog (see _filters_tab_grid.html, whose card now links here
     instead).
 
@@ -410,7 +420,8 @@ class SavedFilterDetailView(LoginRequiredMixin, View):
 
 
 class SavedFilterPreviewView(LoginRequiredMixin, View):
-    """Live map preview: pins matching whatever criteria the detail page's form currently holds, whether or
+    """
+    Live map preview: pins matching whatever criteria the detail page's form currently holds, whether or
     not it's been saved yet.
 
     POST /saved-filters/preview/ → JSON {"pins": [...], "count": N}

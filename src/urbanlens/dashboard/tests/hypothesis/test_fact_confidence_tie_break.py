@@ -74,7 +74,8 @@ class ClusterTieBreakTests(SimpleTestCase):
 
 
 class ClusterCategoricalPropertyTests(SimpleTestCase):
-    """Invariants that must hold for *any* evidence list.
+    """
+    Invariants that must hold for *any* evidence list.
 
     The example-based tests above pin the two combinations that actually crashed."""
 

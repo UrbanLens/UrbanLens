@@ -45,7 +45,8 @@ class SearchPanelViewTests(TestCase):
 
 
 class SearchHintsViewTests(TestCase):
-    """GET search/hints/ only surfaces example queries that actually return a result -
+    """
+    GET search/hints/ only surfaces example queries that actually return a result -
     the whole point of the fix (suggestions must never
     dead-end the user in a no-results state)."""
 

@@ -1,4 +1,5 @@
-"""SpotGuessr models - Glicko-2 ratings, game sessions, rounds, guesses, and chat.
+"""
+SpotGuessr models - Glicko-2 ratings, game sessions, rounds, guesses, and chat.
 
 The rules this schema encodes:
 eligibility ("pinned by every joined participant"), point-vs-boundary
@@ -51,7 +52,8 @@ class SpotGuessrMode(abstract.TextChoices):
 
 
 class GameSessionStatus(abstract.TextChoices):
-    """Lifecycle of a GameSession.
+    """
+    Lifecycle of a GameSession.
     Solo sessions skip LOBBY entirely (created directly as ACTIVE with one JOINED participant).
     Multiplayer sessions start in LOBBY and only become ACTIVE when the host explicitly begins the game.
     """
@@ -63,7 +65,8 @@ class GameSessionStatus(abstract.TextChoices):
 
 
 class GameSessionParticipantStatus(abstract.TextChoices):
-    """Whether a participant has accepted their invitation yet, or has gone.
+    """
+    Whether a participant has accepted their invitation yet, or has gone.
 
     Mirrors ``TripMembership.status`` - the same row that will hold the
     accepted membership *is* the invite record, so there is no separate
@@ -78,7 +81,8 @@ class GameSessionParticipantStatus(abstract.TextChoices):
 
 
 class PlayerModeRating(Glicko2RatingFields, abstract.DashboardModel):
-    """A profile's Glicko-2 skill rating for one SpotGuessr mode.
+    """
+    A profile's Glicko-2 skill rating for one SpotGuessr mode.
     One row per ``(profile, mode)`` - a Photos-mode rating is tracked independently of a Street View-mode rating, since they're different skills.
     """
 
@@ -111,7 +115,8 @@ class PlayerModeRating(Glicko2RatingFields, abstract.DashboardModel):
 
 
 class LocationModeRating(Glicko2RatingFields, abstract.DashboardModel):
-    """A location's Glicko-2 *difficulty* rating for one SpotGuessr mode.
+    """
+    A location's Glicko-2 *difficulty* rating for one SpotGuessr mode.
     One row per ``(location, mode)`` - the same location can be easy as a Photos round and hard as a Street View round.
     """
 
@@ -144,7 +149,8 @@ class LocationModeRating(Glicko2RatingFields, abstract.DashboardModel):
 
 
 class GameSession(abstract.DashboardModel):
-    """One SpotGuessr playthrough: a mode, a config snapshot, a fixed round count.
+    """
+    One SpotGuessr playthrough: a mode, a config snapshot, a fixed round count.
     Modeled as a proper many-participant session from Phase 1 (see ``GameSessionParticipant``) - every eligibility/scoring rule reads "all (joined) participants," not "the player," so multiplayer (UL-392) reuses these tables unchanged; only ``GameSessionParticipant.status`` and the ``LOBBY`` status were added.
 
     Attributes:
@@ -191,7 +197,8 @@ class GameSession(abstract.DashboardModel):
 
 
 class GameSessionParticipant(abstract.DashboardModel):
-    """One profile's membership in a GameSession, plus their running score.
+    """
+    One profile's membership in a GameSession, plus their running score.
     ``total_points`` is a denormalized cache (mirrors ``Pin.last_visited``'s role) kept in sync by ``services.spotguessr.session`` as guesses are submitted, so the scoreboard never needs to re-sum every guess.
 
     Attributes:
@@ -256,7 +263,8 @@ class GameSessionParticipant(abstract.DashboardModel):
 
 
 class GameRound(abstract.DashboardModel):
-    """One location to guess within a session.
+    """
+    One location to guess within a session.
 
     Attributes:
         session: The session this round belongs to.
@@ -327,7 +335,8 @@ class GameRound(abstract.DashboardModel):
 
 
 class Guess(abstract.DashboardModel):
-    """One participant's answer to one GameRound.
+    """
+    One participant's answer to one GameRound.
     ``distance_meters``/``points``/``date_points``/``bonus_points`` are computed once at submission time (``services.spotguessr.scoring``, ``services.spotguessr.geo_bonus``) and stored, rather than recomputed on every read - a round's boundary-based target can drift as the community edits the boundary later, and a settled guess must not silently re-score itself when that happens.
     """
 
@@ -370,7 +379,8 @@ class Guess(abstract.DashboardModel):
 
 
 class PhotoCoordinateGuess(abstract.DashboardModel):
-    """One anonymized guess toward a photo's own coordinates.
+    """
+    One anonymized guess toward a photo's own coordinates.
     This is crowd-sourced signal toward the photo's position, not gameplay history; keeping it structurally impossible to trace back to who made a given guess is the point, not an incidental privacy nicety.
     """
 
@@ -406,7 +416,8 @@ class GamePhotoFeedbackKind(abstract.TextChoices):
 
 
 class GamePhotoFeedback(abstract.DashboardModel):
-    """One participant's reaction to the photo shown in one Photos-mode round.
+    """
+    One participant's reaction to the photo shown in one Photos-mode round.
     An event log, not a per-profile mark like ``MediaRelevance`` - the same profile can (and, for ``NO_REACTION``, usually will) accumulate a fresh row every time they're shown the same photo again in a later round, since the whole point of the "shown, no reaction" signal is that it's very weak per-impression and only means something in aggregate over many plays.
     """
 
@@ -438,7 +449,8 @@ class GamePhotoFeedback(abstract.DashboardModel):
 
 
 class GameSessionChatMessage(abstract.DashboardModel):
-    """One chat message in a multiplayer session's live text chat (UL-392).
+    """
+    One chat message in a multiplayer session's live text chat (UL-392).
     Plain text, no E2EE - unlike DirectMessage/GroupMessage, session chat is ephemeral match banter between participants already visible to each other on the scoreboard, not a private conversation, so the ciphertext/key-exchange machinery those models carry buys nothing here.
     """
 
@@ -472,7 +484,8 @@ class GameSessionChatMessage(abstract.DashboardModel):
 
 
 class SpotGuessrPreference(abstract.DashboardModel):
-    """Per-profile SpotGuessr settings - same shape as NotificationPreference/SafetyPreference.
+    """
+    Per-profile SpotGuessr settings - same shape as NotificationPreference/SafetyPreference.
 
     Attributes:
         show_ratings_to_friends: Whether this profile's per-mode ratings may

@@ -16,7 +16,8 @@ if TYPE_CHECKING:
 
 
 def build_trip_map_points(trip: Trip, viewer: Profile, *, include_past: bool = False) -> list[dict[str, Any]]:
-    """Build the trip map's marker list for one viewer.
+    """
+    Build the trip map's marker list for one viewer.
 
     Args:
         trip: The trip being mapped.

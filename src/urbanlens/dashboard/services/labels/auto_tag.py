@@ -1,4 +1,5 @@
-"""Auto-tagging service: label suggestion for pins and wikis.
+"""
+Auto-tagging service: label suggestion for pins and wikis.
 A **wiki** has no owner and so no per-user REData taxonomy to match against; it keeps the keyword stage (label name patterns plus each label's ``keywords`` field), which needs no external service and no user identity."""
 
 from __future__ import annotations
@@ -43,7 +44,8 @@ _FALLBACK_EXAMPLES = (
 
 
 class AutoTagService:
-    """Suggests and optionally applies labels to a Pin or Location.
+    """
+    Suggests and optionally applies labels to a Pin or Location.
 
     Args:
         kinds: Label kinds to process.
@@ -62,7 +64,8 @@ class AutoTagService:
     # -- public entry points --------------------------------------------------
 
     def suggest_for_pin(self, pin: Pin, *, apply: bool = False) -> list[Label]:
-        """Suggest (and optionally apply) labels for a Pin.
+        """
+        Suggest (and optionally apply) labels for a Pin.
         Only labels visible to that user (global + user-owned) are considered.
 
         Args:
@@ -96,7 +99,8 @@ class AutoTagService:
         return results
 
     def suggest_for_wiki(self, wiki: Wiki, *, apply: bool = False) -> list[Label]:
-        """Suggest (and optionally apply) labels for a community Wiki.
+        """
+        Suggest (and optionally apply) labels for a community Wiki.
         A Wiki is shared/global, so only global labels (``profile=None``) are considered and no user preference check is performed.
 
         Args:
@@ -121,7 +125,8 @@ class AutoTagService:
 
     @staticmethod
     def _exclude_removed(target: Pin | Wiki, matched: list[Label]) -> list[Label]:
-        """Drop any matched label the user has already removed from this target.
+        """
+        Drop any matched label the user has already removed from this target.
 
         Args:
             target: Pin or Wiki being tagged.
@@ -142,7 +147,8 @@ class AutoTagService:
 
     @staticmethod
     def _ai_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
-        """Return False when the user has disabled AI-based auto-tagging for this label kind.
+        """
+        Return False when the user has disabled AI-based auto-tagging for this label kind.
 
         Args:
             kind: Label kind string (e.g. ``"category"``).
@@ -158,7 +164,8 @@ class AutoTagService:
 
     @staticmethod
     def _keyword_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
-        """Return False when the user has disabled keyword-based auto-tagging for this label kind.
+        """
+        Return False when the user has disabled keyword-based auto-tagging for this label kind.
         Keyword matching makes no external API call, so it isn't gated on ``external_apis_enabled`` - only the user's own keyword-tagging toggles.
 
         Args:
@@ -175,7 +182,8 @@ class AutoTagService:
 
     @staticmethod
     def _redata_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
-        """Whether REData-sourced auto-tagging applies for this kind and profile.
+        """
+        Whether REData-sourced auto-tagging applies for this kind and profile.
 
         Args:
             kind: Label kind string.
@@ -194,7 +202,8 @@ class AutoTagService:
 
     @staticmethod
     def _redata_match(pin: Pin, eligible: list[Label], kind: str) -> list[Label]:
-        """Labels REData suggests for this pin, restricted to the eligible set.
+        """
+        Labels REData suggests for this pin, restricted to the eligible set.
         REData answers about the profile's whole taxonomy, so the result is filtered back through ``eligible`` - which is what enforces the per-label opt-out and the protected-label exclusion here, rather than trusting the upstream answer to respect either.
 
         Args:
@@ -218,7 +227,8 @@ class AutoTagService:
 
     @staticmethod
     def _eligible_labels(kind: str, *, profile: Profile | None) -> list[Label]:
-        """Return labels eligible for auto-tagging.
+        """
+        Return labels eligible for auto-tagging.
         For Pin targets (profile given) both global and user-owned labels are included; for Location targets only global labels.
 
         Args:
@@ -250,7 +260,8 @@ class AutoTagService:
         do_keyword: bool = True,
         do_ai: bool = True,
     ) -> list[Label]:
-        """Run the keyword and/or AI matching stages and return up to max_labels results.
+        """
+        Run the keyword and/or AI matching stages and return up to max_labels results.
 
         Args:
             target: Pin or Location being tagged.
@@ -290,7 +301,8 @@ class AutoTagService:
 
     @staticmethod
     def _build_keyword_text(target: Pin | Wiki) -> str:
-        """Build the text corpus for keyword matching (name + place name only).
+        """
+        Build the text corpus for keyword matching (name + place name only).
         Addresses are intentionally excluded to avoid false positives such as "Church Street" matching the Church category.
 
         Args:
@@ -324,7 +336,8 @@ class AutoTagService:
         text: str,
         compiled_patterns: dict,
     ) -> bool:
-        """Return True if this label's name patterns or custom keywords match text.
+        """
+        Return True if this label's name patterns or custom keywords match text.
 
         Args:
             label: Label to test.
@@ -354,7 +367,8 @@ class AutoTagService:
         return False
 
     def _keyword_match(self, eligible: list[Label], text: str) -> list[Label]:
-        """Return all eligible labels that match the text via keywords.
+        """
+        Return all eligible labels that match the text via keywords.
 
         Args:
             eligible: Candidate labels.
@@ -385,7 +399,8 @@ class AutoTagService:
         eligible: list[Label],
         kind: str,
     ) -> list[Label]:
-        """Use the LLM gateway to select labels from the eligible list.
+        """
+        Use the LLM gateway to select labels from the eligible list.
 
         Args:
             target: Pin or Location being tagged.
@@ -429,7 +444,8 @@ class AutoTagService:
 
     @staticmethod
     def _build_instructions(eligible: list[Label], kind: str) -> str:
-        """Build the AI system instructions with the constrained label list.
+        """
+        Build the AI system instructions with the constrained label list.
 
         Args:
             eligible: Labels the AI may choose from.
@@ -452,7 +468,8 @@ class AutoTagService:
 
     @staticmethod
     def _build_prompt(target: Pin | Wiki) -> str:
-        """Build the location-context prompt to send to the AI.
+        """
+        Build the location-context prompt to send to the AI.
 
         Args:
             target: Pin or Location instance.

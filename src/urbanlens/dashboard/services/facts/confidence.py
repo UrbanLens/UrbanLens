@@ -112,7 +112,8 @@ def _values_agree(a: Any, b: Any) -> bool:
 
 
 def _cluster_categorical(weighted: list[_WeightedEvidence]) -> tuple[list[tuple[float, Any]], float]:
-    """Group categorical evidence into agreement clusters.
+    """
+    Group categorical evidence into agreement clusters.
 
     Returns:
         ``(totals, total_weight)`` - ``totals`` is ``[(cluster_weight, value), ...]`` sorted heaviest-first; ``total_weight`` is the sum of all of them."""
@@ -153,7 +154,8 @@ def resolve_categorical(
     previous_value: Any,
     previously_confirmed: bool,
 ) -> tuple[Any, float, str]:
-    """Decide the reported ``(value, confidence, status)`` for a categorical fact.
+    """
+    Decide the reported ``(value, confidence, status)`` for a categorical fact.
     When the leading cluster is held back by that gate, confidence/status describe the *held* value's own standing, never the challenger's - so they always describe whatever value is actually being reported, not a value the fact isn't holding.
 
     Args:
@@ -182,7 +184,8 @@ def resolve_categorical(
 
 
 def recompute(fact_id: int) -> None:
-    """Recompute one Fact's ``confidence``/``status``/value from its accumulated evidence.
+    """
+    Recompute one Fact's ``confidence``/``status``/value from its accumulated evidence.
 
     Holds the Fact's row lock throughout, so two recomputes cannot interleave their read and save, and an
     evidence write (which sets ``needs_recompute`` through the same row) lands either before this reads the

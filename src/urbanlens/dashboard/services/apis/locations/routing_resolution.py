@@ -13,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_route_between(origin: tuple[float, float], destination: tuple[float, float]) -> dict[str, Any] | None:
-    """Route between two points, trying REData then direct OSRM.
+    """
+    Route between two points, trying REData then direct OSRM.
 
     Args:
         origin: ``(latitude, longitude)`` of the starting point.

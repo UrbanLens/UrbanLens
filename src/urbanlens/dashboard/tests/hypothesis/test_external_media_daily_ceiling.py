@@ -1,4 +1,5 @@
-"""One account must not be able to fill the volume Postgres lives on.
+"""
+One account must not be able to fill the volume Postgres lives on.
 
 `materialize_media_item` downloads an external photo and stores it with
 `QuotaExemption.EXTERNAL_MEDIA`, which is deliberate: the cache exists so the
@@ -74,7 +75,8 @@ class _MaterializeCase(TestCase):
         self.addCleanup(dns.stop)
 
     def materialize(self, url: str = "https://example.test/photo.jpg", content: bytes = _JPEG_OF_100_BYTES) -> Image:
-        """Materialize one item, returning the row.
+        """
+        Materialize one item, returning the row.
 
         Args:
             url: Source url, which is also the dedupe key.
@@ -92,7 +94,8 @@ class _MaterializeCase(TestCase):
             )
 
     def spend(self, total: int, *, profile: object = None, age: timedelta = timedelta()) -> None:
-        """Record *total* bytes already materialized, without downloading them.
+        """
+        Record *total* bytes already materialized, without downloading them.
 
         Args:
             total: Bytes to attribute.
@@ -179,7 +182,8 @@ class TheCeilingIsEnforcedTests(_MaterializeCase):
         self.assertIsNotNone(self.materialize().pk)
 
     def test_only_exempt_rows_count_against_it(self) -> None:
-        """An ordinary upload is charged to the quota instead; counting it here
+        """
+        An ordinary upload is charged to the quota instead; counting it here
         would charge it twice and refuse a user their own photos."""
         baker.make(
             Image, profile=self.profile, location=self.location, file_size=TEST_CEILING + 1, quota_exempt_reason=""
@@ -188,7 +192,8 @@ class TheCeilingIsEnforcedTests(_MaterializeCase):
         self.assertIsNotNone(self.materialize().pk)
 
     def test_the_allowance_is_rechecked_before_the_write(self) -> None:
-        """A download takes seconds, and the ceiling is read before it starts.
+        """
+        A download takes seconds, and the ceiling is read before it starts.
 
         Concurrent calls therefore all pass that first check while none of them
         has stored anything, which would make the ceiling bound one request
@@ -223,7 +228,8 @@ class TheCeilingIsEnforcedTests(_MaterializeCase):
         )
 
     def test_a_dedupe_hit_is_free(self) -> None:
-        """Re-voting the same photo stores nothing, so it must not be refused -
+        """
+        Re-voting the same photo stores nothing, so it must not be refused -
         and the refusal must not run before the dedupe check finds it."""
         first = self.materialize(url="https://example.test/same.jpg")
         self.spend(TEST_CEILING + 1)

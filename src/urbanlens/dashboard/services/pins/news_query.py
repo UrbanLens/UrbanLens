@@ -1,4 +1,5 @@
-"""What a pin's News panel asks GDELT, and which of its answers are about the place.
+"""
+What a pin's News panel asks GDELT, and which of its answers are about the place.
 
 GDELT's DOC index is translingual: it matches a query against machine translations of articles in
 dozens of languages. A query built from a generic phrase, such as a street name, therefore matches
@@ -133,7 +134,8 @@ def site_language() -> str:
 
 
 def gdelt_country(country: str | None, latitude: float | None, longitude: float | None) -> str | None:
-    """The GDELT ``sourcecountry`` for a place, or None when it cannot be told.
+    """
+    The GDELT ``sourcecountry`` for a place, or None when it cannot be told.
 
     Args:
         country: The place's country as geocoded: a name or an ISO code, possibly blank.
@@ -156,7 +158,8 @@ def gdelt_country(country: str | None, latitude: float | None, longitude: float 
 
 
 def _register_names(location: Location) -> list[str]:
-    """Names of the register listings containing this location, each also cut at its first comma.
+    """
+    Names of the register listings containing this location, each also cut at its first comma.
 
     "Hudson River State Hospital, Main Building" names a building on the site; the part before the comma names the site.
     A one-word head is not kept: in "Roosevelt, Isaac, House" it is a surname, not a place. Which listings count is
@@ -174,7 +177,8 @@ def _register_names(location: Location) -> list[str]:
 
 
 def _raw_names(pin: Pin, scope: SearchScope) -> list[str]:
-    """Every name one search knows the place by, most specific first, before any filtering.
+    """
+    Every name one search knows the place by, most specific first, before any filtering.
 
     The shared search adds the register listings containing the place, which are public; a search for the owner's
     own names adds the names of the pins they filed this one under.
@@ -189,7 +193,8 @@ def _raw_names(pin: Pin, scope: SearchScope) -> list[str]:
 
 
 def place_names(pin: Pin, scope: SearchScope) -> tuple[str, ...]:
-    """The names a news article about this pin's place would use, for one of its searches.
+    """
+    The names a news article about this pin's place would use, for one of its searches.
 
     Street names and address fragments are left out: they name the surroundings, and are the generic
     phrases that match unrelated coverage. A name that contains another kept name is redundant in an
@@ -231,7 +236,8 @@ def place_localities(pin: Pin) -> tuple[str, ...]:
 
 @dataclass(frozen=True, slots=True)
 class NewsQuery:
-    """A news search for one place.
+    """
+    A news search for one place.
 
     Attributes:
         names: Exact-phrase names of the place; an article must use one.
@@ -247,7 +253,8 @@ class NewsQuery:
 
     @classmethod
     def for_pin(cls, pin: Pin, scope: SearchScope) -> NewsQuery | None:
-        """One news search for a pin's place, or None when it has no name worth searching for.
+        """
+        One news search for a pin's place, or None when it has no name worth searching for.
 
         Args:
             pin: The pin whose place is searched for; it supplies the locality and country.
@@ -285,7 +292,8 @@ class NewsQuery:
         return any(_normalized(term) in haystack for term in (*self.names, *self.localities))
 
     def is_relevant(self, article: Mapping[str, Any]) -> bool:
-        """Whether a search result is plausibly about this place, in the requested language.
+        """
+        Whether a search result is plausibly about this place, in the requested language.
 
         GDELT gives a headline and a domain, no body text, so the headline is what is judged.
 

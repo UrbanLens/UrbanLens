@@ -1,4 +1,5 @@
-"""External-API routes for trip settings and calendar export.
+"""
+External-API routes for trip settings and calendar export.
 
 Trip CRUD, members, activities, RSVPs, the map and comments all predate the split and still live in
 ``urls.py``; every new trip endpoint belongs here instead.

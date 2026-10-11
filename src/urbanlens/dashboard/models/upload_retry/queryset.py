@@ -16,7 +16,8 @@ class UploadRetryQuerySet(abstract.DashboardQuerySet["UploadRetry"]):
     """QuerySet for :class:`~urbanlens.dashboard.models.upload_retry.model.UploadRetry`."""
 
     def due(self, now: datetime) -> UploadRetryQuerySet:
-        """Restrict to uploads whose next attempt is due, the longest overdue first.
+        """
+        Restrict to uploads whose next attempt is due, the longest overdue first.
 
         Args:
             now: The current time.

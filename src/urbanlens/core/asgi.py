@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 
 
 class NonBlockingThreadSensitiveContext(ThreadSensitiveContext):
-    """A ``ThreadSensitiveContext`` whose exit never joins the request's thread on the event loop.
+    """
+    A ``ThreadSensitiveContext`` whose exit never joins the request's thread on the event loop.
 
     asgiref's exit waits for that thread. When the request was cancelled mid-flight the thread can be
     parked in ``async_to_sync`` waiting for this same loop, so the join never returns and the server
@@ -46,7 +47,8 @@ class UrbanLensASGIHandler(ASGIHandler):
 
 
 def get_asgi_application() -> UrbanLensASGIHandler:
-    """Set Django up and return the project's HTTP handler, as ``django.core.asgi`` does for its own.
+    """
+    Set Django up and return the project's HTTP handler, as ``django.core.asgi`` does for its own.
 
     Returns:
         The ASGI callable for HTTP connections.

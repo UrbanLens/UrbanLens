@@ -54,7 +54,8 @@ class ProvisionAccountTests(TestCase):
         self.assertTrue(account.email.endswith(f"@{INTEGRATION_EMAIL_DOMAIN}"))
 
     def test_account_can_actually_sign_in(self):
-        """Active, verified, and holding the password that was reported.
+        """
+        Active, verified, and holding the password that was reported.
 
         Each of these is separately load-bearing: an inactive account is refused outright, an unverified one is
         refused with an offer to resend an email nobody can receive, and a password that does not match the
@@ -67,7 +68,8 @@ class ProvisionAccountTests(TestCase):
         self.assertIsNotNone(EmailVerification.objects.get(user=user).verified_at)
 
     def test_profile_is_past_every_post_login_diversion(self):
-        """``PostLoginRedirectView`` must land the run in the application.
+        """
+        ``PostLoginRedirectView`` must land the run in the application.
 
         Without both flags it redirects to the welcome flow or to profile editing, and every navigation the
         suite makes afterwards is against the wrong page."""
@@ -92,7 +94,8 @@ class ProvisionAccountTests(TestCase):
         self.assertTrue(profile.ai_enabled)
 
     def test_no_notification_is_ever_delivered_by_email(self):
-        """Every delivery preference is on-site only.
+        """
+        Every delivery preference is on-site only.
 
         The address is on a reserved domain that cannot receive mail, so an email preference would produce a
         delivery failure inside whatever task raised the notification - reported as that feature failing."""
@@ -134,7 +137,8 @@ class ApiKeyProvisioningTests(TestCase):
         self.assertEqual(set(resolved.scopes), {scope.value for scope in ApiKeyScope})
 
     def test_the_restricted_key_is_valid_and_insufficient(self):
-        """Valid credential, minimal grant.
+        """
+        Valid credential, minimal grant.
 
         A key that does not authenticate proves nothing about scope enforcement - the endpoint would refuse it
         at the authentication step and the test would pass whether or not scopes were checked at all."""
@@ -190,7 +194,8 @@ class IdempotencyTests(TestCase):
 
 
 class SelectionBoundaryTests(TestCase):
-    """What ``--purge`` is and is not allowed to see.
+    """
+    What ``--purge`` is and is not allowed to see.
 
     The negative cases matter more than the positive one."""
 
@@ -216,7 +221,8 @@ class SelectionBoundaryTests(TestCase):
         self.assertEqual(list(integration_users()), [])
 
     def test_a_staff_account_is_never_selected(self):
-        """A staff account carrying both conventions is still excluded.
+        """
+        A staff account carrying both conventions is still excluded.
 
         The last line of defence: if somebody promotes one of these to investigate something, a later purge must
         not silently take the elevated account with it."""
@@ -237,14 +243,16 @@ class SelectionBoundaryTests(TestCase):
 
 
 class BootstrapAdminGuardTests(TestCase):
-    """A disposable account must never claim the single, permanent admin slot.
+    """
+    A disposable account must never claim the single, permanent admin slot.
 
     Asserted against ``SiteSettings.bootstrap_admin_user``, which is the authoritative record, rather than
     against the return value: the promotion runs from a ``post_save`` signal, so by the time a test can call the
     function itself the decision has already been made once."""
 
     def setUp(self):
-        """Establish the global state these tests read, rather than assuming it.
+        """
+        Establish the global state these tests read, rather than assuming it.
 
         ``promote_first_user_if_needed`` consults two pieces of site-wide state: the ``SiteSettings`` bootstrap
         slot, and whether any ``User`` other than the one being created exists."""
@@ -258,7 +266,8 @@ class BootstrapAdminGuardTests(TestCase):
         return SiteSettings.get_current().bootstrap_admin_user_id
 
     def test_the_first_provisioned_account_is_not_promoted(self):
-        """Provisioning against a freshly built database creates the first user on it.
+        """
+        Provisioning against a freshly built database creates the first user on it.
 
         The slot is single-claim and permanent, so a throwaway account taking it would leave the real operator
         unable to ever be promoted - and a purge would then leave it pointing at a row that no longer exists."""
@@ -273,7 +282,8 @@ class BootstrapAdminGuardTests(TestCase):
         self.assertEqual(self._bootstrap_admin_id(), user.pk)
 
     def test_provisioning_leaves_the_slot_unclaimed(self):
-        """The order that matters: disposable accounts created on a fresh instance.
+        """
+        The order that matters: disposable accounts created on a fresh instance.
 
         The slot stays empty rather than pointing at an account a purge will delete."""
         provision_account("primary", password=PASSWORD)
@@ -360,7 +370,8 @@ class CommandTests(OffProductionMixin, TestCase):
 
 
 class HeavySeedingTests(OffProductionMixin, TestCase):
-    """`--heavy-pins`, and the two ways it could lie.
+    """
+    `--heavy-pins`, and the two ways it could lie.
 
     The load harness reads the shared label's id and the account's pin count out of the manifest this writes."""
 

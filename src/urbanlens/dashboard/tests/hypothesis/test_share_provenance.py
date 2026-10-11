@@ -106,7 +106,8 @@ class ExposureRecordingFailureIsolationTests(_ProvenanceTestCase):
         self.assertFalse(LocationExposure.objects.filter(share=share).exists())
 
     def test_the_swallowed_failure_does_not_poison_an_outer_transaction(self):
-        """The precise scenario the nested atomic() protects against: a caller that wraps its own multi-write sequence in atomic() must still be able to write after record_share_exposure swallows a DatabaseError, rather than hit TransactionManagementError from an outer transaction Django marked broken.
+        """
+        The precise scenario the nested atomic() protects against: a caller that wraps its own multi-write sequence in atomic() must still be able to write after record_share_exposure swallows a DatabaseError, rather than hit TransactionManagementError from an outer transaction Django marked broken.
 
         Needs a *real* DB-level failure, not a synthetic ``side_effect`` exception - Postgres only aborts the
         transaction/savepoint for an error it actually raised, so a bare mocked exception that never touches the
@@ -231,7 +232,8 @@ class ExposureResolutionTests(_ProvenanceTestCase):
 
 
 class AdditionalGamingScenarioTests(_ProvenanceTestCase):
-    """The two follow-up gaming vectors, plus the boundary conditions around them.
+    """
+    The two follow-up gaming vectors, plus the boundary conditions around them.
 
     Two follow-up scenarios (delete + drop nearby; create far away + drag in) work because resolution never
     consults a pin's creation history, only its *current* location, re-queried live at share time - so it
@@ -542,7 +544,8 @@ class PinShareQuerySetTests(_ProvenanceTestCase):
 
 
 class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
-    """Property-based generalization of the fixed 2-3-hop chains exercised throughout this module: the provenance invariant - every share, however deep the reshare chain, must be traceable back to a single true origin share (``parent_share`` eventually ``None``), with no cycle and no lost link - must hold for an arbitrary generated chain length/branching factor, not just the hand-picked examples above.
+    """
+    Property-based generalization of the fixed 2-3-hop chains exercised throughout this module: the provenance invariant - every share, however deep the reshare chain, must be traceable back to a single true origin share (``parent_share`` eventually ``None``), with no cycle and no lost link - must hold for an arbitrary generated chain length/branching factor, not just the hand-picked examples above.
 
     Each accepted pin in the chain carries its own ``source_share`` lineage (set directly by
     ``create_pin_from_share``), so ``parent_share`` forms a genuine linked chain back to the origin one hop at
@@ -605,7 +608,8 @@ class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
     def test_arbitrary_number_of_branches_from_one_pin_all_trace_back_to_the_same_origin(
         self, num_branches: int
     ) -> None:
-        """John re-shares the same accepted pin to an arbitrary number of
+        """
+        John re-shares the same accepted pin to an arbitrary number of
         independent recipients (a branching reshare fan-out, not a linear
         chain) - every branch must chain back to the same origin share,
         however many branches there are."""

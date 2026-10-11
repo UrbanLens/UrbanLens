@@ -1,4 +1,5 @@
-"""Queue the property bootstrap a new root pin gets (``services.pins.bootstrap``) for an existing root pin.
+"""
+Queue the property bootstrap a new root pin gets (``services.pins.bootstrap``) for an existing root pin.
 
 For a pin made before bootstraps existed, or one whose property should be filled now rather than when somebody opens
 it. Every stage skips what is already stored, so a property that is complete costs nothing.

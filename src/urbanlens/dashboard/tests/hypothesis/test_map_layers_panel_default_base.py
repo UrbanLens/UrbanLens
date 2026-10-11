@@ -1,4 +1,5 @@
-"""The layers panel carries the viewer's own default_map_view to the map engine.
+"""
+The layers panel carries the viewer's own default_map_view to the map engine.
 
 Every map on the site renders this panel, but most call sites never passed a base at all, so their
 maps opened on the engine's hardcoded literal instead of the setting the viewer chose.

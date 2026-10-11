@@ -1,4 +1,5 @@
-"""External-facing REST views: extremely limited, API-key-gated access.
+"""
+External-facing REST views: extremely limited, API-key-gated access.
 
 Every view here is authenticated by ``ApiKeyAuthentication`` and gated by
 ``HasApiKeyScope`` - neither the internal session-authenticated REST surface
@@ -395,7 +396,8 @@ LOCATION_SEARCH_SOURCES = frozenset({"local", "places"})
 
 
 def parse_search_sources(raw: str | None) -> frozenset[str]:
-    """Parse the ``sources`` query param into the set of sources to search.
+    """
+    Parse the ``sources`` query param into the set of sources to search.
 
     Unknown entries are dropped rather than rejected: a newer client asking for a source this server
     doesn't have should still get the ones it does, instead of failing the whole search.
@@ -419,7 +421,8 @@ _SUGGESTION_SOURCE_KEY = "external_api_submission"
 
 
 def _get_pin_list(request: Request, list_slug: str) -> PinList | None:
-    """The caller's pin list matching *list_slug* (by slug or uuid), or None.
+    """
+    The caller's pin list matching *list_slug* (by slug or uuid), or None.
 
     Another profile's list reads as "not found" rather than "forbidden" - the existence of someone
     else's list is not the caller's business.
@@ -443,7 +446,8 @@ def _get_pin_list(request: Request, list_slug: str) -> PinList | None:
 
 
 def _get_label(request: Request, label_uuid: UUID) -> Label | None:
-    """A label visible to the caller, with their customizations prefetched.
+    """
+    A label visible to the caller, with their customizations prefetched.
 
     The ``with_customizations_for`` call is required for the ``effective_*`` fields to be correct rather
     than silently wrong - see :class:`LabelsView`'s docstring.
@@ -460,7 +464,8 @@ def _get_label(request: Request, label_uuid: UUID) -> Label | None:
 
 
 def _reload_label(label: Label, profile: Profile) -> Label:
-    """Re-read *label* with customizations prefetched, for a post-write response.
+    """
+    Re-read *label* with customizations prefetched, for a post-write response.
 
     A label that was just created or mutated in memory has no ``_user_customizations`` attribute (or a
     stale one), which would make every ``effective_*`` field in the response wrong.
@@ -477,7 +482,8 @@ def _reload_label(label: Label, profile: Profile) -> Label:
 
 
 def _refuse_label_write(label: Label) -> Response | None:
-    """Refuse a write to a global or protected label.
+    """
+    Refuse a write to a global or protected label.
 
     Args:
         label: The label being written to.
@@ -493,7 +499,8 @@ def _refuse_label_write(label: Label) -> Response | None:
 
 
 def _resolve_source_saved_filter(profile: Profile, data: dict) -> tuple[SavedFilter | None, Response | None]:
-    """Resolve a submitted ``source_saved_filter_uuid`` to one of *profile*'s filters.
+    """
+    Resolve a submitted ``source_saved_filter_uuid`` to one of *profile*'s filters.
 
     Args:
         profile: The owner the filter must belong to.
@@ -512,7 +519,8 @@ def _resolve_source_saved_filter(profile: Profile, data: dict) -> tuple[SavedFil
 
 
 def _resolve_parent_labels(profile: Profile, data: dict) -> tuple[list[Label], Response | None]:
-    """Resolve submitted ``parent_uuids`` to labels visible to *profile*.
+    """
+    Resolve submitted ``parent_uuids`` to labels visible to *profile*.
 
     Args:
         profile: The caller.
@@ -542,7 +550,8 @@ def _validated_color(data: dict, *, default: None = None, key: str = "color") ->
 
 
 def _validated_color(data: dict, *, default: str | None = None, key: str = "color") -> str | None:
-    """Read a colour from a request body, 400ing rather than substituting.
+    """
+    Read a colour from a request body, 400ing rather than substituting.
 
     `clean_color` replaces a value it does not recognise with the default, which is right for a form
     post (the user sees the swatch that resulted) and wrong here: the client is told the write succeeded
@@ -567,7 +576,8 @@ def _validated_color(data: dict, *, default: str | None = None, key: str = "colo
 
 
 class ExternalApiView(ErrorEnvelopeMixin, APIView):
-    """Base for every external endpoint: credential auth, scope gate, per-credential throttle.
+    """
+    Base for every external endpoint: credential auth, scope gate, per-credential throttle.
 
     Scopes are declared per HTTP method in ``required_scopes_by_method``; ``HasApiKeyScope`` reads the
     ``required_scopes`` property and fails closed when the current method has no entry, so an endpoint
@@ -586,7 +596,8 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {}
 
     def initial(self, request, *args, **kwargs):
-        """Authenticate, then bind the caller as the source of any writes.
+        """
+        Authenticate, then bind the caller as the source of any writes.
 
         ``WriteSourceMiddleware`` cannot do this for the API. Bound lazily, the same way it binds:
         resolving the profile here cost a ``dashboard_profiles`` query on every request including
@@ -606,7 +617,8 @@ class ExternalApiView(ErrorEnvelopeMixin, APIView):
 
 
 class UnscopedExternalApiView(ExternalApiView):
-    """Base for the rare endpoint that needs authentication but no particular scope.
+    """
+    Base for the rare endpoint that needs authentication but no particular scope.
 
     The one deliberate exception to ``HasApiKeyScope``'s fail-closed default, and reserved for endpoints
     that describe *the credential itself* rather than any of the user's data.
@@ -619,7 +631,8 @@ class UnscopedExternalApiView(ExternalApiView):
 
 
 class OwnedPinMixin:
-    """Pin lookup scoped to the requesting credential's owner.
+    """
+    Pin lookup scoped to the requesting credential's owner.
 
     Every pin-scoped external endpoint resolves its pin through here, so another user's pin is uniformly
     indistinguishable from a nonexistent one - both 404, never 403, which would confirm the pin exists.
@@ -627,7 +640,8 @@ class OwnedPinMixin:
 
     @staticmethod
     def _owned_pins(request: Request, pin_slug: str) -> QuerySet[Pin]:
-        """Pins matching *pin_slug* (by slug or uuid) owned by the requesting user.
+        """
+        Pins matching *pin_slug* (by slug or uuid) owned by the requesting user.
 
         Args:
             request: The authenticated request.
@@ -639,7 +653,8 @@ class OwnedPinMixin:
         return Pin.objects.slug_or_uuid(pin_slug).filter(profile__user=request.user)
 
     def get_owned_pin(self, request: Request, pin_slug: str) -> Pin | None:
-        """The key owner's pin, with every relation the detail payload reads.
+        """
+        The key owner's pin, with every relation the detail payload reads.
 
         Args:
             request: The authenticated request.
@@ -651,7 +666,8 @@ class OwnedPinMixin:
         return self._owned_pins(request, pin_slug).select_related("location", "profile", "parent_pin", "wiki", "cover_photo").first()
 
     def get_owned_pin_lite(self, request: Request, pin_slug: str) -> Pin | None:
-        """The key owner's pin, without the detail-only joins.
+        """
+        The key owner's pin, without the detail-only joins.
 
         For sub-resource endpoints, which need the pin to scope and authorize the query rather than to
         serialize it - the extra joins would be loaded and thrown away.
@@ -667,7 +683,8 @@ class OwnedPinMixin:
 
 
 class WhoAmIView(ExternalApiView):
-    """GET: the calling API key's owner - their profile uuid and slug, nothing else.
+    """
+    GET: the calling API key's owner - their profile uuid and slug, nothing else.
 
     Still the narrowest *profile* read in the API: no settings, friends, or any other private data, per
     the ``profile:read`` scope's definition.
@@ -689,7 +706,8 @@ class WhoAmIView(ExternalApiView):
 
 
 class PinsView(ExternalApiView):
-    """The key owner's pins: GET delta-syncs them, POST creates one.
+    """
+    The key owner's pins: GET delta-syncs them, POST creates one.
 
     GET is a sync feed, not a browse API: ordered by ``(updated, pk)``, it pages through pins changed
     since ``modified_since`` with an opaque cursor and hands back the ``sync_watermark`` to use as the
@@ -807,7 +825,8 @@ class PinsView(ExternalApiView):
 
 
 class PinDetailView(OwnedPinMixin, ExternalApiView):
-    """GET the key owner's full pin detail; PATCH or DELETE it.
+    """
+    GET the key owner's full pin detail; PATCH or DELETE it.
 
     DELETE mirrors ``PinViewSet.destroy``: a pin with child pins requires an explicit
     ``?children=delete`` or ``?children=keep``, refused with 409 otherwise; every deletion stages an
@@ -846,7 +865,8 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
         ),
     )
     def patch(self, request: Request, pin_slug: str) -> Response:
-        """Apply a partial update to one of the key owner's pins.
+        """
+        Apply a partial update to one of the key owner's pins.
 
         Field writes go through ``services.pins.pin_edit.apply_pin_edits``, the same function behind the
         website's own pin-edit dialog, so the two surfaces cannot drift on which companion flags a write
@@ -959,7 +979,8 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
 
 
 class PinSuggestionsView(ExternalApiView):
-    """POST: submit a discovered place as a pending suggestion, not a real pin.
+    """
+    POST: submit a discovered place as a pending suggestion, not a real pin.
 
     An external "discovery" app that finds candidate places autonomously (rather than acting on the
     user's own behalf, like the mobile app's offline outbox does for ``PinsView``) should use this
@@ -1034,7 +1055,8 @@ class PinSuggestionsView(ExternalApiView):
 
 
 class PinTombstonesView(ExternalApiView):
-    """GET: the key owner's pin deletions since ``deleted_since``, for delta sync.
+    """
+    GET: the key owner's pin deletions since ``deleted_since``, for delta sync.
 
     Serves ``PinTombstone`` rows - the durable record written when a pin is hard-deleted.
     Without this feed a sync client can learn about new and changed pins from ``pins/`` but would hold
@@ -1081,7 +1103,8 @@ class PinTombstonesView(ExternalApiView):
 
 
 class PushDevicesView(ExternalApiView):
-    """POST: register (or re-activate) this device as a push destination.
+    """
+    POST: register (or re-activate) this device as a push destination.
 
     Idempotent on the submitted address, so an app can re-register on every launch without tracking
     whether it already did.
@@ -1129,7 +1152,8 @@ class PushDevicesView(ExternalApiView):
 
 
 class AccountSettingsView(ExternalApiView):
-    """GET the caller's account preferences; PATCH to change them.
+    """
+    GET the caller's account preferences; PATCH to change them.
 
     Named for the account rather than matching ``controllers.settings.SettingsView`` (the site's own
     multi-form settings page) - the two are unrelated and share only the underlying ``Profile`` fields,
@@ -1176,7 +1200,8 @@ class AccountSettingsView(ExternalApiView):
 
 
 class AuthSessionView(UnscopedExternalApiView):
-    """GET: what the calling credential is and what it may do.
+    """
+    GET: what the calling credential is and what it may do.
 
     Deliberately scope-free (see :class:`UnscopedExternalApiView`) - a client calls this to discover its
     own grant, so gating it behind a scope would be circular.
@@ -1220,7 +1245,8 @@ class AuthSessionView(UnscopedExternalApiView):
 
 
 class _OwnedImageMixin:
-    """Resolves the ``<uuid:image_uuid>`` path segment to a photo the caller owns.
+    """
+    Resolves the ``<uuid:image_uuid>`` path segment to a photo the caller owns.
 
     Scoped to ``profile__user=request.user`` and deliberately **not** to
     ``Image.objects.visible_to(...)``: visibility is a *read* relation that includes friends' and
@@ -1240,7 +1266,8 @@ def _resolve_own_pin(request: Request, value: str) -> Pin | None:
 
 
 class PhotosView(PaginatedListMixin, ExternalApiView):
-    """The key owner's photo library: GET browses it, POST uploads to it.
+    """
+    The key owner's photo library: GET browses it, POST uploads to it.
 
     GET is a browse endpoint (page-number paginated), not a delta sync: unlike ``pins/`` there is no
     tombstone feed for photos, so a client that needs to detect deletions re-walks the list.
@@ -1318,7 +1345,8 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
 
     @extend_schema(request=PhotoUploadSerializer, responses={201: PhotoSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 409: ErrorSerializer, 413: ErrorSerializer})
     def post(self, request: Request) -> Response:
-        """Upload one photo, video, or document to the key owner's library.
+        """
+        Upload one photo, video, or document to the key owner's library.
 
         EXIF-derived fields (``latitude``/``longitude``/``taken_at``/ ``author``) are extracted
         asynchronously by ``process_image_upload`` and are normally still null in this response - re-fetch
@@ -1359,7 +1387,8 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
 
 
 class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
-    """GET one photo's metadata; DELETE it and its stored file.
+    """
+    GET one photo's metadata; DELETE it and its stored file.
 
     GET widens to ``Image.objects.visible_to`` when the photo isn't the caller's own, so a client can
     resolve a photo it legitimately sees in a shared gallery.
@@ -1384,7 +1413,8 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, image_uuid: UUID) -> Response:
-        """Delete one of the caller's own photos, file included.
+        """
+        Delete one of the caller's own photos, file included.
 
         A photo the caller contributed to a community wiki is taken off their own library and left on the
         wiki, unless ``?from_wiki=true`` says otherwise - the same rule the pin gallery follows.
@@ -1451,7 +1481,8 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
 
 
 class PhotoVoteView(_OwnedImageMixin, ExternalApiView):
-    """POST: cast, flip, or withdraw a community relevance vote on a photo.
+    """
+    POST: cast, flip, or withdraw a community relevance vote on a photo.
 
     Only meaningful for a photo materialized into a Location's Media gallery - a plain personal upload
     has no ``(source, item_key)`` identity for ``MediaRelevance`` to key a vote by, and is refused with
@@ -1487,7 +1518,8 @@ class PhotoVoteView(_OwnedImageMixin, ExternalApiView):
 
 
 class PhotoFileView(_OwnedImageMixin, ExternalApiView):
-    """POST: file an unfiled photo onto a pin, creating one if needed.
+    """
+    POST: file an unfiled photo onto a pin, creating one if needed.
 
     The API counterpart of the Memories organize queue's "log visit" and "create pin" actions, going
     through the same ``services.memories.photos`` functions so a photo filed here lands in the user's
@@ -1611,7 +1643,8 @@ class VisitSuggestionActionView(ExternalApiView):
 
 
 class PinSuggestionListApiView(ExternalApiView):
-    """GET: the caller's pending batch-scan pin suggestions.
+    """
+    GET: the caller's pending batch-scan pin suggestions.
 
     Distinct from ``PinSuggestionsView`` (POST-only - stages a *new* suggestion submitted by an external
     "discovery" app): this lists the review queue an Immich library sweep or local-folder scan already
@@ -1655,7 +1688,8 @@ class PinSuggestionListApiView(ExternalApiView):
 
 
 class PinSuggestionActionApiView(ExternalApiView):
-    """POST: accept or reject one pending pin suggestion.
+    """
+    POST: accept or reject one pending pin suggestion.
 
     Applies the suggestion's own defaults - its ``suggested_name`` for a brand-new pin, no label or
     candidate-photo selection.
@@ -1688,7 +1722,8 @@ class PinSuggestionActionApiView(ExternalApiView):
 
 
 class MemoriesTimelineView(ExternalApiView):
-    """GET: one page of the caller's Memories timeline - routes, trips, visits, photos.
+    """
+    GET: one page of the caller's Memories timeline - routes, trips, visits, photos.
 
     Defaults to the trailing 90 days, matching the internal Memories page's own default window.
     Cursor-paged like the message threads: every source stops at ``limit`` + 1 rows, so a request
@@ -1742,7 +1777,8 @@ class MemoriesTimelineView(ExternalApiView):
 
 
 class MemoriesOnThisDayApiView(ExternalApiView):
-    """GET: past-year visits/routes/photos matching today's month/day.
+    """
+    GET: past-year visits/routes/photos matching today's month/day.
 
     Mirrors the internal Memories page's "on this day" callout, including its cap of
     ``_ON_THIS_DAY_LIMIT`` rows per category - a sensible default for a naturally small, date-scoped
@@ -1783,7 +1819,8 @@ class MemoriesOnThisDayApiView(ExternalApiView):
 
 
 class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
-    """GET: the caller's Memories journal - visit notes, ratings, comments, article edits.
+    """
+    GET: the caller's Memories journal - visit notes, ratings, comments, article edits.
 
     The journal is an aggregate of four separate privacy domains, so it is filtered per source rather
     than gated by a single scope - the same partial-fulfilment contract global search and the undo feed
@@ -1807,7 +1844,8 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
 
     @extend_schema(responses={200: JournalResponseSerializer})
     def get(self, request: Request) -> Response:
-        """Return one page of the caller's journal, newest first.
+        """
+        Return one page of the caller's journal, newest first.
 
         Uses the external API's standard page-number envelope - see ``PaginatedListMixin`` - rather than a
         bespoke ``offset``/``limit``/ ``total`` shape, which could never gain a field later without breaking
@@ -1827,7 +1865,8 @@ class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
 
 
 class PinListsView(PaginatedListMixin, ExternalApiView):
-    """The caller's pin lists: GET pages through them, POST creates one.
+    """
+    The caller's pin lists: GET pages through them, POST creates one.
 
     Supports ``?is_smart=true|false`` to page through only smart or only plain
     lists.
@@ -1911,7 +1950,8 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
 
 
 class PinListDetailView(ExternalApiView):
-    """One of the caller's pin lists: GET it, PATCH it, or DELETE it.
+    """
+    One of the caller's pin lists: GET it, PATCH it, or DELETE it.
 
     PATCH recomputes membership only when the rules actually changed (``is_smart``, ``smart_filter``, or
     ``smart_boundary``) - a resync is a full re-evaluation of every pin the profile owns, far too
@@ -2014,7 +2054,8 @@ class PinListDetailView(ExternalApiView):
 
 
 class PinListItemsView(PaginatedListMixin, ExternalApiView):
-    """The pins on one of the caller's lists: GET, add (POST), or remove (DELETE).
+    """
+    The pins on one of the caller's lists: GET, add (POST), or remove (DELETE).
 
     DELETE carries a body, which is unusual but deliberate: removing a set of pins in one call is what
     an offline client replaying a queued batch needs, and encoding hundreds of uuids in a query string
@@ -2039,7 +2080,8 @@ class PinListItemsView(PaginatedListMixin, ExternalApiView):
 
     @extend_schema(request=PinListItemsWriteSerializer, responses={200: PinListItemsAddResponseSerializer, 404: ErrorSerializer})
     def post(self, request: Request, list_slug: str) -> Response:
-        """Add pins to the list, skipping duplicates and honoring the per-list cap.
+        """
+        Add pins to the list, skipping duplicates and honoring the per-list cap.
 
         Uuids that name no pin of the caller's are silently dropped rather than refused - an offline client
         replaying a queued batch should not have the whole batch fail because one pin was deleted elsewhere
@@ -2080,7 +2122,8 @@ class PinListItemsReorderView(ExternalApiView):
 
     @extend_schema(request=PinListItemsReorderSerializer, responses={200: PinListItemsReorderResponseSerializer, 404: ErrorSerializer})
     def post(self, request: Request, list_slug: str) -> Response:
-        """Set each item's order to its index in ``item_ids``.
+        """
+        Set each item's order to its index in ``item_ids``.
 
         Ids that aren't on this list are ignored rather than rejected, matching the web UI's drag-and-drop
         behavior: a stale id from another tab should not fail the whole reorder.
@@ -2097,7 +2140,8 @@ class PinListItemsReorderView(ExternalApiView):
 
 
 class PinListResyncView(ExternalApiView):
-    """POST: recompute a smart list's membership from its current rules, right now.
+    """
+    POST: recompute a smart list's membership from its current rules, right now.
 
     Runs synchronously, matching the internal behavior - ``resync_smart_list`` is called inline by the
     list-edit view too, and there is no Celery task for it.
@@ -2173,7 +2217,8 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
 
 
 class SavedFilterDetailView(ExternalApiView):
-    """One of the caller's saved filters: GET it, PATCH it, or DELETE it.
+    """
+    One of the caller's saved filters: GET it, PATCH it, or DELETE it.
 
     A PATCH that changes ``criteria`` also resyncs every smart list derived from this filter.
     ``PinList.smart_filter`` is a one-time *copy*, not a live reference, so skipping that would leave
@@ -2246,7 +2291,8 @@ class SavedFilterDetailView(ExternalApiView):
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, filter_uuid: UUID) -> Response:
-        """Delete one of the caller's saved filters.
+        """
+        Delete one of the caller's saved filters.
 
         Lists derived from it keep their last-copied criteria and simply stop
         tracking further edits (the FK is SET_NULL).
@@ -2259,7 +2305,8 @@ class SavedFilterDetailView(ExternalApiView):
 
 
 class LabelsView(PaginatedListMixin, ExternalApiView):
-    """Labels visible to the caller: GET pages through them, POST creates one.
+    """
+    Labels visible to the caller: GET pages through them, POST creates one.
 
     **The ``.with_customizations_for(profile)`` call below is load-bearing and must never be dropped.**
     ``Label._get_customization`` reads the ``_user_customizations`` attribute that prefetch populates,
@@ -2302,7 +2349,8 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
 
     @extend_schema(request=LabelWriteSerializer, responses={201: LabelSerializer, 400: ErrorSerializer})
     def post(self, request: Request) -> Response:
-        """Create a label owned by the caller.
+        """
+        Create a label owned by the caller.
 
         ``profile`` is always the caller's own - a client can never create a
         global label, which is a site-wide object reserved for staff.
@@ -2344,7 +2392,8 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
 
 
 class LabelDetailView(ExternalApiView):
-    """One label visible to the caller: GET it, PATCH it, or DELETE it.
+    """
+    One label visible to the caller: GET it, PATCH it, or DELETE it.
 
     GET works for any visible label, including global ones.
     """
@@ -2443,7 +2492,8 @@ class LabelDetailView(ExternalApiView):
 
 
 class LabelCustomizationView(ExternalApiView):
-    """The caller's private display overrides for one label.
+    """
+    The caller's private display overrides for one label.
 
     Works for *any* label the caller can see, global ones included - this is the only way a client
     changes how a shared label appears to its user, since the label itself is not theirs to edit.
@@ -2489,7 +2539,8 @@ class LabelCustomizationView(ExternalApiView):
 
 
 class LabelMergeView(ExternalApiView):
-    """POST: merge other labels into the one named in the URL.
+    """
+    POST: merge other labels into the one named in the URL.
 
     **This is destructive and cannot be undone.** Merging is not covered by the Undo History framework:
     once the sources are deleted there is no staged entry to restore them from, and re-creating labels
@@ -2585,7 +2636,8 @@ _SUBRESOURCE_ERROR_MESSAGE: dict[type[PinSubResourceError], str] = {
 
 
 def _subresource_error_status(exc: PinSubResourceError) -> int:
-    """The HTTP status describing one sub-resource failure.
+    """
+    The HTTP status describing one sub-resource failure.
 
     Args:
         exc: The raised failure.
@@ -2597,7 +2649,8 @@ def _subresource_error_status(exc: PinSubResourceError) -> int:
 
 
 def _subresource_error_message(exc: PinSubResourceError) -> str:
-    """The user-facing text describing one sub-resource failure.
+    """
+    The user-facing text describing one sub-resource failure.
 
     Args:
         exc: The raised failure.
@@ -2609,7 +2662,8 @@ def _subresource_error_message(exc: PinSubResourceError) -> str:
 
 
 class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin, ExternalApiView):
-    """Base for a pin's list-and-create sub-resource collections.
+    """
+    Base for a pin's list-and-create sub-resource collections.
 
     Only the related name, the serializers, and which service function performs the create differ, so
     subclasses declare those four things and inherit the ownership check, the 404 shape, the pagination,
@@ -2629,7 +2683,8 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
     }
 
     def get_queryset(self, pin: Pin) -> QuerySet:
-        """The pin's sub-resource rows, in a deterministic order.
+        """
+        The pin's sub-resource rows, in a deterministic order.
 
         Args:
             pin: The owning pin.
@@ -2640,7 +2695,8 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
         return getattr(pin, self.related_name).order_by(*self.ordering)
 
     def serializer_context(self, pin: Pin) -> dict[str, object]:
-        """Extra context the output serializer needs.
+        """
+        Extra context the output serializer needs.
 
         Args:
             pin: The owning pin.
@@ -2651,7 +2707,8 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
         return {}
 
     def create(self, pin: Pin, data: dict) -> SubResourceT:
-        """Create one row from validated input.
+        """
+        Create one row from validated input.
 
         Args:
             pin: The owning pin.
@@ -2702,7 +2759,8 @@ class PinSubResourceDetailView[SubResourceT: Model](OwnedPinMixin, ExternalApiVi
     }
 
     def perform_delete(self, pin: Pin, obj: SubResourceT) -> None:
-        """Delete one row through the service that owns its side effects.
+        """
+        Delete one row through the service that owns its side effects.
 
         Args:
             pin: The owning pin.
@@ -2733,7 +2791,8 @@ class PinSubResourceDetailView[SubResourceT: Model](OwnedPinMixin, ExternalApiVi
 
 
 class PinNotesView(PinSubResourceView[PinNote]):
-    """The pin's personal notes: GET lists them, POST adds one.
+    """
+    The pin's personal notes: GET lists them, POST adds one.
 
     Notes are private to the pin's owner and append-only - there is no update
     endpoint; a client edits by deleting and re-adding.
@@ -2771,7 +2830,8 @@ class PinNoteDetailView(PinSubResourceDetailView[PinNote]):
 
 
 class PinAliasesView(PinSubResourceView[PinAlias]):
-    """The pin's alternate names: GET lists them, POST adds one.
+    """
+    The pin's alternate names: GET lists them, POST adds one.
 
     The alias list is the full set of names the pin is known by, *including*
     its current one - which is flagged by ``is_current`` rather than omitted.
@@ -2802,7 +2862,8 @@ class PinAliasesView(PinSubResourceView[PinAlias]):
 
 
 class PinAliasDetailView(PinSubResourceDetailView[PinAlias]):
-    """DELETE: remove one of the pin's alternate names.
+    """
+    DELETE: remove one of the pin's alternate names.
 
     Deleting the pin's *current* name is refused with 400 - the alias list is
     defined to always contain it, so the pin must be renamed first.
@@ -2817,7 +2878,8 @@ class PinAliasDetailView(PinSubResourceDetailView[PinAlias]):
 
 
 class PinAliasUseView(OwnedPinMixin, ExternalApiView):
-    """POST: make one of the pin's aliases its current name.
+    """
+    POST: make one of the pin's aliases its current name.
 
     Answers with the full pin detail rather than the alias, so a client can apply the rename (and
     everything derived from it) from the identical payload shape ``GET pins/{slug}/`` already hands it.
@@ -2877,7 +2939,8 @@ class PinLinkDetailView(PinSubResourceDetailView[PinLink]):
 
 
 class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
-    """The pin's visit history: GET lists it, POST logs a visit.
+    """
+    The pin's visit history: GET lists it, POST logs a visit.
 
     Its own view rather than a :class:`PinSubResourceView` subclass: logging a visit is gated on the
     owner's visit-tracking preference (403 when off, rather than silently discarding it), and
@@ -2940,7 +3003,8 @@ class PinVisitDetailView(OwnedPinMixin, ExternalApiView):
 
     @extend_schema(request=PinVisitCreateSerializer, responses={200: PinVisitSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, pin_slug: str, visit_id: int) -> Response:
-        """Update the visit's date and/or notes, then re-derive the pin's last-visited date.
+        """
+        Update the visit's date and/or notes, then re-derive the pin's last-visited date.
 
         Only the two fields the create endpoint itself accepts (``visited_at``, ``notes``) are writable here
 
@@ -2989,7 +3053,8 @@ class PinVisitDetailView(OwnedPinMixin, ExternalApiView):
 
 
 class LocationSearchView(ExternalApiView):
-    """GET: autocomplete over the caller's own pins and, optionally, external places.
+    """
+    GET: autocomplete over the caller's own pins and, optionally, external places.
 
     The same two sources the web map's search bar uses (``MapController.autocomplete_local`` /
     ``autocomplete_places``), merged into one call so a mobile client makes one request per keystroke
@@ -3035,7 +3100,8 @@ class LocationSearchView(ExternalApiView):
 
 
 class PlaceResolveView(ExternalApiView):
-    """GET: resolve an autocomplete ``place_id`` to coordinates.
+    """
+    GET: resolve an autocomplete ``place_id`` to coordinates.
 
     Split from the search call on purpose: coordinates cost a Places Details lookup per place, so
     they're fetched only for the one suggestion the user actually picks rather than for every row shown.
@@ -3082,7 +3148,8 @@ class PlaceResolveView(ExternalApiView):
 
 
 class SafetyCheckinScopedView(ExternalApiView):
-    """Base for every endpoint addressing one of the caller's own check-ins.
+    """
+    Base for every endpoint addressing one of the caller's own check-ins.
 
     The lookup is **owner-scoped only**.
     Serving a partner/contact their narrower view means modelling check-ins owned by other profiles - a
@@ -3091,7 +3158,8 @@ class SafetyCheckinScopedView(ExternalApiView):
     """
 
     def _get_checkin(self, request: Request, checkin_slug: str) -> SafetyCheckin | None:
-        """The key owner's check-in matching *checkin_slug* (by slug, then uuid), or None.
+        """
+        The key owner's check-in matching *checkin_slug* (by slug, then uuid), or None.
 
         A non-uuid string makes the uuid comparison raise ``ValidationError`` rather than simply not
         matching, so that is caught and reported as "not found" like any other miss.
@@ -3113,7 +3181,8 @@ class SafetyCheckinScopedView(ExternalApiView):
             return None
 
     def _not_found(self) -> Response:
-        """The single 404 body every check-in lookup miss answers with.
+        """
+        The single 404 body every check-in lookup miss answers with.
 
         Another profile's check-in is reported as *not found*, never forbidden - a 403 would confirm that a
         given slug names a real check-in belonging to someone, which is itself a disclosure on a safety
@@ -3122,7 +3191,8 @@ class SafetyCheckinScopedView(ExternalApiView):
         return Response({"error": "No such check-in."}, status=404)
 
     def _detail_response(self, checkin: SafetyCheckin, *, extra: dict | None = None, status: int = 200) -> Response:
-        """Serialize *checkin* as the standard detail document.
+        """
+        Serialize *checkin* as the standard detail document.
 
         Args:
             checkin: The check-in to serialize.
@@ -3341,7 +3411,8 @@ class SafetyCheckinCancelApiView(SafetyCheckinScopedView):
 
 
 class SafetyCheckinPartnersApiView(SafetyCheckinScopedView):
-    """POST: invite a partner to one of the caller's check-ins by username.
+    """
+    POST: invite a partner to one of the caller's check-ins by username.
 
     Partner *accept*/*decline*, and a partner's own read view of someone else's
     check-in, are out of scope this pass - see :class:`SafetyCheckinScopedView`.
@@ -3422,7 +3493,8 @@ class SafetyCheckinPhotosView(SafetyCheckinScopedView, PaginatedListMixin):
 
     @extend_schema(request=SafetyPhotoAttachSerializer, responses={201: SafetyPhotoSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, checkin_slug: str) -> Response:
-        """Attach one of the caller's already-uploaded images to this check-in.
+        """
+        Attach one of the caller's already-uploaded images to this check-in.
 
         Deliberately *not* a second multipart upload path - see
         :class:`~urbanlens.dashboard.external_api.serializers.SafetyPhotoAttachSerializer` for why this
@@ -3553,7 +3625,8 @@ class SafetyContactDefaultsView(ExternalApiView):
 
     @extend_schema(request=SafetyContactDefaultsSerializer, responses={200: SafetyContactDefaultsResponseSerializer, 400: ErrorSerializer})
     def put(self, request: Request) -> Response:
-        """Replace the caller's default contacts wholesale.
+        """
+        Replace the caller's default contacts wholesale.
 
         PUT rather than PATCH because the underlying ``services.visits.safety.save_contact_defaults``
         deletes and recreates the whole set - there is no per-entry addressing to PATCH against.
@@ -3629,7 +3702,8 @@ class PushDeviceDetailView(ExternalApiView):
 
 
 def _friend_identity(viewer: Profile, subject: Profile, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
-    """Shape ``subject`` for ``FriendProfileSerializer`` as ``viewer`` may see them.
+    """
+    Shape ``subject`` for ``FriendProfileSerializer`` as ``viewer`` may see them.
 
     Always routed through ``services.profile.identity_visibility.resolve_visible_identity`` rather than
     read off the model, so a profile whose privacy settings don't permit ``viewer`` is masked here
@@ -3656,7 +3730,8 @@ def _friend_identity(viewer: Profile, subject: Profile, *, visible_pks: set[int]
 
 
 def _serialize_friendship(viewer: Profile, friendship: Friendship, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
-    """Shape one ``Friendship`` from ``viewer``'s point of view.
+    """
+    Shape one ``Friendship`` from ``viewer``'s point of view.
 
     ``status`` and ``relationship_type`` are passed through untouched so the wire values stay the
     model's own capitalized strings.
@@ -3685,7 +3760,8 @@ def _serialize_friendship(viewer: Profile, friendship: Friendship, *, visible_pk
 
 
 class FriendsView(ExternalApiView):
-    """The caller's friend relationships: GET lists them, POST requests a new one.
+    """
+    The caller's friend relationships: GET lists them, POST requests a new one.
 
     GET defaults to accepted friendships only; ``?status=Requested`` surfaces the pending queue.
     POST evaluates the target's ``friend_request_visibility`` and both profiles' ``community_enabled``
@@ -3776,7 +3852,8 @@ class FriendDetailView(ExternalApiView):
 
 
 class FriendActionView(ExternalApiView):
-    """Base for the single-verb friendship transitions.
+    """
+    Base for the single-verb friendship transitions.
 
     Each subclass supplies only ``service_action``; the POST handler, the target lookup and the
     error-to-status mapping live here once.
@@ -3795,7 +3872,8 @@ class FriendActionView(ExternalApiView):
     not_found_message: ClassVar[str] = "Friend request not found."
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
-        """Apply this view's ``services.social.friendship`` transition.
+        """
+        Apply this view's ``services.social.friendship`` transition.
 
         Args:
             actor: The calling profile.
@@ -3810,7 +3888,8 @@ class FriendActionView(ExternalApiView):
         raise NotImplementedError
 
     def _resolve_target(self, profile_uuid: UUID) -> Profile | None:
-        """Look up the other profile in the relationship.
+        """
+        Look up the other profile in the relationship.
 
         Args:
             profile_uuid: The target's public uuid.
@@ -3863,7 +3942,8 @@ class FriendRejectView(FriendActionView):
 
 
 class FriendIgnoreView(FriendActionView):
-    """POST: ignore the target's friend request - silently and permanently.
+    """
+    POST: ignore the target's friend request - silently and permanently.
 
     Distinct from reject: no notification is sent and the requester can never
     re-send (``FriendshipStatus.can_request`` excludes ``Ignored``).
@@ -3875,7 +3955,8 @@ class FriendIgnoreView(FriendActionView):
 
 
 class FriendBlockView(FriendActionView):
-    """POST: block the target, creating the relationship row if there isn't one.
+    """
+    POST: block the target, creating the relationship row if there isn't one.
 
     The only transition here that works against a stranger - that is what
     blocking is for.
@@ -3887,7 +3968,8 @@ class FriendBlockView(FriendActionView):
 
 
 class FriendMuteView(FriendActionView):
-    """PATCH the mute state of an existing relationship; POST is a deprecated alias.
+    """
+    PATCH the mute state of an existing relationship; POST is a deprecated alias.
 
     ``PATCH {"is_muted": true|false}`` is the real endpoint: it names the state it wants rather than
     flipping whatever is there.
@@ -3906,7 +3988,8 @@ class FriendMuteView(FriendActionView):
 
     @extend_schema(request=FriendMuteSerializer, responses={200: FriendshipSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, profile_uuid: UUID) -> Response:
-        """Set the relationship's mute state to exactly what the body asks for.
+        """
+        Set the relationship's mute state to exactly what the body asks for.
 
         Args:
             request: The authenticated request, carrying ``{"is_muted": bool}``.
@@ -3939,7 +4022,8 @@ class FriendMuteView(FriendActionView):
 
 
 class FriendInvitesView(ExternalApiView):
-    """POST: invite someone to connect by email address.
+    """
+    POST: invite someone to connect by email address.
 
     That invariance is the entire security property: any branch in the status code, body or headers
     would let a caller enumerate site membership one address at a time.
@@ -3983,7 +4067,8 @@ class FriendInvitesView(ExternalApiView):
 
 
 def _resolve_profile(profile_slug: str, viewer: Profile) -> Profile | None:
-    """Look up a profile *viewer* may see by slug, or by uuid for a sync client that cached one before a rename.
+    """
+    Look up a profile *viewer* may see by slug, or by uuid for a sync client that cached one before a rename.
 
     Args:
         profile_slug: A profile slug or a uuid string.
@@ -3996,7 +4081,8 @@ def _resolve_profile(profile_slug: str, viewer: Profile) -> Profile | None:
 
 
 class ProfileDetailView(ExternalApiView):
-    """GET a profile the caller may see; PATCH the caller's own.
+    """
+    GET a profile the caller may see; PATCH the caller's own.
 
     A profile whose ``profile_visibility`` excludes the caller answers 404, not 403 - matching
     ``controllers.userprofile.ViewProfileView``, which raises ``Http404`` for the same reason: a 403
@@ -4061,7 +4147,8 @@ class ProfileDetailView(ExternalApiView):
         return Response(ProfileDetailSerializer(self._redact_unreadable(request, payload)).data)
 
     def _redact_unreadable(self, request: Request, payload: dict[str, Any]) -> dict[str, Any]:
-        """Drop the read-scoped sections when the caller only holds write scope.
+        """
+        Drop the read-scoped sections when the caller only holds write scope.
 
         Gating the *payload* rather than only the empty-body case is what makes that airtight - a rule
         enforced on "did this request change anything" is one trivially-satisfied field away from being no
@@ -4105,7 +4192,8 @@ class ProfileDetailView(ExternalApiView):
 
 
 class ProfileNotesView(ExternalApiView):
-    """The caller's own private notes about another profile.
+    """
+    The caller's own private notes about another profile.
 
     Notes are always the *caller's*, never the subject's - the subject can never see them, and a subject
     reading their own page gets their notes about themselves, not other people's notes about them.
@@ -4150,7 +4238,8 @@ class ProfileNoteDetailView(ExternalApiView):
     }
 
     def _get_note(self, viewer: Profile, profile_slug: str, note_uuid: UUID) -> ProfileNote | None:
-        """The caller's own note with this uuid about this subject, or None.
+        """
+        The caller's own note with this uuid about this subject, or None.
 
         Scoped by author first, so another user's note uuid is indistinguishable from one that does not
         exist.
@@ -4254,7 +4343,8 @@ class NotificationDetailView(ExternalApiView):
 
     @extend_schema(request=None, responses={204: None})
     def post(self, request: Request, notification_uuid: UUID) -> Response:
-        """Mark it read, answering 204 whether or not a row actually matched.
+        """
+        Mark it read, answering 204 whether or not a row actually matched.
 
         A 404 for "no such notification" would double as an oracle: a caller could learn whether a given
         uuid belongs to somebody by whether the acknowledgement succeeded.
@@ -4278,7 +4368,8 @@ class NotificationsReadAllView(ExternalApiView):
 
 
 class NotificationsUnreadCountView(ExternalApiView):
-    """GET: how many unread notifications the caller has.
+    """
+    GET: how many unread notifications the caller has.
 
     Split out from the list endpoint so a client polling only for a badge
     count doesn't page through notification bodies to get it.
@@ -4295,7 +4386,8 @@ class NotificationsUnreadCountView(ExternalApiView):
 
 
 class NotificationDeliveryPreferencesView(ExternalApiView):
-    """GET the caller's per-type notification delivery preferences; PATCH to change them.
+    """
+    GET the caller's per-type notification delivery preferences; PATCH to change them.
 
     Distinct from ``AccountSettingsView`` (``/settings/``), which covers general account preferences -
     this is the notification matrix specifically.
@@ -4332,7 +4424,8 @@ class NotificationDeliveryPreferencesView(ExternalApiView):
 
 
 class TripErrorResponseMixin:
-    """Maps the shared trip-service exceptions onto this API's error envelope.
+    """
+    Maps the shared trip-service exceptions onto this API's error envelope.
 
     One table instead of a per-method ``except`` ladder, so a new endpoint cannot accidentally answer
     500 for a condition every other endpoint already reports as 403 or 404.
@@ -4347,7 +4440,8 @@ class TripErrorResponseMixin:
     }
 
     def error_response(self, exc: TripError) -> Response:
-        """Answer a trip-service error with ``{"error": ...}`` and its mapped status.
+        """
+        Answer a trip-service error with ``{"error": ...}`` and its mapped status.
 
         The message is emitted unescaped: it is a JSON string value, and the HTML escaping the internal HTMX
         surface applies would show up here as literal entities.
@@ -4363,7 +4457,8 @@ class TripErrorResponseMixin:
 
 
 class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
-    """Base for the trip endpoints: resolves the trip once, for this caller.
+    """
+    Base for the trip endpoints: resolves the trip once, for this caller.
 
     ``trips:read`` gates every read and ``trips:write`` every mutation; the tiered throttles pick the
     write bucket automatically from those scope names, so no endpoint here needs a
@@ -4379,7 +4474,8 @@ class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
     }
 
     def trip(self, request: Request, trip_slug: str) -> Trip:
-        """The trip identified by *trip_slug*, if the caller may see it.
+        """
+        The trip identified by *trip_slug*, if the caller may see it.
 
         Args:
             request: The authenticated request.
@@ -4395,7 +4491,8 @@ class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
 
 
 def _activity_place_fields(data: dict) -> dict[str, object]:
-    """Translate the API's place fields into what ``resolve_activity_place`` reads.
+    """
+    Translate the API's place fields into what ``resolve_activity_place`` reads.
 
     Rather than teach it a second one, the API's flatter field names are mapped here - so both surfaces
     resolve a place through identical code.
@@ -4417,7 +4514,8 @@ def _activity_place_fields(data: dict) -> dict[str, object]:
 
 
 def _has_place_fields(data: dict) -> bool:
-    """Whether the caller submitted anything that would re-resolve the place.
+    """
+    Whether the caller submitted anything that would re-resolve the place.
 
     Args:
         data: Validated activity payload (presence-keyed for PATCH).
@@ -4429,7 +4527,8 @@ def _has_place_fields(data: dict) -> bool:
 
 
 def _calendar_sync_status(trip: Trip, profile: Profile) -> dict[str, object]:
-    """Describe this caller's calendar mirroring for one trip.
+    """
+    Describe this caller's calendar mirroring for one trip.
 
     Args:
         trip: The trip in question.
@@ -4451,7 +4550,8 @@ def _calendar_sync_status(trip: Trip, profile: Profile) -> dict[str, object]:
 
 
 def _trip_viewer_block(trip: Trip, profile: Profile) -> dict[str, object]:
-    """Describe what this specific caller may see and do on one trip.
+    """
+    Describe what this specific caller may see and do on one trip.
 
     Args:
         trip: The trip in question.
@@ -4475,7 +4575,8 @@ def _trip_viewer_block(trip: Trip, profile: Profile) -> dict[str, object]:
 
 
 def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
-    """Assemble the bundled detail payload for one trip.
+    """
+    Assemble the bundled detail payload for one trip.
 
     Decorates the instance in place rather than building a parallel dict, the same per-request pattern
     ``Trip.viewer_membership`` already uses (all three attributes are declared in the model's
@@ -4498,7 +4599,8 @@ def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
 
 
 def _shown_creator(trip: Trip, viewer: Profile, members: list[TripMembership]) -> Profile | None:
-    """The trip's creator as *viewer* may see them, or None when there is none or a block hides the pair.
+    """
+    The trip's creator as *viewer* may see them, or None when there is none or a block hides the pair.
 
     Args:
         trip: The trip.
@@ -4521,7 +4623,8 @@ def _shown_creator(trip: Trip, viewer: Profile, members: list[TripMembership]) -
 
 
 class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
-    """The caller's trips: GET lists them, POST creates one.
+    """
+    The caller's trips: GET lists them, POST creates one.
 
     Unlike ``pins/``, this is a browse endpoint rather than a delta-sync feed - a user has tens of
     trips, not thousands, and the app shows them in a paged list rather than reconciling them offline.
@@ -4573,7 +4676,8 @@ class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
 
 
 class TripDetailView(TripScopedApiView):
-    """One trip: GET it in full, PATCH its metadata, or DELETE it.
+    """
+    One trip: GET it in full, PATCH its metadata, or DELETE it.
 
     GET bundles the roster, the caller's own standing, and calendar status, so
     the app's trip screen renders from a single request.
@@ -4619,7 +4723,8 @@ class TripDetailView(TripScopedApiView):
 
 
 class TripMapView(TripScopedApiView):
-    """GET the trip's map markers.
+    """
+    GET the trip's map markers.
 
     Deliberately unpaginated: a map has to fit its bounds to the whole set at once, and a client that
     only had the first page would draw the wrong viewport.
@@ -4683,7 +4788,8 @@ class TripRsvpView(TripScopedApiView):
 
 
 class TripCalendarSyncView(TripScopedApiView):
-    """POST: turn auto-sync on or off for an already-exported trip.
+    """
+    POST: turn auto-sync on or off for an already-exported trip.
 
     Only the toggle, never the initial connection: establishing one needs Google's OAuth consent flow,
     which this surface does not build.
@@ -4755,7 +4861,8 @@ class TripMembersView(TripScopedApiView, PaginatedListMixin):
 
 
 class TripInvitationsView(TripScopedApiView, PaginatedListMixin):
-    """The caller's own open email invitations to a trip: GET lists them, POST invites an address.
+    """
+    The caller's own open email invitations to a trip: GET lists them, POST invites an address.
 
     The answer is the same whether or not the address belongs to an account.
     """
@@ -4800,7 +4907,8 @@ class TripInvitationDetailView(TripScopedApiView):
 
 
 class TripMemberDetailView(TripScopedApiView):
-    """One member: PATCH their organizer flag, or DELETE them from the trip.
+    """
+    One member: PATCH their organizer flag, or DELETE them from the trip.
 
     Addressed by profile slug - or uuid, which is the only handle a caller has for a member whose
     identity their privacy settings mask.
@@ -4886,7 +4994,8 @@ class TripActivitiesView(TripScopedApiView, PaginatedListMixin):
 
 
 def _serialize_one_activity(trip: Trip, profile: Profile, activity_id: int) -> dict:
-    """Serialize a single activity through the shared render rows.
+    """
+    Serialize a single activity through the shared render rows.
 
     Rebuilding the whole row set for one activity looks wasteful, but it is what guarantees the
     single-activity payload carries the same index, vote tallies, effective RSVP, ``can_manage`` and
@@ -4952,7 +5061,8 @@ class TripActivityDetailView(TripScopedApiView):
 
 
 class TripActivityPositionView(TripScopedApiView):
-    """POST: save a map-drag position override for one activity.
+    """
+    POST: save a map-drag position override for one activity.
 
     Requires the trip's edit-activities permission, and bounds-checks the coordinates.
     Both were missing from the endpoint this mirrors, which is now fixed on the internal surface too -
@@ -4995,7 +5105,8 @@ class TripActivityVoteView(TripScopedApiView):
 
 
 class TripActivityStatusView(TripScopedApiView):
-    """PUT: set an activity's status.
+    """
+    PUT: set an activity's status.
 
     ``completed`` routes to ``complete_activity`` rather than a plain status write, so completing
     through the API logs the same visit entries and date snapping the web app's "mark complete" does.
@@ -5071,7 +5182,8 @@ class TripCommentsView(TripScopedApiView, PaginatedListMixin):
 
 
 def _serialize_one_comment(trip: Trip, profile: Profile, comment_id: int) -> dict:
-    """Serialize a single comment through the shared visible-comment tree.
+    """
+    Serialize a single comment through the shared visible-comment tree.
 
     Going back through ``build_comment_tree`` rather than serializing the model directly is what applies
     the mention rendering, the author masking and the visibility gates - a comment serialized outside

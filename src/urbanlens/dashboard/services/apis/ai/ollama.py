@@ -25,7 +25,8 @@ _ERROR_DETAIL_CHARS = 200
 
 
 def _reported_tokens(response: requests.Response) -> tuple[int | None, int | None]:
-    """The prompt and completion token counts Ollama reports with a non-streamed answer.
+    """
+    The prompt and completion token counts Ollama reports with a non-streamed answer.
 
     Args:
         response: A ``/api/generate`` response.
@@ -39,7 +40,8 @@ def _reported_tokens(response: requests.Response) -> tuple[int | None, int | Non
 
 
 def _answer_text(body: object) -> str | None:
-    """The text of a finished, non-streamed ``/api/generate`` answer, or None when ``body`` is not one.
+    """
+    The text of a finished, non-streamed ``/api/generate`` answer, or None when ``body`` is not one.
 
     Ollama reports an error as ``{"error": "..."}``: with a 4xx or 5xx status, or, once a response has started, with
     the 200 it already sent. A finished generation is an object whose ``response`` is a string and whose ``done`` is
@@ -78,7 +80,8 @@ class OllamaGateway(Gateway):
     model: str = field(default_factory=lambda: settings.ollama_vision_model)
 
     def describe_photo_keywords(self, image_bytes: bytes, *, raise_refusal: bool = False) -> list[str] | None:
-        """Ask the local Ollama vision model for photo keywords.
+        """
+        Ask the local Ollama vision model for photo keywords.
 
         Args:
             image_bytes: JPEG bytes, already downscaled (never the full upload).

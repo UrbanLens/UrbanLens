@@ -41,7 +41,8 @@ class LedgerStaleSnapshotTests(TestCase):
         self.assertEqual(self.sub.total_paid_cents, 3000, "a concurrent payment overwrote the other one's credit")
 
     def test_a_payment_is_not_rolled_back_by_the_daily_sweep(self) -> None:
-        """The sweep reads every PWYW row, then advances them one at a time.
+        """
+        The sweep reads every PWYW row, then advances them one at a time.
 
         A payment landing inside that window must survive."""
         # Small first payment, so the stale snapshot cannot afford the periods the
@@ -61,7 +62,8 @@ class LedgerStaleSnapshotTests(TestCase):
         )
 
     def test_the_caller_s_instance_reflects_what_was_stored(self) -> None:
-        """Refreshing under the lock must leave the caller holding current values.
+        """
+        Refreshing under the lock must leave the caller holding current values.
 
         ``_handle_invoice_payment_succeeded`` reads nothing after ``apply_payment`` today, but an instance that
         silently disagrees with the row it came from is a trap for the next caller."""
@@ -84,7 +86,8 @@ class LedgerStaleSnapshotTests(TestCase):
         self.assertEqual(subscription.usage_covered_until, self.start + timedelta(days=60))
 
     def test_a_payment_and_a_refund_do_not_erase_each_other(self) -> None:
-        """The mixed interleaving ``_locked``'s own docstring names as motivation -
+        """
+        The mixed interleaving ``_locked``'s own docstring names as motivation -
         "a payment landing beside a refund" - and that no test here (or in the
         payment-only / refund-only stale-snapshot tests elsewhere) actually drives.
         """

@@ -1,4 +1,5 @@
-"""The User-Agent this site sends to a third party: it names the site and a contact, as Wikimedia's policy and the
+"""
+The User-Agent this site sends to a third party: it names the site and a contact, as Wikimedia's policy and the
 OpenStreetMap Foundation's require. Wikimedia answers 403 to the default ``python-requests`` one.
 
 The contact is the project's URL, never a person's email address: every third party this site calls logs the header,

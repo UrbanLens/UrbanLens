@@ -24,7 +24,8 @@ _RESCUER_EMAIL = "rescuer@example.com"
 
 @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class FinalWarningPrecedesEscalationTests(TestCase):
-    """Drives the two five-minute beat sweeps at frozen instants around the check-in's overdue point.
+    """
+    Drives the two five-minute beat sweeps at frozen instants around the check-in's overdue point.
 
     The cache is pinned to locmem because each sweep takes its overlap lock there."""
 

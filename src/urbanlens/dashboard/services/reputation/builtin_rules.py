@@ -1,4 +1,5 @@
-"""The rules shipped with the ledger.
+"""
+The rules shipped with the ledger.
 External media becomes an ``Image`` only when somebody up-votes it or sends it to a wiki, and the profile on that row is the voter."""
 
 from __future__ import annotations

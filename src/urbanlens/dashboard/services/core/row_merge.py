@@ -1,4 +1,5 @@
-"""Moving rows that reference one record onto its twin, and snapshotting rows a merge has to drop.
+"""
+Moving rows that reference one record onto its twin, and snapshotting rows a merge has to drop.
 Shared by the pin merge (``services.pins.pin_merge``) and the duplicate building merge (``services.places.building_merge``): both fold one row into another of the same model and must not let the delete that follows take anything with it.
 """
 
@@ -21,7 +22,8 @@ _MAX_TREE_DEPTH = 64
 
 
 def _ancestor_ids(row: Model, parent_field: str) -> list[int]:
-    """The pks above *row* through its own ``parent_field``, nearest first.
+    """
+    The pks above *row* through its own ``parent_field``, nearest first.
 
     Args:
         row: The row to start from.
@@ -41,7 +43,8 @@ def _ancestor_ids(row: Model, parent_field: str) -> list[int]:
 
 
 def repoint_references(duplicate: Model, kept: Model) -> None:
-    """Point every row that references *duplicate* at *kept*, so deleting *duplicate* takes nothing with it.
+    """
+    Point every row that references *duplicate* at *kept*, so deleting *duplicate* takes nothing with it.
     Generic over the duplicate's reverse relations - a pending share is referenced by reshares, bundled shares, direct-message links and exposure rows, an owner by the sales that list it - so a relation added later is carried without the caller having to learn about it.
     A row that would collide with one *kept* already has is left where it is, for the caller to deal with: :func:`remaining_references` lists them.
 
@@ -75,7 +78,8 @@ def repoint_references(duplicate: Model, kept: Model) -> None:
 
 
 def remaining_references(target: Model) -> dict[str, list[Model]]:
-    """Every row still referencing *target*, by ``Model.field``.
+    """
+    Every row still referencing *target*, by ``Model.field``.
 
     Args:
         target: The row about to be deleted.
@@ -99,7 +103,8 @@ def remaining_references(target: Model) -> dict[str, list[Model]]:
 
 
 def snapshot_row(instance: Model) -> dict[str, Any]:
-    """A JSON-safe copy of every column on *instance*, for an audit record of something a merge drops.
+    """
+    A JSON-safe copy of every column on *instance*, for an audit record of something a merge drops.
 
     Args:
         instance: The row.

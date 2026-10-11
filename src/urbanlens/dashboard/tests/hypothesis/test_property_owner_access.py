@@ -24,7 +24,8 @@ _USER_NAME = "Community Contributed Owner"
 
 
 def _plain_user() -> User:
-    """A user with no subscription and no feature grants.
+    """
+    A user with no subscription and no feature grants.
 
     The very first user created in a fresh test database is auto-promoted to bootstrap site admin, and
     ``user_has_feature`` grants a site admin every feature - so a throwaway user absorbs that promotion and the
@@ -77,7 +78,8 @@ class OwnerAccessServiceTests(TestCase):
 
 
 class SaleRowAccessTests(TestCase):
-    """A deed's grantor/grantee are owner records too - gating the Ownership
+    """
+    A deed's grantor/grantee are owner records too - gating the Ownership
     panel while leaving Sale History open would hand back the same names."""
 
     def setUp(self) -> None:

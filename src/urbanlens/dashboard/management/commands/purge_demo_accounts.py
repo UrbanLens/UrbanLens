@@ -1,4 +1,5 @@
-"""Delete demo accounts whose day is up.
+"""
+Delete demo accounts whose day is up.
 
 Run on a schedule on the demo instance.
 """
@@ -33,7 +34,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        """Find and optionally delete expired demo accounts.
+        """
+        Find and optionally delete expired demo accounts.
 
         Raises:
             CommandError: Not a demo instance and not explicitly overridden, or a negative TTL.

@@ -1,4 +1,5 @@
-"""Development and local call no hosted AI provider (Jess, 2026-10-06, amending D26).
+"""
+Development and local call no hosted AI provider (Jess, 2026-10-06, amending D26).
 
 Cloudflare Workers AI, OpenAI and Anthropic are refused where quota and billed services are, at every place a call
 passes: the feature's ``api_call_slot`` and ``_reserve_call``, ``service_is_enabled``, and the inference client that
@@ -106,7 +107,8 @@ class WhatIsHostedAiTests(SimpleTestCase):
                 self.assertIs(explicit_category(ai_provider_service(provider)), EgressCategory.AI)
 
     def test_every_provider_the_inference_service_knows_is_a_hosted_one(self) -> None:
-        """A provider added to ``urbanlens_ai.schema.Provider`` is held here until someone says whether it is hosted.
+        """
+        A provider added to ``urbanlens_ai.schema.Provider`` is held here until someone says whether it is hosted.
 
         A local model is added to neither list: it gets an ``internal`` key, and this test is where that is decided.
         """

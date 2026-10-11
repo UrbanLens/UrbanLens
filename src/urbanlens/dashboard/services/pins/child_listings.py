@@ -1,4 +1,5 @@
-"""A pin's child pins' aliases and labels, listed read-only on the parent's page while "child pin details" is on (P16).
+"""
+A pin's child pins' aliases and labels, listed read-only on the parent's page while "child pin details" is on (P16).
 
 Editing stays on each child's own page; the parent only shows what its children carry, the way it already shows
 their notes, visits and photos.
@@ -19,7 +20,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ChildListing:
-    """One child pin and what it carries.
+    """
+    One child pin and what it carries.
 
     Attributes:
         child: The child pin.
@@ -37,7 +39,8 @@ def _url_of(child: Pin) -> str:
 
 
 def child_alias_listings(pin: Pin) -> list[ChildListing]:
-    """Each descendant pin with aliases, and its aliases other than its current name, which its chip already shows.
+    """
+    Each descendant pin with aliases, and its aliases other than its current name, which its chip already shows.
 
     Args:
         pin: The parent pin.
@@ -59,7 +62,8 @@ def child_alias_listings(pin: Pin) -> list[ChildListing]:
 
 
 def child_label_listings(pin: Pin) -> list[ChildListing]:
-    """Each descendant pin with labels, and its labels.
+    """
+    Each descendant pin with labels, and its labels.
 
     Args:
         pin: The parent pin.

@@ -208,7 +208,8 @@ class ExpandTripDatesTests(TestCase):
 
 
 class TripElapsedDayTests(TestCase):
-    """Trip.elapsed_day - 1-indexed day-of-trip while active, else None.
+    """
+    Trip.elapsed_day - 1-indexed day-of-trip while active, else None.
 
     Uses unsaved instances where possible (elapsed_day never touches the DB once both dates are set -
     effective_start_date/effective_end_date short-circuit before falling back to querying activities), except
@@ -412,7 +413,8 @@ _GET_RAW_FORECAST_SLOTS = "urbanlens.dashboard.services.apis.locations.weather_r
 
 
 class BuildActivityForecastsTests(SimpleTestCase):
-    """_build_activity_forecasts matches activities to weather slots.
+    """
+    _build_activity_forecasts matches activities to weather slots.
 
     ``get_raw_forecast_slots`` (REData-first, OWM/Open-Meteo-fallback - see
     ``services.apis.locations.weather_resolution``) is mocked directly rather than a gateway instance, since
@@ -816,7 +818,8 @@ class TripRecordedWeatherTests(TestCase):
         self.assertEqual((start, end), (datetime.date(2026, 5, 1), datetime.date(2026, 5, 3)))
 
     def test_a_day_outside_era5s_window_is_never_requested(self) -> None:
-        """Inside the publication lag there is nothing to fetch, and caching the
+        """
+        Inside the publication lag there is nothing to fetch, and caching the
         blank would make it permanent."""
         self._past_activity(timezone.now() - datetime.timedelta(days=1))
 

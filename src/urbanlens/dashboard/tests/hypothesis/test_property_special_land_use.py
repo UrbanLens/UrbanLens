@@ -38,7 +38,8 @@ class SpecialLandUseRowTests(SimpleTestCase):
         self.assertEqual([row["name"] for row in rows], ["Fort Example"])
 
     def test_an_unnamed_area_still_produces_a_row(self) -> None:
-        """*That* you are inside one matters whether or not the layer names it.
+        """
+        *That* you are inside one matters whether or not the layer names it.
 
         TIGERweb rows are confirmed to omit fields per category, so a missing name is expected data, not
         corruption - and dropping the row would turn "inside a correctional facility" into silence."""

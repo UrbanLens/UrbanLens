@@ -48,7 +48,8 @@ class MapDocumentScalingTests(EndpointScalingMixin, TestCase):
         ]
 
     def seed_rows(self, count: int) -> None:
-        """Create *count* more root pins, each carrying the shared labels.
+        """
+        Create *count* more root pins, each carrying the shared labels.
 
         Args:
             count: How many pins to add.
@@ -65,7 +66,8 @@ class MapDocumentScalingTests(EndpointScalingMixin, TestCase):
             pin.labels.set(self.labels)
 
     def count_payload_rows(self, response) -> int | None:  # noqa: ANN001
-        """How many pin lines the document carries.
+        """
+        How many pin lines the document carries.
 
         Args:
             response: The streamed response.

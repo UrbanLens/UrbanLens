@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 
 def add_pin_link(pin: Pin, url: str, name: str, *, source: AutoLinkSource) -> bool:
-    """Add an external URL to a pin's links, unless already present or previously removed.
+    """
+    Add an external URL to a pin's links, unless already present or previously removed.
 
     Args:
         pin: The pin whose links should include this URL.
@@ -42,7 +43,8 @@ def add_pin_link(pin: Pin, url: str, name: str, *, source: AutoLinkSource) -> bo
 
 
 def add_wiki_link(wiki: Wiki, url: str, name: str, *, source: AutoLinkSource) -> bool:
-    """Add an external URL to a wiki's links, unless already present or previously removed.
+    """
+    Add an external URL to a wiki's links, unless already present or previously removed.
 
     Args:
         wiki: The wiki whose links should include this URL.
@@ -70,7 +72,8 @@ def add_wiki_link(wiki: Wiki, url: str, name: str, *, source: AutoLinkSource) ->
 
 
 def add_pin_and_wiki_link(pin: Pin, location: Location, url: str, name: str, *, source: AutoLinkSource) -> None:
-    """Add an external URL to a pin's links, and to its wiki's links if it has one.
+    """
+    Add an external URL to a pin's links, and to its wiki's links if it has one.
 
     Args:
         pin: The pin whose links should include this URL.

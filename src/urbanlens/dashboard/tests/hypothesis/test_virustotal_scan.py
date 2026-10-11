@@ -64,7 +64,8 @@ def test_malicious_verdict_returns_a_rejection_message() -> None:
 
 
 def test_suspicious_only_is_not_treated_as_clean() -> None:
-    """malicious == 0 alone must not read as safe - a suspicious-only verdict
+    """
+    malicious == 0 alone must not read as safe - a suspicious-only verdict
     is exactly the ambiguous case that must not fall through as clean."""
     gateway = Mock()
     gateway.get_file_report.return_value = {"last_analysis_stats": {"malicious": 0, "suspicious": 1, "undetected": 69}}
@@ -77,7 +78,8 @@ def test_suspicious_only_is_not_treated_as_clean() -> None:
 
 
 def test_all_zero_stats_raises_rather_than_reading_as_clean() -> None:
-    """The core correctness guard: absence of a positive finding must never be
+    """
+    The core correctness guard: absence of a positive finding must never be
     conflated with an explicit clean verdict when no engine actually reported."""
     gateway = Mock()
     gateway.get_file_report.return_value = {
@@ -123,7 +125,8 @@ def test_gateway_request_error_raises_no_verdict() -> None:
 
 
 def test_rate_limit_exceeded_raises_no_verdict() -> None:
-    """Quota exhaustion (calls_per_day/calls_per_minute) must fail over silently, not
+    """
+    Quota exhaustion (calls_per_day/calls_per_minute) must fail over silently, not
     raise something the caller doesn't already handle."""
     gateway = Mock()
     gateway.get_file_report.side_effect = RateLimitExceededError("virustotal")

@@ -1,4 +1,5 @@
-"""How a place's name and address read, as pure functions of their components.
+"""
+How a place's name and address read, as pure functions of their components.
 Keeping the rules here rather than reimplementing them against the projection is what stops the two from drifting - a fallback chain changed on the model but not in the payload is invisible until a user reports the wrong name on their map."""
 
 from __future__ import annotations
@@ -8,7 +9,8 @@ USA_COUNTRY_NAMES = frozenset({"united states", "united states of america", "usa
 
 
 def is_usa(country: str | None) -> bool:
-    """Whether *country* identifies the USA.
+    """
+    Whether *country* identifies the USA.
 
     Args:
         country: The location's country component, possibly blank or None.
@@ -20,7 +22,8 @@ def is_usa(country: str | None) -> bool:
 
 
 def canonical_country(country: str | None) -> str:
-    """A comparable form of a country name: casefolded, with every USA spelling as one.
+    """
+    A comparable form of a country name: casefolded, with every USA spelling as one.
 
     Args:
         country: A country name, possibly blank or None.
@@ -32,7 +35,8 @@ def canonical_country(country: str | None) -> str:
 
 
 def area_label(*, city: str | None, state: str | None, country: str | None) -> str | None:
-    """A short human-readable area, e.g. ``Albany, NY`` or ``Kyiv, Ukraine``.
+    """
+    A short human-readable area, e.g. ``Albany, NY`` or ``Kyiv, Ukraine``.
 
     Args:
         city: The location's city component.
@@ -49,7 +53,8 @@ def area_label(*, city: str | None, state: str | None, country: str | None) -> s
 
 
 def display_name(*, wiki_name: str | None, official_name: str | None, city: str | None, state: str | None, country: str | None) -> str:
-    """The best human-readable name for a place.
+    """
+    The best human-readable name for a place.
 
     Args:
         wiki_name: The linked wiki's name, if the place has a wiki.
@@ -70,7 +75,8 @@ def display_name(*, wiki_name: str | None, official_name: str | None, city: str 
 
 
 def street_address(*, street_number: str | None, route: str | None) -> str | None:
-    """The street number and route, joined, or None when neither is known.
+    """
+    The street number and route, joined, or None when neither is known.
 
     Args:
         street_number: The location's street-number component.
@@ -83,7 +89,8 @@ def street_address(*, street_number: str | None, route: str | None) -> str | Non
 
 
 def formatted_address(*, address_basic: str | None, city: str | None, state: str | None) -> str | None:
-    """A "street, city, state" address, omitting the components that are absent.
+    """
+    A "street, city, state" address, omitting the components that are absent.
 
     Args:
         address_basic: The street address.

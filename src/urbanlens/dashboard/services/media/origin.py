@@ -65,7 +65,8 @@ PUBLIC_SUFFIXES = frozenset(
 
 
 def media_origin() -> str:
-    """The configured media origin, e.g. ``https://media.urbanlens.org``.
+    """
+    The configured media origin, e.g. ``https://media.urbanlens.org``.
 
     Returns:
         The origin with no trailing slash, or an empty string when uploads are served from the app's own hostname (the default, and what local development runs)."""
@@ -73,7 +74,8 @@ def media_origin() -> str:
 
 
 def media_origin_host() -> str:
-    """Hostname of the media origin, without scheme or port.
+    """
+    Hostname of the media origin, without scheme or port.
 
     Returns:
         The hostname, or an empty string when no media origin is configured.
@@ -82,7 +84,8 @@ def media_origin_host() -> str:
 
 
 def is_media_origin_request(request: HttpRequest) -> bool:
-    """Whether this request arrived on the media origin rather than the app's.
+    """
+    Whether this request arrived on the media origin rather than the app's.
 
     Args:
         request: The current request.
@@ -94,7 +97,8 @@ def is_media_origin_request(request: HttpRequest) -> bool:
 
 
 def shared_suffix(media_host: str, app_host: str) -> str:
-    """The deepest domain two hosts share, with no safety filtering applied.
+    """
+    The deepest domain two hosts share, with no safety filtering applied.
 
     Args:
         media_host: Hostname of the media origin.
@@ -111,7 +115,8 @@ def shared_suffix(media_host: str, app_host: str) -> str:
 
 
 def cookie_domain() -> str:
-    """The ``Domain`` attribute the media cookie must carry, or ``""``.
+    """
+    The ``Domain`` attribute the media cookie must carry, or ``""``.
     A deployment whose two hosts are not related this way (different registrable domains, or a media host that is not a sibling) has to say so explicitly via ``UL_MEDIA_COOKIE_DOMAIN``; there is no correct value to derive.
 
     Returns:
@@ -139,7 +144,8 @@ def cookie_domain() -> str:
 
 
 def mint_media_token(user_id: int) -> str:
-    """Sign a media credential for the user with *user_id*.
+    """
+    Sign a media credential for the user with *user_id*.
     Carries the ``auth.User`` id rather than the ``Profile`` id so the middleware can decide whether a refresh is due from ``request.user.pk`` alone, with no database query on the overwhelmingly common path where the browser already holds a valid cookie.
 
     Args:
@@ -151,7 +157,8 @@ def mint_media_token(user_id: int) -> str:
 
 
 def user_id_from_token(token: str, *, max_age: int = MEDIA_COOKIE_MAX_AGE_SECONDS) -> int | None:
-    """Recover the user id from a media cookie value.
+    """
+    Recover the user id from a media cookie value.
 
     Args:
         token: The raw cookie value as received.
@@ -172,7 +179,8 @@ def user_id_from_token(token: str, *, max_age: int = MEDIA_COOKIE_MAX_AGE_SECOND
 
 
 def needs_refresh(request: HttpRequest, user_id: int) -> bool:
-    """Whether this response should (re-)set the media cookie.
+    """
+    Whether this response should (re-)set the media cookie.
 
     Args:
         request: The current request, carrying whatever cookie the browser has.
@@ -185,7 +193,8 @@ def needs_refresh(request: HttpRequest, user_id: int) -> bool:
 
 
 def set_media_cookie(response: HttpResponse, user_id: int) -> HttpResponse:
-    """Attach a freshly minted media cookie to *response*.
+    """
+    Attach a freshly minted media cookie to *response*.
 
     Args:
         response: The outgoing response.
@@ -219,7 +228,8 @@ MEDIA_ORIGIN_CSP = "default-src 'none'"
 
 
 def apply_media_response_headers[ResponseT: HttpResponseBase](request: HttpRequest, response: ResponseT) -> ResponseT:
-    """Set the framing and hardening headers for one media response.
+    """
+    Set the framing and hardening headers for one media response.
     **Behind nginx, only the ``FileResponse`` (development) path actually delivers these** - see :data:`MEDIA_ORIGIN_CSP`.
 
     Args:
@@ -246,7 +256,8 @@ def apply_media_response_headers[ResponseT: HttpResponseBase](request: HttpReque
 
 
 def clear_media_cookie(response: HttpResponse) -> HttpResponse:
-    """Delete the media cookie, e.g. on logout.
+    """
+    Delete the media cookie, e.g. on logout.
 
     Args:
         response: The outgoing response.

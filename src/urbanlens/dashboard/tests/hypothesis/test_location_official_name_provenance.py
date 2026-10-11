@@ -1,4 +1,5 @@
-"""P186: text a client sent never becomes ``Location.official_name``, so it never reaches the wiki's name or URL.
+"""
+P186: text a client sent never becomes ``Location.official_name``, so it never reaches the wiki's name or URL.
 
 The paired tests prove the request really ran, that the person still sees the name they sent, and that a provider's
 name given at creation does become the slug.

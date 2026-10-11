@@ -29,7 +29,8 @@ _MODE_LABEL_OVERRIDES = {
 
 
 def preview_modes() -> list[tuple[str, str]]:
-    """Return the selectable preview audiences as ``(mode, label)`` pairs.
+    """
+    Return the selectable preview audiences as ``(mode, label)`` pairs.
 
     Returns:
         List of ``(mode value, human-readable label)`` tuples, in the same order as the settings-page choices."""
@@ -37,7 +38,8 @@ def preview_modes() -> list[tuple[str, str]]:
 
 
 def mode_label(mode: str) -> str:
-    """Return the display label for a preview mode value.
+    """
+    Return the display label for a preview mode value.
 
     Args:
         mode: A :class:`VisibilityChoice` value.
@@ -49,7 +51,8 @@ def mode_label(mode: str) -> str:
 
 
 def is_rendering_as_ghost(request: HttpRequest) -> bool:
-    """Whether this request is being answered as a preview's ghost viewer rather than as the owner.
+    """
+    Whether this request is being answered as a preview's ghost viewer rather than as the owner.
 
     Args:
         request: The current request.
@@ -64,7 +67,8 @@ def is_rendering_as_ghost(request: HttpRequest) -> bool:
 
 
 def create_ghost_viewer(owner: Profile, mode: str) -> User:
-    """Create a throwaway user standing in the selected relationship to *owner*.
+    """
+    Create a throwaway user standing in the selected relationship to *owner*.
     Must be called inside a transaction that the caller rolls back - every row created here (the ghost user, its auto-created profile, and any relationship rows) is meant to exist only for the duration of one request.
 
     Args:
@@ -94,7 +98,8 @@ def create_ghost_viewer(owner: Profile, mode: str) -> User:
 
 
 def _make_friends(ghost: Profile, owner: Profile) -> None:
-    """Create an accepted friendship between *ghost* and *owner*.
+    """
+    Create an accepted friendship between *ghost* and *owner*.
 
     Args:
         ghost: The throwaway viewer profile.
@@ -112,7 +117,8 @@ def _make_friends(ghost: Profile, owner: Profile) -> None:
 
 
 def _share_a_pin(ghost: Profile, owner: Profile) -> None:
-    """Give *ghost* a pin at a location the owner has also pinned.
+    """
+    Give *ghost* a pin at a location the owner has also pinned.
     Uses one of the owner's existing pinned locations when available; otherwise fabricates a shared location (and an owner pin) so the relationship can still be simulated.
 
     Args:
@@ -132,7 +138,8 @@ def _share_a_pin(ghost: Profile, owner: Profile) -> None:
 
 
 def _share_a_friend(ghost: Profile, owner: Profile) -> None:
-    """Give *ghost* a mutual friend with *owner* (without befriending them directly).
+    """
+    Give *ghost* a mutual friend with *owner* (without befriending them directly).
 
     Args:
         ghost: The throwaway viewer profile.
@@ -163,7 +170,8 @@ def _share_a_friend(ghost: Profile, owner: Profile) -> None:
 
 
 def _share_a_trip(ghost: Profile, owner: Profile) -> None:
-    """Put *ghost* on a trip the owner is also a member of.
+    """
+    Put *ghost* on a trip the owner is also a member of.
     Joins one of the owner's existing trips when available; otherwise fabricates a trip with both of them as members.
 
     Args:

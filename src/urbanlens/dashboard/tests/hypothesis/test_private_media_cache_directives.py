@@ -95,7 +95,8 @@ class MediaGateCacheDirectiveTests(TestCase):
 
 
 class EveryByteServingViewIsMarkedTests(SimpleTestCase):
-    """Static check: no byte-serving return escapes ``mark_private_media``.
+    """
+    Static check: no byte-serving return escapes ``mark_private_media``.
 
     Matches on the response *construction* rather than the returned name, so a view that builds its response and
     returns it a few lines later is still covered."""

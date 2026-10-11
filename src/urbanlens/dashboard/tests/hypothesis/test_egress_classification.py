@@ -1,4 +1,5 @@
-"""Every external service and every scheduled task is classified (D26), so the policy can never silently miss one.
+"""
+Every external service and every scheduled task is classified (D26), so the policy can never silently miss one.
 
 An unclassified service is treated as billed at runtime; these fail first, naming it.
 """

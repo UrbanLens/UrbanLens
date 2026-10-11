@@ -40,7 +40,8 @@ class BackfilledGeometryStalenessTests(TestCase):
         )
 
     def test_a_backfilled_place_is_stale(self) -> None:
-        """The reported case: geometry the provider chain never produced.
+        """
+        The reported case: geometry the provider chain never produced.
 
         Left as "not stale", REData is never asked for this parcel and the
         pre-places boundary stands forever.
@@ -64,7 +65,8 @@ class BackfilledGeometryStalenessTests(TestCase):
         self.assertTrue(geometry_stale(place))
 
     def test_a_place_exactly_at_the_cache_window_is_not_stale(self) -> None:
-        """The comparison is strict (``>``): aged to exactly the window is still fresh.
+        """
+        The comparison is strict (``>``): aged to exactly the window is still fresh.
 
         A ``>=`` mutant would flip this one case without affecting any of the others above.
         """
@@ -96,7 +98,8 @@ class BackfilledGeometryStalenessTests(TestCase):
     )
     @_hyp
     def test_staleness_matches_the_configured_window_at_any_age(self, configured_days: int, age_days: float) -> None:
-        """The whole comparison, generalised - not just the specific ages pinned above.
+        """
+        The whole comparison, generalised - not just the specific ages pinned above.
 
         Time must be frozen: geometry_stale() calls timezone.now() again internally, and an unfrozen clock lets
         real elapsed time between that call and generated_at's construction drift age_days past configured_days

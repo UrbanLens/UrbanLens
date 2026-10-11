@@ -33,7 +33,8 @@ class InstantiationSample:
 
 
 class count_instantiations:  # noqa: N801  # a context manager, named as one reads at the call
-    """Count every Django model instantiated inside the block, by model.
+    """
+    Count every Django model instantiated inside the block, by model.
 
     Usable on its own around any callable, not just a request, so a service can be measured without going
     through a URL:: with count_instantiations() as counted: MapPinPayloadService(profile).all(query)
@@ -70,13 +71,15 @@ class count_instantiations:  # noqa: N801  # a context manager, named as one rea
 
 
 class InstantiationScalingMixin(SeedScalingMixin):
-    """Mixin asserting a row costs few model instances.
+    """
+    Mixin asserting a row costs few model instances.
 
     Subclasses implement :meth:`seed_rows`, exactly as for the sibling mixins.
     """
 
     def measure_instantiations(self, url: str, **extra: Any) -> InstantiationSample:
-        """Fetch *url*, returning the model instances its render constructed.
+        """
+        Fetch *url*, returning the model instances its render constructed.
 
         Args:
             url: The URL to fetch. **extra: Passed to the test client (headers, auth).
@@ -97,7 +100,8 @@ class InstantiationScalingMixin(SeedScalingMixin):
         growth_waiver: str = "",
         **extra: Any,
     ) -> None:
-        """Assert one more row costs at most *max_objects_per_row* model instances.
+        """
+        Assert one more row costs at most *max_objects_per_row* model instances.
 
         Args:
             url: The URL to measure. max_objects_per_row: Model instances one row may cost.

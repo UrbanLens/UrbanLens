@@ -1,4 +1,5 @@
-"""Access-scoped resolution of custom-field reference targets.
+"""
+Access-scoped resolution of custom-field reference targets.
 Everything here enforces the access rules from the feature request - a user can only reference what they can already see:"""
 
 from __future__ import annotations
@@ -32,7 +33,8 @@ MAX_REFERENCE_CHOICES = 500
 
 
 def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
-    """The objects of ``kind`` the given profile is allowed to reference.
+    """
+    The objects of ``kind`` the given profile is allowed to reference.
 
     Args:
         kind: A :data:`REFERENCE_KINDS` value.
@@ -77,7 +79,8 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
 
 
 def resolve_reference(kind: str, pk: Any, profile: Profile) -> Any | None:
-    """Resolve a candidate reference target by pk, enforcing access.
+    """
+    Resolve a candidate reference target by pk, enforcing access.
 
     Args:
         kind: A :data:`REFERENCE_KINDS` value.
@@ -153,7 +156,8 @@ def reference_url(kind: str, target: Any) -> str | None:
 
 
 def capped_reference_choices(kind: str, profile: Profile) -> list[tuple[int, str]]:
-    """The (pk, label) choices every reference field of *kind* owned by *profile* shares.
+    """
+    The (pk, label) choices every reference field of *kind* owned by *profile* shares.
 
     Args:
         kind: A :data:`REFERENCE_KINDS` value.
@@ -174,7 +178,8 @@ def capped_reference_choices(kind: str, profile: Profile) -> list[tuple[int, str
 
 
 def reference_choices(kind: str, profile: Profile, *, include_pk: int | None = None, capped: list[tuple[int, str]] | None = None) -> list[tuple[int, str]]:
-    """(pk, label) picker choices for a reference field, capped for sanity.
+    """
+    (pk, label) picker choices for a reference field, capped for sanity.
 
     Args:
         kind: A :data:`REFERENCE_KINDS` value.

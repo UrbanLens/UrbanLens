@@ -57,7 +57,8 @@ class GoogleGeocodingNameResolver:
 
 @dataclass(frozen=True, slots=True)
 class PlaceNameResolverChain:
-    """Try resolvers in order so fallback strategies can be added.
+    """
+    Try resolvers in order so fallback strategies can be added.
 
     Off production, once REData has been asked, the chain stops before any resolver that asks a ``quota`` or
     ``billed`` provider directly (D26): a REData that failed or found nothing is reported as no name for now,

@@ -29,7 +29,8 @@ _SCHEDULE_LOCK_TIMEOUT_SECONDS = 300
 
 
 def is_backup_filename(name: str) -> bool:
-    """Return True when name matches this class's backup naming scheme.
+    """
+    Return True when name matches this class's backup naming scheme.
 
     Args:
         name: A bare filename (no directory component) to check.
@@ -41,7 +42,8 @@ def is_backup_filename(name: str) -> bool:
 
 
 def is_backup_temp_filename(name: str) -> bool:
-    """Return True for an in-progress ``.tmp`` backup file.
+    """
+    Return True for an in-progress ``.tmp`` backup file.
 
     Args:
         name: A bare filename (no directory component) to check.
@@ -56,7 +58,8 @@ class DatabaseBackup:
     """Create and manage scheduled/on-demand PostgreSQL backups via ``pg_dump``."""
 
     def __init__(self, *, auto_schedule: bool = True):
-        """Initialize the backup manager.
+        """
+        Initialize the backup manager.
 
         Args:
             auto_schedule: When True, check on startup whether a backup is due.
@@ -68,7 +71,8 @@ class DatabaseBackup:
             self.schedule_backup()
 
     def create_backup_dir(self) -> bool:
-        """Create the backup directory if missing; return True if created.
+        """
+        Create the backup directory if missing; return True if created.
 
         Returns:
             True if the directory was just created, False if it already existed or
@@ -123,7 +127,8 @@ class DatabaseBackup:
                 logger.exception("Failed to remove stale partial backup: %s. Error: %s", name, e)
 
     def run(self) -> bool:
-        """Run ``pg_dump`` and purge old backups; return True on success.
+        """
+        Run ``pg_dump`` and purge old backups; return True on success.
 
         Returns:
             True if the backup completed successfully, False otherwise.
@@ -189,7 +194,8 @@ class DatabaseBackup:
         return True
 
     def schedule_backup(self) -> bool:
-        """Enqueue a backup if due and none is already pending.
+        """
+        Enqueue a backup if due and none is already pending.
 
         Returns:
             True if a backup task was enqueued, False if none was due or one is already

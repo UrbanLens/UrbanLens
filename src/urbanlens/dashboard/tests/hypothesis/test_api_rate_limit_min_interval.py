@@ -88,7 +88,8 @@ class ReserveCallMinIntervalTests(TestCase):
         _reserve_call(self.service)
 
     def test_call_exactly_at_the_interval_boundary_is_allowed(self) -> None:
-        """``elapsed < min_interval_seconds`` blocks - equal-to is allowed, not blocked.
+        """
+        ``elapsed < min_interval_seconds`` blocks - equal-to is allowed, not blocked.
 
         Guards the boundary condition itself: a ``<=`` typo here would reject a call landing exactly on the
         configured spacing, which is the spacing the admin asked for, not a violation of it."""

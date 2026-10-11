@@ -1,4 +1,5 @@
-"""Account mail whose work depends on whether an address is registered: signup, resend and password reset (P147).
+"""
+Account mail whose work depends on whether an address is registered: signup, resend and password reset (P147).
 
 The request only validates the form, then hands the rest to a task, so a registered address costs the submitter
 exactly what a new one does. Which email goes out is the only difference, and only the address's owner sees it.
@@ -31,7 +32,8 @@ logger = logging.getLogger(__name__)
 
 
 def is_abandoned_signup(user: User) -> bool:
-    """Whether ``user`` is a signup whose verification link expired unused; it never proved the address, so it
+    """
+    Whether ``user`` is a signup whose verification link expired unused; it never proved the address, so it
     does not keep it from a new signup."""
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -65,7 +67,8 @@ def send_verification_email(user: User, verification: EmailVerification) -> None
 
 
 def complete_signup(username: str, email: str, password_hash: str, auth_salt: str, invite_token: uuid.UUID | None) -> None:
-    """Create the account and send its verification link, or tell the address's owner someone tried to sign up.
+    """
+    Create the account and send its verification link, or tell the address's owner someone tried to sign up.
 
     Args:
         username: The validated username.
@@ -128,7 +131,8 @@ def send_password_reset(email: str) -> None:
 
 
 def charge_verification_mail(user: User) -> bool:
-    """Charge one verification mail to ``user``'s address, or refuse it.
+    """
+    Charge one verification mail to ``user``'s address, or refuse it.
 
     Charged to the pending account's own ledger, so the cap follows the address whoever asks and from wherever:
     at most one per ``VERIFICATION_RESEND_COOLDOWN_SECONDS``, and never past the account's email budget.

@@ -120,7 +120,8 @@ _KNOWN_UNSTYLED = frozenset(
 
 
 def stylesheet(root: pathlib.Path) -> str:
-    """Compile the Sass sources, or fall back to the artifact if it is current.
+    """
+    Compile the Sass sources, or fall back to the artifact if it is current.
 
     Measuring the checked-in `style.css` is what the original hand count did, and it was five days stale at the
     time.
@@ -158,7 +159,8 @@ def stylesheet(root: pathlib.Path) -> str:
 
 
 def _which(name: str) -> bool:
-    """Whether an executable is on PATH.
+    """
+    Whether an executable is on PATH.
 
     Args:
         name: The executable to look for.
@@ -169,7 +171,8 @@ def _which(name: str) -> bool:
 
 
 def styled_classes(css: str) -> set[str]:
-    """Collect every class name a rule in *css* selects.
+    """
+    Collect every class name a rule in *css* selects.
 
     Whatever is between the previous `{`, `}` or `;` and the next `{` is a selector list, or an at-rule prelude
     if it starts with `@`.
@@ -192,7 +195,8 @@ def styled_classes(css: str) -> set[str]:
 
 
 def applied_classes(templates: dict[str, str]) -> dict[str, list[str]]:
-    """Collect every class name a template applies, and where.
+    """
+    Collect every class name a template applies, and where.
 
     Args:
         templates: Template path to contents.
@@ -214,7 +218,8 @@ def applied_classes(templates: dict[str, str]) -> dict[str, list[str]]:
 
 
 def _selects(name: str, script: str) -> bool:
-    """Whether *script* uses *name* to find an element rather than to render one.
+    """
+    Whether *script* uses *name* to find an element rather than to render one.
 
     A plain substring test gets both directions wrong.
 
@@ -231,7 +236,8 @@ def _selects(name: str, script: str) -> bool:
 
 
 def unstyled_modifiers(css: str, templates: dict[str, str], scripts: dict[str, str]) -> dict[str, list[str]]:
-    """Find applied BEM modifiers whose block is styled and which are not.
+    """
+    Find applied BEM modifiers whose block is styled and which are not.
 
     A modifier whose *base* has no rule either is not this check's business: that is a whole component with no
     styling, which is visible immediately.

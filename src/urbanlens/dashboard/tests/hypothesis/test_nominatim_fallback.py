@@ -41,7 +41,8 @@ class GeocodeResolutionFallbackTests(SimpleTestCase):
         self.assertEqual(coords, (None, None))
 
     def test_neither_fallback_constructs_geopy_nominatim(self) -> None:
-        """The banned tutorial user agent (and raw geopy geocoding) must not return.
+        """
+        The banned tutorial user agent (and raw geopy geocoding) must not return.
 
         A source-text assertion rather than a behavioural one, deliberately: the failure mode being guarded is
         someone re-adding the "simple" direct client in either module, which no mock-based test would see."""

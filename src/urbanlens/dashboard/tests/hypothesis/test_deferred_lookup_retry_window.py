@@ -107,7 +107,8 @@ class DeferredLookupRetryWindowTests(TestCase):
         self.assertFalse(_deferred_deadline_passed(timezone.now().replace(tzinfo=None).isoformat()))
 
     def test_a_naive_start_stamp_still_expires(self) -> None:
-        """Falling back to "not expired" on a naive stamp would let the batch
+        """
+        Falling back to "not expired" on a naive stamp would let the batch
         retry forever, defeating the deadline entirely."""
         from urbanlens.dashboard.tasks import _deferred_deadline_passed
 
@@ -122,7 +123,8 @@ class DeferredLookupRetryWindowTests(TestCase):
 
 
 class DeferredLookupRetryBoundTests(TestCase):
-    """The deadline ends a batch; ``max_retries`` is finite as well, so a batch the deadline cannot end still stops.
+    """
+    The deadline ends a batch; ``max_retries`` is finite as well, so a batch the deadline cannot end still stops.
 
     ``_deferred_deadline_passed`` reads an unparseable ``started_at`` as "not expired", and the task re-sends the
     stamp it was given, so a replayed or hand-made message carrying one would retry for ever on the deadline alone.
@@ -150,7 +152,8 @@ class DeferredLookupRetryBoundTests(TestCase):
         provider: str = PROVIDER_REDATA,
         lookup: CidResolutionResult | None = None,
     ):
-        """Run the task as a worker would on its ``retries``-th retry, with a start stamp the deadline cannot read.
+        """
+        Run the task as a worker would on its ``retries``-th retry, with a start stamp the deadline cannot read.
 
         Celery's own ``retry()`` runs, so a retry past the bound raises ``MaxRetriesExceededError`` here as it would
         on a worker; only the re-sent message is stubbed.

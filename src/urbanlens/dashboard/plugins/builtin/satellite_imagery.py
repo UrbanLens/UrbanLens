@@ -1,4 +1,5 @@
-"""Satellite imagery plugins: providers for the pin detail satellite carousel.
+"""
+Satellite imagery plugins: providers for the pin detail satellite carousel.
 USGS Historical Topo Maps is a different kind of feature entirely (a gallery of individually dated/titled scanned quadrangles, not one carousel slide) and was never part of this carousel - see ``plugins.builtin.usgs``, untouched by this migration."""
 
 from __future__ import annotations
@@ -61,7 +62,8 @@ _HISTORICAL_MAP_PREFIX = "loc_"
 
 
 def _wanted_providers(latitude: float, longitude: float) -> list[str]:
-    """Which imagery providers to ask for at a point.
+    """
+    Which imagery providers to ask for at a point.
 
     Args:
         latitude: WGS-84 latitude.
@@ -111,7 +113,8 @@ def _lonlat_to_tile(longitude: float, latitude: float, zoom: int) -> tuple[int, 
 
 
 def _resolve_tile_template(url: str, latitude: float, longitude: float, result: dict[str, Any]) -> str:
-    """Substitute a specific tile's ``{z}``/``{x}``/``{y}``/``{s}`` into a slippy-map template.
+    """
+    Substitute a specific tile's ``{z}``/``{x}``/``{y}``/``{s}`` into a slippy-map template.
 
     Args:
         url: The template URL, e.g. ``"https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png"``.
@@ -141,7 +144,8 @@ def _zoom_level(value: object) -> int | None:
 
 
 def _composed_zoom(result: dict[str, Any], latitude: float) -> int | None:
-    """The zoom to ask REData to compose *result* at, or None to leave REData's default framing.
+    """
+    The zoom to ask REData to compose *result* at, or None to leave REData's default framing.
 
     REData frames a composed image to a fixed ground span, enlarging a coarse source's pixels
     (Sentinel-2's 10 m become a blur at a street zoom). A source whose resolution can't fill that
@@ -171,7 +175,8 @@ def _composed_zoom(result: dict[str, Any], latitude: float) -> int | None:
 
 
 def _most_recent_interval_end(attributes: dict[str, Any]) -> datetime.date | None:
-    """The latest date covered by a ``time_series`` result's own ``attributes.intervals``.
+    """
+    The latest date covered by a ``time_series`` result's own ``attributes.intervals``.
 
     Args:
         attributes: The result's ``attributes`` blob.
@@ -223,7 +228,8 @@ class EsriPlugin(UrbanLensPlugin):
 
 
 def _missed(exc: LocationContextUnavailableError) -> SlideSignal | None:
-    """What a slide REData could not produce comes to.
+    """
+    What a slide REData could not produce comes to.
 
     Args:
         exc: What asking REData for the slide's image raised.
@@ -296,7 +302,8 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         longitude: float,
         seen_urls: set[str],
     ) -> Generator[SatelliteSlide | SlideSignal]:
-        """Slides for dated captures from the imagery timeline.
+        """
+        Slides for dated captures from the imagery timeline.
         ``_slide_from_result`` already materializes one representative date per ``time_series`` provider from the plain ``/imagery/`` call above, so nothing is lost; this loop only ever sees ``"capture"`` offerings.
 
         Args:
@@ -384,7 +391,8 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         return SatelliteSlide(img_src=img_src, source=name, date=str(date), detail=result.get("attribution") or "")
 
     def _composed_tile_image(self, gateway: RedataImageryGateway, result: dict[str, Any], url: str, latitude: float, longitude: float) -> str:
-        """``img_src`` for a ``tile_template`` result: REData's composed photo, or a raw tile as a fallback.
+        """
+        ``img_src`` for a ``tile_template`` result: REData's composed photo, or a raw tile as a fallback.
 
         Args:
             gateway: The imagery gateway to reuse.
@@ -409,7 +417,8 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         return _resolve_tile_template(url, latitude, longitude, result)
 
     def _time_series_slide(self, gateway: RedataImageryGateway, result: dict[str, Any], name: str, latitude: float) -> SatelliteSlide | SlideSignal | None:
-        """Materialize and embed one date from a continuous (``time_series``) source.
+        """
+        Materialize and embed one date from a continuous (``time_series``) source.
         This shows exactly one: the range's most recent date (see ``_most_recent_interval_end``), so this provider gets one carousel slide framed the same "current conditions" way every other slide here is, rather than being skipped outright.
 
         Args:

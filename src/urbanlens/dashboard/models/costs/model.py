@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 
 class CostComponent(abstract.DashboardModel):
-    """A depreciating hardware/infrastructure asset an admin has defined, e.g.
+    """
+    A depreciating hardware/infrastructure asset an admin has defined, e.g.
     "Hard Drives".
     Its replacement cost is amortized evenly over ``deprecation_years`` to produce a monthly figure (see ``monthly_amortized_cost``) that feeds into the site's overall effective monthly running cost.
 
@@ -72,7 +73,8 @@ class CostComponent(abstract.DashboardModel):
         return self.replacement_cost / (self.deprecation_years * 12)
 
     def elapsed_months(self, as_of: datetime.datetime) -> Decimal:
-        """Months this component has counted toward costs, from creation to retirement (or *as_of*).
+        """
+        Months this component has counted toward costs, from creation to retirement (or *as_of*).
 
         Args:
             as_of: The point in time to measure elapsed months up to.
@@ -87,7 +89,8 @@ class CostComponent(abstract.DashboardModel):
 
 
 class OperatingCost(abstract.DashboardModel):
-    """A recurring monthly operating cost an admin has defined, e.g.
+    """
+    A recurring monthly operating cost an admin has defined, e.g.
     "Electricity".
     ``retired_at`` records when a cost stopped being charged - it is kept (not deleted) so all-time expense totals stay accurate.
 
@@ -130,7 +133,8 @@ class OperatingCost(abstract.DashboardModel):
         return self.retired_at is None
 
     def elapsed_months(self, as_of: datetime.datetime) -> Decimal:
-        """Months this cost has been charged, from creation to retirement (or *as_of*).
+        """
+        Months this cost has been charged, from creation to retirement (or *as_of*).
 
         Args:
             as_of: The point in time to measure elapsed months up to.

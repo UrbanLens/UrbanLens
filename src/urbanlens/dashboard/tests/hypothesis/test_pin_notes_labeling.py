@@ -64,7 +64,8 @@ class PinNotesLabelingTests(TestCase):
 
 
 class WikiCommentsKeepTheCommentsLabelTests(TestCase):
-    """Wiki comments are genuinely shared between users - regression guard
+    """
+    Wiki comments are genuinely shared between users - regression guard
     against the pin-only "Notes" rename leaking into this shared context."""
 
     def setUp(self):

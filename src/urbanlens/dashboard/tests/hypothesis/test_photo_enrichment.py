@@ -46,7 +46,8 @@ def _make_location() -> Location:
 
 @override_settings(MEDIA_ROOT=_MEDIA_ROOT)
 class SaveEnrichedImageTests(TestCase):
-    """_save_enriched_image - the shared wiki-attach + quarantine + hand-off helper.
+    """
+    _save_enriched_image - the shared wiki-attach + quarantine + hand-off helper.
 
     It is now ``tasks.process_image_upload``'s job, on the sandbox queue, which is why these assertions run the
     task explicitly and re-read the row."""

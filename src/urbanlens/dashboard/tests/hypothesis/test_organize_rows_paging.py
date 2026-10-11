@@ -1,4 +1,5 @@
-"""The Organize page's label rows arrive a page at a time (P66).
+"""
+The Organize page's label rows arrive a page at a time (P66).
 
 The tab renders its first page, a sentinel row fetches the next as it scrolls into view, and anything that
 needs every row - a filter, the tree view, select-all - asks for the rest in one request. A write
@@ -111,7 +112,8 @@ class FirstPageTests(_RowsFixture):
         self.assertIsNone(self._more(root))
 
     def test_the_sentinel_swaps_only_itself(self) -> None:
-        """The panel around it carries ``hx-target`` for its own deferred load, and htmx inherits it: without an
+        """
+        The panel around it carries ``hx-target`` for its own deferred load, and htmx inherits it: without an
         explicit target the next page would replace the whole list."""
         self._tags(_PAGE + 1)
 
@@ -205,7 +207,8 @@ class WalkTests(_RowsFixture):
         self.assertEqual(self._ids(first) + self._ids(rest), self._expected())
 
     def test_a_filter_can_reach_a_label_the_first_page_did_not_show(self) -> None:
-        """The client filters what is in the DOM, so it loads the rest first; the label it is looking for has to
+        """
+        The client filters what is in the DOM, so it loads the rest first; the label it is looking for has to
         be in that response."""
         self._tags(_PAGE * 2)
         wanted = ensure_label(profile=self.profile, name="zzz needle", kind=KIND_TAG)

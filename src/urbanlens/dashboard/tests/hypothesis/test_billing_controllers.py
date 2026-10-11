@@ -145,7 +145,8 @@ class BillingCheckoutViewTests(TestCase):
         mock_create.assert_not_called()
 
     def test_amount_at_stripe_minimum_calls_stripe(self) -> None:
-        """Exact boundary: the check is `amount_cents < STRIPE_MINIMUM_CHARGE_CENTS`, so 50
+        """
+        Exact boundary: the check is `amount_cents < STRIPE_MINIMUM_CHARGE_CENTS`, so 50
         cents itself must succeed - a `<` -> `<=` mutation would wrongly reject it, and the
         far-below-minimum test above (10 cents) wouldn't notice."""
         role = baker.make(SubscriptionRole, monthly_price_cents=None, pay_what_you_want=True)
@@ -237,7 +238,8 @@ class BillingPledgeUpdateViewTests(TestCase):
         mock_update.assert_called_once_with(self.subscription, 800)
 
     def test_amount_below_stripe_minimum_returns_400_and_does_not_call_stripe(self) -> None:
-        """Distinct branch from test_invalid_amount_... above: a parseable amount that's
+        """
+        Distinct branch from test_invalid_amount_... above: a parseable amount that's
         merely too small, not an unparseable string - both take the `amount_cents is None or
         amount_cents < MINIMUM` guard, but only this exercises the `< MINIMUM` half."""
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
@@ -249,7 +251,8 @@ class BillingPledgeUpdateViewTests(TestCase):
         mock_update.assert_not_called()
 
     def test_amount_at_stripe_minimum_calls_update_pledge(self) -> None:
-        """Exact boundary: 50 cents itself must succeed - a `<` -> `<=` mutation would
+        """
+        Exact boundary: 50 cents itself must succeed - a `<` -> `<=` mutation would
         wrongly reject it."""
         with mock.patch("urbanlens.dashboard.controllers.billing.stripe_client.update_pledge") as mock_update:
             response = self.client.post(

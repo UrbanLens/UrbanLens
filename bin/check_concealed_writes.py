@@ -89,7 +89,8 @@ def _writes(fn: ast.FunctionDef, watched: set[str], writers: frozenset[str]) -> 
 
 
 def _transitive_writers(trees: dict[pathlib.Path, ast.Module]) -> frozenset[str]:
-    """Grow :data:`WRITER_SEEDS` to a fixed point over the call graph.
+    """
+    Grow :data:`WRITER_SEEDS` to a fixed point over the call graph.
 
     A function counts as a writer when it hands a wiki-holding parameter of its own to a function already known
     to be one.

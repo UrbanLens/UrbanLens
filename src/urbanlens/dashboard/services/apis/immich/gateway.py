@@ -55,7 +55,8 @@ class SearchAsset:
 
 @dataclass(slots=True, kw_only=True)
 class ImmichGateway(Gateway):
-    """REST client for one user's Immich server.
+    """
+    REST client for one user's Immich server.
 
     Attributes:
         account: The user's stored Immich server URL and API key.
@@ -83,7 +84,8 @@ class ImmichGateway(Gateway):
         return (urlsplit(self.account.server_url).hostname or "",)
 
     def _json(self, method: str, path: str, *, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None) -> Any:
-        """Perform an authenticated request and return the decoded JSON body.
+        """
+        Perform an authenticated request and return the decoded JSON body.
 
         Args:
             method: ``GET`` or ``POST``.
@@ -127,7 +129,8 @@ class ImmichGateway(Gateway):
             raise GatewayRequestError("Immich returned a response that is not JSON.") from exc
 
     def _get(self, path: str, *, params: dict[str, Any] | None = None) -> Any:
-        """Perform an authenticated GET and return the decoded JSON body.
+        """
+        Perform an authenticated GET and return the decoded JSON body.
 
         Args:
             path: API path beginning with ``/`` (e.g. ``/server/ping``).
@@ -142,7 +145,8 @@ class ImmichGateway(Gateway):
         return self._json("GET", path, params=params)
 
     def _get_binary(self, path: str, *, max_bytes: int, deadline: float, params: dict[str, Any] | None = None) -> tuple[bytes, str, str]:
-        """Perform an authenticated GET and return the raw response body.
+        """
+        Perform an authenticated GET and return the raw response body.
 
         Streamed and stopped at ``max_bytes`` rather than read whole: the server
         is the account holder's own, so its response size is a thing one user
@@ -191,7 +195,8 @@ class ImmichGateway(Gateway):
         return content, content_type, filename
 
     def _post(self, path: str, *, json: dict[str, Any]) -> Any:
-        """Perform an authenticated POST and return the decoded JSON body.
+        """
+        Perform an authenticated POST and return the decoded JSON body.
 
         Args:
             path: API path beginning with ``/`` (e.g. ``/search/metadata``).
@@ -206,7 +211,8 @@ class ImmichGateway(Gateway):
         return self._json("POST", path, json=json)
 
     def ping(self) -> bool:
-        """Verify the stored server URL and API key are valid.
+        """
+        Verify the stored server URL and API key are valid.
 
         Returns:
             True when the server responds and the key is accepted.
@@ -218,7 +224,8 @@ class ImmichGateway(Gateway):
         return bool(result)
 
     def get_map_markers(self, *, is_archived: bool = False) -> list[MapMarker]:
-        """Return every geolocated asset in the user's library.
+        """
+        Return every geolocated asset in the user's library.
 
         Args:
             is_archived: When False (default), excludes archived/trashed assets.
@@ -233,7 +240,8 @@ class ImmichGateway(Gateway):
         return [MapMarker(id=marker["id"], lat=float(marker["lat"]), lon=float(marker["lon"]), city=marker.get("city")) for marker in markers if marker.get("lat") is not None and marker.get("lon") is not None]
 
     def library_asset_count(self) -> int:
-        """Return the true total number of assets in the user's library.
+        """
+        Return the true total number of assets in the user's library.
 
         Returns:
             Total matching assets, or 0 if the endpoint errors.
@@ -244,7 +252,8 @@ class ImmichGateway(Gateway):
         return int(body.get("total") or 0)
 
     def _search_metadata_page(self, filters: dict[str, Any], *, page: Any = None, size: int = _DEFAULT_RECENT_LIMIT) -> tuple[list[SearchAsset], Any, int]:
-        """Run one page of a ``POST /api/search/metadata`` query.
+        """
+        Run one page of a ``POST /api/search/metadata`` query.
 
         Args:
             filters: Immich metadata-search filters (e.g. ``takenAfter``/``takenBefore``).
@@ -269,7 +278,8 @@ class ImmichGateway(Gateway):
         return [_parse_asset(item) for item in items], assets_body.get("nextPage"), int(assets_body.get("total") or 0)
 
     def _search_metadata(self, filters: dict[str, Any], *, size: int = _DEFAULT_RECENT_LIMIT) -> list[SearchAsset]:
-        """Run one ``POST /api/search/metadata`` query and parse the results.
+        """
+        Run one ``POST /api/search/metadata`` query and parse the results.
 
         Args:
             filters: Immich metadata-search filters (e.g. ``takenAfter``/``takenBefore``).
@@ -285,7 +295,8 @@ class ImmichGateway(Gateway):
         return assets
 
     def iter_library_assets(self, *, page_size: int = _DEFAULT_PAGE_SIZE) -> Iterator[tuple[list[SearchAsset], int]]:
-        """Page through every asset in the user's library, yielding one page at a time.
+        """
+        Page through every asset in the user's library, yielding one page at a time.
         Used for a full-library location sweep, where downloading every asset would be far too expensive - this only fetches the lightweight metadata (id, GPS, capture date, city) already present in the search response.
 
         Args:
@@ -307,7 +318,8 @@ class ImmichGateway(Gateway):
             page = next_page
 
     def search_by_dates(self, dates: Sequence[datetime.date]) -> list[SearchAsset]:
-        """Return the user's own assets taken on any of the given calendar dates.
+        """
+        Return the user's own assets taken on any of the given calendar dates.
 
         Args:
             dates: Calendar dates to search, in the account's local time.
@@ -327,7 +339,8 @@ class ImmichGateway(Gateway):
         return sorted(seen.values(), key=lambda asset: asset.taken_at or datetime.datetime.min.replace(tzinfo=datetime.UTC), reverse=True)
 
     def list_recent(self, limit: int = _DEFAULT_RECENT_LIMIT) -> list[SearchAsset]:
-        """Return the user's most recently taken assets, with no filter applied.
+        """
+        Return the user's most recently taken assets, with no filter applied.
 
         Args:
             limit: Maximum number of assets to return (a single page).
@@ -341,7 +354,8 @@ class ImmichGateway(Gateway):
         return self._search_metadata({}, size=limit)
 
     def get_asset_thumbnail(self, asset_id: str) -> tuple[bytes, str]:
-        """Return a preview-sized image for one asset.
+        """
+        Return a preview-sized image for one asset.
 
         Args:
             asset_id: The Immich asset id.
@@ -363,7 +377,8 @@ class ImmichGateway(Gateway):
         return content, content_type
 
     def get_asset_original(self, asset_id: str) -> tuple[bytes, str, str]:
-        """Return the full-resolution original file for one asset.
+        """
+        Return the full-resolution original file for one asset.
 
         Args:
             asset_id: The Immich asset id.
@@ -384,7 +399,8 @@ class ImmichGateway(Gateway):
 
 
 def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
-    """Extract the capture timestamp from a ``/search/metadata`` result item.
+    """
+    Extract the capture timestamp from a ``/search/metadata`` result item.
 
     Args:
         item: One raw asset object from the search response.
@@ -401,7 +417,8 @@ def _parse_taken_at(item: dict[str, Any]) -> datetime.datetime | None:
 
 
 def _parse_asset(item: dict[str, Any]) -> SearchAsset:
-    """Parse one raw asset object from a ``/search/metadata`` result item.
+    """
+    Parse one raw asset object from a ``/search/metadata`` result item.
 
     Args:
         item: One raw asset object from the search response.
@@ -422,7 +439,8 @@ def _parse_asset(item: dict[str, Any]) -> SearchAsset:
 
 
 def _filename_from_content_disposition(header: str | None) -> str:
-    """Extract a filename from a Content-Disposition header, if present.
+    """
+    Extract a filename from a Content-Disposition header, if present.
 
     Args:
         header: The raw Content-Disposition header value, or None.

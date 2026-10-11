@@ -1,4 +1,5 @@
-"""External-facing AI assistant endpoints: a stateless mirror of the web chat.
+"""
+External-facing AI assistant endpoints: a stateless mirror of the web chat.
 
 A turn runs on ``ai-worker`` (``services.ai.tasks.run_assistant_turn_task``), never inline in this
 process - this domain gates, enqueues, and polls, mirroring ``controllers.assistant``'s web flow.
@@ -88,7 +89,8 @@ def _poll_attempt(request: Request) -> int:
 
 
 def _finished_result(task_id: str, turn_id: str) -> dict[str, Any] | None:
-    """This turn's task result if it has finished, else ``None`` (still running).
+    """
+    This turn's task result if it has finished, else ``None`` (still running).
 
     That matters more here than on the web: a ``GET`` an HTTP client retries (because it lost the
     response, or because its poll loop simply asks again) must not consume the reply the first call
@@ -119,7 +121,8 @@ def _api_proposals(proposals: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 class AssistantMessageView(ExternalApiView):
-    """POST: enqueue one chat message; 202 with a turn id to poll.
+    """
+    POST: enqueue one chat message; 202 with a turn id to poll.
 
     Stateless: ``history`` is round-tripped through the client rather than kept server-side.
     Entries are capped to ``MAX_HISTORY_ENTRIES`` here (the same cap the web chat's session enforces).
@@ -205,7 +208,8 @@ class AssistantTurnPollView(ExternalApiView):
 
 
 class AssistantProposalConfirmView(ExternalApiView):
-    """POST: confirm (and actually run) one write-tool proposal from a resolved turn.
+    """
+    POST: confirm (and actually run) one write-tool proposal from a resolved turn.
 
     The write itself never ran inside the turn loop - it ran on ai-worker, where ``registry.execute()``
     refuses every write outright, and even off ai-worker the loop always calls ``execute(...,
@@ -246,7 +250,8 @@ class AssistantProposalConfirmView(ExternalApiView):
 
 
 class AssistantResetView(ExternalApiView):
-    """POST: reset the conversation.
+    """
+    POST: reset the conversation.
 
     A genuine no-op for this stateless shape - there is no server-side history left to clear once it
     lives client-side.

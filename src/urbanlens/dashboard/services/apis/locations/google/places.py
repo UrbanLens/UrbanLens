@@ -59,7 +59,8 @@ class GooglePlacesGateway(Gateway):
     _DEFAULT_SEARCH_NEARBY_FIELD_MASK: ClassVar[str] = "places.id,places.displayName,places.location,places.types,places.rating,places.userRatingCount,places.shortFormattedAddress"
 
     def search_nearby(self, latitude, longitude, radius=2000, included_types=None, max_results=20, field_mask=None):
-        """Search nearby places using the new Places API v1 (Nearby Search New).
+        """
+        Search nearby places using the new Places API v1 (Nearby Search New).
 
         Args:
             latitude: Centre latitude.
@@ -102,7 +103,8 @@ class GooglePlacesGateway(Gateway):
         return response.json().get("places", [])
 
     def get_place_details(self, place_id, fields):
-        """Fetch legacy Place Details fields for a place.
+        """
+        Fetch legacy Place Details fields for a place.
 
         Args:
             place_id: The Google Place id.
@@ -130,7 +132,8 @@ class GooglePlacesGateway(Gateway):
         return response.json().get("result", {})
 
     def find_nearest_place_id(self, latitude: float, longitude: float, radius: float = 75) -> str | None:
-        """Find the Google Place id nearest a set of coordinates - never by name.
+        """
+        Find the Google Place id nearest a set of coordinates - never by name.
 
         Args:
             latitude: WGS-84 latitude.
@@ -149,7 +152,8 @@ class GooglePlacesGateway(Gateway):
         return results[0]["id"] if results else None
 
     def get_place_photo_names(self, place_id: str, max_photos: int = 10) -> list[str]:
-        """Fetch the Places API (New) ``photos[].name`` identifiers for a place.
+        """
+        Fetch the Places API (New) ``photos[].name`` identifiers for a place.
         ``places/ChIJ.../photos/AelY...``) used with :meth:`get_photo_media` to fetch the actual image bytes - never expose these URLs directly to the browser since resolving them requires the API key.
 
         Args:
@@ -169,7 +173,8 @@ class GooglePlacesGateway(Gateway):
         return [p["name"] for p in photos[:max_photos] if p.get("name")]
 
     def get_photo_media(self, photo_name: str, max_width: int = 1200) -> tuple[bytes, str]:
-        """Fetch the raw bytes of one Places API (New) photo.
+        """
+        Fetch the raw bytes of one Places API (New) photo.
         Server-side only - the API key must never reach the browser.
 
         Args:

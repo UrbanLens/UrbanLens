@@ -1,4 +1,5 @@
-"""services.map_pins.autocomplete.search_local - external-tag matching for the map's
+"""
+services.map_pins.autocomplete.search_local - external-tag matching for the map's
 "Jump To" pin search bar. The wiki-side (domain-access) coverage lives in
 test_search_wiki_domain_access.py::ExternalTagSearchDomainAccessTests; this file covers the
 pin block, which is scoped by plain profile ownership rather than domain access.

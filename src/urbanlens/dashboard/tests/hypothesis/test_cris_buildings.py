@@ -274,7 +274,8 @@ class ExtractCrisAttachmentsTaskTests(RedataConfiguredMixin, TestCase):
 
 
 class NearestResourceTests(SimpleTestCase):
-    """A CRIS lookup over a campus returns dozens of buildings in no useful order.
+    """
+    A CRIS lookup over a campus returns dozens of buildings in no useful order.
 
     Taking the first match handed every pin on a site the same arbitrary
     outbuilding; each resource's own published position is what ranks them.
@@ -349,7 +350,8 @@ class MediaItemsTests(SimpleTestCase):
         self.assertEqual(items[0].content_type, "image/tiff")
 
     def test_every_attachment_thumbnails_through_the_proxys_preview_mode(self) -> None:
-        """REData reports content_type as blank until a file has been downloaded
+        """
+        REData reports content_type as blank until a file has been downloaded
         once, so the format can't be decided here - the proxy, which holds the
         bytes, passes an already-displayable file straight through."""
         data = {
@@ -369,7 +371,8 @@ class MediaItemsTests(SimpleTestCase):
         self.assertIn("preview=thumb", items[0].thumb_url)
 
     def test_attachments_carry_their_own_resource_uuid(self) -> None:
-        """One payload aggregates the nearest building's attachments and the
+        """
+        One payload aggregates the nearest building's attachments and the
         site record's, so each must proxy through its own resource."""
         data = {
             "resource_uuid": "res-1",
@@ -416,7 +419,8 @@ class MediaItemsTests(SimpleTestCase):
 
 
 def _stub_pin(*, site_scope: bool = False):
-    """A duck-typed pin for render_context, which now consults parcel-vs-building scope.
+    """
+    A duck-typed pin for render_context, which now consults parcel-vs-building scope.
 
     ``is_site_scope`` short-circuits on the instance memo, so setting it directly decides the answer without
     needing a database (these are SimpleTestCases)."""
@@ -458,7 +462,8 @@ class RenderContextTests(SimpleTestCase):
 
 
 class SiteScopeRenderTests(SimpleTestCase):
-    """A parcel-scope pin shows the district record, never a single building's.
+    """
+    A parcel-scope pin shows the district record, never a single building's.
 
     "TOOL SHED (1937), Building Number 154" is a true statement about one
     structure on a campus and a false one about the campus itself.
@@ -595,7 +600,8 @@ class DistrictPayloadTests(TestCase):
         self.assertEqual(data["district"]["USNName"], "Hudson River State Hospital Historic District")
 
     def test_the_site_records_own_attachments_are_fetched_too(self) -> None:
-        """A parcel-scope pin's CRIS media is the district's nomination forms and
+        """
+        A parcel-scope pin's CRIS media is the district's nomination forms and
         survey photos, not whichever single building happened to be nearest."""
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
@@ -699,7 +705,8 @@ class EnrichmentSourceTests(RedataConfiguredMixin, TestCase):
             CrisBuildingEnrichmentSource().fetch(location)
 
     def test_enrichment_does_not_claim_the_media_half(self) -> None:
-        """Enrichment fills the info card only - attachments need a per-resource
+        """
+        Enrichment fills the info card only - attachments need a per-resource
         detail fetch it deliberately skips."""
         location = baker.make(Location, latitude="42.650000", longitude="-73.750000", google_place=None)
 
@@ -725,7 +732,8 @@ class EnrichmentSourceTests(RedataConfiguredMixin, TestCase):
 
 
 class MediaReadinessTests(SimpleTestCase):
-    """The panel and the background enrichment source share one cache row.
+    """
+    The panel and the background enrichment source share one cache row.
 
     Enrichment writes the info-card half only."""
 
@@ -803,7 +811,8 @@ _CRIS_DISTRICT = {**_DISTRICT_RESOURCE, "provider": "ny_cris"}
 
 
 class ProviderScopingTests(RedataConfiguredMixin, SimpleTestCase):
-    """This panel reads CRIS's own attribute names, so it must read CRIS's rows.
+    """
+    This panel reads CRIS's own attribute names, so it must read CRIS's rows.
 
     REData answers `/cultural-resources/lookup/` from a registry of state and municipal inventories plus the
     nationwide National Register."""

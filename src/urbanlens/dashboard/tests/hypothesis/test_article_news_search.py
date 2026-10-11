@@ -1,4 +1,5 @@
-"""Article > News searches the web for the place by its name and town, and HRSH's search finds it (P235).
+"""
+Article > News searches the web for the place by its name and town, and HRSH's search finds it (P235).
 
 Article > News is the pin page's web search (``pin.web_search?surface=article``). The fixture holds REData's recorded
 ``/search/web/`` answers for the Hudson River State Hospital campus pin's shared search: the query the page sent

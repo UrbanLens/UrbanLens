@@ -83,7 +83,8 @@ def _app_uptime() -> str:
 
 
 class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Site admin settings page.
+    """
+    Site admin settings page.
 
     GET /site-admin/settings/ → settings page
     POST /site-admin/settings/ → save settings, re-render page
@@ -329,7 +330,8 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Development-only UI component showcase for site admins.
+    """
+    Development-only UI component showcase for site admins.
 
     GET /site-admin/ui-components/ → visual reference for reusable UI classes.
 
@@ -363,7 +365,8 @@ class SiteAdminUIComponentsView(LoginRequiredMixin, PermissionRequiredMixin, Vie
 
 
 class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Toggle the current user's theme between light and dark (dev toolbar).
+    """
+    Toggle the current user's theme between light and dark (dev toolbar).
 
     POST /site-admin/dev/toggle-theme/
     """
@@ -392,7 +395,8 @@ class DevToolbarToggleThemeView(LoginRequiredMixin, PermissionRequiredMixin, Vie
 
 
 class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Toggle the current user's map dark mode between light and dark (dev toolbar).
+    """
+    Toggle the current user's map dark mode between light and dark (dev toolbar).
 
     POST /site-admin/dev/toggle-map-dark-mode/
     """
@@ -421,7 +425,8 @@ class DevToolbarToggleMapDarkModeView(LoginRequiredMixin, PermissionRequiredMixi
 
 
 class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Flush the Django session (dev toolbar).
+    """
+    Flush the Django session (dev toolbar).
 
     POST /site-admin/dev/clear-session/
 
@@ -446,7 +451,8 @@ class DevToolbarClearSessionView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 
 
 class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Restore onboarding tips and hints for the current user (dev toolbar).
+    """
+    Restore onboarding tips and hints for the current user (dev toolbar).
 
     POST /site-admin/dev/reset-onboarding/
 
@@ -476,7 +482,8 @@ class DevToolbarResetOnboardingView(LoginRequiredMixin, PermissionRequiredMixin,
 
 
 class SiteAdminStatsView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Site usage statistics dashboard.
+    """
+    Site usage statistics dashboard.
 
     GET /site-admin/stats/  → read-only stats page with charts.
     """
@@ -614,7 +621,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         )
 
     def _grants_list_response(self, request: HttpRequest, *, toast: tuple[str, str] | None = None) -> HttpResponse:
-        """Re-render the "Active grants" partial, optionally with a toast.
+        """
+        Re-render the "Active grants" partial, optionally with a toast.
 
         Args:
             request: The current request.
@@ -960,7 +968,8 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
 
 
 def _redata_capabilities() -> dict | None:
-    """REData's capability index for the api-limits page, cached for an hour.
+    """
+    REData's capability index for the api-limits page, cached for an hour.
 
     The index changes on REData deploys, not per request, and this page must render whether or not
     REData is configured or reachable - so a failure is a ``None`` (the template hides the card), never
@@ -993,7 +1002,8 @@ def _redata_capabilities() -> dict | None:
 
 
 def _redata_refusals() -> list[dict]:
-    """The REData endpoints that refused this deployment's key recently, for the api-limits page.
+    """
+    The REData endpoints that refused this deployment's key recently, for the api-limits page.
 
     A refusal is a key missing a scope: nothing retries its way past it, so the page says which endpoint and when it is
     next tried.
@@ -1013,7 +1023,8 @@ _PROVIDER_HEALTH_STALE_AFTER = timedelta(minutes=30)
 
 
 def _provider_health() -> dict[str, object]:
-    """The providers ``services.core.provider_health`` is backing off or watching, for the api-limits page.
+    """
+    The providers ``services.core.provider_health`` is backing off or watching, for the api-limits page.
 
     Returns:
         ``unhealthy``: the rows not healthy, each with the calls the gate refused today; ``healthy``: how many are;
@@ -1034,7 +1045,8 @@ def _provider_health() -> dict[str, object]:
 
 
 class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """API rate limit configuration page.
+    """
+    API rate limit configuration page.
 
     GET  /site-admin/api-limits/  → view and edit per-service rate limits
     POST /site-admin/api-limits/  → save one or more service configs
@@ -1168,7 +1180,8 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Read-only listing of every discovered UrbanLens plugin.
+    """
+    Read-only listing of every discovered UrbanLens plugin.
 
     GET /site-admin/plugins/ → plugin inventory page
 
@@ -1230,7 +1243,8 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Registered-user directory for site administrators, and account deletion.
+    """
+    Registered-user directory for site administrators, and account deletion.
 
     GET /site-admin/users/ → paginated, searchable list of users.
     POST /site-admin/users/ → ``request_delete`` / ``cancel_delete`` for one account.
@@ -1270,7 +1284,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     @staticmethod
     def _search_filter(search: str, viewer: Profile) -> Q:
-        """Match a search term only against the fields this admin may actually see.
+        """
+        Match a search term only against the fields this admin may actually see.
 
         The username and first name are the same oracle against ``profile_visibility``, since a masked row
         renders "Invisible User" rather than disappearing.
@@ -1358,7 +1373,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
         )
 
     def post(self, request: HttpRequest):
-        """Admin-initiated account deletion, sharing the self-service flow's grace period and undo.
+        """
+        Admin-initiated account deletion, sharing the self-service flow's grace period and undo.
 
         Reuses ``request_deletion``/``cancel_deletion`` verbatim - a deletion triggered here goes through
         the exact same 7-day grace period, reminder, and hard-delete task as a user deleting their own data,
@@ -1416,7 +1432,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Admin dashboard homepage.
+    """
+    Admin dashboard homepage.
 
     GET /site-admin/  → navigation hub with quick stats and health overview.
     """
@@ -1484,7 +1501,8 @@ class SiteAdminHomeView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class _AdminPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
-    """Shared mixin for all site-admin HTMX partial views.
+    """
+    Shared mixin for all site-admin HTMX partial views.
 
     Enforces ``dashboard.view_site_admin`` permission and redirects anonymous
     users to the login page rather than returning 403.
@@ -1506,7 +1524,8 @@ class _AdminPermissionMixin(LoginRequiredMixin, PermissionRequiredMixin):
 
 
 class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
-    """HTMX partial: infrastructure health + git update badges for the admin home page.
+    """
+    HTMX partial: infrastructure health + git update badges for the admin home page.
 
     GET /site-admin/status/
 
@@ -1538,7 +1557,8 @@ class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
 
 
 class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
-    """HTMX partial: KPI cards + top locations for the stats page.
+    """
+    HTMX partial: KPI cards + top locations for the stats page.
 
     GET /site-admin/stats/kpi/
     """
@@ -1609,7 +1629,8 @@ class SiteAdminStatsKpiPartialView(_AdminPermissionMixin, View):
 
 
 class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
-    """HTMX partial: Application, infrastructure services, and server health.
+    """
+    HTMX partial: Application, infrastructure services, and server health.
 
     GET /site-admin/stats/system/
     """
@@ -1657,7 +1678,8 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
 
 
 class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
-    """HTMX partial: External API usage table for the stats page.
+    """
+    HTMX partial: External API usage table for the stats page.
 
     GET /site-admin/stats/api/
     """
@@ -1710,7 +1732,8 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
 
 
 class CeleryTaskStatusView(_AdminPermissionMixin, View):
-    """Return normalized Celery task progress for polling progress bars.
+    """
+    Return normalized Celery task progress for polling progress bars.
 
     Celery's result backend has no per-task owner field to check a requester against (see
     ``services/celery.TaskProgress`` - it's just state/progress counters, not tied to a user id), so a

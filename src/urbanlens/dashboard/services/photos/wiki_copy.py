@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def copy_wiki_photo_to_pin(image: Image, target_pin: Pin, profile: Profile) -> tuple[Image, bool]:
-    """Copy a wiki photo onto ``target_pin``, crediting its original uploader.
+    """
+    Copy a wiki photo onto ``target_pin``, crediting its original uploader.
     Reuses the wiki photo's own stored file rather than duplicating bytes, and does not re-run upload processing - the new row points at an already-processed file, exactly like ``create_pin_from_share``'s copies.
 
     Args:

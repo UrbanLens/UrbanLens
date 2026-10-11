@@ -112,7 +112,8 @@ class GetPlaceDetailsFullTests(SimpleTestCase):
             self.assertEqual(places_resolution.get_place_details_full("missing", api_key="key"), {})
 
     def test_redata_error_propagates_uncaught(self) -> None:
-        """No caching-of-transient-failure: the caller's own except-block (which
+        """
+        No caching-of-transient-failure: the caller's own except-block (which
         skips caching on failure) must still see this, not a swallowed {}."""
         with (
             _redata_configured(),
@@ -212,7 +213,8 @@ class DownloadPhotoTests(SimpleTestCase):
         gw_cls.return_value.get_photo_media.assert_called_once_with("places/p1/photos/abc")
 
     def test_dispatch_ignores_current_redata_configuration(self) -> None:
-        """An already-persisted identifier must be honored by its own prefix,
+        """
+        An already-persisted identifier must be honored by its own prefix,
         even if REData is (or isn't) configured right now."""
         with (
             _redata_not_configured(),
@@ -307,7 +309,8 @@ class ResolveNameFromNearbyTests(SimpleTestCase):
             )
 
     def test_redata_error_is_swallowed_to_none(self) -> None:
-        """Unlike most other functions here, this one must swallow - the caller's
+        """
+        Unlike most other functions here, this one must swallow - the caller's
         own except clause is narrower than GatewayRequestError."""
         with (
             _redata_configured(),

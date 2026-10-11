@@ -1,4 +1,5 @@
-"""Whether the code running now is work nobody is waiting on, so a struggling provider can stop it first.
+"""
+Whether the code running now is work nobody is waiting on, so a struggling provider can stop it first.
 
 The queue a task runs on already says who waits (``services.sandbox.queues``): ``interactive``, ``panel_fetch``,
 ``ai`` and ``sandbox`` are a person waiting on a result; ``bulk``, ``maintenance``, ``sandbox_batch`` and Celery's
@@ -25,7 +26,8 @@ _BACKGROUND: ContextVar[bool] = ContextVar("ul_background_work", default=False)
 
 
 def is_background() -> bool:
-    """Whether the current work is background work.
+    """
+    Whether the current work is background work.
 
     Returns:
         True inside a task on one of :data:`BACKGROUND_QUEUES`, or a :func:`background_work` block.
@@ -34,7 +36,8 @@ def is_background() -> bool:
 
 
 def queue_is_background(queue: str | None) -> bool:
-    """Whether a task on ``queue`` is background work.
+    """
+    Whether a task on ``queue`` is background work.
 
     Args:
         queue: The queue name, or None when it is not known.
@@ -47,7 +50,8 @@ def queue_is_background(queue: str | None) -> bool:
 
 @contextmanager
 def background_work(enabled: bool = True) -> Iterator[None]:
-    """Mark the enclosed block as background work, or as live with ``enabled=False``.
+    """
+    Mark the enclosed block as background work, or as live with ``enabled=False``.
 
     Args:
         enabled: Whether the block is background work.

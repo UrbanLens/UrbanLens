@@ -1,4 +1,5 @@
-"""Tests for Profile.is_supporter / Profile.display_supporter_badge.
+"""
+Tests for Profile.is_supporter / Profile.display_supporter_badge.
 
 DB-backed - both properties resolve the user's real subscription state via
 active_subscription_roles(), which queries RoleSubscription/UserSubscription.

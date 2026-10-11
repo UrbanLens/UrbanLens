@@ -1,4 +1,5 @@
-"""Signing up with, or changing to, an email address without revealing whether another account holds it (P147).
+"""
+Signing up with, or changing to, an email address without revealing whether another account holds it (P147).
 
 Whatever the address, the person submitting it sees the same result. What differs is the email that goes to the
 address: a new one gets a link to confirm it, one that already has an account gets a notice instead, so only
@@ -43,7 +44,8 @@ class EmailClaimError(ValueError):
 
 
 def defer(task: Any, *args: Any) -> None:
-    """Run ``task`` after the current transaction commits, inline if the broker refuses it.
+    """
+    Run ``task`` after the current transaction commits, inline if the broker refuses it.
 
     Work whose cost depends on whether an address is registered goes here, so the response takes the same time
     either way.
@@ -111,7 +113,8 @@ def send_confirmation(claim: ProfileEmail) -> None:
 
 
 def claim_address(profile: Profile, raw: str, *, make_primary: bool) -> ProfileEmail:
-    """Record ``raw`` as pending for ``profile`` and email it; the same for an address another account holds.
+    """
+    Record ``raw`` as pending for ``profile`` and email it; the same for an address another account holds.
 
     Args:
         profile: The account claiming the address.
@@ -165,7 +168,8 @@ def queue_confirmation(claim: ProfileEmail) -> None:
 
 
 def mark_primary_verified(user: User) -> bool:
-    """Record that ``user`` proved it controls its current primary address.
+    """
+    Record that ``user`` proved it controls its current primary address.
 
     ``Profile.verified_primary_email`` is unique, so this refuses (and returns False) when another account has
     already proved the same address; the checks before every caller make that a race, not a path.
@@ -200,7 +204,8 @@ def promote(claim: ProfileEmail) -> None:
 
 
 def confirm(claim: ProfileEmail) -> str | None:
-    """Verify a claim from its emailed link, and promote it if it was a primary change.
+    """
+    Verify a claim from its emailed link, and promote it if it was a primary change.
 
     Returns:
         An error for the mailbox's owner, or None on success.

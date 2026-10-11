@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 
 class PinSerializer(serializers.ModelSerializer):
-    """Serializer for Pin - exposes user-specific fields only.
+    """
+    Serializer for Pin - exposes user-specific fields only.
     Address and place name are not included here; nest a LocationSerializer or add read-only ``source="location.*"`` fields if API consumers need place-level data.
     Canonical coordinates are read from the related Location (``pin.location``); ``latitude``/``longitude`` are read-only here.
     """

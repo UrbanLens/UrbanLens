@@ -117,7 +117,8 @@ class DeletedRowFileCleanupTests(TestCase):
         self.assertFalse(Achievement.objects.filter(name="Already gone").exists())
 
     def test_an_undo_restorable_model_keeps_its_icon(self) -> None:
-        """`Pin` and `Label` are deliberately not managed.
+        """
+        `Pin` and `Label` are deliberately not managed.
 
         Undo stashes their icon as a stored *name*, so unlinking it would leave
         an undo within the window restoring a row that points at nothing.

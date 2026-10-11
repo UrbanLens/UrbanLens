@@ -168,7 +168,8 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
 
 
 class HardDeleteBatchingTests(TestCase):
-    """A backlog is drained in batches, not pulled into one `IN (...)` list.
+    """
+    A backlog is drained in batches, not pulled into one `IN (...)` list.
 
     Steady state is one hour of expiries and fits in a single batch; the case this covers is the backlog - a
     retention-policy change, or the beat worker having been down - where the due set can approach the size of
@@ -231,7 +232,8 @@ class HardDeleteBatchingTests(TestCase):
 
 
 class WhenReadFirstOpenTests(TestCase):
-    """A "delete as soon as read" message is readable exactly once on a cold open.
+    """
+    A "delete as soon as read" message is readable exactly once on a cold open.
 
     The read mark must land after the page is loaded, so the first render shows the content and only later
     renders tombstone it."""
@@ -277,7 +279,8 @@ class WhenReadFirstOpenTests(TestCase):
 
 
 class SidebarPreviewTombstoneTests(TestCase):
-    """The conversation-list sidebar's last-message preview honors tombstone state too.
+    """
+    The conversation-list sidebar's last-message preview honors tombstone state too.
 
     Regression: `_conversation_list.html` rendered `conv.last_message.body` directly (only branching on
     `is_encrypted`), so a message tombstoned in its own thread bubble - deleted-for-everyone, or expired via the

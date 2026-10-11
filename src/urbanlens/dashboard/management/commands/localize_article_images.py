@@ -1,4 +1,5 @@
-"""Point every remote image in a stored article at this site's copy (P165).
+"""
+Point every remote image in a stored article at this site's copy (P165).
 
 Articles saved from now on are rewritten as they are saved (``articles.localize_article_images``). This does the same
 for articles saved before, each as a new revision, so the history keeps what the author wrote.
@@ -20,7 +21,8 @@ class Command(BaseCommand):
     help = "Point every remote image in a stored article at this site's copy, as a new revision."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Declare the command's options.
+        """
+        Declare the command's options.
 
         Args:
             parser: The command's argument parser.
@@ -28,7 +30,8 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true", help="Count the articles that would change without saving.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Rewrite each article whose source names a remote image.
+        """
+        Rewrite each article whose source names a remote image.
 
         Args:
             *args: Unused.

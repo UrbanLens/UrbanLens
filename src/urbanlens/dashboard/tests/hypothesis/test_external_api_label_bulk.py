@@ -110,7 +110,8 @@ class LabelBulkEditTests(LabelBulkTestCase):
         self.assertEqual(self.label_b.color, "#F44336")
 
     def test_a_named_css_colour_is_refused(self) -> None:
-        """This test posted "red" and asserted it round-tripped, then that it was silently dropped. It is now refused.
+        """
+        This test posted "red" and asserted it round-tripped, then that it was silently dropped. It is now refused.
 
         It never was a valid label colour: `Label.color` declares `choices` that are all hex, and the renderers
         append an alpha suffix ("red33"), which is not a colour and paints nothing."""

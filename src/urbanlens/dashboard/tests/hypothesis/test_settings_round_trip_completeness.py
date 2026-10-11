@@ -49,7 +49,8 @@ class SettingsRoundTripCompletenessTests(TestCase):
         target.refresh_from_db()
 
     def _distinctive_profile(self):
-        """A profile whose settings differ from the defaults wherever possible.
+        """
+        A profile whose settings differ from the defaults wherever possible.
 
         Values equal to the default would round-trip "successfully" even if the
         importer ignored them entirely, so the comparison would prove nothing.

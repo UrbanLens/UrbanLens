@@ -54,7 +54,8 @@ class EmptyPanelTabTests(TestCase):
 
 
 class ReadinessFormsAgreeTests(TestCase):
-    """The single and bulk forms of "is this panel ready" must not disagree.
+    """
+    The single and bulk forms of "is this panel ready" must not disagree.
 
     `panel_readiness` is documented as the batched form of `is_ready`, and both are consulted in different
     places - the tab strip uses the batched one, the Location Data overview loops over the single one."""

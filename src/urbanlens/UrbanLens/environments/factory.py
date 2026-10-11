@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 
 def select_environment(env_type: str | EnvironmentTypes | None = None) -> BaseEnvironment:
-    """Select the environment for the given type.
+    """
+    Select the environment for the given type.
 
     Args:
         env_type: Environment type (strings coerced); empty resolves ``UL_ENVIRONMENT`` via ``environment_from_env``.

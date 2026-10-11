@@ -1,4 +1,5 @@
-"""A cache-backed panel whose data goes stale in hours is refreshed in hours, not after the site-wide week.
+"""
+A cache-backed panel whose data goes stale in hours is refreshed in hours, not after the site-wide week.
 
 REData keeps air-quality readings 1-3 hours and NPS alerts a few hours; ``LocationCache`` served both as current for
 ``external_data_cache_days`` (7 by default).

@@ -156,7 +156,8 @@ class WikiImageViewDeleteTests(_DualOwnershipTestCase):
 
 
 class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
-    """Endpoint-level: POST .../gallery/bulk/ {"action": "delete"} - a batch can mix
+    """
+    Endpoint-level: POST .../gallery/bulk/ {"action": "delete"} - a batch can mix
     dual-owned and solo photos, and each must be handled correctly on its own."""
 
     def setUp(self) -> None:
@@ -209,7 +210,8 @@ class PinGalleryBulkDeleteTests(_DualOwnershipTestCase):
 
 
 class WithdrawingAContributedPhotoTests(_DualOwnershipTestCase):
-    """The community quota bonus ends when its contributor withdraws the photo.
+    """
+    The community quota bonus ends when its contributor withdraws the photo.
 
     The reward is one-way against *other people's* later actions - votes taken back, or the wiki deleted by an
     editor or by the low-engagement sweep - because someone comfortably inside their quota must not be pushed
@@ -269,7 +271,8 @@ class WithdrawingAContributedPhotoTests(_DualOwnershipTestCase):
         self.assertEqual(get_storage_used_bytes(self.profile), 0)
 
     def test_deleting_the_wiki_leaves_the_bonus_intact(self) -> None:
-        """`Image.wiki` is SET_NULL, and nobody's storage should move because of it.
+        """
+        `Image.wiki` is SET_NULL, and nobody's storage should move because of it.
 
         This passes on the code before the revoke existed, and is meant to: it is not evidence for the revoke
         but a guard against the two shapes that would have been easier to write - a `post_save` receiver, or a

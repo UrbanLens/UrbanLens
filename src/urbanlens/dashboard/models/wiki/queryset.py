@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 class WikiQuerySet(abstract.VersionedQuerySet, abstract.PublicDashboardQuerySet["Wiki"], TreeQuerySetMixin):
-    """QuerySet for Wiki - the community-editable half of the place model.
+    """
+    QuerySet for Wiki - the community-editable half of the place model.
 
     Filters here operate on community data (name, labels). For address/geo
     filtering use LocationQuerySet; for per-user filtering use PinQuerySet.
@@ -36,12 +37,14 @@ _WikiManagerBase = abstract.PublicDashboardManager.from_queryset(WikiQuerySet)
 
 
 class WikiManager(_WikiManagerBase["Wiki"]):
-    """Manager for Wiki.
+    """
+    Manager for Wiki.
     Every pinned Location gets a page automatically (``tasks.ensure_wiki_for_location``), published from the moment it exists and filled in by background enrichment.
     """
 
     def existing_for_location(self, location: Location | None) -> Wiki | None:
-        """The Wiki describing what this Location stands on, draft or official.
+        """
+        The Wiki describing what this Location stands on, draft or official.
         Checks the Location's own row first, then the *place* it resolved onto.
         The second lookup is the dedup that matters: two people pinning opposite ends of one property get two Locations, and without it they would get two community pages for one real-world thing.
         On a campus, whose buildings often have no place for a point to resolve onto, a Location standing on one of them is that building's (``building_wikis.standing_building``).
@@ -71,7 +74,8 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         return (holder if building is None else building.wiki), holder
 
     def holding_place_of(self, location: Location | None) -> Wiki | None:
-        """The wiki holding the place a Location resolved onto, whichever part of the place the Location stands on.
+        """
+        The wiki holding the place a Location resolved onto, whichever part of the place the Location stands on.
 
         Args:
             location: The Location (None-safe).
@@ -84,7 +88,8 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         return self.filter(place_id=location.place_id).select_related("place", "location").first()
 
     def get_for_location(self, location: Location | None) -> Wiki | None:
-        """Return the Location's Wiki, or None when it has none yet.
+        """
+        Return the Location's Wiki, or None when it has none yet.
         Identical to :meth:`existing_for_location`, and kept because it is the name most call sites use.
 
         Args:
@@ -100,7 +105,8 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         return f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
 
     def get_or_create_for_location(self, location: Location, defaults: dict | None = None) -> tuple[Wiki, bool]:
-        """Return the Wiki for a Location, creating it if absent, nested where the places already say it belongs.
+        """
+        Return the Wiki for a Location, creating it if absent, nested where the places already say it belongs.
         The one creation path.
         Everything else should use ``get_for_location``, which never creates - a wiki appearing as a side effect of viewing or editing other content is a bug.
 
@@ -135,7 +141,8 @@ class WikiManager(_WikiManagerBase["Wiki"]):
         return self._get_or_create_building_wiki(location, holder, explicit_name, defaults)
 
     def _get_or_create_building_wiki(self, location: Location, holder: Wiki, explicit_name: str | None, defaults: dict) -> tuple[Wiki, bool]:
-        """The wiki of the campus building ``location`` stands on, created placeless and nested when it has none.
+        """
+        The wiki of the campus building ``location`` stands on, created placeless and nested when it has none.
 
         A building's wiki holds no place, so no unique column stops two locations on one building creating one each:
         creation holds the campus wiki's row, as the building mirror does (``pin_restructure.BuildingNester.campus_wiki``),

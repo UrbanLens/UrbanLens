@@ -24,7 +24,8 @@ register = template.Library()
 
 @register.filter
 def in_list(value: Any, collection: Collection[Any]) -> bool:
-    """Return True if value is found in collection.
+    """
+    Return True if value is found in collection.
 
     Usage: {{ value|in_list:some_set }}
     """
@@ -33,7 +34,8 @@ def in_list(value: Any, collection: Collection[Any]) -> bool:
 
 @register.filter
 def humanize_tag_value(value: str) -> str:
-    """Display-friendly version of a raw PlaceExternalTag value.
+    """
+    Display-friendly version of a raw PlaceExternalTag value.
 
     Usage: {{ tag.value|humanize_tag_value }}
     """
@@ -44,7 +46,8 @@ def humanize_tag_value(value: str) -> str:
 
 @register.filter
 def visible_external_tags(place) -> list:
-    """The PlaceExternalTag rows to display for a place, one per equivalence group.
+    """
+    The PlaceExternalTag rows to display for a place, one per equivalence group.
 
     Usage: {% include "..." with tags=wiki.place|visible_external_tags %}
     """
@@ -57,7 +60,8 @@ def visible_external_tags(place) -> list:
 
 @register.filter
 def label_map_url(label_id: int) -> str:
-    """Return the main map URL, pre-filtered to pins carrying this one label.
+    """
+    Return the main map URL, pre-filtered to pins carrying this one label.
 
     Used by the Organize > Labels page's "View on map" button - the main map's
     ``_restoreFiltersFromUrl()`` (map/index.html) reads the ``label_groups`` query param on load and
@@ -73,7 +77,8 @@ def label_map_url(label_id: int) -> str:
 
 @register.filter
 def reaction_summary(message: Any) -> list[dict[str, Any]]:
-    """Group a DirectMessage's reactions by emoji for template rendering.
+    """
+    Group a DirectMessage's reactions by emoji for template rendering.
 
     Relies on the caller having `prefetch_related("reactions__profile")` on the message queryset to
     avoid N+1 queries across a thread.
@@ -85,7 +90,8 @@ def reaction_summary(message: Any) -> list[dict[str, Any]]:
 
 @register.filter
 def tombstone_text(message: Any, viewer_id: int) -> str | None:
-    """Return tombstone text for `message` as seen by `viewer_id`, or None if it renders normally.
+    """
+    Return tombstone text for `message` as seen by `viewer_id`, or None if it renders normally.
 
     Usage: {{ message|tombstone_text:viewer_id }}
     """
@@ -94,7 +100,8 @@ def tombstone_text(message: Any, viewer_id: int) -> str | None:
 
 @register.filter
 def group_share_for(message: Any, viewer_id: int) -> Any:
-    """Return the viewer's own GroupMessageShare on a group message, or None.
+    """
+    Return the viewer's own GroupMessageShare on a group message, or None.
 
     Relies on the caller having prefetched ``shares`` on the message queryset to avoid N+1 queries
     across a thread.
@@ -104,7 +111,8 @@ def group_share_for(message: Any, viewer_id: int) -> Any:
 
 @register.filter
 def message_preview(message: Any, viewer_id: int) -> str:
-    """Short preview text for a DirectMessage or GroupMessage, honoring its tombstone state.
+    """
+    Short preview text for a DirectMessage or GroupMessage, honoring its tombstone state.
 
     Used for reply-quote boxes and conversation-list row previews, so a message that's been deleted or
     has expired for the viewer shows the same placeholder its own bubble would, rather than leaking its
@@ -135,7 +143,8 @@ def message_preview(message: Any, viewer_id: int) -> str:
 
 @register.filter
 def read_receipt_visible_to(message: Any, viewer_id: int) -> bool:
-    """True if `viewer_id` (as this message's sender) may see that it's been read.
+    """
+    True if `viewer_id` (as this message's sender) may see that it's been read.
 
     Usage: {{ message|read_receipt_visible_to:viewer_id }}
     """
@@ -148,7 +157,8 @@ def read_receipt_visible_to(message: Any, viewer_id: int) -> bool:
 
 @register.filter
 def first_pin_directions_url(map_data: Any) -> str | None:
-    """Return a Google Maps walking-directions URL for the first "pin" item in a map snapshot.
+    """
+    Return a Google Maps walking-directions URL for the first "pin" item in a map snapshot.
 
     Usage: {{ map_data|first_pin_directions_url }}
 
@@ -171,7 +181,8 @@ def first_pin_directions_url(map_data: Any) -> str | None:
 
 @register.filter
 def tag_total_pins(tag: Label) -> int:
-    """Return this label's pin count plus every descendant's pin count (full subtree).
+    """
+    Return this label's pin count plus every descendant's pin count (full subtree).
 
     Usage: {{ label|tag_total_pins }}
     """
@@ -180,7 +191,8 @@ def tag_total_pins(tag: Label) -> int:
 
 @register.filter
 def to_json(value: Any) -> str:
-    """Serialize ``value`` to a compact JSON string for embedding in an attribute.
+    """
+    Serialize ``value`` to a compact JSON string for embedding in an attribute.
 
     Args:
         value: Any JSON-serializable value (typically a dict from a JSONField).
@@ -195,7 +207,8 @@ def to_json(value: Any) -> str:
 
 @register.filter
 def get_attr(obj: Any, attr: str) -> Any:
-    """Return getattr(obj, attr), useful in loops over field names.
+    """
+    Return getattr(obj, attr), useful in loops over field names.
 
     Usage: {{ object|get_attr:field_name }}
     """
@@ -257,7 +270,8 @@ def filter_criteria_summary(criteria: dict[str, Any] | None) -> str:
 
 @register.filter
 def dict_get(mapping: dict[Any, Any] | None, key: Any) -> Any:
-    """Return mapping.get(key), for looking up a dict value by a template variable key.
+    """
+    Return mapping.get(key), for looking up a dict value by a template variable key.
 
     Usage: {{ my_dict|dict_get:some_key }}
     """
@@ -266,7 +280,8 @@ def dict_get(mapping: dict[Any, Any] | None, key: Any) -> Any:
 
 @register.filter
 def distance(distance_km: Any, units: str = "km") -> str:
-    """Format a kilometre distance in the viewer's preferred unit.
+    """
+    Format a kilometre distance in the viewer's preferred unit.
 
     Distances are stored/computed internally in kilometres; this renders them in the unit from
     ``distance_units`` (exposed globally by the ``add_distance_units`` context processor), converting to
@@ -290,7 +305,8 @@ def distance(distance_km: Any, units: str = "km") -> str:
 
 @register.filter
 def human_timesince(value: datetime.datetime | datetime.date) -> str:
-    """Return a human-friendly relative time string.
+    """
+    Return a human-friendly relative time string.
 
     Returns 'just now' for times less than 1 minute ago instead of '0 minutes ago'.
     """
@@ -305,7 +321,8 @@ def human_timesince(value: datetime.datetime | datetime.date) -> str:
 
 @register.filter
 def is_material_icon(value: str | None) -> bool:
-    """Return True if value is a Material Icons name (ASCII letters/digits/underscores only).
+    """
+    Return True if value is a Material Icons name (ASCII letters/digits/underscores only).
 
     Digits are allowed because several Material Symbols names include them (e.g. ``filter_1``,
     ``3d_rotation``, ``9mp``).
@@ -315,7 +332,8 @@ def is_material_icon(value: str | None) -> bool:
 
 @register.filter
 def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
-    """Convert a ``#RRGGBB`` hex color plus a 0-100 opacity into a CSS ``rgba(...)`` string.
+    """
+    Convert a ``#RRGGBB`` hex color plus a 0-100 opacity into a CSS ``rgba(...)`` string.
 
     Usage: style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"
 
@@ -353,7 +371,8 @@ def _relative_luminance(rgb: Sequence[float]) -> float:
 
 @register.filter
 def readable_text_on(hex_value: str | None, opacity_pct: int | str = 100) -> str:
-    """The text colour that reads best on a ``#RRGGBB`` chip tinted at ``opacity_pct`` over the dark filter panel.
+    """
+    The text colour that reads best on a ``#RRGGBB`` chip tinted at ``opacity_pct`` over the dark filter panel.
 
     Usage: style="background:{{ filter.color|hex_to_rgba:filter.opacity }};color:{{ filter.color|readable_text_on:filter.opacity }}"
 
@@ -372,7 +391,8 @@ def readable_text_on(hex_value: str | None, opacity_pct: int | str = 100) -> str
 
 @register.filter
 def is_icon_url(value: str | None) -> bool:
-    """Return True if value is a URL pointing at an uploaded custom icon image.
+    """
+    Return True if value is a URL pointing at an uploaded custom icon image.
 
     Mirrors the client-side classification in the map marker builder: a custom icon's ``effective_icon``
     resolves to its file URL (absolute or media-relative), which must be rendered as an ``<img>`` rather
@@ -383,7 +403,8 @@ def is_icon_url(value: str | None) -> bool:
 
 @register.filter
 def icon_keywords(value: str | None) -> str:
-    """Return space-separated search keywords for an emoji icon character.
+    """
+    Return space-separated search keywords for an emoji icon character.
 
     Looks up ``value`` in ``ICON_KEYWORDS`` and returns the associated string, or an empty string when
     no keywords are registered for this emoji.
@@ -405,7 +426,8 @@ def icon_picker_grid_url() -> str:
 
 @register.filter
 def contact_picker_options(connections: Iterable[Profile]) -> list[dict[str, Any]]:
-    """Return friend connections as JSON-serializable dicts for the contact picker's autocomplete/avatar data.
+    """
+    Return friend connections as JSON-serializable dicts for the contact picker's autocomplete/avatar data.
 
     Usage: {{ connections|contact_picker_options|json_script:"safety-contact-friends-data" }}
     """
@@ -428,7 +450,8 @@ def tooltip_attrs(
     wide: bool = False,
     float_tip: bool = False,
 ) -> SafeString:
-    """Return HTML attributes for a ``data-tooltip`` trigger.
+    """
+    Return HTML attributes for a ``data-tooltip`` trigger.
 
     Usage::
 
@@ -453,7 +476,8 @@ def tooltip_attrs(
 
 @register.inclusion_tag("dashboard/partials/ui/_tooltip_help.html")
 def tooltip_help(text: str, pos: str = "", wide: bool = False) -> dict[str, object]:
-    """Render a standard info-icon tooltip trigger.
+    """
+    Render a standard info-icon tooltip trigger.
 
     Args:
         text: Tooltip copy.
@@ -473,7 +497,8 @@ def tooltip_label(
     pos: str = "",
     wide: bool = False,
 ) -> dict[str, object]:
-    """Render a label with an optional inline help tooltip.
+    """
+    Render a label with an optional inline help tooltip.
 
     Args:
         label: Visible label text.
@@ -489,7 +514,8 @@ def tooltip_label(
 
 @register.simple_tag
 def assistant_enabled_flag(user) -> bool:
-    """Whether the AI assistant's global surface (hotkey, floating button) should be wired up.
+    """
+    Whether the AI assistant's global surface (hotkey, floating button) should be wired up.
 
     A template tag rather than a context processor: base.html is the only template that needs this, the
     same way it's the only one that needs ``tooltip_attrs``/``subscription_role_choices`` above.
@@ -516,7 +542,8 @@ def assistant_enabled_flag(user) -> bool:
 
 @register.simple_tag
 def wiki_built_year(wiki: Wiki) -> int | None:
-    """The year a wiki's place was built, when a record or the community says (``services.pins.build_dates``).
+    """
+    The year a wiki's place was built, when a record or the community says (``services.pins.build_dates``).
 
     Args:
         wiki: The wiki being rendered.
@@ -531,7 +558,8 @@ def wiki_built_year(wiki: Wiki) -> int | None:
 
 @register.simple_tag
 def subscription_role_choices():
-    """Return every subscription role, for the invite-a-friend dialog's role picker.
+    """
+    Return every subscription role, for the invite-a-friend dialog's role picker.
 
     Usage: {% subscription_role_choices as subscription_roles %}
     """
@@ -542,7 +570,8 @@ def subscription_role_choices():
 
 @register.simple_tag
 def trip_name_ideas(count: int = 12) -> list[str]:
-    """Return generated trip names for the create-trip dialog's placeholder rotation.
+    """
+    Return generated trip names for the create-trip dialog's placeholder rotation.
 
     A tag rather than view context because the dialog is included from two pages (the trips list and the
     overview), and the names come from the same generator that fills in a blank submission server-side -
@@ -556,7 +585,8 @@ def trip_name_ideas(count: int = 12) -> list[str]:
 
 @register.filter
 def pin_type_icon(pin_type: str) -> str:
-    """The Material Symbols glyph for a ``PinType`` value.
+    """
+    The Material Symbols glyph for a ``PinType`` value.
 
     Backed by the single mapping on the enum itself, so the detail-pin list, the child-wiki list, and
     the scope badge on both detail pages can't drift apart.
@@ -568,7 +598,8 @@ def pin_type_icon(pin_type: str) -> str:
 
 @register.simple_tag
 def organize_label_cards(labels: Any, *, kind: str, url_kind: str, selectable: bool, editable: bool, deletable: bool, can_edit_global: bool) -> list[Any]:
-    """Prepare the Organize page's label cards; see :func:`~urbanlens.dashboard.services.labels.organize_cards.build_organize_label_cards`.
+    """
+    Prepare the Organize page's label cards; see :func:`~urbanlens.dashboard.services.labels.organize_cards.build_organize_label_cards`.
 
     Usage: ``{% organize_label_cards labels kind=kind url_kind=label_url_kind ... as cards %}``
     """

@@ -37,7 +37,8 @@ def _make_pin(profile, *, last_visited=None, priority=5, name="Priority Spot") -
 
 
 class PriorityUnvisitedPinsTests(TestCase):
-    """The "High-priority places to visit" widget on the Home overview page.
+    """
+    The "High-priority places to visit" widget on the Home overview page.
 
     The dashboard (and its context) moved from the profile page to the Home
     overview page - see services.home.home_widgets.home_dashboard_context.

@@ -1,4 +1,5 @@
-"""P197: "Trip Updated" and "Community Wiki Updated" notify, a burst of changes folding into one notification.
+"""
+P197: "Trip Updated" and "Community Wiki Updated" notify, a burst of changes folding into one notification.
 
 Both were settings with nothing behind them: switching them changed nothing, because nothing sent either type.
 """

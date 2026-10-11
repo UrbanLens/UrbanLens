@@ -1,4 +1,5 @@
-"""A WKT or WKB geometry nested past what GEOS's readers can recurse through is refused before GEOS sees it.
+"""
+A WKT or WKB geometry nested past what GEOS's readers can recurse through is refused before GEOS sees it.
 
 GEOS reads both formats recursively, and tens of thousands of nested collections overflow its stack: thirty thousand
 are a 600 KB WKT line. The process dies with SIGSEGV, and in ``media-worker`` it takes the task in the other slot with

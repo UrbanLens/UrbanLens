@@ -16,7 +16,8 @@ class Command(BaseCommand):
     help = "Create or update the per-tier Postgres login roles and their connection budgets."
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """Apply the declared roles and report each one.
+        """
+        Apply the declared roles and report each one.
 
         Raises:
             CommandError: The roles could not be applied as declared.

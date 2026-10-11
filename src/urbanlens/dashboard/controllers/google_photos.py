@@ -1,4 +1,5 @@
-"""Google Photos Picker integration controller.
+"""
+Google Photos Picker integration controller.
 
 Two groups of views:
 
@@ -75,7 +76,8 @@ def _session_owner_cache_key(session_id: str) -> str:
 
 
 def _require_session_owner(session_id: str, profile: Profile) -> None:
-    """Raise Http404 unless ``profile`` created this picker session.
+    """
+    Raise Http404 unless ``profile`` created this picker session.
 
     Args:
         session_id: The picker session id from the URL.
@@ -256,7 +258,8 @@ class PinGooglePhotosSessionStatusView(LoginRequiredMixin, View):
 
 
 class PinGooglePhotosThumbnailView(LoginRequiredMixin, View):
-    """GET pin/<slug>/google-photos/thumbnail/<session_id>/<item_id>/ - proxies one picked item's preview.
+    """
+    GET pin/<slug>/google-photos/thumbnail/<session_id>/<item_id>/ - proxies one picked item's preview.
 
     The Bearer token must never reach the browser, and Google's ``baseUrl`` requires it - this view
     fetches the preview server-side, same reasoning as the Immich thumbnail proxy.

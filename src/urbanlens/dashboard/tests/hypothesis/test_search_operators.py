@@ -102,7 +102,8 @@ class ScanTests(SimpleTestCase):
         self.assertIn("https://example.com/x", result.text)
 
     def test_an_operator_with_no_value_is_dropped(self) -> None:
-        """`label:` on its own filters nothing; matching everything or nothing
+        """
+        `label:` on its own filters nothing; matching everything or nothing
         would both be guesses about what a half-typed query meant."""
         result = scan("label: hospital")
         self.assertEqual(result.clauses, [])
@@ -118,7 +119,8 @@ class ScanTests(SimpleTestCase):
         self.assertEqual(scan("label:rooftop, tunnel").clauses[0].values, ("rooftop",))
 
     def test_operators_that_cannot_be_answered_still_parse(self) -> None:
-        """They parse so the UI can explain the gap instead of showing an
+        """
+        They parse so the UI can explain the gap instead of showing an
         empty result that reads as "you have none of those"."""
         clause = scan("color:red").clauses[0]
         self.assertEqual(clause.key, "color")
@@ -165,7 +167,8 @@ class ScanPropertyTests(SimpleTestCase):
 
 
 class ParseQueryOperatorTests(SimpleTestCase):
-    """Operators reaching `parse_query`, which is what the engine consumes.
+    """
+    Operators reaching `parse_query`, which is what the engine consumes.
 
     The two registers must land in the same fields: a downstream provider
     should never be able to tell whether the user typed English or operators.
@@ -182,7 +185,8 @@ class ParseQueryOperatorTests(SimpleTestCase):
         self.assertEqual(parse_query("type:photo waterfall").types, parse_query("photos waterfall").types)
 
     def test_a_quoted_place_survives_the_place_heuristic(self) -> None:
-        """Bare "in Poughkeepsie, NY" is guessable; the quoted operator has to
+        """
+        Bare "in Poughkeepsie, NY" is guessable; the quoted operator has to
         be exact, comma and all."""
         from urbanlens.dashboard.services.global_search.parser import parse_query
 
@@ -210,7 +214,8 @@ class ParseQueryOperatorTests(SimpleTestCase):
         self.assertEqual(parsed.date_end.year, 2019)
 
     def test_date_operators_reuse_the_english_phrase_vocabulary(self) -> None:
-        """`visited:"last march"` and "visited last march" must not be two
+        """
+        `visited:"last march"` and "visited last march" must not be two
         date parsers that drift apart."""
         from urbanlens.dashboard.services.global_search.parser import parse_query
 
@@ -274,7 +279,8 @@ class ParseQueryOperatorTests(SimpleTestCase):
         self.assertTrue(any("colour" in problem or "color" in problem for problem in problems))
 
     def test_an_unbacked_is_value_explains_itself(self) -> None:
-        """`is:` mixes answerable and unanswerable values on one operator - unlike
+        """
+        `is:` mixes answerable and unanswerable values on one operator - unlike
         `color:`, which is unanswerable outright."""
         from urbanlens.dashboard.services.global_search.parser import parse_query
 
@@ -290,7 +296,8 @@ class ParseQueryOperatorTests(SimpleTestCase):
         self.assertTrue(any("coords" in problem or "coordinates" in problem for problem in problems))
 
     def test_a_backed_is_value_is_not_reported_as_unsupported(self) -> None:
-        """`archived` is unbacked for most types but real for safety check-ins -
+        """
+        `archived` is unbacked for most types but real for safety check-ins -
         it must not be blanket-flagged as unanswerable."""
         from urbanlens.dashboard.services.global_search.parser import parse_query
 

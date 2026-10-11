@@ -34,7 +34,8 @@ def refuse_unverified_address_link(
     *args: Any,
     **kwargs: Any,
 ) -> HttpResponseRedirect | None:
-    """Refuse a sign-in whose link is keyed by an address the provider did not verify. Runs before ``social_user``.
+    """
+    Refuse a sign-in whose link is keyed by an address the provider did not verify. Runs before ``social_user``.
 
     Google links are keyed by address, so without this an unverified copy of an address would sign in to the
     account holding it.
@@ -70,7 +71,8 @@ def generate_sso_username(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any] | None:
-    """Choose an initial username for new SSO users.
+    """
+    Choose an initial username for new SSO users.
     Otherwise falls back to a random ``{adjective}{animal}{number}`` name.
 
     Args:
@@ -100,7 +102,8 @@ def suppress_last_name_for_new_users(
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Clear ``last_name`` on the Django User for brand-new SSO accounts.
+    """
+    Clear ``last_name`` on the Django User for brand-new SSO accounts.
     Existing users are not affected so that a user who manually added their last name on their profile settings doesn't lose it on every subsequent login.
 
     Args:
@@ -124,7 +127,8 @@ def fetch_and_save_avatar(
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Download the provider avatar (or Gravatar) and store it on the Profile.
+    """
+    Download the provider avatar (or Gravatar) and store it on the Profile.
     Only fetches when the profile has no existing avatar so that users who upload their own photo are not overwritten on subsequent logins.
 
     Args:
@@ -175,7 +179,8 @@ _ADDRESS_IN_USE_MESSAGE = "An UrbanLens account already uses that email address.
 
 
 def provider_verified_email(response: dict[str, Any] | None) -> str:
-    """The normalized address the provider says it verified, or ``""``.
+    """
+    The normalized address the provider says it verified, or ``""``.
 
     Args:
         response: The provider's user-info response.
@@ -198,7 +203,8 @@ def resolve_sso_email(
     *args: Any,
     **kwargs: Any,
 ) -> dict[str, Any] | HttpResponseRedirect | None:
-    """Decide which address a new SSO account is created with. Runs before ``create_user``.
+    """
+    Decide which address a new SSO account is created with. Runs before ``create_user``.
 
     A provider address becomes the primary only when the provider verified it and no other account holds it. An
     unverified address is left off the account and claimed through ``email_claims.claim_address`` once the
@@ -241,7 +247,8 @@ def resolve_sso_email(
 
 
 def claim_unverified_sso_email(user: User | None = None, is_new: bool = False, *args: Any, **kwargs: Any) -> None:
-    """Send a new account's unverified provider address through the confirmation flow ``resolve_sso_email`` deferred.
+    """
+    Send a new account's unverified provider address through the confirmation flow ``resolve_sso_email`` deferred.
 
     Args:
         user: The Django User.
@@ -266,7 +273,8 @@ def record_provider_verified_email(
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Record the account's primary address as verified when the provider verified that same address.
+    """
+    Record the account's primary address as verified when the provider verified that same address.
 
     Args:
         backend: The social-auth backend in use.
@@ -289,7 +297,8 @@ def mark_new_user_onboarding(
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Set profile_setup_complete=False for brand-new SSO users.
+    """
+    Set profile_setup_complete=False for brand-new SSO users.
     Causes PostLoginRedirectView to send them to /profile/edit/ so they can choose a username and avatar before landing on the map.
 
     Args:
@@ -314,7 +323,8 @@ def save_discord_social_link(
     *args: Any,
     **kwargs: Any,
 ) -> None:
-    """Store the Discord username as a SocialLink for Discord SSO users.
+    """
+    Store the Discord username as a SocialLink for Discord SSO users.
     Runs for every Discord login so that username changes on Discord are reflected in UrbanLens.
 
     Args:
@@ -352,7 +362,8 @@ def enforce_two_factor_for_sso(
     *args: Any,
     **kwargs: Any,
 ) -> HttpResponseRedirect | None:
-    """Detour through the 2FA challenge if this account has a second factor enabled. python-social-auth logs the user in automatically once the pipeline finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s ``has_second_factor()`` gate...
+    """
+    Detour through the 2FA challenge if this account has a second factor enabled. python-social-auth logs the user in automatically once the pipeline finishes - there is no equivalent of ``CustomLoginView.form_valid()``'s ``has_second_factor()`` gate...
 
     Args:
         strategy: The social-auth strategy, used here for ``strategy.request``.
@@ -378,7 +389,8 @@ def enforce_two_factor_for_sso(
 
 
 def _sanitize_sso_username(raw: str) -> str | None:
-    """Normalize a provider handle to UrbanLens username rules.
+    """
+    Normalize a provider handle to UrbanLens username rules.
 
     Args:
         raw: Provider username or email address.
@@ -405,7 +417,8 @@ def _provider_username_preference(
     response: dict[str, Any],
     details: dict[str, Any],
 ) -> str | None:
-    """Return a preferred username derived from the OAuth provider, if any.
+    """
+    Return a preferred username derived from the OAuth provider, if any.
 
     Args:
         backend: The social-auth backend in use.

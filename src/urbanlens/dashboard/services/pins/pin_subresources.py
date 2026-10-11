@@ -54,7 +54,8 @@ class LinkExistsError(PinSubResourceError):
 
 
 def touch_pin(pin: Pin) -> None:
-    """Bump the pin's ``updated`` stamp so delta-sync clients see the change.
+    """
+    Bump the pin's ``updated`` stamp so delta-sync clients see the change.
 
     Args:
         pin: The pin to re-stamp."""
@@ -62,7 +63,8 @@ def touch_pin(pin: Pin) -> None:
 
 
 def create_pin_note(pin: Pin, *, text: str) -> PinNote:
-    """Add a personal note to a pin.
+    """
+    Add a personal note to a pin.
 
     Args:
         pin: The pin to attach the note to.
@@ -82,7 +84,8 @@ def create_pin_note(pin: Pin, *, text: str) -> PinNote:
 
 
 def delete_pin_note(note: PinNote) -> None:
-    """Delete one personal note.
+    """
+    Delete one personal note.
     No ``PinAutoRemoval`` tombstone, unlike aliases and links: notes are only ever authored by the user, so nothing exists that could recreate one.
 
     Args:
@@ -93,7 +96,8 @@ def delete_pin_note(note: PinNote) -> None:
 
 
 def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) -> PinAlias:
-    """Add an alternate name to a pin.
+    """
+    Add an alternate name to a pin.
 
     Args:
         pin: The pin to attach the alias to.
@@ -129,7 +133,8 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
 
 
 def delete_pin_alias(pin: Pin, alias: PinAlias) -> None:
-    """Delete one of a pin's alternate names.
+    """
+    Delete one of a pin's alternate names.
 
     Args:
         pin: The alias's owning pin.
@@ -152,7 +157,8 @@ def delete_pin_alias(pin: Pin, alias: PinAlias) -> None:
 
 
 def promote_alias_to_name(pin: Pin, alias: PinAlias) -> Pin:
-    """Make one of a pin's aliases its current name ("use this name").
+    """
+    Make one of a pin's aliases its current name ("use this name").
     The outgoing name is preserved as an alias, so the alias list stays the full set of names the pin has ever had and the rename is reversible.
 
     Args:
@@ -177,7 +183,8 @@ def promote_alias_to_name(pin: Pin, alias: PinAlias) -> Pin:
 
 
 def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
-    """Add an external website link to a pin.
+    """
+    Add an external website link to a pin.
 
     Args:
         pin: The pin to attach the link to.
@@ -211,7 +218,8 @@ def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
 
 
 def delete_pin_link(pin: Pin, link: PinLink) -> None:
-    """Delete one of a pin's external links.
+    """
+    Delete one of a pin's external links.
 
     Args:
         pin: The link's owning pin.

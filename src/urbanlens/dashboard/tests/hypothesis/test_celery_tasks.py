@@ -50,7 +50,8 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
         generate.assert_called_once_with(location, force=False, attempt=0)
 
     def test_regenerates_when_never_run_even_if_not_marked_stale(self) -> None:
-        """The "not ran" arm of the ``or`` must trigger generation on its own -
+        """
+        The "not ran" arm of the ``or`` must trigger generation on its own -
         a first-ever generation has nothing to be stale relative to."""
         from model_bakery import baker
 
@@ -117,7 +118,8 @@ class DatabaseBackupTaskTests(SimpleTestCase):
         progress.assert_called_with(task, current=1, total=1, message="Database backup complete")
 
     def test_run_database_backup_reports_failure_when_backup_run_fails(self) -> None:
-        """The final progress message and return value both track ``backup.run()`` -
+        """
+        The final progress message and return value both track ``backup.run()`` -
         pinned separately from the success case so a hardcoded True can't hide behind it."""
         task = mock.Mock()
         fake_backup = mock.Mock()
@@ -137,7 +139,8 @@ class DatabaseBackupTaskTests(SimpleTestCase):
         progress.assert_called_with(task, current=1, total=1, message="Database backup failed")
 
     def test_run_database_backup_works_without_a_task_handle(self) -> None:
-        """task defaults to None (an ad-hoc/management-command call, not a Celery
+        """
+        task defaults to None (an ad-hoc/management-command call, not a Celery
         worker) and must skip progress reporting entirely rather than call it with None."""
         fake_backup = mock.Mock()
         fake_backup.run.return_value = True
@@ -201,7 +204,8 @@ class AdvancePwywUsageLedgersTaskTests(TestCase):
         advance.assert_called_once_with(pwyw_sub)
 
     def test_one_failing_subscription_does_not_block_the_rest(self) -> None:
-        """The per-row try/except must swallow a raised error and keep sweeping - one
+        """
+        The per-row try/except must swallow a raised error and keep sweeping - one
         broken subscription can't be allowed to freeze every other user's ledger."""
         from django.contrib.auth.models import User
         from model_bakery import baker

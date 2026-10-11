@@ -1,4 +1,5 @@
-"""External-API routes for search across UrbanLens's own data.
+"""
+External-API routes for search across UrbanLens's own data.
 
 Search here never leaves the database.
 Search is the highest-risk surface in this API for accidental disclosure, because a result set is

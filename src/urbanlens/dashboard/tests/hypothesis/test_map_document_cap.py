@@ -35,7 +35,8 @@ _JSON_SCRIPT = re.compile(
 
 
 def _embedded_pins(html: str) -> list[dict[str, Any]]:
-    """The pin document `map/data.html` embedded, parsed.
+    """
+    The pin document `map/data.html` embedded, parsed.
 
     Args:
         html: The rendered response body.
@@ -81,7 +82,8 @@ class _SeededMapCase(TestCase):
 
 
 class TheCeilingMustExistTests(_SeededMapCase):
-    """Before anything can be bounded, something has to name the bound.
+    """
+    Before anything can be bounded, something has to name the bound.
 
     Not xfail: D12 landed this half. It stays as the tripwire for the name, which
     is what the mis-wired first draft of this file got wrong.
@@ -107,7 +109,8 @@ class TheCeilingMustExistTests(_SeededMapCase):
 
 @override_settings(**{SETTING_NAME: TEST_CAP})
 class TheFilterPostMustRespectItTests(_SeededMapCase):
-    """`map.search` is the one a user triggers repeatedly, by changing a filter.
+    """
+    `map.search` is the one a user triggers repeatedly, by changing a filter.
 
     Was `xfail(strict=True)` until the ceiling landed; kept here as the
     regression guard, because the thing that made it red - a whole-account
@@ -128,7 +131,8 @@ class TheFilterPostMustRespectItTests(_SeededMapCase):
         )
 
     def test_a_truncated_document_says_so(self) -> None:
-        """Silently dropping pins would be worse than shipping them all.
+        """
+        Silently dropping pins would be worse than shipping them all.
 
         Whatever the client is meant to do next - page through `map.pins`, switch
         to viewport mode - it can only do it if the response admits it is partial.
@@ -143,7 +147,8 @@ class TheFilterPostMustRespectItTests(_SeededMapCase):
 
 
 class TheSeedIsRealTests(_SeededMapCase):
-    """Guards the reproduction itself: these counts must come from real rows.
+    """
+    Guards the reproduction itself: these counts must come from real rows.
 
     Not xfail."""
 

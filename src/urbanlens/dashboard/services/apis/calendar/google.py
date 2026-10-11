@@ -1,4 +1,5 @@
-"""Google Calendar API gateway and OAuth helpers.
+"""
+Google Calendar API gateway and OAuth helpers.
 The site's Google OAuth client (``UL_GOOGLE_CLIENT_ID`` / ``UL_GOOGLE_CLIENT_SECRET``) is only the application identity; each user grants it access to their calendar via the "Connect Google Calendar" consent flow."""
 
 from __future__ import annotations
@@ -91,7 +92,8 @@ EVENT_REFUSAL_REASONS = frozenset({"forbiddenForNonOrganizer"})
 
 
 def client_event_id(*parts: object) -> str:
-    """An event id for ``events.insert`` that the same *parts* always reproduce.
+    """
+    An event id for ``events.insert`` that the same *parts* always reproduce.
 
     Google takes a client-assigned id of 5 to 1024 base32hex characters (``a``-``v``, ``0``-``9``), unique per
     calendar. A retry that sends the same id after a lost response is answered 409 rather than creating a
@@ -109,7 +111,8 @@ def client_event_id(*parts: object) -> str:
 
 @dataclass(frozen=True)
 class EventListing:
-    """Events read from a calendar, and whether more existed past the requested limit.
+    """
+    Events read from a calendar, and whether more existed past the requested limit.
 
     Attributes:
         events: Event resource dicts in calendar order.
@@ -121,7 +124,8 @@ class EventListing:
 
 
 def _error_reasons(response: requests.Response) -> set[str]:
-    """The ``reason`` of every entry in an error body's ``errors`` (legacy) and ``details`` (``ErrorInfo``) lists.
+    """
+    The ``reason`` of every entry in an error body's ``errors`` (legacy) and ``details`` (``ErrorInfo``) lists.
 
     The envelope's ``status`` is not read: Google sends PERMISSION_DENIED with a per-user quota refusal and with a
     disabled API alike.
@@ -142,7 +146,8 @@ def _error_reasons(response: requests.Response) -> set[str]:
 
 
 def is_rate_limit_refusal(response: requests.Response) -> bool:
-    """Whether Google refused a call for a rate or usage limit, which passes, rather than for the grant, which does not.
+    """
+    Whether Google refused a call for a rate or usage limit, which passes, rather than for the grant, which does not.
 
     Google gives a rate limit as 429, or as 403 with a usage-limit ``reason``. Every other 403 (``forbidden``,
     ``insufficientPermissions``, a body with no readable reason) is not one.
@@ -159,7 +164,8 @@ def is_rate_limit_refusal(response: requests.Response) -> bool:
 
 
 def is_site_refusal(response: requests.Response) -> bool:
-    """Whether Google refused the site's Google project rather than the user, such as the Calendar API being disabled.
+    """
+    Whether Google refused the site's Google project rather than the user, such as the Calendar API being disabled.
 
     Args:
         response: A Calendar API response.
@@ -171,7 +177,8 @@ def is_site_refusal(response: requests.Response) -> bool:
 
 
 def is_event_refusal(response: requests.Response) -> bool:
-    """Whether Google refused a change to one event rather than the grant.
+    """
+    Whether Google refused a change to one event rather than the grant.
 
     Args:
         response: A Calendar API response.
@@ -183,7 +190,8 @@ def is_event_refusal(response: requests.Response) -> bool:
 
 
 class CalendarBusyError(RateLimitExceededError, UpstreamBusyError, GatewayRateLimitedError):
-    """Google could not take a calendar call just now, for a reason that passes: the grant is sound.
+    """
+    Google could not take a calendar call just now, for a reason that passes: the grant is sound.
 
     A :class:`RateLimitExceededError`, so an export it cuts short owes a push the way one our own budget cuts short
     does, and every caller that answers "busy" for our budget answers the same for Google's.
@@ -200,7 +208,8 @@ class CalendarBusyError(RateLimitExceededError, UpstreamBusyError, GatewayRateLi
 
 
 class CalendarRateLimitedError(CalendarBusyError):
-    """Google refused a call for a rate or usage limit (429, or 403 naming one).
+    """
+    Google refused a call for a rate or usage limit (429, or 403 naming one).
 
     Args:
         service: The rate-limiter service key.
@@ -212,14 +221,16 @@ class CalendarRateLimitedError(CalendarBusyError):
 
 
 class CalendarUnavailableError(GatewayRequestError):
-    """Google refused the site, not the user: the Calendar API is off on its Google project, or its OAuth client is refused.
+    """
+    Google refused the site, not the user: the Calendar API is off on its Google project, or its OAuth client is refused.
 
     Every user's calls fail the same way until the operator fixes it, so no connection is dropped for it.
     """
 
 
 class CalendarServerError(GatewayRequestError):
-    """Google Calendar failed or did not answer (a 5xx, a 408, no response): it passes, and nothing was refused.
+    """
+    Google Calendar failed or did not answer (a 5xx, a 408, no response): it passes, and nothing was refused.
 
     The Calendar guide's answer to 500 and 503 ``backendError`` is to retry with exponential backoff. Nothing written
     for later counts it against the write it stopped, so a delete or push waits for Google rather than being dropped.
@@ -227,7 +238,8 @@ class CalendarServerError(GatewayRequestError):
 
 
 class CalendarEventRefusedError(GatewayRequestError):
-    """Google refused a request for something in it, which on a write means that one event: ``forbiddenForNonOrganizer``
+    """
+    Google refused a request for something in it, which on a write means that one event: ``forbiddenForNonOrganizer``
     (a shared property changed on a copy the user does not organise), or a 4xx no other error names, such as a 400.
 
     A write of another event may still go through, unlike after any other failure.
@@ -239,7 +251,8 @@ class CalendarNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError):
 
 
 def _oauth_client() -> tuple[str, str]:
-    """Return the site's Google OAuth client id and secret.
+    """
+    Return the site's Google OAuth client id and secret.
 
     Returns:
         Tuple of (client_id, client_secret).
@@ -257,7 +270,8 @@ def _oauth_client() -> tuple[str, str]:
 
 
 def build_authorization_url(redirect_uri: str, state: str) -> str:
-    """Build the Google consent-screen URL for the calendar connect flow.
+    """
+    Build the Google consent-screen URL for the calendar connect flow.
 
     Args:
         redirect_uri: Absolute callback URL registered with the OAuth client.
@@ -273,7 +287,8 @@ def build_authorization_url(redirect_uri: str, state: str) -> str:
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
-    """Exchange an authorization code for access/refresh tokens.
+    """
+    Exchange an authorization code for access/refresh tokens.
 
     Args:
         code: Authorization code from the OAuth callback.
@@ -290,7 +305,8 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
 
 
 def refresh_access_token(refresh_token: str) -> dict[str, Any]:
-    """Obtain a fresh access token using a refresh token.
+    """
+    Obtain a fresh access token using a refresh token.
 
     Args:
         refresh_token: The stored OAuth refresh token.
@@ -308,7 +324,8 @@ def refresh_access_token(refresh_token: str) -> dict[str, Any]:
 
 
 def revoke_token(token: str) -> bool:
-    """Best-effort revocation of an access or refresh token at Google.
+    """
+    Best-effort revocation of an access or refresh token at Google.
 
     Args:
         token: The token to revoke (refresh token revokes the whole grant).
@@ -329,7 +346,8 @@ class CalendarEventExistsError(GatewayRequestError):
 
 @dataclass(slots=True, kw_only=True)
 class GoogleCalendarGateway(Gateway):
-    """Events API client bound to one user's connected Google account.
+    """
+    Events API client bound to one user's connected Google account.
 
     Attributes:
         account: The user's stored calendar credentials.
@@ -349,7 +367,8 @@ class GoogleCalendarGateway(Gateway):
         return f"{self.base_url}/calendars/{self.account.calendar_id}/events"
 
     def _auth_headers(self) -> dict[str, str]:
-        """Return Authorization headers, refreshing the access token first if needed.
+        """
+        Return Authorization headers, refreshing the access token first if needed.
 
         Returns:
             Headers dict with a valid bearer token.
@@ -366,7 +385,8 @@ class GoogleCalendarGateway(Gateway):
         return {"Authorization": f"Bearer {self.account.access_token}"}
 
     def _refresh_token(self) -> None:
-        """Refresh and persist the account's access token.
+        """
+        Refresh and persist the account's access token.
 
         Raises:
             GoogleAuthExpiredError: When no refresh token is stored or Google refused the grant.
@@ -392,7 +412,8 @@ class GoogleCalendarGateway(Gateway):
         self.account.save(update_fields=["access_token", "refresh_token", "token_expiry", "updated"])
 
     def _send(self, method: str, url: str, *, params: dict[str, Any] | None, json_body: dict[str, Any] | None) -> requests.Response:
-        """Send one request with the current access token, refreshing it first if it has run out.
+        """
+        Send one request with the current access token, refreshing it first if it has run out.
 
         Args:
             method: HTTP method.
@@ -423,7 +444,8 @@ class GoogleCalendarGateway(Gateway):
         json_body: dict[str, Any] | None = None,
         ok_statuses: tuple[int, ...] = (200,),
     ) -> dict[str, Any] | None:
-        """Perform an authenticated request against the Calendar API.
+        """
+        Perform an authenticated request against the Calendar API.
 
         Args:
             method: HTTP method.
@@ -500,7 +522,8 @@ class GoogleCalendarGateway(Gateway):
         time_max: datetime.datetime | None = None,
         limit: int,
     ) -> EventListing:
-        """List (recurring-expanded) upcoming events on the user's calendar, following pages up to *limit*.
+        """
+        List (recurring-expanded) upcoming events on the user's calendar, following pages up to *limit*.
 
         Args:
             time_min: Lower bound (inclusive) for the event end time.
@@ -532,7 +555,8 @@ class GoogleCalendarGateway(Gateway):
                 return EventListing(events)
 
     def get_event(self, event_id: str) -> dict[str, Any]:
-        """Fetch a single event by id.
+        """
+        Fetch a single event by id.
 
         Args:
             event_id: Google event identifier.
@@ -549,7 +573,8 @@ class GoogleCalendarGateway(Gateway):
         return body
 
     def create_event(self, body: dict[str, Any], *, event_id: str | None = None) -> dict[str, Any]:
-        """Create an event on the user's calendar.
+        """
+        Create an event on the user's calendar.
 
         Args:
             body: Event resource payload.
@@ -569,7 +594,8 @@ class GoogleCalendarGateway(Gateway):
         return created
 
     def update_event(self, event_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        """Update an existing event (PATCH semantics).
+        """
+        Update an existing event (PATCH semantics).
 
         Args:
             event_id: Google event identifier.
@@ -587,7 +613,8 @@ class GoogleCalendarGateway(Gateway):
         return updated
 
     def delete_event(self, event_id: str, *, calendar_id: str | None = None) -> None:
-        """Delete an event from the user's calendar; one already gone (404/410) counts as deleted.
+        """
+        Delete an event from the user's calendar; one already gone (404/410) counts as deleted.
 
         Args:
             event_id: Google event identifier.

@@ -64,7 +64,8 @@ def _is_ignored(path: str, root: pathlib.Path) -> bool:
 
 
 def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
-    """Whether `citation` names something that exists.
+    """
+    Whether `citation` names something that exists.
 
     Tried against the repo root and against the citing file's own directory, because both spellings are in use:
     prose cites `docs/FEATURES.md` from the root, while code passes a path relative to itself
@@ -90,7 +91,8 @@ def _resolves(citation: str, root: pathlib.Path, citing: pathlib.Path) -> bool:
 
 
 def _names_a_sibling(resolved: pathlib.Path, root: pathlib.Path) -> bool:
-    """Whether `resolved` points into a directory beside this repository.
+    """
+    Whether `resolved` points into a directory beside this repository.
 
     Args:
         resolved: An absolute path.
@@ -107,7 +109,8 @@ def _names_a_sibling(resolved: pathlib.Path, root: pathlib.Path) -> bool:
 
 
 def _sibling_is_absent(resolved: pathlib.Path, root: pathlib.Path) -> bool:
-    """Whether the sibling checkout `resolved` names is missing from the workspace.
+    """
+    Whether the sibling checkout `resolved` names is missing from the workspace.
 
     Args:
         resolved: An absolute path into a sibling checkout.
@@ -123,7 +126,8 @@ def _sibling_is_absent(resolved: pathlib.Path, root: pathlib.Path) -> bool:
 
 
 def broken_citations(root: pathlib.Path) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    """Every citation in `root` that does not resolve, split by what cites it.
+    """
+    Every citation in `root` that does not resolve, split by what cites it.
 
     Args:
         root: Repository root to scan.

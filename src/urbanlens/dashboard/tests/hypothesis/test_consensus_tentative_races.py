@@ -23,7 +23,8 @@ from urbanlens.dashboard.services.consensus import tentative
 
 @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
 class TentativeAnswerRaceTests(TransactionTestCase):
-    """Cache pinned to locmem and background dispatch stubbed: the subject here is which
+    """
+    Cache pinned to locmem and background dispatch stubbed: the subject here is which
     rows end up in the table, and the default Redis-backed cache/broker is unreachable
     under the suite's localhost-only network guard."""
 

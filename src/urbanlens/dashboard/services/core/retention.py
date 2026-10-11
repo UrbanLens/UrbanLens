@@ -18,7 +18,8 @@ MAX_BATCHES_PER_RUN = 200
 
 
 def delete_in_batches(queryset: QuerySet[Model], *, batch_size: int, max_batches: int = MAX_BATCHES_PER_RUN) -> int:
-    """Delete ``queryset``'s rows in primary-key batches, each its own statement and transaction.
+    """
+    Delete ``queryset``'s rows in primary-key batches, each its own statement and transaction.
 
     Args:
         queryset: The rows to delete.
@@ -40,7 +41,8 @@ def delete_in_batches(queryset: QuerySet[Model], *, batch_size: int, max_batches
 
 
 def retention_cutoff(days: int, *, now: datetime | None = None) -> datetime | None:
-    """The moment before which rows kept for ``days`` are due, or None when ``days`` is 0 (keep forever).
+    """
+    The moment before which rows kept for ``days`` are due, or None when ``days`` is 0 (keep forever).
 
     Args:
         days: The retention period from ``SiteSettings``.
@@ -55,7 +57,8 @@ def retention_cutoff(days: int, *, now: datetime | None = None) -> datetime | No
 
 
 def prune_read_notifications(*, now: datetime | None = None) -> int:
-    """Delete read notifications older than ``SiteSettings.notification_retention_days``.
+    """
+    Delete read notifications older than ``SiteSettings.notification_retention_days``.
 
     Unread ones stay: nobody has seen them yet.
 

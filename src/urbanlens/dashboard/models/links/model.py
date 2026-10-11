@@ -1,4 +1,5 @@
-"""Link models - external website URLs attached to Pins (personal) and Wikis (shared).
+"""
+Link models - external website URLs attached to Pins (personal) and Wikis (shared).
 
 Each link may carry a Wayback Machine snapshot URL, captured asynchronously
 (see services.links.wayback_archive) so a dead or altered external page can
@@ -35,7 +36,8 @@ class AutoLinkSource(TextChoices):
 
 
 class _LinkBase(abstract.DashboardModel):
-    """Shared fields for all link types.
+    """
+    Shared fields for all link types.
 
     Attributes:
         auto_source: The :class:`AutoLinkSource` that added this link, or ``""`` when a person did.
@@ -58,7 +60,8 @@ class _LinkBase(abstract.DashboardModel):
         ordering = ["order", "id"]
 
     def save(self, *args, **kwargs) -> None:
-        """Sanitize ``name`` and refuse a URL that is not an http(s) link.
+        """
+        Sanitize ``name`` and refuse a URL that is not an http(s) link.
 
         Raises:
             InvalidLinkUrlError: ``url`` or ``wayback_url`` is not an http(s) link; both are rendered as ``href``.

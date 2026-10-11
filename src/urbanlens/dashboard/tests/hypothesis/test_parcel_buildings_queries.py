@@ -1,4 +1,5 @@
-"""The pin page's Buildings card, and its API twin, cost the same queries for 3 child pins as for 12.
+"""
+The pin page's Buildings card, and its API twin, cost the same queries for 3 child pins as for 12.
 
 Each unnamed child pin was named by its location's wiki, read once per pin: dev's 517-child campus pin answered the
 card in 99 queries, 82 of them that read.

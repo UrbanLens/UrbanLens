@@ -239,7 +239,8 @@ class ConfirmedImportJobTests(TestCase):
     },
 )
 class ConfirmedImportFollowOnBatchingTests(TransactionTestCase):
-    """A real import's per-pin follow-on work (wiki creation, category suggestion, reputation
+    """
+    A real import's per-pin follow-on work (wiki creation, category suggestion, reputation
     scoring) coalesces into bounded chunks rather than one broker task per pin (P109).
 
     ``run_confirmed_import`` wraps its per-pin loop in ``batching_follow_on_work()``, so every pin

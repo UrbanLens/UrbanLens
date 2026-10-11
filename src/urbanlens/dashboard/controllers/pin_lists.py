@@ -67,7 +67,8 @@ _SYNC_POLL_DELAYS = (2, 3, 5, 10, 20, 30, 60)
 
 
 def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
-    """Resolve a PinList by slug, falling back to uuid for pre-slug/legacy links.
+    """
+    Resolve a PinList by slug, falling back to uuid for pre-slug/legacy links.
 
     Mirrors ``PinController``'s slug-then-uuid lookup for Pin - see ``pin.py``.
     """
@@ -84,7 +85,8 @@ def _get_pin_list_or_404(list_slug: str, profile: Profile) -> PinList:
 
 
 def _default_trip_name_for_list(pin_list: PinList) -> str:
-    """Build the default trip name used when creating a trip from a pin list.
+    """
+    Build the default trip name used when creating a trip from a pin list.
 
     Args:
         pin_list: The list the trip is being created from.
@@ -99,7 +101,8 @@ def _default_trip_name_for_list(pin_list: PinList) -> str:
 
 
 def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
-    """Ordered list items with their pin's labels prefetched (icon/color/tag chips need these).
+    """
+    Ordered list items with their pin's labels prefetched (icon/color/tag chips need these).
 
     Returned as a queryset (not materialized), so a caller that only needs one page of rows
     (``PinListItemsPageView``) can paginate it at the database level instead of always pulling every
@@ -116,7 +119,8 @@ def _list_items_queryset(pin_list: PinList) -> QuerySet[PinListItem]:
 
 
 def _pin_map_marker_data(pin: Pin) -> dict[str, Any]:
-    """Serialize a pin for the list-detail overview map's label-icon markers/popups.
+    """
+    Serialize a pin for the list-detail overview map's label-icon markers/popups.
 
     Reads ``pin.labels.all()`` (not ``.filter()``) so the ``pin__labels`` prefetch in
     ``_list_items_queryset`` is reused instead of triggering a query per pin.
@@ -143,7 +147,8 @@ def _items_map_data(items: Iterable[PinListItem]) -> list[dict[str, Any]]:
 
 
 def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
-    """Build the items/page_obj/items_map_data context shared by the detail page and items panel.
+    """
+    Build the items/page_obj/items_map_data context shared by the detail page and items panel.
 
     ``items_map_data`` deliberately ignores which page of rows is rendered - the overview map is about the
     whole list - but it is capped, matching the ``_PREVIEW_MAP_PIN_LIMIT`` the near-identical saved-filter
@@ -175,7 +180,8 @@ def _paginated_items_context(request: HttpRequest, pin_list: PinList) -> dict[st
 
 
 def _membership_sync_context(request: HttpRequest, pin_list: PinList) -> dict[str, Any]:
-    """Whether the panel must say the list is catching up, and when its notice asks again.
+    """
+    Whether the panel must say the list is catching up, and when its notice asks again.
 
     Pin changes reach smart lists through a queued sync (``services.pins.smart_list_sync``), so a panel rendered
     before it runs shows the list as it was. The notice asks :class:`PinListSyncStatusView`, backing off, until the
@@ -196,7 +202,8 @@ def _render_items_panel(request: HttpRequest, pin_list: PinList) -> HttpResponse
 
 
 def _show_toast(response: HttpResponse, message: str, level: str = "success") -> HttpResponse:
-    """Attach a showToast HX-Trigger to a response.
+    """
+    Attach a showToast HX-Trigger to a response.
 
     Args:
         response: The response to annotate.
@@ -213,7 +220,8 @@ def _show_toast(response: HttpResponse, message: str, level: str = "success") ->
 
 
 class PinListsIndexView(LoginRequiredMixin, View):
-    """Lists and Filters content - lives as tabs on the Organize page.
+    """
+    Lists and Filters content - lives as tabs on the Organize page.
 
     GET /lists/?tab=lists|filters
 
@@ -258,7 +266,8 @@ class PinListsIndexView(LoginRequiredMixin, View):
 
 
 class PinListCreateView(LoginRequiredMixin, View):
-    """Create a new list.
+    """
+    Create a new list.
 
     POST /lists/create/
     """
@@ -293,7 +302,8 @@ class PinListCreateView(LoginRequiredMixin, View):
 
 
 class PinListDetailView(LoginRequiredMixin, View):
-    """List detail page.
+    """
+    List detail page.
 
     GET /lists/<uuid>/
     """
@@ -319,7 +329,8 @@ class PinListDetailView(LoginRequiredMixin, View):
 
 
 class PinListEditView(LoginRequiredMixin, View):
-    """Edit a list's name/description/smart configuration.
+    """
+    Edit a list's name/description/smart configuration.
 
     POST /lists/<uuid>/edit/ → JSON ``{"ok": true}``
 
@@ -410,7 +421,8 @@ class PinListEditView(LoginRequiredMixin, View):
 
 
 class PinListDeleteView(LoginRequiredMixin, View):
-    """Delete a list (items cascade).
+    """
+    Delete a list (items cascade).
 
     POST /lists/<uuid>/delete/
     """
@@ -424,7 +436,8 @@ class PinListDeleteView(LoginRequiredMixin, View):
 
 
 class PinListItemsView(LoginRequiredMixin, View):
-    """Items panel for a list.
+    """
+    Items panel for a list.
 
     GET /lists/<uuid>/items/
     """
@@ -436,7 +449,8 @@ class PinListItemsView(LoginRequiredMixin, View):
 
 
 class PinListSyncStatusView(LoginRequiredMixin, View):
-    """Whether a smart list is still catching up on its owner's pin changes.
+    """
+    Whether a smart list is still catching up on its owner's pin changes.
 
     GET /lists/<slug>/sync-status/?poll=N
 
@@ -457,7 +471,8 @@ class PinListSyncStatusView(LoginRequiredMixin, View):
 
 
 class PinListItemsPageView(LoginRequiredMixin, View):
-    """One page of a list's item rows, for infinite scroll past the first page.
+    """
+    One page of a list's item rows, for infinite scroll past the first page.
 
     GET /lists/<uuid>/items/page/?page=N
 
@@ -474,7 +489,8 @@ class PinListItemsPageView(LoginRequiredMixin, View):
 
 
 class PinListAddPinsView(LoginRequiredMixin, View):
-    """Add pins to a list, explicitly or by replaying filter criteria.
+    """
+    Add pins to a list, explicitly or by replaying filter criteria.
 
     POST /lists/<uuid>/items/add/
 
@@ -539,7 +555,8 @@ class PinListAddPinsView(LoginRequiredMixin, View):
 
 
 class PinListRemoveItemView(LoginRequiredMixin, View):
-    """Remove a single pin from a list (explicit removal - always allowed).
+    """
+    Remove a single pin from a list (explicit removal - always allowed).
 
     POST /lists/<uuid>/items/<id>/remove/
     """
@@ -552,7 +569,8 @@ class PinListRemoveItemView(LoginRequiredMixin, View):
 
 
 class PinListReorderView(LoginRequiredMixin, View):
-    """Persist a new item order.
+    """
+    Persist a new item order.
 
     POST /lists/<uuid>/items/reorder/  body: ``{"items": [{"id": ...}, ...]}``
     """
@@ -579,7 +597,8 @@ class PinListReorderView(LoginRequiredMixin, View):
 
 
 class PinListCreateTripView(LoginRequiredMixin, View):
-    """Create a new trip from a list's pins (one-time copy).
+    """
+    Create a new trip from a list's pins (one-time copy).
 
     POST /lists/<uuid>/create-trip/
     """
@@ -605,7 +624,8 @@ class PinListCreateTripView(LoginRequiredMixin, View):
 
 
 class PinListAddToTripView(LoginRequiredMixin, View):
-    """Add a list's pins onto an existing trip (one-time copy, appended).
+    """
+    Add a list's pins onto an existing trip (one-time copy, appended).
 
     POST /lists/<uuid>/add-to-trip/  body: ``{"trip_slug": ...}``
     """
@@ -635,7 +655,8 @@ class PinListAddToTripView(LoginRequiredMixin, View):
 
 
 class PinListMarkupMapView(LoginRequiredMixin, View):
-    """Create or refresh a markup map showing every pin on a list.
+    """
+    Create or refresh a markup map showing every pin on a list.
 
     POST /lists/<uuid>/markup-map/
     """
@@ -662,7 +683,8 @@ class PinListMarkupMapView(LoginRequiredMixin, View):
 
 
 class PinListExportView(LoginRequiredMixin, View):
-    """Download every pin on a list as GeoJSON/KML/GPX/CSV (UL-377).
+    """
+    Download every pin on a list as GeoJSON/KML/GPX/CSV (UL-377).
 
     POST /lists/<slug>/export/ body: ``format=...`` (plain form POST, not
 

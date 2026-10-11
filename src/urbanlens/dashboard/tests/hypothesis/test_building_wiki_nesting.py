@@ -1,4 +1,5 @@
-"""A building's wiki nests under its parcel's from what the places say about its location, never from pins (P231).
+"""
+A building's wiki nests under its parcel's from what the places say about its location, never from pins (P231).
 
 A child pin's wiki was created as a root by ``tasks.ensure_wiki_for_location`` and nested only when the location's
 boundary generation ran, which waits for an owner who allows enrichment. A wiki holding no place of its own then

@@ -249,7 +249,8 @@ class ViewProfileView(LoginRequiredMixin, View):
 
 
 class PhotoAttachmentPointsView(LoginRequiredMixin, View):
-    """GET: where one of the requesting user's own photo-strip photos is attached.
+    """
+    GET: where one of the requesting user's own photo-strip photos is attached.
 
     Owner-only, same shape as PhotoCustomFieldsView (controllers/custom_fields.py)
 
@@ -303,7 +304,8 @@ class CommonPinsView(LoginRequiredMixin, View):
 
 
 class ProfilePreviewStartView(LoginRequiredMixin, View):
-    """Start previewing your own profile as a selected type of user.
+    """
+    Start previewing your own profile as a selected type of user.
 
     Stores the preview state in the session and redirects to the public profile URL;
     ``ProfilePreviewMiddleware`` then renders that page as a simulated user with the chosen
@@ -311,7 +313,8 @@ class ProfilePreviewStartView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, mode: str) -> HttpResponse:
-        """Activate a preview session for the given audience.
+        """
+        Activate a preview session for the given audience.
 
         Args:
             request: The HTTP request.
@@ -343,7 +346,8 @@ class ProfilePreviewStopView(LoginRequiredMixin, View):
     """Exit profile preview mode and return to the normal profile page."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Clear any active preview session.
+        """
+        Clear any active preview session.
 
         Args:
             request: The HTTP request.
@@ -358,7 +362,8 @@ class ProfilePreviewStopView(LoginRequiredMixin, View):
 
 
 class ProfileFieldUpdateView(LoginRequiredMixin, View):
-    """Save a single profile field immediately (auto-save AJAX endpoint).
+    """
+    Save a single profile field immediately (auto-save AJAX endpoint).
 
     GET  ?field=username&value=foo  →  availability check (JSON)
     GET  ?field=avatar              →  the avatar's address and whether an upload is still being processed (JSON)
@@ -530,7 +535,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         return JsonResponse({"error": "Unknown field."}, status=400)
 
     def _avatar_state(self, request: HttpRequest) -> JsonResponse:
-        """The picture shown now, and whether an upload is still held for processing.
+        """
+        The picture shown now, and whether an upload is still held for processing.
 
         An upload or Gravatar is stored as the avatar only once the sandbox worker has re-encoded it, so a page that
         just saved one asks until ``avatar_pending`` is false.
@@ -588,7 +594,8 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "avatar_url": profile.avatar.url if profile.avatar else None, "avatar_pending": True})
 
     def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:
-        """Generate and store an emoji avatar from the inline picker.
+        """
+        Generate and store an emoji avatar from the inline picker.
 
         Args:
             request: The HTTP request.
@@ -847,7 +854,8 @@ SOCIAL_LINK_PROBE_METHODS = frozenset({"GET"})
 
 
 class SocialLinkVerifyView(LoginRequiredMixin, View):
-    """Verify that a just-saved social-link URL resolves to a valid profile page.
+    """
+    Verify that a just-saved social-link URL resolves to a valid profile page.
 
     Only verifiable platforms (see ``VERIFIABLE_PLATFORMS``) are checked; the view silently returns 204
     for anything else so the client never has to guard against unrecognised platforms.
@@ -857,7 +865,8 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
     _USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Verify the platform+handle pair and return an optional toast trigger.
+        """
+        Verify the platform+handle pair and return an optional toast trigger.
 
         Args:
             request: The HTTP request.
@@ -888,7 +897,8 @@ class SocialLinkVerifyView(LoginRequiredMixin, View):
         return self._check_url(url)
 
     def _check_url(self, url: str) -> HttpResponse:
-        """Fetch *url* and decide whether to surface a warning toast.
+        """
+        Fetch *url* and decide whether to surface a warning toast.
 
         Args:
             url: The fully-formed profile URL to probe.
@@ -928,7 +938,8 @@ def pending_primary_message(email: str) -> str:
 
 
 class ProfileEmailVerifyView(View):
-    """Click-through from a secondary-email confirmation link (no login required).
+    """
+    Click-through from a secondary-email confirmation link (no login required).
 
     Anyone holding the emailed link can confirm ownership of that inbox, the same way the initial signup
     verification link works - the visitor may not be logged in as the owning profile at the time they
@@ -970,7 +981,8 @@ class ProfileEmailVerifyView(View):
 
 
 def _authenticated_profile(request: HttpRequest) -> Profile:
-    """Return the authenticated user's Profile.
+    """
+    Return the authenticated user's Profile.
 
     LoginRequiredMixin guarantees this path is only reached by authenticated users, but mypy sees
     request.user as User | AnonymousUser.
@@ -1059,14 +1071,16 @@ class ProfileLabelToggleView(LoginRequiredMixin, View):
 
 
 class ProfileTrustView(LoginRequiredMixin, View):
-    """Set or clear the viewer's private trust rating for another profile (HTMX).
+    """
+    Set or clear the viewer's private trust rating for another profile (HTMX).
 
     POST with ``rating`` (int 1-5) to set/update; POST with ``rating=0`` or
     omit ``rating`` to clear an existing rating.
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Apply a trust rating, or clear it when the value is out of range.
+        """
+        Apply a trust rating, or clear it when the value is out of range.
 
         Args:
             request: The HTTP request.
@@ -1108,14 +1122,16 @@ class ProfileTrustView(LoginRequiredMixin, View):
 
 
 class ProfileNicknameView(LoginRequiredMixin, View):
-    """Set or clear the viewer's private nickname for another profile (HTMX).
+    """
+    Set or clear the viewer's private nickname for another profile (HTMX).
 
     POST with ``nickname`` to set/update; POST with a blank ``nickname``
     to clear an existing one.
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        """Set the nickname, or clear it when the submitted value is blank.
+        """
+        Set the nickname, or clear it when the submitted value is blank.
 
         Args:
             request: The HTTP request.
@@ -1164,7 +1180,8 @@ def _render_profile_annotation_partial(
     author: Profile,
     subject: Profile,
 ) -> HttpResponse:
-    """Render the private annotation partial for HTMX swaps.
+    """
+    Render the private annotation partial for HTMX swaps.
 
     Args:
         request: The HTTP request.

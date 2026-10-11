@@ -25,7 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
-    """Send an HTML email, logging (not raising) on delivery failure.
+    """
+    Send an HTML email, logging (not raising) on delivery failure.
 
     Args:
         to: Recipient email address.
@@ -45,7 +46,8 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
 
 
 def request_deletion(profile: Profile) -> None:
-    """Soft-delete a profile: start its 7-day grace period and notify the owner.
+    """
+    Soft-delete a profile: start its 7-day grace period and notify the owner.
 
     Args:
         profile: The profile requesting deletion of its own account.
@@ -71,7 +73,8 @@ def request_deletion(profile: Profile) -> None:
 
 
 def cancel_deletion(profile: Profile) -> None:
-    """Undo a pending account deletion.
+    """
+    Undo a pending account deletion.
 
     Args:
         profile: The profile whose deletion request is being cancelled.
@@ -82,7 +85,8 @@ def cancel_deletion(profile: Profile) -> None:
 
 
 def send_deletion_reminder(profile: Profile) -> bool:
-    """Send the "1 day left" notice for a profile about to be hard-deleted, at most once per request.
+    """
+    Send the "1 day left" notice for a profile about to be hard-deleted, at most once per request.
 
     The stamp is claimed, the notification written and the email sent in one transaction: a second sweep
     finds the claim and sends nothing, and a failure before the email rolls the claim back so the next sweep
@@ -119,7 +123,8 @@ def send_deletion_reminder(profile: Profile) -> bool:
 
 
 def _delete_file_field(instance, field_name: str, *, label: str) -> None:
-    """Best-effort delete of one FileField's underlying storage file.
+    """
+    Best-effort delete of one FileField's underlying storage file.
 
     Args:
         instance: The model instance owning the file field.
@@ -156,7 +161,8 @@ def _delete_profile_files(profile: Profile) -> None:
 
 
 def hard_delete_profile(profile: Profile) -> None:
-    """Permanently delete a profile's account and all of its data, then tell its owner.
+    """
+    Permanently delete a profile's account and all of its data, then tell its owner.
 
     The email goes only after the rows are gone, so a deletion that fails and is retried by the next sweep
     never sends it twice.

@@ -21,7 +21,8 @@ _FK_FIELDS: frozenset[str] = frozenset({"location"})
 
 
 def _make_pin(**kwargs: Any) -> Pin:
-    """Build an unsaved Pin with sensible defaults.
+    """
+    Build an unsaved Pin with sensible defaults.
 
     Bypasses the database entirely; only the Python object is created so that
     pure-Python properties can be exercised in isolation.
@@ -47,7 +48,8 @@ def _make_pin(**kwargs: Any) -> Pin:
 
 
 def _make_location(name: str, lat: Decimal | None = None, lon: Decimal | None = None) -> MagicMock:
-    """Return a lightweight mock that quacks like a Location.
+    """
+    Return a lightweight mock that quacks like a Location.
 
     ``display_name`` is what Pin.effective_name reads (the community wiki name,
     falling back to official_name); the mock exposes it directly.
@@ -101,7 +103,8 @@ class PinEffectiveNameTests(SimpleTestCase):
 
 
 class PinEffectiveCoordinateTests(SimpleTestCase):
-    """effective_latitude/effective_longitude always proxy the linked Location.
+    """
+    effective_latitude/effective_longitude always proxy the linked Location.
 
     A Pin has no coordinate fields of its own (see AddressableModel) - there is
     no "pin override" concept anymore.
@@ -199,7 +202,8 @@ class PinEffectiveDateLastActiveTests(SimpleTestCase):
 
 
 class PinEffectiveIconTests(SimpleTestCase):
-    """effective_icon follows a defined priority chain.
+    """
+    effective_icon follows a defined priority chain.
 
     The DB-backed tag-lookup branch is not tested here (it requires a live ORM
     queryset) but the top two tiers - custom_icon and icon - are pure Python.
@@ -247,7 +251,8 @@ class PinEffectiveIconTests(SimpleTestCase):
 
 
 class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
-    """Place Name/Official Name/Address collapse near-duplicate text instead of
+    """
+    Place Name/Official Name/Address collapse near-duplicate text instead of
     only catching an exact string match."""
 
     def _make_pin_with_location(
@@ -270,7 +275,8 @@ class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
         return _make_pin(location=loc)
 
     def test_full_address_supersedes_shorter_prefix_variants(self) -> None:
-        """The exact scenario reported: a geocoder-derived place_name that's just a
+        """
+        The exact scenario reported: a geocoder-derived place_name that's just a
         fuller-formatted version of the official_name/address street text."""
         pin = self._make_pin_with_location(
             place_name="1265 Section Rd, Cincinnati, OH 45237, USA",
@@ -284,7 +290,8 @@ class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
         self.assertEqual(labels, ["Place Name"])
 
     def test_genuinely_distinct_place_name_is_kept_alongside_address(self) -> None:
-        """A real landmark name (not just a reformatted address) has no
+        """
+        A real landmark name (not just a reformatted address) has no
         overlapping text with the address, so both are kept."""
         pin = self._make_pin_with_location(
             place_name="Riverside Mill",
@@ -311,7 +318,8 @@ class PinDeduplicatedIdentityFieldsTests(SimpleTestCase):
         self.assertEqual(labels, ["Official Name", "Address"])
 
     def test_three_genuinely_distinct_fields_keep_place_official_address_order(self) -> None:
-        """Official Name resolution order in the source dict is Address, then
+        """
+        Official Name resolution order in the source dict is Address, then
         Official Name, then Place Name (by length) - verifies the result is
         re-sorted back to display order rather than left in dedup-pass order."""
         pin = self._make_pin_with_location(

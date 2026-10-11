@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class ScoreResult:
-    """What a rule decided a contribution was worth.
+    """
+    What a rule decided a contribution was worth.
 
     Attributes:
         value: The raw worth, before decay and caps - those are applied centrally by the scorer so every rule obeys them.
@@ -33,7 +34,8 @@ class ScoreResult:
 
 @dataclass(frozen=True)
 class Rule:
-    """One way of earning reputation.
+    """
+    One way of earning reputation.
 
     Attributes:
         key: Stable identifier, stored on every row it produces.
@@ -57,7 +59,8 @@ _RULES: dict[str, Rule] = {}
 
 
 def register(rule: Rule) -> Rule:
-    """Add *rule* to the registry, replacing any rule with the same key.
+    """
+    Add *rule* to the registry, replacing any rule with the same key.
 
     Args:
         rule: The rule to register.
@@ -87,7 +90,8 @@ def rule_choices() -> list[tuple[str, str]]:
 
 
 def score_with(rule: Rule, target: Any) -> ScoreResult | None:
-    """Run *rule* against *target*, converting a failure into "no award".
+    """
+    Run *rule* against *target*, converting a failure into "no award".
     A rule that raises - a plugin's model went away, a target was deleted between the row being written and the scorer reaching it - must not take down the batch it happens to be in.
 
     Args:
@@ -117,7 +121,8 @@ TARGET_MODEL_PATHS: dict[str, str] = {
 
 
 def target_kind_for(instance: Any) -> str | None:
-    """Which :class:`TargetKind` an object is, inverting :data:`TARGET_MODEL_PATHS`.
+    """
+    Which :class:`TargetKind` an object is, inverting :data:`TARGET_MODEL_PATHS`.
 
     Args:
         instance: A model instance a rule might be about.
@@ -133,7 +138,8 @@ def target_kind_for(instance: Any) -> str | None:
 
 
 def resolve_target(event: ReputationEvent) -> Any | None:
-    """Load the object an event is about.
+    """
+    Load the object an event is about.
 
     Args:
         event: The ledger row.

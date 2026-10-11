@@ -47,7 +47,8 @@ class AddFeatureAccessBetaFlagTests(TestCase):
         self.assertTrue(self._flag())
 
     def test_present_in_the_import_error_fallback_shape(self) -> None:
-        """The fallback dict (ImportError/DatabaseError branch) must carry the same key.
+        """
+        The fallback dict (ImportError/DatabaseError branch) must carry the same key.
 
         Called directly rather than by breaking the import, since the point is just that the two dicts declare
         the same keys - drifting would leave one branch's templates referencing an undefined variable."""

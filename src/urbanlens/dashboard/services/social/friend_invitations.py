@@ -1,4 +1,5 @@
-"""Friend invitations sent to an email address: delivery, the invitee's answer, and binding at signup.
+"""
+Friend invitations sent to an email address: delivery, the invitee's answer, and binding at signup.
 
 The inviter's pending entry is the ``FriendInvitation`` row until the invitee accepts, whether or not the address
 has an account, so nothing the inviter sees - the entry, its cancel token, its expiry, the API - depends on it.
@@ -49,7 +50,8 @@ def invitation_for_token(token: uuid.UUID | str) -> FriendInvitation | None:
 
 
 def addressed_to(invitation: FriendInvitation, profile: Profile) -> bool:
-    """Whether ``profile`` may answer: the bound invitee, or the account that verified the address of an unbound one.
+    """
+    Whether ``profile`` may answer: the bound invitee, or the account that verified the address of an unbound one.
 
     Holding the link is not enough; it can be forwarded.
     """
@@ -63,7 +65,8 @@ def addressed_to(invitation: FriendInvitation, profile: Profile) -> bool:
 
 
 def can_be_asked(invitation: FriendInvitation, profile: Profile) -> bool:
-    """Whether the friendship can be offered to ``profile`` at all: no block, Community on, not already friends,
+    """
+    Whether the friendship can be offered to ``profile`` at all: no block, Community on, not already friends,
     and ``profile``'s friend-request setting lets the inviter ask."""
     inviter = invitation.inviter
     if not inviter.community_enabled or not profile.community_enabled:
@@ -93,7 +96,8 @@ def _bind(invitation: FriendInvitation, profile: Profile) -> bool:
 
 
 def deliver(invitation_id: int, url: str, *, send_join_email: bool) -> None:
-    """Deliver a new invitation after the request: ask the account proven to own the address, or email the address.
+    """
+    Deliver a new invitation after the request: ask the account proven to own the address, or email the address.
 
     When the owner's settings, a block or an existing friendship mean nothing can be asked, nothing is sent and
     the invitation simply waits out its expiry, as an unanswered email invitation would.
@@ -151,7 +155,8 @@ def notify_invitee(invitation: FriendInvitation) -> None:
 
 
 def send_join_invitation_email(invitation: FriendInvitation, url: str) -> None:
-    """Email an invitation to its address, once per inviter and address; a failure leaves it sendable later.
+    """
+    Email an invitation to its address, once per inviter and address; a failure leaves it sendable later.
 
     Args:
         invitation: The open invitation.
@@ -186,7 +191,8 @@ def send_join_invitation_email(invitation: FriendInvitation, url: str) -> None:
 
 
 def accept(invitation: FriendInvitation, profile: Profile) -> Friendship:
-    """Become friends with the inviter.
+    """
+    Become friends with the inviter.
 
     Raises:
         FriendInvitationError: The invitation is not open to ``profile``, or the friendship could not be made.
@@ -210,7 +216,8 @@ def accept(invitation: FriendInvitation, profile: Profile) -> Friendship:
 
 
 def decline(invitation: FriendInvitation, profile: Profile) -> None:
-    """Decline the invitation. The inviter is not told.
+    """
+    Decline the invitation. The inviter is not told.
 
     Raises:
         FriendInvitationError: ``profile`` is not the one it was addressed to.
@@ -230,7 +237,8 @@ def _redeem_grants(invitation: FriendInvitation, profile: Profile) -> None:
 
 
 def bind_to_new_account(user: User, *, email: str | None = None) -> int:
-    """Show an account the invitations sent to an address it just verified. Answers none of them.
+    """
+    Show an account the invitations sent to an address it just verified. Answers none of them.
 
     A subscription grant attached to an invitation is the inviter's gift to whoever joins, so it is redeemed
     here, once.

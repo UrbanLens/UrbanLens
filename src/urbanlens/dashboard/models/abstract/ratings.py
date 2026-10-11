@@ -17,7 +17,8 @@ DEFAULT_PHI = DEFAULT_RATING_DEVIATION / GLICKO2_SCALE
 
 
 class Glicko2RatingFields:
-    """Display-scale conversion for a model storing ``mu``/``phi``/``sigma``.
+    """
+    Display-scale conversion for a model storing ``mu``/``phi``/``sigma``.
 
     Those are kept on the paper's internal scale (mu centered on 0, phi around 1-2), which ``services.games.glicko2``
     operates on directly; everything user-facing reads ``rating``/``rating_deviation``.

@@ -24,7 +24,8 @@ COLLECTABLE_SOURCES = frozenset({ImageSource.LINKED_URL})
 
 
 def attach_to_pin(image: Image, pin: Pin, *, added_by: Profile | None = None) -> ImageAttachment:
-    """Attach a photo to a pin, if it is not attached already.
+    """
+    Attach a photo to a pin, if it is not attached already.
 
     Args:
         image: The photo.
@@ -40,7 +41,8 @@ def attach_to_pin(image: Image, pin: Pin, *, added_by: Profile | None = None) ->
 
 
 def attach_to_wiki(image: Image, wiki: Wiki, *, added_by: Profile | None = None) -> ImageAttachment:
-    """Attach a photo to a wiki, if it is not attached already.
+    """
+    Attach a photo to a wiki, if it is not attached already.
 
     Args:
         image: The photo.
@@ -56,7 +58,8 @@ def attach_to_wiki(image: Image, wiki: Wiki, *, added_by: Profile | None = None)
 
 
 def reference_count(image: Image) -> int:
-    """How many things currently point at this photo.
+    """
+    How many things currently point at this photo.
     Counts every kind of citation, not only attachments: a floorplan reference keeps a photo alive exactly as much as a pin does, which is the reason ``FloorplanReference.image`` is SET_NULL rather than CASCADE.
 
     Args:
@@ -74,7 +77,8 @@ def reference_count(image: Image) -> int:
 
 
 def collect_if_unreferenced(image: Image) -> bool:
-    """Delete a fetched photo once nothing refers to it any more.
+    """
+    Delete a fetched photo once nothing refers to it any more.
     Only rows in :data:`COLLECTABLE_SOURCES` are eligible - bytes fetched to back a citation, which have no independent reason to exist - and only when every kind of reference is gone.
 
     Args:

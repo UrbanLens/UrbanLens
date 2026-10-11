@@ -1,4 +1,5 @@
-"""The Organize page's label cards, prepared in one pass so the template only places them (P66).
+"""
+The Organize page's label cards, prepared in one pass so the template only places them (P66).
 
 The card template once derived all of this itself: about thirty variable renders and as many ``{% if %}``
 nodes per card, which at 400 tags was nearly two seconds of template interpretation and no queries to speak
@@ -27,7 +28,8 @@ _COUNTED_KINDS = frozenset({"tag", "category", "status"})
 
 @dataclass(frozen=True)
 class OrganizeLabelCard:
-    """Everything one Organize card renders, beyond the label's own plain fields.
+    """
+    Everything one Organize card renders, beyond the label's own plain fields.
 
     Attributes:
         label: The label itself, for its name, description and flags.
@@ -88,7 +90,8 @@ def build_organize_label_cards(
     deletable: bool,
     can_edit_global: bool,
 ) -> list[OrganizeLabelCard]:
-    """Prepare one card per label.
+    """
+    Prepare one card per label.
 
     Counted kinds read ``total_pin_count``, so their labels should be primed with
     ``Label.prime_total_pin_counts`` first; people and media never read it.

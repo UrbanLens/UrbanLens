@@ -1,4 +1,5 @@
-"""One ``{"error": ...}`` envelope for every error the external API can emit.
+"""
+One ``{"error": ...}`` envelope for every error the external API can emit.
 
 The hand-written error returns throughout this package all use ``{"error": "..."}``, but until this
 module was applied package-wide two paths bypassed them and emitted DRF's own shapes instead: A
@@ -46,7 +47,8 @@ MALFORMED_JSON_BODY_MESSAGE = "Malformed JSON body"
 
 
 def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Response | None:
-    """Render DRF exceptions in the external API's ``{"error": ...}`` shape.
+    """
+    Render DRF exceptions in the external API's ``{"error": ...}`` shape.
 
     Args:
         exc: The exception raised by the view.
@@ -100,7 +102,8 @@ def uniform_exception_handler(exc: Exception, context: dict[str, Any]) -> Respon
 
 
 def _stringify(value: Any) -> Any:
-    """Recursively convert DRF ``ErrorDetail`` leaves to plain strings.
+    """
+    Recursively convert DRF ``ErrorDetail`` leaves to plain strings.
 
     Args:
         value: A validation-error structure (dict, list, or leaf).
@@ -116,7 +119,8 @@ def _stringify(value: Any) -> Any:
 
 
 class ErrorEnvelopeMixin:
-    """Route a view's exceptions through :func:`uniform_exception_handler`.
+    """
+    Route a view's exceptions through :func:`uniform_exception_handler`.
 
     Mixed into ``external_api.views.ExternalApiView`` and ``external_api.mixins.DualAuthJsonView`` - the
     two bases every endpoint in this package inherits - so the envelope is the package's default rather
@@ -126,7 +130,8 @@ class ErrorEnvelopeMixin:
     """
 
     def get_exception_handler(self) -> Callable[[Exception, dict[str, Any]], Response | None]:
-        """Return the ``{"error": ...}``-normalizing handler for this view.
+        """
+        Return the ``{"error": ...}``-normalizing handler for this view.
 
         Returns:
             :func:`uniform_exception_handler`, replacing the project-wide
@@ -136,7 +141,8 @@ class ErrorEnvelopeMixin:
 
 
 class UniformErrorsMixin(ErrorEnvelopeMixin):
-    """Deprecated alias for :class:`ErrorEnvelopeMixin`. Nothing references it.
+    """
+    Deprecated alias for :class:`ErrorEnvelopeMixin`. Nothing references it.
 
     Once ``ExternalApiView`` itself started inheriting the envelope, making this the *same* class would
     have meant C3 could not linearize those bases (a class may never precede its own subclass), so

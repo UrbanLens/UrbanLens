@@ -37,7 +37,8 @@ class _StorageRefusedError(Exception):
 
 @dataclass(slots=True)
 class ImportCounts:
-    """What a background photo import did with the photos it was given, across every retry.
+    """
+    What a background photo import did with the photos it was given, across every retry.
 
     Attributes:
         imported: Photos stored.
@@ -53,7 +54,8 @@ class ImportCounts:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any] | None) -> ImportCounts:
-        """Read counts back from a task's arguments or result.
+        """
+        Read counts back from a task's arguments or result.
 
         Args:
             data: A mapping from :meth:`as_dict`, or None.
@@ -74,7 +76,8 @@ class ImportCounts:
         return self.imported + self.skipped + self.failed + self.storage_unavailable
 
     def summary(self) -> str:
-        """One line saying what became of the selection.
+        """
+        One line saying what became of the selection.
 
         Returns:
             The summary, for the progress dialog and its toast.
@@ -89,7 +92,8 @@ class ImportCounts:
         return ", ".join(parts) + "."
 
     def toast(self) -> dict[str, str]:
-        """The ``showToast`` payload for a finished import.
+        """
+        The ``showToast`` payload for a finished import.
 
         Returns:
             A warning when any photo was not imported, else a success.
@@ -99,7 +103,8 @@ class ImportCounts:
 
 
 class PhotoImport(ABC):
-    """One background import of photos picked from a single source, stored one at a time onto a pin or wiki.
+    """
+    One background import of photos picked from a single source, stored one at a time onto a pin or wiki.
 
     A photo storage refuses ends the run, and the task is retried later for the photos left, so a photo already
     stored is neither downloaded nor stored again. A refusal with nothing stored since the last one waits longer, up
@@ -112,7 +117,8 @@ class PhotoImport(ABC):
     source: ClassVar[str]
 
     def __init__(self, task: Task, profile: Profile, *, done: Mapping[str, Any] | None = None, storage_waits: int = 0) -> None:
-        """Start, or resume, an import.
+        """
+        Start, or resume, an import.
 
         Args:
             task: The bound Celery task running it.
@@ -132,7 +138,8 @@ class PhotoImport(ABC):
 
     @abstractmethod
     def dedupe_filter(self) -> dict[str, Any]:
-        """Lookups matching a photo already imported onto the same target, alongside its checksum.
+        """
+        Lookups matching a photo already imported onto the same target, alongside its checksum.
 
         Returns:
             ``Image`` filter keyword arguments.
@@ -140,7 +147,8 @@ class PhotoImport(ABC):
 
     @abstractmethod
     def download(self, item_id: str) -> tuple[bytes, str]:
-        """Fetch one picked photo.
+        """
+        Fetch one picked photo.
 
         Args:
             item_id: The source's id for it.
@@ -154,7 +162,8 @@ class PhotoImport(ABC):
 
     @abstractmethod
     def build(self, item_id: str, content: bytes, filename: str, checksum: str) -> Image:
-        """The unsaved row for one photo, its file set and ``pending_scan`` on.
+        """
+        The unsaved row for one photo, its file set and ``pending_scan`` on.
 
         Args:
             item_id: The source's id for it.
@@ -168,7 +177,8 @@ class PhotoImport(ABC):
 
     @abstractmethod
     def call_for(self, remaining: list[str]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        """The task's arguments for importing just *remaining*.
+        """
+        The task's arguments for importing just *remaining*.
 
         Args:
             remaining: The ids left, in order.
@@ -179,14 +189,16 @@ class PhotoImport(ABC):
 
     @abstractmethod
     def stored(self, image: Image) -> None:
-        """Run once a photo's row is committed, before it is queued for processing.
+        """
+        Run once a photo's row is committed, before it is queued for processing.
 
         Args:
             image: The stored row.
         """
 
     def run(self, item_ids: Sequence[str]) -> dict[str, int]:
-        """Import *item_ids* in order.
+        """
+        Import *item_ids* in order.
 
         Args:
             item_ids: The picked ids this run imports.
@@ -213,7 +225,8 @@ class PhotoImport(ABC):
         return self.counts.as_dict()
 
     def _import(self, item_id: str) -> bool:
-        """Download, dedupe and store one photo.
+        """
+        Download, dedupe and store one photo.
 
         Args:
             item_id: The source's id for it.
@@ -256,7 +269,8 @@ class PhotoImport(ABC):
         return True
 
     def _wait_for_storage(self, exc: BaseException, remaining: list[str], *, progressed: bool, total: int) -> None:
-        """Retry the task for *remaining* once storage has had time to recover, or give up on them.
+        """
+        Retry the task for *remaining* once storage has had time to recover, or give up on them.
 
         Args:
             exc: What storage raised.
@@ -291,7 +305,8 @@ class _PinPhotoImport(PhotoImport):
     """An import from one account's own library onto that account's pin, logging a visit per photo."""
 
     def __init__(self, task: Task, profile: Profile, pin: Pin, *, done: Mapping[str, Any] | None = None, storage_waits: int = 0) -> None:
-        """Start, or resume, an import onto *pin*.
+        """
+        Start, or resume, an import onto *pin*.
 
         Args:
             task: The bound Celery task running it.
@@ -304,7 +319,8 @@ class _PinPhotoImport(PhotoImport):
         self.pin = pin
 
     def dedupe_filter(self) -> dict[str, Any]:
-        """The same photo on the same pin by the same profile.
+        """
+        The same photo on the same pin by the same profile.
 
         Returns:
             ``Image`` filter keyword arguments.
@@ -312,7 +328,8 @@ class _PinPhotoImport(PhotoImport):
         return {"pin": self.pin, "profile": self.profile}
 
     def row(self, content: bytes, filename: str, checksum: str, source_url: str, **extra: Any) -> Image:
-        """A pending row on the pin.
+        """
+        A pending row on the pin.
 
         Args:
             content: The photo's bytes.
@@ -339,7 +356,8 @@ class _PinPhotoImport(PhotoImport):
         )
 
     def stored(self, image: Image) -> None:
-        """Log a visit on the pin for the photo, unless it already joined one.
+        """
+        Log a visit on the pin for the photo, unless it already joined one.
 
         Args:
             image: The stored row.
@@ -366,7 +384,8 @@ class ImmichPhotoImport(_PinPhotoImport):
         done: Mapping[str, Any] | None = None,
         storage_waits: int = 0,
     ) -> None:
-        """Start, or resume, an Immich import.
+        """
+        Start, or resume, an Immich import.
 
         Args:
             task: The bound Celery task running it.
@@ -385,7 +404,8 @@ class ImmichPhotoImport(_PinPhotoImport):
         self.visit_id_by_asset = dict(visit_id_by_asset or {})
 
     def download(self, item_id: str) -> tuple[bytes, str]:
-        """Fetch an asset's original.
+        """
+        Fetch an asset's original.
 
         Args:
             item_id: The Immich asset id.
@@ -397,7 +417,8 @@ class ImmichPhotoImport(_PinPhotoImport):
         return content, filename
 
     def build(self, item_id: str, content: bytes, filename: str, checksum: str) -> Image:
-        """The asset's row, joined to its suggested visit when it has one on this pin.
+        """
+        The asset's row, joined to its suggested visit when it has one on this pin.
 
         Args:
             item_id: The Immich asset id.
@@ -415,7 +436,8 @@ class ImmichPhotoImport(_PinPhotoImport):
         return self.row(content, filename, checksum, self.account.asset_web_url(item_id), visit=visit)
 
     def call_for(self, remaining: list[str]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        """``import_immich_photos``'s arguments for *remaining*.
+        """
+        ``import_immich_photos``'s arguments for *remaining*.
 
         Args:
             remaining: The asset ids left.
@@ -432,7 +454,8 @@ class FlickrPhotoImport(_PinPhotoImport):
     source = ImageSource.FLICKR
 
     def __init__(self, task: Task, profile: Profile, pin: Pin, account: FlickrAccount, *, done: Mapping[str, Any] | None = None, storage_waits: int = 0) -> None:
-        """Start, or resume, a Flickr import.
+        """
+        Start, or resume, a Flickr import.
 
         Args:
             task: The bound Celery task running it.
@@ -449,7 +472,8 @@ class FlickrPhotoImport(_PinPhotoImport):
         self.gateway = FlickrGateway(account=account)
 
     def download(self, item_id: str) -> tuple[bytes, str]:
-        """Fetch a photo's original.
+        """
+        Fetch a photo's original.
 
         Args:
             item_id: The Flickr photo id.
@@ -461,7 +485,8 @@ class FlickrPhotoImport(_PinPhotoImport):
         return content, filename
 
     def build(self, item_id: str, content: bytes, filename: str, checksum: str) -> Image:
-        """The photo's row.
+        """
+        The photo's row.
 
         Args:
             item_id: The Flickr photo id.
@@ -475,7 +500,8 @@ class FlickrPhotoImport(_PinPhotoImport):
         return self.row(content, filename, checksum, self.account.photo_web_url(item_id))
 
     def call_for(self, remaining: list[str]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        """``import_flickr_photos``'s arguments for *remaining*.
+        """
+        ``import_flickr_photos``'s arguments for *remaining*.
 
         Args:
             remaining: The photo ids left.
@@ -503,7 +529,8 @@ class GooglePhotosImport(_PinPhotoImport):
         done: Mapping[str, Any] | None = None,
         storage_waits: int = 0,
     ) -> None:
-        """Start, or resume, a Google Photos import, resolving each item's download address.
+        """
+        Start, or resume, a Google Photos import, resolving each item's download address.
 
         The session's items are read from the cache the picker filled; the session is listed again only for an item
         missing from it.
@@ -535,7 +562,8 @@ class GooglePhotosImport(_PinPhotoImport):
                 logger.warning("import_google_photos: could not re-list session %s to resolve %d missing item(s)", session_id, len(missing), exc_info=True)
 
     def download(self, item_id: str) -> tuple[bytes, str]:
-        """Fetch an item's original.
+        """
+        Fetch an item's original.
 
         Args:
             item_id: The picker media item id.
@@ -552,7 +580,8 @@ class GooglePhotosImport(_PinPhotoImport):
         return self.gateway.download_media_item(item["base_url"], original=True), item.get("filename") or f"{item_id}.jpg"
 
     def build(self, item_id: str, content: bytes, filename: str, checksum: str) -> Image:
-        """The item's row.
+        """
+        The item's row.
 
         Args:
             item_id: The picker media item id.
@@ -568,7 +597,8 @@ class GooglePhotosImport(_PinPhotoImport):
         return self.row(content, filename, checksum, media_item_web_url(item_id))
 
     def call_for(self, remaining: list[str]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        """``import_google_photos``'s arguments for *remaining*.
+        """
+        ``import_google_photos``'s arguments for *remaining*.
 
         Args:
             remaining: The item ids left.
@@ -598,7 +628,8 @@ class FlickrAlbumPhotoImport(PhotoImport):
         done: Mapping[str, Any] | None = None,
         storage_waits: int = 0,
     ) -> None:
-        """Start, or resume, an album import.
+        """
+        Start, or resume, an album import.
 
         Args:
             task: The bound Celery task running it.
@@ -622,7 +653,8 @@ class FlickrAlbumPhotoImport(PhotoImport):
         self.photos_by_id = {photo.id: photo for photo in album.photos}
 
     def dedupe_filter(self) -> dict[str, Any]:
-        """The same photo on the same pin or wiki by the same profile.
+        """
+        The same photo on the same pin or wiki by the same profile.
 
         Returns:
             ``Image`` filter keyword arguments.
@@ -630,7 +662,8 @@ class FlickrAlbumPhotoImport(PhotoImport):
         return {"profile": self.profile, **({"pin": self.pin} if self.pin is not None else {"wiki": self.wiki})}
 
     def download(self, item_id: str) -> tuple[bytes, str]:
-        """Fetch an album photo.
+        """
+        Fetch an album photo.
 
         Args:
             item_id: The Flickr photo id, one the album lists.
@@ -642,7 +675,8 @@ class FlickrAlbumPhotoImport(PhotoImport):
         return content, filename
 
     def build(self, item_id: str, content: bytes, filename: str, checksum: str) -> Image:
-        """The photo's row, credited to its photographer.
+        """
+        The photo's row, credited to its photographer.
 
         Args:
             item_id: The Flickr photo id.
@@ -673,7 +707,8 @@ class FlickrAlbumPhotoImport(PhotoImport):
         )
 
     def stored(self, image: Image) -> None:
-        """Log nothing: an album is somebody else's photos, so they say nothing of the importer's visits.
+        """
+        Log nothing: an album is somebody else's photos, so they say nothing of the importer's visits.
 
         Args:
             image: The stored row.
@@ -681,7 +716,8 @@ class FlickrAlbumPhotoImport(PhotoImport):
         del image
 
     def call_for(self, remaining: list[str]) -> tuple[tuple[Any, ...], dict[str, Any]]:
-        """``import_flickr_album_photos``'s arguments for *remaining*.
+        """
+        ``import_flickr_album_photos``'s arguments for *remaining*.
 
         Args:
             remaining: The photo ids left.

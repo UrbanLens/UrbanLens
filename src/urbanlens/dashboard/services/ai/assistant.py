@@ -96,7 +96,8 @@ def _wire_tools(context: ToolContext) -> list[InferenceToolSpec]:
 
 
 def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_message: str, *, page: PageObject | None = None, dismissals: tuple[DismissalEntry, ...] = ()) -> AssistantTurn:
-    """Process one user message: loop model <-> tools until it replies.
+    """
+    Process one user message: loop model <-> tools until it replies.
 
     Args:
         profile: The requesting profile; every tool is scoped to it.

@@ -31,7 +31,8 @@ _ALERTS_SHARED_SECONDS = 60 * 60
 
 
 def _as_dict_list(body: Any) -> list[dict[str, Any]]:
-    """Coerce a per-park-facet response body into a list of dicts, defensively.
+    """
+    Coerce a per-park-facet response body into a list of dicts, defensively.
 
     Args:
         body: The raw decoded JSON body from :meth:`RedataLocationContextGateway.get_json` - expected to already be a plain array for these endpoints.
@@ -49,7 +50,8 @@ def _park_path(template: str, park_code: str) -> str:
 
 @dataclass(slots=True, kw_only=True)
 class RedataNationalParksGateway(RedataLocationContextGateway):
-    """REST client for REData's local NPS catalog: units near a point, and each unit's facets.
+    """
+    REST client for REData's local NPS catalog: units near a point, and each unit's facets.
 
     A unit's facets answer the same for every pin near it, so each is asked once per unit and shared - alerts for an
     hour, the rest for :data:`_SHARED_SECONDS` - rather than once per pin.
@@ -58,7 +60,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_national_parks"
 
     def find_parks_near(self, latitude: float, longitude: float, *, radius_meters: float | None = None, limit: int = 20) -> list[dict[str, Any]]:
-        """Return NPS park units near a coordinate, nearest first.
+        """
+        Return NPS park units near a coordinate, nearest first.
 
         Args:
             latitude: WGS-84 latitude.
@@ -83,7 +86,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         )
 
     def find_nearest_park(self, latitude: float, longitude: float, *, radius_meters: float | None = None) -> dict[str, Any] | None:
-        """Return the single nearest NPS park unit to a coordinate, if any is within range.
+        """
+        Return the single nearest NPS park unit to a coordinate, if any is within range.
 
         Args:
             latitude: WGS-84 latitude.
@@ -101,7 +105,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         return results[0] if results else None
 
     def get_alerts(self, park_code: str) -> list[dict[str, Any]]:
-        """Fetch published alerts (closures, hazards, cautions) for one NPS park unit.
+        """
+        Fetch published alerts (closures, hazards, cautions) for one NPS park unit.
 
         Args:
             park_code: The unit's NPS park code (e.g. ``"yell"``) - REData's
@@ -119,7 +124,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_ALERTS_SHARED_SECONDS)
 
     def get_visitor_centers(self, park_code: str) -> list[dict[str, Any]]:
-        """Fetch visitor centers for one NPS park unit.
+        """
+        Fetch visitor centers for one NPS park unit.
 
         Args:
             park_code: The unit's NPS park code - see :meth:`get_alerts`.
@@ -134,7 +140,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
 
     def get_campgrounds(self, park_code: str) -> list[dict[str, Any]]:
-        """Fetch campgrounds for one NPS park unit.
+        """
+        Fetch campgrounds for one NPS park unit.
 
         Args:
             park_code: The unit's NPS park code - see :meth:`get_alerts`.
@@ -149,7 +156,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
 
     def get_places(self, park_code: str) -> list[dict[str, Any]]:
-        """Fetch one NPS park unit's points of interest - trailheads, overlooks, ruins, wayside exhibits.
+        """
+        Fetch one NPS park unit's points of interest - trailheads, overlooks, ruins, wayside exhibits.
 
         Args:
             park_code: The unit's NPS park code - see :meth:`get_alerts`.
@@ -166,7 +174,8 @@ class RedataNationalParksGateway(RedataLocationContextGateway):
         return coalesced(f"redata:{path}", lambda: _as_dict_list(self.get_json(path)), ttl=_SHARED_SECONDS)
 
     def get_webcams(self, park_code: str) -> list[dict[str, Any]]:
-        """Fetch one NPS park unit's webcams.
+        """
+        Fetch one NPS park unit's webcams.
 
         Args:
             park_code: The unit's NPS park code - see :meth:`get_alerts`.

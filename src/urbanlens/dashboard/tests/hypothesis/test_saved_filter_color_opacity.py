@@ -1,4 +1,5 @@
-"""Tests for saved filter color/opacity: create/edit persistence, validation,
+"""
+Tests for saved filter color/opacity: create/edit persistence, validation,
 and that the accent tint actually renders on the toolbar/sidebar/grid buttons.
 """
 

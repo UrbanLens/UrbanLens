@@ -1,4 +1,5 @@
-"""Whether a trip-mate may see a common-pin activity is read from the pins at that activity, not the viewer's whole list.
+"""
+Whether a trip-mate may see a common-pin activity is read from the pins at that activity, not the viewer's whole list.
 
 Every trip page with an activity added under ``COMMON_PIN`` read every location the viewer had ever pinned to decide
 whether any of them matched the handful of places on the trip.

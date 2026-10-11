@@ -1,4 +1,5 @@
-"""POST /csp-report/ - where browsers send Content-Security-Policy violation reports.
+"""
+POST /csp-report/ - where browsers send Content-Security-Policy violation reports.
 
 Reports are logged, not stored: with the policy enforced, a violation is something a page lost, and
 the log is where a deployment already looks for that. Every field is attacker-writable, so each is
@@ -48,7 +49,8 @@ _FIELDS = {
 
 
 def _clean(value: object) -> str:
-    """One report field as it may be logged: no credentials, query, fragment or control characters, bounded.
+    """
+    One report field as it may be logged: no credentials, query, fragment or control characters, bounded.
 
     Args:
         value: The raw field.
@@ -73,7 +75,8 @@ def _pick(report: dict[str, Any], names: tuple[str, ...]) -> str:
 
 
 def iter_reports(payload: object) -> Iterator[dict[str, Any]]:
-    """The violation reports in a request body, in either wire format.
+    """
+    The violation reports in a request body, in either wire format.
 
     Args:
         payload: The decoded JSON body.
@@ -97,7 +100,8 @@ class CspReportView(View):
     http_method_names = ["post"]
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        """Accept a report batch.
+        """
+        Accept a report batch.
 
         Args:
             request: The browser's report POST.

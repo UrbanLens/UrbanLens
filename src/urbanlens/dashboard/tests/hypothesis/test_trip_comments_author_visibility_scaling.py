@@ -1,4 +1,5 @@
-"""The trip comment tree re-asks "may I see this author" once per comment.
+"""
+The trip comment tree re-asks "may I see this author" once per comment.
 
 The trip half of N21 H43/H52. `visible_comment_tree`, which the pin and wiki
 panels use, builds a `can_view` dict keyed by author precisely because - in its
@@ -123,7 +124,8 @@ class TheAnswerIsStillRightTests(_TripThreadCase):
 
 
 class TheReactionPrefetchIsActuallyUsedTests(_TripThreadCase):
-    """`_aggregate_reactions` re-queried every prefetch handed to it.
+    """
+    `_aggregate_reactions` re-queried every prefetch handed to it.
 
     It calls `.select_related("profile")` on the queryset it is given. On a
     prefetched relation that is not a refinement - it clones the queryset, which

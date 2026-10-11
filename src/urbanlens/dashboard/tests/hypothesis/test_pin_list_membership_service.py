@@ -186,7 +186,8 @@ class ReorderListItemsTests(MembershipServiceTestCase):
 
 
 class ReorderPropertyTests(TestCase):
-    """Property: any permutation of a list's items yields contiguous 0..n-1 order.
+    """
+    Property: any permutation of a list's items yields contiguous 0..n-1 order.
 
     Pure ordering logic, so ``@given`` applies - note there is no ``self.client`` anywhere here, which this
     repo's TestCase does not tolerate under ``@given``."""

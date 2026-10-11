@@ -1,4 +1,5 @@
-"""Tests for services.import_formats.route_geometry.simplify_and_measure().
+"""
+Tests for services.import_formats.route_geometry.simplify_and_measure().
 
 Pure-function tests - no models/DB involved, since simplify_and_measure only
 deals with plain point lists and returns a GEOS LineString.

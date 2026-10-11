@@ -24,14 +24,16 @@ if TYPE_CHECKING:
 
 
 class _ProbeView(CredentialOrSessionMediaMixin, View):
-    """A minimal consumer of the mixin, standing in for the future views.
+    """
+    A minimal consumer of the mixin, standing in for the future views.
 
     Deliberately has no authorization policy of its own: the point is to observe the authentication half in
     isolation, the way the panel image proxy and the SpotGuessr round image will use it once a signature or
     session check of their own has already passed."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Identify the requester and report the outcome as a status code.
+        """
+        Identify the requester and report the outcome as a status code.
 
         Args:
             request: The current request.
@@ -51,7 +53,8 @@ class _ProbeView(CredentialOrSessionMediaMixin, View):
 
 
 def _bearer(raw_key: str) -> dict:
-    """Request kwargs carrying an API key as a bearer token.
+    """
+    Request kwargs carrying an API key as a bearer token.
 
     Args:
         raw_key: The raw (unhashed) key value.
@@ -69,7 +72,8 @@ class MediaAuthDelegationTests(SimpleTestCase):
         self.assertTrue(issubclass(MediaGateView, CredentialOrSessionMediaMixin))
 
     def test_media_gate_does_not_redefine_the_resolution_methods(self) -> None:
-        """A local override would silently reintroduce the copy this removed.
+        """
+        A local override would silently reintroduce the copy this removed.
 
         Checking ``__dict__`` rather than ``hasattr`` is the point: inherited attributes are exactly what should
         be present, and only a re-definition in the subclass body would mean the two implementations had come
@@ -83,7 +87,8 @@ class MediaAuthDelegationTests(SimpleTestCase):
             self.assertNotIn(name, MediaGateView.__dict__)
 
     def test_mixin_does_not_gate_dispatch(self) -> None:
-        """Authentication must stay an explicit call the view chooses to make.
+        """
+        Authentication must stay an explicit call the view chooses to make.
 
         The panel image proxy rejects an unsigned ``sig`` before touching the cache, a database row, or the
         upstream API."""
@@ -106,7 +111,8 @@ class MediaAuthResolutionTests(TestCase):
         self.view = _ProbeView()
 
     def _key_with_scopes(self, scopes: list[ApiKeyScope], user: User | None = None) -> str:
-        """Issue a key carrying exactly *scopes*.
+        """
+        Issue a key carrying exactly *scopes*.
 
         Args:
             scopes: Scopes to store on the row. user: Owner of the key; defaults to the fixture user.
@@ -118,7 +124,8 @@ class MediaAuthResolutionTests(TestCase):
         return raw
 
     def _get(self, **extra) -> HttpResponse:
-        """Run the probe view against a request built with *extra* headers.
+        """
+        Run the probe view against a request built with *extra* headers.
 
         Args:
             **extra: Extra WSGI environ entries, e.g. an Authorization header.
@@ -136,7 +143,8 @@ class MediaAuthResolutionTests(TestCase):
         self.assertEqual(response.content.decode(), str(self.profile.pk))
 
     def test_credential_without_media_read_gets_404_not_403(self) -> None:
-        """A valid-but-unscoped credential must not be told it was forbidden.
+        """
+        A valid-but-unscoped credential must not be told it was forbidden.
 
         403 would confirm the credential is real and the path exists; media authorization is no-oracle end to
         end, so an unscoped key is answered exactly as a missing file is."""
@@ -164,7 +172,8 @@ class MediaAuthResolutionTests(TestCase):
         self.assertEqual(response.content.decode(), str(self.profile.pk))
 
     def test_a_presented_credential_wins_over_an_ambient_session(self) -> None:
-        """A request carrying both is served as the *credential's* account.
+        """
+        A request carrying both is served as the *credential's* account.
 
         The reverse (session first) let a WebView sharing the site's cookie jar fetch media as whichever account
         happened to be logged in, and skipped the scope check entirely whenever a session was also present - see
@@ -179,7 +188,8 @@ class MediaAuthResolutionTests(TestCase):
         self.assertEqual(response.content.decode(), str(stranger.profile.pk))
 
     def test_an_unscoped_credential_cannot_fall_back_to_the_session(self) -> None:
-        """The scope check can't be bypassed by also being logged in.
+        """
+        The scope check can't be bypassed by also being logged in.
 
         This is the half of the ordering fix with teeth: a token deliberately issued without ``media:read`` must
         be refused outright, not quietly served under the cookie's authority."""
@@ -205,7 +215,8 @@ class MediaAuthResolutionTests(TestCase):
         self.assertEqual(Profile.objects.filter(user=fresh_user).count(), 1)
 
     def test_throttled_credential_gets_429_not_404(self) -> None:
-        """An over-budget credential is told to slow down, not that files vanished.
+        """
+        An over-budget credential is told to slow down, not that files vanished.
 
         The caller has already proven it holds a valid scoped credential, so 429 leaks nothing - and it is the
         only answer that lets a syncing client back off instead of concluding every file is missing."""
@@ -222,7 +233,8 @@ class MediaAuthResolutionTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.TOO_MANY_REQUESTS)
 
     def test_throttle_is_not_charged_to_session_requests(self) -> None:
-        """A browser session never reaches the metered branch at all.
+        """
+        A browser session never reaches the metered branch at all.
 
         The site's own login and session handling already bounds it; charging it against a per-credential budget
         would let a heavy page of thumbnails rate-limit the web UI."""

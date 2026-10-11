@@ -35,7 +35,8 @@ def _user_id(profile: Profile) -> str:
 
 
 def _label_definition(label: Label, *, is_active: bool) -> dict[str, Any]:
-    """Build one ``POST /labels/`` definition dict for ``label``.
+    """
+    Build one ``POST /labels/`` definition dict for ``label``.
 
     Args:
         label: The label to describe.
@@ -76,7 +77,8 @@ def _pin_assignment_entry(pin: Pin) -> dict[str, Any]:
 
 
 def sync_label_definitions(profile_ids: list[int], definitions: list[dict[str, Any]]) -> None:
-    """Push ``definitions`` into every listed profile's REData taxonomy.
+    """
+    Push ``definitions`` into every listed profile's REData taxonomy.
     Called from the ``sync_redata_label_definitions`` Celery task - never call this synchronously from a request/view.
 
     Args:
@@ -98,7 +100,8 @@ def sync_label_definitions(profile_ids: list[int], definitions: list[dict[str, A
 
 
 def sync_pin_assignment(pin: Pin) -> None:
-    """Push ``pin``'s complete current tag/category label set to REData.
+    """
+    Push ``pin``'s complete current tag/category label set to REData.
     Called from the ``sync_redata_pin_assignment`` Celery task - never call this synchronously from a request/view.
 
     Args:
@@ -116,7 +119,8 @@ def sync_pin_assignment(pin: Pin) -> None:
 
 
 def backfill_profile(profile: Profile) -> tuple[int, int]:
-    """Push a profile's complete current tag/category taxonomy and pin assignments to REData.
+    """
+    Push a profile's complete current tag/category taxonomy and pin assignments to REData.
     Safe to call repeatedly - REData's own upsert/resend semantics mean this never duplicates or corrupts existing state.
 
     Args:
@@ -161,7 +165,8 @@ def backfill_profile(profile: Profile) -> tuple[int, int]:
 
 
 def queue_label_definition_sync(label: Label) -> None:
-    """Queue an upsert of ``label``'s REData definition, if it's a tag/category label.
+    """
+    Queue an upsert of ``label``'s REData definition, if it's a tag/category label.
     Safe to call unconditionally from any Label save - a status/people/media label is silently skipped, so callers never need their own kind guard.
 
     Args:
@@ -174,7 +179,8 @@ def queue_label_definition_sync(label: Label) -> None:
 
 
 def queue_label_definitions_sync(labels: Iterable[Label]) -> None:
-    """Queue upserts for several saved labels at once, for writes that skip ``post_save`` such as ``bulk_create``.
+    """
+    Queue upserts for several saved labels at once, for writes that skip ``post_save`` such as ``bulk_create``.
 
     Args:
         labels: Saved labels; status, people and media labels are skipped.
@@ -192,7 +198,8 @@ def queue_label_definitions_sync(labels: Iterable[Label]) -> None:
 
 
 def queue_label_retirement(label: Label) -> None:
-    """Queue retirement (``is_active: false``) of a label that used to be tag/category.
+    """
+    Queue retirement (``is_active: false``) of a label that used to be tag/category.
 
     Args:
         label: The label being deleted or converted away."""
@@ -212,7 +219,8 @@ def _queue_definitions(profile_ids: list[int], definitions: list[dict[str, Any]]
 
 
 def queue_pin_assignment_sync(pin_id: int) -> None:
-    """Queue a resync of one pin's tag/category assignment set.
+    """
+    Queue a resync of one pin's tag/category assignment set.
     Safe to call unconditionally from any ``Pin.labels`` change - see ``models.pin.signals``' ``m2m_changed`` receiver, which is the only caller.
 
     Args:
@@ -229,7 +237,8 @@ def queue_pin_assignment_sync(pin_id: int) -> None:
 
 
 def get_suggestions(pin: Pin, *, limit: int | None = None) -> list[tuple[Label, float]] | None:
-    """Ask REData which of the pin owner's own tag/category labels likely apply here.
+    """
+    Ask REData which of the pin owner's own tag/category labels likely apply here.
 
     Args:
         pin: The pin to suggest labels for.

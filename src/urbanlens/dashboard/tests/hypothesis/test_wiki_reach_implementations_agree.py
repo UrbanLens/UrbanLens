@@ -1,4 +1,5 @@
-"""One rule for wiki reach, two implementations, and nothing binding them together.
+"""
+One rule for wiki reach, two implementations, and nothing binding them together.
 
 ``location_visible_to(location, profile)`` answers "can this viewer reach this
 one wiki". ``visible_wiki_location_ids(profile)`` builds the whole set the viewer

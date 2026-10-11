@@ -1,4 +1,5 @@
-"""Everything a new root pin's property needs, fetched once in the background rather than when somebody opens it.
+"""
+Everything a new root pin's property needs, fetched once in the background rather than when somebody opens it.
 
 ``tasks.bootstrap_location`` runs one stage per task run, each with its own time limit, and queues the next:
 
@@ -138,7 +139,8 @@ def _in_flight_key(location_id: int) -> str:
 
 
 def bootstrap_eligible(pin: Pin) -> bool:
-    """Whether a pin is one a bootstrap may run for.
+    """
+    Whether a pin is one a bootstrap may run for.
 
     Args:
         pin: A newly created pin.
@@ -168,7 +170,8 @@ def _take_allowance(pin: Pin) -> bool:
 
 
 def request_bootstrap(pin: Pin) -> bool:
-    """Queue the bootstrap of a new root pin's property, once the pin is committed.
+    """
+    Queue the bootstrap of a new root pin's property, once the pin is committed.
 
     Args:
         pin: The pin just created.
@@ -193,7 +196,8 @@ def request_bootstrap(pin: Pin) -> bool:
 
 
 def locations_bootstrapping(location_ids: Iterable[int]) -> set[int]:
-    """Which of these locations a bootstrap is filling right now.
+    """
+    Which of these locations a bootstrap is filling right now.
 
     Args:
         location_ids: Candidate location ids.
@@ -206,7 +210,8 @@ def locations_bootstrapping(location_ids: Iterable[int]) -> set[int]:
 
 
 def enqueue_step(pin_id: int, step: NextStep) -> None:
-    """Queue the next stage of a pin's bootstrap.
+    """
+    Queue the next stage of a pin's bootstrap.
 
     Args:
         pin_id: The root pin.
@@ -219,7 +224,8 @@ def enqueue_step(pin_id: int, step: NextStep) -> None:
 
 
 def run_stage(pin: Pin, stage: BootstrapStage, attempt: int = 0) -> NextStep | None:
-    """Run one stage of a pin's bootstrap.
+    """
+    Run one stage of a pin's bootstrap.
 
     A stage that fails is logged and the chain goes on: each later stage stands on its own, and a page visit or the
     enrichment job retries what is missing.
@@ -309,7 +315,8 @@ _STAGES = {
 
 
 def fetch_inline(pin: Pin, source_key: str) -> Fetched:
-    """Run one panel's fetch in this task, under the flight marker a page's scheduling uses.
+    """
+    Run one panel's fetch in this task, under the flight marker a page's scheduling uses.
 
     Args:
         pin: The pin whose panel to fetch.
@@ -339,7 +346,8 @@ def fetch_inline(pin: Pin, source_key: str) -> Fetched:
 
 
 def schedule_site_panels(pin: Pin) -> list[str]:
-    """Schedule every site panel that applies to the pin and has nothing stored, as a page's first view would.
+    """
+    Schedule every site panel that applies to the pin and has nothing stored, as a page's first view would.
 
     Args:
         pin: A root pin.
@@ -364,7 +372,8 @@ def schedule_site_panels(pin: Pin) -> list[str]:
 
 
 def prewarm_location(location: Location) -> bool:
-    """Ask REData to start fetching what it knows about a new point, without waiting for any of it.
+    """
+    Ask REData to start fetching what it knows about a new point, without waiting for any of it.
 
     The key needs the ``locations:prewarm`` scope; one without it is remembered and not asked again for
     :data:`PREWARM_REFUSED_SECONDS`, and the bootstrap goes on as if nothing had been asked.

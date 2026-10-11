@@ -1,4 +1,5 @@
-"""Write handlers no other test sent their verb to: a photo visit suggestion's accept or dismiss, a profile note's
+"""
+Write handlers no other test sent their verb to: a photo visit suggestion's accept or dismiss, a profile note's
 edit, the default emergency contacts' replacement, a detail pin's delete and a wiki photo's reposition.
 
 Each asserts the owner's write lands, that anyone else is refused and nothing changes, that anonymous is refused (a

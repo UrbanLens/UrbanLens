@@ -1,4 +1,5 @@
-"""Building permits plugin: permit/violation history for a pin's site, via REData.
+"""
+Building permits plugin: permit/violation history for a pin's site, via REData.
 Providers are cities (Chicago, New York, San Francisco, Austin, Seattle), so the panel gates on the USA and quietly hides outside a covered city."""
 
 from __future__ import annotations

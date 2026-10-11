@@ -1,4 +1,5 @@
-"""Google Calendar plugin: rate-limit defaults for the per-user calendar sync.
+"""
+Google Calendar plugin: rate-limit defaults for the per-user calendar sync.
 This plugin registers the service's rate-limit defaults so calls are throttled and logged like every other external API."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ class GoogleCalendarPlugin(UrbanLensPlugin):
     order: ClassVar[int] = 30
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Google Calendar API.
+        """
+        Rate-limit defaults for the Google Calendar API.
 
         Returns:
             Defaults for the ``google_calendar`` service key.

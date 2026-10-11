@@ -1,4 +1,5 @@
-"""Every field UrbanLens reads from REData is one REData publishes, where UrbanLens reads it.
+"""
+Every field UrbanLens reads from REData is one REData publishes, where UrbanLens reads it.
 
 The table is ``redata_contract.READS``: one row per UrbanLens reader and REData operation, listing the response fields
 the reader uses. It is checked against REData's own OpenAPI document, vendored by a maintainer from a REData checkout.
@@ -22,7 +23,8 @@ def _load() -> dict[str, Any]:
 
 
 class _Resolver:
-    """Walks a field path through one response schema.
+    """
+    Walks a field path through one response schema.
 
     Path syntax: dot-separated keys from the body root; ``key[]`` steps into each item of the array at ``key``; a
     leading ``[]`` steps into a body that is itself an array; ``{}`` steps into each value of a free-keyed map; a final
@@ -72,7 +74,8 @@ class _Resolver:
         return found
 
     def problem(self, body: dict[str, Any], path: str) -> str | None:
-        """Why ``path`` does not resolve in ``body``, or None when it does.
+        """
+        Why ``path`` does not resolve in ``body``, or None when it does.
 
         Args:
             body: The response schema.

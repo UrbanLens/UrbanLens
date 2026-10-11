@@ -62,7 +62,8 @@ __all__ = [
 
 
 def _pending_cancel_token(profile_id: int, kind: str, pk: int) -> str:
-    """Opaque per-item token for cancelling a pending outgoing request.
+    """
+    Opaque per-item token for cancelling a pending outgoing request.
 
     A pending outgoing Friendship (email matched a registered account, or a direct profile-click
     request) and a pending FriendInvitation (unmatched email) must be completely indistinguishable to
@@ -85,7 +86,8 @@ def _pending_cancel_token(profile_id: int, kind: str, pk: int) -> str:
 
 
 def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
-    """Build context dict for friend list partials and pages.
+    """
+    Build context dict for friend list partials and pages.
 
     Determines:
 
@@ -177,7 +179,8 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
 
 
 def _mark_incoming_request_notifications_read(viewer_profile: Profile, incoming_requests: list[Friendship]) -> None:
-    """Mark "new friend request" notifications read once the owner views the pending requests.
+    """
+    Mark "new friend request" notifications read once the owner views the pending requests.
 
     Args:
         viewer_profile: Profile who is viewing their own pending requests.
@@ -194,7 +197,8 @@ def _mark_incoming_request_notifications_read(viewer_profile: Profile, incoming_
 
 
 def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
-    """Re-render whichever own-profile friend widget triggered this HTMX request.
+    """
+    Re-render whichever own-profile friend widget triggered this HTMX request.
 
     Accept/reject/ignore/remove actions always mutate the current user's own friendships, so the
     refreshed context is always built for `request.user.profile`
@@ -212,7 +216,8 @@ def _own_friend_widget_response(request: HttpRequest) -> HttpResponse:
 
 
 def _block_htmx_response(request: HttpRequest, profile_id: int) -> HttpResponse:
-    """Re-render the DM thread after blocking its partner, in place.
+    """
+    Re-render the DM thread after blocking its partner, in place.
 
     Re-rendering rather than returning a placeholder string means the composer picks up its new locked
     state immediately, via the same ``can_direct_message`` check ``_thread_context`` already applies for
@@ -233,7 +238,8 @@ def _block_htmx_response(request: HttpRequest, profile_id: int) -> HttpResponse:
 
 
 def _known_profile(actor: Profile, profile_id: int) -> Profile | None:
-    """The profile ``profile_id`` names, if ``actor`` could already have come across it.
+    """
+    The profile ``profile_id`` names, if ``actor`` could already have come across it.
 
     These buttons are offered on a profile the actor may see and in any conversation the DM routes open,
     and act on requests and connections; a profile reached any other way answers as if no profile held the id, so walking
@@ -303,7 +309,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         htmx_response: Callable[[HttpRequest], HttpResponse],
         missing_message: str = "Friend request not found.",
     ) -> HttpResponse:
-        """Run one ``services.social.friendship`` transition and render this controller's reply.
+        """
+        Run one ``services.social.friendship`` transition and render this controller's reply.
 
         The transitions themselves (and their error taxonomy) live in the service so the external API shares
         them; this only maps those errors onto the status codes the profile-page buttons have always
@@ -373,7 +380,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         )
 
     def unblock_friend(self, request: HttpRequest, profile_id: int):
-        """Lift a block this user placed on ``profile_id``.
+        """
+        Lift a block this user placed on ``profile_id``.
 
         That is now refused at the service, so the button needs the real inverse; ``unblock_profile`` also
         answers 404 rather than 403 when the block is not the caller's, so nothing here confirms one exists.
@@ -387,7 +395,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         )
 
     def mute_friend(self, request: HttpRequest, profile_id: int):
-        """Mute an existing relationship with ``profile_id``.
+        """
+        Mute an existing relationship with ``profile_id``.
 
         Sets the ``muted`` flag only - the relationship itself (and so every visibility gate that reads
         ``Profile.are_friends``) is untouched.
@@ -400,7 +409,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         )
 
     def unmute_friend(self, request: HttpRequest, profile_id: int):
-        """Un-mute an existing relationship with ``profile_id``.
+        """
+        Un-mute an existing relationship with ``profile_id``.
 
         The counterpart the profile page never had.
         """
@@ -416,7 +426,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return self._friend_action(request, profile_id, remove_friend_service, htmx_response=_own_friend_widget_response)
 
     def cancel_pending(self, request: HttpRequest, token: str):
-        """Cancel one of the current user's own pending outgoing requests, by opaque token.
+        """
+        Cancel one of the current user's own pending outgoing requests, by opaque token.
 
         The token (see ``_pending_cancel_token``) is resolved by recomputing the HMAC over the caller's own
         pending rows, so the URL shape, the response, and the 404 behavior are byte-identical regardless of
@@ -486,7 +497,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return render(request, "dashboard/partials/profile/friends_page_content.html", _friend_list_ctx(viewer, viewer))
 
     def friend_request_respond(self, request: HttpRequest, from_profile_id: int):
-        """Accept or decline a friend request from the notification dropdown.
+        """
+        Accept or decline a friend request from the notification dropdown.
 
         Returns the refreshed notification dropdown so the HTMX swap replaces
         #notif-dropdown-wrap's innerHTML inline without navigating away.
@@ -533,7 +545,8 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         return action_taken_response(request, viewer_profile, notification=notification)
 
     def invite_by_email(self, request: HttpRequest):
-        """Invite a friend by email address.
+        """
+        Invite a friend by email address.
 
         The response is identical in every case - it never reveals the target's username or whether the
         email belongs to a registered account, since that would let a caller enumerate site membership by

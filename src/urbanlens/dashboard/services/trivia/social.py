@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def visible_friend_ratings(profile: Profile) -> list[dict]:
-    """Friends' Trivia ratings, excluding anyone who has opted out.
+    """
+    Friends' Trivia ratings, excluding anyone who has opted out.
 
     Returns:
         A list of ``{"profile": Profile, "rating": PlayerTriviaRating | None}`` dicts, one per visible friend - friends who haven't played yet still appear, with ``rating=None``, since the opt-out is about visibility, not about hiding the fact that a friend hasn't played."""

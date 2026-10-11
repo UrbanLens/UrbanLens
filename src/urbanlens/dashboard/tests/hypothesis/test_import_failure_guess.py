@@ -123,7 +123,8 @@ class ImportFailureGuessTests(TestCase):
 
 
 class ImportFailureGuessCorroborationTests(TestCase):
-    """The S2 cell raises confidence when it agrees, and never rejects when it does not.
+    """
+    The S2 cell raises confidence when it agrees, and never rejects when it does not.
 
     Decoding the cell is wrong about one time in three, which was fatal when the importer used it to *place*
     pins (see the module docstring) but is useful for proposing one: two independent signals agreeing is much
@@ -218,7 +219,8 @@ class ImportFailureGuessCorroborationTests(TestCase):
         self.assertEqual(guess.source, "address")
 
     def test_corroboration_does_not_get_stricter_at_high_latitude(self) -> None:
-        """The agreement bound is a true distance, not a degree box.
+        """
+        The agreement bound is a true distance, not a degree box.
 
         A degree of longitude shrinks with latitude - half its equatorial width at 60 deg, a third at 70 - so a
         degree-based check silently tightened the further north the pin was."""

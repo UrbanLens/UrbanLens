@@ -27,7 +27,8 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
         since: datetime.date | None = None,
         until: datetime.date | None = None,
     ) -> dict[str, Any]:
-        """Fetch the capture-date timeline for a point.
+        """
+        Fetch the capture-date timeline for a point.
         One entry per capture *date* rather than per frame (a vehicle records dozens of frames in seconds); each entry's ``representative`` is the frame taken nearest the query point, preferring a panorama on a tie.
 
         Args:
@@ -55,7 +56,8 @@ class RedataStreetViewGateway(RedataLocationContextGateway):
         return self.get_json(_STREET_VIEW_TIMELINE_PATH, params)
 
     def download_capture(self, capture_uuid: str) -> tuple[bytes, str]:
-        """REData's permanent archived copy of one capture, which outlives the contributor deleting it upstream.
+        """
+        REData's permanent archived copy of one capture, which outlives the contributor deleting it upstream.
 
         REData fetches the image from the network on the first request for it, so this is charged to the lookup pool.
 

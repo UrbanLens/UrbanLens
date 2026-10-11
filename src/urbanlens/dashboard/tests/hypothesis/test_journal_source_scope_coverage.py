@@ -25,14 +25,16 @@ class JournalSourceScopeCoverageTests(SimpleTestCase):
         self.assertEqual(stale, [], "these scope entries refer to journal sources that were removed")
 
     def test_no_source_declares_an_empty_scope_set(self) -> None:
-        """An empty set is omitted rather than granted, so it reads as 'mapped'
+        """
+        An empty set is omitted rather than granted, so it reads as 'mapped'
         while behaving as 'never served'."""
         empty = sorted(key for key, scopes in MemoriesJournalView.JOURNAL_SOURCE_SCOPES.items() if not scopes)
 
         self.assertEqual(empty, [])
 
     def test_every_source_requires_the_endpoints_own_base_scope(self) -> None:
-        """``filter_sources_by_grants`` deliberately does not assume the view's
+        """
+        ``filter_sources_by_grants`` deliberately does not assume the view's
         own ``required_scopes`` were satisfied, so each entry must list them."""
         base = MemoriesJournalView.required_scopes_by_method["GET"]
         missing = sorted(

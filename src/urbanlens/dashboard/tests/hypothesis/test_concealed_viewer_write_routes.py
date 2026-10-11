@@ -1,4 +1,5 @@
-"""The community wiki write routes P29 covered, for a viewer the wiki is concealed from.
+"""
+The community wiki write routes P29 covered, for a viewer the wiki is concealed from.
 
 ``concealment_active`` returns ``False`` in production until the gate is defined, so these force it on the way the other concealment suites do: by
 patching that one predicate. ``external_api.views_wiki`` imports it by name, so its binding is patched as well.

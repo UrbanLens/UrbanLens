@@ -1,4 +1,5 @@
-"""A photo whose re-encode has not landed is listed as processing, never by its stored path (P142).
+"""
+A photo whose re-encode has not landed is listed as processing, never by its stored path (P142).
 
 The stored file of a pending upload is replaced, and deleted, by the re-encode; a listing that names
 it hands the browser a URL that 404s moments later.

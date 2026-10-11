@@ -21,7 +21,8 @@ def recorded_route_distance_km(profile: Profile) -> float:
 
 
 def inter_visit_distance_km(profile: Profile) -> float:
-    """Return the summed great-circle distance between consecutive visits, in km.
+    """
+    Return the summed great-circle distance between consecutive visits, in km.
     Any visit without a resolvable coordinate is skipped, and the leg is measured between the two nearest coordinate-bearing visits so a single gap does not break the chain.
 
     Args:

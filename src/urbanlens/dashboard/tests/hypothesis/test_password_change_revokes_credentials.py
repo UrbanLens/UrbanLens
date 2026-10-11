@@ -44,7 +44,8 @@ def _b64(raw: bytes) -> str:
 
 
 def _issue_oauth_grant(user: User, suffix: str) -> tuple[str, str]:
-    """An application with a live access token, its refresh token, and a pending authorization code.
+    """
+    An application with a live access token, its refresh token, and a pending authorization code.
 
     Returns:
         ``(access_token, refresh_token)`` strings.

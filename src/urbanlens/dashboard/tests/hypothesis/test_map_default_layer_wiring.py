@@ -1,4 +1,5 @@
-"""Every map opens on the base the viewer chose.
+"""
+Every map opens on the base the viewer chose.
 
 ``Profile.default_map_view`` defaults to ``satellite``, but most maps were built without ever being
 told what the viewer chose, and the shared layers engine substituted ``street`` - a value nobody
@@ -43,7 +44,8 @@ class MapDefaultLayerTestCase(TestCase):
 
 
 class AlbumMapDefaultLayerTests(MapDefaultLayerTestCase):
-    """This map asked for ``remember`` against a site-wide storage key, so a viewer opening an album
+    """
+    This map asked for ``remember`` against a site-wide storage key, so a viewer opening an album
     for the first time got the engine's own default whatever their profile said."""
 
     def setUp(self) -> None:
@@ -73,7 +75,8 @@ class AlbumMapDefaultLayerTests(MapDefaultLayerTestCase):
         self.assertNotIn('data-default-base="street"', body)
 
     def test_remember_reaches_the_client_verbatim(self) -> None:
-        """Resolving this server-side would lose the per-browser restore: only the client knows what
+        """
+        Resolving this server-side would lose the per-browser restore: only the client knows what
         was stored, and whether it has anywhere to store it."""
         self.set_view("remember")
 
@@ -81,7 +84,8 @@ class AlbumMapDefaultLayerTests(MapDefaultLayerTestCase):
 
 
 class WikiAnnotationsMapDefaultLayerTests(MapDefaultLayerTestCase):
-    """The wiki page's annotations map is the same entry the pin detail page uses.
+    """
+    The wiki page's annotations map is the same entry the pin detail page uses.
 
     The pin page hands it ``data-default-map-view`` and the wiki page hands it nothing, so the
     viewer's setting was never consulted here.
@@ -101,7 +105,8 @@ class WikiAnnotationsMapDefaultLayerTests(MapDefaultLayerTestCase):
         self.assertIn('data-default-base="topographic"', self._render())
 
     def test_the_wiki_map_names_no_base_of_its_own_to_override_it_with(self) -> None:
-        """``map-annotations.ts`` passes this attribute straight through as the base, so any literal
+        """
+        ``map-annotations.ts`` passes this attribute straight through as the base, so any literal
         here - not just the one this page used to imply - would win over the panel's."""
         self.set_view("topographic")
 

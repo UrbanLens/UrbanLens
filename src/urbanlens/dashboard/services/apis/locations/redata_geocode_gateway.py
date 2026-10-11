@@ -16,7 +16,8 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
     service_key: ClassVar[str] = "redata_geocode"
 
     def geocode(self, query: str, *, latitude: float | None = None, longitude: float | None = None, limit: int | None = None, provider: str | list[str] | None = None) -> LocationContextEnvelope:
-        """Resolve free text to places (``GET /geocode/``).
+        """
+        Resolve free text to places (``GET /geocode/``).
 
         Args:
             query: The free-text search string.
@@ -47,7 +48,8 @@ class RedataGeocodeGateway(RedataLocationContextGateway):
         return self._get_envelope("/api/v1/geocode/", params)
 
     def reverse_geocode(self, latitude: float, longitude: float, *, provider: str | list[str] | None = None, force_refresh: bool = False) -> LocationContextEnvelope:
-        """Resolve a coordinate to the place there (``GET /geocode/reverse/``).
+        """
+        Resolve a coordinate to the place there (``GET /geocode/reverse/``).
 
         Args:
             latitude: WGS-84 latitude.

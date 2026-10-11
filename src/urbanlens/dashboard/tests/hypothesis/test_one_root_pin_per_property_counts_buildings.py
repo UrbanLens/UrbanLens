@@ -1,4 +1,5 @@
-"""One root pin per property holds when the second coordinate lands on one of the property's buildings.
+"""
+One root pin per property holds when the second coordinate lands on one of the property's buildings.
 
 The check compared the exact place, so once a building had a footprint of its own a point on it resolved
 onto the building place rather than the parcel, and a second root pin on the same property was accepted."""

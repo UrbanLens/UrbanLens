@@ -10,7 +10,8 @@ from urbanlens.dashboard.models.google_place.queryset import GooglePlaceManager
 
 
 class GooglePlace(abstract.DashboardModel):
-    """Cached Google Place / geocoding metadata for a coordinate pair.
+    """
+    Cached Google Place / geocoding metadata for a coordinate pair.
     Deduplicated by (latitude, longitude): any two Location rows that share coordinates reference the same GooglePlace row, so Google's APIs are only contacted once per point.
     """
 

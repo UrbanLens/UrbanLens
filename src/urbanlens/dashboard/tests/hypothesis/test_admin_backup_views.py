@@ -39,7 +39,8 @@ class ToolsIndexViewTests(TestCase):
 
 
 class BackupStartViewTests(TestCase):
-    """BackupStartView requires the site-admin permission and queues the Celery backup task.
+    """
+    BackupStartView requires the site-admin permission and queues the Celery backup task.
 
     Routed through ``self.client`` (not the view's ``post()`` called directly) so
     ``PermissionRequiredMixin.dispatch()`` actually runs - calling ``post()`` on a bare instance skips

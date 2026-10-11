@@ -47,7 +47,8 @@ class PinCoverHeroTests(TestCase):
 
 
 class OtherHeroPagesTests(TestCase):
-    """The same partial on a page that passes no cover image at all.
+    """
+    The same partial on a page that passes no cover image at all.
 
     The Private Pin page is currently the only include site that passes `hero_image_url`, so nothing else
     renders the block this is about - which is how a 500 in it went unnoticed."""
@@ -70,7 +71,8 @@ class OtherHeroPagesTests(TestCase):
 
 
 class PinHeroOutOfBandTests(TestCase):
-    """The overview partial, loaded on every pin page, swaps its own copy of the hero over the page's.
+    """
+    The overview partial, loaded on every pin page, swaps its own copy of the hero over the page's.
 
     That copy was rendered without the other photos, so the hover preview through them never survived page load.
     """

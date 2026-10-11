@@ -31,7 +31,8 @@ class RedataPermitsGateway(RedataLocationContextGateway):
         limit: int | None = None,
         force_refresh: bool = False,
     ) -> LocationContextEnvelope:
-        """Fetch permit/violation/site-plan filings near a coordinate.
+        """
+        Fetch permit/violation/site-plan filings near a coordinate.
 
         Args:
             latitude: WGS-84 latitude.

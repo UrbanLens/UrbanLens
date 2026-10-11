@@ -93,7 +93,8 @@ class TripVisibilityIsStricterTests(TestCase):
         self.assertFalse(self._hidden())
 
     def test_elsewhere_still_means_a_different_place_not_just_a_different_row(self) -> None:
-        """Regression guard for divergence 2 itself: giving self.location and
+        """
+        Regression guard for divergence 2 itself: giving self.location and
         `elsewhere` unrelated Places (rather than leaving place unset, which
         the other divergence-2 test relies on implicitly) must still hide it."""
         self._set_visibility(VisibilityChoice.COMMON_PIN)

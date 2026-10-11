@@ -1,4 +1,5 @@
-"""Command-line scripts for the app (never import into Django). Run with --help for options.
+"""
+Command-line scripts for the app (never import into Django). Run with --help for options.
 
 Examples:
     >>> python db.py --help

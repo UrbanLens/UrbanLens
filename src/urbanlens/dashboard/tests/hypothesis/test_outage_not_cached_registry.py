@@ -1,4 +1,5 @@
-"""Every source that caches to LocationCache, run while its upstream cannot be reached, writes nothing.
+"""
+Every source that caches to LocationCache, run while its upstream cannot be reached, writes nothing.
 
 The sources are read from the panel and enrichment registries, so one added later is held to this without being
 listed here. The upstream is cut off below every gateway, at the socket (or, for a 503, at requests' adapter), which is
@@ -171,7 +172,8 @@ class _OutageFixture(RedataConfiguredMixin, TestCase):
         )
 
     def _run_as_the_worker_does(self, run: Callable[[], object]) -> None:
-        """A raise is that one source's failure, and whatever it wrote first stays written.
+        """
+        A raise is that one source's failure, and whatever it wrote first stays written.
 
         Each source starts with its own quota: an earlier one's attempts would otherwise use up a shared per-minute
         limit, and a refusal by the limiter asks nothing.

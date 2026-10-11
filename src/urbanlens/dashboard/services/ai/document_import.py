@@ -48,7 +48,8 @@ _TEMP_FILE_SUFFIX = ".csv"
 
 
 class DocumentTooLargeError(Exception):
-    """Raised when an uploaded document's extracted text exceeds the configured limit.
+    """
+    Raised when an uploaded document's extracted text exceeds the configured limit.
     Callers should catch this and surface ``str(exc)`` to the user so they can shorten the file and retry, rather than have it silently truncated (which could cut off pins described later in the document)."""
 
 
@@ -60,7 +61,8 @@ def _get_max_document_chars() -> int:
 
 
 def is_supported_document_filename(filename: str) -> bool:
-    """Return True when *filename*'s extension is one this module can parse.
+    """
+    Return True when *filename*'s extension is one this module can parse.
 
     Args:
         filename: Uploaded filename, used only for its extension.
@@ -73,7 +75,8 @@ def is_supported_document_filename(filename: str) -> bool:
 
 
 def _reject_oversized_docx(filename: str, data: bytes) -> None:
-    """Refuse a ``.docx`` whose contents decompress far past anything readable.
+    """
+    Refuse a ``.docx`` whose contents decompress far past anything readable.
     So the character limit is checked after the memory has already been spent.
 
     Args:
@@ -97,7 +100,8 @@ def _reject_oversized_docx(filename: str, data: bytes) -> None:
 
 @untrusted_parse("document.parse")
 def extract_text(filename: str, data: bytes) -> str | None:
-    """Extract plain text from an uploaded ``.txt`` or ``.docx`` file.
+    """
+    Extract plain text from an uploaded ``.txt`` or ``.docx`` file.
 
     Args:
         filename: Uploaded filename, used to pick the extraction method.
@@ -141,7 +145,8 @@ def extract_text(filename: str, data: bytes) -> str | None:
 
 
 def extract_pins_from_document(filename: str, data: bytes, profile: Profile) -> tuple[dict[str, Any] | None, str | None]:
-    """Ask AI to extract pin candidates from an uploaded document.
+    """
+    Ask AI to extract pin candidates from an uploaded document.
     Only runs when AI is enabled for this profile/site/subscription; otherwise returns None so the caller can skip the file exactly like any other unsupported upload.
 
     Args:
@@ -178,7 +183,8 @@ UNAVAILABLE_HERE_WARNING = "AI document import is not available in this environm
 
 
 def ai_document_import_available(profile: Profile) -> bool:
-    """Whether AI document extraction may run for *profile*.
+    """
+    Whether AI document extraction may run for *profile*.
 
     Args:
         profile: Profile the import is being run for.
@@ -191,7 +197,8 @@ def ai_document_import_available(profile: Profile) -> bool:
 
 
 def read_document_text(filename: str, data: bytes) -> tuple[str | None, bool]:
-    """The half of document import that parses bytes, for the sandbox worker.
+    """
+    The half of document import that parses bytes, for the sandbox worker.
 
     Args:
         filename: Uploaded filename, used to pick the extraction method.
@@ -210,7 +217,8 @@ def read_document_text(filename: str, data: bytes) -> tuple[str | None, bool]:
 
 
 def extract_pins_from_text(filename: str, text: str, profile: Profile) -> tuple[dict[str, Any] | None, str | None]:
-    """Ask AI for pin candidates in a document's extracted text, and geocode them.
+    """
+    Ask AI for pin candidates in a document's extracted text, and geocode them.
 
     The half of document import that needs the network. The caller has already checked
     :func:`ai_document_import_available`.
@@ -323,7 +331,8 @@ def _build_prompt(text: str) -> str:
 
 
 def _parse_csv_rows(answer: str) -> list[dict[str, str]]:
-    """Parse CSV text into row dicts, tolerating a missing/mismatched header.
+    """
+    Parse CSV text into row dicts, tolerating a missing/mismatched header.
     Production code should go through ``_parse_ai_csv_response`` instead, which treats the AI's answer as untrusted output the same way any other uploaded file is treated.
 
     Args:
@@ -373,7 +382,8 @@ def _rows_from_dicts(rows: Iterable[dict[str, str | None]]) -> list[dict[str, st
 
 
 def _parse_ai_csv_response(answer: str) -> list[dict[str, str]]:
-    """Parse the AI's CSV answer the same way any other untrusted upload is handled.
+    """
+    Parse the AI's CSV answer the same way any other untrusted upload is handled.
 
     Args:
         answer: Raw CSV text returned by the AI (already unwrapped from its ANSWER tag).
@@ -406,7 +416,8 @@ def _parse_ai_csv_response(answer: str) -> list[dict[str, str]]:
 
 
 def _parse_explicit_coordinates(latitude: str, longitude: str) -> tuple[float, float] | None:
-    """Parse a lat/lng pair the AI copied directly from the document text.
+    """
+    Parse a lat/lng pair the AI copied directly from the document text.
     Only returns a value when both fields are present and form a plausible WGS-84 coordinate.
 
     Args:
@@ -430,7 +441,8 @@ def _parse_explicit_coordinates(latitude: str, longitude: str) -> tuple[float, f
 
 
 def _geocode_pins(rows: list[dict[str, str]]) -> tuple[list[dict[str, Any]], int]:
-    """Resolve coordinates for each extracted row.
+    """
+    Resolve coordinates for each extracted row.
 
     Args:
         rows: Extracted ``{name, description, address, latitude, longitude}`` dicts.

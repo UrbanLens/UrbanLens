@@ -84,7 +84,8 @@ def _winner_pk(place: Place) -> int | None:
 
 
 def _backdate(vote: BoundaryVote, days: float) -> None:
-    """Push a vote's recency timestamp ``days`` into the past.
+    """
+    Push a vote's recency timestamp ``days`` into the past.
 
     Queryset ``update()`` bypasses ``auto_now``, so this sets ``updated``
     exactly - the field the weighting reads.
@@ -110,7 +111,8 @@ class VoteWeightTests(SimpleTestCase):
         self.assertLess(older, newer)
 
     def test_same_age_votes_tie_exactly(self) -> None:
-        """Weight is a function of *age*, not absolute calendar time.
+        """
+        Weight is a function of *age*, not absolute calendar time.
 
         Calling the function twice with identical arguments is tautological and proves nothing; the real claim
         is that shifting both timestamps by the same amount leaves the weight unchanged."""
@@ -120,7 +122,8 @@ class VoteWeightTests(SimpleTestCase):
         self.assertAlmostEqual(vote_weight(recent_now - age, recent_now), vote_weight(shifted_now - age, shifted_now))
 
     def test_weight_quarters_at_two_half_lives(self) -> None:
-        """Pins the exponential curve itself, not just its one named point.
+        """
+        Pins the exponential curve itself, not just its one named point.
 
         A linear decay reaching 0.5 at HALF_LIFE_DAYS would also pass ``test_weight_halves_at_half_life`` (0.5
         is 0.5 either way) but would hit 0.0, not 0.25, here."""
@@ -197,7 +200,8 @@ class BoundaryOptionsTests(TestCase):
         self.assertEqual(boundary_options(self.place), [])
 
     def test_none_place_has_no_options(self) -> None:
-        """A coordinate no provider has resolved to a place - real candidates
+        """
+        A coordinate no provider has resolved to a place - real candidates
         exist (for a different place), but there's nothing to vote on here."""
         _make_candidate(self.place, BoundarySource.REDATA, _square(-73.76, 42.65))
         self.assertEqual(boundary_options(None), [])
@@ -240,7 +244,8 @@ class WinningBoundaryTests(TestCase):
         self.assertIsNone(winning_boundary(empty_place))
 
     def test_none_place_has_no_winner_or_consensus(self) -> None:
-        """``location.place`` is nullable - callers (e.g. the vote endpoint)
+        """
+        ``location.place`` is nullable - callers (e.g. the vote endpoint)
         pass it straight through, so None must resolve gracefully rather
         than raising or falling through to some other place's candidates."""
         self.assertIsNone(winning_boundary(None))
@@ -263,7 +268,8 @@ class WinningBoundaryTests(TestCase):
         self.assertTrue(has_consensus(self.place))
 
     def test_consensus_boundary_is_inclusive_at_exact_ratio(self) -> None:
-        """A leader-to-runner-up ratio of exactly CONSENSUS_RATIO (1.5) must already count as consensus - the check is ``>=``, not ``>``.
+        """
+        A leader-to-runner-up ratio of exactly CONSENSUS_RATIO (1.5) must already count as consensus - the check is ``>=``, not ``>``.
 
         Three same-age votes vs. two same-age votes gives a ratio of exactly 3/2 regardless of how much real
         time has elapsed by the time this assertion runs, since every vote's individual weight cancels out."""
@@ -319,7 +325,8 @@ class WinnerMatchingIntegrationTests(TestCase):
         self.assertIsNone(Place.objects.resolve_for_point(42.6505, -73.7595))
 
     def test_reaffirming_the_same_choice_refreshes_recency(self) -> None:
-        """Recasting an unchanged vote still counts as a fresh vote.
+        """
+        Recasting an unchanged vote still counts as a fresh vote.
 
         ``update_or_create`` saves unconditionally on a match, but a plausible "skip the write if the choice
         didn't change" refactor would silently stop refreshing recency - which is the entire point of letting
@@ -484,7 +491,8 @@ class BoundaryVoteContextTests(TestCase):
             cast_boundary_vote(self.place, self.viewer, 999_999)
 
     def test_a_non_candidate_boundary_at_the_same_place_is_rejected(self) -> None:
-        """A real row at this exact place that just isn't a votable candidate
+        """
+        A real row at this exact place that just isn't a votable candidate
         (wrong type here) must be rejected too - the check has to be
         membership in ``boundary_options``, not merely "this pk exists"."""
         self.overpass.boundary_type = BoundaryType.BUILDING

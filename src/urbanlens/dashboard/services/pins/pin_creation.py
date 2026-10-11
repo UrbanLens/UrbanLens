@@ -58,14 +58,16 @@ class AddressResolutionError(PinCreationError):
 
 
 class AddressLookupUnavailableError(AddressResolutionError):
-    """The address could not be looked up right now - not that it names no place.
+    """
+    The address could not be looked up right now - not that it names no place.
 
     The geocoder did not answer, its budget is spent, or this environment does not ask it (D26).
     """
 
 
 def coordinates_for_address(address: str) -> tuple[float | None, float | None]:
-    """Geocode an address for pin creation, telling "not looked up" apart from "no such place".
+    """
+    Geocode an address for pin creation, telling "not looked up" apart from "no such place".
 
     Args:
         address: The address to geocode.
@@ -91,7 +93,8 @@ class DuplicateUuidError(PinCreationError):
 
 
 class PinCreationForbiddenError(PinCreationError):
-    """The input was well-formed but a profile setting forbids acting on it.
+    """
+    The input was well-formed but a profile setting forbids acting on it.
     Distinct from plain :class:`PinCreationError` so HTTP-facing callers can map it to 403 rather than 400 without inspecting the message text."""
 
 
@@ -103,7 +106,8 @@ def resolve_child_pin_location(
     exclude_pin: Pin | None = None,
     defaults: dict | None = None,
 ) -> Location:
-    """Resolve the Location a child (detail) pin sits at, refusing an exact overlap.
+    """
+    Resolve the Location a child (detail) pin sits at, refusing an exact overlap.
     A child pin records its own precise coordinates near its parent, so - unlike a top-level pin - this never applies the fuzzy proximity radius, which would collapse a door, a window, and a sign on one building onto the parent's own Location.
 
     Args:
@@ -163,7 +167,8 @@ def create_pin_for_profile(
     parent_id: UUID | None = None,
     name_is_user_provided: bool = False,
 ) -> PinCreationResult:
-    """Create a Pin for a profile from raw, untrusted-shaped input.
+    """
+    Create a Pin for a profile from raw, untrusted-shaped input.
 
     Args:
         profile: The owning profile - the pin is always created as this profile's own, regardless of who/what is calling.

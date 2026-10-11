@@ -53,7 +53,8 @@ class PhotoUploadGauntletTests(TestCase):
         self.assertEqual(error[1], 400)
 
     def test_renaming_the_svg_to_jpg_is_now_refused_outright(self) -> None:
-        """Was "accepted but harmless"; it is refused now, which is strictly better.
+        """
+        Was "accepted but harmless"; it is refused now, which is strictly better.
 
         The extension allowlist's reasoning has not changed and is still why it exists: the *stored extension*
         determines the served Content-Type, so SVG bytes under a `.jpg` name were already inert - the browser is

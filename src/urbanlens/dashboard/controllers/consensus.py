@@ -1,4 +1,5 @@
-"""Consensus controller - gameplay, competitive lobby, and chat.
+"""
+Consensus controller - gameplay, competitive lobby, and chat.
 
 Session/round/answer/vote/lobby orchestration lives in
 ``services.consensus`` - this module only handles HTTP: request parsing,
@@ -82,7 +83,8 @@ def _joined_participant(profile: Profile, session: ConsensusSession) -> Consensu
 
 
 class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The Consensus overview page: own points/level, friends, start-game form.
+    """
+    The Consensus overview page: own points/level, friends, start-game form.
 
     GET /games/consensus/
     """
@@ -126,7 +128,8 @@ class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Start a new session - solo (immediately active) or competitive (a lobby to invite friends into).
+    """
+    Start a new session - solo (immediately active) or competitive (a lobby to invite friends into).
 
     POST /games/consensus/start/ body: ``total_rounds``, optional ``invite_profile_ids`` (repeated).
 
@@ -175,7 +178,8 @@ class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The lobby's current state: status, and every participant (invited or joined).
+    """
+    The lobby's current state: status, and every participant (invited or joined).
 
     GET /games/consensus/session/<session_id>/lobby/
     """
@@ -187,7 +191,8 @@ class ConsensusLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Invite one more friend to a still-open lobby. Host-only.
+    """
+    Invite one more friend to a still-open lobby. Host-only.
 
     POST /games/consensus/session/<session_id>/invite/   body: ``profile_id``
     """
@@ -220,7 +225,8 @@ class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Accept an invitation to a lobby.
+    """
+    Accept an invitation to a lobby.
 
     POST /games/consensus/session/<session_id>/join/
     """
@@ -244,7 +250,8 @@ class ConsensusJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host starts the game: locks the roster and creates round 1.
+    """
+    Host starts the game: locks the roster and creates round 1.
 
     POST /games/consensus/session/<session_id>/begin/
     """
@@ -274,7 +281,8 @@ class ConsensusBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host ends the game immediately - the manual escape hatch for a stalled or AFK competitive session.
+    """
+    Host ends the game immediately - the manual escape hatch for a stalled or AFK competitive session.
 
     POST /games/consensus/session/<session_id>/end/
     """
@@ -298,7 +306,8 @@ class ConsensusEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vie
 
 
 class ConsensusRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The session's current round (for reloads/reconnects).
+    """
+    The session's current round (for reloads/reconnects).
 
     GET /games/consensus/session/<session_id>/round/
     """
@@ -320,7 +329,8 @@ class ConsensusRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 def _parse_answer_value(request: HttpRequest, round_: ConsensusRound) -> tuple[str | Point | None, JsonResponse | None]:
-    """Parse a submitted answer body for ``round_``'s field kind.
+    """
+    Parse a submitted answer body for ``round_``'s field kind.
 
     Returns:
         ``(value, None)`` on success, or ``(None, error_response)`` on failure.
@@ -342,7 +352,8 @@ def _parse_answer_value(request: HttpRequest, round_: ConsensusRound) -> tuple[s
 
 
 class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Submit an answer for the session's current round.
+    """
+    Submit an answer for the session's current round.
 
     POST /games/consensus/session/<session_id>/round/<round_id>/answer/
     body: ``value`` (text kinds) or ``latitude``/``longitude`` (PHOTO_COORDINATES)
@@ -383,7 +394,8 @@ class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Skip the session's current round - "I don't know."
+    """
+    Skip the session's current round - "I don't know."
 
     POST /games/consensus/session/<session_id>/round/<round_id>/skip/
     """
@@ -419,7 +431,8 @@ class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Cast a vote during a competitive round's disagreement sub-phase.
+    """
+    Cast a vote during a competitive round's disagreement sub-phase.
 
     POST /games/consensus/session/<session_id>/round/<round_id>/vote/   body: ``answer_id``
     """
@@ -456,7 +469,8 @@ class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Upload a photo of the spot during a round - reuses the Memories upload pipeline.
+    """
+    Upload a photo of the spot during a round - reuses the Memories upload pipeline.
 
     POST /games/consensus/session/<session_id>/round/<round_id>/photo/ body: an ``image`` file
 
@@ -518,7 +532,8 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
 
 class ConsensusChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
+    """
+    Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /games/consensus/session/<session_id>/chat/
     """
@@ -531,7 +546,8 @@ class ConsensusChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
 
 class ConsensusSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The session's final scoreboard.
+    """
+    The session's final scoreboard.
 
     GET /games/consensus/session/<session_id>/summary/
     """

@@ -16,7 +16,8 @@ class PinOwnerQuerySet(abstract.DashboardQuerySet["PinOwner"]):
     """QuerySet for PinOwner."""
 
     def for_pin(self, pin: Pin) -> Self:
-        """Return the owners private to a specific pin.
+        """
+        Return the owners private to a specific pin.
 
         Args:
             pin: The pin to filter by.
@@ -38,7 +39,8 @@ class WikiOwnerQuerySet(abstract.DashboardQuerySet["WikiOwner"]):
     """QuerySet for WikiOwner."""
 
     def for_location(self, location: Location) -> Self:
-        """Return the owners shared for a specific location.
+        """
+        Return the owners shared for a specific location.
 
         Args:
             location: The Location to filter by.
@@ -60,7 +62,8 @@ class PinPropertySaleQuerySet(abstract.DashboardQuerySet["PinPropertySale"]):
     """QuerySet for PinPropertySale."""
 
     def for_pin(self, pin: Pin) -> Self:
-        """Return the sale records private to a specific pin.
+        """
+        Return the sale records private to a specific pin.
 
         Args:
             pin: The pin to filter by.
@@ -82,7 +85,8 @@ class WikiPropertySaleQuerySet(abstract.DashboardQuerySet["WikiPropertySale"]):
     """QuerySet for WikiPropertySale."""
 
     def for_location(self, location: Location) -> Self:
-        """Return the sale records shared for a specific location.
+        """
+        Return the sale records shared for a specific location.
 
         Args:
             location: The Location to filter by.

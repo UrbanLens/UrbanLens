@@ -16,7 +16,8 @@ class UndoEntrySerializer(serializers.Serializer):
 
 
 class UndoHistorySerializer(serializers.Serializer):
-    """The undo feed, as the endpoint actually returns it.
+    """
+    The undo feed, as the endpoint actually returns it.
 
     Exists because the endpoint was documented as a bare array of :class:`UndoEntrySerializer` while
     returning this envelope, so a generated client iterated an object.

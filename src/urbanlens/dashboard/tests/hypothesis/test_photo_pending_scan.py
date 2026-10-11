@@ -267,7 +267,8 @@ class PendingScanUploadFlowTests(TestCase):
 
 
 class DedupedCopyInheritsPendingScanTests(TestCase):
-    """A dedup sibling must not be a side door around its original's pending_scan.
+    """
+    A dedup sibling must not be a side door around its original's pending_scan.
 
     ``attach_deduped_copy`` points a new row at the *same stored file* as an earlier upload by the same profile,
     without going through ``process_image_upload`` itself."""
@@ -314,7 +315,8 @@ class LegacyRowsDefaultToNotPendingTests(DjangoTestCase):
 
 
 class SafetyContactPortalRespectsPendingScanTests(TestCase):
-    """The one Image-serving surface that does not go through ``authorize_image``.
+    """
+    The one Image-serving surface that does not go through ``authorize_image``.
 
     ``SafetyContactPhotoView`` authenticates an emergency contact by magic-link token - they usually have no
     account - and streams the file directly."""

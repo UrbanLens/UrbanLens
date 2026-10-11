@@ -49,7 +49,8 @@ def _fold(value: str) -> str:
 
 
 def normalize_username_key(username: str) -> str:
-    """Return the key two usernames share when they would read as the same name.
+    """
+    Return the key two usernames share when they would read as the same name.
 
     Compatibility forms fold to plain characters, case is ignored, every separator and symbol is dropped, and
     look-alike characters collapse, so ``Foo.Bar``, ``foo_bar``, ``_f-o-o-b-a-r-`` and ``f00bar`` all key to
@@ -75,7 +76,8 @@ def _is_reserved(username: str) -> bool:
 
 
 def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> bool:
-    """Return True when another account already owns this username or any spelling that shares its key.
+    """
+    Return True when another account already owns this username or any spelling that shares its key.
     The demo prefix is reserved rather than merely unused.
 
     Args:
@@ -98,7 +100,8 @@ def username_is_taken(username: str, *, exclude_user_id: int | None = None) -> b
 
 
 def username_is_available(username: str, *, exclude_user_id: int | None = None) -> bool:
-    """Whether ``username`` is well-formed and free, so callers can refuse every other case with one message.
+    """
+    Whether ``username`` is well-formed and free, so callers can refuse every other case with one message.
 
     Args:
         username: Candidate username.
@@ -110,7 +113,8 @@ def username_is_available(username: str, *, exclude_user_id: int | None = None) 
 
 
 def find_profile_by_username(username: str, allowed: Q) -> Profile | None:
-    """The profile a typed username names, if *allowed* admits it.
+    """
+    The profile a typed username names, if *allowed* admits it.
 
     Matches as :func:`find_user_by_username` does, active accounts only: an exact username, else the one account
     holding its key. A match *allowed* refuses answers as no match, after the same one statement, so a caller cannot
@@ -146,7 +150,8 @@ def find_profile_by_username(username: str, allowed: Q) -> Profile | None:
 
 
 def find_user_by_username(username: str, *, active_only: bool = True) -> User | None:
-    """The account a typed username names: an exact match, else the one account holding its key.
+    """
+    The account a typed username names: an exact match, else the one account holding its key.
 
     Args:
         username: Any spelling of a username - case, separators and look-alike characters are ignored.
@@ -177,7 +182,8 @@ def find_user_by_username(username: str, *, active_only: bool = True) -> User | 
 
 
 def username_search_q(query: str, *, profile_path: str = "") -> Q:
-    """Match profiles whose username contains ``query``, in any spelling that shares its key.
+    """
+    Match profiles whose username contains ``query``, in any spelling that shares its key.
 
     Args:
         query: The typed search fragment.
@@ -195,7 +201,8 @@ def username_search_q(query: str, *, profile_path: str = "") -> Q:
 
 
 class UsernameGenerator:
-    """Random username generator using adjective + animal + number patterns.
+    """
+    Random username generator using adjective + animal + number patterns.
     Word lists and generation parameters are class attributes so they can be overridden in a subclass without touching the generation logic.
 
     Example::
@@ -348,7 +355,8 @@ class UsernameGenerator:
 
     @classmethod
     def generate(cls) -> str:
-        """Return a random ``{adjective}{animal}{number}`` username that is not already taken.
+        """
+        Return a random ``{adjective}{animal}{number}`` username that is not already taken.
         The fallback should essentially never be reached given the size of the word lists.
 
         Returns:

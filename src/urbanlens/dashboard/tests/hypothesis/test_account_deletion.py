@@ -49,7 +49,8 @@ def _backdate_request(profile: Profile, ago: datetime.timedelta) -> Profile:
 
 
 def _new_profile() -> Profile:
-    """A Profile has a required OneToOne to User, auto-created by a post_save signal on User -
+    """
+    A Profile has a required OneToOne to User, auto-created by a post_save signal on User -
     baker.make(Profile) directly would race that signal and violate the unique constraint.
     """
     return baker.make(User).profile
@@ -248,7 +249,8 @@ class SendDeletionReminderTests(TestCase):
         self.assertIsNotNone(self.profile.deletion_reminder_sent_at)
 
     def test_reminder_still_stamped_when_email_send_fails(self):
-        """A raised SMTPException must not stop the idempotency marker from being set,
+        """
+        A raised SMTPException must not stop the idempotency marker from being set,
         or the sweep would resend this reminder forever."""
         self.assertIsNone(self.profile.deletion_reminder_sent_at, "Test assumptions fail")
         with mock.patch("django.core.mail.EmailMultiAlternatives.send", side_effect=smtplib.SMTPException("nope")):
@@ -304,7 +306,8 @@ class HardDeleteProfileTests(TestCase):
         self.assertFalse(User.objects.filter(pk=user_pk).exists())
 
     def test_account_still_deleted_when_final_email_fails(self):
-        """A raised SMTPException while sending the "account deleted" email must not
+        """
+        A raised SMTPException while sending the "account deleted" email must not
         abort the hard delete - a broken mail relay must never leave the account undeleted."""
         user_pk = self.user.pk
         self.assertTrue(User.objects.filter(pk=user_pk).exists(), "Test assumptions fail")
@@ -314,7 +317,8 @@ class HardDeleteProfileTests(TestCase):
 
 
 class HardDeleteProfileFileCleanupTests(TestCase):
-    """hard_delete_profile() must not orphan storage files for rows whose DB
+    """
+    hard_delete_profile() must not orphan storage files for rows whose DB
     row is about to cascade-delete - Django never deletes a FileField's file
     on row deletion, so account_deletion.py has to do it explicitly."""
 
@@ -357,7 +361,8 @@ class HardDeleteProfileFileCleanupTests(TestCase):
         self.assertFalse(storage.exists(name))
 
     def test_trip_comment_is_deleted_with_its_image(self):
-        """TripComment.author is CASCADE, matching Comment.profile (P25) - a
+        """
+        TripComment.author is CASCADE, matching Comment.profile (P25) - a
         trip comment with no replies is erased along with the account, and
         its image file does not outlive the row."""
         other = baker.make(User)
@@ -378,7 +383,8 @@ class HardDeleteProfileFileCleanupTests(TestCase):
 
 
 class HardDeleteProfileCommentTombstoneTests(TestCase):
-    """P25: deleting an account erases its own comments, but a reply another
+    """
+    P25: deleting an account erases its own comments, but a reply another
     member wrote is never deleted or emptied - the CASCADE reaches exactly as
     far as the departing profile's own rows, and the existing UL-219
     parent_deleted signal tombstones the reply the same way a direct
@@ -488,7 +494,8 @@ class RequestAccountDeletionViewTests(TestCase):
         self.assertFalse(self.user.profile.is_pending_deletion)
 
     def test_view_site_admin_permission_blocks_deletion(self):
-        """The gate is `is_superuser OR has_perm(view_site_admin)` - a staff moderator
+        """
+        The gate is `is_superuser OR has_perm(view_site_admin)` - a staff moderator
         holding just the permission (not superuser) must be blocked too."""
         self.user.user_permissions.add(Permission.objects.get(codename="view_site_admin"))
         self.client.post(
@@ -512,7 +519,8 @@ class CancelAccountDeletionViewTests(TestCase):
         self.assertFalse(self.profile.is_pending_deletion)
 
     def test_redirect_only_honors_a_same_site_next(self):
-        """`next` is an attacker-controlled POST field, not just the hidden banner
+        """
+        `next` is an attacker-controlled POST field, not just the hidden banner
         input - an off-site value must fall back to the settings page rather than
         becoming an open redirect."""
         response = self.client.post(reverse("account.delete.cancel"), {"next": "https://evil.example.com/phish"})
@@ -540,7 +548,8 @@ class AccountDeletionBannerTests(TestCase):
 
 
 class DeletionReminderOverlapLockTests(TestCase):
-    """Two overlapping sweeps must not both email the same account.
+    """
+    Two overlapping sweeps must not both email the same account.
 
     `due_for_deletion_reminder` filters on `deletion_reminder_sent_at__isnull=True`, which guards at *selection*
     time, and `send_deletion_reminder` emails first and stamps the marker afterwards - so without the overlap
@@ -575,7 +584,8 @@ class DeletionReminderOverlapLockTests(TestCase):
         self.assertIsNone(self.profile.deletion_reminder_sent_at, "a blocked run must leave the profile still due")
 
     def test_the_blocked_profile_is_still_sent_on_the_next_tick(self) -> None:
-        """The lock must not lose a reminder - only defer it.
+        """
+        The lock must not lose a reminder - only defer it.
 
         This is why a lock is right here and a claim-before-send is not: a duplicate notice is noise, a missing
         one means no warning at all before a permanent deletion."""
@@ -610,7 +620,8 @@ class DeletionReminderOverlapLockTests(TestCase):
 
 
 class HardDeleteOverlapLockTests(TestCase):
-    """The hard-delete sweep needs the same overlap lock as its reminder sibling.
+    """
+    The hard-delete sweep needs the same overlap lock as its reminder sibling.
 
     `due_for_hard_delete` selects on `deletion_requested_at`, which `hard_delete_profile` does not clear until
     it has already sent the final "your account has been deleted" email - so two overlapping runs both select

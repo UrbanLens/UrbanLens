@@ -30,7 +30,8 @@ def _params_of(pattern) -> list[str]:
 
 
 def _walk(patterns, inherited: tuple[str, ...] = (), namespace: str = ""):
-    """Yield ``(route_name, params)``, accumulating params *and* namespaces.
+    """
+    Yield ``(route_name, params)``, accumulating params *and* namespaces.
 
     The namespace prefix is as load-bearing as the parameters: routes under an included urlconf reverse as
     ``ns:name``, so yielding the bare local name makes every namespaced route - the entire external API -
@@ -115,7 +116,8 @@ class RouteQueryScalingTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {raw}"}
 
     def _measure(self, url: str) -> tuple[int, int]:
-        """Request *url* inside a savepoint, returning (status, query count).
+        """
+        Request *url* inside a savepoint, returning (status, query count).
 
         The savepoint matters: a route that raises a database error would otherwise poison the surrounding test
         transaction and take every subsequent route down with it, turning one broken route into a sweep-wide

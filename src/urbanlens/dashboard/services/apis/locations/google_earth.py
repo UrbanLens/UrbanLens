@@ -25,7 +25,8 @@ class GoogleEarthGateway(Gateway):
     api_key: str | None = field(default_factory=lambda: settings.google_earth_api_key)
 
     def _auth_headers(self) -> dict[str, str]:
-        """Return Authorization header with the configured OAuth2 Bearer token.
+        """
+        Return Authorization header with the configured OAuth2 Bearer token.
 
         Raises:
                 ValueError: When no OAuth2 token is configured."""
@@ -38,7 +39,8 @@ class GoogleEarthGateway(Gateway):
     # URL builders - no auth required
 
     def earth_web_url_for_coordinates(self, latitude: float, longitude: float, *, altitude: float = 500.0) -> str:
-        """Return a Google Earth Web URL that flies to the given coordinates.
+        """
+        Return a Google Earth Web URL that flies to the given coordinates.
 
         Args:
             latitude: WGS-84 latitude.
@@ -52,7 +54,8 @@ class GoogleEarthGateway(Gateway):
         return f"{_EARTH_WEB_URL}/@{latitude},{longitude},{altitude}a,0d,30y"
 
     def catalog_url(self, search: str | None = None) -> str:
-        """Return the Earth Engine public data catalog URL.
+        """
+        Return the Earth Engine public data catalog URL.
 
         Args:
             search: Optional free-text filter to pre-populate the catalog search.
@@ -65,7 +68,8 @@ class GoogleEarthGateway(Gateway):
         return f"{_DATA_CATALOG_URL}?{urlencode({'q': search})}"
 
     def code_editor_url_for_coordinates(self, latitude: float, longitude: float, *, zoom: int = 16) -> str:
-        """Return a Google Earth Engine Code Editor URL centred on coordinates.
+        """
+        Return a Google Earth Engine Code Editor URL centred on coordinates.
 
         Args:
             latitude: WGS-84 latitude.
@@ -80,7 +84,8 @@ class GoogleEarthGateway(Gateway):
     # REST API methods - require OAuth2 Bearer token
 
     def list_assets(self, parent: str, **params: Any) -> dict[str, Any]:
-        """List Earth Engine assets under a parent collection or project.
+        """
+        List Earth Engine assets under a parent collection or project.
 
         Args:
             parent: Full asset path, e.g.
@@ -101,7 +106,8 @@ class GoogleEarthGateway(Gateway):
         return response.json()
 
     def get_asset(self, name: str) -> dict[str, Any]:
-        """Return Earth Engine asset metadata.
+        """
+        Return Earth Engine asset metadata.
 
         Args:
             name: Full asset path, e.g.
@@ -126,7 +132,8 @@ class GoogleEarthGateway(Gateway):
         *,
         delta: float = 0.005,
     ) -> dict[str, Any]:
-        """Evaluate an Earth Engine expression graph near a coordinate.
+        """
+        Evaluate an Earth Engine expression graph near a coordinate.
 
         Args:
             expression: Serialised EE computation graph (``ee.Image(...).serialize()``).

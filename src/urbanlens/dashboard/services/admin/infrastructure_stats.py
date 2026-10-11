@@ -65,7 +65,8 @@ def _postgres_version_label(version: str) -> str:
 
 
 def _read_postgres_row() -> tuple[Any, ...]:
-    """Query PostgreSQL for database health metrics.
+    """
+    Query PostgreSQL for database health metrics.
 
     Returns:
         Row from the infrastructure stats query.
@@ -121,7 +122,8 @@ def _build_postgres_metrics(row: tuple[Any, ...]) -> tuple[ServiceMetric, ...]:
 
 
 def collect_postgres_stats() -> InfrastructureServiceStat:
-    """Collect PostgreSQL/PostGIS connection and database statistics.
+    """
+    Collect PostgreSQL/PostGIS connection and database statistics.
 
     Returns:
         InfrastructureServiceStat for the configured Django database.
@@ -182,7 +184,8 @@ def _dragonfly_metrics(client: redis.Redis) -> tuple[ServiceMetric, ...]:
 
 
 def collect_dragonfly_stats() -> InfrastructureServiceStat:
-    """Collect Dragonfly/Redis cache statistics.
+    """
+    Collect Dragonfly/Redis cache statistics.
 
     Returns:
         InfrastructureServiceStat for the configured Dragonfly instance, or a disabled stat when
@@ -317,7 +320,8 @@ def _collect_celery_stats_live() -> InfrastructureServiceStat:
 
 
 def _redact_url(url: str) -> str:
-    """Hide credentials in service URLs displayed to admins.
+    """
+    Hide credentials in service URLs displayed to admins.
 
     Args:
         url: The service URL, which may embed a username and password (the Celery broker URL does).
@@ -341,7 +345,8 @@ def _redact_url(url: str) -> str:
 
 
 def collect_nginx_stats() -> InfrastructureServiceStat:
-    """Collect nginx reverse-proxy health statistics.
+    """
+    Collect nginx reverse-proxy health statistics.
 
     Returns:
         InfrastructureServiceStat for the nginx health endpoint configured by ``UL_NGINX_HEALTH_URL`` (default ``http://urbanlens_nginx/nginx-health``)."""
@@ -387,7 +392,8 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
 
 
 def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], InfrastructureServiceStat]) -> InfrastructureServiceStat:
-    """Run one collector, degrading to an "unavailable" stat if it raises.
+    """
+    Run one collector, degrading to an "unavailable" stat if it raises.
     Each collector already handles the failure it expects - Dragonfly catches ``RedisError``, and so on.
 
     Args:
@@ -413,7 +419,8 @@ def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], 
 
 
 def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, ...]:
-    """Collect health statistics for all UrbanLens infrastructure services.
+    """
+    Collect health statistics for all UrbanLens infrastructure services.
 
     Returns:
         Tuple of service stats in display order: PostgreSQL, Dragonfly, Celery, nginx."""

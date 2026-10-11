@@ -107,7 +107,8 @@ class SeedRefreshesStatisticsTests(TestCase):
         self.assertIn("dashboard_locations", case.analyzed[0])
 
     def test_the_statistics_really_move(self) -> None:
-        """The end-to-end claim: after seed(), the planner knows the rows are there.
+        """
+        The end-to-end claim: after seed(), the planner knows the rows are there.
 
         `pg_class.reltuples` is -1 on a table that has never been analysed, and a non-negative estimate
         afterwards."""

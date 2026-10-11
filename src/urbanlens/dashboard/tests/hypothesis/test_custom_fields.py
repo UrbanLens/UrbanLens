@@ -183,7 +183,8 @@ class PinCustomFieldPanelTests(CustomFieldTestsBase):
         self.assertContains(response, "cf-add-form")
 
     def test_empty_state_renders_as_a_collapsible_explainer(self) -> None:
-        """The plain "Track anything extra..." paragraph became a collapsible
+        """
+        The plain "Track anything extra..." paragraph became a collapsible
         explainer (see _page_explainer.html), matching the Aliases section."""
         response = self.client.get(reverse("pin.custom_fields", args=[self.pin.slug]))
         content = response.content.decode()

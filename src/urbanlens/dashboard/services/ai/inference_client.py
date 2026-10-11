@@ -56,7 +56,8 @@ logger = logging.getLogger(__name__)
 
 
 class InferenceError(RuntimeError):
-    """The inference call failed: network error, HTTP error, or an unparseable response.
+    """
+    The inference call failed: network error, HTTP error, or an unparseable response.
 
     Args:
         message: What failed.
@@ -81,7 +82,8 @@ HOP_ALLOWANCE_SECONDS = 5.0
 
 
 def require_provider_egress(provider: str) -> None:
-    """Refuse a request this environment may not send to a hosted provider, before it leaves the process (D26).
+    """
+    Refuse a request this environment may not send to a hosted provider, before it leaves the process (D26).
 
     Development and local call no hosted AI provider, through ``ai-inference`` or in-process; ``UL_ENVIRONMENT_SHARE_OVERRIDES``
     opts one provider (``ai_cloudflare=1``) or one feature (``trivia_generation=1``) in.
@@ -155,7 +157,8 @@ class RemoteInferenceClient:
 
 
 class LocalInferenceClient:
-    """Calls the provider SDKs in-process - local dev/tests only.
+    """
+    Calls the provider SDKs in-process - local dev/tests only.
     This is the fallback ``get_gateway()`` picks when ``UL_AI_INFERENCE_URL`` is unset, so a plain local checkout with no sandbox stack running still works exactly as the pre-sandbox code did."""
 
     def send(self, request: InferenceRequest) -> InferenceResponse:
@@ -215,7 +218,8 @@ class LocalInferenceClient:
 
 
 def get_inference_client() -> InferenceClient:
-    """Pick the client every :class:`~services.ai.gateway.LLMGateway` sends through.
+    """
+    Pick the client every :class:`~services.ai.gateway.LLMGateway` sends through.
     Remote whenever ``UL_AI_INFERENCE_URL`` is configured (every staging/ production deployment); local otherwise, so a plain checkout with no sandbox stack running still works."""
     from urbanlens.UrbanLens.settings.app import settings
 

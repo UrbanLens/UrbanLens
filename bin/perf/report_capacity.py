@@ -38,7 +38,8 @@ class Stage:
 
 
 def parse_metric_key(key: str) -> tuple[str, dict[str, str]]:
-    """``http_req_duration{endpoint:map_view,stage:u100}`` as its name and tags.
+    """
+    ``http_req_duration{endpoint:map_view,stage:u100}`` as its name and tags.
 
     Args:
         key: A k6 summary metric key.
@@ -54,7 +55,8 @@ def parse_metric_key(key: str) -> tuple[str, dict[str, str]]:
 
 
 def load_stages(path: Path) -> tuple[list[Stage], dict[str, Any]]:
-    """The run's stages on the wall clock, and the budgets and endpoint classes it was judged under.
+    """
+    The run's stages on the wall clock, and the budgets and endpoint classes it was judged under.
 
     Args:
         path: The ``stages.json`` the scenario writes.
@@ -79,7 +81,8 @@ def stage_for(epoch_ms: float, stages: list[Stage]) -> Stage | None:
 
 
 def endpoint_rows(summary: dict[str, Any], stages_document: dict[str, Any]) -> list[dict[str, Any]]:
-    """One row per endpoint per hold, with its budget verdict.
+    """
+    One row per endpoint per hold, with its budget verdict.
 
     Args:
         summary: The k6 ``handleSummary`` document.
@@ -121,7 +124,8 @@ def endpoint_rows(summary: dict[str, Any], stages_document: dict[str, Any]) -> l
 
 
 def container_rows(path: Path, stages: list[Stage]) -> list[dict[str, Any]]:
-    """Mean and peak cores, throttled share and peak memory, per container per hold.
+    """
+    Mean and peak cores, throttled share and peak memory, per container per hold.
 
     Consecutive samples of one container become one interval, counted only when it starts and ends inside the same
     hold: one that spans a ramp would average the ramp's load into the hold's. A counter that goes backwards is a
@@ -175,7 +179,8 @@ def container_rows(path: Path, stages: list[Stage]) -> list[dict[str, Any]]:
 
 
 def nginx_rows(path: Path, stages: list[Stage]) -> list[dict[str, Any]]:
-    """What the proxy saw per hold: requests, errors by status, and its own p95.
+    """
+    What the proxy saw per hold: requests, errors by status, and its own p95.
 
     Args:
         path: The proxy's ``docker logs`` for the run.
@@ -214,7 +219,8 @@ def nginx_rows(path: Path, stages: list[Stage]) -> list[dict[str, Any]]:
 
 
 def render(summary: dict[str, Any], stages_document: dict[str, Any], containers: list[dict[str, Any]], proxy: list[dict[str, Any]]) -> str:
-    """The report, as Markdown.
+    """
+    The report, as Markdown.
 
     Args:
         summary: The k6 summary.
@@ -257,7 +263,8 @@ def render(summary: dict[str, Any], stages_document: dict[str, Any], containers:
 
 
 def _rate(metric: dict[str, Any] | None) -> float | None:
-    """A rate metric's value, or None when nothing was recorded.
+    """
+    A rate metric's value, or None when nothing was recorded.
 
     k6 reports an empty sub-metric as rate 0 and passes its threshold, so without this a hold where no socket ever
     opened reads as 0% handshakes and a hold where none was attempted reads the same.

@@ -29,7 +29,8 @@ _FFPROBE_TIMEOUT_SECONDS = 30
 
 
 def ffmpeg_path() -> str | None:
-    """The absolute path to the ffmpeg binary, or None.
+    """
+    The absolute path to the ffmpeg binary, or None.
     Resolved once here rather than left to `exec`'s own PATH walk, so the sandbox tier passes an absolute path and the binary it will run is inspectable before it runs."""
     return shutil.which("ffmpeg")
 
@@ -46,7 +47,8 @@ def ffmpeg_available() -> bool:
 
 @untrusted_parse("video.probe")
 def probe_video(path: str) -> dict[str, Any] | None:
-    """Run ffprobe on a local file and return its parsed JSON output.
+    """
+    Run ffprobe on a local file and return its parsed JSON output.
 
     Args:
         path: Local filesystem path to the video file.
@@ -95,7 +97,8 @@ _KEPT_STREAMS = ["-map", "0:V:0?", "-map", "0:a:0?"]
 
 
 def _is_location_track(stream: dict[str, Any]) -> bool:
-    """Whether a stream can say where the video was shot, beside its pictures and sound.
+    """
+    Whether a stream can say where the video was shot, beside its pictures and sound.
 
     A drone captions every frame with its position (DJI writes it as a subtitle track), an action camera records GPS
     telemetry in a data track (GoPro's GPMF, ``gpmd``), phones and others write timed-metadata tracks, and a cover
@@ -133,7 +136,8 @@ def _location_values(tags: dict[str, Any]) -> list[Any]:
 
 
 def extract_video_metadata(path: str) -> dict[str, Any]:
-    """Best-effort metadata extraction for an uploaded video.
+    """
+    Best-effort metadata extraction for an uploaded video.
 
     Args:
         path: Local filesystem path to the video file.
@@ -237,7 +241,8 @@ def _remux_without_location(src_path: str, out_path: str) -> bool:
 
 
 def process_uploaded_video(image: Image, max_height: int | None) -> tuple[dict[str, Any], StoredFileReplacement | None]:
-    """Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
+    """
+    Extract metadata from an uploaded video, downscale it if oversized, and scrub its location.
 
     Args:
         image: The Image row whose stored video to process.

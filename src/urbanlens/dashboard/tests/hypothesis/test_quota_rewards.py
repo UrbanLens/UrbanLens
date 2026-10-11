@@ -203,7 +203,8 @@ class CommunityQuotaBonusTests(TestCase):
         self.assertFalse(refresh_community_quota_bonus(private))
 
     def test_the_bonus_is_never_revoked(self) -> None:
-        """One-way by design: a granted bonus can't be taken back by re-voting,
+        """
+        One-way by design: a granted bonus can't be taken back by re-voting,
         so a user inside their quota can't be pushed over it retroactively."""
         for _ in range(2):
             _mark_relevant(self._voter(), self.location, self.image)
@@ -228,7 +229,8 @@ class CommunityQuotaBonusTests(TestCase):
 
 
 class RevokingTheCommunityBonusTests(TestCase):
-    """Withdrawing the contribution ends the bonus it earned.
+    """
+    Withdrawing the contribution ends the bonus it earned.
 
     The forward rule is one-way against everyone else - see ``test_the_bonus_is_never_revoked`` above, which
     must keep passing."""
@@ -308,7 +310,8 @@ class RevokingTheCommunityBonusTests(TestCase):
 
 
 class WikiDeleteQuotaBonusTests(TestCase):
-    """Deleting a whole wiki ends the deleter's own bonuses and nobody else's.
+    """
+    Deleting a whole wiki ends the deleter's own bonuses and nobody else's.
 
     ``Image.wiki`` is ``SET_NULL``, so one delete detaches every contributor's photos at once."""
 

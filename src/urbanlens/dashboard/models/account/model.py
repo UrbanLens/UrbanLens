@@ -25,7 +25,8 @@ from urbanlens.dashboard.models.fields import EncryptedTextField
 
 
 class AccountKdf(DashboardModel):
-    """Marks an account as using client-side derived authentication.
+    """
+    Marks an account as using client-side derived authentication.
     When this row exists, the browser derives the credential sent at login (``authKey``) from the raw password via Argon2id + ``auth_salt``, and the server's stored password hash is a hash of that derived key - the raw password never reaches the server.
     """
 
@@ -46,7 +47,8 @@ class AccountKdf(DashboardModel):
 
 
 class WebAuthnCredential(DashboardModel):
-    """A registered passkey used as an optional second factor at login.
+    """
+    A registered passkey used as an optional second factor at login.
     An account with zero rows here logs in with a password alone.
     The moment it has one or more, ``CustomLoginView`` routes password logins through ``LoginTwoFactorView`` for a passkey assertion before establishing the session - 2FA is opt-in per user, never enforced site-wide.
     """
@@ -83,7 +85,8 @@ class WebAuthnCredential(DashboardModel):
 
 
 class TOTPDevice(DashboardModel):
-    """An authenticator-app (RFC 6238 TOTP) second factor, alternative to a passkey.
+    """
+    An authenticator-app (RFC 6238 TOTP) second factor, alternative to a passkey.
     One per account, created only once the user has confirmed a code from their app - an unconfirmed setup lives only in the session (see ``TOTPSetupStartView``/``TOTPSetupConfirmView``) rather than this table.
     """
 
@@ -104,7 +107,8 @@ class TOTPDevice(DashboardModel):
 
 
 class BackupCode(DashboardModel):
-    """A single-use recovery code for accounts with a passkey and/or TOTP device.
+    """
+    A single-use recovery code for accounts with a passkey and/or TOTP device.
     Generated ten at a time (``services.auth.two_factor.generate_backup_codes``), shown to the user exactly once in plaintext, and stored here only as a salted hash (``django.contrib.auth.hashers``) - like a password, the plaintext can never be recovered from the database.
     """
 
@@ -127,7 +131,8 @@ class BackupCode(DashboardModel):
 
 
 class ApiKeyScope(TextChoices):
-    """Capabilities a credential can grant to the external application holding it.
+    """
+    Capabilities a credential can grant to the external application holding it.
     The single source of truth for the external API's scope vocabulary, shared by both credential kinds (PAT-style :class:`ApiKey` rows and django-oauth-toolkit access tokens).
     Names are *domain*-shaped (``<domain>:<action>``) rather than endpoint-shaped so a domain can grow new endpoints without minting new scopes - a user who consented to "read your trips" does not need to re-consent when a trip-stops endpoint ships.
     """
@@ -176,7 +181,8 @@ class ApiKeyScope(TextChoices):
 
 
 def _default_api_key_scopes() -> list[str]:
-    """The fixed grant every new PAT-style key gets - there is no scope picker yet.
+    """
+    The fixed grant every new PAT-style key gets - there is no scope picker yet.
     Silently expanding every already-issued key's grant to cover messages, safety check-ins, photos and the rest would hand integrations a reach their owner never consented to - a privilege escalation, not a convenience.
 
     Returns:
@@ -186,7 +192,8 @@ def _default_api_key_scopes() -> list[str]:
 
 
 class ApiKey(DashboardModel):
-    """A user-issued credential letting an external application act on their behalf.
+    """
+    A user-issued credential letting an external application act on their behalf.
     Grants only what's listed in ``scopes`` - currently always both members of :class:`ApiKeyScope`, since there's no scope picker yet (every key can read the owner's uuid and create pins as them, and nothing else).
     """
 

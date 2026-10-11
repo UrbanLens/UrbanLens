@@ -24,7 +24,8 @@ _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 
 
 def _without_struck_text(lines: list[str]) -> list[str]:
-    """The document with every ``~~struck~~`` span blanked out.
+    """
+    The document with every ``~~struck~~`` span blanked out.
 
     A struck citation is a record of where a defect *was*, kept beside the note that it is fixed - the same
     thing the archive is, one sentence wide.
@@ -57,7 +58,8 @@ def _without_struck_text(lines: list[str]) -> list[str]:
 
 
 def _fenced_lines(lines: list[str]) -> tuple[set[int], int | None]:
-    """Zero-based indices of the lines inside fenced code blocks, fences included.
+    """
+    Zero-based indices of the lines inside fenced code blocks, fences included.
 
     A block quotes output: a pasted traceback's frames carry the line numbers the code had when it crashed, and
     renumbering them would falsify the quote.
@@ -79,7 +81,8 @@ def _fenced_lines(lines: list[str]) -> tuple[set[int], int | None]:
 
 
 def _citation_block(lines: list[str], index: int) -> range:
-    """The wrapped prose block the line at `index` belongs to.
+    """
+    The wrapped prose block the line at `index` belongs to.
 
     Markdown wraps at well under the length of a sentence naming a symbol, so the identifier a citation is about
     is very often on the line above or below it rather than beside it.
@@ -106,7 +109,8 @@ def _citation_block(lines: list[str], index: int) -> range:
 
 
 def _tracked_files_by_suffix() -> dict[str, list[str]]:
-    """Index every tracked file under each of its path suffixes.
+    """
+    Index every tracked file under each of its path suffixes.
 
     Citations are written relative to wherever the author was reading - ``controllers/maps.py``,
     ``dashboard/controllers/maps.py`` and the full path all appear - so resolution is by suffix, and only an
@@ -129,7 +133,8 @@ def _documentation_files() -> list[pathlib.Path]:
 
 
 def check(*, report_drift: bool = False) -> int:
-    """Report citations pointing past end-of-file, and optionally suspected drift.
+    """
+    Report citations pointing past end-of-file, and optionally suspected drift.
 
     Args:
         report_drift: Also print citations whose line exists but does not appear to hold the identifier named beside it.

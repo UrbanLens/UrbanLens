@@ -1,4 +1,5 @@
-"""AI fallback for a Trivia answer that doesn't exact-match the canonical one.
+"""
+AI fallback for a Trivia answer that doesn't exact-match the canonical one.
 Only ever consulted on a normalized-string mismatch (``services.trivia.session.submit_answer``) - an exact match never reaches this module."""
 
 from __future__ import annotations
@@ -24,7 +25,8 @@ Respond with EXACTLY ONE of the following tokens, wrapped in ANSWER tags, and no
 
 
 def is_answer_equivalent(raw_answer: str, accepted_answer: str, *, profile: Profile) -> bool:
-    """Ask AI whether ``raw_answer`` means the same thing as ``accepted_answer``, differently phrased.
+    """
+    Ask AI whether ``raw_answer`` means the same thing as ``accepted_answer``, differently phrased.
     Only called after a normalized-string mismatch already ruled out an exact match.
 
     Args:

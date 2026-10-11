@@ -9,7 +9,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class InferenceConfig(BaseSettings):
-    """``UL_``-prefixed environment variables this service reads.
+    """
+    ``UL_``-prefixed environment variables this service reads.
 
     Field names deliberately match ``UrbanLens.settings.app.AppSettings``'s provider-key field names one-for-one
     (same ``UL_`` prefix, same suffix), since it is the same credential moving to a different container - not a

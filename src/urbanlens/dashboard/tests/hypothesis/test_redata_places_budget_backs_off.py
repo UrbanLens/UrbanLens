@@ -1,4 +1,5 @@
-"""A spent REData Places budget is left alone for as long as REData said (P315).
+"""
+A spent REData Places budget is left alone for as long as REData said (P315).
 
 REData's whole Google Places budget is 160 uncached calls a UTC day, shared by every key and its own CID resolution,
 and it asks each client to honour ``Retry-After`` on ``503 rate_limited``. The gateway raised that answer without

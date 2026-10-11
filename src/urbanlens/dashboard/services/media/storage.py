@@ -64,7 +64,8 @@ _ASSUMED_ASPECT = 0.75
 
 
 def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | None = None) -> int | None:
-    """Resolve the storage quota for a profile, in bytes.
+    """
+    Resolve the storage quota for a profile, in bytes.
 
     Args:
         profile: The profile whose quota to resolve.
@@ -83,7 +84,8 @@ def get_quota_bytes(profile: Profile, *, roles: Sequence[SubscriptionRole] | Non
 
 
 def get_storage_used_bytes(profile: Profile) -> int:
-    """Total bytes of stored uploads counted against a profile's quota.
+    """
+    Total bytes of stored uploads counted against a profile's quota.
     Rows carrying a ``quota_exempt_reason`` are skipped permanently - cached external media and community-rewarded contributions are storage the whole site benefits from, so no single user is charged for them (see ``services.media.quota_rewards``).
 
     Args:
@@ -98,7 +100,8 @@ def get_storage_used_bytes(profile: Profile) -> int:
 
 
 def get_exempt_bytes(profile: Profile) -> int:
-    """Total bytes this profile stores that don't count against their quota.
+    """
+    Total bytes this profile stores that don't count against their quota.
     Surfaced in the storage settings so a user can see the benefit rather than just an unexplained gap between their file list and their usage bar.
 
     Args:
@@ -113,7 +116,8 @@ def get_exempt_bytes(profile: Profile) -> int:
 
 
 def get_storage_totals(profile: Profile) -> tuple[int, int]:
-    """Both halves of a profile's storage accounting, in one query.
+    """
+    Both halves of a profile's storage accounting, in one query.
 
     Args:
         profile: The profile whose storage to total.
@@ -136,7 +140,8 @@ def _quota_exceeded_message(used: int, quota: int) -> str:
 
 
 class UploadRefusedError(Exception):
-    """An upload the reservation would not admit.
+    """
+    An upload the reservation would not admit.
 
     Attributes:
         message: User-facing explanation, safe to return to the uploader.
@@ -148,7 +153,8 @@ class UploadRefusedError(Exception):
     retry_after: int | None = None
 
     def __init__(self, message: str) -> None:
-        """Store the user-facing message.
+        """
+        Store the user-facing message.
 
         Args:
             message: Why the upload was refused.
@@ -181,7 +187,8 @@ class StorageUnavailableError(UploadRefusedError):
     retry_after: int | None = STORAGE_RETRY_AFTER_SECONDS
 
     def __init__(self, message: str = "Storage is briefly unavailable, so nothing was saved. Try again in a minute.", *, retry_after: int | None = STORAGE_RETRY_AFTER_SECONDS) -> None:
-        """Store the user-facing message.
+        """
+        Store the user-facing message.
 
         Args:
             message: Why the upload was refused.
@@ -192,7 +199,8 @@ class StorageUnavailableError(UploadRefusedError):
 
     @classmethod
     def for_failure(cls, exc: BaseException) -> StorageUnavailableError:
-        """The refusal for *exc*: retryable when storage is briefly unreachable, and not when it refuses for good.
+        """
+        The refusal for *exc*: retryable when storage is briefly unreachable, and not when it refuses for good.
 
         A lasting refusal, such as a rejected key, is reported to the admins.
 
@@ -211,7 +219,8 @@ class StorageUnavailableError(UploadRefusedError):
 
 
 def retry_after_headers(seconds: int | None) -> dict[str, str]:
-    """The ``Retry-After`` header for a refusal the client may send again later.
+    """
+    The ``Retry-After`` header for a refusal the client may send again later.
 
     Args:
         seconds: How long the client should wait, or None when retrying will not help.
@@ -224,7 +233,8 @@ def retry_after_headers(seconds: int | None) -> dict[str, str]:
 
 @contextmanager
 def storage_failures_refused() -> Iterator[None]:
-    """Turn a storage failure inside the block into :class:`StorageUnavailableError`, for a request to answer 503.
+    """
+    Turn a storage failure inside the block into :class:`StorageUnavailableError`, for a request to answer 503.
 
     Raises:
         StorageUnavailableError: Storage raised one of ``STORAGE_ERRORS``.
@@ -237,7 +247,8 @@ def storage_failures_refused() -> Iterator[None]:
 
 
 def storage_refusal(exc: BaseException, context: str) -> StorageUnavailableError | None:
-    """The refusal a request should answer with when *exc* escaped it, if storage failed.
+    """
+    The refusal a request should answer with when *exc* escaped it, if storage failed.
 
     Args:
         exc: What the request raised.
@@ -256,7 +267,8 @@ def storage_refusal(exc: BaseException, context: str) -> StorageUnavailableError
 
 @dataclass(slots=True)
 class UploadReservation:
-    """A profile's storage, held exclusively until the surrounding transaction ends.
+    """
+    A profile's storage, held exclusively until the surrounding transaction ends.
 
     Attributes:
         profile: The uploading profile.
@@ -277,7 +289,8 @@ class UploadReservation:
         return self._quota, self._used or 0
 
     def reserve(self, size: int) -> None:
-        """Admit *size* more counted bytes, or refuse.
+        """
+        Admit *size* more counted bytes, or refuse.
 
         Rows stored under this reservation are counted from the bytes reserved here, not re-read,
         so reserve before each counted row even when several share one reservation.
@@ -296,7 +309,8 @@ class UploadReservation:
 
 
 def lock_profile_uploads(profile: Profile, *, wait_seconds: float = UPLOAD_RESERVATION_WAIT_SECONDS) -> None:
-    """Hold *profile*'s upload lock until the current transaction ends.
+    """
+    Hold *profile*'s upload lock until the current transaction ends.
 
     Args:
         profile: Whose uploads to serialize.
@@ -325,7 +339,8 @@ def lock_profile_uploads(profile: Profile, *, wait_seconds: float = UPLOAD_RESER
 
 @contextmanager
 def reserve_upload(profile: Profile, size: int | None, *, wait_seconds: float = UPLOAD_RESERVATION_WAIT_SECONDS) -> Iterator[UploadReservation]:
-    """Store uploads for *profile* one reservation at a time, inside one transaction.
+    """
+    Store uploads for *profile* one reservation at a time, inside one transaction.
 
     Everything that decides whether a row may be stored (the quota, a duplicate-checksum lookup, a
     rolling allowance) belongs inside the block, next to the insert, so that no other upload by the
@@ -352,7 +367,8 @@ def reserve_upload(profile: Profile, size: int | None, *, wait_seconds: float = 
 
 
 def ingress_body_limit_bytes() -> int:
-    """The largest request body the ingress in front of this deployment will pass.
+    """
+    The largest request body the ingress in front of this deployment will pass.
 
     Returns:
         The cap in bytes, or 0 when nothing in front of the app imposes one.
@@ -363,7 +379,8 @@ def ingress_body_limit_bytes() -> int:
 
 
 def cap_to_ingress(limit_bytes: int) -> int:
-    """Lower *limit_bytes* to what the ingress will actually carry.
+    """
+    Lower *limit_bytes* to what the ingress will actually carry.
 
     Args:
         limit_bytes: The limit this deployment would otherwise apply.
@@ -375,7 +392,8 @@ def cap_to_ingress(limit_bytes: int) -> int:
 
 
 def max_upload_file_size_bytes() -> int:
-    """Site-wide max size for a single photo/video/document upload, in bytes.
+    """
+    Site-wide max size for a single photo/video/document upload, in bytes.
 
     Returns:
         The admin's configured limit, lowered to the ingress cap when there is one."""
@@ -383,7 +401,8 @@ def max_upload_file_size_bytes() -> int:
 
 
 def file_size_error_for_upload(upload_size: int | None) -> str | None:
-    """Check a single upload against the site-wide max file size.
+    """
+    Check a single upload against the site-wide max file size.
 
     Args:
         upload_size: Size of the incoming file in bytes.
@@ -398,7 +417,8 @@ def file_size_error_for_upload(upload_size: int | None) -> str | None:
 
 
 def get_entitled_policy(profile: Profile) -> tuple[int | None, bool]:
-    """The site-imposed downscale policy for a profile, ignoring the user's own cap.
+    """
+    The site-imposed downscale policy for a profile, ignoring the user's own cap.
 
     Args:
         profile: The uploading profile.
@@ -413,7 +433,8 @@ def get_entitled_policy(profile: Profile) -> tuple[int | None, bool]:
 
 
 def get_downscale_policy(profile: Profile) -> tuple[int | None, bool]:
-    """The effective downscale policy for a profile's future uploads.
+    """
+    The effective downscale policy for a profile's future uploads.
     Combines the site-imposed policy with the user's voluntary cap: the user can only tighten the cap (the smaller dimension wins), never loosen it.
 
     Args:
@@ -427,7 +448,8 @@ def get_downscale_policy(profile: Profile) -> tuple[int | None, bool]:
 
 
 def get_stored_photo_policy(image: Image, max_dimension_override: int | None = None) -> tuple[int | None, bool]:
-    """The size and format a photo is stored in.
+    """
+    The size and format a photo is stored in.
 
     Args:
         image: The photo's row.
@@ -445,7 +467,8 @@ def get_stored_photo_policy(image: Image, max_dimension_override: int | None = N
 
 
 def get_entitled_video_policy(profile: Profile) -> int | None:
-    """The site-imposed video downscale policy for a profile, ignoring the user's own cap.
+    """
+    The site-imposed video downscale policy for a profile, ignoring the user's own cap.
     Mirrors :func:`get_entitled_policy` for photos, but videos have no WebP- equivalent format toggle - only a max resolution.
 
     Args:
@@ -459,7 +482,8 @@ def get_entitled_video_policy(profile: Profile) -> int | None:
 
 
 def get_video_downscale_policy(profile: Profile) -> int | None:
-    """The effective video downscale policy for a profile's future uploads.
+    """
+    The effective video downscale policy for a profile's future uploads.
     Combines the site-imposed cap with the user's voluntary cap: the user can only tighten it (the smaller height wins), never loosen it.
 
     Args:
@@ -473,7 +497,8 @@ def get_video_downscale_policy(profile: Profile) -> int | None:
 
 
 def estimate_bytes_per_photo(max_dimension: int | None, convert_webp: bool) -> int:
-    """Rough bytes one stored photo occupies at a given downscale setting.
+    """
+    Rough bytes one stored photo occupies at a given downscale setting.
 
     Args:
         max_dimension: Longest-edge cap in pixels; None means original size, for which a 12 MP phone photo is assumed.
@@ -489,7 +514,8 @@ def estimate_bytes_per_photo(max_dimension: int | None, convert_webp: bool) -> i
 
 
 def estimate_photos_remaining(remaining_bytes: int, max_dimension: int | None, convert_webp: bool) -> int:
-    """Approximate number of additional photos that fit in ``remaining_bytes``.
+    """
+    Approximate number of additional photos that fit in ``remaining_bytes``.
 
     Args:
         remaining_bytes: Free quota, in bytes.
@@ -502,7 +528,8 @@ def estimate_photos_remaining(remaining_bytes: int, max_dimension: int | None, c
 
 
 def get_storage_settings_context(profile: Profile) -> dict:
-    """Everything the user settings "Storage" section needs to render.
+    """
+    Everything the user settings "Storage" section needs to render.
 
     Args:
         profile: The profile viewing the settings page.
@@ -586,7 +613,8 @@ def get_storage_settings_context(profile: Profile) -> dict:
 
 
 def allowed_user_dimension_values(profile: Profile) -> set[int]:
-    """The downscale caps a user may choose for themselves.
+    """
+    The downscale caps a user may choose for themselves.
 
     Args:
         profile: The profile saving the preference.
@@ -599,7 +627,8 @@ def allowed_user_dimension_values(profile: Profile) -> set[int]:
 
 
 def allowed_user_video_height_values(profile: Profile) -> set[int]:
-    """The video downscale caps a user may choose for themselves.
+    """
+    The video downscale caps a user may choose for themselves.
 
     Args:
         profile: The profile saving the preference.

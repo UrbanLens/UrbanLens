@@ -1,4 +1,5 @@
-"""P110: Overture's parquet/STAC reads must be visible to, and bounded by, the rate limiter.
+"""
+P110: Overture's parquet/STAC reads must be visible to, and bounded by, the rate limiter.
 
 `_fetch` bypasses `self.session` entirely - it reads GeoParquet straight from S3 via
 `pyarrow`/`geopandas` via the `overturemaps` library, so `Gateway.__post_init__`'s automatic

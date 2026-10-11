@@ -1,4 +1,5 @@
-"""A label's custom icon must not be decoded by the request that uploads it.
+"""
+A label's custom icon must not be decoded by the request that uploads it.
 
 ``_resize_custom_icon`` opened every uploaded icon with Pillow inside the label create and edit
 requests, with no ``untrusted_parse`` guard - so ``warn`` could not even log it, and the web process

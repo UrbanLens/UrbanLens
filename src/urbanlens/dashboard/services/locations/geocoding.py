@@ -1,4 +1,5 @@
-"""Forward geocoding (free-text address -> coordinates).
+"""
+Forward geocoding (free-text address -> coordinates).
 Split out from ``controllers.maps`` so it can be shared by the map "add pin by address" flow and any other pin-creation entry point (e.g. the external API) without a controller-to-controller import."""
 
 from __future__ import annotations
@@ -7,7 +8,8 @@ from urbanlens.dashboard.services.apis.locations.geocode_resolution import geoco
 
 
 def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
-    """Resolve a free-text address to coordinates.
+    """
+    Resolve a free-text address to coordinates.
 
     Args:
         address: The address string to geocode.

@@ -24,7 +24,8 @@ _USER_NAME = "Community Contributed Owner"
 
 
 def _plain_user() -> User:
-    """A user with no subscription and no feature grants.
+    """
+    A user with no subscription and no feature grants.
 
     The first user in a fresh test database is auto-promoted to bootstrap site admin, which ``user_has_feature``
     grants every feature - so a throwaway user absorbs that promotion, matching
@@ -47,7 +48,8 @@ def _bearer(raw_key: str) -> dict:
 
 
 def _key_with_scopes(user: User) -> str:
-    """Issue an API key for *user* carrying only ``WIKI_READ`` - the scope
+    """
+    Issue an API key for *user* carrying only ``WIKI_READ`` - the scope
     both endpoints under test require and nothing subscription-related."""
     api_key, raw_key = generate_api_key(user, "Test Key")
     api_key.scopes = [ApiKeyScope.WIKI_READ.value]
@@ -144,7 +146,8 @@ class WikiPropertySalesApiGateTests(_OwnerApiTestCase):
         self.assertEqual([owner["name"] for owner in row["new_owners"]], [_USER_NAME])
 
     def test_filtering_a_plain_users_view_never_touches_the_stored_m2m_relation(self) -> None:
-        """Regression guard: shaping the response must not mutate the database.
+        """
+        Regression guard: shaping the response must not mutate the database.
 
         An earlier draft of this fix called ``sale.previous_owners.set(...)`` to build the filtered response,
         which would have persisted the withheld-for-this-caller list as the sale's *actual* recorded parties -

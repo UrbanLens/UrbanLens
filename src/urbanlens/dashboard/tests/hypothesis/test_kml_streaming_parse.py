@@ -1,4 +1,5 @@
-"""The KML import streams placemarks, and reads exactly what the fastkml tree walk it replaced read (P95).
+"""
+The KML import streams placemarks, and reads exactly what the fastkml tree walk it replaced read (P95).
 
 fastkml built a full lxml-backed tree before reading one placemark: about fifteen times the file in memory.
 """
@@ -130,7 +131,8 @@ class CoordinateFormattingTests(SimpleTestCase):
 
 
 class AreaPlacemarkTests(SimpleTestCase):
-    """A Polygon or MultiGeometry raised past the importer's error tuple, failing the whole file. It is read at its
+    """
+    A Polygon or MultiGeometry raised past the importer's error tuple, failing the whole file. It is read at its
     centroid now, as the GeoJSON importer reads the same shapes."""
 
     def _doc(self, geometry: str) -> bytes:

@@ -16,7 +16,8 @@ _BUSY_RETRY_AFTER_SECONDS = 60
 
 
 class RegionBoundarySearchView(LoginRequiredMixin, View):
-    """Look up a place name's polygonal boundary for the Filters tab's region map.
+    """
+    Look up a place name's polygonal boundary for the Filters tab's region map.
 
     GET /region-search/?q=<free text> → JSON ``{"results": [{"display_name": str, "geojson": dict},
 
@@ -26,7 +27,8 @@ class RegionBoundarySearchView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> JsonResponse:
-        """Look up polygonal boundaries matching a free-text place name.
+        """
+        Look up polygonal boundaries matching a free-text place name.
 
         Args:
             request: The incoming GET request; ``q`` is the free-text place name to look up.

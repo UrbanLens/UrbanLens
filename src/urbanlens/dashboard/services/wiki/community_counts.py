@@ -26,7 +26,8 @@ _CACHE_KEY_TEMPLATE = "wiki_pin_count_fuzz:{wiki_id}"
 
 
 def approximate_pin_count(wiki_id: int, exact_count: int) -> dict[str, object]:
-    """Build the privacy-preserving display form of a wiki's pinned-user count.
+    """
+    Build the privacy-preserving display form of a wiki's pinned-user count.
 
     Args:
         wiki_id: Primary key of the wiki the count belongs to (cache key).
@@ -49,7 +50,8 @@ def approximate_pin_count(wiki_id: int, exact_count: int) -> dict[str, object]:
 
 
 def _first_of_month(value: date) -> date:
-    """Truncate a date to the first day of its month.
+    """
+    Truncate a date to the first day of its month.
 
     Args:
         value: The date to truncate.
@@ -61,7 +63,8 @@ def _first_of_month(value: date) -> date:
 
 
 def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
-    """Summarize a wiki's community footprint without leaking who pinned it when.
+    """
+    Summarize a wiki's community footprint without leaking who pinned it when.
 
     Args:
         wiki: The wiki being summarized (its pk keys the count's fuzz cache).

@@ -1,4 +1,5 @@
-"""Gateway for REData's ``/maps/`` historical-map endpoints.
+"""
+Gateway for REData's ``/maps/`` historical-map endpoints.
 Those tiles require REData API auth, so browser-facing consumers go through UrbanLens's tile proxy (``controllers.historical_map_tiles``) rather than using REData's template directly."""
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ PARTIAL_MAPS_STALE_AFTER = timedelta(minutes=5)
 
 
 class MapMatches(list):
-    """The matches of one ``/maps/`` answer, remembering whether REData finished reading.
+    """
+    The matches of one ``/maps/`` answer, remembering whether REData finished reading.
 
     A plain ``list`` to every reader that only shows the matches; :attr:`complete` is for the ones that cache them.
     """
@@ -31,7 +33,8 @@ class MapMatches(list):
 
 
 def maps_answer_complete(matches: object) -> bool:
-    """Whether a ``get_maps_covering`` answer may be cached as the whole answer.
+    """
+    Whether a ``get_maps_covering`` answer may be cached as the whole answer.
 
     Args:
         matches: What :meth:`RedataHistoricalMapsGateway.get_maps_covering` returned.
@@ -49,7 +52,8 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
-        """Record the georeference, never the tile coordinate.
+        """
+        Record the georeference, never the tile coordinate.
 
         Args:
             url: The URL about to be requested.
@@ -71,7 +75,8 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         overlay_grade_only: bool = True,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Fetch georeferenced historical maps covering (or near) a point.
+        """
+        Fetch georeferenced historical maps covering (or near) a point.
         Reads only REData's own spatial index - never an external source - so it is cheap enough to call per page view.
 
         Args:
@@ -115,7 +120,8 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         return matches
 
     def get_volumes_near(self, latitude: float, longitude: float, *, radius_meters: float | None = None, limit: int | None = None) -> list[dict[str, Any]]:
-        """Fetch the catalogued volumes of scanned maps - a town's fire-insurance atlas, a county atlas - of the place a point is in or near.
+        """
+        Fetch the catalogued volumes of scanned maps - a town's fire-insurance atlas, a county atlas - of the place a point is in or near.
 
         Found by where each volume's catalogue says it depicts rather than by any sheet's georeference, so it answers
         for the many scans nobody has placed on the map yet. A volume whose sheets REData has not listed yet comes back
@@ -145,7 +151,8 @@ class RedataHistoricalMapsGateway(RedataLocationContextGateway):
         return [row for row in results if isinstance(row, dict) and isinstance(row.get("volume"), dict)] if isinstance(results, list) else []
 
     def download_tile(self, georeference_uuid: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
-        """Fetch one warped overlay tile from REData.
+        """
+        Fetch one warped overlay tile from REData.
 
         Args:
             georeference_uuid: The georeference whose tile pyramid to read.

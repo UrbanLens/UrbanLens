@@ -41,7 +41,8 @@ _WEIGHTS: dict[str, float] = {
 
 
 def record_vote(question: TriviaQuestion, profile: Profile, kind: str) -> TriviaQuestionVote:
-    """Record (or change) ``profile``'s explicit reaction to ``question``.
+    """
+    Record (or change) ``profile``'s explicit reaction to ``question``.
 
     Args:
         question: The question being voted on.
@@ -58,7 +59,8 @@ def backfill_no_reaction(question: TriviaQuestion, profiles: Iterable[Profile]) 
 
 
 def effective_score(question: TriviaQuestion) -> float:
-    """This question's blended vote score - weighted sum of upvote/downvote/report/no-reaction.
+    """
+    This question's blended vote score - weighted sum of upvote/downvote/report/no-reaction.
 
     Args:
         question: The question to score.
@@ -74,7 +76,8 @@ _SCORE_FIELD = DecimalField(max_digits=12, decimal_places=2)
 
 
 def score_expression() -> Coalesce:
-    """:func:`effective_score` as an expression on ``TriviaQuestion``, for filtering many questions in one query.
+    """
+    :func:`effective_score` as an expression on ``TriviaQuestion``, for filtering many questions in one query.
 
     Summed as ``numeric``, so a score that lands exactly on a threshold compares exactly.
     """

@@ -22,7 +22,8 @@ class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):
         return self.filter(is_active=True)
 
     def for_metric(self, metric: str | list[str]) -> Self:
-        """Return awards measuring one metric, or any of several.
+        """
+        Return awards measuring one metric, or any of several.
 
         Args:
             metric: A single registry key, or a list of them.
@@ -32,7 +33,8 @@ class AchievementQuerySet(abstract.PublicDashboardQuerySet["Achievement"]):
         return self.filter(metric__in=metric)
 
     def listable_for(self, profile: Profile | int | None) -> Self:
-        """Return awards a given viewer should see in a catalogue listing.
+        """
+        Return awards a given viewer should see in a catalogue listing.
         Secret awards stay hidden until earned, so they are included only when *profile* already holds them.
 
         Args:
@@ -62,7 +64,8 @@ class UserAchievementQuerySet(abstract.FrontendDashboardQuerySet["UserAchievemen
         return self.filter(profile=profile)
 
     def displayable(self) -> Self:
-        """Return earned awards ready to render - newest first, award prefetched.
+        """
+        Return earned awards ready to render - newest first, award prefetched.
 
         Retired (``is_active=False``) awards are kept: revoking the display of
         something a user already earned would read as the award being taken

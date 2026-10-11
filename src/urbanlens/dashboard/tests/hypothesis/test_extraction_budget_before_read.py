@@ -1,4 +1,5 @@
-"""The upload's extraction budget bounds how much one entry reads, not only what is kept afterwards (P95).
+"""
+The upload's extraction budget bounds how much one entry reads, not only what is kept afterwards (P95).
 
 Each entry used to be read up to the 1 GB per-file cap and charged to the budget only once it was in
 memory, so an upload with 10 MB of allowance left could still pull a gigabyte into the sandbox worker

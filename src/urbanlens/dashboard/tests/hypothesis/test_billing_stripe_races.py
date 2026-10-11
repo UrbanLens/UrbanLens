@@ -1,4 +1,5 @@
-"""Concurrent billing work must not create duplicate Stripe objects or undo a cancellation (G2-16, G2-17).
+"""
+Concurrent billing work must not create duplicate Stripe objects or undo a cancellation (G2-16, G2-17).
 
 Each scenario runs two callers on their own threads and connections. A patched hook holds the first caller between
 its read and its write for a bounded pause; without the row lock the second caller runs inside that window, with it

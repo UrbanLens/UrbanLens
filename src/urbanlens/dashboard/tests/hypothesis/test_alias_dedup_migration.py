@@ -1,4 +1,5 @@
-"""Tests for the alias-deduplication step carried by migration 0008.
+"""
+Tests for the alias-deduplication step carried by migration 0008.
 
 Existing databases can hold case-insensitive duplicate aliases predating the
 constraint the migration adds - without a cleanup step first, `AddConstraint`
@@ -101,7 +102,8 @@ class PinAliasDedupMigrationTests(TestCase):
         self.assertEqual(PinAlias.objects.filter(pin=other_pin).count(), 1)
 
     def test_constraint_can_be_recreated_after_dedup(self) -> None:
-        """The actual point of the cleanup - confirms the migration's own
+        """
+        The actual point of the cleanup - confirms the migration's own
         AddConstraint step (case-insensitive) would succeed afterward."""
         self._drop_constraint()
         self._insert_raw("Aloha Stadium")
@@ -163,7 +165,8 @@ class WikiAliasDedupMigrationTests(TestCase):
         self.assertEqual(WikiAlias.objects.filter(wiki=self.wiki, name="Old Mill").count(), 1)
 
     def test_duplicates_on_different_wikis_are_both_kept(self) -> None:
-        """Guards PARTITION BY wiki_id - without it, same-name aliases on
+        """
+        Guards PARTITION BY wiki_id - without it, same-name aliases on
         different wikis would collapse into one, deleting another wiki's row."""
         self._drop_constraint()
         other_location = baker.make(Location, latitude=44.4, longitude=-76.4)
@@ -180,7 +183,8 @@ class WikiAliasDedupMigrationTests(TestCase):
         self.assertEqual(WikiAlias.objects.filter(wiki=other_wiki, name__iexact="Shared Name").count(), 1)
 
     def test_constraint_can_be_recreated_after_dedup(self) -> None:
-        """The actual point of the cleanup - confirms the migration's own
+        """
+        The actual point of the cleanup - confirms the migration's own
         AddConstraint step (case-insensitive) would succeed afterward."""
         self._drop_constraint()
         self._insert_raw("Main Street")

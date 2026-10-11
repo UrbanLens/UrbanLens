@@ -6,7 +6,8 @@ import hashlib
 
 
 def make_cache_key(namespace: str, *parts: str | float) -> str:
-    """Build a memcached-safe cache key from a namespace and parts.
+    """
+    Build a memcached-safe cache key from a namespace and parts.
 
     Args:
         namespace: Short identifier for the cache entry type.

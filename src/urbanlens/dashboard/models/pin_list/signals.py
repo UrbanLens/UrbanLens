@@ -25,7 +25,8 @@ def sync_smart_list_membership(sender: type[Pin], instance: Pin, **kwargs) -> No
 
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_smart_list_membership_sync")
 def sync_smart_list_membership_for_labels(sender, instance: Pin, action: str, reverse: bool = False, **kwargs) -> None:
-    """Keep smart PinList membership current whenever a pin's labels change.
+    """
+    Keep smart PinList membership current whenever a pin's labels change.
     Label add/remove/clear never calls ``Pin.save()``, so this can't rely on the ``post_save`` receiver above - a smart list whose ``smart_filter`` includes ``tags``/``exclude_tags``/``label_groups`` would otherwise never pick up a pin gaining or losing a matching label.
     """
     if reverse or action not in {"post_add", "post_remove", "post_clear"}:
@@ -48,7 +49,8 @@ def _touch_pin(pin_id: int | None) -> None:
 
 @receiver(post_save, sender=PinLink, dispatch_uid="pin_link_smart_list_resync_on_save")
 def resync_pin_on_link_saved(sender: type[PinLink], instance: PinLink, **kwargs) -> None:
-    """A link add (or edit) can flip a pin's "has links" filter/smart-list match.
+    """
+    A link add (or edit) can flip a pin's "has links" filter/smart-list match.
 
     ``PinLink`` writes never call ``Pin.save()``, so nothing else notices.
     """
@@ -63,7 +65,8 @@ def resync_pin_on_link_deleted(sender: type[PinLink], instance: PinLink, **kwarg
 
 @receiver(post_save, sender=Pin, dispatch_uid="detail_pin_parent_smart_list_resync_on_create")
 def resync_parent_on_detail_pin_created(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
-    """A new detail pin changes its parent's "detail pin count" filter/smart-list match.
+    """
+    A new detail pin changes its parent's "detail pin count" filter/smart-list match.
 
     Only fires on creation (not every edit of an existing detail pin) - the
     count only changes when a detail pin is added or removed.

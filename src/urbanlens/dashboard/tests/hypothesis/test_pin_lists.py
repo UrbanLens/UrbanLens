@@ -101,7 +101,8 @@ class PinListMarkupMapErrorIsJsonTests(TestCase):
 
 
 class PinListDetailPaginationTests(TestCase):
-    """The list-detail page's item rows are paginated; the overview map is not.
+    """
+    The list-detail page's item rows are paginated; the overview map is not.
 
     Regression: the page rendered every item on the list with no pagination at all, so a large list cost an
     unbounded amount of HTML/DOM."""
@@ -120,7 +121,8 @@ class PinListDetailPaginationTests(TestCase):
         return pins
 
     def test_detail_page_only_renders_one_page_of_rows(self) -> None:
-        """Checks the *row* markup specifically - the map data blob legitimately
+        """
+        Checks the *row* markup specifically - the map data blob legitimately
         embeds every pin's name regardless of pagination (see the map-data test
         below), so a bare substring check on the whole page would false-positive."""
         pins = self._add_pins(5)
@@ -242,7 +244,8 @@ class PinListExportViewTests(TestCase):
 
 
 class PinListDetailInlineEditableTests(TestCase):
-    """Click-to-edit-in-place title/description on the list detail hero.
+    """
+    Click-to-edit-in-place title/description on the list detail hero.
 
     Reuses the pre-existing PinListEditView (lists.edit) endpoint - only the template/JS wiring is new.
     name/description via that endpoint were exercised only incidentally by the smart-filter tests above, never
@@ -293,7 +296,8 @@ class PinListDetailInlineEditableTests(TestCase):
         self.assertEqual(pin_list.description, "New description.")
 
     def test_blank_name_is_ignored_not_cleared(self) -> None:
-        """The model requires a name - PinListEditView silently no-ops a blank
+        """
+        The model requires a name - PinListEditView silently no-ops a blank
         one rather than erroring, matching how the inline editor reverts to
         the prior text instead of submitting an empty rename."""
         pin_list = baker.make(PinList, profile=self.profile, name="Keep Me")
@@ -586,7 +590,8 @@ class SavedFilterSuggestNameViewTests(TestCase):
 
 
 class PinListSlugTests(TestCase):
-    """PinList URLs use a human-readable slug, unique per-profile (not globally).
+    """
+    PinList URLs use a human-readable slug, unique per-profile (not globally).
 
     See PublicDashboardModel / Pin._slugify_qs for the pattern this mirrors - Pin is scoped the same way, since
     a slug only needs to be unique within one user's own lists, not across every user's."""
@@ -730,7 +735,8 @@ class PinListItemQuerySetTests(TestCase):
 
 
 class PinListCreateRefusalContractTests(TestCase):
-    """What `lists.create` says when it refuses, which two pages now depend on.
+    """
+    What `lists.create` says when it refuses, which two pages now depend on.
 
     This endpoint answers a duplicate name with **409 and a plain-text sentence**, not JSON - so `r.json()`
     threw into an unhandled rejection and the button did nothing at all: no toast, no closed dialog, name still

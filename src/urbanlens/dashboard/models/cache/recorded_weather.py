@@ -8,7 +8,8 @@ from urbanlens.dashboard.models import abstract
 
 
 class RecordedWeatherDay(abstract.DashboardModel):
-    """What the weather was on one day in one 0.01° cell, as REData's ``/weather/history/`` reported it.
+    """
+    What the weather was on one day in one 0.01° cell, as REData's ``/weather/history/`` reported it.
 
     Keyed by cell rather than by Location so a trip activity with only a coordinate shares rows with
     the Locations around it; ERA5's own grid is 0.25°, so nothing finer is lost. A past day never

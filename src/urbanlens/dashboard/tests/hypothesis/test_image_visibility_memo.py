@@ -34,7 +34,8 @@ class ViewerScopePrimingTests(TestCase):
         baker.make(Image, profile=self.viewer, pending_scan=False)
 
     def _resolve(self, times: int, *, primed: bool) -> list[str]:
-        """Measure the viewer-table queries of *times* calls on a fresh profile.
+        """
+        Measure the viewer-table queries of *times* calls on a fresh profile.
 
         Reloading matters: a primed value hangs on the instance, so reusing one across measurements would leave
         the second reading what the first primed, and the comparison would be between different things.
@@ -71,7 +72,8 @@ class ViewerScopePrimingTests(TestCase):
         self.assertEqual(four_times, once * 4)
 
     def test_an_unprimed_read_sees_a_friendship_made_a_moment_ago(self) -> None:
-        """The bug the first version of this shipped.
+        """
+        The bug the first version of this shipped.
 
         A caller that writes and then asks must see its own write. Caching on
         first read made ``visible_to`` answer from before it.
@@ -85,7 +87,8 @@ class ViewerScopePrimingTests(TestCase):
         self.assertIn(stranger.pk, queryset._get_friend_ids(self.viewer))
 
     def test_a_primed_read_is_deliberately_a_snapshot(self) -> None:
-        """The trade priming makes, stated so it cannot be a surprise.
+        """
+        The trade priming makes, stated so it cannot be a surprise.
 
         Having opted in, the caller gets the set as it was when primed. That is
         why the opt-in exists, and why it is not the default.

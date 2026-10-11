@@ -1,4 +1,5 @@
-"""Cross-request caching for a value whose invalidating events are known by name.
+"""
+Cross-request caching for a value whose invalidating events are known by name.
 
 A value read on every page and changed only by a rare, nameable event should not be recomputed
 per request - and should not be left to a timeout either, because the gap between the event and
@@ -28,7 +29,8 @@ _FOREVER = None
 
 
 class VersionedCache:
-    """Entries in one namespace, retired together by a counter rather than one key at a time.
+    """
+    Entries in one namespace, retired together by a counter rather than one key at a time.
 
     Attributes:
         namespace: Prefix for every key, including the counter's.
@@ -38,7 +40,8 @@ class VersionedCache:
     __slots__ = ("_counter", "namespace", "seconds")
 
     def __init__(self, namespace: str, *, seconds: int) -> None:
-        """Build a namespace.
+        """
+        Build a namespace.
 
         Args:
             namespace: Prefix for every key this instance reads or writes.
@@ -52,7 +55,8 @@ class VersionedCache:
         return f"{self.namespace}:{name}"
 
     def read(self, *names: str) -> tuple[int | None, dict[str, Any]]:
-        """The current generation and whichever of *names* is stored under it.
+        """
+        The current generation and whichever of *names* is stored under it.
 
         Args:
             *names: Entry names within this namespace.
@@ -76,7 +80,8 @@ class VersionedCache:
         return generation, fresh
 
     def write(self, generation: int | None, values: Mapping[str, Any]) -> None:
-        """Store *values* stamped with *generation*.
+        """
+        Store *values* stamped with *generation*.
 
         Args:
             generation: The generation :meth:`read` reported, or None to establish one. A stamp
@@ -93,7 +98,8 @@ class VersionedCache:
         cache.set_many({self._key(name): (generation, value) for name, value in values.items()}, self.seconds)
 
     def generation(self) -> int | None:
-        """The current generation, starting one if the namespace has never had a reader.
+        """
+        The current generation, starting one if the namespace has never had a reader.
 
         Args:
             None.
@@ -106,7 +112,8 @@ class VersionedCache:
         return current if isinstance(current, int) else None
 
     def bump(self, **_kwargs: object) -> None:
-        """Retire every entry in this namespace.
+        """
+        Retire every entry in this namespace.
 
         Shaped to be connected directly as a signal receiver, so the event that changes the value
         is the thing that invalidates it, with no per-key bookkeeping in between.

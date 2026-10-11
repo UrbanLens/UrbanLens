@@ -1,4 +1,5 @@
-"""Deliberately minimal, hand-rolled serializers for the external API.
+"""
+Deliberately minimal, hand-rolled serializers for the external API.
 
 These never subclass or reuse the internal ``PinSerializer``/``ProfileSerializer``
 (``dashboard/models/pin/serializer.py``, ``dashboard/models/profile/serializer.py``) -
@@ -92,7 +93,8 @@ if TYPE_CHECKING:
 
 
 class WhoAmISerializer(serializers.Serializer):
-    """The calling key owner's own identity: their profile uuid and slug.
+    """
+    The calling key owner's own identity: their profile uuid and slug.
 
     The slug is here because it is the *identifier every other endpoint speaks*.
     A profile is addressed by slug throughout this API (``/profiles/{profile_slug}/``,
@@ -110,7 +112,8 @@ class WhoAmISerializer(serializers.Serializer):
 
 
 class PinCreateSerializer(serializers.Serializer):
-    """Validates an untrusted pin-creation payload from an external application.
+    """
+    Validates an untrusted pin-creation payload from an external application.
 
     A conservative subset of what the map UI's "Add pin" form accepts (see
     ``controllers.maps.MapController.post_add_pin``) - label/tag/category ids, custom icon uploads, and
@@ -157,7 +160,8 @@ class LinkInputSerializer(serializers.Serializer):
 
 
 class PinSuggestionCreateSerializer(serializers.Serializer):
-    """Validates an untrusted pin-*suggestion* payload from an external application.
+    """
+    Validates an untrusted pin-*suggestion* payload from an external application.
 
     Unlike ``PinCreateSerializer``, nothing here is written to a real Pin immediately - it's staged as a
     ``PinSuggestion`` the profile owner must explicitly accept before anything appears on their map (see
@@ -223,7 +227,8 @@ class TombstoneSyncQuerySerializer(serializers.Serializer):
 
 
 class SyncPinTagSerializer(serializers.Serializer):
-    """One label chip on a synced pin (schema-only).
+    """
+    One label chip on a synced pin (schema-only).
 
     Spelled out rather than left as an untyped dict because ``kind`` is what lets an offline client tell
     a status from a category from a tag without re-deriving it, and a ``DictField`` would leave that
@@ -239,7 +244,8 @@ class SyncPinTagSerializer(serializers.Serializer):
 
 
 class SyncPinSerializer(serializers.Serializer):
-    """Documents the pin payload shape served by the delta-sync endpoint.
+    """
+    Documents the pin payload shape served by the delta-sync endpoint.
 
     Schema-only: the actual payload is built by ``services.pins.pin_sync.serialize_sync_pin`` (the map
     payload plus sync-only fields), never by this class - but the OpenAPI contract (and the Dart client
@@ -290,7 +296,8 @@ class PinSyncResponseSerializer(serializers.Serializer):
 
 
 class PinNoteSerializer(serializers.Serializer):
-    """One personal note on a pin - both the read shape and the create payload.
+    """
+    One personal note on a pin - both the read shape and the create payload.
 
     Notes are append-only by design (see ``models.pin.note.PinNote``), so there is no update
     counterpart: a client edits a note by deleting it and adding another.
@@ -317,7 +324,8 @@ class PinAliasSerializer(serializers.Serializer):
     is_current = serializers.SerializerMethodField()
 
     def get_is_current(self, alias) -> bool:
-        """Whether this alias is the pin's current name.
+        """
+        Whether this alias is the pin's current name.
 
         The pin comes from the serializer context rather than ``alias.pin`` so that serializing a whole list
         costs no per-row query.
@@ -337,7 +345,8 @@ class PinAliasSerializer(serializers.Serializer):
 
 
 class PinLinkSerializer(serializers.Serializer):
-    """One external link on a pin (output only).
+    """
+    One external link on a pin (output only).
 
     Separate from :class:`PinLinkCreateSerializer` because ``name`` means different things in each
     direction: on the way out it is the resolved ``display_name`` (which falls back to the url's host
@@ -353,7 +362,8 @@ class PinLinkSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
     def get_wayback_url(self, link) -> str | None:
-        """The Wayback snapshot url, or null when none has been archived yet.
+        """
+        The Wayback snapshot url, or null when none has been archived yet.
 
         The model stores "not archived" as ``""``; this reports it as null to match the shape
         ``services.pins.pin_detail.build_pin_detail`` already ships.
@@ -367,7 +377,8 @@ class PinLinkSerializer(serializers.Serializer):
         return link.wayback_url or None
 
     def get_auto_source(self, link) -> str | None:
-        """The provider that added the link automatically (an ``AutoLinkSource`` value), or null when a person did.
+        """
+        The provider that added the link automatically (an ``AutoLinkSource`` value), or null when a person did.
 
         Args:
             link: The link being serialized.
@@ -386,7 +397,8 @@ class PinLinkCreateSerializer(serializers.Serializer):
 
 
 class CustomFieldValueSerializer(serializers.Serializer):
-    """One custom field's value on a target object (schema-only).
+    """
+    One custom field's value on a target object (schema-only).
 
     Shared by the pin-detail payload's nested ``custom_fields`` and the standalone ``custom-fields/``
     domain - both describe the same row shape.
@@ -414,7 +426,8 @@ class PinSecurityDetailSerializer(serializers.Serializer):
 
 
 class PinDetailSerializer(SyncPinSerializer):
-    """Documents the full pin-detail response (schema-only).
+    """
+    Documents the full pin-detail response (schema-only).
 
     A superset of :class:`SyncPinSerializer` - see ``services.pins.pin_detail.build_pin_detail``, the
     function that actually builds this payload.
@@ -454,7 +467,8 @@ class PinDetailSerializer(SyncPinSerializer):
 
 
 def _security_update_fields() -> dict[str, serializers.Field]:
-    """Build the optional, writable counterpart of :class:`PinSecurityDetailSerializer`.
+    """
+    Build the optional, writable counterpart of :class:`PinSecurityDetailSerializer`.
 
     Generated from ``models.abstract.security.SECURITY_FIELDS`` rather than typed out, so a ninth
     indicator added to the model mixin becomes writable here automatically instead of being silently
@@ -491,7 +505,8 @@ PinSecurityUpdateSerializer = type(
 
 
 class PinUpdateSerializer(serializers.Serializer):
-    """Validates an untrusted pin-update payload.
+    """
+    Validates an untrusted pin-update payload.
 
     An earlier version accepted only name/icon/last_visited/coordinates/parent_id and *silently dropped*
     everything else while still answering 200, so a user who edited a pin's description in the app saw a
@@ -546,7 +561,8 @@ class PinUpdateSerializer(serializers.Serializer):
     confirm_wiki_loss = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
-        """Reject payloads that are internally contradictory.
+        """
+        Reject payloads that are internally contradictory.
 
         Args:
             attrs: The field-validated payload.
@@ -571,7 +587,8 @@ class PinUpdateSerializer(serializers.Serializer):
         return attrs
 
     def pin_field_edits(self) -> dict[str, Any]:
-        """Flatten the validated payload into ``Pin`` column name -> value to write.
+        """
+        Flatten the validated payload into ``Pin`` column name -> value to write.
 
         The nested ``security`` object is flattened into the same mapping rather than given a second write
         path of its own, because the eight indicators are plain ``Pin`` columns.
@@ -618,7 +635,8 @@ class PinVisitCreateSerializer(serializers.Serializer):
     notes = serializers.CharField(max_length=MAX_VISIT_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
 
     def validate_visited_at(self, value: datetime.datetime) -> datetime.datetime:
-        """Refuse a visit that has not happened yet.
+        """
+        Refuse a visit that has not happened yet.
 
         A visit is a record of somewhere the user has *been*.
 
@@ -648,7 +666,8 @@ class LocationSearchQuerySerializer(serializers.Serializer):
 
 
 class LocationSearchResultSerializer(serializers.Serializer):
-    """One autocomplete hit (schema-only).
+    """
+    One autocomplete hit (schema-only).
 
     Mirrors ``services.map_pins.autocomplete.AutocompleteResult.to_dict()``, which is what actually
     builds these - the same wire shape the web map's own autocomplete consumes.
@@ -731,7 +750,8 @@ class PushDeviceRegisterSerializer(serializers.Serializer):
 
 
 class PushDeviceResponseSerializer(serializers.Serializer):
-    """The registered device as echoed back to the client.
+    """
+    The registered device as echoed back to the client.
 
     An FCM registration is accepted and stored but never dispatched to yet, so it comes back False - a
     client that assumed a 201 meant working delivery would otherwise show a silently dead notification
@@ -746,7 +766,8 @@ class PushDeviceResponseSerializer(serializers.Serializer):
 
 
 class SettingsFeaturesSerializer(serializers.Serializer):
-    """Which feature-gated settings groups the caller's account can use (schema-only).
+    """
+    Which feature-gated settings groups the caller's account can use (schema-only).
 
     A client uses this to hide the AI and Places cards outright rather than
     offering fields that a PATCH would reject.
@@ -757,7 +778,8 @@ class SettingsFeaturesSerializer(serializers.Serializer):
 
 
 class SettingsSerializer(serializers.Serializer):
-    """The full account-preferences document served by ``GET settings/``.
+    """
+    The full account-preferences document served by ``GET settings/``.
 
     Every field is spelled out by hand rather than generated from ``Profile`` by a ``ModelSerializer``.
     That is the whole point: ``Profile`` also carries location history, onboarding state, subscription
@@ -865,7 +887,8 @@ class SettingsSerializer(serializers.Serializer):
 
 
 class SettingsPatchSerializer(serializers.Serializer):
-    """Validates a partial account-preferences update from ``PATCH settings/``.
+    """
+    Validates a partial account-preferences update from ``PATCH settings/``.
 
     A default would collapse those two cases and make every PATCH a full overwrite, so a client syncing
     one toggle would silently reset everything else.
@@ -985,7 +1008,8 @@ MAX_BOUNDARY_VERTICES = 20_000
 #: Human-readable description of the ``criteria``/``smart_filter`` JSON shape, reused by every field carrying
 #: it.
 def _require_criteria_shape(value: object) -> None:
-    """Raise a field error when *value* is not criteria the pin filter can read back.
+    """
+    Raise a field error when *value* is not criteria the pin filter can read back.
 
     Args:
         value: Submitted criteria.
@@ -1023,7 +1047,8 @@ CRITERIA_HELP_TEXT = (
 
 
 class PinSummarySerializer(serializers.Serializer):
-    """The minimal pin identity nested inside list-membership payloads.
+    """
+    The minimal pin identity nested inside list-membership payloads.
 
     Deliberately far smaller than :class:`SyncPinSerializer`: an items page is about *which* pins are on
     a list and in what order, and a client that wants a pin's full detail already has ``GET
@@ -1040,7 +1065,8 @@ class PinSummarySerializer(serializers.Serializer):
 
 
 class PinListSerializer(serializers.Serializer):
-    """One of the caller's pin lists, as served by the list endpoint.
+    """
+    One of the caller's pin lists, as served by the list endpoint.
 
     ``smart_boundary`` is reported only as the boolean ``has_boundary`` here.
     The polygon itself can be megabytes, and a page of 25 lists would be dominated by geometry the
@@ -1091,7 +1117,8 @@ class PinListDetailSerializer(PinListSerializer):
 
 
 class PinListWriteSerializer(serializers.Serializer):
-    """Validates an untrusted pin-list create/update payload.
+    """
+    Validates an untrusted pin-list create/update payload.
 
     Used for both POST and PATCH; the view passes ``partial=True`` for the latter, so presence in
     ``validated_data`` is what distinguishes "not submitted" from "set to null".
@@ -1109,7 +1136,8 @@ class PinListWriteSerializer(serializers.Serializer):
     source_saved_filter_uuid = serializers.UUIDField(required=False, allow_null=True)
 
     def validate_smart_filter(self, value):
-        """Refuse rules the pin filter could not read back.
+        """
+        Refuse rules the pin filter could not read back.
 
         Args:
             value: The submitted rules, or None to clear them.
@@ -1125,7 +1153,8 @@ class PinListWriteSerializer(serializers.Serializer):
         return value
 
     def validate_smart_boundary(self, value):
-        """Parse and bound the submitted boundary geometry.
+        """
+        Parse and bound the submitted boundary geometry.
 
         Args:
             value: A GeoJSON Polygon/MultiPolygon dict, or None to clear it.
@@ -1165,7 +1194,8 @@ class PinListItemSerializer(serializers.Serializer):
 
 
 class PinListItemsWriteSerializer(serializers.Serializer):
-    """Validates a request to add pins to a list.
+    """
+    Validates a request to add pins to a list.
 
     Unknown or foreign uuids are dropped by the view rather than rejected here
 
@@ -1183,7 +1213,8 @@ class PinListItemsDeleteSerializer(serializers.Serializer):
 
 
 class PinListItemsReorderSerializer(serializers.Serializer):
-    """Validates a request to renumber a list's items.
+    """
+    Validates a request to renumber a list's items.
 
     Takes ``PinListItem`` ids (from ``PinListItemSerializer.id``), not pin uuids - the ordering belongs
     to the membership row, and one pin can sit on many lists.
@@ -1276,7 +1307,8 @@ class SavedFilterWriteSerializer(serializers.Serializer):
     order = serializers.IntegerField(required=False, min_value=DB_INTEGER_MIN, max_value=DB_INTEGER_MAX)
 
     def validate_color(self, value):
-        """Reject any hex not in the shared saved-filter/label/custom-layer color palette.
+        """
+        Reject any hex not in the shared saved-filter/label/custom-layer color palette.
 
         Args:
             value: The submitted color.
@@ -1292,7 +1324,8 @@ class SavedFilterWriteSerializer(serializers.Serializer):
         return value
 
     def validate_criteria(self, value):
-        """Require the stored criteria shape, since every consumer indexes it by key.
+        """
+        Require the stored criteria shape, since every consumer indexes it by key.
 
         Args:
             value: The submitted criteria.
@@ -1324,7 +1357,8 @@ _OPTIONAL_COUNT_SCHEMA = {
 
 
 class LabelSerializer(serializers.Serializer):
-    """One label visible to the caller, with their own customizations applied.
+    """
+    One label visible to the caller, with their own customizations applied.
 
     The ``effective_*`` fields are the values that should actually be displayed: a per-profile
     ``LabelCustomization`` override where one exists, otherwise the label's own value.
@@ -1380,7 +1414,8 @@ class LabelSerializer(serializers.Serializer):
 
 
 class LabelWriteSerializer(serializers.Serializer):
-    """Validates an untrusted label create/update payload.
+    """
+    Validates an untrusted label create/update payload.
 
     ``kind`` is required on create and ignored on update: converting a label between kinds moves it
     between entirely different attachment surfaces (pins, images, profiles) and is deliberately out of
@@ -1401,7 +1436,8 @@ class LabelWriteSerializer(serializers.Serializer):
 
 
 class LabelCustomizationSerializer(serializers.Serializer):
-    """Validates a per-profile display override for a label.
+    """
+    Validates a per-profile display override for a label.
 
     All three fields are optional and nullable.
     An empty string is normalized to null by the service, so "" and null both mean "no override"; when
@@ -1414,7 +1450,8 @@ class LabelCustomizationSerializer(serializers.Serializer):
 
 
 class LabelMergeSerializer(serializers.Serializer):
-    """Validates a label-merge request.
+    """
+    Validates a label-merge request.
 
     The target is the label named in the URL; these are the labels that will be
     consumed and deleted.
@@ -1432,7 +1469,8 @@ class LabelMergeResponseSerializer(serializers.Serializer):
 
 
 class SafetyCheckinContactSerializer(serializers.Serializer):
-    """One emergency contact on a check-in (read-only).
+    """
+    One emergency contact on a check-in (read-only).
 
     Emitting it here would let any ``safety:read`` key mint portal access for every contact - and to an
     outside observer that access is indistinguishable from the real contact acting.
@@ -1458,7 +1496,8 @@ class SafetyCheckinContactSerializer(serializers.Serializer):
 
 
 class SafetyCheckinPartnerSerializer(serializers.Serializer):
-    """One partner on a check-in (read-only).
+    """
+    One partner on a check-in (read-only).
 
     ``id`` is the ``{partnerId}`` path segment of
     ``DELETE safety/checkins/{slug}/partners/{partnerId}/``.
@@ -1485,7 +1524,8 @@ class SafetyCheckinPartnerSerializer(serializers.Serializer):
 
 
 class SafetyCheckinSummarySerializer(serializers.Serializer):
-    """A check-in as it appears in the list endpoint.
+    """
+    A check-in as it appears in the list endpoint.
 
     Carries the lifecycle state a client needs to render a row and decide which actions are still
     available, without the plan text, contact list, or any of the other detail-only PII.
@@ -1510,7 +1550,8 @@ class SafetyCheckinSummarySerializer(serializers.Serializer):
     partner_count = serializers.IntegerField(read_only=True)
 
     def get_grace_period_seconds(self, obj: SafetyCheckin) -> int | None:
-        """Return the grace period as whole seconds.
+        """
+        Return the grace period as whole seconds.
 
         Never emit the raw ``DurationField``: DRF renders it as Django's ``[DD] [HH:[MM:]]ss[.uuuuuu]``
         string, which no mobile client parses without bespoke code.
@@ -1535,7 +1576,8 @@ class SafetyCheckinSummarySerializer(serializers.Serializer):
 
 
 class SafetyCheckinDetailSerializer(SafetyCheckinSummarySerializer):
-    """The full check-in document, including the plan and contact list.
+    """
+    The full check-in document, including the plan and contact list.
 
     Every ``live_location_*`` field is deliberately omitted this pass.
     Live location is a continuously-updating precise position stream; exposing it read-only through a
@@ -1568,7 +1610,8 @@ class SafetyCheckinDetailSerializer(SafetyCheckinSummarySerializer):
 
 
 class SafetyContactInputSerializer(serializers.Serializer):
-    """One submitted emergency contact: either an existing connection or a raw email.
+    """
+    One submitted emergency contact: either an existing connection or a raw email.
 
     Mirrors ``SafetyCheckinContact``'s own exactly-one-of ``CheckConstraint`` - a contact is either a
     linked account or an email address, never both and never neither.
@@ -1626,7 +1669,8 @@ class SafetyCheckinCreateSerializer(serializers.Serializer):
 
 
 class SafetyCheckinUpdateSerializer(serializers.Serializer):
-    """Validates a partial safety check-in update - the six autosave fields.
+    """
+    Validates a partial safety check-in update - the six autosave fields.
 
     **No field carries a ``default``, and that is load-bearing.** The view builds its service kwargs
     purely from ``key in validated_data``, because ``apply_checkin_edit`` distinguishes "not submitted,
@@ -1663,7 +1707,8 @@ class SafetyContactDefaultsSerializer(serializers.Serializer):
 
 
 class SafetyDefaultContactSerializer(serializers.Serializer):
-    """One saved default emergency contact (schema-only).
+    """
+    One saved default emergency contact (schema-only).
 
     Thinner than :class:`SafetyCheckinContactSerializer`: a *default* is not attached to any check-in,
     so it has no notification state - and, like every contact payload here, no portal token.
@@ -1727,7 +1772,8 @@ class SafetyPhotoListResponseSerializer(serializers.Serializer):
 
 
 class SafetyPhotoAttachSerializer(serializers.Serializer):
-    """Attaches an already-uploaded image to a check-in by uuid.
+    """
+    Attaches an already-uploaded image to a check-in by uuid.
 
     Interim shape: the multipart upload pipeline (quota accounting, checksum dedup, downscaling, EXIF
     handling) lives in ``controllers.safety.SafetyGalleryView.post`` and has not yet been extracted into
@@ -1765,7 +1811,8 @@ class SafetyMapAttachSerializer(serializers.Serializer):
 
 
 class AuthSessionSerializer(serializers.Serializer):
-    """Describes the credential the request authenticated with (schema-only).
+    """
+    Describes the credential the request authenticated with (schema-only).
 
     Lets a client answer "what am I actually allowed to do?" without probing endpoints and collecting
     403s - it can hide unreachable UI up front, and schedule a refresh before ``expires_at``.
@@ -1785,7 +1832,8 @@ class AuthSessionSerializer(serializers.Serializer):
 
 
 class FriendProfileSerializer(serializers.Serializer):
-    """A person as they may be shown to the caller, masking included.
+    """
+    A person as they may be shown to the caller, masking included.
 
     Never populated straight off a ``Profile``.
     Callers must build the dict through
@@ -1803,7 +1851,8 @@ class FriendProfileSerializer(serializers.Serializer):
 
 
 class FriendshipSerializer(serializers.Serializer):
-    """One friend relationship from the calling profile's point of view.
+    """
+    One friend relationship from the calling profile's point of view.
 
     ``status`` and ``relationship_type`` are sourced from ``FriendshipStatus``/``FriendshipType``
     directly, so the wire values are the model's own capitalized strings ("Accepted", "Requested", ...).
@@ -1822,7 +1871,8 @@ class FriendshipSerializer(serializers.Serializer):
 
 
 class FriendMuteSerializer(serializers.Serializer):
-    """The desired mute state for a relationship.
+    """
+    The desired mute state for a relationship.
 
     An explicit target rather than a toggle.
     """
@@ -1853,7 +1903,8 @@ class FriendRequestCreateSerializer(serializers.Serializer):
 
 
 class FriendInviteSerializer(serializers.Serializer):
-    """Validates an invite-by-email submission.
+    """
+    Validates an invite-by-email submission.
 
     Deliberately has no ``subscription_role`` field.
     The web form accepts one (site admins can attach a subscription grant to an invitation), but that is
@@ -1866,7 +1917,8 @@ class FriendInviteSerializer(serializers.Serializer):
 
 
 class FriendInviteResponseSerializer(serializers.Serializer):
-    """The invite endpoint's single, invariant response (schema-only).
+    """
+    The invite endpoint's single, invariant response (schema-only).
 
     Anything that made this field (or the status code, or the headers) branch would hand a caller an
     account-enumeration oracle.
@@ -1876,7 +1928,8 @@ class FriendInviteResponseSerializer(serializers.Serializer):
 
 
 def _visibility_fields() -> dict[str, serializers.Field]:
-    """Build one ``ChoiceField`` per community-gated visibility setting.
+    """
+    Build one ``ChoiceField`` per community-gated visibility setting.
 
     Generated from ``_COMMUNITY_GATED_VISIBILITY_FIELDS`` rather than typed out, so a thirteenth
     visibility setting added to ``Profile`` appears on this surface automatically instead of being
@@ -1905,7 +1958,8 @@ ProfileVisibilitySerializer = type(
 
 
 class ProfileContactSerializer(serializers.Serializer):
-    """A profile's contact methods, served only when contact visibility permits.
+    """
+    A profile's contact methods, served only when contact visibility permits.
 
     Gated by ``Profile.can_view_contact_info``, which (unlike most visibility
     settings) does not treat a merely-pending friend request as sufficient.
@@ -1962,7 +2016,8 @@ class ProfileDetailSerializer(serializers.Serializer):
 
 
 class ProfileUpdateSerializer(serializers.Serializer):
-    """Validates a partial update to the caller's own profile.
+    """
+    Validates a partial update to the caller's own profile.
 
     ``ProfileSettingsOverlapTests`` asserts the two field sets stay disjoint so the overlap cannot creep
     back.
@@ -2008,7 +2063,8 @@ class ProfileNoteWriteSerializer(serializers.Serializer):
 
 
 class NotificationSerializer(serializers.Serializer):
-    """One notification from the caller's own inbox.
+    """
+    One notification from the caller's own inbox.
 
     Every enum here is lowercase snake_case, matching its model definition - unlike
     ``FriendshipSerializer.status`` above, which is capitalized.
@@ -2050,7 +2106,8 @@ class UnreadCountSerializer(serializers.Serializer):
 
 
 class NotificationPreferenceEntrySerializer(serializers.Serializer):
-    """Delivery settings for a single notification-preference stem.
+    """
+    Delivery settings for a single notification-preference stem.
 
     ``whatsapp`` and ``sms`` are separate booleans rather than members of ``DeliveryPreference`` because
     each is billed per message; both are forced off server-side when the profile has no number to
@@ -2063,7 +2120,8 @@ class NotificationPreferenceEntrySerializer(serializers.Serializer):
 
 
 def _preference_entry_fields() -> dict[str, serializers.Field]:
-    """Build one nested entry field per real notification-preference stem.
+    """
+    Build one nested entry field per real notification-preference stem.
 
     Driven by ``services.notifications.notification_center.preference_field_names``, which introspects
     the model - so a thirteenth preference becomes readable and writable here with no change to this
@@ -2092,7 +2150,8 @@ NotificationPreferenceSerializer = type(
 
 
 class PhotoSerializer(serializers.Serializer):
-    """One photo/video/document as an external client sees it (schema-only).
+    """
+    One photo/video/document as an external client sees it (schema-only).
 
     Populated by :func:`build_photo_payload`, which resolves the viewer-dependent fields
     (``owner_slug``, ``wiki_*``, ``dm_peer_*``) - this class only declares the resulting shape.
@@ -2136,7 +2195,8 @@ class PhotoSerializer(serializers.Serializer):
 
 
 def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids: set[int] | None = None) -> dict:
-    """Build one photo's external-API payload for a given viewer.
+    """
+    Build one photo's external-API payload for a given viewer.
 
     Every field naming a *person* or a *space the viewer may not belong to* is resolved through the same
     gate the site's own pages use, so a photo the viewer can legitimately see never becomes a side
@@ -2220,7 +2280,8 @@ def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids
 
 
 class PhotoListQuerySerializer(serializers.Serializer):
-    """Validates the filters on ``GET photos/``.
+    """
+    Validates the filters on ``GET photos/``.
 
     Pagination itself is the standard ``page``/``page_size`` pair handled by
     ``external_api.pagination.ExternalApiPagination`` and is not declared here.
@@ -2312,7 +2373,8 @@ class VisitSuggestionListResponseSerializer(serializers.Serializer):
 
 
 class PinSuggestionApiSerializer(serializers.Serializer):
-    """One pending batch-scan pin suggestion (schema-only).
+    """
+    One pending batch-scan pin suggestion (schema-only).
 
     A field-for-field mirror of ``models.pin_suggestions.model.PinSuggestion``,
     the sibling of ``VisitSuggestionSerializer`` for the other suggestion kind.
@@ -2345,7 +2407,8 @@ class PinSuggestionListResponseSerializer(serializers.Serializer):
 
 
 class MemoryEventSerializer(serializers.Serializer):
-    """One row in a profile's unified Memories timeline (schema-only).
+    """
+    One row in a profile's unified Memories timeline (schema-only).
 
     A field-for-field mirror of ``services.memories.aggregator.MemoryEvent``.
     """
@@ -2416,7 +2479,8 @@ class OnThisDayResponseSerializer(serializers.Serializer):
 
 
 class JournalEntrySerializer(serializers.Serializer):
-    """One Memories journal entry (schema-only).
+    """
+    One Memories journal entry (schema-only).
 
     A field-for-field mirror of ``services.memories.journal.JournalEntry``.
     ``test_external_api_photos`` asserts the two stay identical, so a new dataclass field fails the
@@ -2434,7 +2498,8 @@ class JournalEntrySerializer(serializers.Serializer):
 
 
 class JournalResponseSerializer(serializers.Serializer):
-    """One page of the Memories journal (schema-only).
+    """
+    One page of the Memories journal (schema-only).
 
     The standard ``{count, next, previous, results}`` envelope, plus one
     addition - see ``omitted_sources`` below.
@@ -2457,7 +2522,8 @@ class JournalResponseSerializer(serializers.Serializer):
 
 
 class TripMemberProfileSerializer(serializers.Serializer):
-    """One person as they may be shown to the requesting viewer.
+    """
+    One person as they may be shown to the requesting viewer.
 
     Always sourced from ``services.profile.identity_visibility.resolve_visible_identities``' masked
     output, never from the raw model fields.
@@ -2472,7 +2538,8 @@ class TripMemberProfileSerializer(serializers.Serializer):
     avatar_url = serializers.CharField(source="display_avatar_url", read_only=True, allow_null=True)
 
     def get_slug(self, profile) -> str | None:
-        """Return the profile slug, or None when this viewer sees a masked identity.
+        """
+        Return the profile slug, or None when this viewer sees a masked identity.
 
         Args:
             profile: A profile already resolved by ``resolve_visible_identities``.
@@ -2484,7 +2551,8 @@ class TripMemberProfileSerializer(serializers.Serializer):
 
 
 class TripSummarySerializer(serializers.Serializer):
-    """One trip as it appears in a list (schema and response shape).
+    """
+    One trip as it appears in a list (schema and response shape).
 
     The count fields come from ``TripQuerySet.for_list_page``'s annotations, so a list response costs
     the same queries the web list page already does.
@@ -2517,7 +2585,8 @@ class TripSummarySerializer(serializers.Serializer):
         return self.context.get("viewer")
 
     def _membership(self, trip):
-        """This viewer's membership row for *trip*, resolved at most once per trip.
+        """
+        This viewer's membership row for *trip*, resolved at most once per trip.
 
         Callers that did not prefetch keep the targeted query, which fetches one row rather than pulling a
         whole roster they have no other use for.
@@ -2581,7 +2650,8 @@ class TripSummarySerializer(serializers.Serializer):
 
 
 class TripCalendarSyncStatusSerializer(serializers.Serializer):
-    """Whether this trip is mirrored to the caller's Google Calendar (schema-only).
+    """
+    Whether this trip is mirrored to the caller's Google Calendar (schema-only).
 
     ``connected`` and ``linked`` are separate deliberately: a client that finds ``connected`` false must
     send the user to the web app, because establishing a calendar connection needs an OAuth consent flow
@@ -2598,7 +2668,8 @@ class TripCalendarSyncStatusSerializer(serializers.Serializer):
 
 
 class TripCalendarSyncRefusalSerializer(ErrorSerializer):
-    """A refused calendar-sync toggle (schema-only).
+    """
+    A refused calendar-sync toggle (schema-only).
 
     A refusal naming the export as the blocker carries the trip's sync status beside ``error``, so a client can tell
     whether the calendar or the export is missing; a malformed request carries ``error`` alone.
@@ -2620,7 +2691,8 @@ class TripPermissionsSerializer(serializers.Serializer):
 
 
 class TripViewerSerializer(serializers.Serializer):
-    """What the requesting caller specifically may see and do on this trip.
+    """
+    What the requesting caller specifically may see and do on this trip.
 
     The four ``can_*`` booleans are derived server-side from ``services.trips.trip_access.can_perform``,
     not re-derived by the client from the permission levels - so a future change to how a level is
@@ -2655,7 +2727,8 @@ class TripMemberSerializer(serializers.Serializer):
 
 
 class TripDetailSerializer(TripSummarySerializer):
-    """One trip in full, including its roster.
+    """
+    One trip in full, including its roster.
 
     Members are bundled here rather than left to the paginated members endpoint: a trip's roster is
     small and bounded by ``max_trip_members``, and the app needs it to render the detail screen at all,
@@ -2679,7 +2752,8 @@ class TripActivityLegSerializer(serializers.Serializer):
 
 
 class TripActivitySerializer(serializers.Serializer):
-    """One itinerary entry, serialized from a ``build_activity_rows`` render row.
+    """
+    One itinerary entry, serialized from a ``build_activity_rows`` render row.
 
     ``latitude``/``longitude`` are **null** - not merely flagged - whenever the activity's location is
     effectively hidden from this viewer, whether by the activity's own ``location_hidden`` flag or by
@@ -2742,7 +2816,8 @@ class TripActivitySerializer(serializers.Serializer):
         return coords[1] if coords else None
 
     def get_child_trip_uuid(self, row) -> str | None:
-        """The uuid of the trip nested under this activity, or None when absent or hidden.
+        """
+        The uuid of the trip nested under this activity, or None when absent or hidden.
 
         Reads the row's already-masked ``display_child_trip_uuid`` rather than
         ``row["activity"].child_trip`` directly - the raw relation has no location_hidden/viewer-privacy
@@ -2784,7 +2859,8 @@ class TripCommentReactionSerializer(serializers.Serializer):
 
 
 class TripCommentSerializer(serializers.Serializer):
-    """One trip comment, serialized from a ``build_comment_tree`` row.
+    """
+    One trip comment, serialized from a ``build_comment_tree`` row.
 
     Only comments this viewer is allowed to see are ever in the tree, so there is no visibility decision
     left to make here.
@@ -2849,7 +2925,8 @@ class TripCreateSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs: dict) -> dict:
-        """Reject a range that ends before it starts.
+        """
+        Reject a range that ends before it starts.
 
         Args:
             attrs: The validated field values.
@@ -2867,7 +2944,8 @@ class TripCreateSerializer(serializers.Serializer):
 
 
 class _StoredRangeValidationMixin(serializers.Serializer):
-    """Validates a range whose other endpoint may live on the stored row.
+    """
+    Validates a range whose other endpoint may live on the stored row.
 
     A partial update is the case a plain ``attrs``-only range check cannot handle: when a PATCH sends
     one endpoint and omits the other, the omitted one is simply absent from ``attrs``, so ``start and
@@ -2881,7 +2959,8 @@ class _StoredRangeValidationMixin(serializers.Serializer):
     range_fields: ClassVar[tuple[str, str, str]]
 
     def _resolve_range(self, attrs: dict) -> tuple[Any, Any]:
-        """Combine submitted values with the stored instance's.
+        """
+        Combine submitted values with the stored instance's.
 
         Args:
             attrs: The validated field values for this request.
@@ -2896,7 +2975,8 @@ class _StoredRangeValidationMixin(serializers.Serializer):
         return start, end
 
     def validate(self, attrs: dict) -> dict:
-        """Reject an update that would leave the range inverted.
+        """
+        Reject an update that would leave the range inverted.
 
         Args:
             attrs: The validated field values.
@@ -2916,7 +2996,8 @@ class _StoredRangeValidationMixin(serializers.Serializer):
 
 
 class TripUpdateSerializer(_StoredRangeValidationMixin):
-    """Validates a partial trip update.
+    """
+    Validates a partial trip update.
 
     No field carries a default, so ``"x" in validated_data`` distinguishes "omitted" from "explicitly
     set to null" - the same presence-keyed pattern :class:`PinUpdateSerializer` uses, and what
@@ -2957,7 +3038,8 @@ class TripInvitationSerializer(serializers.Serializer):
 
 
 class TripMemberOrganizerSerializer(serializers.Serializer):
-    """Validates an organizer-flag change.
+    """
+    Validates an organizer-flag change.
 
     Explicitly the target state rather than a toggle - a client retrying a
     request it never saw acknowledged would otherwise flip the flag back.
@@ -2973,7 +3055,8 @@ class TripRsvpSerializer(serializers.Serializer):
 
 
 class TripActivityCreateSerializer(serializers.Serializer):
-    """Validates an untrusted activity-creation payload.
+    """
+    Validates an untrusted activity-creation payload.
 
     Unlike the web form's split date and time inputs, schedule fields here are whole ISO datetimes - a
     native client has a real datetime to send, and splitting it only to recombine it server-side loses
@@ -2997,7 +3080,8 @@ class TripActivityCreateSerializer(serializers.Serializer):
     location_hidden = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
-        """Coordinates travel together, and a range must not end before it starts.
+        """
+        Coordinates travel together, and a range must not end before it starts.
 
         Args:
             attrs: The validated field values.
@@ -3019,7 +3103,8 @@ class TripActivityCreateSerializer(serializers.Serializer):
 
 
 class TripActivityUpdateSerializer(_StoredRangeValidationMixin, TripActivityCreateSerializer):
-    """Validates a partial activity update.
+    """
+    Validates a partial activity update.
 
     Dropping the defaults is exactly what broke the inherited schedule check: with ``default=None``
     gone, an omitted endpoint is absent from ``attrs`` rather than present-and-None, so the parent's
@@ -3043,7 +3128,8 @@ class TripActivityUpdateSerializer(_StoredRangeValidationMixin, TripActivityCrea
 
 
 class TripActivityPositionSerializer(serializers.Serializer):
-    """Validates a map-drag position override.
+    """
+    Validates a map-drag position override.
 
     The bounds are the point of this serializer: the endpoint it replaces accepted any float and
     persisted it, so a marker could be saved at latitude 5000.
@@ -3060,7 +3146,8 @@ class TripActivityVoteSerializer(serializers.Serializer):
 
 
 class TripActivityStatusSerializer(serializers.Serializer):
-    """Validates an activity status change.
+    """
+    Validates an activity status change.
 
     ``completed`` is accepted here and routed to ``services.trips.trip_activities.complete_activity``,
     which also logs the completer's visit and snaps a future date back to today - so a client never has
@@ -3077,7 +3164,8 @@ class TripActivityRsvpSerializer(serializers.Serializer):
 
 
 class TripCommentCreateSerializer(serializers.Serializer):
-    """Validates a trip comment submission.
+    """
+    Validates a trip comment submission.
 
     Image and map attachments are web-only for now: both need multipart upload
     and the markup-map editor's payload, neither of which this surface exposes.

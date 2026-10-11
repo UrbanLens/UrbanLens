@@ -187,7 +187,8 @@ def _is_test_file(path: str) -> bool:
 
 
 def _read_source(path: str) -> str:
-    """Read a Python source file, tolerating a BOM and other common encodings.
+    """
+    Read a Python source file, tolerating a BOM and other common encodings.
 
     "utf-8-sig" is tried first: it reads plain utf-8 identically while also
     stripping a leading U+FEFF.
@@ -507,7 +508,8 @@ class Finding:
 
 
 def _score_confidence(d: FunctionDef, name_definition_counts: dict[str, int]) -> tuple[str, list[str]]:
-    """Score 100 minus each applicable blind spot; bucket High (>=80) /
+    """
+    Score 100 minus each applicable blind spot; bucket High (>=80) /
     Medium (>=50) / Low (<50). A triage heuristic, not a verdict.
     """
     score = 100

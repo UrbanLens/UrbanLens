@@ -54,7 +54,8 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
         self.assertEqual([r.title for r in results], [], "search returned a photo its uploader shows to no one")
 
     def test_the_owning_pin_name_does_not_leak_through_the_result(self) -> None:
-        """A result's title falls back to the pin's name when there is no caption,
+        """
+        A result's title falls back to the pin's name when there is no caption,
         so a photo with no caption at all still names somebody's private pin."""
         self.owner.photo_upload_visibility = VisibilityChoice.NO_ONE
         self.owner.save(update_fields=["photo_upload_visibility"])
@@ -78,7 +79,8 @@ class PhotoSearchRespectsUploaderVisibilityTests(TestCase):
         )
 
     def test_a_photo_shared_widely_is_still_found_by_a_neighbour(self) -> None:
-        """The positive control: this suite must not pass by breaking search.
+        """
+        The positive control: this suite must not pass by breaking search.
 
         Both gates open - contributed to the wiki, and a setting that admits anyone."""
         from urbanlens.dashboard.models.images.model import Image as ImageModel

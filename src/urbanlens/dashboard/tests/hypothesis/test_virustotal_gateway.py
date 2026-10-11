@@ -11,7 +11,8 @@ _SHA256 = "a" * 64
 
 
 def _gateway(*, api_key: str = "test-key") -> VirusTotalGateway:
-    """A gateway with a mocked session, bypassing the real rate-limited one.
+    """
+    A gateway with a mocked session, bypassing the real rate-limited one.
 
     Gateway.__post_init__ only swaps in the DB-writing _RateLimitedSession when `session` is still the default
     plain requests.Session instance - passing a Mock() here skips that entirely."""

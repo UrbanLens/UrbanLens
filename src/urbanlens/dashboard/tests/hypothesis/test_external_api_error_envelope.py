@@ -36,7 +36,8 @@ _LEAKY_DETAIL = "pin 'old-mill' exists but belongs to profile 17"
 
 
 def _bearer(raw_key: str) -> dict:
-    """Request kwargs carrying an API key as a bearer token.
+    """
+    Request kwargs carrying an API key as a bearer token.
 
     Args:
         raw_key: The plaintext key value returned by ``generate_api_key``.
@@ -47,7 +48,8 @@ def _bearer(raw_key: str) -> dict:
 
 
 class _CredentialHttp404ProbeView(ExternalApiView):
-    """Raises a chatty ``Http404`` from a credential-authenticated endpoint.
+    """
+    Raises a chatty ``Http404`` from a credential-authenticated endpoint.
 
     Deliberately attaches ``_LEAKY_DETAIL`` to the exception: a handler that forwards DRF's rendered detail
     instead of substituting the constant body would pass a plain ``raise Http404`` test and fail this one."""
@@ -57,7 +59,8 @@ class _CredentialHttp404ProbeView(ExternalApiView):
     }
 
     def get(self, request: Request) -> Response:
-        """Always raise ``Http404`` carrying a message that must be discarded.
+        """
+        Always raise ``Http404`` carrying a message that must be discarded.
 
         Args:
             request: The authenticated request (unused).
@@ -71,7 +74,8 @@ class _CredentialHttp404ProbeView(ExternalApiView):
 
 
 class _CredentialNotFoundProbeView(ExternalApiView):
-    """Raises DRF's own ``NotFound``, the other route to a 404.
+    """
+    Raises DRF's own ``NotFound``, the other route to a 404.
 
     ``Http404`` and ``NotFound`` arrive at the handler as different exception types and only converge because
     the handler tests for both."""
@@ -81,7 +85,8 @@ class _CredentialNotFoundProbeView(ExternalApiView):
     }
 
     def get(self, request: Request) -> Response:
-        """Always raise ``NotFound`` carrying a message that must be discarded.
+        """
+        Always raise ``NotFound`` carrying a message that must be discarded.
 
         Args:
             request: The authenticated request (unused).
@@ -95,7 +100,8 @@ class _CredentialNotFoundProbeView(ExternalApiView):
 
 
 class _DualAuthHttp404ProbeView(DualAuthJsonView):
-    """The same 404 probe on the dual-auth base, reachable by a browser session.
+    """
+    The same 404 probe on the dual-auth base, reachable by a browser session.
 
     ``DualAuthJsonView`` is the seam the web client shares with the mobile one, so it inherits the envelope
     separately from ``ExternalApiView`` and needs its own proof - the two bases have no common ancestor below
@@ -106,7 +112,8 @@ class _DualAuthHttp404ProbeView(DualAuthJsonView):
     }
 
     def get(self, request: Request) -> Response:
-        """Always raise ``Http404`` carrying a message that must be discarded.
+        """
+        Always raise ``Http404`` carrying a message that must be discarded.
 
         Args:
             request: The session- or credential-authenticated request (unused).
@@ -158,7 +165,8 @@ class _EnvelopeTestCase(TestCase):
         ApiKey.objects.filter(pk=api_key.pk).update(scopes=self.SCOPES)
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
-        """Issue a second key carrying exactly *scopes*.
+        """
+        Issue a second key carrying exactly *scopes*.
 
         Args:
             scopes: The scope values to grant.
@@ -170,7 +178,8 @@ class _EnvelopeTestCase(TestCase):
         return raw
 
     def assertEnvelope(self, response, status: int) -> dict:  # noqa: N802 - unittest's own casing
-        """Assert *response* is a JSON error in the package's envelope.
+        """
+        Assert *response* is a JSON error in the package's envelope.
 
         Checks the two halves of the contract that a per-endpoint assertion tends to miss: that ``error`` is
         present *and* that DRF's ``detail`` key is absent.
@@ -207,7 +216,8 @@ class NotFoundEnvelopeTests(_EnvelopeTestCase):
         self.assertEqual(response.json(), NOT_FOUND_BODY)
 
     def test_upstream_detail_never_reaches_the_client(self) -> None:
-        """The anti-enumeration rule: no part of the raised message survives.
+        """
+        The anti-enumeration rule: no part of the raised message survives.
 
         Asserted against the raw response body rather than the parsed payload, so a detail smuggled into a
         nested key or a header-adjacent field would still be caught."""
@@ -254,7 +264,8 @@ class ValidationEnvelopeTests(_EnvelopeTestCase):
         self.assertIn("address", payload["fields"])
 
     def test_field_messages_are_plain_strings(self) -> None:
-        """Leaves are ``str``, not DRF ``ErrorDetail``, so the JSON is ordinary.
+        """
+        Leaves are ``str``, not DRF ``ErrorDetail``, so the JSON is ordinary.
 
         ``ErrorDetail`` subclasses ``str`` and serializes identically, so this is invisible on the wire - but it
         is what lets the payload be handed to ``json.dumps`` or a non-DRF renderer without surprises."""
@@ -280,7 +291,8 @@ class DrfRaisedErrorEnvelopeTests(_EnvelopeTestCase):
         self.assertEnvelope(response, 403)
 
     def test_method_not_allowed_uses_the_envelope(self) -> None:
-        """405 names the offending method, in ``error``.
+        """
+        405 names the offending method, in ``error``.
 
         Probed against ``auth/session/`` rather than an ordinary endpoint because a *scoped* view can never
         actually answer 405: DRF runs permissions inside ``initial()``, before it looks up the handler, and
@@ -297,7 +309,8 @@ class DrfRaisedErrorEnvelopeTests(_EnvelopeTestCase):
         self.assertEnvelope(self.client.get(reverse("e2ee.enroll")), 405)
 
     def test_throttled_request_uses_the_envelope(self) -> None:
-        """429 carries the retry advice in ``error`` rather than ``detail``.
+        """
+        429 carries the retry advice in ``error`` rather than ``detail``.
 
         The burst throttle is squeezed to a single request per hour rather than actually making hundreds, and
         the cache is cleared around the test so the counter cannot leak into (or out of) its neighbours."""
@@ -313,7 +326,8 @@ class DrfRaisedErrorEnvelopeTests(_EnvelopeTestCase):
 
 
 class HandWrittenErrorsAreUnchangedTests(_EnvelopeTestCase):
-    """The envelope must not disturb the returns that already used it.
+    """
+    The envelope must not disturb the returns that already used it.
 
     ``uniform_exception_handler`` only ever sees *exceptions*."""
 
@@ -325,7 +339,8 @@ class HandWrittenErrorsAreUnchangedTests(_EnvelopeTestCase):
 
 
 class HandlerPropertyTests(SimpleTestCase):
-    """``uniform_exception_handler`` itself, over generated inputs.
+    """
+    ``uniform_exception_handler`` itself, over generated inputs.
 
     The HTTP tests above prove the handler is *wired up*; these prove it is produce, which is a universal claim
     - and the endpoint tests can only ever sample the handful of exceptions today's endpoints happen to raise."""
@@ -336,7 +351,8 @@ class HandlerPropertyTests(SimpleTestCase):
 
     @given(message=st.text(max_size=200))
     def test_every_http404_message_collapses_to_one_body(self, message: str) -> None:
-        """The anti-enumeration rule as a universal claim, not a sample.
+        """
+        The anti-enumeration rule as a universal claim, not a sample.
 
         Whatever an upstream helper attaches to its ``Http404`` - a slug, an owner id, a reason - the caller
         sees the same constant."""
@@ -362,7 +378,8 @@ class HandlerPropertyTests(SimpleTestCase):
         )
     )
     def test_validation_errors_always_land_under_fields(self, errors: dict[str, list[str]]) -> None:
-        """Any field-keyed validation structure keeps its keys - one level down.
+        """
+        Any field-keyed validation structure keeps its keys - one level down.
 
         The two halves that matter to a client: nothing is dropped (every submitted field name still appears),
         and nothing is promoted (the field names live under ``fields``, never at the top level where they would
@@ -396,7 +413,8 @@ class HandlerPropertyTests(SimpleTestCase):
 
     @given(message=st.text(min_size=1, max_size=200))
     def test_single_message_exceptions_always_use_the_error_key(self, message: str) -> None:
-        """``{"detail": x}`` becomes ``{"error": x}`` with the text preserved.
+        """
+        ``{"detail": x}`` becomes ``{"error": x}`` with the text preserved.
 
         Unlike a 404, these messages *are* meant to reach the caller - a throttle's retry advice or a permission
         refusal is actionable."""

@@ -1,4 +1,5 @@
-"""The import preview reads uploads in the sandbox worker, never in the web process.
+"""
+The import preview reads uploads in the sandbox worker, never in the web process.
 
 Every format the preview accepts - archives, KML, GPX, shapefiles, Word documents - is an
 ``untrusted_parse`` operation, which refuses the web process under
@@ -90,7 +91,8 @@ class ImportPreviewStatus(ImportJobStatus):
 
 
 class ImportPreviewRefusedError(Exception):
-    """The preview was not started, and nothing was left behind.
+    """
+    The preview was not started, and nothing was left behind.
 
     Attributes:
         message: What to tell the user.
@@ -108,7 +110,8 @@ class _UnreadableUploadError(Exception):
 
 
 def job_dir(job_id: str) -> str:
-    """Where a preview's upload, intermediate parse and result are kept.
+    """
+    Where a preview's upload, intermediate parse and result are kept.
 
     Args:
         job_id: The preview.
@@ -120,7 +123,8 @@ def job_dir(job_id: str) -> str:
 
 
 def guard_key(profile_id: int) -> str:
-    """The single-flight key allowing one preview per account.
+    """
+    The single-flight key allowing one preview per account.
 
     Args:
         profile_id: The uploading profile.
@@ -132,7 +136,8 @@ def guard_key(profile_id: int) -> str:
 
 
 def parse_slot_key(index: int) -> str:
-    """The single-flight key for one of the site-wide slots a preview is read in.
+    """
+    The single-flight key for one of the site-wide slots a preview is read in.
 
     Args:
         index: Which slot, below ``IMPORT_PREVIEW_MAX_CONCURRENT_PARSES``.
@@ -144,7 +149,8 @@ def parse_slot_key(index: int) -> str:
 
 
 def start_import_preview(profile: Profile, uploads: Iterable[UploadedFile]) -> str:
-    """Store an upload for the sandbox worker to read, as the account's one preview.
+    """
+    Store an upload for the sandbox worker to read, as the account's one preview.
 
     Args:
         profile: The uploading profile.
@@ -190,7 +196,8 @@ def start_import_preview(profile: Profile, uploads: Iterable[UploadedFile]) -> s
 
 
 def parse_import_preview(profile_id: int, job_id: str) -> bool:
-    """Read a stored upload in the sandbox worker, finishing here when nothing needs the network.
+    """
+    Read a stored upload in the sandbox worker, finishing here when nothing needs the network.
 
     Only ``IMPORT_PREVIEW_MAX_CONCURRENT_PARSES`` previews are read at once site-wide. One that finds
     no slot free is left as it is to be tried again, until it has waited past ``STALL_AFTER``.
@@ -261,7 +268,8 @@ def parse_import_preview(profile_id: int, job_id: str) -> bool:
 
 
 def finish_import_preview(profile_id: int, job_id: str) -> None:
-    """Finish what the sandbox could not: lookups, AI extraction, and the admin's parse-failure notice.
+    """
+    Finish what the sandbox could not: lookups, AI extraction, and the admin's parse-failure notice.
 
     Releases the account's guard however it ends.
 
@@ -334,7 +342,8 @@ def finish_import_preview(profile_id: int, job_id: str) -> None:
 
 
 def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
-    """One of *user_id*'s previews: its status, and its result once it is done.
+    """
+    One of *user_id*'s previews: its status, and its result once it is done.
 
     Args:
         user_id: The requesting user.
@@ -363,7 +372,8 @@ def read_preview(user_id: int, job_id: str) -> dict[str, Any] | None:
 
 
 def preview_history_path(user_id: int, preview_id: object) -> str | None:
-    """Where a finished preview of *user_id*'s keeps the history for its confirmed import.
+    """
+    Where a finished preview of *user_id*'s keeps the history for its confirmed import.
 
     Args:
         user_id: The requesting user.
@@ -385,7 +395,8 @@ def preview_history_path(user_id: int, preview_id: object) -> str | None:
 
 
 def discard_preview_history(job_id: str) -> None:
-    """Remove a preview's history once an import has taken it, so the same trips are not saved twice.
+    """
+    Remove a preview's history once an import has taken it, so the same trips are not saved twice.
 
     Args:
         job_id: A preview :func:`preview_history_path` accepted.
@@ -417,7 +428,8 @@ def _read_uploads(profile: Profile, directory: str, names: list[str]) -> dict[st
 
 
 def _uploaded_files(uploads: list[tuple[str, str]], scratch: str) -> Iterator[tuple[str, IO[bytes]]]:
-    """Each file the upload holds, archives expanded to disk an entry at a time, as the parser asks for it.
+    """
+    Each file the upload holds, archives expanded to disk an entry at a time, as the parser asks for it.
 
     A file is yielded open, and closed - an extracted one removed - once the parser asks for the next.
 

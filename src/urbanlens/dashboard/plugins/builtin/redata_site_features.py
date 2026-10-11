@@ -92,7 +92,8 @@ class SiteFeaturesPanelSource(RedataInfoPanelSource):
 
 
 def feature_rows(features: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Normalize REData point-of-interest rows into display rows.
+    """
+    Normalize REData point-of-interest rows into display rows.
     Reads only the promoted fields every provider in the registry answers - ``name``, ``category``, ``description``, ``url`` - never the per-provider ``attributes`` blob.
 
     Args:

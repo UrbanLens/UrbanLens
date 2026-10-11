@@ -1,4 +1,5 @@
-"""Site-admin view: what REData's two models are, and how well they score.
+"""
+Site-admin view: what REData's two models are, and how well they score.
 
 The scrubbing below enforces that at the boundary rather than trusting the upstream shape to stay
 aggregate.
@@ -49,7 +50,8 @@ _PERSONAL_KEYS = frozenset(
 
 
 def scrub_personal_keys(value: Any) -> Any:
-    """Recursively drop anything that could identify a person.
+    """
+    Recursively drop anything that could identify a person.
 
     It exists because "aggregate" is a property of the current upstream shape rather than something this
     codebase can enforce upstream, and a diagnostics page is a poor place to discover that the shape
@@ -69,7 +71,8 @@ def scrub_personal_keys(value: Any) -> Any:
 
 
 def _training_size(active: dict[str, Any]) -> str:
-    """What the active model trained on, in the unit its endpoint counts, or ``""``.
+    """
+    What the active model trained on, in the unit its endpoint counts, or ``""``.
 
     Args:
         active: The serialized model version.
@@ -85,7 +88,8 @@ def _training_size(active: dict[str, Any]) -> str:
 
 
 def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str, Any]:
-    """Fetch one model's metadata, or describe why it is unavailable.
+    """
+    Fetch one model's metadata, or describe why it is unavailable.
 
     Args:
         fetch: Zero-argument callable returning the raw endpoint body.
@@ -140,7 +144,8 @@ def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str,
 
 
 class SiteAdminModelsView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Read-only diagnostics for REData's label-suggestion and photo-relevance models.
+    """
+    Read-only diagnostics for REData's label-suggestion and photo-relevance models.
 
     GET /site-admin/models/
     """
@@ -160,7 +165,8 @@ class SiteAdminModelsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         return super().handle_no_permission()
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        """Render both models' current state.
+        """
+        Render both models' current state.
 
         Args:
             request: The current request.

@@ -1,4 +1,5 @@
-"""A radius filter reaches Postgres as a predicate the spatial index can answer, not a distance computed per row.
+"""
+A radius filter reaches Postgres as a predicate the spatial index can answer, not a distance computed per row.
 
 ``distance_lte`` compiles to ``ST_Distance(point, x) <= r``, which no index serves. On the capacity population a 50 m
 location lookup planned a parallel scan of all 400k locations, and a pin's nearby layer measured all 21k of the

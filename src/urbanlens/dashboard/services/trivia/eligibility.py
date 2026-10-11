@@ -24,7 +24,8 @@ def eligible_questions(
     geo_bounds: GEOSGeometry | None = None,
     exclude_question_ids: Iterable[int] = (),
 ) -> QuerySet[TriviaQuestion]:
-    """Approved, in-rotation questions about a location every profile in ``profiles`` has pinned.
+    """
+    Approved, in-rotation questions about a location every profile in ``profiles`` has pinned.
 
     Args:
         profiles: Every participant in the session.
@@ -64,7 +65,8 @@ def solo_own_pending_questions(
     geo_bounds: GEOSGeometry | None = None,
     exclude_question_ids: Iterable[int] = (),
 ) -> QuerySet[TriviaQuestion]:
-    """A solo player's own PENDING_REVIEW/REJECTED questions about locations they've pinned.
+    """
+    A solo player's own PENDING_REVIEW/REJECTED questions about locations they've pinned.
     Per the Trivia spec: a user gets no feedback on whether their submitted question was accepted - so they can't iteratively tweak a rejected one until it slips through.
 
     Args:

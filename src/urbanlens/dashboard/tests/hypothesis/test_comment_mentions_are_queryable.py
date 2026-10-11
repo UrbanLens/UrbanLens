@@ -1,4 +1,5 @@
-"""The @loc mention gate becomes a queryset filter instead of a text scan.
+"""
+The @loc mention gate becomes a queryset filter instead of a text scan.
 
 Gate 3 (see ``services.comments.comments``) drops a comment entirely when it
 names a location the viewer has not pinned - the existence of the mention is
@@ -156,7 +157,8 @@ class BackfillTests(TestCase):
 
 
 class DerivationCoversEveryWritePathTests(TestCase):
-    """Every path that stores comment text must leave the rows behind it.
+    """
+    Every path that stores comment text must leave the rows behind it.
 
     The gate reads these rows, so a write path that skipped the derivation
     would not fail - it would quietly make a comment visible to people who

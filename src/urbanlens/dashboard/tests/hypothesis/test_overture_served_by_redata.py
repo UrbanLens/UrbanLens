@@ -1,4 +1,5 @@
-"""P110: inside the US, Overture's buildings and places come from REData's mirror and the public release is never read.
+"""
+P110: inside the US, Overture's buildings and places come from REData's mirror and the public release is never read.
 
 REData's own HTTP is answered at the transport, below every gateway and its rate limiter. The fixtures are REData
 ``release/0.3.0``'s wire shapes: ``BuildingRecord.to_dict()`` for an ``OvertureBuilding`` row

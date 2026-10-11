@@ -54,7 +54,8 @@ def _current_profile(request: HttpRequest) -> Profile:
 
 
 def _joined_participant(profile: Profile, session: GameSession) -> GameSessionParticipant:
-    """The profile's active participant row; callers check ``is_joined`` themselves.
+    """
+    The profile's active participant row; callers check ``is_joined`` themselves.
 
     Raises:
         Http404: The profile has no active participant row.
@@ -66,7 +67,8 @@ def _joined_participant(profile: Profile, session: GameSession) -> GameSessionPa
 
 
 def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResponse | None]:
-    """Parse+validate an optional ``geo_bounds`` GeoJSON string.
+    """
+    Parse+validate an optional ``geo_bounds`` GeoJSON string.
 
     Returns:
         ``(geojson, None)`` on success, or ``(None, error_response)`` on failure - the caller should
@@ -89,7 +91,8 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
 
 
 def _validate_label_id(raw_label_id: str | None, profile: Profile) -> tuple[int | None, JsonResponse | None]:
-    """Parse+validate an optional ``label_id`` - must name a label ``profile`` can actually use.
+    """
+    Parse+validate an optional ``label_id`` - must name a label ``profile`` can actually use.
 
     Scoped to ``Label.objects.location_labels().visible_to(profile)`` (the same visibility rule the
     map's label filter uses) so a profile can't probe for the existence of another profile's private
@@ -112,7 +115,8 @@ def _validate_label_id(raw_label_id: str | None, profile: Profile) -> tuple[int 
 
 
 def _config_from_request(request: HttpRequest, profile: Profile) -> tuple[spotguessr_session.GameConfig | None, JsonResponse | None]:
-    """Build+validate a GameConfig from POST fields, shared by solo and multiplayer start.
+    """
+    Build+validate a GameConfig from POST fields, shared by solo and multiplayer start.
 
     Returns:
         ``(config, None)`` on success, or ``(None, error_response)``.
@@ -161,7 +165,8 @@ _ROUND_ID_SENTINEL = 888888888
 
 
 def _url_templates() -> dict[str, str]:
-    """Every SpotGuessr endpoint the frontend needs, with numeric-id placeholders for the parameterized
+    """
+    Every SpotGuessr endpoint the frontend needs, with numeric-id placeholders for the parameterized
     ones.
 
     ``{% url %}`` can't emit a template directly (its ``<int:...>`` path converters require a real
@@ -217,7 +222,8 @@ def _prewarm_solo_start(profile_id: int, mode: str, last_config: dict) -> None:
 
 
 class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The SpotGuessr overview page: own rating, friends' ratings, start-game form.
+    """
+    The SpotGuessr overview page: own rating, friends' ratings, start-game form.
 
     GET /spotguessr/
     """
@@ -271,7 +277,8 @@ class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Update SpotGuessr preferences.
+    """
+    Update SpotGuessr preferences.
 
     POST /spotguessr/settings/   body: ``show_ratings_to_friends`` ("on"/"off")
     """
@@ -288,7 +295,8 @@ class SpotGuessrSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View
 
 
 class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
+    """
+    Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
     POST /spotguessr/start/ body: ``mode``, ``total_rounds``, difficulty/toggle fields,
 
@@ -354,7 +362,8 @@ class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The lobby's current state: mode, status, and every participant (invited or joined).
+    """
+    The lobby's current state: mode, status, and every participant (invited or joined).
 
     GET /spotguessr/session/<session_id>/lobby/
     """
@@ -366,7 +375,8 @@ class SpotGuessrLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Invite one more friend to a still-open lobby. Host-only.
+    """
+    Invite one more friend to a still-open lobby. Host-only.
 
     POST /spotguessr/session/<session_id>/invite/   body: ``profile_id``
     """
@@ -396,7 +406,8 @@ class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Accept an invitation to a lobby.
+    """
+    Accept an invitation to a lobby.
 
     POST /spotguessr/session/<session_id>/join/
     """
@@ -417,7 +428,8 @@ class SpotGuessrJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host starts the game: locks the roster and creates round 1.
+    """
+    Host starts the game: locks the roster and creates round 1.
 
     POST /spotguessr/session/<session_id>/begin/
 
@@ -453,7 +465,8 @@ class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
+    """
+    Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
 
     POST /spotguessr/session/<session_id>/end/
 
@@ -480,7 +493,8 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, Vi
 
 
 class SpotGuessrLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The calling profile leaves this session - or declines an invitation to it.
+    """
+    The calling profile leaves this session - or declines an invitation to it.
 
     POST /spotguessr/session/<session_id>/leave/
     """
@@ -501,7 +515,8 @@ class SpotGuessrLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 
 
 class SpotGuessrKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Host removes another participant, joined or still invited. Host-only.
+    """
+    Host removes another participant, joined or still invited. Host-only.
 
     POST /spotguessr/session/<session_id>/kick/   body: ``profile_id``
     """
@@ -532,7 +547,8 @@ class SpotGuessrKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixi
 
 
 class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The session's current round (for reloads/reconnects).
+    """
+    The session's current round (for reloads/reconnects).
 
     GET /spotguessr/session/<session_id>/round/
 
@@ -558,7 +574,8 @@ class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Submit a guess for the session's current round.
+    """
+    Submit a guess for the session's current round.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/guess/   body: ``latitude``, ``longitude``, optional ``guessed_date`` (YYYY-MM-DD)
     """
@@ -603,7 +620,8 @@ class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Force-reveal the current round because its configured round timer expired.
+    """
+    Force-reveal the current round because its configured round timer expired.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/timeout/
 
@@ -632,7 +650,8 @@ class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 
 
 class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Thumbs up/down, or report, the photo a Photos-mode round just showed.
+    """
+    Thumbs up/down, or report, the photo a Photos-mode round just showed.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/feedback/ body: ``kind``
 
@@ -661,7 +680,8 @@ class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, AlphaFeatureRequiredMixin,
 
 
 class SpotGuessrChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
+    """
+    Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /spotguessr/session/<session_id>/chat/
     """
@@ -674,7 +694,8 @@ class SpotGuessrChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, V
 
 
 class SpotGuessrPinsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The profile's own pins, for the "search my pins to guess" input.
+    """
+    The profile's own pins, for the "search my pins to guess" input.
 
     GET /spotguessr/pins/
 
@@ -706,7 +727,8 @@ class SpotGuessrPinsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
 
 
 class SpotGuessrAreaPinCountView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """How many of the profile's own pins fall inside a candidate ``geo_bounds`` selection.
+    """
+    How many of the profile's own pins fall inside a candidate ``geo_bounds`` selection.
 
     GET /spotguessr/area_pin_count/?geo_bounds=<geojson>
 
@@ -729,7 +751,8 @@ class SpotGuessrAreaPinCountView(LoginRequiredMixin, AlphaFeatureRequiredMixin, 
 
 
 class SpotGuessrSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
-    """The session's final scoreboard.
+    """
+    The session's final scoreboard.
 
     GET /spotguessr/session/<session_id>/summary/
     """

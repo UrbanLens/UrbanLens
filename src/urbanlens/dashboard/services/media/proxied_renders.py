@@ -1,4 +1,5 @@
-"""Renderings of the files the in-app REData proxies serve (CRIS attachments, LoopNet photos), made once and kept.
+"""
+Renderings of the files the in-app REData proxies serve (CRIS attachments, LoopNet photos), made once and kept.
 
 A proxied file a browser cannot show is decoded in the sandbox worker, at a gallery tile's size or the lightbox's, and
 the result is stored as a :class:`ProxiedMediaRender`, so a later view neither downloads the file from REData nor
@@ -31,7 +32,8 @@ _FAILED = "failed"
 
 
 def render_digest(source_key: str, size: str) -> str:
-    """The stable identity of one rendering.
+    """
+    The stable identity of one rendering.
 
     Args:
         source_key: The proxy's cache key for the original file.
@@ -63,7 +65,8 @@ def has_failed(source_key: str, size: str) -> bool:
 
 
 def request_render(source_key: str, size: str, original: tuple[bytes, str]) -> None:
-    """Queue one rendering in the sandbox worker, at most once at a time.
+    """
+    Queue one rendering in the sandbox worker, at most once at a time.
 
     The original is staged on disk rather than read back from the cache, which keeps only small files.
 
@@ -91,7 +94,8 @@ def release(source_key: str, size: str) -> None:
 
 
 def finish(source_key: str, size: str, rendered: tuple[bytes, str] | None) -> None:
-    """Keep a finished rendering, or remember that there is none.
+    """
+    Keep a finished rendering, or remember that there is none.
 
     Args:
         source_key: The proxy's cache key for the original file.

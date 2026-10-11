@@ -54,7 +54,8 @@ class WhoAmIAuthTests(TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_valid_key_returns_exactly_the_profile_uuid_and_slug(self) -> None:
-        """whoami serves the caller's uuid and slug - and nothing else, ever.
+        """
+        whoami serves the caller's uuid and slug - and nothing else, ever.
 
         Asserted as an exact dict rather than field-by-field on purpose."""
         _api_key, raw_key = generate_api_key(self.user, "Zapier")
@@ -117,7 +118,8 @@ class PinCreateViewTests(TestCase):
         self.assertFalse(pin.name_is_user_provided)
 
     def test_client_can_declare_a_name_as_deliberately_typed(self) -> None:
-        """An interactive client (the mobile app's pin form) opts in explicitly.
+        """
+        An interactive client (the mobile app's pin form) opts in explicitly.
 
         Without this the name a user typed stayed unprotected until they happened to edit it, leaving it
         eligible for the placeholder-name upgrade sweep."""
@@ -460,7 +462,8 @@ class PinTombstoneTests(TestCase):
         self.assertEqual(body["tombstones"], [])
 
     def test_deleted_since_older_than_retention_gets_410_full_resync(self) -> None:
-        """Pruning makes deletions that old unrecoverable - the feed must say so
+        """
+        Pruning makes deletions that old unrecoverable - the feed must say so
         loudly (410 + full_resync_required) instead of silently omitting them."""
         from urbanlens.dashboard.services.pins.pin_sync import TOMBSTONE_RETENTION
 

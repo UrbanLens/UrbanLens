@@ -1,4 +1,5 @@
-"""One page of comments must cost one page, however long the thread is.
+"""
+One page of comments must cost one page, however long the thread is.
 
 The external comment endpoints built the *whole* tree - every top-level
 comment, every reply, every reaction, every markup map, and a visibility check

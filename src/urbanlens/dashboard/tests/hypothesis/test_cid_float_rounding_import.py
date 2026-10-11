@@ -1,4 +1,5 @@
-"""A Takeout pin's 64-bit CID survives the import wizard's browser round trip (REData P120).
+"""
+A Takeout pin's 64-bit CID survives the import wizard's browser round trip (REData P120).
 
 The preview reaches the browser as JSON and the confirm step posts the pins back. A CID sent as a
 JSON number came back as a JavaScript Number's shortest digits padded with zeros
@@ -34,7 +35,8 @@ LAT, LNG = 42.682512, -76.866421
 
 
 def _through_the_browser(payload: object) -> Any:
-    """What ``JSON.parse`` then ``JSON.stringify`` does to *payload*, as the server reads it back.
+    """
+    What ``JSON.parse`` then ``JSON.stringify`` does to *payload*, as the server reads it back.
 
     Every JSON integer becomes a JavaScript Number, which prints its shortest round-trip digits.
     """

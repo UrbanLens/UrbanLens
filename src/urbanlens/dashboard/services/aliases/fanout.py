@@ -1,4 +1,5 @@
-"""Mirror one wiki alias onto every opted-in pin at that location.
+"""
+Mirror one wiki alias onto every opted-in pin at that location.
 
 A location has one pin per person who saved it, so this walks a list whose
 length is set by how popular the place is - not by anything the person adding
@@ -26,7 +27,8 @@ _CHUNK = 500
 
 
 def mirror_wiki_alias_to_pins(alias_id: int) -> int:
-    """Give every opted-in pin at this alias's location the same name.
+    """
+    Give every opted-in pin at this alias's location the same name.
 
     Args:
         alias_id: Primary key of the ``WikiAlias`` that was just created. Read

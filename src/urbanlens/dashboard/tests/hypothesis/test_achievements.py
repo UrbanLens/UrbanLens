@@ -193,7 +193,8 @@ class MetricComputationTests(AchievementTestsBase):
         self.assertEqual(get_metric("pins_created").value_for(self.profile), 3)
 
     def test_photos_uploaded_excludes_external_sources(self) -> None:
-        """Attaching someone else's Yelp photo is not an upload.
+        """
+        Attaching someone else's Yelp photo is not an upload.
 
         The Yelp row carries a ``media_source_key`` because a real materialised row always does - that column,
         not ``source``, is what says the profile merely up-voted somebody else's photograph."""
@@ -204,7 +205,8 @@ class MetricComputationTests(AchievementTestsBase):
         self.assertEqual(get_metric("photos_uploaded").value_for(self.profile), 2)
 
     def test_photos_uploaded_counts_a_photo_from_your_own_library(self) -> None:
-        """An Immich or Google Photos pick is the user's own picture.
+        """
+        An Immich or Google Photos pick is the user's own picture.
 
         Here so the gate cannot be narrowed back to ``source == UPLOAD``: that reads green against the Yelp case
         above while silently dropping every photo a user imported from an account they connected."""
@@ -274,7 +276,8 @@ class AwardingTests(AchievementTestsBase):
         self.assertEqual(UserAchievement.objects.filter(profile=self.profile).count(), 1)
 
     def test_a_concurrent_grant_race_does_not_raise(self) -> None:
-        """Two evaluation passes racing on the same award must not crash - the
+        """
+        Two evaluation passes racing on the same award must not crash - the
         loser hits the unique constraint and is treated as already-granted."""
         from django.db import IntegrityError
 
@@ -333,7 +336,8 @@ class AwardingTests(AchievementTestsBase):
         self.assertEqual(evaluate_achievement_for_all(achievement), 0)
 
     def test_backfill_skips_an_inactive_achievement(self) -> None:
-        """The manual backfill button (and the signal's queued backfill) must
+        """
+        The manual backfill button (and the signal's queued backfill) must
         no-op on a retired award rather than granting it retroactively."""
         achievement = self._achievement(metric="pins_created", threshold=1, is_active=False)
         baker.make(Pin, profile=self.profile)
@@ -357,7 +361,8 @@ class AwardingTests(AchievementTestsBase):
         self.assertIn("First Pin", notification.title)
 
     def test_no_notification_when_preference_is_none(self) -> None:
-        """Opting out of achievement notifications must actually suppress them,
+        """
+        Opting out of achievement notifications must actually suppress them,
         without affecting whether the award itself is granted."""
         from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
         from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
@@ -425,7 +430,8 @@ class AwardingTests(AchievementTestsBase):
 
 
 class SignalIntegrationTests(AchievementTestsBase):
-    """The end-to-end path: a contribution lands, the award appears.
+    """
+    The end-to-end path: a contribution lands, the award appears.
 
     Streak days are written synchronously inside the contribution's own transaction."""
 
@@ -443,7 +449,8 @@ class SignalIntegrationTests(AchievementTestsBase):
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
     def test_pin_creation_records_a_pinning_streak_day(self) -> None:
-        """Recorded even with no award defined - a streak award added later
+        """
+        Recorded even with no award defined - a streak award added later
         needs the history to reward."""
         baker.make(Pin, profile=self.profile)
 
@@ -514,7 +521,8 @@ class SignalIntegrationTests(AchievementTestsBase):
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
     def test_defining_an_inactive_achievement_does_not_backfill_until_activated(self) -> None:
-        """An award saved inactive must not backfill - only becoming active
+        """
+        An award saved inactive must not backfill - only becoming active
         should reach the users who already qualify."""
         from urbanlens.dashboard.tasks import backfill_achievement, backfill_achievement_range
 
@@ -538,7 +546,8 @@ class SignalIntegrationTests(AchievementTestsBase):
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
     def test_a_cosmetic_edit_does_not_requeue_the_backfill(self) -> None:
-        """`on_achievement_saved` fired on *every* save of an active award.
+        """
+        `on_achievement_saved` fired on *every* save of an active award.
 
         Its own docstring says "newly defined or re-activated", but the handler never looked at `created` or at
         whether anything relevant had changed - so renaming an award, recolouring it, or dragging it up the list
@@ -558,7 +567,8 @@ class SignalIntegrationTests(AchievementTestsBase):
         self.assertEqual(enqueue.call_args_list, [], "a cosmetic edit must not backfill the whole user base")
 
     def test_lowering_the_threshold_does_requeue_the_backfill(self) -> None:
-        """Anti-vacuity, and the case a naive "only on create" fix would lose.
+        """
+        Anti-vacuity, and the case a naive "only on create" fix would lose.
 
         `threshold` and `metric` decide *who qualifies*, so widening either has
         to reach the users it newly covers - exactly what the backfill is for.
@@ -579,7 +589,8 @@ class SignalIntegrationTests(AchievementTestsBase):
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
 
     def test_a_field_excluded_from_update_fields_is_not_re_baselined(self) -> None:
-        """A value that never reached the database must not be recorded as persisted.
+        """
+        A value that never reached the database must not be recorded as persisted.
 
         `save()` re-baselines the qualifying markers so a second save of the same instance is not mistaken for
         another change."""
@@ -724,7 +735,8 @@ class AchievementViewTests(AchievementTestsBase):
         self.assertEqual(response.status_code, 404)
 
     def test_stranger_can_view_a_public_profiles_achievements(self) -> None:
-        """The positive counterpart to test_hidden_profile_is_not_readable -
+        """
+        The positive counterpart to test_hidden_profile_is_not_readable -
         guards against a check that denies every non-owner, not just a hidden one."""
         from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 

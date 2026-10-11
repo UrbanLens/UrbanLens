@@ -1,4 +1,5 @@
-"""Fail-closed safety classifier for AI-drafted article text.
+"""
+Fail-closed safety classifier for AI-drafted article text.
 Unavailable gateways, empty responses, and unrecognized tokens are all treated as REJECT — moderation is never bypassed by turning the feature off (the caller skips expansion entirely when this feature's SiteSettings toggle is disabled)."""
 
 from __future__ import annotations
@@ -50,7 +51,8 @@ Respond with EXACTLY ONE of the following tokens, wrapped in ANSWER tags, and no
 
 @dataclass(frozen=True)
 class ArticleSafetyVerdict:
-    """The safety classifier's decision.
+    """
+    The safety classifier's decision.
 
     Attributes:
         approved: True only when the model returned the APPROVE token.
@@ -61,7 +63,8 @@ class ArticleSafetyVerdict:
 
 
 def classify_article_text(text: str, *, place_name: str, profile: Profile | None = None, raise_refusal: bool = False) -> ArticleSafetyVerdict:
-    """Judge whether drafted article text is safe to append.
+    """
+    Judge whether drafted article text is safe to append.
 
     Args:
         text: Sanitized plain-text paragraphs proposed for the article.

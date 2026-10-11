@@ -1,4 +1,5 @@
-"""Seed one account large enough for the neighbour test to mean something.
+"""
+Seed one account large enough for the neighbour test to mean something.
 The performance work this exists for is about what *one* user's account costs everyone else, so its measurements need an account big enough for per-row costs to dominate the constants."""
 
 from __future__ import annotations
@@ -45,7 +46,8 @@ DEFAULT_ORIGIN = (ORIGIN_LATITUDE, ORIGIN_LONGITUDE)
 
 
 def max_seeded_pins(origin_latitude: float = ORIGIN_LATITUDE) -> int:
-    """Largest seed a grid starting at *origin_latitude* can lay out before running past the pole.
+    """
+    Largest seed a grid starting at *origin_latitude* can lay out before running past the pole.
 
     Args:
         origin_latitude: Latitude of the grid's first row; rows run north.
@@ -93,7 +95,8 @@ _ANALYZED_TABLES = ("dashboard_locations", "dashboard_user_pins", "dashboard_lab
 
 
 def _grid(index: int, origin: tuple[float, float] = DEFAULT_ORIGIN) -> tuple[str, str]:
-    """One pin's coordinates, laid out on a fixed grid.
+    """
+    One pin's coordinates, laid out on a fixed grid.
     A grid rather than a line so a bounding-box query over the seeded block returns a realistic subset rather than everything or nothing.
 
     Args:
@@ -108,7 +111,8 @@ def _grid(index: int, origin: tuple[float, float] = DEFAULT_ORIGIN) -> tuple[str
 
 
 def _precompute_map_center(profile: Profile, total: int, origin: tuple[float, float] = DEFAULT_ORIGIN) -> tuple[float, float] | None:
-    """Store the account's map centre without computing it the expensive way.
+    """
+    Store the account's map centre without computing it the expensive way.
 
     Args:
         profile: The seeded account.
@@ -137,7 +141,8 @@ def seed_heavy_account(
     labels_per_pin: int = 1,
     origin: tuple[float, float] = DEFAULT_ORIGIN,
 ) -> dict[str, Any]:
-    """Give *profile* *pins* root pins, all carrying one shared label.
+    """
+    Give *profile* *pins* root pins, all carrying one shared label.
 
     Args:
         profile: The account to seed.
@@ -237,7 +242,8 @@ BULK_LABEL_PREFIX = "Perf Bulk Label"
 
 
 def seed_bulk_labels(profile: Profile, *, count: int, analyze: bool = True, batch_size: int = BATCH_SIZE) -> dict[str, Any]:
-    """Grow `dashboard_labels` by *count* rows, for P123's cross-account label-scan load test.
+    """
+    Grow `dashboard_labels` by *count* rows, for P123's cross-account label-scan load test.
 
     Args:
         profile: Whose account the rows are created under. Immaterial to the defect being
@@ -302,7 +308,8 @@ _RELATION_TABLES = (
 
 
 def _bulk_relation_host_location(profile: Profile) -> Location:
-    """The `Location` that seeds *profile*'s `seed_bulk_search_relations` host rows.
+    """
+    The `Location` that seeds *profile*'s `seed_bulk_search_relations` host rows.
 
     `Wiki` carries no `profile` field of its own - it is a global page keyed by `location` alone -
     so this location has to be unique per profile, not shared the way `seed_bulk_labels`' unattached
@@ -320,7 +327,8 @@ def _bulk_relation_host_location(profile: Profile) -> Location:
 
 
 def seed_bulk_search_relations(profile: Profile, *, count: int, analyze: bool = True, batch_size: int = BATCH_SIZE) -> dict[str, Any]:
-    """Grow the five to-many relations P123 generalised to, for the same cross-account scan load test.
+    """
+    Grow the five to-many relations P123 generalised to, for the same cross-account scan load test.
 
     One dedicated host row per relation (a pin, its wiki, a trip, a check-in) carries *count* children
     each: `PinAlias`/`WikiAlias` (`ArticleSearchProvider`'s `pin__aliases__name`/`wiki__aliases__name`),
@@ -391,7 +399,8 @@ def seed_bulk_search_relations(profile: Profile, *, count: int, analyze: bool = 
 
 
 def _vocabulary_labels(profile: Profile) -> list[Label]:
-    """The shared vocabulary, created if absent.
+    """
+    The shared vocabulary, created if absent.
 
     Args:
         profile: The account the labels belong to.
@@ -407,7 +416,8 @@ def _vocabulary_labels(profile: Profile) -> list[Label]:
 
 
 def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> list[Location]:
-    """The `Location` rows for *coordinates*, creating only the missing ones.
+    """
+    The `Location` rows for *coordinates*, creating only the missing ones.
 
     Args:
         coordinates: ``(latitude, longitude)`` string pairs, in pin order.
@@ -435,7 +445,8 @@ def _locations_for(coordinates: list[tuple[str, str]], *, first_index: int) -> l
 
 
 def analyze_seeded_tables(tables: Sequence[str] = _ANALYZED_TABLES) -> bool:
-    """Refresh planner statistics for the tables a seed wrote to.
+    """
+    Refresh planner statistics for the tables a seed wrote to.
 
     Only the tables' owner may, and Postgres skips anyone else with a warning rather than an error, so a
     per-tier login role would otherwise report a refresh that never happened.

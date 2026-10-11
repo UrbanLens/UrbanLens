@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 
 
 class ConversationKey(abstract.DashboardModel):
-    """One version of a conversation's random symmetric key, wrapped for both parties.
+    """
+    One version of a conversation's random symmetric key, wrapped for both parties.
     The key itself is generated in the browser of whichever participant sends first, then sealed (``crypto_box_seal``) once to each participant's public key - the server stores only the two sealed blobs and can decrypt neither.
     """
 
@@ -51,7 +52,8 @@ class ConversationKey(abstract.DashboardModel):
 
     @staticmethod
     def canonical_pair(profile_a: Profile, profile_b: Profile) -> tuple[Profile, Profile]:
-        """Return the two profiles in canonical (low pk, high pk) order.
+        """
+        Return the two profiles in canonical (low pk, high pk) order.
 
         Args:
             profile_a: One participant.
@@ -63,7 +65,8 @@ class ConversationKey(abstract.DashboardModel):
         return (profile_a, profile_b) if profile_a.pk < profile_b.pk else (profile_b, profile_a)
 
     def wrapped_for(self, profile_id: int) -> str:
-        """Return the sealed key blob addressed to ``profile_id``.
+        """
+        Return the sealed key blob addressed to ``profile_id``.
 
         Args:
             profile_id: Primary key of one of the two participants.
@@ -81,7 +84,8 @@ class ConversationKey(abstract.DashboardModel):
         raise ValueError(f"Profile {profile_id} is not a participant of conversation key {self.pk}")
 
     def __str__(self) -> str:
-        """Return a human-readable description of this key row.
+        """
+        Return a human-readable description of this key row.
 
         Returns:
             String like "ConversationKey(3<->7, v1)".

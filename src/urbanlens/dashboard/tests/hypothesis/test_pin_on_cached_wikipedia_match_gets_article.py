@@ -1,4 +1,5 @@
-"""A pin created where the Wikipedia match is already cached still gets its article.
+"""
+A pin created where the Wikipedia match is already cached still gets its article.
 
 Pin articles are seeded when a cache write turns a miss into a match. A second pin at the same
 location arrives after that write, and the prefetch skips a fresh cache, so nothing seeded it."""

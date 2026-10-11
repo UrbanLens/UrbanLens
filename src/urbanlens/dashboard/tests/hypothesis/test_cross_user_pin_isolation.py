@@ -1,4 +1,5 @@
-"""Nothing one account does changes another account's private pin.
+"""
+Nothing one account does changes another account's private pin.
 
 Locations are shared rows keyed by coordinate, and places and wikis are community data, so another account's
 lookups may fill in what a pin reads from them. The pin's own row, and every row hanging off it, belongs to its

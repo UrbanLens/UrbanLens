@@ -1,4 +1,5 @@
-"""Request/response types for a safety check-in's live location.
+"""
+Request/response types for a safety check-in's live location.
 
 Deliberately its own module, not folded into ``serializers.py``'s
 ``SafetyCheckinDetailSerializer`` - see that serializer's docstring on why
@@ -13,7 +14,8 @@ from rest_framework import serializers
 
 
 class SafetyCheckinLocationSerializer(serializers.Serializer):
-    """The owner's current shared position on a check-in, as read by the owner or a watching partner.
+    """
+    The owner's current shared position on a check-in, as read by the owner or a watching partner.
 
     ``latitude``/``longitude``/``accuracy`` are null whenever ``sharing_enabled`` is false - disabling
     sharing clears the last-known fix rather than leaving a stale marker visible to partners (see
@@ -28,7 +30,8 @@ class SafetyCheckinLocationSerializer(serializers.Serializer):
 
 
 class SafetyCheckinLocationUpdateSerializer(serializers.Serializer):
-    """Validates a live-location PATCH. Owner-only; every field is optional and independent.
+    """
+    Validates a live-location PATCH. Owner-only; every field is optional and independent.
 
     ``sharing_enabled`` is applied before a position, so a single PATCH may both turn sharing on and
     report the first fix in one round trip.
@@ -41,7 +44,8 @@ class SafetyCheckinLocationUpdateSerializer(serializers.Serializer):
     accuracy = serializers.FloatField(required=False, allow_null=True, min_value=0)
 
     def validate(self, attrs: dict) -> dict:
-        """Require latitude and longitude together, never one alone.
+        """
+        Require latitude and longitude together, never one alone.
 
         Args:
             attrs: The already field-validated submission.

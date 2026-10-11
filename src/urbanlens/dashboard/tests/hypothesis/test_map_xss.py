@@ -78,7 +78,8 @@ class PinIconColorEscapejsTests(_MapXssTestCase):
         self.assertNotIn(_QUOTE_BREAKOUT_PAYLOAD, body)
 
     def test_malicious_pin_color_is_escaped(self) -> None:
-        """The template's own escaping, with the column's coercion stepped around.
+        """
+        The template's own escaping, with the column's coercion stepped around.
 
         `Pin.save()` coerces `color` to NULL for anything that is not a colour, so a payload written through
         `baker.make` never reaches the database and this test would pass against a template with no escaping at

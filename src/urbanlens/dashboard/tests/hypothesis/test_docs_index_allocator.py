@@ -13,7 +13,8 @@ _CHECKER_PATH = pathlib.Path(__file__).resolve().parents[5] / "bin" / "check_doc
 
 
 def _load_checker():
-    """Import ``bin/check_docs_index.py`` as a module.
+    """
+    Import ``bin/check_docs_index.py`` as a module.
 
     Returns:
         The imported module.

@@ -1,4 +1,5 @@
-"""Admin-curated equivalence groups over the PlaceExternalTag vocabulary.
+"""
+Admin-curated equivalence groups over the PlaceExternalTag vocabulary.
 Different providers often describe the same real-world concept differently (OSM's ``amenity=restaurant`` vs.
 """
 
@@ -14,7 +15,8 @@ from urbanlens.dashboard.models.place.queryset import ExternalTagGroupManager, E
 
 
 class ExternalTagGroup(abstract.DashboardModel):
-    """A set of vocabulary entries considered the same real-world concept.
+    """
+    A set of vocabulary entries considered the same real-world concept.
 
     Carries no fields beyond identity and timestamps - membership and which
     member is displayed both live on :class:`ExternalTagVocabularyEntry`.
@@ -33,7 +35,8 @@ class ExternalTagGroup(abstract.DashboardModel):
 
 
 class ExternalTagVocabularyEntry(abstract.DashboardModel):
-    """One distinct ``(source, key, value)`` tag ever reported by a provider.
+    """
+    One distinct ``(source, key, value)`` tag ever reported by a provider.
     Auto-registered (``get_or_create``) by ``PlaceExternalTag.sync_for_source`` as new tags appear, and never auto-deleted - a tag going temporarily unseen on every Place shouldn't drop an admin's mapping decision, the same reasoning that keeps an unused ``Label`` alive.
 
     Attributes:

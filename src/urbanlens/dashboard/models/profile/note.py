@@ -12,7 +12,8 @@ from urbanlens.dashboard.models.profile.queryset import ProfileNoteManager
 
 
 class ProfileNote(abstract.FrontendDashboardModel):
-    """A private note one user keeps about another user's profile.
+    """
+    A private note one user keeps about another user's profile.
 
     Visible only to the author; the subject cannot see it.
     """

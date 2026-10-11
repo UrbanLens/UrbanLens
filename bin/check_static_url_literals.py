@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Fail if a template writes a `/static/...` URL instead of going through `{% static %}`.
+"""
+Fail if a template writes a `/static/...` URL instead of going through `{% static %}`.
 
 A literal path resolves, which is exactly what makes it hard to notice. What it
 does not do is carry the content hash `ManifestStaticFilesStorage` puts in the
@@ -42,7 +43,8 @@ _COMMENT_LINE = re.compile(r"^\s*(?:\{#|<!--|#)")
 
 
 def tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
-    """Return every tracked template file.
+    """
+    Return every tracked template file.
 
     Args:
         root: Repository root.
@@ -60,7 +62,8 @@ def tracked_templates(root: pathlib.Path) -> list[pathlib.Path]:
 
 
 def offenders(paths: list[pathlib.Path], root: pathlib.Path) -> list[str]:
-    """Find every literal `/static/` URL.
+    """
+    Find every literal `/static/` URL.
 
     Args:
         paths: Template files to read.
@@ -78,7 +81,8 @@ def offenders(paths: list[pathlib.Path], root: pathlib.Path) -> list[str]:
 
 
 def main() -> int:
-    """Run the check.
+    """
+    Run the check.
 
     Returns:
         0 when every static reference goes through the tag, 1 otherwise.

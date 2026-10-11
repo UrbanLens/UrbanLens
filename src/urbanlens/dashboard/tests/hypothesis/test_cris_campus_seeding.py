@@ -1,4 +1,5 @@
-"""A campus's site-scope CRIS fetch answers its building children, so a campus costs one site fetch, not a REData round trip per building.
+"""
+A campus's site-scope CRIS fetch answers its building children, so a campus costs one site fetch, not a REData round trip per building.
 
 On dev, HRSH's building children each fetched their own ``cris_building_usn`` row: 4,548 REData calls in three hours,
 1,595 rate-limited and 2,972 failed, and BLDG 166, 152 and 67 never got a row at all - while the parent's own
@@ -532,7 +533,8 @@ class SweepSeedsTheBuildingsItCreatesTests(CampusSeedingTestCase):
 
 
 class UndetailedCampusRecordsAreFilledLaterTests(CampusSeedingTestCase):
-    """A pass details only so many buildings live; REData's bulk queue warms the rest for a later pass to add (P24).
+    """
+    A pass details only so many buildings live; REData's bulk queue warms the rest for a later pass to add (P24).
 
     Before, the campus page's Sources listed the rest only when its row was next refetched, a cache window later.
     """
@@ -640,7 +642,8 @@ class UndetailedCampusRecordsAreFilledLaterTests(CampusSeedingTestCase):
 
 
 class WithheldDetailTests(CampusSeedingTestCase):
-    """REData withholds a resource's detail for now: its source is down (a 503), or it holds a resource its source cannot
+    """
+    REData withholds a resource's detail for now: its source is down (a 503), or it holds a resource its source cannot
     resolve (a 200 ``unresolved``).
 
     Every caller of the detail fetch degrades the same for both. The resource is asked about again, nothing records that it

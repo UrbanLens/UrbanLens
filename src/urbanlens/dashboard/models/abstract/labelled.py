@@ -15,7 +15,8 @@ if TYPE_CHECKING:
 
 
 class LabelledModel(Model):
-    """Mixin giving a model kind-specific views of its ``labels``.
+    """
+    Mixin giving a model kind-specific views of its ``labels``.
     Subclasses must declare a ``labels`` many-to-many to :class:`~urbanlens.dashboard.models.labels.model.Label`; this mixin adds no fields of its own.
     The accessors filter in Python rather than issuing ``labels.filter(kind=...)`` so that a caller's ``prefetch_related("labels")`` is actually used.
     """
@@ -31,7 +32,8 @@ class LabelledModel(Model):
         labels: Manager[Label]
 
     def _labels_of_kind(self, kind: str) -> list[Label]:
-        """Labels of one kind, read from the prefetch cache when there is one.
+        """
+        Labels of one kind, read from the prefetch cache when there is one.
 
         Args:
             kind: A ``KIND_*`` value from :mod:`dashboard.models.labels.meta`.

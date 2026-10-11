@@ -1,4 +1,5 @@
-"""A partial edit writes only what it changed, so a concurrent edit to another field survives it (P5).
+"""
+A partial edit writes only what it changed, so a concurrent edit to another field survives it (P5).
 
 Each test lands a second writer's change between the handler loading the row and saving it, which is
 what two overlapping autosaves or two editors of one annotation produce.

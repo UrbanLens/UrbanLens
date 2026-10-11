@@ -12,7 +12,8 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 
 class LoginFirstRunCopyTests(TestCase):
     def test_fresh_install_shows_welcome_not_welcome_back(self) -> None:
-        """Default SiteSettings row (bootstrap_admin_onboarding_complete=False,
+        """
+        Default SiteSettings row (bootstrap_admin_onboarding_complete=False,
         the field's own default) - the state before anyone has ever set up
         the site, including before the very first account is created."""
         response = self.client.get(reverse("login"))

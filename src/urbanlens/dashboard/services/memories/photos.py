@@ -28,7 +28,8 @@ PhotoState = Literal["filed", "suggested", "needs_pin", "needs_location"]
 
 
 def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: Decimal | float) -> Pin | None:
-    """Return the profile's nearest top-level pin within the match radius, if any.
+    """
+    Return the profile's nearest top-level pin within the match radius, if any.
 
     Args:
         profile: The pin owner to search within.
@@ -50,7 +51,8 @@ def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: De
 
 
 def pending_suggestion_image_ids(images: Sequence[Image]) -> set[int]:
-    """Return which of *images* have a pending photo-origin VisitSuggestion.
+    """
+    Return which of *images* have a pending photo-origin VisitSuggestion.
 
     Args:
         images: The photos about to be classified.
@@ -67,7 +69,8 @@ def pending_suggestion_image_ids(images: Sequence[Image]) -> set[int]:
 
 
 def classify_photo(image: Image, pending_image_ids: set[int] | None = None) -> PhotoState:
-    """Return the organize state of an uploaded photo.
+    """
+    Return the organize state of an uploaded photo.
 
     Args:
         image: The Image to classify (``visit``, coordinates, and ``organize_dismissed`` are read).
@@ -96,7 +99,8 @@ def _visit_time(image: Image):
 
 
 def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_image_id: int) -> None:
-    """Retroactively file or suggest visits for other unfiled photos now that a pin exists here.
+    """
+    Retroactively file or suggest visits for other unfiled photos now that a pin exists here.
     Since it's unambiguously the same visit, file it directly via ``log_visit_on_pin`` instead of asking for a confirmation that would never actually appear.
 
     Args:
@@ -141,7 +145,8 @@ def create_pin_and_log_visit(
     longitude: Decimal | float | None = None,
     name: str | None = None,
 ) -> tuple[Pin, PinVisit | None]:
-    """Create a pin for a geotagged photo and log a visit there in one step.
+    """
+    Create a pin for a geotagged photo and log a visit there in one step.
 
     Args:
         profile: The owner the new pin and visit belong to.
@@ -191,7 +196,8 @@ def create_pin_and_log_visit(
 
 
 def log_visit_on_pin(profile: Profile, image: Image, pin: Pin) -> PinVisit | None:
-    """Log a photo-sourced visit on an existing pin and attach the photo to it.
+    """
+    Log a photo-sourced visit on an existing pin and attach the photo to it.
     When the photo has no coordinates, they are backfilled from the pin so it appears on the map.
 
     Args:

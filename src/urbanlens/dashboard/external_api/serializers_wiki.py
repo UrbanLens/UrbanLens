@@ -1,4 +1,5 @@
-"""Serializers for the external API's wiki surface.
+"""
+Serializers for the external API's wiki surface.
 
 The conventions are identical: hand-rolled, never subclassing the internal serializers, with
 field-level bounds acting as the first line of defense against untrusted input.
@@ -46,7 +47,8 @@ class WikiSecuritySerializer(serializers.Serializer):
 
 
 class WikiSecurityUpdateSerializer(serializers.Serializer):
-    """The writable half of :class:`WikiSecuritySerializer`.
+    """
+    The writable half of :class:`WikiSecuritySerializer`.
 
     Every field is optional, so a caller may submit only the indicators they actually observed.
     """
@@ -75,7 +77,8 @@ class WikiStatSerializer(serializers.Serializer):
 
 
 class WikiAliasSerializer(serializers.Serializer):
-    """An alternate name for a wiki (schema-only).
+    """
+    An alternate name for a wiki (schema-only).
 
     The alias list is the full set of names a place is known by, *including* the one it currently goes
     by - which is flagged rather than omitted, exactly as ``PinAliasSerializer`` does it.
@@ -92,7 +95,8 @@ class WikiAliasSerializer(serializers.Serializer):
     is_current = serializers.SerializerMethodField()
 
     def get_is_current(self, alias) -> bool:
-        """Whether this alias is the wiki's current community name.
+        """
+        Whether this alias is the wiki's current community name.
 
         The wiki comes from the serializer context rather than ``alias.wiki`` so that serializing a whole
         list costs no per-row query - the view already has the wiki in hand from ``resolve_visible_wiki``.
@@ -125,7 +129,8 @@ class WikiLinkSerializer(serializers.Serializer):
     order = serializers.IntegerField(read_only=True)
 
     def get_auto_source(self, link) -> str | None:
-        """The provider that added the link automatically (an ``AutoLinkSource`` value), or null when a person did.
+        """
+        The provider that added the link automatically (an ``AutoLinkSource`` value), or null when a person did.
 
         Args:
             link: The link being serialized.
@@ -155,7 +160,8 @@ class WikiArticleSummarySerializer(serializers.Serializer):
 
 
 class WikiDetailSerializer(serializers.Serializer):
-    """Documents the full wiki-detail response (schema-only).
+    """
+    Documents the full wiki-detail response (schema-only).
 
     See ``services.wiki.wiki_detail.build_wiki_detail``, the function that actually
     builds this payload.
@@ -197,7 +203,8 @@ class WikiDetailSerializer(serializers.Serializer):
 
 
 class WikiUpdateSerializer(serializers.Serializer):
-    """Validates an untrusted wiki PATCH payload.
+    """
+    Validates an untrusted wiki PATCH payload.
 
     Every field is optional (this is a partial update), and unknown keys are rejected outright rather
     than ignored - a client misspelling ``decription`` should be told so, not handed a 200 for a write
@@ -213,7 +220,8 @@ class WikiUpdateSerializer(serializers.Serializer):
     base_revision_id = serializers.IntegerField(required=False, min_value=0, max_value=DB_BIGINT_MAX)
 
     def validate(self, attrs: dict) -> dict:
-        """Reject unknown top-level keys and empty payloads.
+        """
+        Reject unknown top-level keys and empty payloads.
 
         Args:
             attrs: The validated field values.
@@ -267,7 +275,8 @@ class ArticleDetailSerializer(serializers.Serializer):
 
 
 class ArticleSaveSerializer(serializers.Serializer):
-    """Validates an article save.
+    """
+    Validates an article save.
 
     ``base_revision_id`` is required (though it may be explicitly ``null``) - see this module's
     docstring for why an omitted value is not allowed to mean "no opinion".
@@ -308,7 +317,8 @@ class CommentMentionSerializer(serializers.Serializer):
 
 
 class CommentSerializer(serializers.Serializer):
-    """A comment as the external API returns it (schema-only).
+    """
+    A comment as the external API returns it (schema-only).
 
     Returns the raw storage-format ``text`` plus resolved ``mentions`` rather than server-rendered HTML,
     so a native client can lay it out itself instead of embedding a webview.
@@ -331,7 +341,8 @@ class CommentSerializer(serializers.Serializer):
     created = serializers.DateTimeField(read_only=True)
 
     def get_fields(self) -> dict:
-        """Attach the one-level-deep ``replies`` field.
+        """
+        Attach the one-level-deep ``replies`` field.
 
         Declared here rather than inline because a serializer cannot reference itself during class-body
         evaluation.
@@ -359,7 +370,8 @@ class ReviewSerializer(serializers.Serializer):
 
 
 class GalleryImageSerializer(serializers.Serializer):
-    """One image in a wiki's gallery (schema-only).
+    """
+    One image in a wiki's gallery (schema-only).
 
     Field names verified against ``models/images/model.py`` - the model stores an ``image`` file plus
     optional attribution metadata, and has no separate "url" column, so ``url`` here is derived from
@@ -389,7 +401,8 @@ class WikiBoundaryEntrySerializer(serializers.Serializer):
 
 
 class WikiBoundaryPayloadSerializer(serializers.Serializer):
-    """The wiki page map's full boundary payload (schema-only).
+    """
+    The wiki page map's full boundary payload (schema-only).
 
     Field-for-field identical to the internal ``WikiBoundaryView``'s response (see
     ``controllers.boundary``'s module docstring for the shape) - this is a thin wrapper over the same
@@ -424,7 +437,8 @@ class WikiCoverPhotoResponseSerializer(serializers.Serializer):
 
 
 class WikiOwnerSerializer(serializers.Serializer):
-    """One shared owner record on a wiki's Ownership card (schema-only, read-only).
+    """
+    One shared owner record on a wiki's Ownership card (schema-only, read-only).
 
     Write support is deliberately out of scope this pass.
     """

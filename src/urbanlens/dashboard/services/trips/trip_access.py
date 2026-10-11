@@ -1,4 +1,5 @@
-"""Who may see a trip, and who may act on it.
+"""
+Who may see a trip, and who may act on it.
 The single source of truth for trip authorization, shared by the internal HTMX controllers and the external REST API so a permission-level change can never apply to one surface and not the other."""
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ TRIP_NOT_FOUND_MESSAGE = "No such trip."
 
 
 def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
-    """Return the trip identified by *trip_slug*, if *viewer* may see it at all.
+    """
+    Return the trip identified by *trip_slug*, if *viewer* may see it at all.
 
     Args:
         trip_slug: The trip's URL slug.
@@ -36,7 +38,8 @@ def get_trip_for_viewer(trip_slug: str, viewer: Profile) -> Trip:
 
 
 def get_joined_trip(trip_slug: str, profile: Profile) -> Trip | None:
-    """The trip *trip_slug* names, when *profile* created it or has joined it.
+    """
+    The trip *trip_slug* names, when *profile* created it or has joined it.
 
     Args:
         trip_slug: The trip's URL slug.
@@ -49,7 +52,8 @@ def get_joined_trip(trip_slug: str, profile: Profile) -> Trip | None:
 
 
 def is_organizer(profile: Profile, trip: Trip) -> bool:
-    """Return True when *profile* is the trip's creator or a designated organizer.
+    """
+    Return True when *profile* is the trip's creator or a designated organizer.
 
     Args:
         profile: The profile to test.
@@ -64,7 +68,8 @@ def is_organizer(profile: Profile, trip: Trip) -> bool:
 
 
 def has_joined(profile: Profile, trip: Trip) -> bool:
-    """Return True when *profile* may contribute at all - creator, or a joined member.
+    """
+    Return True when *profile* may contribute at all - creator, or a joined member.
 
     Args:
         profile: The profile to test.
@@ -78,7 +83,8 @@ def has_joined(profile: Profile, trip: Trip) -> bool:
 
 
 def can_perform(profile: Profile, trip: Trip, level: str) -> bool:
-    """Return True when *profile* is allowed to act at the given permission level.
+    """
+    Return True when *profile* is allowed to act at the given permission level.
     Requires the profile to have joined (see :func:`has_joined`) - an invited-but-not-yet-joined member can never act, regardless of level.
 
     Args:
@@ -100,7 +106,8 @@ def can_perform(profile: Profile, trip: Trip, level: str) -> bool:
 
 
 def require_perform(profile: Profile, trip: Trip, level: str, message: str) -> None:
-    """Raise unless *profile* may act at *level* on *trip*.
+    """
+    Raise unless *profile* may act at *level* on *trip*.
 
     Args:
         profile: The profile attempting the action.
@@ -115,7 +122,8 @@ def require_perform(profile: Profile, trip: Trip, level: str, message: str) -> N
 
 
 def require_joined(profile: Profile, trip: Trip, message: str) -> None:
-    """Raise unless *profile* has joined *trip*.
+    """
+    Raise unless *profile* has joined *trip*.
     The level-independent counterpart to :func:`require_perform`, for actions (RSVP, viewing suggestions, editing trip metadata) gated only on having accepted the invitation.
 
     Args:

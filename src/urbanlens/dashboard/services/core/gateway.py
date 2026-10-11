@@ -1,4 +1,5 @@
-"""Base gateway class for external API integrations.
+"""
+Base gateway class for external API integrations.
 Subclasses that override ``__post_init__`` **must** call ``Gateway.__post_init__(self)`` so the session swap takes effect."""
 
 from __future__ import annotations
@@ -57,7 +58,8 @@ _pooled = threading.local()
 
 
 def pooled_session(key: str) -> requests.Session:
-    """This thread's long-lived session for *key*, so one call after another reuses its open connections.
+    """
+    This thread's long-lived session for *key*, so one call after another reuses its open connections.
 
     One per thread rather than one per process: ``requests.Session`` is not documented as safe to share
     between threads, and a request thread makes one call at a time anyway. It keeps no cookies, so the
@@ -82,7 +84,8 @@ def pooled_session(key: str) -> requests.Session:
 
 @dataclass(slots=True, kw_only=True)
 class Gateway(Service, ABC):
-    """A gateway to an external service.
+    """
+    A gateway to an external service.
 
     Attributes:
         session: The HTTP session used for all requests.
@@ -96,7 +99,8 @@ class Gateway(Service, ABC):
     session: requests.Session = field(default_factory=requests.Session)
 
     def __post_init__(self) -> None:
-        """Replace the plain session with a rate-limited wrapper when applicable.
+        """
+        Replace the plain session with a rate-limited wrapper when applicable.
         A custom session (e.g. a test mock) is preserved as-is; only the default ``requests.Session`` instance is swapped for a rate-limited one."""
         key = type(self).service_key
         if key and type(self.session) is requests.Session:
@@ -107,7 +111,8 @@ class Gateway(Service, ABC):
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
-        """How this gateway's URLs are described in ``ApiCallLog``.
+        """
+        How this gateway's URLs are described in ``ApiCallLog``.
 
         Args:
             url: The URL about to be requested.
@@ -123,7 +128,8 @@ class GatewayRequestError(RuntimeError):
 
     @property
     def is_outage(self) -> bool:
-        """Whether nothing was learned about what was asked, so the failure must not be cached as an empty answer.
+        """
+        Whether nothing was learned about what was asked, so the failure must not be cached as an empty answer.
 
         True unless a subclass knows the upstream answered, as REData does when it reports "no record here".
         """
@@ -131,7 +137,8 @@ class GatewayRequestError(RuntimeError):
 
 
 def is_source_outage(exc: BaseException) -> bool:
-    """Whether ``exc`` means the upstream could not be asked or did not answer, rather than that it found nothing.
+    """
+    Whether ``exc`` means the upstream could not be asked or did not answer, rather than that it found nothing.
 
     A ``LocationCache`` row marks its source fetched for the whole cache term, so a caller that stores an empty
     payload after one of these turns a passing outage into a lasting "nothing here".
@@ -151,7 +158,8 @@ def is_source_outage(exc: BaseException) -> bool:
 
 
 class GatewayRateLimitedError(GatewayRequestError):
-    """Raised when an external gateway reports that its own request budget is exhausted.
+    """
+    Raised when an external gateway reports that its own request budget is exhausted.
 
     A subclass rather than a sibling of :class:`GatewayRequestError`, so every
     existing ``except GatewayRequestError`` keeps working unchanged. Callers
@@ -170,7 +178,8 @@ _WAIT_IN_MESSAGE = re.compile(r"available in (\d+) seconds?")
 
 
 class UpstreamBusyError(GatewayRequestError):
-    """The upstream refused for now (throttled, or its own source unavailable) rather than for good.
+    """
+    The upstream refused for now (throttled, or its own source unavailable) rather than for good.
 
     Attributes:
         retry_after: Seconds the upstream asked callers to wait, bounded by :data:`UPSTREAM_BUSY_MAX_SECONDS`.
@@ -186,7 +195,8 @@ class UpstreamBusyError(GatewayRequestError):
 
 
 def upstream_retry_after(response: requests.Response, *, maximum: int = UPSTREAM_BUSY_MAX_SECONDS, default: int = UPSTREAM_BUSY_DEFAULT_SECONDS) -> int | None:
-    """How long a busy upstream asked callers to wait.
+    """
+    How long a busy upstream asked callers to wait.
 
     Args:
         response: The upstream's response.
@@ -225,7 +235,8 @@ SERVABLE_TILE_TYPES = frozenset({"image/avif", "image/gif", "image/jpeg", "image
 
 
 def servable_tile_type(content_type: str | None, *, default: str = "image/png") -> str | None:
-    """The type a proxied tile may be served as.
+    """
+    The type a proxied tile may be served as.
 
     Args:
         content_type: What the upstream declared, header parameters and all.
@@ -243,7 +254,8 @@ def servable_tile_type(content_type: str | None, *, default: str = "image/png") 
 
 
 def read_capped(response: requests.Response, *, max_bytes: int = MAX_PROXIED_MEDIA_BYTES, what: str) -> bytes:
-    """Read a proxied body, refusing one larger than *max_bytes*.
+    """
+    Read a proxied body, refusing one larger than *max_bytes*.
 
     The response must have been requested with ``stream=True``. That is not a
     style preference: without it ``requests`` has already read the whole body

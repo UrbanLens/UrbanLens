@@ -338,7 +338,8 @@ class GitRevisionHelperTests(SimpleTestCase):
 
 
 class PreOneReleaseTests(SimpleTestCase):
-    """UrbanLens stays on 0.x releases until the maintainer explicitly decides otherwise.
+    """
+    UrbanLens stays on 0.x releases until the maintainer explicitly decides otherwise.
 
     A 1.0.0 commits the project to semver's stability promise, and UrbanLens is still in
     beta. release-please would otherwise turn one breaking-change commit into a 1.0.0

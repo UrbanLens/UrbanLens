@@ -28,7 +28,8 @@ _FEATURE_FIELDS: dict[str, str] = {
 
 
 def get_gateway(feature: str | None = None, profile: Profile | None = None, provider: str | None = None, **kwargs) -> LLMGateway | None:
-    """Return a configured AI gateway, or None if AI is disabled.
+    """
+    Return a configured AI gateway, or None if AI is disabled.
     Reads provider, model, and feature-flag state from SiteSettings so the site admin can control AI behaviour without a code deploy.
 
     Args:

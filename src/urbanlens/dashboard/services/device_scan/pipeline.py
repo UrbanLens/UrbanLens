@@ -9,7 +9,8 @@ if TYPE_CHECKING:
 
 
 def process_scan_upload(upload: DeviceScanUpload) -> None:
-    """Summarise every device in *upload* and update its wiki marker(s).
+    """
+    Summarise every device in *upload* and update its wiki marker(s).
 
     Args:
         upload: The upload to process."""

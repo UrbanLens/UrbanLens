@@ -1,4 +1,5 @@
-"""`gunicorn.conf.py` is loaded by every gunicorn in the image, not just the app.
+"""
+`gunicorn.conf.py` is loaded by every gunicorn in the image, not just the app.
 
 Gunicorn reads `gunicorn.conf.py` from the working directory whether or not
 `-c` names it, and the working directory is `/app` for every service built from
@@ -57,7 +58,8 @@ def _server(worker_class: str):
 
 
 class TheGeventWorkerIsRefusedTests(SimpleTestCase):
-    """psycogreen's wait callback made psycopg2 yield to the gevent hub. It has no
+    """
+    psycogreen's wait callback made psycopg2 yield to the gevent hub. It has no
     psycopg3 equivalent, so a gevent worker blocks its whole event loop on every
     query - and serves requests while doing it, which is the hardest failure to
     attribute. The fork refuses instead."""
@@ -81,7 +83,8 @@ class TheGeventWorkerIsRefusedTests(SimpleTestCase):
 
 
 class TheWarmUpSkipsProcessesItCannotWarmTests(SimpleTestCase):
-    """The URLconf warm exists to move a 9.5s import off the first request. A
+    """
+    The URLconf warm exists to move a 9.5s import off the first request. A
     process with no Django settings has no URLconf to warm, and saying so with
     a traceback misreports a correct configuration as a failure.
 
@@ -110,7 +113,8 @@ class TheWarmUpSkipsProcessesItCannotWarmTests(SimpleTestCase):
         worker.log.exception.assert_not_called()
 
     def test_the_django_app_is_still_warmed(self) -> None:
-        """Anti-vacuity: a guard that skipped every process would pass the test
+        """
+        Anti-vacuity: a guard that skipped every process would pass the test
         above while removing the thing the hook is for."""
         worker = _worker()
         with mock.patch.dict(os.environ, {"DJANGO_SETTINGS_MODULE": "urbanlens.UrbanLens.settings"}):

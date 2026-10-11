@@ -1,4 +1,5 @@
-"""A keyword source that did not answer for a photo is asked again, boundedly, once it can answer (P323).
+"""
+A keyword source that did not answer for a photo is asked again, boundedly, once it can answer (P323).
 
 ``generate_keywords_for_image`` records an ``ImageKeywordRetry`` row for each (photo, source) that did not answer, and
 the ``keyword-retry-sweep`` beat entry asks that source again when the row comes due: a capped batch per run, a

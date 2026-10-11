@@ -1,4 +1,5 @@
-"""Generation and verification of external-application API keys.
+"""
+Generation and verification of external-application API keys.
 
 Only a digest of a key's secret half is ever stored, and it is a bare SHA-256 rather than a password
 KDF: the secret is 32 bytes of ``secrets.token_urlsafe``, so there is nothing for a work factor to
@@ -58,7 +59,8 @@ API_KEYS_PAGE_PARAM = "api_keys_page"
 
 
 def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
-    """Create a new API key for ``user`` and return it with its one-time plaintext.
+    """
+    Create a new API key for ``user`` and return it with its one-time plaintext.
 
     Args:
         user: The account the key acts on behalf of.
@@ -91,7 +93,8 @@ def generate_api_key(user: User, name: str) -> tuple[ApiKey, str]:
 
 
 def _hash_secret(secret: str) -> str:
-    """Encode ``secret`` for ``ApiKey.key_hash``.
+    """
+    Encode ``secret`` for ``ApiKey.key_hash``.
 
     Args:
         secret: The secret half of a key.
@@ -108,7 +111,8 @@ def _hash_secret(secret: str) -> str:
 
 
 def verify_api_key_secret(secret: str, encoded: str) -> tuple[bool, bool]:
-    """Check a presented secret against a stored ``key_hash``, in either format.
+    """
+    Check a presented secret against a stored ``key_hash``, in either format.
 
     Cheap for a current-format row. A legacy row costs a full PBKDF2, which is why the WebSocket path
     runs this off the shared database thread.
@@ -141,7 +145,8 @@ def verify_api_key_secret(secret: str, encoded: str) -> tuple[bool, bool]:
 
 
 def _upgrade_key_hash(api_key: ApiKey, secret: str) -> bool:
-    """Rewrite a just-verified legacy ``key_hash`` in the current format.
+    """
+    Rewrite a just-verified legacy ``key_hash`` in the current format.
 
     A compare-and-swap against the value this request read, so a racing request that already
     upgraded the row, or a reissue in between, is never overwritten.
@@ -161,7 +166,8 @@ def _upgrade_key_hash(api_key: ApiKey, secret: str) -> bool:
 
 
 def finish_api_key_authentication(api_key: ApiKey, secret: str, *, is_legacy: bool) -> ApiKey:
-    """The database writes owed by a key whose secret has just verified.
+    """
+    The database writes owed by a key whose secret has just verified.
 
     Args:
         api_key: The verified row.
@@ -178,7 +184,8 @@ def finish_api_key_authentication(api_key: ApiKey, secret: str, *, is_legacy: bo
 
 
 def authenticate_api_key(raw_key: str) -> ApiKey | None:
-    """Resolve a presented raw key to its ``ApiKey`` row, or None if invalid.
+    """
+    Resolve a presented raw key to its ``ApiKey`` row, or None if invalid.
 
     Nothing about the decision is cached, so a revocation takes effect on the very next request.
 
@@ -202,7 +209,8 @@ def authenticate_api_key(raw_key: str) -> ApiKey | None:
 
 
 def api_key_candidate(raw_key: str) -> tuple[ApiKey, str] | None:
-    """The row a presented key *claims* to be, and the secret still to check.
+    """
+    The row a presented key *claims* to be, and the secret still to check.
 
     The lookup half of :func:`authenticate_api_key`, split out so the WebSocket path can run the
     database work and the verification on different threads (see ``websocket_auth.ApiKeyAuthMiddleware``).
@@ -229,7 +237,8 @@ def api_key_candidate(raw_key: str) -> tuple[ApiKey, str] | None:
 
 
 def touch_api_key(api_key: ApiKey) -> bool:
-    """Refresh ``last_used_at``, at most once per key per :data:`LAST_USED_RESOLUTION`.
+    """
+    Refresh ``last_used_at``, at most once per key per :data:`LAST_USED_RESOLUTION`.
 
     The window is re-tested in SQL, so concurrent workers that read the same stale row collapse to one
     write and the rest match no row, taking no lock.
@@ -251,7 +260,8 @@ def touch_api_key(api_key: ApiKey) -> bool:
 
 
 def record_api_key_usage(api_key: ApiKey, endpoint: str) -> None:
-    """Log one activity entry for ``api_key``, trimming older entries beyond ``USAGE_LOG_LIMIT``.
+    """
+    Log one activity entry for ``api_key``, trimming older entries beyond ``USAGE_LOG_LIMIT``.
 
     Called only for successfully authenticated requests, and for reads only on the one request per
     :data:`LAST_USED_RESOLUTION` that refreshed ``last_used_at`` (see
@@ -268,7 +278,8 @@ def record_api_key_usage(api_key: ApiKey, endpoint: str) -> None:
 
 
 def revoke_api_key(user: User, api_key_id: int) -> bool:
-    """Revoke one of ``user``'s API keys, if it exists and isn't already revoked.
+    """
+    Revoke one of ``user``'s API keys, if it exists and isn't already revoked.
 
     Args:
         user: The owner - scoping by user prevents revoking someone else's key by guessing an id.
@@ -281,7 +292,8 @@ def revoke_api_key(user: User, api_key_id: int) -> bool:
 
 
 def active_api_key_count(user: User) -> int:
-    """How many of ``user``'s API keys still work.
+    """
+    How many of ``user``'s API keys still work.
 
     Args:
         user: The owner.
@@ -293,7 +305,8 @@ def active_api_key_count(user: User) -> int:
 
 
 def revoke_all_api_keys(user: User) -> int:
-    """Revoke every one of ``user``'s active API keys at once.
+    """
+    Revoke every one of ``user``'s active API keys at once.
     Revoked, not deleted: ``ApiKeyUsageLog`` rows hang off the key, and the settings page shows a revoked key so its owner can see it went away.
 
     Args:
@@ -305,7 +318,8 @@ def revoke_all_api_keys(user: User) -> int:
 
 
 def api_keys_settings_context(user: User, request: HttpRequest, **extra: object) -> dict:
-    """Context for the Security section's API Keys subsection.
+    """
+    Context for the Security section's API Keys subsection.
     Pops ``new_api_key`` from the session, which ``ApiKeyCreateView`` stashes there as a one-time flash: the plaintext key is only ever available on the response immediately after generating it.
 
     Args:

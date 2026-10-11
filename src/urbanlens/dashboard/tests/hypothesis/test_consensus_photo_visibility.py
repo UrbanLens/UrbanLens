@@ -75,7 +75,8 @@ class ConsensusPhotoVisibilityTests(TestCase):
         self.assertIn(mine.pk, self._offered_image_ids())
 
     def test_a_wiki_whose_only_photo_is_hidden_is_not_a_photo_candidate(self) -> None:
-        """find_missing must agree with build_round, or selection loops on a
+        """
+        find_missing must agree with build_round, or selection loops on a
         wiki it can never build a round for."""
         self._photo(VisibilityChoice.FRIENDS)
         strategy = fields.get_strategy(ConsensusFieldKind.PHOTO_COORDINATES)

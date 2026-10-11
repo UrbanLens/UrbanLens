@@ -34,7 +34,8 @@ _TURN_LOCK_TTL_SECONDS = 180
 
 
 def turn_poll_delay(attempt: int) -> int:
-    """The delay (seconds) before the ``attempt``-th poll.
+    """
+    The delay (seconds) before the ``attempt``-th poll.
 
     Args:
         attempt: 0-indexed poll attempt number.
@@ -50,7 +51,8 @@ def _turn_lock_key(profile: Profile) -> str:
 
 
 def acquire_turn_lock(profile: Profile) -> str | None:
-    """Take the per-profile single-flight lock for starting a new turn.
+    """
+    Take the per-profile single-flight lock for starting a new turn.
 
     Args:
         profile: The requesting profile.
@@ -61,7 +63,8 @@ def acquire_turn_lock(profile: Profile) -> str | None:
 
 
 def release_turn_lock(profile: Profile, token: str | None) -> None:
-    """Release the lock :func:`acquire_turn_lock` took, if it is still ours.
+    """
+    Release the lock :func:`acquire_turn_lock` took, if it is still ours.
 
     Args:
         profile: The same profile passed to :func:`acquire_turn_lock`.
@@ -70,7 +73,8 @@ def release_turn_lock(profile: Profile, token: str | None) -> None:
 
 
 def turn_lock_is_current(profile: Profile, token: str) -> bool:
-    """Whether ``token`` is still the current holder of the per-profile turn lock.
+    """
+    Whether ``token`` is still the current holder of the per-profile turn lock.
 
     Args:
         profile: The profile whose lock to check.
@@ -91,7 +95,8 @@ def new_turn_id() -> str:
 
 
 def store_turn_record(turn_id: str, *, profile_id: int, task_id: str, lock_token: str) -> None:
-    """Record which task and lock a turn id maps to.
+    """
+    Record which task and lock a turn id maps to.
 
     Args:
         turn_id: The turn id returned to the client.
@@ -102,7 +107,8 @@ def store_turn_record(turn_id: str, *, profile_id: int, task_id: str, lock_token
 
 
 def read_turn_record(turn_id: str) -> dict[str, Any] | None:
-    """The record :func:`store_turn_record` wrote for ``turn_id``.
+    """
+    The record :func:`store_turn_record` wrote for ``turn_id``.
 
     Returns:
         The stored ``{"profile_id", "task_id", "lock_token"}`` mapping, or ``None`` if it expired or a turn id this cache never issued was polled."""
@@ -115,7 +121,8 @@ def _turn_result_key(turn_id: str) -> str:
 
 
 def store_turn_result(turn_id: str, result: dict[str, Any]) -> None:
-    """Cache a resolved turn's task result, so polling it again stays idempotent.
+    """
+    Cache a resolved turn's task result, so polling it again stays idempotent.
 
     Args:
         turn_id: The turn the result belongs to.
@@ -124,7 +131,8 @@ def store_turn_result(turn_id: str, result: dict[str, Any]) -> None:
 
 
 def read_turn_result(turn_id: str) -> dict[str, Any] | None:
-    """The result :func:`store_turn_result` cached for ``turn_id``, if any.
+    """
+    The result :func:`store_turn_result` cached for ``turn_id``, if any.
 
     Returns:
         The stored result, or ``None`` when this turn has not resolved yet (the caller should consult Celery) or its cache entry has expired."""
@@ -148,7 +156,8 @@ def _turn_proposal_claim_key(turn_id: str, n: int) -> str:
 
 
 def store_turn_proposals(turn_id: str, *, profile_id: int, proposals: list[dict[str, Any]]) -> None:
-    """Record the write-tool proposals a resolved turn produced (``AssistantTurn.proposals``).
+    """
+    Record the write-tool proposals a resolved turn produced (``AssistantTurn.proposals``).
     Called once a turn's poll resolves successfully - never by the turn task itself, which has no reason to know its own turn_id (see ``run_assistant_turn_task``'s own docstring).
 
     Args:
@@ -159,7 +168,8 @@ def store_turn_proposals(turn_id: str, *, profile_id: int, proposals: list[dict[
 
 
 def read_turn_proposal(turn_id: str, n: int) -> dict[str, Any] | None:
-    """The stored proposal ``n`` for ``turn_id``, or ``None`` if unknown or out of range.
+    """
+    The stored proposal ``n`` for ``turn_id``, or ``None`` if unknown or out of range.
 
     Args:
         turn_id: The turn the proposal belongs to.
@@ -177,7 +187,8 @@ def read_turn_proposal(turn_id: str, n: int) -> dict[str, Any] | None:
 
 
 def claim_turn_proposal(turn_id: str, n: int) -> bool:
-    """Atomically claim proposal ``n`` for execution, exactly once.
+    """
+    Atomically claim proposal ``n`` for execution, exactly once.
 
     Args:
         turn_id: The turn the proposal belongs to.

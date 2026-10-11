@@ -1,4 +1,5 @@
-"""The port in an absolute URL is the one the site is published on, never one the client names.
+"""
+The port in an absolute URL is the one the site is published on, never one the client names.
 
 Django runs with ``USE_X_FORWARDED_HOST`` and validates only the domain half of that header against
 ``ALLOWED_HOSTS``. nginx's raw ``$http_host`` therefore let any client stamp its own port onto every emailed

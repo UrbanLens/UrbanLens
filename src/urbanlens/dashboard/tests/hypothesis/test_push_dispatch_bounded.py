@@ -1,4 +1,5 @@
-"""No push-dispatch task outlives its time limit, whatever the device limit is set to.
+"""
+No push-dispatch task outlives its time limit, whatever the device limit is set to.
 
 Delivery used to POST to every device in turn, 10 s each at worst, in one task; with the limit raised
 to its 1,000 maximum, or to 0 (unlimited), that is far past the interactive queue's 150 s hard limit.

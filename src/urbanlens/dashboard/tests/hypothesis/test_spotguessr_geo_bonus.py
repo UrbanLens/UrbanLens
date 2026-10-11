@@ -64,7 +64,8 @@ class BonusScopeForTests(TestCase):
 
 class BonusPointsForGuessTests(SimpleTestCase):
     def setUp(self) -> None:
-        """Reset shared state before each guess so the tests stay order-independent.
+        """
+        Reset shared state before each guess so the tests stay order-independent.
 
         ``_reverse_geocode_admin_cached`` memoizes into the Django cache keyed by rounded coordinates, and the
         cache is process-wide rather than per-test."""

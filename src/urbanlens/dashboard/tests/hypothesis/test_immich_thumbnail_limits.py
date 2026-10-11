@@ -1,4 +1,5 @@
-"""One account pointed at a slow Immich server must not be able to fill every request thread.
+"""
+One account pointed at a slow Immich server must not be able to fill every request thread.
 
 Both thumbnail routes fetch from a server the account holder chose, on the request. Each is
 throttled per account, takes a slot in a per-process bound, and a slot in a fleet-wide per-account

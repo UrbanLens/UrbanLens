@@ -1,4 +1,5 @@
-"""The wiki photo map re-answers "may I see this uploader" once per photo.
+"""
+The wiki photo map re-answers "may I see this uploader" once per photo.
 
 N21 H28's second half. `bound_map_layer` already caps how many photos the layer
 plots, but every one of the survivors still calls `_visible_uploader_name`,
@@ -91,7 +92,8 @@ class TheUploaderCheckIsAnsweredOnceTests(_GalleryCase):
 
 
 class TheAnswerIsStillRightTests(_GalleryCase):
-    """A memo that returns the wrong name is worse than the cost it saves.
+    """
+    A memo that returns the wrong name is worse than the cost it saves.
 
     Photo visibility and identity visibility are separate gates: `visible_to`
     decides whether the row appears at all, `can_view_profile` only decides

@@ -1,4 +1,5 @@
-"""The import preview must not parse an upload in the web process.
+"""
+The import preview must not parse an upload in the web process.
 
 The preview accepts archives, KML, GPX, shapefiles and Word documents, and each of those parsers is
 decorated with ``untrusted_parse``. Under ``UL_UNTRUSTED_PARSE_POLICY=deny`` a web process that reaches

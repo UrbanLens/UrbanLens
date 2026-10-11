@@ -1,4 +1,5 @@
-"""Retire places too large to be what they claim, and release every domain they joined (P148, UrbanLens#285).
+"""
+Retire places too large to be what they claim, and release every domain they joined (P148, UrbanLens#285).
 
 Offline and idempotent: it asks no provider. Detached locations are marked unresolved, so the fixed provider chain
 places them again the next time they are viewed.
@@ -24,7 +25,8 @@ class Command(BaseCommand):
     help = "Retire places larger than their kind can be (a county-sized 'parcel'), re-home their locations and un-nest the wikis they merged. Dry-run unless --apply."
 
     def add_arguments(self, parser: ArgumentParser) -> None:
-        """Register the command's flags.
+        """
+        Register the command's flags.
 
         Args:
             parser: The argument parser.
@@ -32,7 +34,8 @@ class Command(BaseCommand):
         parser.add_argument("--apply", action="store_true", help="Detach the places; without it, only report what would be detached.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        """List every place to detach, and detach each one with ``--apply``.
+        """
+        List every place to detach, and detach each one with ``--apply``.
 
         Args:
             *args: Unused.

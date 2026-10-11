@@ -37,7 +37,8 @@ def external_data_cache_seconds() -> int:
 
 @dataclass(frozen=True)
 class SatelliteSlide:
-    """A single slide in the satellite imagery carousel.
+    """
+    A single slide in the satellite imagery carousel.
 
     Attributes:
         img_src: Absolute URL or ``data:`` URI for the image.
@@ -54,7 +55,8 @@ class SatelliteSlide:
 
 @dataclass(frozen=True)
 class StreetViewSlide:
-    """A single street-level image result.
+    """
+    A single street-level image result.
 
     Attributes:
         img_src: Absolute URL or ``data:`` URI for the image.
@@ -76,7 +78,8 @@ logger = logging.getLogger(__name__)
 
 
 class SlideState(StrEnum):
-    """How a provider's slide fetch ended.
+    """
+    How a provider's slide fetch ended.
 
     Attributes:
         COMPLETE: It answered; the slides are cached.
@@ -99,7 +102,8 @@ class SlideSignal(Enum):
 
 
 def _collect_slides(generator: Iterable[object], limit: int, what: str) -> tuple[list, SlideState]:
-    """Drain a slide generator, reporting how the provider ended.
+    """
+    Drain a slide generator, reporting how the provider ended.
     Providers signal the difference by letting their gateway error propagate out of the generator rather than
     swallowing it, or by yielding :attr:`SlideSignal.PARTIAL` when an upstream answered only in part.
 
@@ -143,7 +147,8 @@ def _collect_slides(generator: Iterable[object], limit: int, what: str) -> tuple
 
 
 class SlideFetch(NamedTuple):
-    """One provider's answer for a carousel, and how much to trust it.
+    """
+    One provider's answer for a carousel, and how much to trust it.
     It is a field rather than an exception because slides yielded before the failure are still worth showing.
 
     Attributes:
@@ -169,7 +174,8 @@ class SatelliteViewProvider(Gateway, ABC):
     slide_cache_version: ClassVar[str] = ""
 
     def available(self) -> bool:
-        """Whether this install can ask this provider at all; an unavailable one is skipped and nothing is cached.
+        """
+        Whether this install can ask this provider at all; an unavailable one is skipped and nothing is cached.
 
         Returns:
             True unless the provider needs configuration this install lacks.
@@ -199,7 +205,8 @@ class SatelliteViewProvider(Gateway, ABC):
 
 class StreetViewProvider(Gateway, ABC):
     def available(self) -> bool:
-        """Whether this install can ask this provider at all; an unavailable one is skipped and nothing is cached.
+        """
+        Whether this install can ask this provider at all; an unavailable one is skipped and nothing is cached.
 
         Returns:
             True unless the provider needs configuration this install lacks.
@@ -228,7 +235,8 @@ class StreetViewProvider(Gateway, ABC):
 
 
 class BoundaryProviderDeferredError(Exception):
-    """A boundary provider could not answer for now, which says nothing about whether it has a boundary.
+    """
+    A boundary provider could not answer for now, which says nothing about whether it has a boundary.
 
     Attributes:
         service_key: The provider that declined.
@@ -256,7 +264,8 @@ class BoundaryProvider(Service, ABC):
         ...
 
     def get_typed_boundaries(self, latitude: float, longitude: float, *, name: str | None = None) -> Mapping[str, Polygon | MultiPolygon | None]:
-        """Return this provider's boundaries keyed by boundary type.
+        """
+        Return this provider's boundaries keyed by boundary type.
         `Mapping` rather than `dict`, because `dict` is invariant in its value type: a provider that only ever yields Polygons could not otherwise declare that narrower return.
 
         Args:
@@ -426,7 +435,8 @@ def _close_ring(points: list) -> list[tuple[float, float]] | None:
 
 
 def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | None:
-    """Convert an Esri ring-list polygon geometry into a GEOS polygon.
+    """
+    Convert an Esri ring-list polygon geometry into a GEOS polygon.
     For sources that hand back Esri's native ring-list shape: Census TIGERweb (``geo_boundary.py``), and the county geometries inside a REData parcel's ``record_payload`` (see :func:`polygon_from_wire`).
 
     Args:
@@ -495,7 +505,8 @@ def esri_rings_to_polygon(geometry: dict | None) -> Polygon | MultiPolygon | Non
 
 
 def polygon_from_wire(geometry: object) -> Polygon | MultiPolygon | None:
-    """Read a polygon in whichever of the two shapes REData publishes geometry in.
+    """
+    Read a polygon in whichever of the two shapes REData publishes geometry in.
 
     REData converts a parcel's own boundary to GeoJSON, but a county record's other geometries (a building footprint)
     arrive inside ``record_payload`` as Esri rings.
@@ -514,7 +525,8 @@ def polygon_from_wire(geometry: object) -> Polygon | MultiPolygon | None:
 
 
 def geojson_polygon_to_geos(geometry: dict | None) -> Polygon | MultiPolygon | None:
-    """Convert a standard GeoJSON ``Polygon``/``MultiPolygon`` dict into a GEOS geometry.
+    """
+    Convert a standard GeoJSON ``Polygon``/``MultiPolygon`` dict into a GEOS geometry.
 
     Args:
         geometry: A dict of the shape ``{"type": "Polygon"|"MultiPolygon", "coordinates": [...]}``, or None.

@@ -1,4 +1,5 @@
-"""Map tiles from another host, drawn from this site's kept copies (Jess, 2026-09-30, item 16 of the rulings).
+"""
+Map tiles from another host, drawn from this site's kept copies (Jess, 2026-09-30, item 16 of the rulings).
 
 An overlay given a foreign XYZ template draws through :func:`kept_tile_template` instead. The first request for a tile
 downloads it, the sandbox worker re-encodes it (``render_remote_tile``), and every later request is served from the
@@ -49,7 +50,8 @@ def template_digest(template: str) -> str:
 
 
 def tile_url(template: str, z: int, x: int, y: int) -> str:
-    """One tile's address at its host.
+    """
+    One tile's address at its host.
 
     Args:
         template: The XYZ template.
@@ -65,7 +67,8 @@ def tile_url(template: str, z: int, x: int, y: int) -> str:
 
 
 def is_foreign_template(template: str) -> bool:
-    """Whether *template* is an XYZ tile template on a public http(s) host.
+    """
+    Whether *template* is an XYZ tile template on a public http(s) host.
 
     Args:
         template: The candidate.
@@ -98,7 +101,8 @@ def _route_template(digest: str) -> str:
 
 
 def kept_tile_template(template: str, *, provider: str) -> str:
-    """This site's template for a foreign one, recording the foreign one as a source.
+    """
+    This site's template for a foreign one, recording the foreign one as a source.
 
     Args:
         template: The foreign XYZ template, already checked with :func:`is_foreign_template`.
@@ -113,7 +117,8 @@ def kept_tile_template(template: str, *, provider: str) -> str:
 
 
 def source_for_route_template(template: str) -> RemoteTileSource | None:
-    """The source behind one of this site's kept-tile templates.
+    """
+    The source behind one of this site's kept-tile templates.
 
     Args:
         template: A template, possibly one :func:`kept_tile_template` returned.
@@ -133,7 +138,8 @@ def source_for_route_template(template: str) -> RemoteTileSource | None:
 
 
 def coordinate_is_valid(z: int, x: int, y: int) -> bool:
-    """Whether ``z/x/y`` names a tile an overlay can ask for.
+    """
+    Whether ``z/x/y`` names a tile an overlay can ask for.
 
     Args:
         z: Zoom.
@@ -152,7 +158,8 @@ def pending_marker(digest: str, z: int, x: int, y: int) -> str:
 
 
 def retry_is_due(tile: RemoteTile) -> bool:
-    """Whether a tile whose downloads failed may be tried again yet.
+    """
+    Whether a tile whose downloads failed may be tried again yet.
 
     Args:
         tile: The tile.
@@ -177,7 +184,8 @@ def record_absent(tile: RemoteTile) -> None:
 
 
 def store(tile: RemoteTile, content: bytes, content_type: str) -> bool:
-    """Keep a rendered tile.
+    """
+    Keep a rendered tile.
 
     Args:
         tile: The tile.
@@ -199,7 +207,8 @@ def store(tile: RemoteTile, content: bytes, content_type: str) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class TileDownload:
-    """What a host answered for one tile.
+    """
+    What a host answered for one tile.
 
     Attributes:
         status: The HTTP status.
@@ -213,7 +222,8 @@ class TileDownload:
 
 
 def download_tile(url: str) -> TileDownload | None:
-    """Download one tile, pinning each hop to the address it validated to.
+    """
+    Download one tile, pinning each hop to the address it validated to.
 
     Args:
         url: The tile's address at its host.

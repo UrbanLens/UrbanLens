@@ -1,4 +1,5 @@
-"""The Organize page renders a label's picker entry once, not once per hidden picker.
+"""
+The Organize page renders a label's picker entry once, not once per hidden picker.
 
 Nine parent/child pickers sit in the page's hidden create and bulk-edit dialogs, and each rendered every label the
 account can see, twice, as two templates apiece: 1,704 template renders and ~220 ms of CPU for an account with 55

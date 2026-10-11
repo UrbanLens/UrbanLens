@@ -1,4 +1,5 @@
-"""Every gateway's service key must name a registered rate-limit default.
+"""
+Every gateway's service key must name a registered rate-limit default.
 
 An unregistered key is not refused: `get_limit_config` creates its row from a generic
 fallback nobody chose for that integration, and `test_plugin_rate_limit_coverage` cannot

@@ -1,4 +1,5 @@
-"""Which external media items are about the place they were found for (P196).
+"""
+Which external media items are about the place they were found for (P196).
 
 Jess's ruling, 2026-10-02: keep an item geolocated inside the place's bounding box, or one naming the place with a
 geographic indicator consistent with it; a distinctive name alone is enough when nothing geographic contradicts it,

@@ -1,4 +1,5 @@
-"""State transitions that raced: each is now one guarded step with a database guarantee.
+"""
+State transitions that raced: each is now one guarded step with a database guarantee.
 
 G2-6 pin-share reject, G2-15 trip member cap, G2-18 friend accept, G4-17 backup overlap,
 G4-28 wiki field edits. Interleavings are forced - a stale in-memory row, or a barrier inside

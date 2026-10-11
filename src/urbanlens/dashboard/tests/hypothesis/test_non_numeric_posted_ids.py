@@ -1,4 +1,5 @@
-"""A non-numeric id posted to a write route is refused, never a 500.
+"""
+A non-numeric id posted to a write route is refused, never a 500.
 
 Django raises ``ValueError`` for ``filter(pk="abc")`` while building the query, before any "not found"
 branch the view has, so every one of these answered a hand-edited or hostile form with a server error.

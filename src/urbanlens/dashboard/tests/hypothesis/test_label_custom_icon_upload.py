@@ -14,7 +14,8 @@ from urbanlens.dashboard.models.labels.model import Label
 
 
 def _png(name: str = "icon.png") -> SimpleUploadedFile:
-    """A real PNG.
+    """
+    A real PNG.
 
     Photos now need a positive identification, so a placeholder string is refused - which is right, and means a
     test wanting a successful upload has to supply an actual image."""

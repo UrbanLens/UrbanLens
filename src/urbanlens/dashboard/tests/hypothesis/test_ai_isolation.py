@@ -70,7 +70,8 @@ class UrbanlensAiIsolationTests(SimpleTestCase):
 
 
 def _subprocess_env() -> dict[str, str]:
-    """The current environment, plus what the subprocess needs to import urbanlens_ai.
+    """
+    The current environment, plus what the subprocess needs to import urbanlens_ai.
 
     Starting from a *copy* of the real environment (not a minimal replacement) so Python's own startup - DLL
     search, temp dirs, and the rest of what a bare interpreter needs on Windows - still works; only PYTHONPATH
@@ -267,7 +268,8 @@ def _compose() -> dict[str, Any]:
 
 
 class ComposeTopologyTests(SimpleTestCase):
-    """docker-compose.yml's AI sandbox topology matches what batch 1 actually wires up.
+    """
+    docker-compose.yml's AI sandbox topology matches what batch 1 actually wires up.
 
     PyYAML resolves the ``<<:`` merge-key anchors (x-app-env, x-app-build, ...) the same way Compose does;
     ``${VAR}`` stays a literal string in both, so these assertions check structure and literal values, never
@@ -553,7 +555,8 @@ def _egress_filter_lines() -> list[str]:
 
 
 class EgressFilterTests(SimpleTestCase):
-    """The egress-proxy allowlist matches what ai-worker's own tools actually call.
+    """
+    The egress-proxy allowlist matches what ai-worker's own tools actually call.
 
     A host missing here isn't a code-level failure - it's ``ai-worker`` (or ``ai-inference``) silently unable to
     reach a host that's genuinely on the allowlist's intended set, discovered only once the sandbox stack is
@@ -612,7 +615,8 @@ _FORBIDDEN_IMPORT_ROOTS = {"requests", "httpx", "urllib"}
 
 
 def _imported_module_names(path: pathlib.Path) -> set[str]:
-    """Every module named in a top-level or function-local import in ``path``.
+    """
+    Every module named in a top-level or function-local import in ``path``.
 
     ``ast.walk`` (not just ``tree.body``) so a local import inside a function body - the pattern every tool
     module actually uses to defer Django model imports - is caught the same as a module-level one."""
@@ -635,7 +639,8 @@ def _is_forbidden_import(module_name: str) -> bool:
 
 
 class ToolsPackageImportTests(SimpleTestCase):
-    """No module under ``services/ai/tools/`` may import REData or raw HTTP libraries directly.
+    """
+    No module under ``services/ai/tools/`` may import REData or raw HTTP libraries directly.
 
     ``redata_configured()`` already returns ``False`` under ``ProcessRole.AI`` (defense in depth) and the
     network topology is the real boundary - this is the fastest-failing rail: a violation here is a lint-speed

@@ -1,4 +1,5 @@
-"""The list-detail overview map plots a bounded number of pins (P69).
+"""
+The list-detail overview map plots a bounded number of pins (P69).
 
 `_items_map_data` had no cap, unlike the near-identical saved-filter preview
 map in the same feature, which has had `_PREVIEW_MAP_PIN_LIMIT = 500` all
@@ -105,7 +106,8 @@ class PinListOverviewMapCapTests(TestCase):
         ]
 
     def test_the_marker_payload_is_read_for_the_chosen_rows_only(self) -> None:
-        """Building the markers in Python from every item on the list would
+        """
+        Building the markers in Python from every item on the list would
         leave the expensive half of this exactly as it was.
 
         Identified by the columns rather than by the absence of a LIMIT: the
@@ -146,7 +148,8 @@ class PinListOverviewMapCapTests(TestCase):
 
 
 class PinListItemOrderingTests(TestCase):
-    """The list's ordering has to be total, now that two slices of it are taken.
+    """
+    The list's ordering has to be total, now that two slices of it are taken.
 
     `add_pins_to_list` numbers new items from the current row count, not from `max(order) + 1`, so a duplicate
     `order` is reachable through ordinary use."""

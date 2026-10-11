@@ -46,7 +46,8 @@ CLUSTER_RADIUS_M = DEFAULT_RADIUS_METERS
 
 @dataclass(frozen=True, slots=True)
 class LocationHit:
-    """One geotagged, dated data point discovered by a batch scan.
+    """
+    One geotagged, dated data point discovered by a batch scan.
 
     Attributes:
         latitude: WGS-84 latitude.
@@ -92,7 +93,8 @@ class IngestSummary:
 
 
 def _dates_from_hits(hits: list[LocationHit]) -> list[str]:
-    """Return the distinct, sorted, capped ISO dates among hits that imply an actual visit.
+    """
+    Return the distinct, sorted, capped ISO dates among hits that imply an actual visit.
     Hits with ``implies_visit=False`` (external-app discoveries, not photo evidence) never contribute a date - see ``LocationHit.implies_visit``."""
     visit_hits = [hit for hit in hits if hit.implies_visit]
     dates = {hit.taken_at.date().isoformat() for hit in visit_hits}
@@ -129,7 +131,8 @@ def _label_from_hits(hits: list[LocationHit]) -> str:
 
 
 def _merge_sample_assets(existing: list[dict[str, str]], hits: list[LocationHit]) -> list[dict[str, str]]:
-    """Return existing sample assets plus any new ones from hits, deduped and capped.
+    """
+    Return existing sample assets plus any new ones from hits, deduped and capped.
 
     Args:
         existing: Current ``PinSuggestion.sample_assets`` value.
@@ -213,7 +216,8 @@ _PREFILTER_GRID_SLACK_KM = 1.0
 
 
 def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict[Pin, list[LocationHit]], list[LocationHit]]:
-    """Split hits into ones that fall inside an existing pin's boundary and ones that don't.
+    """
+    Split hits into ones that fall inside an existing pin's boundary and ones that don't.
 
     Args:
         profile: Owner whose pins are being matched against.
@@ -234,7 +238,8 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
         return polygon_cache[pin.pk]
 
     def _nearby_pins(key: tuple[int, int]) -> list[tuple[Pin, float, float]]:
-        """A cell's candidate pins, each with its coordinates already floats.
+        """
+        A cell's candidate pins, each with its coordinates already floats.
 
         Converted once per cell rather than inside the per-hit sort key: the
         coordinates are ``Decimal`` on the model, and re-converting them for
@@ -255,7 +260,8 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
         return nearby_cache[key]
 
     def _nearest_first(hit: LocationHit, candidates: list[tuple[Pin, float, float]]) -> list[Pin]:
-        """Order a cell's shared candidates by distance from this hit.
+        """
+        Order a cell's shared candidates by distance from this hit.
 
         The query is answered for the cell, so its own ordering is by distance
         from the cell centre. Re-sorting keeps the original tie-break - where two
@@ -293,7 +299,8 @@ def _match_hits_to_pins(profile: Profile, hits: list[LocationHit]) -> tuple[dict
 
 
 def _cluster_hits(hits: list[LocationHit], radius_m: float) -> list[list[LocationHit]]:
-    """Greedily group hits into clusters no farther than radius_m from a running centroid.
+    """
+    Greedily group hits into clusters no farther than radius_m from a running centroid.
 
     Args:
         hits: Unmatched hits to cluster.
@@ -324,7 +331,8 @@ def _cluster_hits(hits: list[LocationHit], radius_m: float) -> list[list[Locatio
 
 
 def _find_nearby_pending_new_pin_suggestion(candidates: list[PinSuggestion], latitude: float, longitude: float) -> PinSuggestion | None:
-    """Return a pending, not-yet-matched-to-a-pin suggestion within cluster range of a point, if any.
+    """
+    Return a pending, not-yet-matched-to-a-pin suggestion within cluster range of a point, if any.
 
     Args:
         candidates: The profile's pending pin-less suggestions - fetched once by the caller before its ingest loop starts and kept/updated in memory across every cluster in that run, rather than re-queried per cluster (see ``ingest_location_hits``).
@@ -388,7 +396,8 @@ def _upsert_matched_suggestion(profile: Profile, pin: Pin, hits: list[LocationHi
 
 
 def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], origin: PinSuggestionOrigin, pending_candidates: list[PinSuggestion]) -> PinSuggestion:
-    """Create or extend the pending suggestion to create a new pin for a cluster of hits.
+    """
+    Create or extend the pending suggestion to create a new pin for a cluster of hits.
 
     Args:
         profile: Owner the cluster belongs to.
@@ -449,7 +458,8 @@ def _upsert_new_pin_suggestion(profile: Profile, cluster: list[LocationHit], ori
 
 
 def excluded_suggestion_origins(profile: Profile) -> list[PinSuggestionOrigin]:
-    """Which ``PinSuggestionOrigin`` values this profile has turned off.
+    """
+    Which ``PinSuggestionOrigin`` values this profile has turned off.
 
     Args:
         profile: Profile whose suggestion-source settings to read.
@@ -467,7 +477,8 @@ def excluded_suggestion_origins(profile: Profile) -> list[PinSuggestionOrigin]:
 
 
 def pending_suggestions_for_profile(profile: Profile) -> QuerySet[PinSuggestion]:
-    """Pending suggestions this profile currently wants to see.
+    """
+    Pending suggestions this profile currently wants to see.
 
     Args:
         profile: Owner whose pending suggestions to fetch.
@@ -484,7 +495,8 @@ def pending_suggestions_for_profile(profile: Profile) -> QuerySet[PinSuggestion]
 
 
 def _lock_ingests_for(profile: Profile) -> None:
-    """Hold off any other ingest for this profile until the current transaction ends.
+    """
+    Hold off any other ingest for this profile until the current transaction ends.
 
     An ingest reads the profile's pending suggestions and then creates or extends them, so two at once
     can both miss the read and both create, or both extend one row and each save over the other's merged
@@ -498,7 +510,8 @@ def _lock_ingests_for(profile: Profile) -> None:
 
 
 def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: PinSuggestionOrigin) -> IngestSummary:
-    """Match/cluster a batch of location hits into PinSuggestion rows.
+    """
+    Match/cluster a batch of location hits into PinSuggestion rows.
     Re-running this with overlapping hits (e.g. a repeated Immich sweep, or uploading local-scan results twice) merges into existing pending suggestions rather than creating duplicates.
 
     Args:
@@ -549,7 +562,8 @@ def ingest_location_hits(profile: Profile, hits: Iterable[LocationHit], origin: 
 
 
 def _delete_image_with_file(image: Image) -> None:
-    """Delete an Image row and its stored file together.
+    """
+    Delete an Image row and its stored file together.
     Plain ``QuerySet.delete()``/``Model.delete()`` never touches storage, so every deletion site in this codebase deletes the file first."""
     delete_stored_file(image)
     image.delete()
@@ -571,14 +585,16 @@ class SuggestionPhotoError(RuntimeError):
 
 
 def _filename_from_url(url: str) -> str:
-    """Best-effort filename for a downloaded photo, defaulting when unclear.
+    """
+    Best-effort filename for a downloaded photo, defaulting when unclear.
     Left untruncated - ``Image.image``'s ``upload_to`` trims an overlong name to fit the field itself, so every writer doesn't need its own copy of that logic."""
     name = urlparse(url).path.rsplit("/", 1)[-1]
     return name if name and "." in name else _DEFAULT_PHOTO_FILENAME
 
 
 def _download_photo_bytes(url: str) -> bytes:
-    """Follow redirects (each hop pinned to its validated address) and return the bytes.
+    """
+    Follow redirects (each hop pinned to its validated address) and return the bytes.
     A rejected hop or an exhausted redirect chain raises ``UnsafeUrlError``, which is already in ``attach_suggestion_photos``'s except clause alongside ``SuggestionPhotoError``, so no translation is needed here."""
     response = fetch_with_revalidated_redirects(url, max_redirects=_MAX_PHOTO_REDIRECTS, timeout=_PHOTO_DOWNLOAD_TIMEOUT, headers=_PHOTO_DOWNLOAD_HEADERS)
     response.raise_for_status()
@@ -586,7 +602,8 @@ def _download_photo_bytes(url: str) -> bytes:
 
 
 def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], profile: Profile) -> list[Image]:
-    """Download submitted photo urls and stage them as candidate images on a suggestion.
+    """
+    Download submitted photo urls and stage them as candidate images on a suggestion.
 
     Args:
         suggestion: The pending suggestion to attach photos to.
@@ -642,7 +659,8 @@ def attach_suggestion_photos(suggestion: PinSuggestion, photo_urls: list[str], p
 
 @dataclass(frozen=True, slots=True)
 class AcceptResult:
-    """What accepting a suggestion produced.
+    """
+    What accepting a suggestion produced.
 
     Attributes:
         pin: The reused or newly-created pin.
@@ -655,7 +673,8 @@ class AcceptResult:
 
 
 def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
-    """Enrich ``pin`` with a suggestion's description/pin_type/aliases/links, additively.
+    """
+    Enrich ``pin`` with a suggestion's description/pin_type/aliases/links, additively.
 
     Args:
         pin: The reused or newly-created pin (already saved).
@@ -717,7 +736,8 @@ def _resolve_visit(visit_by_date: dict[datetime.date, PinVisit], day: datetime.d
 
 
 def _visit_by_date(pin: Pin, suggestion: PinSuggestion, new_visits: list[PinVisit]) -> dict[datetime.date, PinVisit]:
-    """Map every date in ``suggestion.visit_dates`` to its PinVisit, new or pre-existing.
+    """
+    Map every date in ``suggestion.visit_dates`` to its PinVisit, new or pre-existing.
     A selected photo taken on a date that was already logged before this accept call (see the skip branch in ``accept_pin_suggestion``) must still resolve to that real existing visit rather than being dropped."""
     days = [datetime.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
     by_date: dict[datetime.date, PinVisit] = {visit.visited_at.date(): visit for visit in pin.visit_history.filter(visited_at__date__in=days)}
@@ -736,7 +756,8 @@ def accept_pin_suggestion(
     label_ids: list[int] | None = None,
     fetch_if_missing: bool = True,
 ) -> AcceptResult:
-    """Accept a pending PinSuggestion: reuse/create its pin and log any missing dated visits.
+    """
+    Accept a pending PinSuggestion: reuse/create its pin and log any missing dated visits.
 
     Args:
         suggestion: The pending suggestion being accepted.
@@ -826,7 +847,8 @@ def accept_pin_suggestion(
 
 
 def reject_pin_suggestion(suggestion: PinSuggestion) -> None:
-    """Reject a pending PinSuggestion, discarding any staged candidate photos.
+    """
+    Reject a pending PinSuggestion, discarding any staged candidate photos.
 
     Args:
         suggestion: The pending suggestion being rejected.

@@ -1,4 +1,5 @@
-"""Building places are identified by keys that mean the same building everywhere, and only those.
+"""
+Building places are identified by keys that mean the same building everywhere, and only those.
 
 A building number is local to its parcel ("Building 9" exists on countless campuses), and an OSM record
 has a global id of its own; both were filed under the caller's provider namespace as if global."""

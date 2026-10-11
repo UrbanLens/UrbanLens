@@ -1,4 +1,5 @@
-"""A trip thread must cost a page, not a thread.
+"""
+A trip thread must cost a page, not a thread.
 
 H43 and H52: ``build_comment_tree`` loads every top-level comment and every
 reply on a trip, renders each one's text, aggregates each one's reactions, and

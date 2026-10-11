@@ -1,4 +1,5 @@
-"""Smart PinList membership matching and sync.
+"""
+Smart PinList membership matching and sync.
 ``PinListItem.added_via`` tracks provenance so manually-added pins are never auto-removed, even if they also happen to match (or stop matching) a smart rule."""
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ListAddResult:
-    """Outcome of one :func:`add_pins_to_list` call.
+    """
+    Outcome of one :func:`add_pins_to_list` call.
 
     Attributes:
         added: How many ``PinListItem`` rows were actually created.
@@ -34,7 +36,8 @@ class ListAddResult:
 
 
 def sync_pins_against_smart_lists(profile_id: int, pin_ids: Collection[int]) -> None:
-    """Evaluate some of one account's pins against every smart list it has.
+    """
+    Evaluate some of one account's pins against every smart list it has.
 
     One query per rule per list, however many pins: each list's filter and boundary are run over the pins together,
     and their memberships are read once. A pin that matches is added with the rule that matched (the filter ahead of
@@ -83,7 +86,8 @@ def sync_pins_against_smart_lists(profile_id: int, pin_ids: Collection[int]) -> 
 
 
 def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) -> None:
-    """Fully recompute one list's membership against its current smart_filter/smart_boundary rules.
+    """
+    Fully recompute one list's membership against its current smart_filter/smart_boundary rules.
     ``is_smart`` only gates whether *future* pin edits keep re-triggering this (see ``services.pins.smart_list_sync``, fed by Pin's post_save/labels-m2m signals).
 
     Args:
@@ -131,7 +135,8 @@ def resync_smart_list(pin_list: PinList, *, filter_ids: set[int] | None = None) 
 
 
 def filter_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) -> set[int]:
-    """Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
+    """
+    Resolve ``pin_list.smart_filter`` into the set of currently-matching pin ids.
 
     The filter always runs over all of the owner's root pins, and *among* only narrows what it reports: a criterion
     such as ``overlapping_pins`` compares each pin with the rest, so evaluating it over a few pins would change
@@ -158,7 +163,8 @@ def filter_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) 
 
 
 def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str | None = None) -> ListAddResult:
-    """Add *pins* to *pin_list*, skipping duplicates and honoring the per-list cap.
+    """
+    Add *pins* to *pin_list*, skipping duplicates and honoring the per-list cap.
     Extracted verbatim from ``controllers.pin_lists.PinListAddPinsView.post`` so the web UI and the external API share one implementation.
 
     Args:
@@ -172,7 +178,8 @@ def add_pins_to_list(pin_list: PinList, pins: Sequence[Pin], *, added_via: str |
 
 
 def add_pin_ids_to_list(pin_list: PinList, pin_ids: Sequence[int], *, added_via: str | None = None) -> ListAddResult:
-    """Add the pins with *pin_ids* to *pin_list*, skipping duplicates and honoring the per-list cap.
+    """
+    Add the pins with *pin_ids* to *pin_list*, skipping duplicates and honoring the per-list cap.
 
     Args:
         pin_list: The list to add to.
@@ -217,7 +224,8 @@ def add_pin_ids_to_list(pin_list: PinList, pin_ids: Sequence[int], *, added_via:
 
 
 def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
-    """Remove the given pins from *pin_list*, whatever their provenance.
+    """
+    Remove the given pins from *pin_list*, whatever their provenance.
     ``PinListItem.Meta. ordering = ["order", "created"]`` tolerates gaps, so closing them would be a full-table rewrite for no visible difference.
 
     Args:
@@ -233,7 +241,8 @@ def remove_pins_from_list(pin_list: PinList, pin_ids: Sequence[int]) -> int:
 
 
 def reorder_list_items(pin_list: PinList, item_ids: Sequence[int]) -> int:
-    """Renumber *pin_list*'s items so they follow the order given in *item_ids*.
+    """
+    Renumber *pin_list*'s items so they follow the order given in *item_ids*.
 
     Args:
         pin_list: The list whose items are being reordered.
@@ -247,7 +256,8 @@ def reorder_list_items(pin_list: PinList, item_ids: Sequence[int]) -> int:
 
 
 def resync_lists_for_saved_filter(saved_filter: SavedFilter) -> int:
-    """Refresh every PinList derived from *saved_filter* against its current criteria.
+    """
+    Refresh every PinList derived from *saved_filter* against its current criteria.
     ``PinList.smart_filter`` is a one-time *copy* of a SavedFilter's criteria, not a live reference, so a list pointed at a filter silently drifts out of sync the moment that filter is edited.
 
     Args:
@@ -269,7 +279,8 @@ def resync_lists_for_saved_filter(saved_filter: SavedFilter) -> int:
 
 
 def _boundary_matching_ids(pin_list: PinList, *, among: PinQuerySet | None = None) -> set[int]:
-    """The ids of the list owner's pins inside ``pin_list.smart_boundary``.
+    """
+    The ids of the list owner's pins inside ``pin_list.smart_boundary``.
 
     Split at the antimeridian for the same reason ``filter_by_criteria``'s ``include_regions`` is: a boundary drawn
     across the date line arrives with unwrapped coordinates, and a planar ``__within`` against it matches nothing on

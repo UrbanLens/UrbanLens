@@ -1,4 +1,5 @@
-"""External-API mirror of the manual pin <-> wiki child-marker sync.
+"""
+External-API mirror of the manual pin <-> wiki child-marker sync.
 
 Three things this module gets right that a naive port would not:
 Resolving through ``OwnedPinMixin`` is therefore not defensive tidiness; skipping it would be a
@@ -35,7 +36,8 @@ class PinWikiSyncApiView(OwnedPinRequiredMixin, ExternalApiView):
 
     @staticmethod
     def result(created: int, *, wiki_exists: bool) -> Response:
-        """Build the shared ``{created, wiki_exists}`` body.
+        """
+        Build the shared ``{created, wiki_exists}`` body.
 
         Args:
             created: How many markers the service actually created.
@@ -48,7 +50,8 @@ class PinWikiSyncApiView(OwnedPinRequiredMixin, ExternalApiView):
 
 
 class PinWikiSyncPushView(PinWikiSyncApiView):
-    """POST: publish selected child pins to the property's community wiki.
+    """
+    POST: publish selected child pins to the property's community wiki.
 
     Requires **both** ``pins:write`` and ``wiki:write``: the call reads the caller's private child pins
     and writes public child wikis plus an attributed ``WikiEdit`` row, so consenting to only one half is
@@ -62,7 +65,8 @@ class PinWikiSyncPushView(PinWikiSyncApiView):
 
     @extend_schema(request=PinWikiSyncPushSerializer, responses={200: PinWikiSyncResultSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, pin_slug: str) -> Response:
-        """Create a matching child wiki for each selected child pin not already covered.
+        """
+        Create a matching child wiki for each selected child pin not already covered.
 
         Args:
             request: The authenticated request carrying ``child_pin_uuids``.
@@ -93,7 +97,8 @@ class PinWikiSyncPushView(PinWikiSyncApiView):
 
 
 class PinWikiSyncPullView(PinWikiSyncApiView):
-    """POST: create personal child pins for the wiki's child wikis not already covered.
+    """
+    POST: create personal child pins for the wiki's child wikis not already covered.
 
     Requires ``pins:write`` (it creates pins) and ``wiki:read`` (it reads the community page's markers)
 
@@ -107,7 +112,8 @@ class PinWikiSyncPullView(PinWikiSyncApiView):
 
     @extend_schema(request=None, responses={200: PinWikiSyncResultSerializer, 404: ErrorSerializer})
     def post(self, request: Request, pin_slug: str) -> Response:
-        """Create a personal child pin for each child wiki not already covered.
+        """
+        Create a personal child pin for each child wiki not already covered.
 
         Args:
             request: The authenticated request.

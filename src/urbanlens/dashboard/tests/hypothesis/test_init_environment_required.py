@@ -1,4 +1,5 @@
-"""``bin/init.py`` starts every container, and refuses to guess which environment it is (Jess, 2026-10-07).
+"""
+``bin/init.py`` starts every container, and refuses to guess which environment it is (Jess, 2026-10-07).
 
 It used to fall back to production when ``UL_ENVIRONMENT`` was unset, and ``--environment`` reached init.py alone: the
 ``manage.py`` children it runs read the variable themselves, so they could disagree with it.
@@ -24,7 +25,8 @@ _INIT_PATH = pathlib.Path(__file__).resolve().parents[5] / "src" / "bin" / "init
 
 
 def _load_init_module() -> ModuleType:
-    """Import ``src/bin/init.py``, which is a script rather than a package member.
+    """
+    Import ``src/bin/init.py``, which is a script rather than a package member.
 
     Returns:
         The imported module.

@@ -55,7 +55,8 @@ class TripMemoryAggregationTests(TestCase):
         self.assertEqual(len(six_trips.captured_queries), len(one_trip.captured_queries))
 
     def test_a_trip_whose_last_activity_runs_past_the_window_start_is_included(self) -> None:
-        """The activity starts before the window and ends inside it.
+        """
+        The activity starts before the window and ends inside it.
 
         Filtering on scheduled_at alone puts this trip's end before the window and drops
         it, while effective_end_date - which the feed displays - says it is still running.

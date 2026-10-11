@@ -38,7 +38,8 @@ def _fitted_polygon(pin: Pin, children: list[Pin]) -> MultiPolygon:
 
 
 def _provider_outline(pin: Pin) -> MultiPolygon | None:
-    """The official property outline a provider has for this pin, if any.
+    """
+    The official property outline a provider has for this pin, if any.
 
     Args:
         pin: The pin whose place to consult.
@@ -57,7 +58,8 @@ _deferred_refits: ContextVar[set[int] | None] = ContextVar("deferred_child_bound
 
 @contextmanager
 def deferring_child_boundary_refits() -> Iterator[None]:
-    """Collect this block's child-boundary refits and run each parent's once, when the block succeeds.
+    """
+    Collect this block's child-boundary refits and run each parent's once, when the block succeeds.
 
     A bulk hierarchy change otherwise refits a parent once per moved child, reloading every child each time.
     Open it inside the bulk action's ``transaction.atomic()`` so the refits commit with the moves; a block that
@@ -89,7 +91,8 @@ def request_child_boundary_refit(parent_pin_id: int | None) -> None:
 
 @transaction.atomic
 def refit_child_pin_boundary(parent_pin_id: int | None) -> None:
-    """Refit one parent's child-generated fallback after a hierarchy change.
+    """
+    Refit one parent's child-generated fallback after a hierarchy change.
     Existing pin/community drawings and official location boundaries take precedence and are never created, updated, or removed here.
 
     Args:

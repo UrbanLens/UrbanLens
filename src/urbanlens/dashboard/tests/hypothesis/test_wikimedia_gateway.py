@@ -138,7 +138,8 @@ def _response(payload: dict) -> mock.Mock:
 
 
 class _FakeCommons:
-    """Answers the gateway's two calls, a File-namespace search and a page lookup, and records both.
+    """
+    Answers the gateway's two calls, a File-namespace search and a page lookup, and records both.
 
     A page carries ``coordinates`` only when the lookup asks for them, as Commons does.
     """

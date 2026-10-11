@@ -43,7 +43,8 @@ ENVIRONMENTS = ("development", "local", "production", "staging", "testing")
 
 
 def resolve_environment(explicit: str | None, *, environ: Mapping[str, str] | None = None, env_file: Path | None = None) -> str:
-    """The environment this start is for: ``--environment``, else ``UL_ENVIRONMENT``, else the checkout's ``.env``.
+    """
+    The environment this start is for: ``--environment``, else ``UL_ENVIRONMENT``, else the checkout's ``.env``.
 
     The ``.env`` is read the way ``settings.base`` reads it, never over a variable the process already has, so the
     ``manage.py`` children agree with this script. Unset used to mean production; since 2026-10-07 it refuses.
@@ -183,7 +184,8 @@ class DjangoProjectInitializer:
         self._environment = value
 
     def configure_git(self):
-        """Configure git user/email.
+        """
+        Configure git user/email.
 
         Raises:
             UnrecoverableError: if git configuration fails.
@@ -256,7 +258,8 @@ class DjangoProjectInitializer:
     _ENV_FILE_ENVIRONMENTS = frozenset({"local", "development", "testing"})
 
     def copy_sample_env(self):
-        """Seed a local checkout's `.env` from `.env-sample` when needed.
+        """
+        Seed a local checkout's `.env` from `.env-sample` when needed.
 
         Skipped in staging/production (configured from the environment) and never fatal.
         """
@@ -287,7 +290,8 @@ class DjangoProjectInitializer:
             )
 
     def update_env(self, username: str, email: str):
-        """Update the env file with git username/email (probably deprecated).
+        """
+        Update the env file with git username/email (probably deprecated).
 
         Args:
             username: git username.
@@ -320,7 +324,8 @@ class DjangoProjectInitializer:
             raise UnrecoverableError(".env was updated but still does not exist.")
 
     def bun_init(self):
-        """Run bun install.
+        """
+        Run bun install.
 
         Raises:
             UnrecoverableError: if bun install fails.
@@ -328,7 +333,8 @@ class DjangoProjectInitializer:
         self.run_command(["bun", "install", "-y"], "during npm init")
 
     def build_frontend(self):
-        """Build SCSS/TS and collect static (twice: image build and container start).
+        """
+        Build SCSS/TS and collect static (twice: image build and container start).
 
         Raises:
             UnrecoverableError: if the build fails or the manifest mismatches.
@@ -369,7 +375,8 @@ class DjangoProjectInitializer:
         self.verify_static_manifest()
 
     def verify_static_manifest(self):
-        """Check manifest entries name existing files with portable separators.
+        """
+        Check manifest entries name existing files with portable separators.
 
         Raises:
             UnrecoverableError: if the manifest is unusable or incomplete.
@@ -406,7 +413,8 @@ class DjangoProjectInitializer:
         logger.info("Static manifest verified: %d entries, all present.", len(entries))
 
     def run_migrations(self):
-        """Run Django migrations.
+        """
+        Run Django migrations.
 
         Raises:
             UnrecoverableError: if migrations fail.
@@ -414,7 +422,8 @@ class DjangoProjectInitializer:
         self.run_command(["python", "src/urbanlens/manage.py", "migrate"], "migrating db")
 
     def apply_database_roles(self):
-        """Create or update the per-tier login roles; needs the owner's credentials.
+        """
+        Create or update the per-tier login roles; needs the owner's credentials.
 
         Raises:
             UnrecoverableError: if the roles cannot be applied.
@@ -422,7 +431,8 @@ class DjangoProjectInitializer:
         self.run_command(["python", "src/urbanlens/manage.py", "apply_database_roles"], "applying database roles")
 
     def setup_database(self):
-        """Everything that needs the owner: create the database, migrate it, and apply the per-tier roles.
+        """
+        Everything that needs the owner: create the database, migrate it, and apply the per-tier roles.
 
         Raises:
             UnrecoverableError: if any step fails.
@@ -438,7 +448,8 @@ class DjangoProjectInitializer:
         cwd: str | Path | None = None,
         raise_error: bool = True,
     ) -> bool:
-        """Run a command.
+        """
+        Run a command.
 
         Args:
             command: The command to run.
@@ -471,7 +482,8 @@ class DjangoProjectInitializer:
             return False
 
     def run_dev_server(self):
-        """Run the development server.
+        """
+        Run the development server.
 
         Raises:
             UnrecoverableError: if the server fails.
@@ -479,7 +491,8 @@ class DjangoProjectInitializer:
         self.run_command(["python", "src/urbanlens/manage.py", "runserver", "0.0.0.0:8000"], "running development server")
 
     def run_prod_server(self):
-        """Run the production server.
+        """
+        Run the production server.
 
         Raises:
             UnrecoverableError: if the server fails.
@@ -487,7 +500,8 @@ class DjangoProjectInitializer:
         self.run_command(["bun", "run", "start"], "running production server")
 
     def check_network(self) -> bool:
-        """Return True when the network is up (pings google.com).
+        """
+        Return True when the network is up (pings google.com).
 
         Returns:
             True if reachable, False otherwise.
@@ -495,7 +509,8 @@ class DjangoProjectInitializer:
         return self.run_command(["ping", "-c", "1", "google.com"], "checking network connection", raise_error=False)
 
     def create_pgpass(self):
-        """Create the .pgpass file.
+        """
+        Create the .pgpass file.
 
         Raises:
             UnrecoverableError: if the file cannot be created.
@@ -526,7 +541,8 @@ class DjangoProjectInitializer:
         raise NotImplementedError
 
     def check_db(self) -> bool:
-        """Return True when the database exists (direct connect).
+        """
+        Return True when the database exists (direct connect).
 
         Returns:
             True if reachable, False otherwise.
@@ -549,7 +565,8 @@ class DjangoProjectInitializer:
         return self.run_command(command, "checking database", raise_error=False)
 
     def initialize_project(self, mode: Mode = Mode.FULL):
-        """Initialize the project.
+        """
+        Initialize the project.
 
         Args:
             mode: Which part of initialization to perform.

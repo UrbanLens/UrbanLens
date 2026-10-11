@@ -1,4 +1,5 @@
-"""The assistant's typed tool registry: one chokepoint for every rule a tool must obey.
+"""
+The assistant's typed tool registry: one chokepoint for every rule a tool must obey.
 Write tools only ever run through the confirm-gated proposal flow, on ``app`` - never inside the tool loop."""
 
 from __future__ import annotations
@@ -43,7 +44,8 @@ _URL_RE = re.compile(r"https?://", re.IGNORECASE)
 
 
 class DataScope(StrEnum):
-    """What a tool's result can contain, for the registry-driven negative-access test.
+    """
+    What a tool's result can contain, for the registry-driven negative-access test.
     Not a Django model or a persisted value - purely a label so a test can iterate ``REGISTRY.values()`` and require a negative-access case for every tool whose result could plausibly contain another profile's data.
 
     Attributes:
@@ -58,7 +60,8 @@ class DataScope(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ToolContext:
-    """Everything a tool handler is given besides its own validated arguments.
+    """
+    Everything a tool handler is given besides its own validated arguments.
 
     Attributes:
         profile: The requesting profile.
@@ -86,7 +89,8 @@ DEFAULT_GATEWAY_TIMEOUT_SECONDS = 20.0
 
 
 def remaining_deadline(context: ToolContext, *, cap: float = DEFAULT_GATEWAY_TIMEOUT_SECONDS) -> float:
-    """Seconds a tool may still spend on one external-gateway call, for ``call_with_deadline``.
+    """
+    Seconds a tool may still spend on one external-gateway call, for ``call_with_deadline``.
 
     Args:
         context: The tool's execution context.
@@ -101,7 +105,8 @@ def remaining_deadline(context: ToolContext, *, cap: float = DEFAULT_GATEWAY_TIM
 
 @dataclass(frozen=True, slots=True)
 class ToolResult:
-    """What :func:`execute` returns, regardless of which tool ran.
+    """
+    What :func:`execute` returns, regardless of which tool ran.
 
     Attributes:
         data: The JSON-safe payload - either the handler's result (possibly wrapped/capped) or ``{"error": "..."}`` when execution was refused or failed.
@@ -117,7 +122,8 @@ class ToolResult:
 
 @dataclass(frozen=True, slots=True)
 class ToolSpec[ArgsT: BaseModel]:
-    """One tool the assistant may call, and every rule governing it.
+    """
+    One tool the assistant may call, and every rule governing it.
 
     Attributes:
         name: The tool name as the model sees it - must be unique in :data:`REGISTRY`.
@@ -161,7 +167,8 @@ REGISTRY: dict[str, ToolSpec[Any]] = {}
 
 
 def register(spec: ToolSpec[Any]) -> None:
-    """Add ``spec`` to :data:`REGISTRY`.
+    """
+    Add ``spec`` to :data:`REGISTRY`.
 
     Args:
         spec: The tool to register.
@@ -204,7 +211,8 @@ def _wrap_user_content(value: Any, fields: frozenset[str]) -> Any:
 
 
 def _capped(data: dict[str, Any]) -> dict[str, Any]:
-    """Discard ``data`` in favor of an error when its serialized form exceeds the cap.
+    """
+    Discard ``data`` in favor of an error when its serialized form exceeds the cap.
     Dropping the whole payload rather than truncating the serialized string: a naive string truncation would hand the model invalid JSON."""
     try:
         serialized = json.dumps(data, default=str)
@@ -220,7 +228,8 @@ def _capped(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def available_tools(context: ToolContext) -> list[ToolSpec[Any]]:
-    """Every registered tool whose ``features``/``requires_external_apis``/``needs_page`` gate ``context`` currently satisfies.
+    """
+    Every registered tool whose ``features``/``requires_external_apis``/``needs_page`` gate ``context`` currently satisfies.
 
     Args:
         context: The scoped execution context.
@@ -241,7 +250,8 @@ def _is_available(spec: ToolSpec[Any], context: ToolContext) -> bool:
 
 
 def execute(name: str, raw_args: dict[str, Any] | None, context: ToolContext, *, confirmed: bool = True) -> ToolResult:
-    """Run ``name`` with ``raw_args``, enforcing every rule in the module docstring.
+    """
+    Run ``name`` with ``raw_args``, enforcing every rule in the module docstring.
     Never raises for a tool-level problem (unknown name, bad args, a handler's own exception) - those all become an error :class:`ToolResult` so the caller can hand the error straight back to the model as a tool result and let the loop continue.
 
     Args:

@@ -1,4 +1,5 @@
-"""Searching your own trips must not read comment rows belonging to a trip you are not on.
+"""
+Searching your own trips must not read comment rows belonging to a trip you are not on.
 
 Same mechanism as P123 (``test_search_does_not_read_another_accounts_labels.py``):
 ``TripSearchProvider.search`` feeds ``comments__text`` to ``apply_text``, and it crosses a to-many
@@ -47,7 +48,8 @@ TOLERANCE = 20
 
 
 class _TripCommentCase(TestCase):
-    """A viewer with one trip they belong to (one comment matching the term), and a stranger's trip
+    """
+    A viewer with one trip they belong to (one comment matching the term), and a stranger's trip
     the viewer is not a member of, whose unrelated comments share the table."""
 
     def setUp(self) -> None:
@@ -92,7 +94,8 @@ class _TripCommentCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the trip-comment table.
+        """
+        The full capture, and the statements in it that read the trip-comment table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

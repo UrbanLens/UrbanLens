@@ -1,4 +1,5 @@
-"""One expensive background job per account at a time.
+"""
+One expensive background job per account at a time.
 Four presses meant four concurrent sweeps, each able to hold one of only four worker slots for the length of the task's hard limit - so one person's impatience became everyone else's queue depth."""
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ PENDING = "pending"
 
 
 def claim(key: str, ttl_seconds: int, token: str = PENDING) -> bool:
-    """Reserve *key* for one job, if nothing holds it.
+    """
+    Reserve *key* for one job, if nothing holds it.
 
     Args:
         key: Identifies the job and whose it is.
@@ -37,7 +39,8 @@ def claim(key: str, ttl_seconds: int, token: str = PENDING) -> bool:
 
 
 def adopt(key: str, token: str, ttl_seconds: int) -> None:
-    """Record the task id now the job has one, keeping the reservation.
+    """
+    Record the task id now the job has one, keeping the reservation.
 
     Args:
         key: The reserved key.
@@ -51,7 +54,8 @@ def adopt(key: str, token: str, ttl_seconds: int) -> None:
 
 
 def holder(key: str) -> str | None:
-    """What holds *key*, if anything.
+    """
+    What holds *key*, if anything.
 
     Args:
         key: The key to read.
@@ -66,7 +70,8 @@ def holder(key: str) -> str | None:
 
 
 def release(key: str) -> None:
-    """Give up the reservation, so the next press may start a job.
+    """
+    Give up the reservation, so the next press may start a job.
 
     Args:
         key: The key to clear.

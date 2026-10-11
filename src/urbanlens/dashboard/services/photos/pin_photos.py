@@ -45,7 +45,8 @@ MAX_PAGE_SIZE = 100
 
 @dataclass(frozen=True, slots=True)
 class ExternalPhoto:
-    """One public-source photo, attributed.
+    """
+    One public-source photo, attributed.
 
     Attributes:
         source: The Media panel's provider key, e.g. ``"wikimedia"``.
@@ -91,7 +92,8 @@ class ExternalPhoto:
 
 @dataclass(slots=True)
 class ExternalPhotoListing:
-    """Every public-source photo for one pin, and the providers yet to answer.
+    """
+    Every public-source photo for one pin, and the providers yet to answer.
 
     Attributes:
         photos: Displayable photos, deduplicated, in provider order.
@@ -123,7 +125,8 @@ def _own_copy_keys(pins: Sequence[Pin], profile: Profile, keys: set[str]) -> set
 
 
 def external_photos_for_pin(pin: Pin, profile: Profile, user: AbstractBaseUser | AnonymousUser, *, own_pins: Sequence[Pin] = ()) -> ExternalPhotoListing:
-    """The public-source photos the Media panel shows for *pin*, as one attributed list.
+    """
+    The public-source photos the Media panel shows for *pin*, as one attributed list.
 
     Mirrors ``PinController.media_provider`` per provider: the same visibility and gate checks, the same
     cached rows, local copies and thumbnail conversion. Differs where a single list needs it: items the

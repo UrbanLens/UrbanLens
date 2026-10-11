@@ -57,7 +57,8 @@ OVERLAY_UUID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 
 
 def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, MapImageOverlayQuerySet]:
-    """Resolve the overlay owner (Pin or Wiki) from URL kwargs.
+    """
+    Resolve the overlay owner (Pin or Wiki) from URL kwargs.
 
     Args:
         request: The current request, used for the ownership checks.
@@ -89,7 +90,8 @@ def _owner_location(owner: Pin | Wiki):
 
 
 def _wants_json(request: HttpRequest) -> bool:
-    """True when the caller asked for JSON rather than the HTMX list partial.
+    """
+    True when the caller asked for JSON rather than the HTMX list partial.
 
     Args:
         request: The current request.
@@ -103,7 +105,8 @@ def _wants_json(request: HttpRequest) -> bool:
 
 
 def _default_corners(owner: Pin | Wiki) -> list[list[float]] | None:
-    """A small box around the pin/wiki, used when the client did not seed corners.
+    """
+    A small box around the pin/wiki, used when the client did not seed corners.
 
     The manage dialog normally fills the hidden ``corners`` field from the current map viewport just
     before submit.
@@ -133,7 +136,8 @@ def _default_corners(owner: Pin | Wiki) -> list[list[float]] | None:
 
 
 def _overlay_picker_images(owner: Pin | Wiki, viewer: Profile):
-    """Photos the manage-overlays picker (and ``image_id`` POST) may offer.
+    """
+    Photos the manage-overlays picker (and ``image_id`` POST) may offer.
 
     Matches the pin/wiki gallery's notion of "this page's photos", including a pin's child-pin uploads
     and visit-attached photos, without the gallery's page size or the old 60-row cap that hid older
@@ -155,7 +159,8 @@ def _overlay_picker_images(owner: Pin | Wiki, viewer: Profile):
 
 
 def _parse_corners(raw: str | None) -> list[list[float]] | None:
-    """Parse a posted ``corners`` JSON array into four ``[lat, lng]`` pairs.
+    """
+    Parse a posted ``corners`` JSON array into four ``[lat, lng]`` pairs.
 
     Args:
         raw: The raw request value, expected to be a JSON array of four two-element arrays.
@@ -198,7 +203,8 @@ def _clamped_opacity(raw: str | None, fallback: int) -> int:
 
 
 def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, str | None]:
-    """Resolve the overlay's image from an upload, a gallery pick, or a pasted URL.
+    """
+    Resolve the overlay's image from an upload, a gallery pick, or a pasted URL.
 
     Args:
         request: The current request.
@@ -281,7 +287,8 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
 
 
 def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | None = None) -> list[dict]:
-    """Serialize an owner's renderable overlays for the map.
+    """
+    Serialize an owner's renderable overlays for the map.
 
     Shared with the pin-detail and wiki page controllers, which embed the same list on first render - so
     a page load and a later HTMX refresh hand the renderer identical shapes.
@@ -305,7 +312,8 @@ def overlay_payload(qs: MapImageOverlayQuerySet, visible_layer_ids: set[int] | N
 
 
 def _visible_layer_ids(owner: Pin | Wiki, request: HttpRequest) -> set[int] | None:
-    """The CustomLayer pks *request*'s viewer may see under *owner*, or None for a pin owner.
+    """
+    The CustomLayer pks *request*'s viewer may see under *owner*, or None for a pin owner.
 
     Args:
         owner: The Pin or Wiki the overlays/layers belong to.
@@ -331,7 +339,8 @@ def _render_overlay_list(
     toast: tuple[str, str] | None = None,
     align: str | None = None,
 ) -> HttpResponse:
-    """Render the manage-overlays list, with an ``HX-Trigger`` for the map JS.
+    """
+    Render the manage-overlays list, with an ``HX-Trigger`` for the map JS.
 
     Action URLs are built here by positional ``args`` (rather than reversed in-template) so the
     pin-vs-wiki URL-name difference stays invisible to the template - the same approach
@@ -398,7 +407,8 @@ def _render_overlay_list(
 
 
 def _created_overlay_json(owner: Pin | Wiki, overlay: MapImageOverlay) -> JsonResponse:
-    """JSON body for the lightbox's "use as floorplan overlay" fetch.
+    """
+    JSON body for the lightbox's "use as floorplan overlay" fetch.
 
     Args:
         owner: The Pin or Wiki the overlay belongs to.
@@ -427,7 +437,8 @@ def _picker_entry(request: HttpRequest, image: Image) -> dict:
 
 
 class OverlayMediaPickerView(LoginRequiredMixin, View):
-    """This pin's/wiki's own already-uploaded photos, for the manage-overlays dialog's picker.
+    """
+    This pin's/wiki's own already-uploaded photos, for the manage-overlays dialog's picker.
 
     Deliberately not ``pin.gallery.json``/``location.wiki.gallery.json``: those feed the pin's own photo
     *map layer*, so they filter to images that already have coordinates - which would hide every photo
@@ -447,7 +458,8 @@ class OverlayMediaPickerView(LoginRequiredMixin, View):
 
 
 class MapOverlayListView(LoginRequiredMixin, View):
-    """GET the manage-overlays list; POST to add one.
+    """
+    GET the manage-overlays list; POST to add one.
 
     ``GET/POST pin/<slug>/overlays/`` and the wiki counterpart.
     """
@@ -569,7 +581,8 @@ class MapOverlayEditView(LoginRequiredMixin, View):
 
 
 class MapOverlayCornersView(LoginRequiredMixin, View):
-    """POST new corner coordinates after the user drags a handle.
+    """
+    POST new corner coordinates after the user drags a handle.
 
     Kept apart from :class:`MapOverlayEditView` because it fires on every drag-end while a user is
     aligning a sheet: it writes eight float columns and answers a small JSON body, rather than
@@ -595,7 +608,8 @@ class MapOverlayCornersView(LoginRequiredMixin, View):
 
 
 class MapOverlayDeleteView(LoginRequiredMixin, View):
-    """DELETE one overlay.
+    """
+    DELETE one overlay.
 
     The backing ``Image`` is deliberately left alone: an uploaded sheet also lives in the pin's or
     wiki's own gallery, and a materialized gallery pick may be shared with the wiki - deleting the
@@ -620,7 +634,8 @@ _NOTABLE_RMSE_METERS = 25.0
 
 
 def georeference_accuracy(georeference: dict) -> str:
-    """A short honest note about how well a sheet is placed, or ``""``.
+    """
+    A short honest note about how well a sheet is placed, or ``""``.
 
     Args:
         georeference: REData's ``georeference`` block - ``transformation``, ``rmse_meters``,
@@ -641,7 +656,8 @@ def georeference_accuracy(georeference: dict) -> str:
 
 
 def historical_map_row(match: dict) -> dict | None:
-    """One picker row from a REData historical-map match, or None to skip it.
+    """
+    One picker row from a REData historical-map match, or None to skip it.
 
     ``thumbnail_url`` and ``landing_page_url`` are the *institution's* own public URLs, not
     REData-authenticated ones. The page shows this site's copy of the thumbnail rather than the institution's.
@@ -693,7 +709,8 @@ def _start_historical_maps(request: HttpRequest, location: Location) -> Pending[
 
 
 def historical_maps_covering(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
-    """REData's georeferenced sheets covering a location, from cache or under the request-path policy.
+    """
+    REData's georeferenced sheets covering a location, from cache or under the request-path policy.
 
     Args:
         request: The current request, charged against the per-account rate on a miss.
@@ -731,7 +748,8 @@ def _start_historical_map_volumes(request: HttpRequest, location: Location) -> P
 
 
 def historical_map_volumes_near(request: HttpRequest, location: Location) -> UpstreamResult[list[dict[str, Any]]]:
-    """REData's catalogued map volumes of the place a location is in, from cache or under the request-path policy.
+    """
+    REData's catalogued map volumes of the place a location is in, from cache or under the request-path policy.
 
     An answer with a volume whose sheets REData is still listing is not cached, so the next browse shows them.
 
@@ -775,7 +793,8 @@ def _volume_sheet_row(sheet: dict[str, Any], latitude: float, longitude: float) 
 
 
 def historical_volume_row(match: dict[str, Any], latitude: float, longitude: float, listed: set[str]) -> dict[str, Any] | None:
-    """One catalogued volume as a picker row, or None to skip it.
+    """
+    One catalogued volume as a picker row, or None to skip it.
 
     Its placed sheets nearest the spot are addable here unless the covering list above already offers them; the
     rest of the volume - usually most of it, since few scans are placed - is at the institution's landing page.
@@ -820,7 +839,8 @@ def _historical_maps_unavailable_message(found: UpstreamResult[list[dict[str, An
 
 
 def _chosen_georeference(request: HttpRequest, location: Location, georeference_uuid: str) -> tuple[dict[str, Any], str] | str:
-    """The georeference a browse POST chose and the overlay's name, from REData's own lists for the spot; else why not.
+    """
+    The georeference a browse POST chose and the overlay's name, from REData's own lists for the spot; else why not.
 
     The lists (usually still cached from the browse) are the authority rather than posted bounds or titles: the uuid
     must be a sheet covering this location or a placed sheet of a volume catalogued to its place, and the canonical
@@ -855,7 +875,8 @@ def _chosen_georeference(request: HttpRequest, location: Location, georeference_
 
 
 class HistoricalMapBrowseView(LoginRequiredMixin, View):
-    """Browse REData's georeferenced historical maps covering this pin/wiki and the catalogued map volumes of its place, and add a sheet as an overlay.
+    """
+    Browse REData's georeferenced historical maps covering this pin/wiki and the catalogued map volumes of its place, and add a sheet as an overlay.
 
     The overlay's ``tile_url_template`` points at UrbanLens's own tile proxy (``map.historical_tiles``)
     rather than REData's template - REData's API key must never reach the browser.

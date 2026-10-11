@@ -75,7 +75,8 @@ class ApplyRoundRatingsTests(TestCase):
         self.assertLess(rating.mu, 0.0)
 
     def test_a_question_everyone_answers_correctly_gets_easier(self) -> None:
-        """A question every participant nails is 'losing' against the field -
+        """
+        A question every participant nails is 'losing' against the field -
         its difficulty rating (mu) should fall, mirroring LocationModeRating."""
         profile = _make_profile()
         round_, answer = _make_round_and_answer(profile, is_correct=True)
@@ -97,7 +98,8 @@ class ApplyRoundRatingsTests(TestCase):
         self.assertGreater(question_rating.mu, 0.0)
 
     def test_calling_twice_double_counts_games_played(self) -> None:
-        """apply_round_ratings has no internal idempotency guard - session.submit_answer
+        """
+        apply_round_ratings has no internal idempotency guard - session.submit_answer
         is responsible for calling it exactly once per round; this documents that contract."""
         profile = _make_profile()
         round_, answer = _make_round_and_answer(profile, is_correct=True)

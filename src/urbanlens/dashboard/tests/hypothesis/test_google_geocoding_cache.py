@@ -1,4 +1,5 @@
-"""A Google geocode is asked for once per address or point, not on every lookup.
+"""
+A Google geocode is asked for once per address or point, not on every lookup.
 
 ``GeocodedLocation`` keyed a stored answer by ``request_data["place_name"]``, which no request carries, and a reverse
 geocode by the answer's own coordinates rather than the point asked about. An address was never read back, and a point

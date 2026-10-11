@@ -1,4 +1,5 @@
-"""Tests for safety check-in partners: invite validation, the owner/partner permission
+"""
+Tests for safety check-in partners: invite validation, the owner/partner permission
 check, the detail view's partner fallback, and the chat consumer's widened access.
 """
 
@@ -76,7 +77,8 @@ class InviteCheckinPartnerTests(TestCase):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=self.owner.username)
 
     def test_blocked_invitee_raises(self):
-        """Same exception type as an unknown username - confirming a block would
+        """
+        Same exception type as an unknown username - confirming a block would
         itself confirm the account exists, which is the enumeration leak this guards."""
         invitee = _profile()
         Friendship.objects.create(from_profile=invitee, to_profile=self.owner, status=FriendshipStatus.BLOCKED)
@@ -103,7 +105,8 @@ class InviteCheckinPartnerTests(TestCase):
             invite_checkin_partner(self.checkin, inviter=self.owner, username=second.username)
 
     def test_over_cap_raises_even_for_unknown_username(self):
-        """The cap check must fire before username resolution.
+        """
+        The cap check must fire before username resolution.
 
         Otherwise "check-in full" only ever answers for a real account, letting a caller who fills their own
         check-in once turn the cap into a free, repeatable username-existence oracle."""
@@ -156,7 +159,8 @@ class AcceptCheckinPartnerInviteTests(TestCase):
 
 
 class IsOwnerOrAcceptedPartnerTests(TestCase):
-    """is_owner_or_accepted_partner: the owner and unrelated-profile boundary cases.
+    """
+    is_owner_or_accepted_partner: the owner and unrelated-profile boundary cases.
 
     Kept in a class of its own, separate from the @given property test below:
     Hypothesis example-shrinking and this TestCase's per-test transaction rollback don't always compose cleanly,
@@ -176,7 +180,8 @@ class IsOwnerOrAcceptedPartnerTests(TestCase):
 
 
 class IsOwnerOrAcceptedPartnerHypothesisTests(TestCase):
-    """is_owner_or_accepted_partner is true iff a non-owner partner is ACCEPTED -
+    """
+    is_owner_or_accepted_partner is true iff a non-owner partner is ACCEPTED -
     never for an INVITED-but-not-yet-accepted partner. Isolated in its own class,
     see IsOwnerOrAcceptedPartnerTests's docstring for why.
     """
@@ -202,7 +207,8 @@ class SafetyCheckinDetailPartnerFallbackTests(TestCase):
         self.checkin = _checkin(self.owner, plan_details="Secret plan details")
 
     def test_unrelated_profile_still_falls_through_to_community_view_and_404s(self):
-        """Regression guard: a random authenticated non-owner, non-partner hitting the
+        """
+        Regression guard: a random authenticated non-owner, non-partner hitting the
         uuid route must still 404 via the existing community-view fallback, unchanged
         by the new partner branch being tried first.
         """
@@ -245,7 +251,8 @@ class SafetyCheckinDetailPartnerFallbackTests(TestCase):
 
 
 def _run(coro):
-    """Run *coro* via async_to_sync - see test_safety_chat.py's identical helper for why
+    """
+    Run *coro* via async_to_sync - see test_safety_chat.py's identical helper for why
     a bare asyncio.run() won't work with database_sync_to_async's thread-sensitive mode.
     """
 
@@ -332,7 +339,8 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         await partner_comm.disconnect()
 
     def test_removed_partner_connection_is_force_closed(self):
-        """Regression guard: permission is otherwise only checked once, at connect()
+        """
+        Regression guard: permission is otherwise only checked once, at connect()
         time - without a live revocation, a removed partner's already-open socket
         would keep receiving chat/status/location/archive events indefinitely.
         """
@@ -366,7 +374,8 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertEqual(close_message.get("code"), 4404)
 
     def test_removed_partner_is_closed_on_every_simultaneous_connection(self):
-        """Regression guard: a removed partner logged in from two tabs/devices at once
+        """
+        Regression guard: a removed partner logged in from two tabs/devices at once
         must have BOTH connections closed - the group_send that drives revocation
         reaches every channel_name registered for the group, not just one of them.
         """

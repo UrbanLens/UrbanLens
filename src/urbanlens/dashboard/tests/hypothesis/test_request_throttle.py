@@ -53,7 +53,8 @@ class TheCounterTests(TestCase):
             self.assertFalse(throttle.allow("scope", "1.2.3.4", rate))
 
     def test_a_refusal_says_how_long_to_wait(self) -> None:
-        """Never zero and never longer than the window - the exact second
+        """
+        Never zero and never longer than the window - the exact second
         depends on where in the window the call landed, so asserting one would
         be asserting the clock."""
         rate = throttle.Rate(limit=1, window_seconds=45)
@@ -112,7 +113,8 @@ class TheViewDecoratorTests(TestCase):
         self.assertEqual(len(calls), 1, "the throttled call still ran the view")
 
     def test_the_wrapper_keeps_what_django_attached_to_as_view(self) -> None:
-        """`view_class` and friends live in the callable's `__dict__`, and Django
+        """
+        `view_class` and friends live in the callable's `__dict__`, and Django
         and its tooling read them off whatever the URLconf holds."""
         from django.views.generic import View
 

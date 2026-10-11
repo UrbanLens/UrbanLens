@@ -1,4 +1,5 @@
-"""Resolving the address a request actually came from.
+"""
+Resolving the address a request actually came from.
 One implementation, because every caller is making a security decision with the answer - per-IP rate limiting on login and passphrase suggestions, and the network allowlist on ``/metrics``."""
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def client_ip(request: HttpRequest) -> str:
-    """Return the client address, trusting only the proxies we put in front.
+    """
+    Return the client address, trusting only the proxies we put in front.
 
     Args:
         request: The incoming HTTP request.
@@ -37,7 +39,8 @@ def client_ip(request: HttpRequest) -> str:
 
 
 def parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
-    """Parse an address that :func:`client_ip` returned.
+    """
+    Parse an address that :func:`client_ip` returned.
 
     Args:
         value: The address string to parse.
@@ -59,7 +62,8 @@ def parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None
 
 @lru_cache(maxsize=8)
 def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...]:
-    """Parse a comma-separated CIDR list into networks.
+    """
+    Parse a comma-separated CIDR list into networks.
     Cached on the raw string, because callers re-derive this from a setting on every request and the result only changes when the setting does.
 
     Args:
@@ -80,7 +84,8 @@ def parse_networks(raw: str) -> tuple[ipaddress.IPv4Network | ipaddress.IPv6Netw
 
 
 def address_in_networks(address: str, networks: Sequence[ipaddress.IPv4Network | ipaddress.IPv6Network] | Iterable[ipaddress.IPv4Network | ipaddress.IPv6Network]) -> bool:
-    """Report whether an address falls inside any of the given networks.
+    """
+    Report whether an address falls inside any of the given networks.
 
     Args:
         address: An address string as returned by :func:`client_ip`.

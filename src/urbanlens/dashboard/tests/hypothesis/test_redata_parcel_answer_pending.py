@@ -1,4 +1,5 @@
-"""REData answers a cold parcel's unfiltered buildings and boundaries with a 503 while it computes them (its P62).
+"""
+REData answers a cold parcel's unfiltered buildings and boundaries with a 503 while it computes them (its P62).
 
 REData finishes the parcel's one computation in the background and names the wait in the body, not in a
 ``Retry-After`` header, because the wait is this parcel's and not the endpoint's. REData 0.3.7 to 0.3.9 name the pending

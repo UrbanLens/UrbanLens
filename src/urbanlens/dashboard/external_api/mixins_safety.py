@@ -1,4 +1,5 @@
-"""View base for the *watcher* side of a safety check-in.
+"""
+View base for the *watcher* side of a safety check-in.
 
 That question already has exactly one correct implementation,
 ``services.visits.safety.is_owner_or_accepted_partner``, and this module exists to make sure the API
@@ -26,7 +27,8 @@ if TYPE_CHECKING:
 
 
 class SafetyCheckinViewerScopedView(ExternalApiView):
-    """Base for endpoints addressing a check-in the caller is entitled to *watch*.
+    """
+    Base for endpoints addressing a check-in the caller is entitled to *watch*.
 
     Deliberately a sibling of ``views.SafetyCheckinScopedView`` rather than a subclass or a replacement.
     The two answer different questions and must keep doing so: widening the owner-scoped base to admit
@@ -36,7 +38,8 @@ class SafetyCheckinViewerScopedView(ExternalApiView):
     """
 
     def resolve_viewer(self, request: Request) -> Profile:
-        """The profile the credential belongs to.
+        """
+        The profile the credential belongs to.
 
         Args:
             request: The authenticated request.
@@ -49,7 +52,8 @@ class SafetyCheckinViewerScopedView(ExternalApiView):
         return profile
 
     def get_viewable_checkin(self, request: Request, checkin_slug: str) -> SafetyCheckin | None:
-        """The check-in named by *checkin_slug*, if this caller may watch it.
+        """
+        The check-in named by *checkin_slug*, if this caller may watch it.
 
         Expressing it as a queryset filter here would be a second implementation of a rule whose whole risk
         is that a subtly weaker version of it looks correct; the cost is one extra row fetched for a
@@ -82,7 +86,8 @@ class SafetyCheckinViewerScopedView(ExternalApiView):
         return checkin
 
     def not_found(self) -> Response:
-        """The single 404 body every check-in lookup miss answers with.
+        """
+        The single 404 body every check-in lookup miss answers with.
 
         Byte-identical to ``views.SafetyCheckinScopedView._not_found`` so that the owner-scoped and
         watcher-scoped surfaces cannot be told apart by their error bodies - a client probing both would

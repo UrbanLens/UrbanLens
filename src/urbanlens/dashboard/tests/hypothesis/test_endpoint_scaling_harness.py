@@ -29,7 +29,8 @@ class _AchievementSeedMixin(EndpointScalingMixin):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Create *count* more achievements.
+        """
+        Create *count* more achievements.
 
         Args:
             count: How many rows to add.
@@ -44,7 +45,8 @@ class _AchievementSeedMixin(EndpointScalingMixin):
             )
 
     def count_payload_rows(self, response: HttpResponse) -> int | None:
-        """Read the record count out of the JSON body.
+        """
+        Read the record count out of the JSON body.
 
         Args:
             response: The response to read.
@@ -80,7 +82,8 @@ class ObjectsPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
 
 @override_settings(ROOT_URLCONF=_URLCONF)
 class RowsFetchedPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
-    """The new axis: one statement, every row of the table, constant body.
+    """
+    The new axis: one statement, every row of the table, constant body.
 
     The budget that catches this is the *capped* one."""
 
@@ -93,13 +96,15 @@ class RowsFetchedPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
             )
 
     def test_the_same_reading_is_fine_when_the_rows_are_rendered(self) -> None:
-        """The negative control for the axis, not just for the fixture.
+        """
+        The negative control for the axis, not just for the fixture.
 
         `/bounded/` reads exactly the same one row per row and is not a defect, because it renders them."""
         self.assert_endpoint_scaling("/bounded/")
 
     def test_the_query_count_really_is_flat_for_it(self) -> None:
-        """Proves the axis is necessary, not merely available.
+        """
+        Proves the axis is necessary, not merely available.
 
         If a statement counter caught this, the new axis would be redundant. It
         does not: there is one query at both sizes.
@@ -127,7 +132,8 @@ class BytesPerRowIsCaughtTests(_AchievementSeedMixin, TestCase):
 
 @override_settings(ROOT_URLCONF=_URLCONF)
 class AStreamedResponseIsMeasurableTests(_AchievementSeedMixin, TestCase):
-    """The transport `map.document` uses must not be a hole in the instrument.
+    """
+    The transport `map.document` uses must not be a hole in the instrument.
 
     `StreamingHttpResponse` has no `.content`."""
 
@@ -178,7 +184,8 @@ class ThePayloadCeilingIsCheckedTests(_AchievementSeedMixin, TestCase):
         )
 
     def test_asking_for_a_ceiling_without_a_counter_is_an_error_not_a_pass(self) -> None:
-        """A silently-skipped assertion is the failure mode this guards.
+        """
+        A silently-skipped assertion is the failure mode this guards.
 
         `count_payload_rows` returns None by default, so a case that asks for a ceiling and forgets to implement
         it would otherwise pass while checking nothing at all."""
@@ -203,7 +210,8 @@ class EveryFailingAxisIsReportedTests(_AchievementSeedMixin, TestCase):
     """One run should say everything that is wrong, not the first thing."""
 
     def test_a_view_breaking_two_axes_reports_both(self) -> None:
-        """`/objects/` builds an instance per row *and* reads a row per row.
+        """
+        `/objects/` builds an instance per row *and* reads a row per row.
 
         Reported together because fixing one at a time means measuring three
         times, and the second failure is usually a consequence of the first.

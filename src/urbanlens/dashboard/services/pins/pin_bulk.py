@@ -1,4 +1,5 @@
-"""Multi-select bulk actions on pins: merge under a target, delete with undo, and a shared edit.
+"""
+Multi-select bulk actions on pins: merge under a target, delete with undo, and a shared edit.
 
 The map's select tool and the external API both call these, so the two cannot drift. Each action is one
 transaction, and hierarchy changes refit each affected parent's child-fitted boundary once at the end rather than
@@ -97,7 +98,8 @@ class BulkDeleteResult:
 
 @dataclass(frozen=True, slots=True)
 class BulkPinEdit:
-    """One edit applied to every selected pin; :data:`UNSET` leaves a part alone.
+    """
+    One edit applied to every selected pin; :data:`UNSET` leaves a part alone.
 
     Attributes:
         description: New description; ``None`` clears it.
@@ -125,7 +127,8 @@ class BulkEditResult:
 
 
 def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
-    """Make every source a detail pin of *target*, promoting *target* to top level first if it is a child.
+    """
+    Make every source a detail pin of *target*, promoting *target* to top level first if it is a child.
 
     Args:
         target: The pin that ends up on top.
@@ -165,7 +168,8 @@ def bulk_merge_under(target: Pin, sources: Sequence[Pin]) -> BulkMergeResult:
 
 
 def bulk_delete_pins(profile: Profile, pins: Sequence[Pin]) -> BulkDeleteResult:
-    """Delete *pins* and their whole detail-pin subtrees, staging one undo entry for all of it.
+    """
+    Delete *pins* and their whole detail-pin subtrees, staging one undo entry for all of it.
 
     Args:
         profile: The owner, who may restore the deletion.
@@ -189,7 +193,8 @@ def bulk_delete_pins(profile: Profile, pins: Sequence[Pin]) -> BulkDeleteResult:
 
 
 def bulk_edit_pins(profile: Profile, pins: Sequence[Pin], edit: BulkPinEdit) -> BulkEditResult:
-    """Apply *edit* to every pin, all or nothing.
+    """
+    Apply *edit* to every pin, all or nothing.
 
     Args:
         profile: The owner, whose review a rating writes.

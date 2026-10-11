@@ -37,7 +37,8 @@ class GooglePhotosNotConfiguredError(google_oauth.GoogleOAuthNotConfiguredError)
 
 
 def _oauth_client() -> tuple[str, str]:
-    """Return the site's Google OAuth client id and secret.
+    """
+    Return the site's Google OAuth client id and secret.
     Reuses the same site-wide client as Calendar (``UL_GOOGLE_CLIENT_ID``/ ``UL_GOOGLE_CLIENT_SECRET``) - only the requested scopes differ per feature.
 
     Returns:
@@ -53,7 +54,8 @@ def _oauth_client() -> tuple[str, str]:
 
 
 def build_authorization_url(redirect_uri: str, state: str) -> str:
-    """Build the Google consent-screen URL for the Google Photos connect flow.
+    """
+    Build the Google consent-screen URL for the Google Photos connect flow.
 
     Args:
         redirect_uri: Absolute callback URL registered with the OAuth client.
@@ -69,7 +71,8 @@ def build_authorization_url(redirect_uri: str, state: str) -> str:
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
-    """Exchange an authorization code for access/refresh tokens.
+    """
+    Exchange an authorization code for access/refresh tokens.
 
     Args:
         code: Authorization code from the OAuth callback.
@@ -86,7 +89,8 @@ def exchange_code_for_tokens(code: str, redirect_uri: str) -> dict[str, Any]:
 
 
 def revoke_token(token: str) -> bool:
-    """Best-effort revocation of an access or refresh token at Google.
+    """
+    Best-effort revocation of an access or refresh token at Google.
 
     Args:
         token: The token to revoke.
@@ -98,7 +102,8 @@ def revoke_token(token: str) -> bool:
 
 
 def _parse_duration_seconds(value: str | None, default: int) -> int:
-    """Parse a Google API duration string (e.g. ``"5s"``) into whole seconds.
+    """
+    Parse a Google API duration string (e.g. ``"5s"``) into whole seconds.
 
     Args:
         value: The duration string, or None.
@@ -145,7 +150,8 @@ PREVIEW_MAX_DIMENSION = 512
 
 @dataclass(slots=True, kw_only=True)
 class GooglePhotosGateway(Gateway):
-    """Picker API client bound to one user's connected Google Photos account.
+    """
+    Picker API client bound to one user's connected Google Photos account.
 
     Attributes:
         account: The user's stored Google Photos OAuth credentials."""
@@ -159,7 +165,8 @@ class GooglePhotosGateway(Gateway):
         Gateway.__post_init__(self)
 
     def _auth_headers(self) -> dict[str, str]:
-        """Return Authorization headers, refreshing the access token first if needed.
+        """
+        Return Authorization headers, refreshing the access token first if needed.
 
         Returns:
             Headers dict with a valid bearer token.
@@ -176,7 +183,8 @@ class GooglePhotosGateway(Gateway):
         return {"Authorization": f"Bearer {self.account.access_token}"}
 
     def _refresh_token(self) -> None:
-        """Refresh and persist the account's access token.
+        """
+        Refresh and persist the account's access token.
 
         Raises:
             GatewayRequestError: When no refresh token is stored or the refresh is rejected by Google."""
@@ -192,7 +200,8 @@ class GooglePhotosGateway(Gateway):
         self.account.save(update_fields=["access_token", "refresh_token", "token_expiry", "updated"])
 
     def _send(self, send: Callable[..., requests.Response], url: str, *, what: str, **kwargs: Any) -> requests.Response:
-        """Send one authenticated request to Google.
+        """
+        Send one authenticated request to Google.
 
         Args:
             send: The session method to send it with.
@@ -212,7 +221,8 @@ class GooglePhotosGateway(Gateway):
             raise GatewayRequestError(f"Could not reach Google Photos to {what}: {exc}") from exc
 
     def create_session(self) -> PickerSession:
-        """Create a new picker session for the user to select photos in.
+        """
+        Create a new picker session for the user to select photos in.
 
         Returns:
             The new session, including the ``picker_uri`` to send the user to.
@@ -226,7 +236,8 @@ class GooglePhotosGateway(Gateway):
         return self._session_from_json(response.json())
 
     def get_session(self, session_id: str) -> PickerSession:
-        """Fetch the current state of a picker session.
+        """
+        Fetch the current state of a picker session.
 
         Args:
             session_id: The session id from :meth:`create_session`.
@@ -254,7 +265,8 @@ class GooglePhotosGateway(Gateway):
         )
 
     def list_session_media_items(self, session_id: str) -> list[PickedMediaItem]:
-        """List every item the user selected in a completed picker session.
+        """
+        List every item the user selected in a completed picker session.
 
         Args:
             session_id: The session id from :meth:`create_session`.
@@ -294,7 +306,8 @@ class GooglePhotosGateway(Gateway):
         return items
 
     def download_media_item(self, base_url: str, *, original: bool = True) -> bytes:
-        """Download a picked item's bytes.
+        """
+        Download a picked item's bytes.
 
         Args:
             base_url: The item's ``base_url`` from :meth:`list_session_media_items`.
@@ -319,7 +332,8 @@ class GooglePhotosGateway(Gateway):
 
 
 def session_items_cache_key(session_id: str) -> str:
-    """Cache key holding a picker session's listed media items (id -> base_url/mime_type/filename).
+    """
+    Cache key holding a picker session's listed media items (id -> base_url/mime_type/filename).
     Shared between the controller (writes it after listing, reads it for the thumbnail proxy) and the import task (reads it to resolve each selected item's download URL), so both agree on the same key format.
 
     Args:
@@ -336,7 +350,8 @@ GOOGLE_PHOTOS_URL_PREFIX = "https://photos.google.com/lr/photo/"
 
 
 def media_item_web_url(media_item_id: str) -> str:
-    """Return the Google Photos web URL for one media item.
+    """
+    Return the Google Photos web URL for one media item.
     Used both as the "view on Google Photos" attribution link and as the de-dup key stored on ``Image.source_url`` - an item already imported to a pin is recognised by matching this URL, without re-fetching it.
 
     Args:
@@ -348,7 +363,8 @@ def media_item_web_url(media_item_id: str) -> str:
 
 
 def _parse_timestamp(value: str | None) -> datetime.datetime | None:
-    """Parse an RFC3339 timestamp string from the API, if present.
+    """
+    Parse an RFC3339 timestamp string from the API, if present.
 
     Args:
         value: The timestamp string, or None.

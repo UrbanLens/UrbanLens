@@ -30,7 +30,8 @@ class CoordinateOffTheGlobeError(ValueError):
 
 
 def _on_the_globe(latitude: object, longitude: object) -> tuple[float, float]:
-    """*latitude* and *longitude* as floats, refused unless they are a place on the globe.
+    """
+    *latitude* and *longitude* as floats, refused unless they are a place on the globe.
 
     Raises:
         CoordinateOffTheGlobeError: Either is not a finite number in range.
@@ -43,7 +44,8 @@ def _on_the_globe(latitude: object, longitude: object) -> tuple[float, float]:
 
 
 def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decimal:
-    """Round a submitted coordinate to the precision ``Location`` actually stores.
+    """
+    Round a submitted coordinate to the precision ``Location`` actually stores.
     ``Location.latitude``/``longitude`` are fixed-precision decimals, so the database rounds on insert.
 
     Args:
@@ -68,7 +70,8 @@ def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decima
 
 
 class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
-    """QuerySet for Location - the shared, user-agnostic half of the place model.
+    """
+    QuerySet for Location - the shared, user-agnostic half of the place model.
 
     Filters here operate on global place data (coordinates, name, CID, address).
     For per-user filtering (by profile, visit status, priority) use PinQuerySet.
@@ -78,7 +81,8 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
         return self.filter(google_place__cid=cid)
 
     def from_url_slug(self, value: str, *, related: tuple[str, ...] = ()) -> Location | None:
-        """The Location a URL segment names: its current slug, its uuid, else a slug it had before.
+        """
+        The Location a URL segment names: its current slug, its uuid, else a slug it had before.
 
         One query whichever of the three matches, or whether any does, so a filter already on this queryset (who may
         see the row) decides the answer at the same cost as a slug nothing ever used. A current slug wins over
@@ -100,7 +104,8 @@ class LocationQuerySet(abstract.PublicDashboardQuerySet["Location"]):
         return matched.order_by(Case(When(slug=value, then=Value(0)), default=Value(1)), "pk").first()
 
     def within_bounding_box(self, latitude: float, longitude: float) -> Self:
-        """Locations sharing the access domain of whatever is at this coordinate.
+        """
+        Locations sharing the access domain of whatever is at this coordinate.
         Resolution happens once, on Place, and the answer is a single real-world thing - so "which locations cover this point?" is no longer a geometry query over every location that ever copied a polygon, but a lookup of the domain the point resolves into.
         """
         from urbanlens.dashboard.models.place.model import Place
@@ -121,7 +126,8 @@ class LocationManager(_LocationManagerBase["Location"]):
     """Manager for Location."""
 
     def get_all_for_point(self, latitude: float, longitude: float) -> Self:
-        """Return every Location sharing the access domain at (lat, lon).
+        """
+        Return every Location sharing the access domain at (lat, lon).
         These are locations describing the *same* real-world thing - one parcel and the buildings on it - not competing candidates.
 
         Args:
@@ -134,7 +140,8 @@ class LocationManager(_LocationManagerBase["Location"]):
         return self.within_bounding_box(latitude, longitude)
 
     def get_exact_or_create(self, latitude, longitude, defaults=None) -> tuple[Location, bool]:
-        """Get or create the Location at exactly these coordinates.
+        """
+        Get or create the Location at exactly these coordinates.
         The counterpart to :meth:`get_nearby_or_create` for callers that must keep a submitted point exactly as given - a detail pin's own marker, a child wiki, a manual pin move - rather than snapping it onto whatever Location happens to sit within the dedup radius.
 
         Args:
@@ -171,7 +178,8 @@ class LocationManager(_LocationManagerBase["Location"]):
             return existing, False
 
     def get_nearby_or_create(self, latitude, longitude, threshold_meters=0, defaults=None):
-        """Get or create a Location instance, optionally treating nearby coordinates as the same.
+        """
+        Get or create a Location instance, optionally treating nearby coordinates as the same.
         The threshold now defaults to **exact**.
         Consolidating two drops at one real place is the *place's* job: they resolve onto the same parcel and share its wiki, its community, and its "places in common" entry without either coordinate being thrown away.
 

@@ -1,4 +1,5 @@
-"""Photo keyword generation pipeline.
+"""
+Photo keyword generation pipeline.
 Runs entirely in the background (a Celery task enqueued after every upload's ``process_image_upload``) so uploads are never slowed down."""
 
 from __future__ import annotations
@@ -47,7 +48,8 @@ class KeywordOutcome(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class KeywordResult:
-    """One keyword produced by a provider.
+    """
+    One keyword produced by a provider.
 
     Attributes:
         keyword: The keyword text (will be normalized before storage).
@@ -59,7 +61,8 @@ class KeywordResult:
 
 
 class PhotoKeywordProvider(ABC):
-    """One keywording strategy for uploaded photos.
+    """
+    One keywording strategy for uploaded photos.
 
     Attributes:
         slug: Stable identifier stored on ``ImageKeyword.source``.
@@ -72,7 +75,8 @@ class PhotoKeywordProvider(ABC):
     service_key: ClassVar[str] = ""
 
     def is_available_for(self, image: Image) -> bool:
-        """Whether this provider should run for this image's uploader.
+        """
+        Whether this provider should run for this image's uploader.
 
         Args:
             image: The freshly uploaded image (``profile`` is populated).
@@ -84,7 +88,8 @@ class PhotoKeywordProvider(ABC):
 
     @abstractmethod
     def generate(self, image: Image) -> list[KeywordResult]:
-        """Produce keywords for one image.
+        """
+        Produce keywords for one image.
 
         Args:
             image: The image to keyword; read its bytes via ``image.image``.
@@ -100,7 +105,8 @@ class PhotoKeywordProvider(ABC):
 
 
 def analysis_jpeg_bytes(image: Image) -> bytes | None:
-    """Reads bytes; never parses them.
+    """
+    Reads bytes; never parses them.
 
     Args:
         image: The Image row whose analysis copy to read.
@@ -120,7 +126,8 @@ def analysis_jpeg_bytes(image: Image) -> bytes | None:
 
 
 def require_analysis_jpeg_bytes(image: Image) -> bytes:
-    """The analysis copy's bytes, for a provider that must not answer for a photo it could not see.
+    """
+    The analysis copy's bytes, for a provider that must not answer for a photo it could not see.
 
     Args:
         image: The Image row whose analysis copy to read.
@@ -140,7 +147,8 @@ def require_analysis_jpeg_bytes(image: Image) -> bytes:
 
 
 def normalize_keywords(candidates: list[KeywordResult]) -> list[KeywordResult]:
-    """Clean and deduplicate provider output before storage.
+    """
+    Clean and deduplicate provider output before storage.
 
     Args:
         candidates: Raw provider output.
@@ -162,7 +170,8 @@ def normalize_keywords(candidates: list[KeywordResult]) -> list[KeywordResult]:
 
 
 def run_keyword_provider(image: Image, provider: PhotoKeywordProvider) -> tuple[KeywordOutcome, int]:
-    """Ask one provider about one photo, and store its keywords if it answers.
+    """
+    Ask one provider about one photo, and store its keywords if it answers.
 
     A provider that does not answer leaves the photo's keywords from it as they are (P322). Nothing here records a
     retry; the callers decide what an outcome means for one (``services.photos.keyword_retry``).
@@ -217,7 +226,8 @@ def run_keyword_provider(image: Image, provider: PhotoKeywordProvider) -> tuple[
 
 
 def generate_keywords_for_image(image_id: int) -> dict[str, int]:
-    """Run every enabled photo-keyword provider for one uploaded image.
+    """
+    Run every enabled photo-keyword provider for one uploaded image.
     Each provider is isolated: one failing provider is logged and skipped without affecting the others. A source that
     did not answer is recorded for the retry sweep (P323).
 

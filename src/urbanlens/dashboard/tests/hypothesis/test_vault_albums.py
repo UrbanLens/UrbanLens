@@ -120,7 +120,8 @@ class VaultAlbumViewTests(TestCase):
         self.assertFalse(AlbumItem.objects.filter(album=album, image=others_image).exists())
 
     def test_can_add_own_pin_filed_photo_to_vault_album(self) -> None:
-        """A vault album may reference any of the profile's own uploads, filed or not.
+        """
+        A vault album may reference any of the profile's own uploads, filed or not.
 
         This is deliberate, not a gap: Vault Photos' own gallery already shows every photo the profile has
         uploaded regardless of pin/wiki filing, so a vault album (a curated subset of that same library) can
@@ -228,7 +229,8 @@ class VaultAlbumViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_loose_photos_section_is_suppressed_for_the_vault_albums_list(self) -> None:
-        """Vault Photos has its own full gallery, so the album-list page's
+        """
+        Vault Photos has its own full gallery, so the album-list page's
         "loose photos" section (meant for a pin/wiki's unfiled photos) would
         just repeat it - _albums_panel.html hides it for context_type=='vault'.
         """
@@ -320,7 +322,8 @@ class VaultPinAlbumsViewTests(TestCase):
 
 
 class VaultUploadDedupeTests(TestCase):
-    """The widened, unfiled-only duplicate-upload scope for a Vault (Profile) owner.
+    """
+    The widened, unfiled-only duplicate-upload scope for a Vault (Profile) owner.
 
     Distinct from owner_kwargs_to_image_scope (which deliberately scopes a vault's *eligible* photos to
     everything the profile has uploaded): this is about whether a fresh *upload* is a duplicate, which stays

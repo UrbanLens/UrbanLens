@@ -70,7 +70,8 @@ _OPEN_TAG = re.compile(r"<div [^>]*>", re.DOTALL)
 
 
 class PinDetailFanoutBudgetTests(EveryPanelGateConfiguredMixin, TestCase):
-    """The page's opening burst has a ceiling.
+    """
+    The page's opening burst has a ceiling.
 
     Measured on the worst case: a pin no panel's gate refuses and nothing is cached for, so no panel is known to be
     empty and the page leaves none out (P53).
@@ -113,7 +114,8 @@ class PinDetailFanoutBudgetTests(EveryPanelGateConfiguredMixin, TestCase):
         )
 
     def test_the_counter_actually_finds_them(self) -> None:
-        """Guards the test itself.
+        """
+        Guards the test itself.
 
         A regex that silently matched nothing would make the budget above pass forever, which is the failure
         mode a ceiling test is most prone to - it looks green either way."""
@@ -127,7 +129,8 @@ class PinDetailFanoutBudgetTests(EveryPanelGateConfiguredMixin, TestCase):
         )
 
     def test_every_enrichment_panel_queues_against_a_lane(self) -> None:
-        """The invariant the count assertion cannot see.
+        """
+        The invariant the count assertion cannot see.
 
         A panel added without `hx-sync` fires alongside every other one and puts the page back where it was,
         while the ceiling above stays green because the ceiling counts elements rather than simultaneous

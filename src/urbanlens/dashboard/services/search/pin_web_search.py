@@ -1,4 +1,5 @@
-"""The Private Pin page's web search: which queries a pin makes, and the cached results it may read.
+"""
+The Private Pin page's web search: which queries a pin makes, and the cached results it may read.
 
 A pin reads the search every viewer of its Location shares, built from the place's public names, and, when it has
 names of its own, the search cached for exactly that set (see ``services.pins.search_names``).
@@ -27,7 +28,8 @@ WEB_SEARCH_SOURCE = "web_search"
 
 @dataclass(frozen=True, slots=True)
 class WebSearch:
-    """One web search a pin's page makes.
+    """
+    One web search a pin's page makes.
 
     Attributes:
         scope: Who may read its results, and the names it is built from.
@@ -44,7 +46,8 @@ class WebSearch:
 
 
 def pin_web_searches(pin: Pin) -> list[WebSearch]:
-    """Every web search ``pin``'s page reads, the shared one first; empty when the pin has no name to search for.
+    """
+    Every web search ``pin``'s page reads, the shared one first; empty when the pin has no name to search for.
 
     Args:
         pin: The pin whose page is being rendered.
@@ -60,7 +63,8 @@ def pin_web_searches(pin: Pin) -> list[WebSearch]:
 
 
 def web_search_query(pin: Pin, scope: SearchScope) -> str | None:
-    """One search's query: the place's name as an exact phrase, then its town and state.
+    """
+    One search's query: the place's name as an exact phrase, then its town and state.
 
     The engines behind REData's web search require every quoted phrase, and a page about a place rarely repeats its
     street address or "Town ST" verbatim: HRSH's query with both found nothing. The town stays a phrase only for a
@@ -80,7 +84,8 @@ def web_search_query(pin: Pin, scope: SearchScope) -> str | None:
 
 
 def cached_web_searches(location: Location, searches: Sequence[WebSearch]) -> dict[str, LocationCache]:
-    """The fresh cached row of each search, keyed by audience, where it was made with the same query.
+    """
+    The fresh cached row of each search, keyed by audience, where it was made with the same query.
 
     Args:
         location: The pin's Location.
@@ -101,7 +106,8 @@ def cached_web_searches(location: Location, searches: Sequence[WebSearch]) -> di
 
 
 def annotate_results(results: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Results with the ``domain`` and ``date_display`` the panel shows.
+    """
+    Results with the ``domain`` and ``date_display`` the panel shows.
 
     Args:
         results: The search provider's results.
@@ -122,7 +128,8 @@ def annotate_results(results: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def store_web_search(location: Location, search: WebSearch, results: list[dict[str, Any]]) -> LocationCache:
-    """Cache one search's results under its audience.
+    """
+    Cache one search's results under its audience.
 
     Args:
         location: The pin's Location.
@@ -139,7 +146,8 @@ def store_web_search(location: Location, search: WebSearch, results: list[dict[s
 
 
 def merged_results(answers: Iterable[list[dict[str, Any]]]) -> list[dict[str, Any]]:
-    """Several searches' results as one list, in order, each link once.
+    """
+    Several searches' results as one list, in order, each link once.
 
     Args:
         answers: Each search's results, the shared search's first.

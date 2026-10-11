@@ -64,7 +64,8 @@ class Settings:
 
     @classmethod
     def all(cls) -> SettingsFile:
-        """Return the settings dict.
+        """
+        Return the settings dict.
 
         Returns:
             SettingsFile: A dictionary of settings.
@@ -73,7 +74,8 @@ class Settings:
 
     @classmethod
     def get(cls, key: str) -> Any:
-        """Return the value at key.
+        """
+        Return the value at key.
 
         Args:
             key: A key to retrieve.

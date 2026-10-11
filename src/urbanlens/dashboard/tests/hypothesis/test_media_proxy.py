@@ -110,7 +110,8 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         mocked.assert_not_called()
 
     def test_unsigned_request_is_rejected_before_any_upstream_call(self) -> None:
-        """The photo_name path segment is client-controlled - without a valid
+        """
+        The photo_name path segment is client-controlled - without a valid
         signature, a replayed/guessed reference must not consume Places quota."""
         with mock.patch.object(GooglePlacesGateway, "get_photo_media") as mocked:
             response = self.client.get(reverse("media.google_maps_photo", args=["places/ABC/photos/XYZ"]))
@@ -129,7 +130,8 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         mocked.assert_not_called()
 
     def test_unsigned_request_never_serves_even_a_cached_photo(self) -> None:
-        """The signature check runs before the cache lookup - an invalid URL
+        """
+        The signature check runs before the cache lookup - an invalid URL
         reveals nothing about what's cached."""
         with mock.patch.object(GooglePlacesGateway, "get_photo_media", return_value=(b"fake-jpeg-bytes", "image/jpeg")):
             self.client.get(_signed_url("places/ABC/photos/XYZ"))
@@ -147,7 +149,8 @@ class GoogleMapsPhotoProxyViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_external_apis_disabled_blocks_the_upstream_fetch(self) -> None:
-        """A requester who opted out of external lookups must not trigger a
+        """
+        A requester who opted out of external lookups must not trigger a
         quota-consuming Places API call through this proxy."""
         from urbanlens.dashboard.models.profile.model import Profile
 

@@ -1,4 +1,5 @@
-"""Resolves weather/sun-times lookups to REData or direct providers, per call.
+"""
+Resolves weather/sun-times lookups to REData or direct providers, per call.
 Every path converts into the same ``ForecastSlot``/``SunTimes`` shapes (``services.apis.weather.forecast``), so callers never branch on which provider actually answered."""
 
 from __future__ import annotations
@@ -44,7 +45,8 @@ def _pick_entry(results: list[dict], preference: tuple[str, ...], *, key: str) -
 
 
 def get_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
-    """Return a forecast strip for a coordinate, trying REData then the direct provider chain.
+    """
+    Return a forecast strip for a coordinate, trying REData then the direct provider chain.
 
     Args:
         latitude: WGS-84 latitude.
@@ -83,7 +85,8 @@ def get_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
 
 
 def get_raw_forecast_slots(latitude: float, longitude: float) -> list[ForecastSlot]:
-    """Return the finest-grained forecast slots available, for matching against a specific time.
+    """
+    Return the finest-grained forecast slots available, for matching against a specific time.
 
     Args:
         latitude: WGS-84 latitude.
@@ -114,7 +117,8 @@ def get_raw_forecast_slots(latitude: float, longitude: float) -> list[ForecastSl
 
 
 def get_sun_times(latitude: float, longitude: float) -> SunTimes | None:
-    """Return today's sunrise/sunset and golden-hour windows, trying REData then Open-Meteo.
+    """
+    Return today's sunrise/sunset and golden-hour windows, trying REData then Open-Meteo.
 
     Args:
         latitude: WGS-84 latitude.

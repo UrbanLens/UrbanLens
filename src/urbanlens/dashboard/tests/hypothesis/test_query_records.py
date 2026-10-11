@@ -21,7 +21,8 @@ _RELATED_ROWS = 3
 
 
 class ExternalApiQueryRecordTests(TestCase):
-    """Query fingerprints for the external API's most-fetched endpoints.
+    """
+    Query fingerprints for the external API's most-fetched endpoints.
 
     These are the endpoints a mobile client calls on every screen, where an
     extra query per related object is paid on every request by every user.
@@ -59,7 +60,8 @@ class ExternalApiQueryRecordTests(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_whoami_query_fingerprint(self) -> None:
-        """The cheapest authenticated call there is - a useful floor.
+        """
+        The cheapest authenticated call there is - a useful floor.
 
         If this record grows, the cost was added to *authentication* or to the middleware chain, which means
         every other endpoint grew by the same amount without any of their records explaining why."""

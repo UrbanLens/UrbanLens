@@ -63,7 +63,8 @@ class PasswordResetSsoAwarenessTests(TestCase):
         self.assertIn("Discord", mail.outbox[0].body)
 
     def test_sso_only_user_with_no_social_auth_row_gets_the_generic_hint(self) -> None:
-        """A passwordless account with no matching provider row (edge case,
+        """
+        A passwordless account with no matching provider row (edge case,
         e.g. the social_auth row was deleted) still gets a helpful email
         rather than crashing - falls back to the generic phrasing."""
         user = baker.make(User, email="orphan@example.com", is_active=True)
@@ -76,7 +77,8 @@ class PasswordResetSsoAwarenessTests(TestCase):
         self.assertIn("a social account", mail.outbox[0].body)
 
     def test_response_is_identical_whether_or_not_the_email_matches_anyone(self) -> None:
-        """Anti-enumeration: the requester-facing response must not reveal
+        """
+        Anti-enumeration: the requester-facing response must not reveal
         whether the address matched a password-auth user, an SSO-only user,
         or nobody at all."""
         self._make_password_user()
@@ -91,7 +93,8 @@ class PasswordResetSsoAwarenessTests(TestCase):
         self.assertRedirects(unknown_response, reverse("password_reset_done"))
 
     def test_inactive_sso_only_user_receives_no_email(self) -> None:
-        """Inactive accounts must stay excluded, matching Django's default
+        """
+        Inactive accounts must stay excluded, matching Django's default
         get_users() behavior for password-auth accounts."""
         user = baker.make(User, email="inactive@example.com", is_active=False)
         user.set_unusable_password()

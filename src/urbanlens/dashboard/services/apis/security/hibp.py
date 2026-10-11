@@ -1,4 +1,5 @@
-"""Have I Been Pwned Pwned Passwords API gateway.
+"""
+Have I Been Pwned Pwned Passwords API gateway.
 Uses the k-anonymity range endpoint so the full password (and full SHA-1 hash) never leaves the application."""
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; hello@urba
 
 @dataclass(slots=True, kw_only=True)
 class HaveIBeenPwnedGateway(Gateway):
-    """Check whether a password appears in known breach corpora via HIBP.
+    """
+    Check whether a password appears in known breach corpora via HIBP.
     Only the first five characters of the SHA-1 hash are sent to the API."""
 
     service_key: ClassVar[str] = "hibp"
@@ -39,7 +41,8 @@ class HaveIBeenPwnedGateway(Gateway):
 
     @staticmethod
     def endpoint_for_log(url: str) -> str:
-        """Record the range endpoint, never the prefix that identifies the password.
+        """
+        Record the range endpoint, never the prefix that identifies the password.
 
         Args:
             url: The range URL about to be requested.
@@ -52,7 +55,8 @@ class HaveIBeenPwnedGateway(Gateway):
         return f"{prefix}{marker}" if sep else url
 
     def is_password_pwned(self, password: str) -> bool | None:
-        """Return whether ``password`` appears in HIBP's breach list.
+        """
+        Return whether ``password`` appears in HIBP's breach list.
 
         Args:
             password: The plaintext password to check. Never logged or transmitted in full.

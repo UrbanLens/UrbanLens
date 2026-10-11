@@ -1,4 +1,5 @@
-"""A child pin's photos in the parent's gallery are managed from the child pin, bulk selection included.
+"""
+A child pin's photos in the parent's gallery are managed from the child pin, bulk selection included.
 
 The bulk endpoint only acts on the pin it is called for, so a child-pin photo in the selection was skipped
 while the gallery removed its tile as though it had been deleted.

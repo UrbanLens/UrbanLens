@@ -62,7 +62,8 @@ class SavepointKeepsTheTransactionUsableTests(_PinFixtures):
         self.assertEqual(mover.location_id, fresh.pk)
 
     def test_the_savepoint_is_load_bearing(self) -> None:
-        """Control: the shape the helper replaces really does poison the transaction.
+        """
+        Control: the shape the helper replaces really does poison the transaction.
 
         Without this, the tests above would pass just as well against a plain
         `try/except` and would prove nothing about why the helper exists.
@@ -79,7 +80,8 @@ class SavepointKeepsTheTransactionUsableTests(_PinFixtures):
 
 
 class MergeRefusesRatherThanDestroyingTheSurvivorTests(_PinFixtures):
-    """A child that cannot be detached must stop the merge, not be carried into it.
+    """
+    A child that cannot be detached must stop the merge, not be carried into it.
 
     `_reparent_children` detaches a child to top level when re-parenting it under the survivor would close a
     loop - which happens exactly when the survivor sits *beneath* that child."""

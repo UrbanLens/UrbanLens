@@ -28,7 +28,8 @@ class DeletingAPinChangesWhatTheClientPollsTests(TestCase):
         ]
 
     def _meta(self) -> dict:
-        """The poll response the map page reads.
+        """
+        The poll response the map page reads.
 
         Returns:
             The decoded JSON body.
@@ -44,7 +45,8 @@ class DeletingAPinChangesWhatTheClientPollsTests(TestCase):
         self.assertNotEqual(after["fingerprint"], before["fingerprint"])
 
     def test_the_timestamp_alone_could_not_have_seen_it(self) -> None:
-        """The reason the fingerprint exists, asserted rather than assumed.
+        """
+        The reason the fingerprint exists, asserted rather than assumed.
 
         If this ever fails, deleting a pin *does* move `Max(updated)` on its own and the pairing above is
         redundant - which would be worth knowing before anyone simplifies it away."""

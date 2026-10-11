@@ -26,7 +26,8 @@ class VisitSource(TextChoices):
 
 
 class PinVisit(abstract.FrontendDashboardModel):
-    """A single recorded visit by a user to one of their pinned locations. Multiple PinVisit rows can exist per pin.
+    """
+    A single recorded visit by a user to one of their pinned locations. Multiple PinVisit rows can exist per pin.
 
     Attributes:
         pin: The pin this visit belongs to.
@@ -79,7 +80,8 @@ class PinVisit(abstract.FrontendDashboardModel):
 
     @property
     def map_data(self) -> dict | None:
-        """Client snapshot of the attached markup map, if any.
+        """
+        Client snapshot of the attached markup map, if any.
         Kept as a property so templates and viewer JS that consumed the old ``map_data`` JSON column keep working against the MarkupMap relation.
 
         Returns:
@@ -89,7 +91,8 @@ class PinVisit(abstract.FrontendDashboardModel):
 
     @property
     def notes_html(self) -> str:
-        """Sanitized HTML rendering of ``notes``, authored as Markdown.
+        """
+        Sanitized HTML rendering of ``notes``, authored as Markdown.
         The visit-log dialog's notes field uses the same TipTap/Markdown WYSIWYG editor as the pin/wiki article (see ``_visit_form.html``/``frontend/ts/entries/article-wysiwyg.ts``), so rendering it for display reuses the article renderer rather than a second sanitization pipeline.
 
         Returns:
@@ -102,7 +105,8 @@ class PinVisit(abstract.FrontendDashboardModel):
         return render_article(self.notes).html
 
     def __str__(self) -> str:
-        """Return a human-readable description of this visit.
+        """
+        Return a human-readable description of this visit.
 
         Returns:
             String like "Visit to <pin_id> on YYYY-MM-DD".

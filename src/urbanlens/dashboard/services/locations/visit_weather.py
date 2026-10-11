@@ -37,7 +37,8 @@ PUBLICATION_LAG_DAYS = 7
 
 
 def is_recorded_yet(day: date, *, today: date | None = None) -> bool:
-    """Whether ERA5 can be expected to hold a record for ``day``.
+    """
+    Whether ERA5 can be expected to hold a record for ``day``.
 
     Args:
         day: The day in question.
@@ -50,7 +51,8 @@ def is_recorded_yet(day: date, *, today: date | None = None) -> bool:
 
 
 def weather_cell(latitude: float, longitude: float) -> Cell:
-    """The cell a coordinate's recorded days are stored under.
+    """
+    The cell a coordinate's recorded days are stored under.
 
     Args:
         latitude: WGS-84 latitude.
@@ -63,7 +65,8 @@ def weather_cell(latitude: float, longitude: float) -> Cell:
 
 
 def location_cell(location: Location) -> Cell:
-    """The cell a Location's recorded days are stored under.
+    """
+    The cell a Location's recorded days are stored under.
 
     Args:
         location: The shared Location.
@@ -75,7 +78,8 @@ def location_cell(location: Location) -> Cell:
 
 
 def cached_records(wanted: Mapping[Cell, Iterable[date]]) -> dict[Cell, dict[str, dict[str, Any]]]:
-    """The stored rows for several cells' days, in one query.
+    """
+    The stored rows for several cells' days, in one query.
 
     Args:
         wanted: The days wanted in each cell.
@@ -103,7 +107,8 @@ def cached_records(wanted: Mapping[Cell, Iterable[date]]) -> dict[Cell, dict[str
 
 @dataclass(slots=True, frozen=True)
 class RecordedDay:
-    """One recorded day, converted to the units the rest of the app displays.
+    """
+    One recorded day, converted to the units the rest of the app displays.
     Converting here rather than in the template keeps one implementation and one rounding decision.
 
     Attributes:
@@ -132,7 +137,8 @@ class RecordedDay:
 
     @property
     def summary(self) -> str:
-        """A one-line description of the day, for a visit or memory row.
+        """
+        A one-line description of the day, for a visit or memory row.
         Assembled here rather than in a template because the interesting cases are all conditional - a day with a high but no low, a dry day, a reading of exactly zero - and each one is a branch a template expresses badly and nothing can test.
 
         Returns:
@@ -174,7 +180,8 @@ def _mph(kmh: Any) -> float | None:
 
 
 def to_recorded_day(record: dict[str, Any]) -> RecordedDay | None:
-    """Convert one REData ``/weather/history/`` row into display units.
+    """
+    Convert one REData ``/weather/history/`` row into display units.
 
     Args:
         record: A row as returned by :meth:`RedataWeatherHistoryGateway.get_history`.
@@ -200,7 +207,8 @@ def to_recorded_day(record: dict[str, Any]) -> RecordedDay | None:
 
 
 def _fetch_days(latitude: float, longitude: float, start: date, end: date) -> dict[str, Any]:
-    """Ask REData for a date range at a point, keyed by ISO date.
+    """
+    Ask REData for a date range at a point, keyed by ISO date.
 
     Args:
         latitude: WGS-84 latitude.
@@ -239,7 +247,8 @@ _MERGE_GAP_DAYS = 31
 
 
 def _clusters(days: list[date]) -> list[tuple[date, date]]:
-    """Group sorted days into ranges worth fetching in one request.
+    """
+    Group sorted days into ranges worth fetching in one request.
 
     Args:
         days: The days to fetch, in any order.
@@ -261,7 +270,8 @@ def _clusters(days: list[date]) -> list[tuple[date, date]]:
 
 
 def convert_records(records: Mapping[str, Any], wanted: Iterable[date]) -> dict[str, RecordedDay]:
-    """Stored records for the wanted days, in display units.
+    """
+    Stored records for the wanted days, in display units.
 
     Args:
         records: ``{iso_date: record}`` as :func:`cached_records` returns them for one cell.
@@ -279,7 +289,8 @@ def convert_records(records: Mapping[str, Any], wanted: Iterable[date]) -> dict[
 
 
 def recorded_days_at(latitude: float, longitude: float, days: Iterable[date], *, allow_fetch: bool = True) -> dict[str, RecordedDay]:
-    """Recorded weather for a set of days at a coordinate, from stored rows first.
+    """
+    Recorded weather for a set of days at a coordinate, from stored rows first.
 
     Missing days are fetched in clustered ranges, so days years apart never become one request for
     every day between them.
@@ -307,7 +318,8 @@ def recorded_days_at(latitude: float, longitude: float, days: Iterable[date], *,
 
 
 def recorded_days(location: Location, days: Iterable[date], *, allow_fetch: bool = True) -> dict[str, RecordedDay]:
-    """:func:`recorded_days_at` for a Location.
+    """
+    :func:`recorded_days_at` for a Location.
 
     Args:
         location: The shared Location.
@@ -320,7 +332,8 @@ def recorded_days(location: Location, days: Iterable[date], *, allow_fetch: bool
 
 
 def missing_days(days: Iterable[date], records: Mapping[str, Any]) -> list[date]:
-    """Which of ``days`` are recordable and not stored yet.
+    """
+    Which of ``days`` are recordable and not stored yet.
 
     Args:
         days: The days wanted, in any order.
@@ -332,7 +345,8 @@ def missing_days(days: Iterable[date], records: Mapping[str, Any]) -> list[date]
 
 
 def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
-    """Queue a background fetch of a cell's missing days, unless the same fetch was queued recently.
+    """
+    Queue a background fetch of a cell's missing days, unless the same fetch was queued recently.
 
     A page that shows recorded weather reads stored rows only and calls this for the rest, so a slow
     REData never holds up a render.
@@ -364,7 +378,8 @@ def queue_missing_days(cell: Cell, days: Iterable[date]) -> bool:
 
 
 def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True) -> dict[str, Any] | None:
-    """The weather on one day at one location, from stored rows or REData.
+    """
+    The weather on one day at one location, from stored rows or REData.
 
     Args:
         location: The shared Location the visit's pin points at.
@@ -387,7 +402,8 @@ def recorded_weather(location: Location, day: date, *, allow_fetch: bool = True)
 
 
 def _store(cell: Cell, days: Mapping[str, Any]) -> None:
-    """Store fetched days as one row each. A past day never changes, so an existing row is kept.
+    """
+    Store fetched days as one row each. A past day never changes, so an existing row is kept.
 
     Args:
         cell: The cell the days were fetched for.

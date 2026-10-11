@@ -1,4 +1,5 @@
-"""Reading an uploaded file a piece at a time, so that how large it is costs disk rather than memory.
+"""
+Reading an uploaded file a piece at a time, so that how large it is costs disk rather than memory.
 
 An import preview entry may be as large as ``archive_extractor._MAX_SINGLE_FILE_BYTES``. The helpers here let a
 parser read one from a seekable binary file in fixed-size chunks.
@@ -24,7 +25,8 @@ _LINE_BREAK_RE = re.compile("[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]")
 
 
 def as_stream(data: bytes | IO[bytes]) -> IO[bytes]:
-    """A binary file over *data*, so parsers take bytes and files alike.
+    """
+    A binary file over *data*, so parsers take bytes and files alike.
 
     Args:
         data: The file's bytes, or a seekable binary file positioned at its start.
@@ -36,7 +38,8 @@ def as_stream(data: bytes | IO[bytes]) -> IO[bytes]:
 
 
 def iter_decoded(stream: IO[bytes], encoding: str) -> Iterator[str]:
-    """Decode *stream* a chunk at a time.
+    """
+    Decode *stream* a chunk at a time.
 
     Args:
         stream: The file, read from its current position.
@@ -57,7 +60,8 @@ def iter_decoded(stream: IO[bytes], encoding: str) -> Iterator[str]:
 
 
 def iter_lines(pieces: Iterable[str]) -> Iterator[str]:
-    """The lines of a text that arrives in pieces, split exactly as ``str.splitlines`` splits.
+    """
+    The lines of a text that arrives in pieces, split exactly as ``str.splitlines`` splits.
 
     Only a line is held whole, never the text.
 
@@ -81,7 +85,8 @@ def iter_lines(pieces: Iterable[str]) -> Iterator[str]:
 
 
 def is_valid_text(stream: IO[bytes], encoding: str) -> bool:
-    """Whether the rest of *stream* decodes in *encoding*, read a chunk at a time.
+    """
+    Whether the rest of *stream* decodes in *encoding*, read a chunk at a time.
 
     Args:
         stream: The file, read from its current position to its end.
@@ -99,7 +104,8 @@ def is_valid_text(stream: IO[bytes], encoding: str) -> bool:
 
 
 def skip_bom_and_whitespace(stream: IO[bytes], limit: int = READ_CHUNK_BYTES) -> str:
-    """Move *stream* past a UTF-8 byte-order mark and the whitespace ``str.lstrip`` would remove.
+    """
+    Move *stream* past a UTF-8 byte-order mark and the whitespace ``str.lstrip`` would remove.
 
     Args:
         stream: A seekable file positioned at its start.

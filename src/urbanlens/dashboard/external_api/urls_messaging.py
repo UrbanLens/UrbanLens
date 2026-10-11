@@ -1,4 +1,5 @@
-"""External-API routes for messaging beyond the first generation.
+"""
+External-API routes for messaging beyond the first generation.
 
 The original messaging routes (``messages/conversations/``, ``messages/groups/…``,
 ``messages/<peer_slug>/…``) predate the split and still live in ``urls.py``; every new messaging

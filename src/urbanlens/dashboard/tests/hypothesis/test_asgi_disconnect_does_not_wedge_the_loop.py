@@ -1,4 +1,5 @@
-"""A request cancelled mid-flight must not freeze the ASGI server.
+"""
+A request cancelled mid-flight must not freeze the ASGI server.
 
 daphne cancels an application task it considers abandoned. If that lands before Django has handled
 the ``http.disconnect``, Django's handler leaves its request task running and exits
@@ -124,7 +125,8 @@ def handler_under(handler_class: type):
 
 
 def _probe(handler_class: str) -> str:
-    """Run the scenario against ``module:Class`` in a subprocess and report its outcome as one line.
+    """
+    Run the scenario against ``module:Class`` in a subprocess and report its outcome as one line.
 
     A subprocess, because a wedged request thread belongs to a ThreadPoolExecutor and the
     interpreter joins those at exit - in-process, a regression would hang the suite, not fail it.

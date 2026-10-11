@@ -1,4 +1,5 @@
-"""A location that moves onto a different place must not keep data derived from the old one.
+"""
+A location that moves onto a different place must not keep data derived from the old one.
 
 HRSH's campus location kept a parcel_buildings cache of 13,018 OSM buildings fetched inside a
 legacy 102.9 km² outline. The boundary repair re-homed the location onto its real 0.47 km² parcel,

@@ -225,7 +225,8 @@ class HitCountRaceConditionTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile, location=self.location)
 
     def test_matched_suggestion_survives_a_write_racing_between_read_and_save(self) -> None:
-        """A second ingest's increment lands between this ingest's read and its save - a
+        """
+        A second ingest's increment lands between this ingest's read and its save - a
         plain `existing.hit_count += weight` would silently overwrite it; the F() expression
         must not."""
         ingest_location_hits(self.profile, [_hit(40.0001, -74.0, "2024-01-01")], origin=PinSuggestionOrigin.IMMICH)
@@ -1204,7 +1205,8 @@ class PinSuggestionAcceptAllViewTests(TestCase):
 
 
 class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
-    """?onboarding=1 (from the map's new-user dialog) highlights "Accept all suggestions"
+    """
+    ?onboarding=1 (from the map's new-user dialog) highlights "Accept all suggestions"
     and shows the one-time explainer banner - a normal visit shows neither."""
 
     def setUp(self) -> None:
@@ -1238,7 +1240,8 @@ class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
 
 
 class PinSuggestionQueueViewSelectMapTests(TestCase):
-    """The Locations page's map/selection UX is shared with Memories > Visits -
+    """
+    The Locations page's map/selection UX is shared with Memories > Visits -
     see pin-select-map.ts. Regression guard for the shared class names."""
 
     def setUp(self) -> None:
@@ -1325,7 +1328,8 @@ class PinSuggestionQueuePaginationTests(TestCase):
 
 
 class ExternalApiHitFieldsTests(TestCase):
-    """description/pin_type/aliases/links carried by external-API hits merge into
+    """
+    description/pin_type/aliases/links carried by external-API hits merge into
     PinSuggestion exactly like suggested_name/sample_assets already do."""
 
     def setUp(self) -> None:
@@ -1353,7 +1357,8 @@ class ExternalApiHitFieldsTests(TestCase):
         )
 
     def test_implies_visit_false_contributes_no_visit_dates(self) -> None:
-        """A discovery submission isn't evidence anyone actually visited - it must
+        """
+        A discovery submission isn't evidence anyone actually visited - it must
         never fabricate a visit date that accept_pin_suggestion would turn into
         a PinVisit."""
         hit = _hit(41.0, -76.0, "2024-02-01", implies_visit=False)
@@ -1412,7 +1417,8 @@ class ExternalApiHitFieldsTests(TestCase):
 
 
 class AcceptPinSuggestionEnrichmentTests(TestCase):
-    """accept_pin_suggestion copies suggested_description/pin_type (only when
+    """
+    accept_pin_suggestion copies suggested_description/pin_type (only when
     blank) and always creates PinAlias/PinLink rows from suggested_aliases/links -
     for both a brand-new pin and one that already matched the suggestion."""
 
@@ -1532,7 +1538,8 @@ class AcceptPinSuggestionEnrichmentTests(TestCase):
         self.assertEqual(PinLink.objects.filter(pin=self.pin).count(), 1)
 
     def test_no_visit_is_created_when_suggestion_has_no_visit_dates(self) -> None:
-        """The correctness invariant that motivated implies_visit=False: accepting
+        """
+        The correctness invariant that motivated implies_visit=False: accepting
         a discovery suggestion must never fabricate a PinVisit."""
         suggestion = PinSuggestion.objects.create(
             profile=self.profile,
@@ -1666,7 +1673,8 @@ class AttachSuggestionPhotosTests(TestCase):
 
 
 class AttachSuggestionPhotosSsrfTests(TestCase):
-    """A submitted photo url is untrusted external-API input - it must never let
+    """
+    A submitted photo url is untrusted external-API input - it must never let
     a caller direct the server's download at an internal address, either
     directly or via a redirect. Mirrors MaterializeMediaItemSsrfTests."""
 

@@ -1,4 +1,5 @@
-"""Provision (or remove) the accounts the on-demand integration suite runs as.
+"""
+Provision (or remove) the accounts the on-demand integration suite runs as.
 
 Idempotent: re-running refreshes the same accounts (new password, new keys) rather than accumulating
 a new pair each time.
@@ -105,7 +106,8 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options) -> None:
-        """Provision or purge, after checking this is somewhere it may run.
+        """
+        Provision or purge, after checking this is somewhere it may run.
 
         Raises:
             CommandError: The environment is production and both locks were not opened, or ``--purge`` was
@@ -161,7 +163,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Point the suite at it with UL_E2E_ACCOUNTS_FILE={path}")
 
     def _write_private(self, path: Path, payload: str) -> Path:
-        """Write *payload* to *path*, readable by its owner alone before any byte of it lands.
+        """
+        Write *payload* to *path*, readable by its owner alone before any byte of it lands.
 
         Owner-only because a manifest holds live credentials and is frequently written to a shared /tmp on a shared
         staging box.
@@ -185,7 +188,8 @@ class Command(BaseCommand):
         return path
 
     def _provision_population(self, options: dict) -> None:
-        """Provision the capacity test's population and write its manifest.
+        """
+        Provision the capacity test's population and write its manifest.
 
         Args:
             options: Parsed command options.
@@ -206,7 +210,8 @@ class Command(BaseCommand):
         )
 
     def _seed(self, result, options: dict) -> dict[str, object]:
-        """Seed the heavy account, if asked, and report what was made.
+        """
+        Seed the heavy account, if asked, and report what was made.
 
         The report goes into the manifest rather than only to stdout because the load harness reads the
         shared label's id out of it.
@@ -285,7 +290,8 @@ class Command(BaseCommand):
         return {role: report}
 
     def _check_environment(self, *, force: bool) -> None:
-        """Refuse to run against production unless both locks in ``guards`` are open.
+        """
+        Refuse to run against production unless both locks in ``guards`` are open.
 
         Args:
             force: Whether ``--force`` was passed.
@@ -303,7 +309,8 @@ class Command(BaseCommand):
         )
 
     def _purge(self, *, execute: bool) -> None:
-        """Delete the provisioned accounts, or report what would be deleted.
+        """
+        Delete the provisioned accounts, or report what would be deleted.
 
         Args:
             execute: Whether to actually delete.
@@ -323,7 +330,8 @@ class Command(BaseCommand):
         self.stdout.write(f"Deleted {len(deleted)} integration account(s): {', '.join(deleted)}")
 
     def _write_text(self, manifest: dict) -> None:
-        """Print the manifest as shell-pasteable environment variables.
+        """
+        Print the manifest as shell-pasteable environment variables.
 
         For the single-account case, where exporting three variables is less
         ceremony than writing a file and pointing at it.
@@ -345,7 +353,8 @@ def _split_roles(raw: str) -> list[str]:
 
 
 def _signup_verify_path(username: str) -> str:
-    """The verification path of a spec's pending signup.
+    """
+    The verification path of a spec's pending signup.
 
     Raises:
         CommandError: The username is not a spec's, or has no pending signup.

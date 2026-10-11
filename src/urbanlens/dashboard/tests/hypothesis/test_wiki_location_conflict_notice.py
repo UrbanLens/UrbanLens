@@ -34,7 +34,8 @@ class WikiLocationConflictNoticeTests(SimpleTestCase):
         )
 
     def test_other_property_name_links_to_its_wiki(self) -> None:
-        """Safe only because the candidate list is pre-filtered to what the
+        """
+        Safe only because the candidate list is pre-filtered to what the
         viewer can already open - see the module docstring."""
         other = _fake_location()
         html = self._render([other])

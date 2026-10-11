@@ -1,4 +1,5 @@
-"""Parcel-or-building scope: what a marker describes, and what it draws.
+"""
+Parcel-or-building scope: what a marker describes, and what it draws.
 A parcel and a building are the same thing for an ordinary house, and calling it either would be drawing a distinction that isn't there - so a marker on a single-building property stays neutral and shows both outlines, exactly as it always has."""
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ logger = logging.getLogger(__name__)
 
 
 def pin_type_for_place(place: Place | None) -> str | None:
-    """The marker type a place implies, or None when it implies nothing.
+    """
+    The marker type a place implies, or None when it implies nothing.
 
     Args:
         place: The resolved place, or None.
@@ -40,7 +42,8 @@ def pin_type_for_place(place: Place | None) -> str | None:
 
 
 def outline_applies(place: Place, boundary_type: str) -> bool:
-    """Whether a marker on this place has an outline of this type at all, known or not.
+    """
+    Whether a marker on this place has an outline of this type at all, known or not.
 
     Args:
         place: The resolved place.
@@ -61,7 +64,8 @@ def outline_applies(place: Place, boundary_type: str) -> bool:
 
 
 def place_polygon(place: Place | None, boundary_type: str) -> MultiPolygon | None:
-    """The outline a place contributes for one boundary type.
+    """
+    The outline a place contributes for one boundary type.
 
     Args:
         place: The resolved place, or None.
@@ -81,7 +85,8 @@ def place_polygon(place: Place | None, boundary_type: str) -> MultiPolygon | Non
 
 
 def parcel_polygon_for_location(location) -> MultiPolygon | None:
-    """The real parcel outline a coordinate stands on, or None.
+    """
+    The real parcel outline a coordinate stands on, or None.
     Callers that need a shape to *draw* should use ``Boundary.objects.resolve_for_*`` instead, which does fall back.
 
     Args:
@@ -110,7 +115,8 @@ SCOPE_BADGES: dict[str, tuple[str, str]] = {
 
 
 def scope_badge(target: Pin | Wiki) -> dict[str, str]:
-    """Badge context for a marker's header, empty when there's nothing to say.
+    """
+    Badge context for a marker's header, empty when there's nothing to say.
 
     Args:
         target: The pin or wiki being rendered.
@@ -126,7 +132,8 @@ def scope_badge(target: Pin | Wiki) -> dict[str, str]:
 
 
 def implied_pin_type(target: Pin | Wiki) -> str | None:
-    """The type a marker's place implies for it, or None when the place implies nothing.
+    """
+    The type a marker's place implies for it, or None when the place implies nothing.
 
     A child stored as a building on a multi-building parcel is one of that parcel's buildings. Its own building
     place may have no footprint, and the shared Location is placed only by containment, so the parcel is often
@@ -149,7 +156,8 @@ def implied_pin_type(target: Pin | Wiki) -> str | None:
 
 
 def effective_pin_type(target: Pin | Wiki) -> str:
-    """The type a pin or wiki actually reads as, user choice included.
+    """
+    The type a pin or wiki actually reads as, user choice included.
 
     Args:
         target: The pin or wiki being rendered.

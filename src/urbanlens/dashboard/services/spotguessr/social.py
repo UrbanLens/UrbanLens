@@ -18,7 +18,8 @@ def friend_profiles(profile: Profile) -> list[Profile]:
 
 
 def visible_friend_ratings(profile: Profile) -> list[dict]:
-    """Each visible friend's most-recently-played mode rating, excluding anyone who has opted out.
+    """
+    Each visible friend's most-recently-played mode rating, excluding anyone who has opted out.
 
     Returns:
         A list of ``{"profile": Profile, "rating": PlayerModeRating | None}`` dicts, one per visible friend - friends who haven't played yet still appear, with ``rating=None``, since the opt-out is about visibility, not about hiding the fact that a friend hasn't played."""

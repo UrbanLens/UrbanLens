@@ -79,7 +79,8 @@ class ConsentScreenTests(TestCase):
 
 
 class ConsentScreenFormActionTests(TestCase):
-    """The consent form's POST answers with a redirect to the client, which ``form-action`` governs too.
+    """
+    The consent form's POST answers with a redirect to the client, which ``form-action`` governs too.
 
     Chrome refuses a form submission whose redirect leaves ``form-action``, so a consent page sent
     with the site's ``'self'``-only policy strands every native sign-in at the Authorize button.

@@ -1,4 +1,5 @@
-"""Merging duplicate building places - one real building recorded as two ``Place`` rows - into one (REData P98).
+"""
+Merging duplicate building places - one real building recorded as two ``Place`` rows - into one (REData P98).
 
 REData keyed Overture buildings on a content hash that changed whenever a release reshaped or renamed a building, so
 one building could be provisioned twice: once under an old hash, once under the next (or under its stable
@@ -65,7 +66,8 @@ _SUGGESTION_REASON = "Both pins are on the same building, which had been recorde
 
 @dataclass(slots=True)
 class DuplicateGroup:
-    """Places REData's identity record says are one building, with the one that stays.
+    """
+    Places REData's identity record says are one building, with the one that stays.
 
     Attributes:
         stable_ref: The building's ``overture:<gers_id>``.
@@ -90,7 +92,8 @@ class DuplicateGroup:
 
 @dataclass(frozen=True, slots=True)
 class Finding:
-    """A possible duplicate that is reported and left alone.
+    """
+    A possible duplicate that is reported and left alone.
 
     Attributes:
         kind: One of the finding kinds above.
@@ -123,7 +126,8 @@ def _link(
     locate_parcel: overture_refs.ParcelLocator | None,
     buildings_by_parcel: dict[str, list[dict[str, Any]] | None],
 ) -> tuple[str, str | None]:
-    """How one legacy-keyed place is tied to a stable ref: by REData's identity record, by footprint, or not at all.
+    """
+    How one legacy-keyed place is tied to a stable ref: by REData's identity record, by footprint, or not at all.
     Mirrors ``overture_refs._classify`` but keeps apart the two ways it can land on a ref, because only one of them is
     proof enough to merge.
 
@@ -200,7 +204,8 @@ def _source(place: Place) -> str:
 
 
 def _cross_source_pairs() -> list[tuple[int, int]]:
-    """Current building places whose outlines hold each other's centroids, as id pairs (any source, filtered later).
+    """
+    Current building places whose outlines hold each other's centroids, as id pairs (any source, filtered later).
     The same mutual-centroid test ``provisioning.find_matching_place`` uses, in one indexed self-join instead of a
     query per place.
     """
@@ -254,7 +259,8 @@ def detect_duplicate_buildings(
     fetch_buildings: overture_refs.BuildingsFetcher | None = None,
     locate_parcel: overture_refs.ParcelLocator | None = None,
 ) -> Detection:
-    """Find duplicate building places: the groups safe to merge, and everything else worth a person's look.
+    """
+    Find duplicate building places: the groups safe to merge, and everything else worth a person's look.
     Read-only, apart from REData lookups.
 
     Args:
@@ -305,7 +311,8 @@ def detect_duplicate_buildings(
 
 
 def plan_group(group: DuplicateGroup) -> dict[int, dict[str, Any]]:
-    """What merging *group* would move, per loser, without writing anything.
+    """
+    What merging *group* would move, per loser, without writing anything.
 
     Args:
         group: A group from :func:`detect_duplicate_buildings`.
@@ -426,7 +433,8 @@ def _move_place_rows(survivor: Place, loser: Place, moved: dict[str, Any], dropp
 
 
 def _merge_place(survivor: Place, loser: Place, group: DuplicateGroup) -> PlaceMerge:
-    """Fold one loser into the survivor and mark it superseded.
+    """
+    Fold one loser into the survivor and mark it superseded.
 
     Returns:
         The audit record.
@@ -472,7 +480,8 @@ def _are_nested(first: Pin, second: Pin) -> bool:
 
 
 def _suggest_pin_merges(survivor: Place, origins: dict[int, int]) -> list[int]:
-    """Ask each owner left with a building pin from each side whether to merge them. Never merges a pin itself.
+    """
+    Ask each owner left with a building pin from each side whether to merge them. Never merges a pin itself.
 
     Args:
         survivor: The place that stayed.
@@ -501,7 +510,8 @@ def _suggest_pin_merges(survivor: Place, origins: dict[int, int]) -> list[int]:
 
 
 def merge_group(group: DuplicateGroup) -> list[PlaceMerge]:
-    """Merge every loser of *group* into its survivor, in one transaction.
+    """
+    Merge every loser of *group* into its survivor, in one transaction.
     Idempotent: a loser already superseded, or already recorded as merged, is skipped, so a second run writes nothing.
 
     Args:

@@ -18,7 +18,8 @@ _METRIC = "pins_created"
 
 
 class AchievementCatalogueRowCostTests(RenderTimeScalingMixin, TestCase):
-    """The full award catalogue lists every active achievement with no cap or slice.
+    """
+    The full award catalogue lists every active achievement with no cap or slice.
 
     P69 left it that way on the theory that the number of awards the site defines (not account
     age) bounds it, not because a row was measured and found cheap.
@@ -32,7 +33,8 @@ class AchievementCatalogueRowCostTests(RenderTimeScalingMixin, TestCase):
         self.client.force_login(self.user)
 
     def seed_rows(self, count: int) -> None:
-        """Add *count* more active, non-secret achievements on the same metric.
+        """
+        Add *count* more active, non-secret achievements on the same metric.
 
         Args:
             count: How many rows to add.

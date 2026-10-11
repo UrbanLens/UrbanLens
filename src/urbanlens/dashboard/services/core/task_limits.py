@@ -1,4 +1,5 @@
-"""Time limits for Celery tasks: a default per queue, a ceiling per queue, and a soft limit ``except Exception`` cannot swallow.
+"""
+Time limits for Celery tasks: a default per queue, a ceiling per queue, and a soft limit ``except Exception`` cannot swallow.
 
 A task that declares no limit inherits its queue's default through :class:`QueueTimeLimits` (the
 ``task_annotations`` setting), so an interactive task no longer inherits the hour-long global limit.
@@ -45,7 +46,8 @@ class TimeLimits(NamedTuple):
 
 
 def queue_defaults() -> dict[str, TimeLimits]:
-    """The limits a task on each queue gets when it declares none.
+    """
+    The limits a task on each queue gets when it declares none.
 
     Returns:
         Limits keyed by queue name. A queue missing here uses the global ``CELERY_TASK_*_TIME_LIMIT``.
@@ -67,7 +69,8 @@ BATCH_CEILING_SECONDS = 6600
 
 
 def queue_ceilings() -> dict[str, int]:
-    """The longest hard limit a task on each queue may declare.
+    """
+    The longest hard limit a task on each queue may declare.
 
     Returns:
         Ceilings keyed by queue name. Every other queue is capped at :data:`BATCH_CEILING_SECONDS`.
@@ -89,7 +92,8 @@ def global_limits() -> TimeLimits:
 
 
 def ceiling_for(queue: str) -> int:
-    """The longest hard limit allowed on ``queue``.
+    """
+    The longest hard limit allowed on ``queue``.
 
     Args:
         queue: A queue name.
@@ -104,7 +108,8 @@ class QueueTimeLimits:
     """A ``task_annotations`` entry giving each task its queue's default limits, unless it declares its own."""
 
     def annotate(self, task: Task) -> dict[str, int] | None:
-        """The limits to set on ``task``.
+        """
+        The limits to set on ``task``.
 
         Args:
             task: A task class being bound to the app.
@@ -144,7 +149,8 @@ def current_task_deadline() -> float | None:
 
 @contextmanager
 def task_deadline(deadline: float | None) -> Iterator[None]:
-    """Hold outbound calls inside the block to ``deadline``, unless an earlier one is already in force.
+    """
+    Hold outbound calls inside the block to ``deadline``, unless an earlier one is already in force.
 
     Args:
         deadline: A ``time.monotonic()`` value, or None to leave the current deadline as it is.
@@ -164,7 +170,8 @@ def task_deadline(deadline: float | None) -> Iterator[None]:
 
 
 def check_task_deadline() -> None:
-    """Raise :class:`TaskSoftTimeLimit` when the running task is past its soft limit.
+    """
+    Raise :class:`TaskSoftTimeLimit` when the running task is past its soft limit.
 
     Raises:
         TaskSoftTimeLimit: The deadline has passed.
@@ -175,7 +182,8 @@ def check_task_deadline() -> None:
 
 
 def within_task_deadline[T](timeout: T) -> T | float | tuple[float | None, ...]:
-    """A ``requests`` timeout shortened so the call cannot outlast the running task's soft limit.
+    """
+    A ``requests`` timeout shortened so the call cannot outlast the running task's soft limit.
 
     ``requests`` bounds each phase, not the whole call, so a response trickling in can still run past it; the next
     outbound call then refuses.
@@ -205,7 +213,8 @@ def _raise_soft_limit(signum: int, frame: FrameType | None) -> None:
 
 @contextmanager
 def soft_limit_escapes_broad_handlers() -> Iterator[None]:
-    """Raise :class:`TaskSoftTimeLimit` instead of ``SoftTimeLimitExceeded`` for the duration of the block.
+    """
+    Raise :class:`TaskSoftTimeLimit` instead of ``SoftTimeLimitExceeded`` for the duration of the block.
 
     Only in a prefork child's main thread, where billiard installed its own handler; anywhere else (a web
     process, a thread pool, an eager test) the signal is left as it is. Billiard's handler is restored on the

@@ -21,7 +21,8 @@ def resolve_visible_identity(
     placeholder: str = DEFAULT_MASKED_PLACEHOLDER,
     visible_pks: set[int] | None = None,
 ) -> dict[str, Any]:
-    """Return how ``subject`` should be displayed to ``viewer`` right now.
+    """
+    Return how ``subject`` should be displayed to ``viewer`` right now.
 
     Args:
         viewer: The profile viewing the shared space, or None for an anonymous/system viewer (always masked, unless ``subject`` allows ``ANYONE``).
@@ -53,7 +54,8 @@ def resolve_visible_identity(
 
 
 def resolve_identity_for_viewers(subject: Profile, viewers: Sequence[Profile], *, placeholder: str = DEFAULT_MASKED_PLACEHOLDER) -> dict[int, dict[str, Any]]:
-    """One person's identity, as each of many viewers would see it.
+    """
+    One person's identity, as each of many viewers would see it.
 
     Args:
         subject: The profile being displayed.
@@ -74,7 +76,8 @@ def resolve_identity_for_viewers(subject: Profile, viewers: Sequence[Profile], *
 
 
 def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profile]) -> dict[int, dict[str, Any]]:
-    """Resolve display identity for several people shown together in one list.
+    """
+    Resolve display identity for several people shown together in one list.
     Two people masked in the same list would otherwise both show the exact same generic placeholder and the same flat fallback-avatar color, reading as the same person twice.
 
     Args:
@@ -111,7 +114,8 @@ def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profil
 
 
 def mask_profile_references(viewer: Profile | None, refs: Iterable[Profile]) -> None:
-    """Resolve and apply masked identity across EVERY reference to the same profiles.
+    """
+    Resolve and apply masked identity across EVERY reference to the same profiles.
 
     Args:
         viewer: The profile viewing the shared space.

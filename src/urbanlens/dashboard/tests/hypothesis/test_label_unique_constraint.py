@@ -15,7 +15,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 
 
 def _migration_0042():
-    """Load the module holding the 0042 merge logic, by path since it starts with a digit.
+    """
+    Load the module holding the 0042 merge logic, by path since it starts with a digit.
 
     The 0042 data migration was squashed into 0030_v0_7_0.py, which still
     defines ``_merge`` and ``_0042_merge_duplicate_labels`` under those names.
@@ -63,7 +64,8 @@ class LabelUniqueConstraintTests(TestCase):
         self.assertEqual(Label.objects.filter(name__iexact="ZzAudit Abandoned", kind=KIND_TAG).count(), 2)
 
     def test_two_global_labels_cannot_share_a_name(self) -> None:
-        """``profile IS NULL`` twice: Postgres treats NULLs as distinct unless the
+        """
+        ``profile IS NULL`` twice: Postgres treats NULLs as distinct unless the
         constraint says otherwise, so this is what ``nulls_distinct=False`` buys."""
         Label.objects.create(profile=None, name="ZzAudit Bridge", kind=KIND_TAG)
 
@@ -90,12 +92,14 @@ class LabelUniqueConstraintTests(TestCase):
 
 
 class LabelDuplicateMergeTests(TestCase):
-    """The 0042 data pass, exercised by running its function against real rows.
+    """
+    The 0042 data pass, exercised by running its function against real rows.
 
     The constraint is already applied in the test database, so duplicates cannot be created through the ORM."""
 
     def setUp(self) -> None:
-        """Drop the constraint, then build fixtures under it.
+        """
+        Drop the constraint, then build fixtures under it.
 
         A duplicate cannot be produced through the ORM once 0042 has run - that is the point of the migration -
         so reproducing what the beta databases contain means removing the constraint first."""
@@ -130,7 +134,8 @@ class LabelDuplicateMergeTests(TestCase):
         self.assertIn(pin.pk, keep.pins.values_list("pk", flat=True), "the pin should have moved to the survivor")
 
     def test_a_pin_carrying_both_labels_does_not_break_the_move(self) -> None:
-        """The through table is unique on (pin, label); a naive UPDATE would
+        """
+        The through table is unique on (pin, label); a naive UPDATE would
         collide the moment the second row was repointed."""
         from django.db import connection
 
@@ -148,7 +153,8 @@ class LabelDuplicateMergeTests(TestCase):
 
 
 class LabelConflictHandlingTests(TestCase):
-    """A colliding name must produce a message, not an IntegrityError 500.
+    """
+    A colliding name must produce a message, not an IntegrityError 500.
 
     The constraint alone turns a duplicate name into a database error, which reaches the user as a 500 with no
     indication of what went wrong."""
@@ -170,7 +176,8 @@ class LabelConflictHandlingTests(TestCase):
         self.assertIn("already have", response.content.decode().lower())
 
     def test_the_refusal_is_case_insensitive(self) -> None:
-        """Matching the constraint - an exact-match-only check would let this
+        """
+        Matching the constraint - an exact-match-only check would let this
         through and then fail at the database."""
         from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label
 
@@ -224,7 +231,8 @@ class LabelConflictHandlingTests(TestCase):
         self.assertIsNone(find_conflicting_label(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG))
 
     def test_converting_a_kind_into_a_taken_name_is_refused(self) -> None:
-        """The least obvious collision: the name is unchanged, the *kind* moves.
+        """
+        The least obvious collision: the name is unchanged, the *kind* moves.
 
         A tag called "Bridge" converted to a category collides with an existing category "Bridge" - so the check
         has to use the incoming ``new_kind``, not the label's current one."""

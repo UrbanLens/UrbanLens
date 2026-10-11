@@ -59,7 +59,8 @@ class BlockRevokesMapShareTests(TestCase):
         )
 
     def test_an_unrelated_share_involving_the_blocked_profile_is_untouched(self) -> None:
-        """Scoping must hold from the blocked profile's side too, not just the blocker's.
+        """
+        Scoping must hold from the blocked profile's side too, not just the blocker's.
 
         A filter written as "wipe every share the blocked profile is party to" (ignoring who the blocker is)
         would pass every other test in this file, since none of them give the blocked profile a share with
@@ -75,7 +76,8 @@ class BlockRevokesMapShareTests(TestCase):
         )
 
     def test_all_shares_between_the_pair_are_revoked_not_just_one(self) -> None:
-        """The delete must be a bulk queryset delete, not "find one match and stop".
+        """
+        The delete must be a bulk queryset delete, not "find one match and stop".
 
         Both directions exist simultaneously here so a `.first()`-then-delete regression - which every
         single-share test above would still pass - gets caught: one of the two rows would survive."""

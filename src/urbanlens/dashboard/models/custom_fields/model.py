@@ -1,4 +1,5 @@
-"""Custom field models - user-defined fields attachable to pins, photos, people, and maps.
+"""
+Custom field models - user-defined fields attachable to pins, photos, people, and maps.
 A :class:`CustomField` is a private, per-user field *definition* (e.g.
 Both are only ever visible to the field's owner - custom fields are a personal organization tool, never shared or community data.
 """
@@ -42,7 +43,8 @@ logger = logging.getLogger(__name__)
 
 
 class CustomFieldEntity(TextChoices):
-    """The kinds of objects a custom field can be defined for.
+    """
+    The kinds of objects a custom field can be defined for.
 
     Each entity maps to one nullable FK on :class:`CustomFieldValue`. New
     entities may be added over time (trips, visits, ...).
@@ -68,7 +70,8 @@ class CustomFieldType(TextChoices):
 
 
 class CustomFieldDisplay(TextChoices):
-    """Where a field appears on the Private Pin page.
+    """
+    Where a field appears on the Private Pin page.
 
     Only meaningful for pin fields today - other entity types render in
     compact strips with no section layout to place a field into.
@@ -80,7 +83,8 @@ class CustomFieldDisplay(TextChoices):
 
 
 class CustomFieldStyle(TextChoices):
-    """Presentation styles for a custom field's value input.
+    """
+    Presentation styles for a custom field's value input.
 
     Which styles apply depends on the field type (see :data:`STYLES_BY_TYPE`);
     an empty ``CustomField.style`` means the type's default style.
@@ -147,7 +151,8 @@ ENTITY_ICONS: dict[str, str] = {
 
 
 class CustomField(abstract.FrontendDashboardModel):
-    """A user-defined field definition for one entity type.
+    """
+    A user-defined field definition for one entity type.
     Custom fields are private to their owning profile: only the owner sees them, their values, and the filter controls they add to the map.
 
     Attributes:
@@ -221,7 +226,8 @@ class CustomField(abstract.FrontendDashboardModel):
 
     @property
     def effective_style(self) -> str:
-        """The presentation style in effect, resolving blank to the type default.
+        """
+        The presentation style in effect, resolving blank to the type default.
 
         Returns:
             A :class:`CustomFieldStyle` value, or "" for types with a single
@@ -248,7 +254,8 @@ class CustomField(abstract.FrontendDashboardModel):
 
     @property
     def reference_kind(self) -> str:
-        """The configured target kind for a reference field ("" for other types).
+        """
+        The configured target kind for a reference field ("" for other types).
 
         Returns:
             A ``services.custom_fields.custom_field_references.REFERENCE_KINDS`` value, or ""
@@ -269,7 +276,8 @@ class CustomField(abstract.FrontendDashboardModel):
         return dict(REFERENCE_KINDS).get(self.reference_kind, "")
 
     def reference_choices(self, *, include_pk: int | None = None) -> list[tuple[int, str]]:
-        """(pk, label) picker choices for this reference field's target kind.
+        """
+        (pk, label) picker choices for this reference field's target kind.
 
         Args:
             include_pk: A pk to force into the list even when past the cap
@@ -288,7 +296,8 @@ class CustomField(abstract.FrontendDashboardModel):
 
     @property
     def fixed_position(self) -> dict[str, float] | None:
-        """The saved drag position of a fixed-display field, clamped to bounds.
+        """
+        The saved drag position of a fixed-display field, clamped to bounds.
 
         Returns:
             ``{"left": ..., "top": ...}`` viewport percentages, or None when the
@@ -344,7 +353,8 @@ def _at_most_one_of(columns: tuple[str, ...]) -> Q:
 
 
 class CustomFieldValueError(ValueError):
-    """A raw value could not be parsed/stored for a custom field.
+    """
+    A raw value could not be parsed/stored for a custom field.
     The message here is for logs, not a response: a caller's HTTP-facing code should catch a specific subclass below (or this base class as a fallback) and author its own user-facing text, rather than relaying the message - that keeps a future raise site here from being able to smuggle unreviewed text into a response just by adding a new ``raise``.
     """
 
@@ -386,7 +396,8 @@ class CustomFieldTextTooLongError(CustomFieldValueError):
 
 
 class ReferenceKindNotConfiguredError(CustomFieldValueError):
-    """This REFERENCE field's ``config["ref_type"]`` is missing or invalid.
+    """
+    This REFERENCE field's ``config["ref_type"]`` is missing or invalid.
 
     A configuration bug on the field definition, not a bad submission - every
     reference field is supposed to have a valid ``ref_type`` from the moment
@@ -399,7 +410,8 @@ class ReferenceTargetNotFoundError(CustomFieldValueError):
 
 
 class CustomFieldValue(abstract.DashboardModel):
-    """The value of one custom field on one target object.
+    """
+    The value of one custom field on one target object.
     Exactly one target FK is set, matching ``field.entity_type``.
     The value is stored in the typed column matching ``field.field_type`` so numbers and dates filter/sort correctly in SQL.
     """
@@ -515,7 +527,8 @@ class CustomFieldValue(abstract.DashboardModel):
 
     @property
     def target(self) -> Pin | Image | Profile | MarkupMap | None:
-        """The object this value is attached to.
+        """
+        The object this value is attached to.
 
         Returns:
             The target model instance, or None when the row is malformed.
@@ -528,7 +541,8 @@ class CustomFieldValue(abstract.DashboardModel):
 
     @property
     def value(self) -> Any:
-        """The typed value, read from the column matching ``field.field_type``.
+        """
+        The typed value, read from the column matching ``field.field_type``.
 
         Returns:
             The stored value as its natural Python type (the referenced model
@@ -590,7 +604,8 @@ class CustomFieldValue(abstract.DashboardModel):
 
     @property
     def link_href(self) -> str:
-        """``value_text`` when it is an http(s) link safe to put in an ``href``, else ``""``.
+        """
+        ``value_text`` when it is an http(s) link safe to put in an ``href``, else ``""``.
 
         ``set_value`` already refuses anything else; this also covers a row written some other way.
         """
@@ -609,7 +624,8 @@ class CustomFieldValue(abstract.DashboardModel):
         return self.display_value
 
     def _storable_number(self, raw: str) -> Decimal:
-        """Parse ``raw`` as ``value_number`` would store it.
+        """
+        Parse ``raw`` as ``value_number`` would store it.
 
         Raises:
             InvalidNumberError: ``raw`` is not a finite number.
@@ -632,7 +648,8 @@ class CustomFieldValue(abstract.DashboardModel):
         return stored
 
     def set_value(self, raw: str) -> None:
-        """Parse and store a raw string value into the typed column for this field.
+        """
+        Parse and store a raw string value into the typed column for this field.
 
         Args:
             raw: User-entered value. Whitespace is stripped.

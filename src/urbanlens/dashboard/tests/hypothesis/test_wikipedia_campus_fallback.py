@@ -1,4 +1,5 @@
-"""P188: the Wikipedia panel's campus fallback reads the places a building stands in, never its owner's pin nesting.
+"""
+P188: the Wikipedia panel's campus fallback reads the places a building stands in, never its owner's pin nesting.
 
 The match lands in the Location's shared ``wikipedia`` row, so whichever article one owner's own nesting picked was
 the article every viewer of the place saw.

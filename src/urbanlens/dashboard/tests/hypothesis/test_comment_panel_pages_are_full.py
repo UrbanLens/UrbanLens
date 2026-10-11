@@ -1,4 +1,5 @@
-"""A page of the comments panel holds a page's worth of comments.
+"""
+A page of the comments panel holds a page's worth of comments.
 
 The panel paged its queryset in SQL and *then* dropped rows in Python, because
 the visibility gates were only answerable there. A viewer who could not see

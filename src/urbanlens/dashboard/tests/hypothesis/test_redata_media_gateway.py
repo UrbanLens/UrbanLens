@@ -119,7 +119,8 @@ def _date_entry(captured_on: str, provider: str = "", **representative: object) 
 
 
 class _ProviderSlideMappingMixin(_MixinBase):
-    """Shared assertions for each thin street-view provider, run against a
+    """
+    Shared assertions for each thin street-view provider, run against a
     mocked ``RedataStreetViewGateway.get_timeline`` so these stay pure unit tests."""
 
     provider_cls: type[StreetViewProvider]
@@ -200,7 +201,8 @@ class _ProviderSlideMappingMixin(_MixinBase):
         self.assertEqual(self.provider_cls.service_key, self.redata_provider)
 
     def test_a_gateway_failure_propagates_rather_than_being_swallowed(self) -> None:
-        """The street-view carousel's own collector already tolerates one
+        """
+        The street-view carousel's own collector already tolerates one
         provider raising (see ``collect_street_view_slides``) - this provider
         must not duplicate that handling by swallowing the error itself."""
         with (

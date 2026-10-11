@@ -1,4 +1,5 @@
-"""Flickr API gateway.
+"""
+Flickr API gateway.
 Unlike Immich, Flickr's ``flickr.photos.search`` filters by geo radius **server-side** (``lat``/``lon``/``radius``), so no local haversine post-filtering is needed here."""
 
 from __future__ import annotations
@@ -41,7 +42,8 @@ class FlickrPhoto:
 
 @dataclass(slots=True, kw_only=True)
 class FlickrGateway(Gateway):
-    """REST client for one user's Flickr account.
+    """
+    REST client for one user's Flickr account.
 
     Attributes:
         account: The user's stored Flickr OAuth token pair.
@@ -56,7 +58,8 @@ class FlickrGateway(Gateway):
         Gateway.__post_init__(self)
 
     def _auth(self) -> OAuth1:
-        """Build the per-request OAuth1 signer for this account.
+        """
+        Build the per-request OAuth1 signer for this account.
 
         Returns:
             An ``OAuth1`` auth callable for use as ``requests``' ``auth=``.
@@ -72,7 +75,8 @@ class FlickrGateway(Gateway):
         )
 
     def _call(self, method: str, *, extra_params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Call one ``flickr.*`` REST method and return its decoded JSON body.
+        """
+        Call one ``flickr.*`` REST method and return its decoded JSON body.
 
         Args:
             method: The Flickr API method name (e.g. ``flickr.photos.search``).
@@ -99,7 +103,8 @@ class FlickrGateway(Gateway):
         return body
 
     def whoami(self) -> tuple[str, str | None]:
-        """Verify the stored token and return the connected Flickr user's identity.
+        """
+        Verify the stored token and return the connected Flickr user's identity.
 
         Returns:
             Tuple of (user NSID, username or None).
@@ -112,7 +117,8 @@ class FlickrGateway(Gateway):
         return user["id"], username
 
     def _search(self, extra_params: dict[str, Any]) -> list[FlickrPhoto]:
-        """Run one ``flickr.photos.search`` query scoped to the connected user.
+        """
+        Run one ``flickr.photos.search`` query scoped to the connected user.
 
         Args:
             extra_params: Method-specific search parameters (geo radius, date
@@ -141,7 +147,8 @@ class FlickrGateway(Gateway):
         ]
 
     def search_near(self, lat: float, lon: float, radius_km: float) -> list[FlickrPhoto]:
-        """Search the connected user's own photos within a radius of a point.
+        """
+        Search the connected user's own photos within a radius of a point.
 
         Args:
             lat: Latitude of the search center.
@@ -157,7 +164,8 @@ class FlickrGateway(Gateway):
         return self._search({"lat": f"{lat:.6f}", "lon": f"{lon:.6f}", "radius": f"{min(radius_km, 32):.3f}", "radius_units": "km"})
 
     def search_by_dates(self, dates: Sequence[datetime.date]) -> list[FlickrPhoto]:
-        """Return the user's own photos taken on any of the given calendar dates.
+        """
+        Return the user's own photos taken on any of the given calendar dates.
 
         Args:
             dates: Calendar dates to search, in the account's local time.
@@ -176,7 +184,8 @@ class FlickrGateway(Gateway):
         return list(seen.values())
 
     def list_recent(self, limit: int = _DEFAULT_RECENT_LIMIT) -> list[FlickrPhoto]:
-        """Return the user's most recently taken photos, with no filter applied.
+        """
+        Return the user's most recently taken photos, with no filter applied.
 
         Args:
             limit: Maximum number of photos to return (Flickr caps a single
@@ -191,7 +200,8 @@ class FlickrGateway(Gateway):
         return self._search({"sort": "date-taken-desc", "per_page": str(min(limit, 500))})
 
     def get_original(self, photo_id: str, fallback_url: str | None = None) -> tuple[bytes, str, str]:
-        """Download a photo's original file.
+        """
+        Download a photo's original file.
         Uses ``fallback_url`` (the search result's ``url_o``) when given, to avoid an extra API call; falls back to ``flickr.photos.getSizes`` when the owner has disabled original downloads and no ``url_o`` was returned.
 
         Args:
@@ -219,7 +229,8 @@ class FlickrGateway(Gateway):
         return read_capped(response, max_bytes=max_upload_file_size_bytes(), what="Flickr photo"), filename, content_type
 
     def _largest_available_url(self, photo_id: str) -> str:
-        """Return the largest size URL Flickr will serve for a photo.
+        """
+        Return the largest size URL Flickr will serve for a photo.
 
         Args:
             photo_id: The Flickr photo id.

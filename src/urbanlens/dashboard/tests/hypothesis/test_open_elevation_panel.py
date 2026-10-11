@@ -1,4 +1,5 @@
-"""Tests for the Elevation panel's render_context(), fetch(), and gate().
+"""
+Tests for the Elevation panel's render_context(), fetch(), and gate().
 
 Covers the pin-detail "Elevation" info panel, now sourced through REData's
 ``/elevation/`` endpoint instead of a direct Open-Elevation call.

@@ -39,7 +39,8 @@ class SavedFilterUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[SavedFilter]:
-        """Recreate the saved filters.
+        """
+        Recreate the saved filters.
 
         Raises:
             UndoExpiredError: If the owning profile was deleted during the retention window, or the filter's name has since been used for another of that profile's filters - ``uq_saved_filter_profile_name`` would otherwise surface as an uncaught..."""

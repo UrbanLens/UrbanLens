@@ -1,4 +1,5 @@
-"""Turning Celery's event stream into Prometheus metrics.
+"""
+Turning Celery's event stream into Prometheus metrics.
 Per-task outcome and duration need the worker to say what it did, and the workers cannot be scraped: ``media-worker`` and ``media-worker-batch`` run ``cap_drop: ALL`` on an isolated network specifically so they have no inbound surface."""
 
 from __future__ import annotations
@@ -32,11 +33,13 @@ RUNTIME_BUCKETS = (0.1, 0.5, 1.0, 5.0, 15.0, 60.0, 300.0, 900.0, 3600.0, float("
 
 
 class CeleryEventMetrics:
-    """Prometheus metrics fed by Celery worker events.
+    """
+    Prometheus metrics fed by Celery worker events.
     Holds its own registry rather than using the global default, so a test can build one per case and assert on it without the leakage that makes module-level metrics awkward to test."""
 
     def __init__(self, registry: CollectorRegistry | None = None, max_task_labels: int = MAX_TASK_LABELS) -> None:
-        """Build the metric families.
+        """
+        Build the metric families.
 
         Args:
             registry: Registry to attach to; a fresh one when omitted.
@@ -73,7 +76,8 @@ class CeleryEventMetrics:
         )
 
     def task_label(self, name: str | None) -> str:
-        """Map a task name from the wire onto a bounded label value.
+        """
+        Map a task name from the wire onto a bounded label value.
 
         Args:
             name: Task name as the worker reported it, possibly ``None`` when
@@ -93,7 +97,8 @@ class CeleryEventMetrics:
         return name
 
     def on_task_event(self, event: dict[str, Any], task_name: str | None) -> None:
-        """Record one task event.
+        """
+        Record one task event.
 
         Args:
             event: The raw Celery event mapping. ``type`` names the transition;
@@ -122,7 +127,8 @@ class CeleryEventMetrics:
                 self.task_runtime.labels(task=label).observe(float(runtime))
 
     def on_worker_count(self, count: int) -> None:
-        """Record how many workers are currently heartbeating.
+        """
+        Record how many workers are currently heartbeating.
 
         Args:
             count: Number of workers Celery's state considers alive.

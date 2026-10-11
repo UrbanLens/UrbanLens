@@ -72,7 +72,8 @@ class WithdrawnContributionTests(TestCase):
         self.assertEqual(ReputationEvent.objects.for_profile(self.profile).total_value(), Decimal(0))
 
     def test_someone_elses_removal_does_not_retract(self) -> None:
-        """The one-way rule: only the contributor ending their own contribution counts.
+        """
+        The one-way rule: only the contributor ending their own contribution counts.
 
         The same rule the quota bonus follows - votes withdrawn, a moderator removing the photo, or the
         low-engagement sweep must all leave the contributor's standing alone."""
@@ -87,7 +88,8 @@ class WithdrawnContributionTests(TestCase):
         self.assertEqual(ReputationEvent.objects.for_profile(self.profile).total_value(), Decimal(5))
 
     def test_lifetime_earned_is_not_reduced_by_a_retraction(self) -> None:
-        """Retraction lowers standing, never history.
+        """
+        Retraction lowers standing, never history.
 
         `recompute_total`'s docstring is explicit that `lifetime_earned` ignores retraction, so that reverting
         somebody's contributions cannot take away access they already had."""
@@ -106,7 +108,8 @@ class WithdrawnContributionTests(TestCase):
 
 
 class RemovalWeightTests(TestCase):
-    """A weight reduces standing without erasing the contribution (D9).
+    """
+    A weight reduces standing without erasing the contribution (D9).
 
     The middle ground `retract_event` cannot express: it is a boolean, so it takes the whole value."""
 
@@ -156,7 +159,8 @@ class RemovalWeightTests(TestCase):
         self.assertEqual(self._total(), Decimal(10))
 
     def test_a_weight_does_not_reduce_lifetime_earned(self) -> None:
-        """Standing moves; access already earned does not.
+        """
+        Standing moves; access already earned does not.
 
         `recompute_total` ignores retraction for `lifetime_earned` so reverting contributions cannot take away
         access someone already had."""
@@ -185,7 +189,8 @@ class RemovalWeightTests(TestCase):
 
 
 class CascadeKeepsBenefitsTests(TestCase):
-    """A cascade must not strip a contributor who did nothing.
+    """
+    A cascade must not strip a contributor who did nothing.
 
     Err on the side of keeping positive benefits awarded to users who
     contributed rather than stripping them. This is the test that stops a
@@ -221,7 +226,8 @@ class CascadeKeepsBenefitsTests(TestCase):
 
 
 class WikiCommentDeleteRetractionTests(TestCase):
-    """Deleting your own wiki comment retracts its points, like withdrawing a photo.
+    """
+    Deleting your own wiki comment retracts its points, like withdrawing a photo.
 
     `WikiCommentDeleteView` is author-only - it 403s when `comment.profile` is not the caller - so every
     deletion through it is the contributor ending their own contribution."""
@@ -263,7 +269,8 @@ class WikiCommentDeleteRetractionTests(TestCase):
         self.assertEqual(ReputationEvent.objects.for_profile(self.profile).total_value(), Decimal(4))
 
     def test_somebody_elses_comment_cannot_be_deleted_here_at_all(self) -> None:
-        """Why this view retracts outright rather than weighting.
+        """
+        Why this view retracts outright rather than weighting.
 
         There is no moderator path through it, so every deletion it performs is a withdrawal and D9's weighted
         case has no site here to hook."""
@@ -283,7 +290,8 @@ class WikiCommentDeleteRetractionTests(TestCase):
 
 
 class WikiEditRevertReputationTests(TestCase):
-    """Reverting a wiki edit is not author-only, unlike deleting a comment.
+    """
+    Reverting a wiki edit is not author-only, unlike deleting a comment.
 
     `LocationWikiRevertView` shows its Revert button to any viewer with wiki access (the sibling Expunge button
     beside it is the author-only one), so a non-author reverting somebody else's edit is a real, live path - not

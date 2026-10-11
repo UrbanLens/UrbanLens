@@ -8,7 +8,8 @@ from typing import Protocol
 
 @dataclass(frozen=True, slots=True)
 class DebugEntry:
-    """One external-API result's provenance, for the admin debug overlay.
+    """
+    One external-API result's provenance, for the admin debug overlay.
 
     Attributes:
         source: Short identifier for the data source (e.g. ``"wikipedia"``, ``"esri"``).
@@ -23,7 +24,8 @@ class DebugEntry:
 
 
 class _PermissionCheckableUser(Protocol):
-    """Structural type for a user object that supports permission checks.
+    """
+    Structural type for a user object that supports permission checks.
     Matches both the concrete ``User`` model (via ``PermissionsMixin``) and ``AnonymousUser`` without depending on either directly -- plain ``AbstractBaseUser`` alone doesn't define ``has_perm``."""
 
     @property
@@ -33,7 +35,8 @@ class _PermissionCheckableUser(Protocol):
 
 
 def can_view_debug_overlay(user: _PermissionCheckableUser) -> bool:
-    """Whether ``user`` may see external-API query/cache-status debug info.
+    """
+    Whether ``user`` may see external-API query/cache-status debug info.
 
     Args:
         user: The current request user.

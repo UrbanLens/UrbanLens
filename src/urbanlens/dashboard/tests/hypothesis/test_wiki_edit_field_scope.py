@@ -49,7 +49,8 @@ class WikiEditFieldScopeTests(TestCase):
         self.assertEqual(self.wiki.cover_photo_id, photo.pk, "an edit reset a field owned by a different writer")
 
     def test_a_revert_does_not_clobber_a_field_it_deliberately_skipped(self) -> None:
-        """The complement to ``revert_edit_fields``' own conflict check.
+        """
+        The complement to ``revert_edit_fields``' own conflict check.
 
         That check leaves a field alone when someone changed it since."""
         target = apply_wiki_edit(self._snapshot(), self.editor, {"name": "Mill Complex"})

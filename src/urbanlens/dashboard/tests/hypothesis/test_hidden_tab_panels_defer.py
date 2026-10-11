@@ -1,4 +1,5 @@
-"""A tab panel's content loads when its tab opens, not with the page (P53).
+"""
+A tab panel's content loads when its tab opens, not with the page (P53).
 
 htmx counts a hidden element as revealed (its bounding box is all zeros), so `revealed` fires for an element inside
 a hidden tab panel as soon as the page is processed, exactly as `load` does. `intersect` waits until it is shown.

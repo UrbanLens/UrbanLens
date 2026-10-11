@@ -1,4 +1,5 @@
-"""Glicko-2 rating math (Glickman, "Example of the Glicko-2 system", 2012).
+"""
+Glicko-2 rating math (Glickman, "Example of the Glicko-2 system", 2012).
 Only the *meaning* of "opponent" and "score" is chosen to fit the game; the algorithm below is the paper's, unmodified."""
 
 from __future__ import annotations
@@ -48,7 +49,8 @@ def _expected_score(mu: float, opponent_mu: float, opponent_phi: float) -> float
 
 
 def rate(rating: Rating, opponents: Sequence[Opponent], *, tau: float = DEFAULT_TAU) -> Rating:
-    """Apply one Glicko-2 rating period update.
+    """
+    Apply one Glicko-2 rating period update.
 
     Args:
         rating: The rating entering the period.
@@ -81,7 +83,8 @@ def rate(rating: Rating, opponents: Sequence[Opponent], *, tau: float = DEFAULT_
 
 
 def _new_volatility(phi: float, sigma: float, v: float, delta: float, tau: float) -> float:
-    """Solve for the period's new volatility via the paper's Illinois-algorithm root find.
+    """
+    Solve for the period's new volatility via the paper's Illinois-algorithm root find.
     (5)) bracketed between the current log-variance and a bound chosen so the root is guaranteed to lie within it, then narrows the bracket until it's within ``CONVERGENCE_TOLERANCE``."""
     a = math.log(sigma**2)
 

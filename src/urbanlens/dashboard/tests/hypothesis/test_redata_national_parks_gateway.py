@@ -39,7 +39,8 @@ class FindParksNearTests(SimpleTestCase):
         self.assertEqual(result, units)
 
     def test_no_providers_block_is_not_required(self) -> None:
-        """This endpoint has no ``providers`` block (pure local-catalog read) -
+        """
+        This endpoint has no ``providers`` block (pure local-catalog read) -
         the envelope parser must not choke on its absence."""
         session = mock.Mock()
         session.get.return_value = _response(200, {"count": 0, "complete": True, "results": []})
@@ -139,7 +140,8 @@ class GetAlertsTests(SimpleTestCase):
         self.assertEqual(result, [])
 
     def test_a_404_propagates_as_unavailable(self) -> None:
-        """The park code was already resolved via ``/parks/nearby/`` - a 404 here means
+        """
+        The park code was already resolved via ``/parks/nearby/`` - a 404 here means
         something unexpected happened, not "no alerts"."""
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
 

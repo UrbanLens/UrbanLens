@@ -29,7 +29,8 @@ def _unrestricted_api_key() -> str:
 
 @dataclass(kw_only=True)
 class GoogleStreetViewMetadataGateway(Gateway):
-    """Street View coverage lookups, ledgered and rate limited apart from billed Street View images.
+    """
+    Street View coverage lookups, ledgered and rate limited apart from billed Street View images.
 
     Attributes:
         api_key: A server-side Google key; the metadata endpoint rejects referrer-restricted ones.
@@ -46,7 +47,8 @@ class GoogleStreetViewMetadataGateway(Gateway):
         return f"{parts.scheme}://{parts.netloc}{parts.path}"
 
     def has_imagery(self, latitude: float, longitude: float) -> bool:
-        """Whether outdoor Street View imagery exists near a point.
+        """
+        Whether outdoor Street View imagery exists near a point.
 
         The point is rounded before it is sent, and the answer is cached per rounded point, so
         repeated right-clicks on one spot ask Google once.

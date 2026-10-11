@@ -105,7 +105,8 @@ class ConsensusRevertPointsTests(TestCase):
         self.assertEqual(self._total(self.author), earned)
 
     def test_an_edit_war_pays_neither_side(self) -> None:
-        """The behaviour the whole change is for.
+        """
+        The behaviour the whole change is for.
 
         Now each pass only moves the one award the original edit earned, back and forth, so neither total can
         grow."""

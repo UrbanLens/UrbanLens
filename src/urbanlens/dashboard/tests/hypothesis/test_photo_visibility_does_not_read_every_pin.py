@@ -1,4 +1,5 @@
-"""Whether two people share a pinned place is one row of evidence, not both of their pin lists.
+"""
+Whether two people share a pinned place is one row of evidence, not both of their pin lists.
 
 ``ANYTHING_IN_COMMON`` is the default on both sides of the photo gate, so every gallery with another uploader in it
 asks "do these two share a place". It used to answer by reading every location the viewer had pinned and every one

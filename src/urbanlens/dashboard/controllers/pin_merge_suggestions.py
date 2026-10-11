@@ -1,4 +1,5 @@
-"""Memories → Locations page: review queue for PinMergeSuggestion rows.
+"""
+Memories → Locations page: review queue for PinMergeSuggestion rows.
 
 Suggestions are raised by whatever trigger detects two of a profile's own pins
 are probably the same place (today, only
@@ -43,7 +44,8 @@ _PAGE_SIZE = 12
 
 
 def pending_merge_suggestions(profile: Profile) -> QuerySet[PinMergeSuggestion]:
-    """The profile's pending merge suggestions, newest first.
+    """
+    The profile's pending merge suggestions, newest first.
 
     Args:
         profile: Owner whose pending suggestions to fetch.
@@ -73,7 +75,8 @@ def pending_merge_suggestions(profile: Profile) -> QuerySet[PinMergeSuggestion]:
 
 
 def merge_suggestion_cards(suggestions: Iterable[PinMergeSuggestion]) -> list[dict[str, Any]]:
-    """Build per-card template context, one entry per suggestion.
+    """
+    Build per-card template context, one entry per suggestion.
 
     Only ever called with pending suggestions (see callers), so both pins are guaranteed set.
 
@@ -98,7 +101,8 @@ def _pair(suggestion: PinMergeSuggestion) -> tuple[Pin, Pin]:
 
 
 class PinMergeSuggestionQueuePartialView(LoginRequiredMixin, View):
-    """Just the merge-suggestion queue partial, re-fetched via the ``refreshQueue`` event.
+    """
+    Just the merge-suggestion queue partial, re-fetched via the ``refreshQueue`` event.
 
     GET /memories/locations/merge/queue/
     """
@@ -114,7 +118,8 @@ class PinMergeSuggestionQueuePartialView(LoginRequiredMixin, View):
 
 
 class PinMergeSuggestionActionView(LoginRequiredMixin, View):
-    """Accept or reject a single pin merge suggestion.
+    """
+    Accept or reject a single pin merge suggestion.
 
     POST /memories/locations/merge/<suggestion_id>/<action>/ where action is
 

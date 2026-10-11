@@ -1,4 +1,5 @@
-"""Friendship state transitions, extracted from ``controllers.friendship``.
+"""
+Friendship state transitions, extracted from ``controllers.friendship``.
 Every mutation a user can make to a friend relationship lives here as a plain ``(actor, target)`` function so the HTMX controller and the external API can share one implementation."""
 
 from __future__ import annotations
@@ -64,7 +65,8 @@ class InviteMessageTooLongError(InviteValidationError):
 
 
 class InviteRateLimitedError(FriendshipActionError):
-    """The inviter has exhausted their outbound-email budget.
+    """
+    The inviter has exhausted their outbound-email budget.
     Raised before the registered/unregistered branch is ever taken, so a capped caller cannot use the 429-vs-200 difference to probe membership."""
 
 
@@ -90,7 +92,8 @@ def list_friendships(
     cursor: str | None = None,
     limit: int = DEFAULT_FRIEND_PAGE_SIZE,
 ) -> FriendshipPage:
-    """Return one page of the relationships ``profile`` is part of.
+    """
+    Return one page of the relationships ``profile`` is part of.
     Only rows naming ``profile`` on one side or the other are ever considered.
 
     Args:
@@ -123,7 +126,8 @@ def list_friendships(
 
 
 def notify_friend_request(from_profile: Profile, to_profile: Profile, message: str | None = None) -> None:
-    """Create an in-app notification when a friend request is sent.
+    """
+    Create an in-app notification when a friend request is sent.
 
     Args:
         from_profile: Profile sending the request.
@@ -153,7 +157,8 @@ def notify_friend_request(from_profile: Profile, to_profile: Profile, message: s
 
 
 def may_send_friend_request(actor: Profile, target: Profile) -> bool:
-    """Whether ``actor`` may send ``target`` a friend request.
+    """
+    Whether ``actor`` may send ``target`` a friend request.
 
     One answer for every refusal (self, community off on either side, a block in either direction, the target's
     ``friend_request_visibility``), so no caller can report which one applied: whom someone accepts requests
@@ -177,7 +182,8 @@ def may_send_friend_request(actor: Profile, target: Profile) -> bool:
 
 
 def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
-    """Send a friend request, auto-accepting instead if one is already pending in reverse.
+    """
+    Send a friend request, auto-accepting instead if one is already pending in reverse.
 
     Args:
         from_profile: Profile initiating this request.
@@ -206,7 +212,8 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
 
 
 def _dismiss_friend_request_notifications(viewer_profile: Profile, source_profile_id: int) -> None:
-    """Dismiss the viewer's friend-request notification(s) from a source.
+    """
+    Dismiss the viewer's friend-request notification(s) from a source.
 
     Args:
         viewer_profile: Profile who just acted on the request.
@@ -223,7 +230,8 @@ _mark_friend_request_notifications_read = _dismiss_friend_request_notifications
 
 
 def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
-    """The friendship row between the two profiles, or raise.
+    """
+    The friendship row between the two profiles, or raise.
 
     Args:
         actor: The profile performing the action.
@@ -241,7 +249,8 @@ def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
 
 
 def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
-    """The pending request ``target`` sent ``actor``, or raise.
+    """
+    The pending request ``target`` sent ``actor``, or raise.
 
     Args:
         actor: The profile answering the request (the recipient).
@@ -261,7 +270,8 @@ def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
 
 
 def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
-    """Accept ``target``'s pending friend request to ``actor``.
+    """
+    Accept ``target``'s pending friend request to ``actor``.
 
     Args:
         actor: The profile accepting the request.
@@ -292,7 +302,8 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
 
 
 def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
-    """Raise the FRIEND_ACCEPTED notification for *requester*, honoring their delivery preference.
+    """
+    Raise the FRIEND_ACCEPTED notification for *requester*, honoring their delivery preference.
     Split out so the acceptance flow's post-notification steps (dismissing the request notification, returning the friendship) run whether or not the recipient has silenced this type.
 
     Args:
@@ -321,7 +332,8 @@ def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
 
 
 def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
-    """Decline ``target``'s friend request, leaving them free to re-send later.
+    """
+    Decline ``target``'s friend request, leaving them free to re-send later.
 
     Args:
         actor: The profile declining the request.
@@ -339,7 +351,8 @@ def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
 
 
 def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
-    """Ignore ``target``'s friend request - silently, and permanently.
+    """
+    Ignore ``target``'s friend request - silently, and permanently.
     Distinct from :func:`reject_friend_request` in both directions: no notification is sent, and ``FriendshipStatus.can_request`` excludes ``Ignored``, so the requester can never re-send.
 
     Args:
@@ -358,7 +371,8 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
 
 
 def _placed_the_block(actor: Profile, friendship: Friendship) -> bool:
-    """Whether ``actor`` is the profile that placed this block.
+    """
+    Whether ``actor`` is the profile that placed this block.
     ``Friendship`` carries no "blocked_by" column, so the row's *direction* is the only record of who blocked whom - which is exactly why :func:`block_profile` normalizes it (see that function).
 
     Args:
@@ -371,7 +385,8 @@ def _placed_the_block(actor: Profile, friendship: Friendship) -> bool:
 
 
 def remove_friend(actor: Profile, target: Profile) -> Friendship:
-    """End an existing friendship.
+    """
+    End an existing friendship.
     The row is retained at ``Removed`` rather than deleted, which is what lets ``FriendshipStatus.can_request`` allow a later re-request and what ``QuerySet.ever_friends`` reads.
 
     Args:
@@ -391,7 +406,8 @@ def remove_friend(actor: Profile, target: Profile) -> Friendship:
 
 
 def block_profile(actor: Profile, target: Profile) -> Friendship:
-    """Block ``target``, creating the relationship row if none exists yet.
+    """
+    Block ``target``, creating the relationship row if none exists yet.
     Unlike every other transition here, blocking must work against a complete stranger - that is the case it exists for - so a missing row is created rather than raising.
 
     Args:
@@ -449,7 +465,8 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
 
 
 def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
-    """End any safety-partner relationship between two profiles being blocked apart.
+    """
+    End any safety-partner relationship between two profiles being blocked apart.
     An accepted partner watches the owner's live location, check-in chat and escalation status, so a block that left those rows in place would be the weakest thing in the app rather than the strongest.
 
     Args:
@@ -466,7 +483,8 @@ def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
 
 
 def _revoke_map_shares(actor: Profile, target: Profile) -> None:
-    """Delete any standalone map share between two profiles being blocked apart.
+    """
+    Delete any standalone map share between two profiles being blocked apart.
     A ``MarkupMapShare`` is live access, not a copy: it has no accept/reject step, and ``controllers.markup._map_visible_to`` honours it every time the recipient opens the map, so they keep seeing the owner's *current* map and can still clone it.
 
     Args:
@@ -480,7 +498,8 @@ def _revoke_map_shares(actor: Profile, target: Profile) -> None:
 
 
 def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
-    """Reject any still-pending pin share between two profiles being blocked apart.
+    """
+    Reject any still-pending pin share between two profiles being blocked apart.
     A pending share is a standing offer, and the accept path does not re-check blocking - so without this a blocked profile could accept afterwards and end up owning a copy of a place the blocker had just withdrawn from them.
 
     Args:
@@ -496,7 +515,8 @@ def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
 
 
 def unblock_profile(actor: Profile, target: Profile) -> Friendship:
-    """Lift a block ``actor`` placed on ``target``.
+    """
+    Lift a block ``actor`` placed on ``target``.
     The inverse :func:`block_profile` never had.
 
     Args:
@@ -516,7 +536,8 @@ def unblock_profile(actor: Profile, target: Profile) -> Friendship:
 
 
 def mute_profile(actor: Profile, target: Profile) -> Friendship:
-    """Mute an existing relationship with ``target``, without altering it.
+    """
+    Mute an existing relationship with ``target``, without altering it.
 
     Args:
         actor: The profile doing the muting.
@@ -533,7 +554,8 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
 
 
 def unmute_profile(actor: Profile, target: Profile) -> Friendship:
-    """Un-mute an existing relationship with ``target``.
+    """
+    Un-mute an existing relationship with ``target``.
     Mute is a boolean flag rather than part of the relationship's status enum, so unmuting is a single boolean write and the relationship underneath is untouched throughout.
 
     Args:
@@ -551,7 +573,8 @@ def unmute_profile(actor: Profile, target: Profile) -> Friendship:
 
 
 def notifications_muted(recipient: Profile | int | None, source: Profile | int | None) -> bool:
-    """Whether ``recipient`` has muted the relationship notifications from ``source`` travel on.
+    """
+    Whether ``recipient`` has muted the relationship notifications from ``source`` travel on.
 
     Args:
         recipient: The profile the notification is addressed to, or its pk.
@@ -576,7 +599,8 @@ def notifications_muted(recipient: Profile | int | None, source: Profile | int |
 
 @dataclass(frozen=True, slots=True)
 class MutedRecipients:
-    """A batched mute answer, carrying the source it was computed for.
+    """
+    A batched mute answer, carrying the source it was computed for.
 
     Attributes:
         source_id: The profile the mutes were resolved against.
@@ -587,7 +611,8 @@ class MutedRecipients:
 
 
 def profiles_muting(source: Profile | int, recipient_ids: Iterable[int]) -> MutedRecipients:
-    """Which of ``recipient_ids`` have muted notifications from ``source``, in one query.
+    """
+    Which of ``recipient_ids`` have muted notifications from ``source``, in one query.
 
     Args:
         source: The profile the notifications are about, or its pk.
@@ -615,7 +640,8 @@ def invite_by_email(
     subscription_role: Any = None,
     subscription_duration: str = "",
 ) -> FriendInvitation:
-    """Invite someone to connect by email address, revealing nothing about them.
+    """
+    Invite someone to connect by email address, revealing nothing about them.
 
     The request does the same work for every address: it charges the email budget on first contact and records
     a ``FriendInvitation``, which stays the inviter's pending entry until the invitee accepts. A task then asks

@@ -242,7 +242,8 @@ class BulkEdgeCaseTests(TestCase):
 
 
 class BulkExclusionFilterTests(TestCase):
-    """Every metric with a disqualifying state must exclude it in bulk, not just per-profile.
+    """
+    Every metric with a disqualifying state must exclude it in bulk, not just per-profile.
 
     ``SEEDERS`` above only ever creates *qualifying* rows, so a bulk form that silently drops its ``WHERE``
     clause (counting reverted edits, tentative visits, declined RSVPs, ...) would agree with ``compute`` on

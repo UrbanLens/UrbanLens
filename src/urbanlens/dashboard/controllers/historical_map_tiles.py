@@ -1,4 +1,5 @@
-"""Proxy for REData's warped historical-map overlay tiles.
+"""
+Proxy for REData's warped historical-map overlay tiles.
 
 REData's tile pyramid (``/api/v1/maps/georeferences/{uuid}/tiles/{z}/{x}/{y}.png``) requires its API
 key, which must never reach the browser - so Leaflet points at this view instead and the fetch
@@ -47,7 +48,8 @@ class UpstreamSlots(BaseUpstreamSlots):
 
     @classmethod
     def limit(cls) -> int:
-        """How many historical-map tile fetches one process may have in flight.
+        """
+        How many historical-map tile fetches one process may have in flight.
 
         Returns:
             ``historical_tile_upstream_concurrency``.
@@ -56,7 +58,8 @@ class UpstreamSlots(BaseUpstreamSlots):
 
 
 def _cacheable(response: HttpResponse) -> HttpResponse:
-    """Let the browser keep the answer as long as this deployment does, and not guess at its type.
+    """
+    Let the browser keep the answer as long as this deployment does, and not guess at its type.
 
     Args:
         response: The response to stamp.
@@ -75,7 +78,8 @@ class HistoricalMapTileView(LoginRequiredMixin, View):
     """GET map/historical-tiles/<georeference_uuid>/<z>/<x>/<y>.png - one warped overlay tile."""
 
     def get(self, request: HttpRequest, georeference_uuid: str, z: int, x: int, y: int) -> HttpResponse:
-        """Serve one tile from cache or REData.
+        """
+        Serve one tile from cache or REData.
 
         Args:
             request: The current request.

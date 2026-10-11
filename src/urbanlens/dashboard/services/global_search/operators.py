@@ -1,4 +1,5 @@
-"""Typed ``key:value`` search operators, and the tokenizer that finds them.
+"""
+Typed ``key:value`` search operators, and the tokenizer that finds them.
 Operators are parsed first and win, because they are unambiguous - the heuristics then work on whatever text is left over."""
 
 from __future__ import annotations
@@ -17,7 +18,8 @@ KIND_PLACE = "place"
 
 @dataclass(frozen=True, slots=True)
 class Operator:
-    """One recognized search operator.
+    """
+    One recognized search operator.
 
     Attributes:
         key: Canonical keyword, as it appears in a query.
@@ -104,7 +106,8 @@ for _operator in OPERATORS:
 
 
 def lookup(spelling: str) -> Operator | None:
-    """The operator a spelling refers to, or None when it is not one.
+    """
+    The operator a spelling refers to, or None when it is not one.
 
     Args:
         spelling: A candidate key, as typed (case-insensitive).
@@ -116,7 +119,8 @@ def lookup(spelling: str) -> Operator | None:
 
 @dataclass(frozen=True, slots=True)
 class Clause:
-    """One ``key:value`` pair recovered from a query.
+    """
+    One ``key:value`` pair recovered from a query.
 
     Attributes:
         operator: The operator this clause invokes.
@@ -142,7 +146,8 @@ class Clause:
 
 @dataclass(slots=True)
 class OperatorScan:
-    """The result of scanning a raw query for operators.
+    """
+    The result of scanning a raw query for operators.
 
     Attributes:
         clauses: Recognized operator clauses, in the order they appeared.
@@ -182,7 +187,8 @@ _CLAUSE = re.compile(
 
 
 def scan(raw: str) -> OperatorScan:
-    """Pull every recognized operator out of a raw query string.
+    """
+    Pull every recognized operator out of a raw query string.
     Unrecognized ``key:value`` shapes are deliberately left in the free text rather than dropped: ``12:30`` and ``http://example.com`` are not operator syntax, and neither is a typo, and none of them should make a query fail.
 
     Args:
@@ -232,7 +238,8 @@ def scan(raw: str) -> OperatorScan:
 
 
 def suggestions(prefix: str = "") -> list[Operator]:
-    """Operators whose key or aliases start with ``prefix``.
+    """
+    Operators whose key or aliases start with ``prefix``.
 
     Args:
         prefix: What the user has typed so far, with or without a colon.

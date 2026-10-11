@@ -29,7 +29,8 @@ def _run(coro):
 
 
 def _notification_key(user) -> tuple[ApiKey, str]:
-    """Issue a key scoped for ``ws/notifications/`` - see this module's docstring.
+    """
+    Issue a key scoped for ``ws/notifications/`` - see this module's docstring.
 
     Args:
         user: The account the key belongs to.

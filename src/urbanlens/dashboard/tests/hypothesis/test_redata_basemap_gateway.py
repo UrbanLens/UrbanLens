@@ -76,7 +76,8 @@ class ListSourcesEmptyAnswerTests(RedataConfiguredMixin, SimpleTestCase):
 
 
 class EndpointForLogTests(SimpleTestCase):
-    """The tile path must be truncated at the layer, never logged whole.
+    """
+    The tile path must be truncated at the layer, never logged whole.
 
     A tile URL is `/tiles/{layer}/{z}/{x}/{y}/`, so logging it verbatim would
     accumulate a record of which places this deployment's users panned over.

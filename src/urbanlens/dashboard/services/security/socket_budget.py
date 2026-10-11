@@ -1,4 +1,5 @@
-"""How many WebSocket connections one account may hold open at once.
+"""
+How many WebSocket connections one account may hold open at once.
 
 Authorization on these sockets is thorough and ``InboundVolumeMixin`` bounds how
 fast an account may *send* on them. Neither bounds how many it may *hold*. An
@@ -45,7 +46,8 @@ REFRESH_INTERVAL_SECONDS = 5 * 60
 
 
 def max_sockets_per_account() -> int:
-    """The most sockets one account may hold at once.
+    """
+    The most sockets one account may hold at once.
 
     Read at call time rather than bound at import, so a test can lower it
     without opening twenty connections.
@@ -70,7 +72,8 @@ _registry = ConnectionRegistry(prefix="ul_ws_open", stale_after_seconds=STALE_AF
 
 
 def claim(identity: str, connection_id: str, limit: int | None = None) -> bool:
-    """Register one connection and report whether it is within the allowance.
+    """
+    Register one connection and report whether it is within the allowance.
 
     Args:
         identity: Who the connection is charged to. Must be derived from what
@@ -99,7 +102,8 @@ def claim(identity: str, connection_id: str, limit: int | None = None) -> bool:
 
 
 def release(identity: str, connection_id: str) -> None:
-    """Give one connection's place back.
+    """
+    Give one connection's place back.
 
     Args:
         identity: Who it was charged to.
@@ -109,7 +113,8 @@ def release(identity: str, connection_id: str) -> None:
 
 
 def refresh(identity: str, connection_id: str) -> None:
-    """Renew a live connection's claim so it is not swept as abandoned.
+    """
+    Renew a live connection's claim so it is not swept as abandoned.
 
     Args:
         identity: Who it is charged to.
@@ -119,7 +124,8 @@ def refresh(identity: str, connection_id: str) -> None:
 
 
 def open_count(identity: str) -> int:
-    """How many live connections one identity holds, for tests and diagnostics.
+    """
+    How many live connections one identity holds, for tests and diagnostics.
 
     Args:
         identity: Whose connections to count.

@@ -1,4 +1,5 @@
-"""Per-credential scope enforcement for the external API.
+"""
+Per-credential scope enforcement for the external API.
 
 Distinct from Django's user permissions and from the internal API's ``IsAuthenticated`` default: a
 credential can only do what its own scope grant allows, regardless of what the underlying user
@@ -33,7 +34,8 @@ OAUTH2_ONLY_SCOPES = frozenset({ApiKeyScope.MESSAGES_READ, ApiKeyScope.MESSAGES_
 
 
 def credential_grants(credential: object | None, scopes: Iterable[str]) -> bool:
-    """Check whether one resolved credential grants every scope in *scopes*.
+    """
+    Check whether one resolved credential grants every scope in *scopes*.
 
     The single implementation of the "does this credential allow that?" question, shared by
     :class:`HasApiKeyScope` (the DRF permission every external endpoint runs) and by non-DRF callers
@@ -63,7 +65,8 @@ def credential_grants(credential: object | None, scopes: Iterable[str]) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class SourceGrants:
-    """The outcome of splitting a multi-source payload by what a credential may see.
+    """
+    The outcome of splitting a multi-source payload by what a credential may see.
 
     Both tuples preserve the declaration order of the mapping that produced them, so a response built by
     iterating ``granted`` is deterministic across requests and across processes (a set would reorder per
@@ -82,7 +85,8 @@ class SourceGrants:
     omitted: tuple[str, ...]
 
     def __contains__(self, key: object) -> bool:
-        """Whether *key* survived the filter.
+        """
+        Whether *key* survived the filter.
 
         Args:
             key: The source key being tested.
@@ -93,7 +97,8 @@ class SourceGrants:
         return key in self.granted
 
     def __iter__(self) -> Iterator[str]:
-        """Iterate the granted source keys in declaration order.
+        """
+        Iterate the granted source keys in declaration order.
 
         Returns:
             An iterator over :attr:`granted`.
@@ -101,7 +106,8 @@ class SourceGrants:
         return iter(self.granted)
 
     def __bool__(self) -> bool:
-        """Whether anything at all survived the filter.
+        """
+        Whether anything at all survived the filter.
 
         Returns:
             True when at least one source was granted.
@@ -110,7 +116,8 @@ class SourceGrants:
 
 
 def filter_sources_by_grants(credential: object | None, mapping: Mapping[str, Iterable[str]]) -> SourceGrants:
-    """Split a multi-source endpoint's sections into the ones this credential may see.
+    """
+    Split a multi-source endpoint's sections into the ones this credential may see.
 
     Their required behaviour is *partial fulfilment*: a credential that is scoped for pins but not
     messages gets its pin results and no DM section, rather than a 403 that would make the endpoint
@@ -136,7 +143,8 @@ def filter_sources_by_grants(credential: object | None, mapping: Mapping[str, It
 
 
 class HasApiKeyScope(BasePermission):
-    """Requires the authenticating credential to grant every scope in ``view.required_scopes``.
+    """
+    Requires the authenticating credential to grant every scope in ``view.required_scopes``.
 
     Views using this must define ``required_scopes`` (an attribute or property yielding a set of
     :class:`~urbanlens.dashboard.models.account.model.ApiKeyScope` values).

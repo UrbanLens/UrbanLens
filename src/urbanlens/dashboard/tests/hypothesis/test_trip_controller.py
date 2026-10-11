@@ -33,7 +33,8 @@ _CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
 
 
 def _without_csrf_tokens(content: bytes) -> bytes:
-    """Blank out per-request CSRF tokens so two responses can be compared.
+    """
+    Blank out per-request CSRF tokens so two responses can be compared.
 
     The masking is random per render and reveals nothing about the page, so normalizing it is what makes an
     "these two responses are identical" check meaningful rather than flaky.
@@ -258,7 +259,8 @@ class TripCreateViewTests(TestCase):
         )
 
     def test_post_without_name_generates_a_placeholder(self):
-        """A blank name is accepted and gets a generated one (UL-360).
+        """
+        A blank name is accepted and gets a generated one (UL-360).
 
         The behavior itself now lives in ``services.trips.trip_crud.create_trip``."""
         before = set(Trip.objects.values_list("pk", flat=True))
@@ -282,7 +284,8 @@ class TripCreateViewTests(TestCase):
         self.assertIn(resp.status_code, (301, 302))
 
     def test_post_from_overview_redirects_to_new_trip_via_hx_redirect(self):
-        """The overview page's dialog has no #trip-list to swap into, so it opts into
+        """
+        The overview page's dialog has no #trip-list to swap into, so it opts into
         an HX-Redirect straight to the new trip instead of the list-partial re-render."""
         resp = self.client.post(
             reverse("trips.create"),
@@ -318,7 +321,8 @@ class CreateTripDialogHxTargetTests(SimpleTestCase):
         self.assertIn('hx-swap="innerHTML"', html)
 
     def test_default_source_behaves_like_list(self) -> None:
-        """No source given (e.g. a stale include) should keep the original,
+        """
+        No source given (e.g. a stale include) should keep the original,
         long-standing #trip-list behavior rather than the newer overview one."""
         html = render_to_string("dashboard/partials/trips/_create_trip_dialog.html", {})
         self.assertIn('hx-target="#trip-list"', html)
@@ -356,7 +360,8 @@ class TripDetailViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_outsider_gets_404_indistinguishable_from_a_missing_trip(self):
-        """Someone else's trip must look exactly like one that doesn't exist.
+        """
+        Someone else's trip must look exactly like one that doesn't exist.
 
         See ``services.trips.trip_access.get_trip_for_viewer``."""
         client = Client()
@@ -600,7 +605,8 @@ class TripActivitiesViewTests(TestCase):
         self.assertEqual(resp.status_code, 403)
 
     def test_outsider_gets_404(self):
-        """A non-member is told the trip does not exist, not that it's forbidden.
+        """
+        A non-member is told the trip does not exist, not that it's forbidden.
 
         See TripDetailViewTests.test_outsider_gets_404_indistinguishable_from_a_missing_trip
         for why the old 403 was an enumeration leak.
@@ -743,7 +749,8 @@ class TripActivityCompleteViewTests(TestCase):
 
     @override_settings(TIME_ZONE="Pacific/Kiritimati")
     def test_completion_clamps_against_the_configured_timezone_not_the_server_clock(self):
-        """ "Today" must mean today in Django's TIME_ZONE, not the host OS's date.
+        """
+        "Today" must mean today in Django's TIME_ZONE, not the host OS's date.
 
         At this fixed instant the configured zone (UTC+14) is already on Jan 2 while UTC is still on Jan 1, so a
         `date.today()`-based clamp would reject a legitimately "today" completion as a future date and cap it a
@@ -760,7 +767,8 @@ class TripActivityCompleteViewTests(TestCase):
         self.assertEqual(timezone.localtime(self.activity.scheduled_at).date(), local_today)
 
     def test_completed_date_produces_a_timezone_aware_scheduled_at(self):
-        """Regression guard for the same naive-datetime bug as
+        """
+        Regression guard for the same naive-datetime bug as
         test_scheduled_date_only_produces_a_timezone_aware_datetime, but on
         the "mark completed" path's own datetime.combine call."""
         self.client.post(self._url(), data={"completed_date": "2025-06-01"})
@@ -897,7 +905,8 @@ class TripMembersViewTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_cannot_add_a_user_who_blocked_the_inviter(self) -> None:
-        """A block must stop this the same way it stops a direct message -
+        """
+        A block must stop this the same way it stops a direct message -
         forcing a membership row + notification onto someone is exactly the
         unsolicited contact a block exists to prevent."""
         blocker = baker.make("auth.User", username="has-blocked-creator").profile
@@ -934,7 +943,8 @@ class TripMembersViewTests(TestCase):
 
 
 class TripAddableFriendsPickerTests(TestCase):
-    """The add-member dialog's friend picker (trip_members_panel.html/_addable_friends).
+    """
+    The add-member dialog's friend picker (trip_members_panel.html/_addable_friends).
 
     Regression coverage: the dialog used to be a bare "type the exact username" box with no way to browse the
     creator's friends - the picker lives in trip_members_panel.html (not detail.html) specifically so it stays
@@ -1292,7 +1302,8 @@ class TripActivityMoveViewTests(TestCase):
         )
 
     def test_rescheduling_produces_a_timezone_aware_datetime_with_no_prior_time(self):
-        """Regression guard for the same naive-datetime bug as the other
+        """
+        Regression guard for the same naive-datetime bug as the other
         scheduled_at-construction tests, but on the drag-to-reschedule path's
         "no existing scheduled_at" branch."""
         resp = self.client.post(

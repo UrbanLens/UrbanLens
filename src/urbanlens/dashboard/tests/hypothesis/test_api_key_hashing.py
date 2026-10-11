@@ -1,4 +1,5 @@
-"""The ``ApiKey`` secret hash: its format, its upgrade path, its cost, and the writes around it.
+"""
+The ``ApiKey`` secret hash: its format, its upgrade path, its cost, and the writes around it.
 
 P146. A key's secret is 32 bytes of ``secrets.token_urlsafe``, so a password KDF's work factor prices
 nothing an attacker could guess, while PBKDF2 at Django's default iterations cost ~0.9s of CPU on

@@ -1,4 +1,5 @@
-"""H54 (P113): the Celery broker must not share Dragonfly's keyspace.
+"""
+H54 (P113): the Celery broker must not share Dragonfly's keyspace.
 
 Before D16, Dragonfly held sessions, the Channels layer, the Django cache and the Celery broker in
 one keyspace under ``volatile-lru``, and the broker's keys were the only ones with no TTL - so one
@@ -34,7 +35,8 @@ class CeleryBrokerPrecedenceTests(SimpleTestCase):
         self.addCleanup(importlib.reload, settings_base)
 
     def _reload_with(self, **env: str) -> ModuleType:
-        """Reload `settings.base` with exactly `env` set for the broker/result-backend inputs.
+        """
+        Reload `settings.base` with exactly `env` set for the broker/result-backend inputs.
 
         Every key in `_ENV_KEYS` not passed is cleared to "" (falsy to `os.getenv`'s `or`
         chain), so a stale value from the real environment can't leak into the reloaded module.
@@ -80,7 +82,8 @@ class CeleryBrokerPrecedenceTests(SimpleTestCase):
         self.assertEqual(reloaded.CELERY_BROKER_URL, "amqp://explicit.example/")
 
     def test_result_backend_still_prefers_dragonfly_even_when_rabbitmq_is_the_broker(self) -> None:
-        """The result backend is deliberately not moved: it wants a fast store, not a queue.
+        """
+        The result backend is deliberately not moved: it wants a fast store, not a queue.
 
         A regression here would look like an improvement (`H54, done, and the result backend
         moved too`) but would put Celery's high-churn result/status writes back into the shared

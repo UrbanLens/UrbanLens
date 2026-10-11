@@ -1,4 +1,5 @@
-"""Searching your own pins must not read wiki-alias rows belonging to a wiki you cannot see.
+"""
+Searching your own pins must not read wiki-alias rows belonging to a wiki you cannot see.
 
 ``PinSearchProvider.search`` feeds ``location__wiki__aliases__name`` to ``apply_text`` - a path to
 ``WikiAlias`` distinct from both ``ArticleSearchProvider``'s ``wiki__aliases__name``
@@ -99,7 +100,8 @@ class _PinWikiAliasCase(TestCase):
         list[tuple[str, Sequence[Any] | Mapping[str, Any] | None]],
         list[tuple[int, str, Sequence[Any] | Mapping[str, Any] | None]],
     ]:
-        """The full capture, and the statements in it that read the wiki-alias table.
+        """
+        The full capture, and the statements in it that read the wiki-alias table.
 
         Returning both, rather than just the filtered statements, lets a caller pass the
         filtered statements' original positions to ``session_preamble`` - a statement's plan

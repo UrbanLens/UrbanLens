@@ -11,7 +11,8 @@ from urbanlens.dashboard.models import abstract
 
 
 class PlaceMerge(abstract.DashboardModel):
-    """One loser place folded into its survivor by ``services.places.building_merge``.
+    """
+    One loser place folded into its survivor by ``services.places.building_merge``.
     The loser is never deleted - it stays as a SUPERSEDED row with its provider key cleared - so this record is what ties it to the place that now stands for it, and the only home for what the merge could not keep: where both places (or their wikis) held a value for the same key, the survivor's stayed and the loser's is here.
 
     Attributes:

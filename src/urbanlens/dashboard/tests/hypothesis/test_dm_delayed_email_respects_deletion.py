@@ -46,7 +46,8 @@ class DelayedDirectMessageEmailTests(TestCase):
         self.assertEqual(mail.outbox, [], "the delayed email delivered a message the recipient had deleted")
 
     def test_a_message_from_a_since_blocked_sender_is_not_emailed(self) -> None:
-        """Blocking is enforced when sending; the delayed email outlives the send.
+        """
+        Blocking is enforced when sending; the delayed email outlives the send.
 
         A block placed inside the 120-second window - which is exactly when someone reaches for it, right after
         the message that prompted it - otherwise still delivers that message's text to the blocker's inbox, out

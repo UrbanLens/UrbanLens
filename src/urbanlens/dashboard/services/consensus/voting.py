@@ -1,4 +1,5 @@
-"""Competitive-mode vote tallying for a round's disagreement sub-phase.
+"""
+Competitive-mode vote tallying for a round's disagreement sub-phase.
 When a competitive round's submitted answers don't all agree, ``services.consensus.session`` opens a vote (``open_vote``) so every participant can pick which of the distinct submitted values is actually correct."""
 
 from __future__ import annotations
@@ -30,7 +31,8 @@ class DuplicateVoteError(ConsensusVotingError):
 
 @dataclass(frozen=True)
 class VoteTally:
-    """The result of tallying a round's votes.
+    """
+    The result of tallying a round's votes.
 
     Attributes:
         winning_answers: Every answer tied to the winning (agreeing) cluster - the "correct" value's original submitter(s) - empty when no consensus formed.
@@ -48,7 +50,8 @@ def open_vote(round_: ConsensusRound) -> None:
 
 
 def record_vote(round_: ConsensusRound, profile: Profile, chosen_answer: ConsensusAnswer) -> ConsensusVote:
-    """Cast ``profile``'s vote for ``chosen_answer`` (not necessarily their own submission).
+    """
+    Cast ``profile``'s vote for ``chosen_answer`` (not necessarily their own submission).
 
     Raises:
         AnswerNotInRoundError: ``chosen_answer`` isn't part of this round.
@@ -81,7 +84,8 @@ def cluster_answers(strategy, answers: list[ConsensusAnswer]) -> list[list[Conse
 
 
 def tally_votes(round_: ConsensusRound, *, vote_threshold: float) -> VoteTally:
-    """Group this round's votes by agreement and determine whether a majority formed.
+    """
+    Group this round's votes by agreement and determine whether a majority formed.
 
     Args:
         round_: The round whose votes to tally.

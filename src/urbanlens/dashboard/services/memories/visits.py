@@ -18,7 +18,8 @@ PHOTO_VISIT_MATCH_RADIUS_M = 100
 
 
 def maybe_suggest_photo_visit(image: Image) -> VisitSuggestion | None:
-    """Raise a self-directed VisitSuggestion when a geotagged, timestamped photo implies a visit.
+    """
+    Raise a self-directed VisitSuggestion when a geotagged, timestamped photo implies a visit.
     Either way, rather than silently logging a visit, a ``VisitSuggestion`` the uploader confirms or dismisses is raised.
 
     Args:
@@ -91,7 +92,8 @@ def _suggest_for_pinned_photo(image: Image) -> VisitSuggestion | None:
 
 
 def _suggest_for_unfiled_photo(image: Image) -> VisitSuggestion | None:
-    """Raise a visit suggestion for an unfiled Memories-page photo near one of the user's pins.
+    """
+    Raise a visit suggestion for an unfiled Memories-page photo near one of the user's pins.
     The suggestion carries ``origin_image`` so accepting it attaches the photo to the resulting visit."""
     from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
     from urbanlens.dashboard.services.memories.photos import find_matching_pin

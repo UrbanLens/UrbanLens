@@ -1,4 +1,5 @@
-"""The gate resolved the viewer's whole social graph before asking whether it mattered.
+"""
+The gate resolved the viewer's whole social graph before asking whether it mattered.
 
 H44's first cut. `visible_to` loaded the viewer's friends, pinned locations and
 trip memberships up front - four queries - and only then evaluated the settings

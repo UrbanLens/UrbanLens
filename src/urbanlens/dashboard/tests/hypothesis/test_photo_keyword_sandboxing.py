@@ -74,7 +74,8 @@ class AnalysisThumbnailIsSandboxedTests(SimpleTestCase):
         )
 
     def test_every_task_reaching_the_writer_declares_the_sandbox_queue(self) -> None:
-        """No task can reach the image decode without being on media-worker's queue.
+        """
+        No task can reach the image decode without being on media-worker's queue.
 
         Transitive on purpose."""
         import urbanlens.dashboard.tasks as tasks_module

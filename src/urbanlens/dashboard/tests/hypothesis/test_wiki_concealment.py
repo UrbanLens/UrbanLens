@@ -89,7 +89,8 @@ class ConcealedValueTests(TestCase):
         self.assertEqual(values["description"], "Friend's version")
 
     def test_security_indicators_are_unset_even_when_a_provider_set_them(self) -> None:
-        """The one rule that ignores provenance entirely.
+        """
+        The one rule that ignores provenance entirely.
 
         A place reading as surveyed - fences, cameras, alarms - is precisely
         what concealment exists to prevent, so the source does not matter.
@@ -155,7 +156,8 @@ class AggregateConcealmentTests(TestCase):
         self.viewer = baker.make(User).profile
 
     def test_the_concealed_community_summary_never_reaches_the_fuzz_cache(self) -> None:
-        """The shared fuzz is keyed on an id with no viewer in it.
+        """
+        The shared fuzz is keyed on an id with no viewer in it.
 
         So a concealed viewer arriving *after* an ordinary one would be handed the value that viewer populated -
         silently, only under concurrency."""
@@ -187,7 +189,8 @@ class AggregateConcealmentTests(TestCase):
         self.assertEqual(composite.count, 0)
 
     def test_a_concealed_composite_still_reflects_the_viewers_own_vote(self) -> None:
-        """The subtle half, and the one the branch was written for.
+        """
+        The subtle half, and the one the branch was written for.
 
         Returning a flatly empty composite is its own tell: the page still renders "Your vote" from my_vote, so
         a concealed viewer who votes would see their stars filled beside a Community row that stays empty
@@ -224,7 +227,8 @@ class InvertedTellTests(TestCase):
         self.viewer = baker.make(User).profile
 
     def test_the_boundary_dialog_still_auto_opens_for_a_concealed_viewer(self) -> None:
-        """A place nobody has voted on opens this dialog on arrival.
+        """
+        A place nobody has voted on opens this dialog on arrival.
 
         So a concealed viewer who does *not* get it has been told other people
         have been here - the concealment announcing itself by staying quiet.
@@ -285,7 +289,8 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertNotIn(others, visible)
 
     def test_provider_photos_stay_and_strangers_uploads_go(self) -> None:
-        """Image.profile is the up-voter on a materialised provider row.
+        """
+        Image.profile is the up-voter on a materialised provider row.
 
         So authorship only means anything for a row the profile actually contributed - reading the actor column
         alone would drop provider media a fresh wiki would show, and credit a voter for somebody else's
@@ -327,7 +332,8 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertNotIn(stranger_upload, visible)
 
     def test_a_strangers_photo_from_their_own_library_is_concealed(self) -> None:
-        """A photo out of the uploader's own Immich/Google Photos/Flickr library.
+        """
+        A photo out of the uploader's own Immich/Google Photos/Flickr library.
 
         These are the stranger's own pictures - the picker dialog fetched them from an account they connected -
         so a concealed viewer must not see them, exactly as for a form upload."""
@@ -357,7 +363,8 @@ class RelatedRowConcealmentTests(TestCase):
                 )
 
     def test_automatic_imagery_belonging_to_nobody_stays(self) -> None:
-        """``photo_enrichment`` writes profile-less rows, and they are not a contribution.
+        """
+        ``photo_enrichment`` writes profile-less rows, and they are not a contribution.
 
         Google Maps / Street View / Satellite imagery is fetched for a place, so it has no uploader and carries
         no ``media_source_key`` either."""
@@ -405,7 +412,8 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertNotIn(community, visible)
 
     def test_a_rename_created_alias_is_concealed_despite_a_null_author(self) -> None:
-        """The exact case created_by gets wrong, and why the spec rejected it.
+        """
+        The exact case created_by gets wrong, and why the spec rejected it.
 
         Wiki.save() auto-creates an alias on every rename with created_by unset, so filtering on the author
         would re-expose - as an alias row - the very name concealed as a field."""
@@ -421,7 +429,8 @@ class RelatedRowConcealmentTests(TestCase):
         self.assertNotIn(from_rename, visible)
 
     def test_an_unknown_model_returns_nothing_rather_than_everything(self) -> None:
-        """Failing closed is the only safe default for a concealment filter.
+        """
+        Failing closed is the only safe default for a concealment filter.
 
         A model nobody has written a rule for must not quietly return every row - that is the "one call site at
         a time" failure this table exists to avoid, and it would fail silently and permissively."""
@@ -435,7 +444,8 @@ class RelatedRowConcealmentTests(TestCase):
 
 
 class ProjectionTests(TestCase):
-    """The object ``conceal_wiki`` hands back, and what may be done with it.
+    """
+    The object ``conceal_wiki`` hands back, and what may be done with it.
 
     The rework these cover replaced a ``__getattr__`` proxy, which failed *open*: anything it did not explicitly
     override - far more than what it did - fell through to the real row."""
@@ -461,7 +471,8 @@ class ProjectionTests(TestCase):
             return conceal_wiki(self.wiki, viewer if viewer is not None else self.viewer)
 
     def test_a_projection_is_a_real_wiki_with_the_real_primary_key(self) -> None:
-        """Templates, serializers and foreign keys all depend on this.
+        """
+        Templates, serializers and foreign keys all depend on this.
 
         The proxy this replaced could not be assigned to a ``ForeignKey`` at
         all, which is why every write path had to be taught it existed.
@@ -487,7 +498,8 @@ class ProjectionTests(TestCase):
         self.assertEqual(Wiki.objects.get(pk=self.wiki.pk).description, real_description)
 
     def test_the_display_helper_reflects_the_concealed_value(self) -> None:
-        """``get_cameras_display()`` reads the field, so it must read the concealed one.
+        """
+        ``get_cameras_display()`` reads the field, so it must read the concealed one.
 
         The proxy needed explicit code for this and the security chips render through exactly this call - if it
         regressed, a concealed page would show a stranger's survey in words while the field said otherwise."""
@@ -535,7 +547,8 @@ class ProjectionTests(TestCase):
         self.assertIs(again, projection)
 
     def test_a_property_computed_from_concealed_fields_reads_the_concealed_ones(self) -> None:
-        """The failure the projection exists to make impossible.
+        """
+        The failure the projection exists to make impossible.
 
         ``effective_date_last_active`` derives from two versioned fields."""
         with writing_as(WriteSource.USER, actor=self.stranger.pk):
@@ -548,7 +561,8 @@ class ProjectionTests(TestCase):
         self.assertIsNone(projection.effective_date_last_active)
 
     def test_an_ungated_viewer_never_inherits_someone_elses_projection(self) -> None:
-        """The fail-open the viewer key exists to close.
+        """
+        The fail-open the viewer key exists to close.
 
         Reuse is an optimisation; if the second viewer is not gated at all, the cheap answer would be to hand
         the projection straight back, which serves one person's redacted view to somebody entitled to the whole
@@ -572,7 +586,8 @@ class ProjectionTests(TestCase):
 
 
 class ConcealedArticleTests(TestCase):
-    """What a concealed viewer reads on the Article tab.
+    """
+    What a concealed viewer reads on the Article tab.
 
     An article is prose, not fields, so there is nothing to resolve write-by- write."""
 
@@ -648,7 +663,8 @@ class ConcealedArticleTests(TestCase):
 
 
 class ByIdScopeTests(TestCase):
-    """The queryset every by-id lookup on a wiki-scoped row is now scoped to.
+    """
+    The queryset every by-id lookup on a wiki-scoped row is now scoped to.
 
     Fifteen call sites looked up a comment, alias, link, edit, photo or article revision by id, scoped to the
     wiki rather than to the viewer."""

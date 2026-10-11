@@ -30,7 +30,8 @@ class PinArticleApiTests(TestCase):
         self.pin = create_pin_for_profile(self.profile, name="Old Mill", latitude=42.5, longitude=-73.5).pin
 
     def _headers(self, raw_key: str | None = None) -> dict:
-        """Bearer-header kwargs for the fixture key, or an explicitly given one.
+        """
+        Bearer-header kwargs for the fixture key, or an explicitly given one.
 
         Args:
             raw_key: A raw key to use instead of the fixture's.
@@ -40,7 +41,8 @@ class PinArticleApiTests(TestCase):
         return {"HTTP_AUTHORIZATION": f"Bearer {raw_key or self.raw_key}"}
 
     def _url(self, suffix: str = "", *, pin_slug: str | None = None) -> str:
-        """Build a pin-article URL.
+        """
+        Build a pin-article URL.
 
         Args:
             suffix: Path fragment appended after ``article/``. pin_slug: Pin to address; defaults to the fixture pin.
@@ -51,7 +53,8 @@ class PinArticleApiTests(TestCase):
         return f"{BASE}/{slug}/article/{suffix}"
 
     def _key_with_scopes(self, scopes: list[str]) -> str:
-        """Issue a second key carrying exactly *scopes*.
+        """
+        Issue a second key carrying exactly *scopes*.
 
         Args:
             scopes: Raw scope values to store on the row.
@@ -63,7 +66,8 @@ class PinArticleApiTests(TestCase):
         return raw
 
     def _save(self, content: str, base_revision_id: int | None = None) -> dict:
-        """PUT one version of the fixture pin's article.
+        """
+        PUT one version of the fixture pin's article.
 
         Args:
             content: The Markdown source to save. base_revision_id: The revision the client believes it started from.
@@ -195,7 +199,8 @@ class PinArticleApiTests(TestCase):
                 self.assertEqual(response.json(), {"error": "Not found."})
 
     def test_a_revision_from_another_article_is_not_found(self) -> None:
-        """Revision ids are sequential across every article in the database.
+        """
+        Revision ids are sequential across every article in the database.
 
         Without ``article=`` in the lookup this endpoint would hand back other
         users' private pin articles one integer at a time.
@@ -215,7 +220,8 @@ class PinArticleApiTests(TestCase):
         self.assertEqual(Article.objects.get(pin=self.pin).content, "mine")
 
     def test_wiki_scopes_cannot_reach_a_pin_article(self) -> None:
-        """The privacy decision this module exists for, asserted directly.
+        """
+        The privacy decision this module exists for, asserted directly.
 
         A key granted only "read/edit community wikis" must not be able to read or write a pin's private
         article; if this ever passes with 200 the consent screen has started lying."""

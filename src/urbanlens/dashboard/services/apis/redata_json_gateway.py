@@ -1,4 +1,5 @@
-"""Shared JSON-over-HTTP base for REData's non-location-context endpoints.
+"""
+Shared JSON-over-HTTP base for REData's non-location-context endpoints.
 They now differ only in the endpoints they expose."""
 
 from __future__ import annotations
@@ -25,7 +26,8 @@ class RedataJsonGateway(Gateway):
     api_key: str | None = settings.redata_api_key
 
     def __post_init__(self) -> None:
-        """Normalize the base URL and require both settings.
+        """
+        Normalize the base URL and require both settings.
 
         Raises:
             ValueError: ``UL_REDATA_API_URL`` or ``UL_REDATA_API_KEY`` is unset.
@@ -44,7 +46,8 @@ class RedataJsonGateway(Gateway):
         return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json", "Content-Type": "application/json"}
 
     def _url(self, path: str) -> str:
-        """Join ``path`` onto the base URL.
+        """
+        Join ``path`` onto the base URL.
 
         Args:
             path: Path relative to ``base_url`` (leading slash optional).
@@ -60,7 +63,8 @@ class RedataJsonGateway(Gateway):
         return f"{self.base_url.rstrip('/')}/{path.lstrip('/')}"
 
     def _decode(self, response: Any, path: str) -> dict[str, Any]:
-        """Turn a response into a JSON object, or raise.
+        """
+        Turn a response into a JSON object, or raise.
 
         Args:
             response: The ``requests`` response.
@@ -88,7 +92,8 @@ class RedataJsonGateway(Gateway):
         raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
 
     def _get_json(self, path: str, params: dict[str, Any] | None = None, *, timeout: int = _REQUEST_TIMEOUT) -> dict[str, Any]:
-        """GET one endpoint and return its decoded body.
+        """
+        GET one endpoint and return its decoded body.
 
         Args:
             path: Path relative to ``base_url``.
@@ -110,7 +115,8 @@ class RedataJsonGateway(Gateway):
         return self._decode(response, path)
 
     def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        """POST one endpoint and return its decoded body.
+        """
+        POST one endpoint and return its decoded body.
 
         Args:
             path: Path relative to ``base_url``.

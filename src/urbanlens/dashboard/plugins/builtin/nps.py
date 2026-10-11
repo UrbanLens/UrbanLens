@@ -65,7 +65,8 @@ _WEEK: tuple[tuple[str, str], ...] = (
 
 
 def entrance_fee_summary(fees: Any) -> str:
-    """One line describing what it costs to get in.
+    """
+    One line describing what it costs to get in.
 
     Args:
         fees: REData's ``entrance_fees`` - NPS's own ``entranceFees`` list of ``{"cost": "35.00", "title": ..., "description": ...}``.
@@ -110,7 +111,8 @@ def entrance_fee_summary(fees: Any) -> str:
 
 
 def standard_hours_summary(operating_hours: Any) -> str:
-    """When the place is open, collapsed into day ranges.
+    """
+    When the place is open, collapsed into day ranges.
     Consecutive days with identical hours are grouped, so the common shapes read as "Open daily" or "Mon-Fri: 9:00AM - 5:00PM; Sat-Sun: Closed" rather than as seven lines.
 
     Args:
@@ -145,7 +147,8 @@ def standard_hours_summary(operating_hours: Any) -> str:
 
 
 def alert_facts(data: dict[str, Any], *, show_facility_facets: bool) -> list[dict[str, str]]:
-    """Published alerts as icon-led quick facts - the safety-critical section of the card.
+    """
+    Published alerts as icon-led quick facts - the safety-critical section of the card.
 
     Args:
         data: The cached park payload (``alerts`` key - :meth:`RedataNationalParksGateway.get_alerts`-shaped dicts).
@@ -175,7 +178,8 @@ def alert_facts(data: dict[str, Any], *, show_facility_facets: bool) -> list[dic
 
 
 def _facility_summary(rows: Any) -> str:
-    """Render a facility list (visitor centers, campgrounds) as ``"<n> (<name1>, <name2>, ...)"``.
+    """
+    Render a facility list (visitor centers, campgrounds) as ``"<n> (<name1>, <name2>, ...)"``.
     A reasonable minimal treatment for facets that can run long: the count is always exact even when the name list is truncated, so "12 (...)" never understates how many there are.
 
     Args:
@@ -198,7 +202,8 @@ def _coordinate(value: Any) -> float | None:
 
 
 def nearest_places(places: Any, latitude: float, longitude: float) -> list[dict[str, Any]]:
-    """A park's points of interest nearest a spot, trimmed to what the card shows.
+    """
+    A park's points of interest nearest a spot, trimmed to what the card shows.
 
     Args:
         places: :meth:`RedataNationalParksGateway.get_places` rows.
@@ -231,7 +236,8 @@ def nearest_places(places: Any, latitude: float, longitude: float) -> list[dict[
 
 
 def webcam_rows(webcams: Any) -> list[dict[str, Any]]:
-    """A park's webcams as links to NPS's own viewer pages; an embeddable feed is not shown in the card.
+    """
+    A park's webcams as links to NPS's own viewer pages; an embeddable feed is not shown in the card.
 
     Args:
         webcams: :meth:`RedataNationalParksGateway.get_webcams` rows.
@@ -260,7 +266,8 @@ def _places_summary(places: Any, units: str) -> str:
 
 
 def park_facts(data: dict[str, Any], *, show_facility_facets: bool, units: str = "km") -> list[dict[str, str]]:
-    """The park facts worth showing beside its name, as ``{label, value, href}`` rows.
+    """
+    The park facts worth showing beside its name, as ``{label, value, href}`` rows.
     Alerts are deliberately *not* here - they are safety-critical and go through :func:`alert_facts` into the card's icon-led ``facts`` instead, so they render ahead of this whole section rather than mixed into a label/value grid.
 
     Args:
@@ -300,7 +307,8 @@ def park_facts(data: dict[str, Any], *, show_facility_facets: bool, units: str =
 
 
 def _is_park_containing_location(location: Location, park_code: str) -> bool:
-    """Whether ``location`` is known to sit inside the park unit ``park_code``.
+    """
+    Whether ``location`` is known to sit inside the park unit ``park_code``.
     Defaults to False (not contained) whenever the Property Records panel hasn't cached anything yet for this Location - the safe default for a subscription gate.
 
     Args:
@@ -320,7 +328,8 @@ def _is_park_containing_location(location: Location, park_code: str) -> bool:
 
 
 def _park_with_facets(gateway: RedataNationalParksGateway, park: dict[str, Any] | None, location: Location) -> dict[str, Any]:
-    """Attach a park's alerts, visitor centers, campgrounds, places, webcams and containment to its nearby-search row.
+    """
+    Attach a park's alerts, visitor centers, campgrounds, places, webcams and containment to its nearby-search row.
     Shared by :meth:`NpsPanelSource.fetch` and :meth:`NpsEnrichmentSource.fetch` so the two cache the same shape.
 
     Args:
@@ -343,7 +352,8 @@ def _park_with_facets(gateway: RedataNationalParksGateway, park: dict[str, Any] 
 
 
 def _optional_facet(fetch: Callable[[str], list[dict[str, Any]]], park_code: str) -> list[dict[str, Any]]:
-    """A facet the card can do without: REData refusing to answer it leaves it empty rather than the card unshown.
+    """
+    A facet the card can do without: REData refusing to answer it leaves it empty rather than the card unshown.
 
     An outage still raises, as the other facets' do, so the card is fetched again rather than cached without it.
     """
@@ -357,7 +367,8 @@ def _optional_facet(fetch: Callable[[str], list[dict[str, Any]]], park_code: str
 
 
 def facility_facets_visible(data: dict[str, Any], pin: Pin) -> bool:
-    """Whether alerts, visitor centers, campgrounds, places and webcams may be shown to this pin's owner.
+    """
+    Whether alerts, visitor centers, campgrounds, places and webcams may be shown to this pin's owner.
     Free when the pin's own location is genuinely inside the park (``is_contained``, cached at fetch time by :func:`_park_with_facets`) - that is data about the pin's own place, not somewhere else.
 
     Args:
@@ -407,7 +418,8 @@ class NpsPanelSource(LocationCachePanelSource):
         LocationCache.set(location, self.cache_source, _park_with_facets(gateway, park, location), query_key=query_key)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The nearest NPS unit as an information card, or None.
+        """
+        The nearest NPS unit as an information card, or None.
 
         Args:
             pin: The pin whose panel is being read.
@@ -456,7 +468,8 @@ class NpsEnrichmentSource(LocationCacheEnrichmentSource):
         return redata_configured()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Look up the nearest NPS unit to a location, if any is within range.
+        """
+        Look up the nearest NPS unit to a location, if any is within range.
 
         Args:
             location: The location to check.

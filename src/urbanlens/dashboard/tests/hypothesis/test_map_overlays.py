@@ -49,7 +49,8 @@ class CornerHandlingTests(SimpleTestCase):
         self.assertEqual([overlay.se_latitude, overlay.se_longitude], _CORNERS[2])
 
     def test_wrong_corner_count_is_refused(self) -> None:
-        """A partial write would leave some of the eight columns from a previous
+        """
+        A partial write would leave some of the eight columns from a previous
         position, silently georeferencing the image somewhere nobody chose."""
         import pytest
 
@@ -81,7 +82,8 @@ class OverlayOwnerTests(TestCase):
         self.client.force_login(self.user)
 
     def _create(self, **extra):
-        """POST a pasted-external-URL overlay with DNS and the download stubbed.
+        """
+        POST a pasted-external-URL overlay with DNS and the download stubbed.
 
         A pasted URL is resolved (the SSRF guard) and then downloaded, so without both stubs the request does a
         real lookup and reaches out to the real host."""
@@ -108,7 +110,8 @@ class OverlayOwnerTests(TestCase):
         self.assertEqual(overlay.profile, self.user.profile)
 
     def test_a_pasted_external_url_is_downloaded_not_referenced(self) -> None:
-        """The stored column must never hold the foreign URL.
+        """
+        The stored column must never hold the foreign URL.
 
         An overlay's URL is handed to every viewer's browser as an ``<img src>``."""
         from urbanlens.dashboard.models.images.model import Image
@@ -147,7 +150,8 @@ class OverlayOwnerTests(TestCase):
         self.assertTrue(overlay.source_url)
 
     def test_a_media_gallery_pick_is_materialized_first(self) -> None:
-        """Gallery items are transient, so referencing the provider URL would
+        """
+        Gallery items are transient, so referencing the provider URL would
         break the overlay the moment that URL rotted."""
         from urbanlens.dashboard.models.images.model import Image
 
@@ -168,7 +172,8 @@ class OverlayOwnerTests(TestCase):
         self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).get().image_id, materialized.pk)
 
     def test_an_existing_owned_photo_is_used_directly(self) -> None:
-        """Picked from the dialog's own "this page's media" grid - already a
+        """
+        Picked from the dialog's own "this page's media" grid - already a
         real Image on this pin, so it must be reused as-is, not re-downloaded
         or duplicated the way a transient gallery item is."""
         from urbanlens.dashboard.models.images.model import Image
@@ -189,7 +194,8 @@ class OverlayOwnerTests(TestCase):
         self.assertEqual(MapImageOverlay.objects.for_pin(self.pin).get().image_id, existing.pk)
 
     def test_reuploading_a_file_already_in_the_gallery_creates_the_overlay(self) -> None:
-        """The gallery refuses duplicate bytes; the overlay dialog must still
+        """
+        The gallery refuses duplicate bytes; the overlay dialog must still
         place that photo rather than resetting with nothing to show."""
         from io import BytesIO
 
@@ -285,7 +291,8 @@ class OverlayOwnerTests(TestCase):
         self.assertEqual(second.json()["uuid"], str(MapImageOverlay.objects.for_pin(self.pin).get().uuid))
 
     def test_another_pins_photo_cannot_be_picked(self) -> None:
-        """A posted image_id is scoped to this owner - it isn't a free-form
+        """
+        A posted image_id is scoped to this owner - it isn't a free-form
         lookup across every Image in the database."""
         from urbanlens.dashboard.models.images.model import Image
 
@@ -308,7 +315,8 @@ class OverlayOwnerTests(TestCase):
         self.assertFalse(MapImageOverlay.objects.for_pin(other_pin).exists())
 
     def test_a_non_image_url_is_refused(self) -> None:
-        """An external URL is loaded by the browser directly, so a PDF or TIFF
+        """
+        An external URL is loaded by the browser directly, so a PDF or TIFF
         here would be a silently blank overlay."""
         response = self._create(image_url="https://example.test/sheet.pdf")
         self.assertEqual(response.status_code, 200)

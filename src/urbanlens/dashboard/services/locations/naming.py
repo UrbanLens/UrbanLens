@@ -279,7 +279,8 @@ def is_coordinate_name(name: str) -> bool:
 
 
 def normalize_name_for_comparison(name: str | None) -> str:
-    """Casefold and strip everything but letters/digits, for "is this really the same name" checks.
+    """
+    Casefold and strip everything but letters/digits, for "is this really the same name" checks.
     Two names that only differ by case, spacing, or punctuation (e.g."""
     if not name:
         return ""
@@ -312,7 +313,8 @@ def canonical_state(text: str) -> str:
 
 
 def _parse_house_number_range(text: str) -> tuple[int, int] | None:
-    """Extract a leading house number, or a hyphenated range of them, from free text.
+    """
+    Extract a leading house number, or a hyphenated range of them, from free text.
 
     Args:
         text: Free-text address-like string, e.g. "1050 Main St" or "1030-1060 Main St".
@@ -340,7 +342,8 @@ def _house_numbers_are_compatible(candidate_range: tuple[int, int] | None, locat
 
 
 def contains_street_type_word(name: str | None) -> bool:
-    """Return True when any whole word in ``name`` is a street-type word.
+    """
+    Return True when any whole word in ``name`` is a street-type word.
     A weaker signal than :func:`is_address_derived_name` (which needs the location's address components to compare against): this only asks whether the name *looks like* a street name at all.
 
     Args:
@@ -355,7 +358,8 @@ def contains_street_type_word(name: str | None) -> bool:
 
 
 def is_address_derived_name(name: str, location: Location) -> bool:
-    """Return True when a candidate name is merely a fragment of the location's address.
+    """
+    Return True when a candidate name is merely a fragment of the location's address.
     Such names identify the surroundings, not the place, so they must not become the official name.
 
     Args:
@@ -395,7 +399,8 @@ def is_address_derived_name(name: str, location: Location) -> bool:
 
 
 def sanitize_name(value: str | None) -> str | None:
-    """Sanitize a user-supplied or externally-sourced place/pin/wiki name.
+    """
+    Sanitize a user-supplied or externally-sourced place/pin/wiki name.
 
     Args:
         value: Raw name text, or ``None``.
@@ -433,7 +438,8 @@ def external_name_candidates_for_location(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> list[NameCandidate]:
-    """Gather cleaned, quality-gated, tiered external name candidates for a location.
+    """
+    Gather cleaned, quality-gated, tiered external name candidates for a location.
     Sources in ``FALLBACK_ONLY_NAME_SOURCES`` (currently just Google Places) are dropped entirely whenever any other source has a surviving candidate, and only considered when they are the only source with one. A building's name is dropped wherever :func:`~urbanlens.dashboard.services.locations.name_tiers.building_name_admissible` says it does not describe this location.
 
     Args:
@@ -449,7 +455,8 @@ def _gather_candidates(
     location: Location,
     extra_candidates: list[tuple[str, Any]] | None = None,
 ) -> tuple[list[NameCandidate], list[NameCandidate]]:
-    """Candidates that may name the location, and those that may not: inadmissible buildings, an article on a building's own page, and every road or address name.
+    """
+    Candidates that may name the location, and those that may not: inadmissible buildings, an article on a building's own page, and every road or address name.
 
     Args:
         location: The location to gather candidates for.
@@ -516,7 +523,8 @@ def best_external_name_for_location(
     extra_candidates: list[tuple[str, Any]] | None = None,
     profile: Profile | None = None,
 ) -> tuple[str, str] | None:
-    """Choose the best externally supplied name for a location.
+    """
+    Choose the best externally supplied name for a location.
 
     Args:
         location: The location to name.
@@ -535,7 +543,8 @@ def best_external_name_for_location(
 
 
 def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
-    """Persist external name candidates as official WikiAlias rows.
+    """
+    Persist external name candidates as official WikiAlias rows.
 
     Args:
         wiki: The wiki to attach aliases to; skipped when None or unsaved (wikis are created lazily and this honours that).
@@ -561,7 +570,8 @@ def _add_wiki_aliases(wiki, candidates: Sequence[NameCandidate]) -> bool:
 
 
 def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate], profile: Profile | None) -> bool:
-    """Persist external name candidates as official PinAlias rows on one account's pins at this location.
+    """
+    Persist external name candidates as official PinAlias rows on one account's pins at this location.
 
     Args:
         location: The location whose pins should receive aliases; skipped when unsaved (no pins can exist yet).
@@ -605,7 +615,8 @@ def _add_pin_aliases(location: Location, candidates: Sequence[NameCandidate], pr
 
 
 def _prune_inadmissible_aliases(location: Location, wiki, rejected: Sequence[NameCandidate], profile: Profile | None) -> bool:
-    """Remove official aliases automation added that the naming rules no longer admit.
+    """
+    Remove official aliases automation added that the naming rules no longer admit.
 
     A building's name on a campus and a road's name are pruned from the wiki and from ``profile``'s pins at the
     location. A person's alias (``source="user"``) and the wiki's current name are never touched, and nothing is
@@ -647,7 +658,8 @@ def _alias_rejects(candidates: Sequence[NameCandidate], rejected: Sequence[NameC
 
 
 def _property_candidates(location: Location, wiki, candidates: Sequence[NameCandidate], rejected: Sequence[NameCandidate]) -> list[NameCandidate]:
-    """The property's own names, from its wiki, for another root pin's Location on the same property.
+    """
+    The property's own names, from its wiki, for another root pin's Location on the same property.
 
     A property wiki is named from one Location's cached sources; a second person's root pin elsewhere on the
     property has caches of its own that may never have fetched the register or the article. Only
@@ -682,7 +694,8 @@ def _property_candidates(location: Location, wiki, candidates: Sequence[NameCand
 
 
 def _retire_rejected_name(location: Location, wiki, rejected: Sequence[NameCandidate]) -> tuple[bool, bool]:
-    """Take a name the rules now reject - a road's, a campus building's - off the Location and its automatically named wiki.
+    """
+    Take a name the rules now reject - a road's, a campus building's - off the Location and its automatically named wiki.
 
     Runs only when no candidate is left to replace it. The Location's official name is cleared; the wiki
     goes back to its placeholder unless a person named it.
@@ -718,7 +731,8 @@ def _retire_rejected_name(location: Location, wiki, rejected: Sequence[NameCandi
 
 
 def persist_official_aliases_for_location(location: Location, *, profile: Profile | None = None) -> bool:
-    """Backfill official aliases for a location's wiki, and ``profile``'s pins there, from cached candidates.
+    """
+    Backfill official aliases for a location's wiki, and ``profile``'s pins there, from cached candidates.
 
     Args:
         location: The location whose wiki and pins should receive official aliases.
@@ -742,7 +756,8 @@ def update_location_name_from_external_sources(
     save: bool = True,
     profile: Profile | None = None,
 ) -> bool:
-    """Refresh a Location's official_name (and its wiki's/pins' names/aliases) from external sources.
+    """
+    Refresh a Location's official_name (and its wiki's/pins' names/aliases) from external sources.
     The place-identity name lives on ``Location.official_name``; the community-editable name and alias list live on the place's ``Wiki``, renamed only while its name is provisional (see :func:`~urbanlens.dashboard.services.wiki.wiki_naming.adopt_public_name`). A pin's own name is never read or written.
 
     Args:
