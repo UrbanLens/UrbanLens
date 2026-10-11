@@ -1,4 +1,4 @@
-# !/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 from enum import Enum
@@ -11,18 +11,19 @@ import subprocess  # nosec B404
 import sys
 import textwrap
 import time
+from typing import Any
 
 from dotenv import load_dotenv
 from tqdm import tqdm
 
-from bin.utils.action import EnumAction
-
 logger = logging.getLogger(__name__)
 
-# The project root: src/bin/db.py → src/ → project root
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+# The project root: bin/db.py → project root
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
-DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Where the local cluster's data and log default to. `src/`, as it was when this
+# script lived in `src/bin/`, so an existing local cluster is still found.
+DIR = str(ROOT_DIR / "src")
 
 DEFAULT_DATA_PATH = os.environ.get("URBANLENS_DB_DATA_PATH", f"{DIR}/pgsql/data")
 DEFAULT_LOG_PATH = os.environ.get("URBANLENS_LOG_PATH", f"{DIR}/pgsql/pgsql.log")
@@ -40,6 +41,39 @@ def _resolve_executable(name: str) -> str:
 PSQL_EXE = os.environ.get("URBANLENS_PSQL_BIN", "psql")
 PG_DUMP_EXE = os.environ.get("URBANLENS_PG_DUMP_BIN", "pg_dump")
 PYTHON_EXE = str(Path(sys.executable).resolve())
+
+
+class EnumAction(argparse.Action):
+    """Argparse action that takes an Enum member by name."""
+
+    def __init__(self, **kwargs):
+        enum_type = kwargs.pop("type", None)
+
+        if enum_type is None:
+            raise ValueError("type must be assigned an Enum when using EnumAction")
+        if not issubclass(enum_type, Enum):
+            raise TypeError("type must be an Enum when using EnumAction")
+
+        kwargs.setdefault("choices", tuple(e.name for e in enum_type))
+
+        super().__init__(**kwargs)
+
+        self._enum = enum_type
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        value: Any,
+        option_string: str | None = None,
+    ):
+        if isinstance(value, str):
+            value = self._enum[value]
+            setattr(namespace, self.dest, value)
+        elif value is None:
+            raise argparse.ArgumentTypeError(f"You need to pass a value after {option_string}!")
+        else:
+            raise argparse.ArgumentTypeError("Invalid choice, must be a string")
 
 
 class Db:

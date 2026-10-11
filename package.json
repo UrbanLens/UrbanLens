@@ -4,7 +4,7 @@
   "description": "Mapping for Urban Explorers",
   "main": "index.js",
   "scripts": {
-    "db": "python3 src/bin/db.py start",
+    "db": "python3 bin/db.py start",
     "db:restore": "bash bin/restore_backup.sh",
     "db:restore:verify": "bash bin/verify_backup_restore.sh",
     "migrate": "python3 -m urbanlens.manage makemigrations && python3 -m urbanlens.manage migrate",
