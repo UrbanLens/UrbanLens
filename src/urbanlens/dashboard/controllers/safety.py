@@ -20,7 +20,7 @@ from django.views import View
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import MAX_AUTO_DELETE_AFTER_DAYS, SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
+from urbanlens.dashboard.models.safety.model import CHECKIN_TITLE_MAX_LENGTH, MAX_AUTO_DELETE_AFTER_DAYS, SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.services.core.message_limits import MessageRateLimitedError
 from urbanlens.dashboard.services.core.numbers import LATITUDE_BOUND, LONGITUDE_BOUND, bounded_float_or_none, coordinate_or_none
 from urbanlens.dashboard.services.core.pagination import get_page
@@ -625,6 +625,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": "Expected check-in time must be in the future."}, status=400)
 
         title = request.POST.get("title", "").strip() or f"Check-in - {checkin_by:%b} {checkin_by.day}, {checkin_by.year}"
+        if len(title) > CHECKIN_TITLE_MAX_LENGTH:
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": f"Titles can be at most {CHECKIN_TITLE_MAX_LENGTH} characters."}, status=400)
 
         try:
             lat, lng = _parse_destination(request.POST)

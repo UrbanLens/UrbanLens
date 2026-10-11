@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Im
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import (
+    CHECKIN_TITLE_MAX_LENGTH,
     PLAN_UPDATE_NOTIFICATION_COOLDOWN,
     SCRUBBED_CONTACT_EMAIL,
     EmergencyContactDefault,
@@ -411,6 +412,20 @@ def _contact_recipients(contact: SafetyCheckinContact, checkin: SafetyCheckin) -
     return account, email
 
 
+def _is_storable_email(email: str) -> bool:
+    """Whether ``email`` is an address, and short enough for the 254-character normalized column it is saved beside."""
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+
+    if len(normalize_email(email)) > 254:
+        return False
+    try:
+        validate_email(email)
+    except ValidationError:
+        return False
+    return True
+
+
 def validate_notifiable_contacts(
     owner: Profile,
     contacts: Iterable[ContactInput],
@@ -440,7 +455,9 @@ def validate_notifiable_contacts(
         label = name or (resolved_profile.username if resolved_profile else resolved_email) or "That contact"
         key = (resolved_profile.pk if resolved_profile else None, normalize_email(resolved_email) if resolved_email else None)
 
-        if resolved_profile is not None and resolved_profile.pk == owner.pk:
+        if resolved_profile is None and resolved_email and not _is_storable_email(resolved_email):
+            rejected.append("That isn't an email address we can send to, so it wasn't added.")
+        elif resolved_profile is not None and resolved_profile.pk == owner.pk:
             rejected.append(f"{label} is your own account and can't be an emergency contact.")
         elif key in seen:
             rejected.append(f"{label} was already added.")
@@ -1321,6 +1338,8 @@ def apply_checkin_edit(
             if locked.contacts_locked:
                 if title.strip() != locked.title:
                     warnings.append("Title is locked and can't be changed once contacts have been notified.")
+            elif len(title.strip()) > CHECKIN_TITLE_MAX_LENGTH:
+                warnings.append(f"Titles can be at most {CHECKIN_TITLE_MAX_LENGTH} characters, so the title wasn't changed.")
             else:
                 locked.title = title.strip() or locked.title
                 update_fields.append("title")
