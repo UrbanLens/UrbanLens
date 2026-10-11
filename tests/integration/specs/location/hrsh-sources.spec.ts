@@ -174,7 +174,7 @@ test.describe("Hudson River State Hospital - CRIS document sources", () => {
             expect(
                 urls.size,
                 `every sampled building's Sources tab pointed at the same document url(s): ${JSON.stringify([...urls])}. Per-building ` +
-                    "coverage means each building's own CRIS record, not one campus-wide file reused everywhere - UrbanLens#272 ("campus pin's CRIS detail fetches") names " +
+                    "coverage means each building's own CRIS record, not one campus-wide file reused everywhere - UrbanLens#272 (campus pin CRIS detail fetches) names " +
                     "this exact failure mode.",
             ).toBeGreaterThan(1);
         });
