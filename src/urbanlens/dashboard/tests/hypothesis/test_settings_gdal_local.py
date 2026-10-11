@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import subprocess
 import sys
@@ -11,6 +10,7 @@ from unittest import mock
 
 from django.test import SimpleTestCase
 
+from urbanlens.core.tests.environment import probe_environ
 from urbanlens.UrbanLens.settings import _gdal_local
 from urbanlens.UrbanLens.settings._gdal_local import local_gdal_overrides
 
@@ -58,7 +58,7 @@ class LocalGdalOverridesTests(SimpleTestCase):
             print(gdal_version().decode(), geos_version().decode())
             """,
         )
-        env = {**os.environ, "PYTHONPATH": str(_SRC)}
+        env = {**probe_environ(), "PYTHONPATH": str(_SRC)}
         env.pop("DJANGO_SETTINGS_MODULE", None)
 
         result = subprocess.run(

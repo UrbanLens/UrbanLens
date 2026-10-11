@@ -166,6 +166,9 @@ class DeclaredRolesTests(TestCase):
 
         self.assertEqual(_rows("SELECT rolcanlogin FROM pg_roles WHERE rolname = 'ul_p104_retired'"), [(False,)])
 
+    # The command refuses to hand the owner's password to the tiers in a deployed environment, and an unset
+    # UL_ENVIRONMENT - a worktree with no `.env` - reads as production. Pinned so the runner's cannot decide it.
+    @override_settings(ENVIRONMENT_NAME="testing")
     def test_the_command_applies_every_declared_role(self) -> None:
         out = io.StringIO()
         call_command("apply_database_roles", stdout=out)

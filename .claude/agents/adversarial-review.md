@@ -53,6 +53,8 @@ is the attack.
 
 ## How to attack
 
+**Cheap first pass.** For a diff or patch longer than about 200 lines, run `llm-task adversarial < <file>` (free model) first, and treat each candidate it returns as a lead to verify, never as a finding. Then attack as below.
+
 Work down this list; stop early only when something kills it.
 
 1. **Is the premise true?** Most bad conclusions are sound reasoning from a false

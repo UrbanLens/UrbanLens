@@ -14,6 +14,7 @@ import { CHILD_DETAILS_EVENT, childDetailsChange, readChildDetails, withChildDet
 import { AdditiveSelectMemory, createPinClusterGroup, isAdditiveClick } from "../shared/map-clusters";
 import type { MarkupToolbar } from "../shared/markup-toolbar";
 import { createPhotoMarkerLayer, type PhotoMapItem } from "../shared/photo-map";
+import { createLandUseLayer, type LandUseLayer } from "../shared/land-use-layer";
 import { type LightboxInput, lightboxItemFromTile, parsePhotoIds, PHOTO_IDS_TYPE, tileFromJson, writePhotoIds } from "../shared/photo-tile";
 import { createTemporalImagerySlider } from "../shared/temporal-imagery";
 import { installMediaLightboxOpener, observeMediaGalleryProcessing } from "../shared/media-lightbox";
@@ -148,6 +149,7 @@ function readConfig(el: HTMLElement) {
         boundaryUrl: d.boundaryUrl || "",
         photoGalleryJsonUrl: d.photoGalleryJsonUrl || "",
         nearbyPinsJsonUrl: d.nearbyPinsJsonUrl || "",
+        landUseAreasJsonUrl: d.landUseAreasJsonUrl || "",
         mediaRelevanceUrl: d.mediaRelevanceUrl || "",
         markupFillOpacity: d.markupFillOpacity ? Number.parseInt(d.markupFillOpacity, 10) : 87,
         markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
@@ -808,6 +810,28 @@ function init(): void {
         }
     }
 
+    // -- Land Use layer -----------------------------------------------------------
+    // Census Special Land Use Areas around the pin's parcel, via REData. Offered
+    // (and its button rendered) only where REData is configured and the pin is in
+    // the US - see services/map/land_use_areas.land_use_layer_offered.
+    let baseAttribution = "";
+    const renderAttribution = (): void => setAttribution(baseAttribution + (landUseLayer?.isActive() ? " · Land use: U.S. Census Bureau" : ""));
+    const landUseLayer: LandUseLayer | null =
+        cfg.landUseAreasJsonUrl && document.querySelector('#detail-map-layers [data-map-layer="landuse"]')
+            ? createLandUseLayer(map, cfg.landUseAreasJsonUrl, (notice) => (notice.kind === "warning" ? toast.warning(notice.message) : toast.info(notice.message)))
+            : null;
+    const landUseToggles: Record<string, CustomLayerToggle> = landUseLayer
+        ? {
+              landuse: {
+                  isActive: landUseLayer.isActive,
+                  toggle: () => {
+                      landUseLayer.toggle();
+                      renderAttribution();
+                  },
+              },
+          }
+        : {};
+
     // -- Custom layers: user-created groupings of markup items (e.g. "Tunnels"), --
     // independently toggleable from the base Markup layer. One Leaflet LayerGroup
     // per CustomLayer row, keyed by uuid so markup-toolbar.ts's layerGroupFor hook
@@ -842,7 +866,10 @@ function init(): void {
         storageKey: cfg.profileUuid ? `ul_layers_v1_${cfg.profileUuid}` : null,
         // Bound below with "Create child pin here" once those helpers exist.
         contextMenu: false,
-        onAttribution: setAttribution,
+        onAttribution: (text) => {
+            baseAttribution = text;
+            renderAttribution();
+        },
         custom: {
             details: {
                 isActive: () => detailsVisible(),
@@ -856,6 +883,7 @@ function init(): void {
                 isActive: () => nearbyActive,
                 toggle: () => setNearbyActive(!nearbyActive),
             },
+            ...landUseToggles,
             ...customLayerToggles,
         },
     });

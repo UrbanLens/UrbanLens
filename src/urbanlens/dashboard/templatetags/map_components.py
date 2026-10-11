@@ -282,6 +282,17 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="landuse",
+        kind="custom",
+        label="Land Use",
+        aria_label="Show or hide land-use area boundaries",
+        tooltip="Military, prison, national park and campus boundaries around this pin",
+        icon="fence",
+        button_id="land-use-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="past_activities",
         kind="custom",
         label="Past Activities",

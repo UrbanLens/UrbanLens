@@ -148,6 +148,7 @@ _PARCEL_503S = (
     "/api/v1/parcels/lookup/",
     "/api/v1/parcels/{parcel_uuid}/assessments/",
     "/api/v1/parcels/{parcel_uuid}/demographics/",
+    "/api/v1/parcels/{parcel_uuid}/land-use-areas/",
     "/api/v1/parcels/{parcel_uuid}/national-parks/",
     "/api/v1/parcels/{parcel_uuid}/sale-records/",
 )
@@ -659,6 +660,7 @@ READS: tuple[Read, ...] = (
     _get(_PARCELS, "/api/v1/parcels/lookup/", "uuid", "record_payload.*", "parcel_geometry"),
     _get(_PARCELS, "/api/v1/parcels/lookup/", "error", "message", "links.{}", status="404"),
     _get(_PROPERTY, "/api/v1/parcels/{parcel_uuid}/coverage/", "{}.available"),
+    _get("services/map/land_use_areas.py", "/api/v1/parcels/{parcel_uuid}/land-use-areas/", "{}.name", "{}.geometry"),
     _get(
         _PROPERTY,
         "/api/v1/parcels/{parcel_uuid}/assessments/",

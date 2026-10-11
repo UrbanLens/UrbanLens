@@ -619,7 +619,7 @@ _BUILDING_CHARACTERISTIC_LABELS: tuple[tuple[str, str], ...] = (
 #: whether the ground you would be standing on is access-controlled comes before what it is called.
 #: REData resolves these on every parcel fetch (a point-in-polygon test against TIGERweb's Special
 #: Land Use Areas layer) and UrbanLens has been caching the answer and showing none of it.
-_SPECIAL_LAND_USE_LABELS: tuple[tuple[str, str], ...] = (
+SPECIAL_LAND_USE_LABELS: tuple[tuple[str, str], ...] = (
     ("military_installation", "Military installation"),
     ("correctional_facility", "Correctional facility"),
     ("national_park", "National park"),
@@ -634,12 +634,12 @@ def special_land_use_rows(areas: Any) -> list[dict[str, str]]:
         areas: REData's ``special_land_use_areas`` mapping - keyed by category, each value ``{"name": ..., "geoid": ...}`` or ``None``.
 
     Returns:
-        ``{"category", "label", "name"}`` dicts in :data:`_SPECIAL_LAND_USE_LABELS` order, skipping categories the parcel is not inside."""
+        ``{"category", "label", "name"}`` dicts in :data:`SPECIAL_LAND_USE_LABELS` order, skipping categories the parcel is not inside."""
     if not isinstance(areas, dict):
         return []
 
     rows: list[dict[str, str]] = []
-    for category, label in _SPECIAL_LAND_USE_LABELS:
+    for category, label in SPECIAL_LAND_USE_LABELS:
         area = areas.get(category)
         if not area:
             continue

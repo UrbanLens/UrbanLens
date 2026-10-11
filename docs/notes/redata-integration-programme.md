@@ -193,7 +193,8 @@ passed for all four primaries apart from Athens's build date (REData P111).
 **P3 - ingestion and outsourcing.**
 
 13. REData endpoints no UrbanLens surface reads yet: `addresses`, `elevation/profile`, geocode autocomplete and
-    structured, `related-buildings`, `land-use-areas` (UrbanLens#267, "land-use-area boundary geometry is not drawn").
+    structured, `related-buildings`. `land-use-areas` is read by the Private Pin map's Land Use layer
+    (UrbanLens#267) from 0.9.0.
 14. Direct third-party calls REData already answers, which could go through it (each a separate decision):
     Wikipedia geosearch and summary (REData has no infobox or full extract, so not the rest), Nominatim reverse,
     Google Geocoding outside CID resolution, Esri and USGS imagery (excluded on purpose today), and the

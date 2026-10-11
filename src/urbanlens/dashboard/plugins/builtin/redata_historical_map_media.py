@@ -29,9 +29,13 @@ class HistoricalMapMediaSource(GalleryMediaSource):
 
     def fetch(self, pin: Pin) -> None:
         """Cache the map sheets covering this pin."""
-        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.models.cache.location_cache import UNANSWERED_SOURCES_KEY, LocationCache
         from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
-        from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+        from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import (
+            PARTIAL_MAPS_STALE_AFTER,
+            RedataHistoricalMapsGateway,
+            maps_answer_complete,
+        )
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
@@ -39,7 +43,13 @@ class HistoricalMapMediaSource(GalleryMediaSource):
             maps = RedataHistoricalMapsGateway().get_maps_covering(lat, lng, limit=24)
         except LocationContextUnavailableError:
             return
-        LocationCache.set(pin.location, self.cache_source, {"maps": maps}, query_key=f"{lat:.5f},{lng:.5f}")
+        data: dict = {"maps": list(maps)}
+        stale_after = None
+        if not maps_answer_complete(maps):
+            # REData's deadline cut off the nearby-maps read: show what it found, but ask again in minutes, not days.
+            data[UNANSWERED_SOURCES_KEY] = ["nearby_maps"]
+            stale_after = PARTIAL_MAPS_STALE_AFTER
+        LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}", stale_after=stale_after)
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached map matches into gallery tiles. Sheets without a preview image are skipped.
