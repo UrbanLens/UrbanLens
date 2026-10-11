@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import traceback
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.auth.models import User
 from django.db import transaction
@@ -114,8 +115,21 @@ def _origin(exc: BaseException) -> str:
     return f"{Path(frames[-1].filename).relative_to(package)}:{frames[-1].lineno}"
 
 
-class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
-    """Every owner-scoped write route refuses a minimal request rather than crashing."""
+# The sweep reads the test client and assertions, but only the classes below are tests.
+if TYPE_CHECKING:
+    _SweepBase = TestCase
+else:
+    _SweepBase = object
+
+#: How many classes the sweeps are split into, each taking every ``_CHUNKS``-th route. Under ``--dist loadscope`` a
+#: class is the unit a pytest-xdist worker takes, and as one class the sweeps kept a worker busy for over half an hour.
+_CHUNKS = 40
+
+
+class _WriteRouteSweep(_SweepBase):
+    """The fixture and the sweep machinery; ``chunk`` picks which routes a class sweeps (None: all of them)."""
+
+    chunk: ClassVar[int | None] = None
 
     def setUp(self) -> None:
         super().setUp()
@@ -217,6 +231,10 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
                     continue
         return sorted(urls)
 
+    def _swept_routes(self) -> list[tuple[str, str]]:
+        routes = self._write_routes()
+        return routes if self.chunk is None else routes[self.chunk :: _CHUNKS]
+
     def _candidates(self, param: str) -> list:
         """Every value worth trying for *param*, always as a list."""
         value = self.identifiers[param]
@@ -232,7 +250,7 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
         """
         crashes: dict[str, str] = {}
         methods = ("post",) if json_body is not None else _WRITE_METHODS
-        for name, url in self._write_routes():
+        for name, url in self._swept_routes():
             for method in methods:
                 try:
                     # Each request in its own savepoint.
@@ -252,6 +270,10 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
                 if response.status_code >= 500:
                     crashes[name] = f"[{method.upper()}] returned {response.status_code}"
         return crashes
+
+
+class _WriteRouteSweepTests(_WriteRouteSweep):
+    """Every owner-scoped write route refuses a minimal or hostile request rather than crashing."""
 
     def test_no_write_route_answers_a_minimal_request_with_a_server_error(self) -> None:
         unexpected = {name: how for name, how in self._crashing_routes().items() if name not in _KNOWN_CRASHES}
@@ -311,6 +333,29 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
             "routes crashed on a hostile JSON value:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()),
         )
 
+
+for _chunk in range(_CHUNKS):
+    _name = f"WriteRouteSmokeChunk{_chunk:02d}Tests"
+    globals()[_name] = type(
+        _name,
+        (_WriteRouteSweepTests, DiscardsLedgerRowsFromOtherThreadsMixin, TestCase),
+        {"chunk": _chunk, "__module__": __name__, "__qualname__": _name},
+    )
+del _chunk, _name
+
+
+class WriteRouteSmokeTests(_WriteRouteSweep, DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
+    """The sweeps' own guards, over every route."""
+
+    def test_the_chunks_sweep_every_route_once(self) -> None:
+        routes = self._write_routes()
+        swept = []
+        for chunk in range(_CHUNKS):
+            self.chunk = chunk
+            swept += self._swept_routes()
+
+        self.assertCountEqual(swept, routes)
+
     def test_the_parameter_names_are_found(self) -> None:
         """Anti-vacuity: the source scan finds the parameters this sweep relies on."""
         names = _parameter_names()
@@ -324,7 +369,8 @@ class WriteRouteSmokeTests(DiscardsLedgerRowsFromOtherThreadsMixin, TestCase):
 
         With ``_KNOWN_CRASHES`` empty this asserts the absence of excuses, which is the state to defend: every
         write route is swept for real."""
-        still_broken = set(self._crashing_routes()) & _KNOWN_CRASHES
+        # The sweep takes minutes, and with nothing excused there is nothing for it to find.
+        still_broken = set(self._crashing_routes()) & _KNOWN_CRASHES if _KNOWN_CRASHES else set()
 
         self.assertEqual(
             still_broken,
