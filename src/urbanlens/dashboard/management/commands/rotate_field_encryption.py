@@ -80,7 +80,8 @@ class Command(BaseCommand):
         Re-encrypt every discovered column.
 
         Args:
-            *args: Unused positional arguments. **options: Parsed command-line options.
+            *args: Unused positional arguments.
+            **options: Parsed command-line options.
 
         Raises:
             CommandError: When one or more rows could not be decrypted with any configured key, unless

@@ -6,7 +6,7 @@ in ``serializers.py``; the unblock endpoint reuses ``FriendshipSerializer`` rath
 near-identical twin, so a client parses one relationship shape everywhere.
 
 - **Write serializers validate; they do not decide.** The annotation bounds restated here (nickname
-  length, trust range) mirror ``services.profile.profile_anno...
+  length, trust range) mirror ``services.profile.profile_anno...``
 - **Nothing in this module is a read model for someone else's data.** The annotation payload
   describes what the *caller* recorded about a subject. If a field i...
 """

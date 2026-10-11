@@ -10,16 +10,22 @@ if TYPE_CHECKING:
 
 
 class SystemMessage(TypedDict):
+    """A system turn of a chat transcript."""
+
     role: Literal["system"]
     content: str
 
 
 class UserMessage(TypedDict):
+    """A user turn of a chat transcript."""
+
     role: Literal["user"]
     content: str
 
 
 class AssistantMessage(TypedDict):
+    """An assistant turn of a chat transcript."""
+
     role: Literal["assistant"]
     content: str
 

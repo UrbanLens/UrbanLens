@@ -508,7 +508,7 @@ def _resolve_source_saved_filter(profile: Profile, data: dict) -> tuple[SavedFil
 
     Returns:
         ``(saved_filter, None)`` on success - where ``saved_filter`` is None when the key was absent or
-        explicitly null - or ``(None,...
+        explicitly null - or ``(None,...``
     """
     if not data.get("source_saved_filter_uuid"):
         return None, None

@@ -88,8 +88,8 @@ class SearchForm(forms.Form):
 
         Args:
             *args: Standard form args (usually the request data).
-            profile: The requesting user's profile; enables custom-field filters. **kwargs: Standard form
-            kwargs.
+            profile: The requesting user's profile; enables custom-field filters.
+            **kwargs: Standard form kwargs.
         """
         super().__init__(*args, **kwargs)
         self.profile = profile

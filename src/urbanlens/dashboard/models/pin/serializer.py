@@ -65,6 +65,7 @@ class PinSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
+        """Create the pin as not named by its owner, and queue its category suggestion."""
         # A create (including an import through this serializer) is not an
         # explicit rename.  Only the pin-name editing flows set this guard.
         validated_data["name_is_user_provided"] = False

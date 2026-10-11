@@ -35,11 +35,10 @@ class AssistantProposalSerializer(serializers.Serializer):
     """
     One write-tool proposal awaiting the caller's confirmation.
 
-    /assistant/turn/<turn_id>/confirm/<n>/``).
-
     Never carries the tool's ``args`` - those stay server-side
     (``services.ai.turns.store_turn_proposals``) until a confirm request replays them for real; this is
-    only what a client needs to render a confirm control and address it (``n``, this domain's own ``POST
+    only what a client needs to render a confirm control and address it (``n``, this domain's own
+    ``POST /assistant/turn/<turn_id>/confirm/<n>/``).
     """
 
     n = serializers.IntegerField(read_only=True)

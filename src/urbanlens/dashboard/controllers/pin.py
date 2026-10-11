@@ -504,7 +504,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         Args:
             request: The current request.
-            response: The response to annotate. *events: Client event names other panels listen for.
+            response: The response to annotate.
+            *events: Client event names other panels listen for.
 
         Returns:
             The same response, for chaining.

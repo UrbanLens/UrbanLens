@@ -650,7 +650,7 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
 
         Args:
             text_data: JSON string with ``recipient`` (profile slug), ``body``, and optional
-            ``image_ids``/``markup_map_uuid``/``reply_to`` fields, or a ``{"type": "ping"}`` keep-alive.
+                ``image_ids``/``markup_map_uuid``/``reply_to`` fields, or a ``{"type": "ping"}`` keep-alive.
             bytes_data: Unused - this socket is JSON-text-only.
         """
         from urbanlens.dashboard.models.account.model import ApiKeyScope
@@ -785,8 +785,8 @@ class DirectMessageConsumer(SocketAllowanceMixin, InboundVolumeMixin, Credential
         Deliver a broadcasted reaction-summary update to this connection.
 
         Args:
-            event: The group-send event, with a ``message`` dict payload (``{"type": "reaction",
-            "message_id": ..., "reactions": [...]}``).
+            event: The group-send event, with a ``message`` dict payload
+                (``{"type": "reaction", "message_id": ..., "reactions": [...]}``).
         """
         await self.send(text_data=json.dumps(event["message"]))
 
@@ -911,7 +911,7 @@ class SafetyCheckinChatConsumer(SocketAllowanceMixin, InboundVolumeMixin, Creden
     through - important for a feature people may rely on in an emergency.
 
     - ``ws/safety/checkin/<uuid:checkin_uuid>/chat/`` - session route, requires an authenticated session
-      belonging to the check-in's owner or an accepted ``SafetyC...
+      belonging to the check-in's owner or an accepted ``SafetyC...``
     - ``ws/safety/contact/<uuid:token>/chat/`` - contact route, authorized by the token alone (mirrors
       ``SafetyCheckinMessageView._resolve`` - a contact identified...
 

@@ -56,8 +56,8 @@ def column_max_length(model: type[Model], field_name: str) -> int:
 
 def column_length_error(model: type[Model], field_name: str, value: str | None, field_label: str) -> str | None:
     """
-    Return an error if `value` will not fit `model.field_name`'s column.
-    The constants above cover `TextField`s, whose limit exists only as a Django validator.
+    Return an error if ``value`` will not fit the column of ``model.field_name``.
+    The constants above cover ``TextField`` columns, whose limit exists only as a Django validator.
 
     Args:
         model: The model class owning the field.

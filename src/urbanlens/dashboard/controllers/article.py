@@ -197,11 +197,12 @@ class ArticleViewBase(LoginRequiredMixin, View):
         Resolve the host (pin or wiki) and its article for this request.
 
         Args:
-            request: The current request. **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
-            ``pin_slug`` selects pin scope.
+            request: The current request.
+            **kwargs: URL kwargs; ``location_slug`` selects wiki scope,
+                ``pin_slug`` selects pin scope.
 
         Returns:
-            The populated: class:`ArticleScope`.
+            The populated :class:`ArticleScope`.
 
         Raises:
             Http404: Host not found or not accessible to the requester.
@@ -251,7 +252,8 @@ class ArticleViewBase(LoginRequiredMixin, View):
         Args:
             response: The response to annotate.
             level: toastr level ("success", "error", ...).
-            message: Toast body. *extra_events: Additional client event names to trigger.
+            message: Toast body.
+            *extra_events: Additional client event names to trigger.
 
         Returns:
             The same response, for chaining.

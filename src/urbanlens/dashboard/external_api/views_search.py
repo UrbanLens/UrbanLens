@@ -89,8 +89,8 @@ class GlobalSearchView(ExternalApiView):
             ``RESULT_TYPES`` slugs, optional) and ``limit``...
 
         Returns:
-            200 with the grouped payload - including for a query too short to search, which answers ``total:
-            0`` rather than an error.
+            200 with the grouped payload - including for a query too short to search, which answers
+            ``total: 0`` rather than an error.
         """
         serializer = GlobalSearchQuerySerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)

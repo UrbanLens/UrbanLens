@@ -7,9 +7,9 @@ functions below exist to enforce (2) structurally: views call a builder, never a
 there is no route to a response that skipped the masking step.
 
 - No field here is ever derived from decrypted plaintext. ``body`` is only ever the plaintext a user
-  *chose* to send unencrypted; an encrypted message yields `...
+  *chose* to send unencrypted; an encrypted message yields ``...``
 - Every payload naming a person is built through the existing ``serialize_direct_message`` /
-  ``resolve_visible_identity`` path rather than reading ``profile.us...
+  ``resolve_visible_identity`` path rather than reading ``profile.us...``
 """
 
 from __future__ import annotations

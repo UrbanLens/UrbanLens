@@ -952,8 +952,8 @@ class E2EERewrapAllView(DualAuthJsonView):
             request: The authenticated request.
 
         Returns:
-            JSON ``{conversation_keys: [{id, wrapped_key}],
-            group_envelopes: [{id, wrapped_key}]}``; 404 when not enrolled.
+            JSON ``{conversation_keys: [{id, wrapped_key}], group_envelopes: [{id, wrapped_key}]}``;
+            404 when not enrolled.
         """
         from django.db.models import Q
 

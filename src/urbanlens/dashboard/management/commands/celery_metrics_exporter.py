@@ -53,7 +53,8 @@ class Command(BaseCommand):
         Serve metrics and consume events until interrupted.
 
         Args:
-            *args: Unused. **options: Parsed command-line options.
+            *args: Unused.
+            **options: Parsed command-line options.
 
         Raises:
             CommandError: If metrics are disabled, or enabled without a gate on a deployed environment - the
@@ -178,7 +179,8 @@ def _build_handler(metrics: CeleryEventMetrics) -> type[BaseHTTPRequestHandler]:
             Route access logging to the app's logger instead of stderr.
 
             Args:
-                format: Printf-style format string. *args: Format arguments.
+                format: Printf-style format string.
+                *args: Format arguments.
             """
             logger.debug("celery-metrics %s", format % args)
 

@@ -94,7 +94,7 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     - friends: accepted friendship records for this profile
     - incoming_requests: pending requests TO this profile (only if viewer == profile)
     - outgoing_pending: this profile's own pending sent requests (only if viewer == profile) -
-      Friendship and FriendInvitation rows merged into one list of ``{"can...
+      Friendship and FriendInvitation rows merged into one list of ``{"can...``
     - viewer_friendship_status: status of the friendship between viewer and this profile
     """
     from django.utils import timezone

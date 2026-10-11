@@ -58,7 +58,7 @@ class GoogleImagesPanelSource(GalleryMediaSource):
         LocationCache.set(pin.location, self.cache_source, {"items": results}, query_key=address)
 
     def media_items(self, data: dict) -> list[MediaItem]:
-        """Rebuild ``MediaItem``s from the cached search results."""
+        """Rebuild ``MediaItem`` objects from the cached search results."""
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
         items = (data or {}).get("items") or []
