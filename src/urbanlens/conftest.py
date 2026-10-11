@@ -24,6 +24,8 @@ from urbanlens.core.tests.database_role_guard import refusal_for_role
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from pytest_django import DjangoDbBlocker
+
 
 logger = logging.getLogger(__name__)
 
@@ -127,16 +129,27 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 
 @pytest.fixture(scope="session")
-def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: None) -> None:  # noqa: ARG001
+def django_db_modify_db_settings(
+    django_db_modify_db_settings_parallel_suffix: None,  # noqa: ARG001
+    django_db_blocker: DjangoDbBlocker,
+    django_db_use_migrations: bool,
+    django_db_keepdb: bool,
+    django_db_createdb: bool,
+) -> None:
     """
     Stop, with directions, before a role that cannot create the test database reaches ``CREATE DATABASE`` (P130).
 
     Asked over a bare driver connection: Django caches PostGIS type ids per connection alias for the whole process, so
     asking through ``django.db.connection`` kept the configured database's ids for a reused test database, and every
     geometry query failed with "cache lookup failed for type".
+
+    Then points the test database at a migrated template, so it is copied rather than migrated (see
+    ``core/tests/template_database.py``).
     """
     from django.db import connection
     import psycopg
+
+    from urbanlens.core.tests import template_database
 
     try:
         probe = psycopg.connect(**connection.get_connection_params())
@@ -147,6 +160,10 @@ def django_db_modify_db_settings(django_db_modify_db_settings_parallel_suffix: N
             refusal = refusal_for_role(probe)
     if refusal is not None:
         pytest.exit(refusal, returncode=4)
+
+    if django_db_use_migrations and template_database.enabled(connection):
+        with django_db_blocker.unblock():
+            template_database.use_template(connection, keepdb=django_db_keepdb and not django_db_createdb)
 
 
 @pytest.fixture(scope="session", autouse=True)
