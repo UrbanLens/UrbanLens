@@ -268,6 +268,10 @@ class SafetyCheckinStatus(abstract.TextChoices):
         return (cls.SCHEDULED, cls.AWAITING_CHECKIN)
 
 
+#: The longest title a check-in stores; an edit or a new check-in with a longer one is refused, not truncated.
+CHECKIN_TITLE_MAX_LENGTH = 200
+
+
 class SafetyCheckin(abstract.PublicDashboardModel):
     """
     A planned trip with an expected check-in time and emergency contacts.
@@ -323,7 +327,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
             retrying forever, and flags it for manual review (see ``services.visits.safety.archive_checkin``).
     """
 
-    title = CharField(max_length=200)
+    title = CharField(max_length=CHECKIN_TITLE_MAX_LENGTH)
     plan_details = TextField(blank=True, default="")
     contact_message = TextField(blank=True, default="")
     checkin_by = DateTimeField()
