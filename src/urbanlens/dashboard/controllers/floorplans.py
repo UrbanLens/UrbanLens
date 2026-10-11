@@ -30,14 +30,15 @@ def _building_place(pin: Pin) -> Place | None:
     A multi-building parcel has no single plan - each building carries its own, so the editor offers a
     picker instead (see :func:`_building_choices`).
     """
-    from urbanlens.dashboard.models.place.model import PlaceKind
+    from urbanlens.dashboard.models.place.model import PlaceKind, PlaceStatus
 
     place = pin.location.place if (pin.location_id and pin.location.place_id) else None
     if place is None:
         return None
     if place.kind == PlaceKind.BUILDING:
         return place
-    buildings = list(place.children.filter(kind=PlaceKind.BUILDING)[:2])
+    # A superseded building (a duplicate merged away, an implausible outline) no longer stands on the parcel.
+    buildings = list(place.children.filter(kind=PlaceKind.BUILDING, status=PlaceStatus.CURRENT)[:2])
     return buildings[0] if len(buildings) == 1 else None
 
 
@@ -47,12 +48,12 @@ def _building_choices(pin: Pin) -> list[dict]:
     Each entry names the child pin covering that building when there is one, so the picker can send the
     user to the marker they already have rather than a bare place.
     """
-    from urbanlens.dashboard.models.place.model import PlaceKind
+    from urbanlens.dashboard.models.place.model import PlaceKind, PlaceStatus
 
     place = pin.location.place if (pin.location_id and pin.location.place_id) else None
     if place is None or place.kind == PlaceKind.BUILDING:
         return []
-    buildings = list(place.children.filter(kind=PlaceKind.BUILDING).order_by("-area_sqm", "id")[:200])
+    buildings = list(place.children.filter(kind=PlaceKind.BUILDING, status=PlaceStatus.CURRENT).order_by("-area_sqm", "id")[:200])
     if len(buildings) < 2:
         return []
 

@@ -148,7 +148,7 @@ def _merge_article(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
 
     absorbed_text = absorbed_article.content.strip()
     differs = bool(absorbed_text) and absorbed_text not in kept_article.content
-    editor_id = article_merge.latest_human_editor_id(absorbed_article if differs else kept_article)
+    editor_id = article_merge.live_text_editor_id(absorbed_article if differs else kept_article)
     editor = Profile.objects.filter(pk=editor_id).first() if editor_id is not None else None
     # Read before the history moves: once it does, the absorbed article's own revisions are visible to their editor too.
     base = _concealed_base(kept_article, kept, editor)
@@ -267,6 +267,33 @@ def _repoint_reputation_targets(kept: Wiki, absorbed: Wiki) -> None:
             continue
 
 
+def _untangle_nesting(kept: Wiki, absorbed: Wiki, result: WikiMergeResult) -> None:
+    """Re-nest so that handing the absorbed page's children to the kept page cannot close a loop.
+    When the absorbed page is anywhere above the kept one (K -> M -> A), its children include the kept page's own
+    ancestors: moving M under K would make K -> M -> K, and deleting A would CASCADE through K. So the kept page first
+    takes the absorbed page's place in the tree (A's parent), and each absorbed child is moved explicitly - under the
+    kept page when that is acyclic, else to the absorbed page's parent, else to the top level.
+
+    Args:
+        kept: The page that stays.
+        absorbed: The page being merged away.
+        result: Records any child that could not go under the kept page.
+    """
+    from urbanlens.dashboard.models.wiki.model import Wiki as WikiModel
+
+    if absorbed.pk in {ancestor.pk for ancestor in kept.ancestor_chain()}:
+        kept.parent_wiki_id = absorbed.parent_wiki_id
+        kept.save(update_fields=["parent_wiki", "updated"])
+    for child in WikiModel.objects.filter(parent_wiki=absorbed).exclude(pk=kept.pk).order_by("pk"):
+        if not child.would_create_cycle(kept):
+            new_parent_id = kept.pk
+        else:
+            fallback = WikiModel.objects.filter(pk=absorbed.parent_wiki_id).first() if absorbed.parent_wiki_id else None
+            new_parent_id = fallback.pk if fallback is not None and not child.would_create_cycle(fallback) else None
+            result.moved.setdefault("child_wikis_renested", []).append({"wiki": child.pk, "parent": new_parent_id})
+        WikiModel.objects.filter(pk=child.pk).update(parent_wiki_id=new_parent_id)
+
+
 def merge_duplicate_wiki(kept: Wiki, absorbed: Wiki) -> WikiMergeResult:
     """Fold *absorbed* into *kept* and delete it, once nothing references it.
 
@@ -291,10 +318,7 @@ def merge_duplicate_wiki(kept: Wiki, absorbed: Wiki) -> WikiMergeResult:
     result = WikiMergeResult()
     with transaction.atomic():
         list(WikiModel.objects.select_for_update().filter(pk__in=[kept.pk, absorbed.pk]).order_by("pk"))
-        if kept.parent_wiki_id == absorbed.pk:
-            # Re-nest above the absorbed page first, or its delete would CASCADE through the kept one.
-            kept.parent_wiki_id = absorbed.parent_wiki_id
-            kept.save(update_fields=["parent_wiki", "updated"])
+        _untangle_nesting(kept, absorbed, result)
 
         _merge_article(kept, absorbed, result)
         _merge_columns(kept, absorbed, result)

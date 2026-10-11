@@ -16,6 +16,30 @@ if TYPE_CHECKING:
     from django.db.models import Model
 
 
+#: Hard ceiling on a parent walk, so a corrupted tree ends the walk rather than hanging it.
+_MAX_TREE_DEPTH = 64
+
+
+def _ancestor_ids(row: Model, parent_field: str) -> list[int]:
+    """The pks above *row* through its own ``parent_field``, nearest first.
+
+    Args:
+        row: The row to start from.
+        parent_field: The self-referential foreign key to follow.
+
+    Returns:
+        Ancestor pks, stopping at the top, at a repeat, or at the depth ceiling.
+    """
+    manager = type(row)._base_manager  # noqa: SLF001
+    attname = row._meta.get_field(parent_field).attname  # noqa: SLF001
+    seen: list[int] = []
+    current = manager.filter(pk=row.pk).values_list(attname, flat=True).first()
+    while current is not None and current not in seen and current != row.pk and len(seen) < _MAX_TREE_DEPTH:
+        seen.append(current)
+        current = manager.filter(pk=current).values_list(attname, flat=True).first()
+    return seen
+
+
 def repoint_references(duplicate: Model, kept: Model) -> None:
     """Point every row that references *duplicate* at *kept*, so deleting *duplicate* takes nothing with it.
     Generic over the duplicate's reverse relations - a pending share is referenced by reshares, bundled shares, direct-message links and exposure rows, an owner by the sales that list it - so a relation added later is carried without the caller having to learn about it.
@@ -35,8 +59,9 @@ def repoint_references(duplicate: Model, kept: Model) -> None:
             column = remote.name
             rows = relation.related_model._base_manager.filter(**{column: duplicate.pk})  # noqa: SLF001
             if relation.related_model is type(kept):
-                # A self-reference from the kept row itself would become a loop.
-                rows = rows.exclude(pk=kept.pk)
+                # A row above *kept* in this same tree would close a loop once it pointed at *kept* (K -> M -> K), as
+                # would *kept* itself. They stay put; ``remaining_references`` reports them to the caller.
+                rows = rows.exclude(pk__in=[kept.pk, *_ancestor_ids(kept, column)])
         try:
             with transaction.atomic():
                 rows.update(**{column: kept.pk})

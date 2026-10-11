@@ -213,6 +213,22 @@ class MergeTests(_DuplicatesTestCase):
         self.parcel.refresh_from_db()
         self.assertEqual(self.parcel.building_child_count, 1)
 
+    def test_the_floorplan_editor_stops_offering_the_superseded_building(self) -> None:
+        """A one-building parcel after a merge resolves to that building, not a picker listing the loser too."""
+        from urbanlens.dashboard.controllers.floorplans import _building_choices, _building_place
+
+        location = Location.objects.create(latitude=0.9, longitude=0.9)
+        Location.objects.filter(pk=location.pk).update(place=self.parcel)
+        pin = baker.make_recipe(
+            "dashboard.pin", profile=baker.make(User).profile, location=location, pin_type=PinType.PARCEL
+        )
+
+        self.merge()
+
+        pin = Pin.objects.select_related("location__place").get(pk=pin.pk)
+        self.assertEqual(_building_place(pin), self.survivor)
+        self.assertEqual(_building_choices(pin), [])
+
     def test_building_child_count_counts_only_current_buildings(self) -> None:
         Place.objects.filter(pk=self.loser.pk).update(status=PlaceStatus.SUPERSEDED)
 
@@ -317,6 +333,17 @@ class WikiMergeTests(_DuplicatesTestCase):
         self.assertNotIn("Alice's private history.", merged.content)
         self.assertIn("Bob's notes.", merged.content)
 
+    def test_text_last_written_by_a_deleted_account_is_credited_to_nobody(self) -> None:
+        """Crediting the last *surviving* editor would attribute the deleted account's text to someone who never wrote it."""
+        save_article(editor=self.alice, content="Built 1890.", wiki=self.kept)
+        save_article(editor=self.bob, content="Bob's draft.", wiki=self.absorbed)
+        save_article(editor=None, content="Rewritten by an account since deleted.", wiki=self.absorbed)
+
+        self.merge()
+
+        merged = ArticleRevision.objects.get(article__wiki=self.kept, edit_summary="Merged from Grist Works")
+        self.assertIsNone(merged.editor_id)
+
     def test_identical_text_is_not_appended(self) -> None:
         save_article(editor=self.alice, content="Built 1890.", wiki=self.kept)
         save_article(editor=self.bob, content="Built 1890.", wiki=self.absorbed)
@@ -335,6 +362,52 @@ class WikiMergeTests(_DuplicatesTestCase):
         self.assertEqual(comment.wiki_id, self.kept.pk)
         edit = WikiEdit.objects.get(wiki=self.kept, editor=None)
         self.assertEqual(edit.changes[WIKI_MERGED_CHANGE], {"from": "Grist Works", "to": "Old Mill"})
+
+    def test_an_absorbed_wiki_further_up_the_tree_does_not_close_a_loop(self) -> None:
+        """Kept -> Mid -> Absorbed: handing Mid to the kept page would make Kept -> Mid -> Kept."""
+        mid = baker.make(
+            Wiki, location=self._location(self.survivor, 0.003), place=None, name="Mid", pin_type=PinType.BUILDING
+        )
+        sibling = baker.make(
+            Wiki, location=self._location(self.survivor, 0.004), place=None, name="Sibling", pin_type=PinType.BUILDING
+        )
+        Wiki.objects.filter(pk__in=[mid.pk, sibling.pk]).update(parent_wiki=self.absorbed)
+        Wiki.objects.filter(pk=self.kept.pk).update(parent_wiki=mid)
+
+        self.merge()
+
+        self.kept.refresh_from_db()
+        mid.refresh_from_db()
+        sibling.refresh_from_db()
+        self.assertIsNone(self.kept.parent_wiki_id, "the kept page takes the absorbed page's place in the tree")
+        self.assertEqual((mid.parent_wiki_id, sibling.parent_wiki_id), (self.kept.pk, self.kept.pk))
+        for wiki in (self.kept, mid, sibling):
+            self.assertNotIn(wiki.pk, [ancestor.pk for ancestor in wiki.ancestor_chain()])
+
+    def test_the_absorbed_wiki_as_direct_parent_is_still_unnested(self) -> None:
+        Wiki.objects.filter(pk=self.kept.pk).update(parent_wiki=self.absorbed)
+
+        self.merge()
+
+        self.kept.refresh_from_db()
+        self.assertIsNone(self.kept.parent_wiki_id)
+        self.assertTrue(Wiki.objects.filter(pk=self.kept.pk).exists())
+
+    def test_repointing_never_moves_an_ancestor_of_the_kept_row(self) -> None:
+        """The general guard: an ancestor left in place is reported, not turned into a loop."""
+        from urbanlens.dashboard.services.core.row_merge import remaining_references, repoint_references
+
+        mid = baker.make(
+            Wiki, location=self._location(self.survivor, 0.003), place=None, name="Mid", pin_type=PinType.BUILDING
+        )
+        Wiki.objects.filter(pk=mid.pk).update(parent_wiki=self.absorbed)
+        Wiki.objects.filter(pk=self.kept.pk).update(parent_wiki=mid)
+
+        repoint_references(self.absorbed, self.kept)
+
+        mid.refresh_from_db()
+        self.assertEqual(mid.parent_wiki_id, self.absorbed.pk)
+        self.assertEqual([row.pk for row in remaining_references(self.absorbed)["Wiki.parent_wiki"]], [mid.pk])
 
     def test_per_key_conflicts_keep_the_survivors_and_record_the_losers(self) -> None:
         Fact.objects.create(wiki=self.kept, key="wiki_indoor_outdoor", value_text="indoor")
