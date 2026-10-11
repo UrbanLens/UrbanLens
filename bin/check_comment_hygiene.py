@@ -295,7 +295,7 @@ def open_tracker_ids(root: Path) -> frozenset[str]:
     Ids that docs/internal/PROBLEMS.md still maps to an open issue.
     """
     try:
-        return frozenset(OPEN_IDS_TABLE.findall((root / "docs" / "PROBLEMS.md").read_text(encoding="utf-8")))
+        return frozenset(OPEN_IDS_TABLE.findall((root / "docs" / "internal" / "PROBLEMS.md").read_text(encoding="utf-8")))
     except OSError:
         return frozenset()
 

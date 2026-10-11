@@ -790,7 +790,7 @@ def write_json_report(results: dict[str, list[Finding]], output_path: str) -> No
 
 
 #: The tracked report, resolved from this file so it lands there from any working directory.
-DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "audits" / "unused_functions.txt"
+DEFAULT_OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "internal" / "audits" / "unused_functions.txt"
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
